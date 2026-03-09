@@ -1,4 +1,5 @@
 # Binaries
+bin/
 /server
 /agent
 /worker

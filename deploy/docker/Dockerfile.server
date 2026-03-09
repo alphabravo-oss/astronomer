@@ -1,0 +1,35 @@
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM golang:1.23-alpine AS builder
+
+RUN apk add --no-cache git
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-s -w \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=${GIT_COMMIT} \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
+    -o /bin/server ./cmd/server
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /bin/server /usr/local/bin/server
+
+USER nobody
+
+EXPOSE 8000
+
+ENTRYPOINT ["server"]
