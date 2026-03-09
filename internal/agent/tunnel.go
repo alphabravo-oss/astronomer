@@ -1,0 +1,324 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"math"
+	"net/http"
+	"sync"
+	"time"
+
+	"nhooyr.io/websocket"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
+)
+
+// MessageHandler processes an incoming tunnel message.
+type MessageHandler func(ctx context.Context, msg *protocol.Message) (*protocol.Message, error)
+
+// TunnelClient manages the WebSocket connection to the server.
+type TunnelClient struct {
+	config   *AgentConfig
+	conn     *websocket.Conn
+	log      *slog.Logger
+	handlers map[protocol.MessageType]MessageHandler
+	sendCh   chan *protocol.Message
+
+	mu        sync.RWMutex
+	connected bool
+}
+
+// NewTunnelClient creates a new tunnel client with the given configuration.
+func NewTunnelClient(cfg *AgentConfig, log *slog.Logger) *TunnelClient {
+	return &TunnelClient{
+		config:   cfg,
+		log:      log,
+		handlers: make(map[protocol.MessageType]MessageHandler),
+		sendCh:   make(chan *protocol.Message, 256),
+	}
+}
+
+// RegisterHandler registers a handler for a specific message type.
+func (tc *TunnelClient) RegisterHandler(msgType protocol.MessageType, handler MessageHandler) {
+	tc.handlers[msgType] = handler
+}
+
+// IsConnected returns the current connection status.
+func (tc *TunnelClient) IsConnected() bool {
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
+	return tc.connected
+}
+
+func (tc *TunnelClient) setConnected(v bool) {
+	tc.mu.Lock()
+	tc.connected = v
+	tc.mu.Unlock()
+}
+
+// Connect establishes the WebSocket connection and runs the read/write loops.
+// It blocks until ctx is cancelled or a fatal error occurs.
+func (tc *TunnelClient) Connect(ctx context.Context) error {
+	if err := tc.dial(ctx); err != nil {
+		return fmt.Errorf("initial connection failed: %w", err)
+	}
+
+	tc.run(ctx)
+	return nil
+}
+
+// dial performs the WebSocket handshake and the CONNECT/CONNECT_ACK exchange.
+func (tc *TunnelClient) dial(ctx context.Context) error {
+	url := fmt.Sprintf("%s/api/v1/ws/agent/tunnel/%s/", tc.config.ServerURL, tc.config.ClusterID)
+	tc.log.Info("dialing server", "url", url)
+
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer "+tc.config.AgentToken)
+
+	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	conn, _, err := websocket.Dial(dialCtx, url, &websocket.DialOptions{
+		HTTPHeader: headers,
+	})
+	if err != nil {
+		return fmt.Errorf("websocket dial: %w", err)
+	}
+
+	// Send CONNECT message.
+	connectPayload := protocol.ConnectPayload{
+		ClusterID:    tc.config.ClusterID,
+		AgentID:      tc.config.AgentID,
+		AgentVersion: version.Version,
+		Token:        tc.config.AgentToken,
+	}
+	payloadBytes, err := json.Marshal(connectPayload)
+	if err != nil {
+		conn.Close(websocket.StatusInternalError, "marshal error")
+		return fmt.Errorf("marshal connect payload: %w", err)
+	}
+
+	connectMsg := &protocol.Message{
+		Type:      protocol.MsgConnect,
+		ClusterID: tc.config.ClusterID,
+		Timestamp: time.Now().UTC(),
+		Payload:   payloadBytes,
+	}
+
+	if err := tc.writeMessage(ctx, conn, connectMsg); err != nil {
+		conn.Close(websocket.StatusInternalError, "write error")
+		return fmt.Errorf("send CONNECT: %w", err)
+	}
+
+	// Wait for CONNECT_ACK with a 10-second timeout.
+	ackCtx, ackCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer ackCancel()
+
+	ackMsg, err := tc.readMessage(ackCtx, conn)
+	if err != nil {
+		conn.Close(websocket.StatusInternalError, "read error")
+		return fmt.Errorf("read CONNECT_ACK: %w", err)
+	}
+	if ackMsg.Type != protocol.MsgConnectAck {
+		conn.Close(websocket.StatusProtocolError, "expected CONNECT_ACK")
+		return fmt.Errorf("expected CONNECT_ACK, got %s", ackMsg.Type)
+	}
+
+	var ack protocol.ConnectAckPayload
+	if err := json.Unmarshal(ackMsg.Payload, &ack); err != nil {
+		conn.Close(websocket.StatusInternalError, "unmarshal error")
+		return fmt.Errorf("unmarshal CONNECT_ACK: %w", err)
+	}
+	if !ack.Accepted {
+		conn.Close(websocket.StatusNormalClosure, "rejected")
+		return fmt.Errorf("connection rejected: %s", ack.Reason)
+	}
+
+	tc.conn = conn
+	tc.setConnected(true)
+	tc.log.Info("connected to server", "cluster_id", tc.config.ClusterID)
+	return nil
+}
+
+// run starts the read/write loops and handles reconnection.
+func (tc *TunnelClient) run(ctx context.Context) {
+	for {
+		var wg sync.WaitGroup
+		loopCtx, loopCancel := context.WithCancel(ctx)
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			tc.readLoop(loopCtx)
+			loopCancel()
+		}()
+		go func() {
+			defer wg.Done()
+			tc.writeLoop(loopCtx)
+		}()
+
+		wg.Wait()
+		loopCancel()
+		tc.setConnected(false)
+
+		// Check if parent context is done.
+		if ctx.Err() != nil {
+			tc.log.Info("context cancelled, stopping tunnel")
+			return
+		}
+
+		tc.log.Warn("connection lost, attempting reconnect")
+		if err := tc.reconnectLoop(ctx); err != nil {
+			tc.log.Error("reconnect failed permanently", "error", err)
+			return
+		}
+	}
+}
+
+// BackoffDuration calculates the exponential backoff duration for a given attempt.
+func BackoffDuration(attempt int, baseSeconds, maxSeconds int) time.Duration {
+	backoff := float64(baseSeconds) * math.Pow(2, float64(attempt))
+	if backoff > float64(maxSeconds) {
+		backoff = float64(maxSeconds)
+	}
+	return time.Duration(backoff) * time.Second
+}
+
+// reconnectLoop attempts to reconnect with exponential backoff.
+func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
+	for attempt := 0; ; attempt++ {
+		wait := BackoffDuration(attempt, tc.config.ReconnectBackoff, tc.config.MaxReconnect)
+		tc.log.Info("reconnecting", "attempt", attempt+1, "backoff", wait)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+
+		if err := tc.dial(ctx); err != nil {
+			tc.log.Warn("reconnect attempt failed", "attempt", attempt+1, "error", err)
+			continue
+		}
+
+		tc.log.Info("reconnected successfully", "attempt", attempt+1)
+		return nil
+	}
+}
+
+// readLoop reads messages from the WebSocket and dispatches them to handlers.
+func (tc *TunnelClient) readLoop(ctx context.Context) {
+	for {
+		msg, err := tc.readMessage(ctx, tc.conn)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			tc.log.Error("read error", "error", err)
+			return
+		}
+
+		tc.log.Debug("received message", "type", msg.Type, "stream_id", msg.StreamID)
+
+		if msg.Type == protocol.MsgHeartbeat {
+			pong := &protocol.Message{
+				Type:      protocol.MsgPong,
+				Timestamp: time.Now().UTC(),
+			}
+			if err := tc.Send(pong); err != nil {
+				tc.log.Error("failed to send pong", "error", err)
+			}
+			continue
+		}
+
+		handler, ok := tc.handlers[msg.Type]
+		if !ok {
+			tc.log.Warn("no handler for message type", "type", msg.Type)
+			continue
+		}
+
+		go func(m *protocol.Message) {
+			resp, err := handler(ctx, m)
+			if err != nil {
+				tc.log.Error("handler error", "type", m.Type, "error", err)
+				errPayload, _ := json.Marshal(protocol.ErrorPayload{
+					Code:    "HANDLER_ERROR",
+					Message: err.Error(),
+				})
+				resp = &protocol.Message{
+					Type:      protocol.MsgError,
+					StreamID:  m.StreamID,
+					Timestamp: time.Now().UTC(),
+					Payload:   errPayload,
+				}
+			}
+			if resp != nil {
+				if sendErr := tc.Send(resp); sendErr != nil {
+					tc.log.Error("failed to send response", "error", sendErr)
+				}
+			}
+		}(msg)
+	}
+}
+
+// writeLoop sends messages from the send channel to the WebSocket.
+func (tc *TunnelClient) writeLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-tc.sendCh:
+			if err := tc.writeMessage(ctx, tc.conn, msg); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				tc.log.Error("write error", "error", err)
+				return
+			}
+		}
+	}
+}
+
+// Send queues a message for sending over the tunnel.
+func (tc *TunnelClient) Send(msg *protocol.Message) error {
+	select {
+	case tc.sendCh <- msg:
+		return nil
+	default:
+		return fmt.Errorf("send channel full, dropping message type=%s", msg.Type)
+	}
+}
+
+// Close gracefully closes the tunnel connection.
+func (tc *TunnelClient) Close() error {
+	tc.setConnected(false)
+	if tc.conn != nil {
+		return tc.conn.Close(websocket.StatusNormalClosure, "agent shutting down")
+	}
+	return nil
+}
+
+// readMessage reads and decodes a single Message from the connection.
+func (tc *TunnelClient) readMessage(ctx context.Context, conn *websocket.Conn) (*protocol.Message, error) {
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var msg protocol.Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, fmt.Errorf("unmarshal message: %w", err)
+	}
+	return &msg, nil
+}
+
+// writeMessage encodes and writes a Message to the connection.
+func (tc *TunnelClient) writeMessage(ctx context.Context, conn *websocket.Conn, msg *protocol.Message) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal message: %w", err)
+	}
+	return conn.Write(ctx, websocket.MessageText, data)
+}
