@@ -8,18 +8,342 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	AcknowledgeAlertEvent(ctx context.Context, arg AcknowledgeAlertEventParams) error
+	// Alert Rule Channels (M2M)
+	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
+	// Pipeline <-> Output M2M
+	AddPipelineOutput(ctx context.Context, arg AddPipelineOutputParams) error
+	CountAPITokens(ctx context.Context) (int64, error)
+	CountActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountAgentConnections(ctx context.Context) (int64, error)
+	CountAlertEvents(ctx context.Context) (int64, error)
+	CountAlertRules(ctx context.Context) (int64, error)
+	CountAlertSilences(ctx context.Context) (int64, error)
+	CountAppsByInstance(ctx context.Context, argocdInstanceID uuid.UUID) (int64, error)
+	CountArgoCDApplications(ctx context.Context) (int64, error)
+	CountArgoCDInstances(ctx context.Context) (int64, error)
+	CountAuditLogs(ctx context.Context) (int64, error)
+	CountAuditLogsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CountBackupSchedules(ctx context.Context) (int64, error)
+	CountBackupStorageConfigs(ctx context.Context) (int64, error)
+	CountBackups(ctx context.Context) (int64, error)
+	CountChartVersions(ctx context.Context, chartID uuid.UUID) (int64, error)
+	CountClusterRoles(ctx context.Context) (int64, error)
+	CountClusterSecurityPolicies(ctx context.Context) (int64, error)
+	CountClusterTools(ctx context.Context) (int64, error)
+	CountClusters(ctx context.Context) (int64, error)
+	CountGlobalRoles(ctx context.Context) (int64, error)
+	CountHelmCharts(ctx context.Context) (int64, error)
+	CountHelmRepositories(ctx context.Context) (int64, error)
+	CountInstalledCharts(ctx context.Context) (int64, error)
+	CountInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountLoggingOutputs(ctx context.Context) (int64, error)
+	CountLoggingPipelines(ctx context.Context) (int64, error)
+	CountNotificationChannels(ctx context.Context) (int64, error)
+	CountPodSecurityTemplates(ctx context.Context) (int64, error)
+	CountProjectRoles(ctx context.Context) (int64, error)
+	CountProjects(ctx context.Context) (int64, error)
+	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountRestoreOperations(ctx context.Context) (int64, error)
+	CountSSOConfigurations(ctx context.Context) (int64, error)
+	CountSecurityScanResults(ctx context.Context) (int64, error)
+	CountTokensByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
+	CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error)
+	CreateAgentConnection(ctx context.Context, arg CreateAgentConnectionParams) (AgentConnection, error)
+	CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) (AlertEvent, error)
+	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error)
+	CreateAlertSilence(ctx context.Context, arg CreateAlertSilenceParams) (AlertSilence, error)
+	CreateArgoCDApplication(ctx context.Context, arg CreateArgoCDApplicationParams) (ArgocdApplication, error)
+	CreateArgoCDInstance(ctx context.Context, arg CreateArgoCDInstanceParams) (ArgocdInstance, error)
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	CreateBackup(ctx context.Context, arg CreateBackupParams) (Backup, error)
+	CreateBackupSchedule(ctx context.Context, arg CreateBackupScheduleParams) (BackupSchedule, error)
+	CreateBackupStorageConfig(ctx context.Context, arg CreateBackupStorageConfigParams) (BackupStorageConfig, error)
+	CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error)
+	CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error)
+	CreateClusterRole(ctx context.Context, arg CreateClusterRoleParams) (ClusterRole, error)
+	CreateClusterRoleBinding(ctx context.Context, arg CreateClusterRoleBindingParams) (ClusterRoleBinding, error)
+	CreateClusterSecurityPolicy(ctx context.Context, arg CreateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error)
+	CreateClusterTool(ctx context.Context, arg CreateClusterToolParams) (ClusterTool, error)
+	CreateGlobalRole(ctx context.Context, arg CreateGlobalRoleParams) (GlobalRole, error)
+	CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalRoleBindingParams) (GlobalRoleBinding, error)
+	CreateHelmChart(ctx context.Context, arg CreateHelmChartParams) (HelmChart, error)
+	CreateHelmChartVersion(ctx context.Context, arg CreateHelmChartVersionParams) (HelmChartVersion, error)
+	CreateHelmRepository(ctx context.Context, arg CreateHelmRepositoryParams) (HelmRepository, error)
+	CreateInstalledChart(ctx context.Context, arg CreateInstalledChartParams) (InstalledChart, error)
+	CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutputParams) (LoggingOutput, error)
+	CreateLoggingPipeline(ctx context.Context, arg CreateLoggingPipelineParams) (LoggingPipeline, error)
+	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
+	CreatePodSecurityTemplate(ctx context.Context, arg CreatePodSecurityTemplateParams) (PodSecurityTemplate, error)
+	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
+	CreateProjectRole(ctx context.Context, arg CreateProjectRoleParams) (ProjectRole, error)
+	CreateProjectRoleBinding(ctx context.Context, arg CreateProjectRoleBindingParams) (ProjectRoleBinding, error)
+	CreateRestoreOperation(ctx context.Context, arg CreateRestoreOperationParams) (RestoreOperation, error)
+	CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfigurationParams) (SsoConfiguration, error)
+	CreateSecurityScanResult(ctx context.Context, arg CreateSecurityScanResultParams) (SecurityScanResult, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteAPIToken(ctx context.Context, id uuid.UUID) error
+	DeleteAgentConnection(ctx context.Context, id uuid.UUID) error
+	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
+	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
+	DeleteArgoCDApplication(ctx context.Context, id uuid.UUID) error
+	DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error
+	DeleteAuditLog(ctx context.Context, id uuid.UUID) error
+	DeleteBackup(ctx context.Context, id uuid.UUID) error
+	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
+	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
+	DeleteCluster(ctx context.Context, id uuid.UUID) error
+	DeleteClusterRole(ctx context.Context, id uuid.UUID) error
+	DeleteClusterRoleBinding(ctx context.Context, id uuid.UUID) error
+	DeleteClusterSecurityPolicy(ctx context.Context, id uuid.UUID) error
+	DeleteClusterTool(ctx context.Context, id uuid.UUID) error
+	DeleteGlobalRole(ctx context.Context, id uuid.UUID) error
+	DeleteGlobalRoleBinding(ctx context.Context, id uuid.UUID) error
+	DeleteHelmChart(ctx context.Context, id uuid.UUID) error
+	DeleteHelmChartVersion(ctx context.Context, id uuid.UUID) error
+	DeleteHelmRepository(ctx context.Context, id uuid.UUID) error
+	DeleteInstalledChart(ctx context.Context, id uuid.UUID) error
+	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
+	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
+	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
+	DeletePodSecurityTemplate(ctx context.Context, id uuid.UUID) error
+	DeleteProject(ctx context.Context, id uuid.UUID) error
+	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
+	DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) error
+	DeleteRestoreOperation(ctx context.Context, id uuid.UUID) error
+	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
+	DeleteSecurityScanResult(ctx context.Context, id uuid.UUID) error
+	// API Tokens
+	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
+	GetActiveAlertSilences(ctx context.Context) ([]AlertSilence, error)
+	GetActiveAlertSilencesByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertSilence, error)
+	GetActiveConnectionByCluster(ctx context.Context, clusterID uuid.UUID) (AgentConnection, error)
+	GetActiveSchedules(ctx context.Context) ([]BackupSchedule, error)
+	GetAgentConnectionByID(ctx context.Context, id uuid.UUID) (AgentConnection, error)
+	// Alert Events
+	GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEvent, error)
+	// Alert Rules
+	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule, error)
+	// Alert Silences
+	GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (AlertSilence, error)
+	// ArgoCD Applications
+	GetArgoCDApplicationByID(ctx context.Context, id uuid.UUID) (ArgocdApplication, error)
+	GetArgoCDApplicationByName(ctx context.Context, arg GetArgoCDApplicationByNameParams) (ArgocdApplication, error)
+	// ArgoCD Instances
+	GetArgoCDInstanceByID(ctx context.Context, id uuid.UUID) (ArgocdInstance, error)
+	GetArgoCDInstanceByName(ctx context.Context, name string) (ArgocdInstance, error)
+	GetAuditLogByID(ctx context.Context, id uuid.UUID) (AuditLog, error)
+	// Backups
+	GetBackupByID(ctx context.Context, id uuid.UUID) (Backup, error)
+	// Backup Schedules
+	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
+	// Backup Storage Configs
+	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
+	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
+	GetClusterByName(ctx context.Context, name string) (Cluster, error)
+	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
+	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (ClusterRegistryConfig, error)
+	// Cluster Role Bindings
+	GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (ClusterRoleBinding, error)
+	GetClusterRoleBindingsByGroup(ctx context.Context, group string) ([]ClusterRoleBinding, error)
+	GetClusterRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error)
+	// Cluster Roles
+	GetClusterRoleByID(ctx context.Context, id uuid.UUID) (ClusterRole, error)
+	GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error)
+	// Cluster Security Policies
+	GetClusterSecurityPolicyByID(ctx context.Context, id uuid.UUID) (ClusterSecurityPolicy, error)
+	GetClusterToolByID(ctx context.Context, id uuid.UUID) (ClusterTool, error)
+	GetDefaultBackupStorageConfig(ctx context.Context) (BackupStorageConfig, error)
+	GetDefaultPodSecurityTemplate(ctx context.Context) (PodSecurityTemplate, error)
+	GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguration, error)
+	// Global Role Bindings
+	GetGlobalRoleBindingByID(ctx context.Context, id uuid.UUID) (GlobalRoleBinding, error)
+	GetGlobalRoleBindingsByGroup(ctx context.Context, group string) ([]GlobalRoleBinding, error)
+	GetGlobalRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
+	// Global Roles
+	GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (GlobalRole, error)
+	GetGlobalRoleByName(ctx context.Context, name string) (GlobalRole, error)
+	// Helm Charts
+	GetHelmChartByID(ctx context.Context, id uuid.UUID) (HelmChart, error)
+	GetHelmChartByRepoAndName(ctx context.Context, arg GetHelmChartByRepoAndNameParams) (HelmChart, error)
+	GetHelmChartVersion(ctx context.Context, arg GetHelmChartVersionParams) (HelmChartVersion, error)
+	// Helm Chart Versions
+	GetHelmChartVersionByID(ctx context.Context, id uuid.UUID) (HelmChartVersion, error)
+	// Helm Repositories
+	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (HelmRepository, error)
+	GetHelmRepositoryByName(ctx context.Context, name string) (HelmRepository, error)
+	// Installed Charts
+	GetInstalledChartByID(ctx context.Context, id uuid.UUID) (InstalledChart, error)
+	GetInstalledChartByRelease(ctx context.Context, arg GetInstalledChartByReleaseParams) (InstalledChart, error)
+	GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (HelmChartVersion, error)
+	// Logging Outputs
+	GetLoggingOutputByID(ctx context.Context, id uuid.UUID) (LoggingOutput, error)
+	// Logging Pipelines
+	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (LoggingPipeline, error)
+	// Notification Channels
+	GetNotificationChannelByID(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
+	GetPlatformConfig(ctx context.Context) (PlatformConfiguration, error)
+	// Pod Security Templates
+	GetPodSecurityTemplateByID(ctx context.Context, id uuid.UUID) (PodSecurityTemplate, error)
+	GetPodSecurityTemplateByName(ctx context.Context, name string) (PodSecurityTemplate, error)
+	GetPolicyByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterSecurityPolicy, error)
+	GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error)
+	GetProjectByNameAndCluster(ctx context.Context, arg GetProjectByNameAndClusterParams) (Project, error)
+	// Project Role Bindings
+	GetProjectRoleBindingByID(ctx context.Context, id uuid.UUID) (ProjectRoleBinding, error)
+	GetProjectRoleBindingsByGroup(ctx context.Context, group string) ([]ProjectRoleBinding, error)
+	GetProjectRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
+	// Project Roles
+	GetProjectRoleByID(ctx context.Context, id uuid.UUID) (ProjectRole, error)
+	GetProjectRoleByName(ctx context.Context, name string) (ProjectRole, error)
+	GetRegistrationTokenByToken(ctx context.Context, token string) (ClusterRegistrationToken, error)
+	// Restore Operations
+	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (RestoreOperation, error)
+	// SSO Configurations
+	GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (SsoConfiguration, error)
+	GetSSOConfigurationByProvider(ctx context.Context, provider string) (SsoConfiguration, error)
+	// Security Scan Results
+	GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (SecurityScanResult, error)
+	GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error)
+	GetToolBySlug(ctx context.Context, slug string) (ClusterTool, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserClusterRoles(ctx context.Context, arg GetUserClusterRolesParams) ([]ClusterRole, error)
+	GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([]GlobalRole, error)
+	GetUserProjectRoles(ctx context.Context, arg GetUserProjectRolesParams) ([]ProjectRole, error)
+	ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error)
+	ListActiveAlertsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertRule, error)
+	ListActiveConnections(ctx context.Context) ([]AgentConnection, error)
+	ListAgentConnections(ctx context.Context, arg ListAgentConnectionsParams) ([]AgentConnection, error)
+	ListAlertEvents(ctx context.Context, arg ListAlertEventsParams) ([]AlertEvent, error)
+	ListAlertEventsByCluster(ctx context.Context, arg ListAlertEventsByClusterParams) ([]AlertEvent, error)
+	ListAlertEventsByRule(ctx context.Context, arg ListAlertEventsByRuleParams) ([]AlertEvent, error)
+	ListAlertRules(ctx context.Context, arg ListAlertRulesParams) ([]AlertRule, error)
+	ListAlertRulesByCluster(ctx context.Context, arg ListAlertRulesByClusterParams) ([]AlertRule, error)
+	ListAlertRulesForChannel(ctx context.Context, notificationChannelID uuid.UUID) ([]AlertRule, error)
+	ListAlertSilences(ctx context.Context, arg ListAlertSilencesParams) ([]AlertSilence, error)
+	ListAllTokensByUser(ctx context.Context, arg ListAllTokensByUserParams) ([]ApiToken, error)
+	ListAppsByInstance(ctx context.Context, arg ListAppsByInstanceParams) ([]ArgocdApplication, error)
+	ListAppsByInstanceAndProject(ctx context.Context, arg ListAppsByInstanceAndProjectParams) ([]ArgocdApplication, error)
+	ListArgoCDApplications(ctx context.Context, arg ListArgoCDApplicationsParams) ([]ArgocdApplication, error)
+	ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstancesParams) ([]ArgocdInstance, error)
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	ListAuditLogsByAction(ctx context.Context, arg ListAuditLogsByActionParams) ([]AuditLog, error)
+	ListAuditLogsByRequestID(ctx context.Context, requestID string) ([]AuditLog, error)
+	ListAuditLogsByResource(ctx context.Context, arg ListAuditLogsByResourceParams) ([]AuditLog, error)
+	ListAuditLogsByResourceType(ctx context.Context, arg ListAuditLogsByResourceTypeParams) ([]AuditLog, error)
+	ListAuditLogsByUser(ctx context.Context, arg ListAuditLogsByUserParams) ([]AuditLog, error)
+	ListBackupSchedules(ctx context.Context, arg ListBackupSchedulesParams) ([]BackupSchedule, error)
+	ListBackupStorageConfigs(ctx context.Context, arg ListBackupStorageConfigsParams) ([]BackupStorageConfig, error)
+	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)
+	ListBackupsByStatus(ctx context.Context, arg ListBackupsByStatusParams) ([]Backup, error)
+	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
+	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
+	ListChartVersions(ctx context.Context, arg ListChartVersionsParams) ([]HelmChartVersion, error)
+	ListChartsByCategory(ctx context.Context, arg ListChartsByCategoryParams) ([]HelmChart, error)
+	ListChartsByRepository(ctx context.Context, arg ListChartsByRepositoryParams) ([]HelmChart, error)
+	ListClusterRoleBindings(ctx context.Context, arg ListClusterRoleBindingsParams) ([]ClusterRoleBinding, error)
+	ListClusterRoleBindingsByCluster(ctx context.Context, arg ListClusterRoleBindingsByClusterParams) ([]ClusterRoleBinding, error)
+	ListClusterRoles(ctx context.Context, arg ListClusterRolesParams) ([]ClusterRole, error)
+	ListClusterSecurityPolicies(ctx context.Context, arg ListClusterSecurityPoliciesParams) ([]ClusterSecurityPolicy, error)
+	ListClusterTools(ctx context.Context, arg ListClusterToolsParams) ([]ClusterTool, error)
+	ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error)
+	ListClustersByStatus(ctx context.Context, arg ListClustersByStatusParams) ([]Cluster, error)
+	ListConnectionsByCluster(ctx context.Context, arg ListConnectionsByClusterParams) ([]AgentConnection, error)
+	ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error)
+	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
+	ListEnabledOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]LoggingOutput, error)
+	ListEnabledPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) ([]LoggingPipeline, error)
+	ListEnabledTools(ctx context.Context) ([]ClusterTool, error)
+	ListFiringAlertEvents(ctx context.Context, arg ListFiringAlertEventsParams) ([]AlertEvent, error)
+	ListGlobalRoleBindings(ctx context.Context, arg ListGlobalRoleBindingsParams) ([]GlobalRoleBinding, error)
+	ListGlobalRoles(ctx context.Context, arg ListGlobalRolesParams) ([]GlobalRole, error)
+	ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) ([]HelmChart, error)
+	ListHelmRepositories(ctx context.Context, arg ListHelmRepositoriesParams) ([]HelmRepository, error)
+	ListInstalledCharts(ctx context.Context, arg ListInstalledChartsParams) ([]InstalledChart, error)
+	ListInstalledChartsByCluster(ctx context.Context, arg ListInstalledChartsByClusterParams) ([]InstalledChart, error)
+	ListInstalledChartsByToolSlug(ctx context.Context, arg ListInstalledChartsByToolSlugParams) ([]InstalledChart, error)
+	ListInstancesByCluster(ctx context.Context, arg ListInstancesByClusterParams) ([]ArgocdInstance, error)
+	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)
+	ListLoggingPipelines(ctx context.Context, arg ListLoggingPipelinesParams) ([]LoggingPipeline, error)
+	ListNotificationChannels(ctx context.Context, arg ListNotificationChannelsParams) ([]NotificationChannel, error)
+	ListOutputsByCluster(ctx context.Context, arg ListOutputsByClusterParams) ([]LoggingOutput, error)
+	ListOutputsForPipeline(ctx context.Context, loggingPipelineID uuid.UUID) ([]LoggingOutput, error)
+	ListPipelinesByCluster(ctx context.Context, arg ListPipelinesByClusterParams) ([]LoggingPipeline, error)
+	ListPipelinesForOutput(ctx context.Context, loggingOutputID uuid.UUID) ([]LoggingPipeline, error)
+	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
+	ListProjectRoleBindings(ctx context.Context, arg ListProjectRoleBindingsParams) ([]ProjectRoleBinding, error)
+	ListProjectRoleBindingsByProject(ctx context.Context, arg ListProjectRoleBindingsByProjectParams) ([]ProjectRoleBinding, error)
+	ListProjectRoles(ctx context.Context, arg ListProjectRolesParams) ([]ProjectRole, error)
+	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
+	ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error)
+	ListRestoreOperations(ctx context.Context, arg ListRestoreOperationsParams) ([]RestoreOperation, error)
+	ListRestoreOperationsByBackup(ctx context.Context, backupID uuid.UUID) ([]RestoreOperation, error)
+	ListSSOConfigurations(ctx context.Context, arg ListSSOConfigurationsParams) ([]SsoConfiguration, error)
+	ListScansByCluster(ctx context.Context, arg ListScansByClusterParams) ([]SecurityScanResult, error)
+	ListScansByClusterAndType(ctx context.Context, arg ListScansByClusterAndTypeParams) ([]SecurityScanResult, error)
+	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
+	ListTokensByUser(ctx context.Context, arg ListTokensByUserParams) ([]ApiToken, error)
+	ListToolsByCategory(ctx context.Context, category string) ([]ClusterTool, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error
+	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
+	RemovePipelineOutput(ctx context.Context, arg RemovePipelineOutputParams) error
+	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
+	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
+	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
+	UpdateAgentConnectionStatus(ctx context.Context, arg UpdateAgentConnectionStatusParams) error
+	UpdateAlertEventStatus(ctx context.Context, arg UpdateAlertEventStatusParams) error
+	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (AlertRule, error)
+	UpdateArgoCDApplication(ctx context.Context, arg UpdateArgoCDApplicationParams) (ArgocdApplication, error)
+	UpdateArgoCDInstance(ctx context.Context, arg UpdateArgoCDInstanceParams) (ArgocdInstance, error)
+	UpdateArgoCDInstanceHealth(ctx context.Context, arg UpdateArgoCDInstanceHealthParams) error
+	UpdateBackupCompleted(ctx context.Context, arg UpdateBackupCompletedParams) error
+	UpdateBackupFailed(ctx context.Context, arg UpdateBackupFailedParams) error
+	UpdateBackupSchedule(ctx context.Context, arg UpdateBackupScheduleParams) (BackupSchedule, error)
+	UpdateBackupScheduleLastBackup(ctx context.Context, arg UpdateBackupScheduleLastBackupParams) error
+	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
+	UpdateBackupStatus(ctx context.Context, arg UpdateBackupStatusParams) error
+	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
+	UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error)
+	UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error
+	UpdateClusterRole(ctx context.Context, arg UpdateClusterRoleParams) (ClusterRole, error)
+	UpdateClusterSecurityPolicy(ctx context.Context, arg UpdateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error)
+	UpdateClusterSecurityPolicyApplied(ctx context.Context, id uuid.UUID) error
+	UpdateClusterSecurityPolicyFailed(ctx context.Context, arg UpdateClusterSecurityPolicyFailedParams) error
+	UpdateClusterStatus(ctx context.Context, arg UpdateClusterStatusParams) error
+	UpdateClusterTool(ctx context.Context, arg UpdateClusterToolParams) (ClusterTool, error)
+	UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRoleParams) (GlobalRole, error)
+	UpdateHelmChart(ctx context.Context, arg UpdateHelmChartParams) (HelmChart, error)
+	UpdateHelmRepository(ctx context.Context, arg UpdateHelmRepositoryParams) (HelmRepository, error)
+	UpdateHelmRepositoryLastSynced(ctx context.Context, id uuid.UUID) error
+	UpdateInstalledChartStatus(ctx context.Context, arg UpdateInstalledChartStatusParams) error
+	UpdateInstalledChartValues(ctx context.Context, arg UpdateInstalledChartValuesParams) (InstalledChart, error)
+	UpdateLoggingOutput(ctx context.Context, arg UpdateLoggingOutputParams) (LoggingOutput, error)
+	UpdateLoggingPipeline(ctx context.Context, arg UpdateLoggingPipelineParams) (LoggingPipeline, error)
+	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
+	UpdatePodSecurityTemplate(ctx context.Context, arg UpdatePodSecurityTemplateParams) (PodSecurityTemplate, error)
+	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
+	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (ProjectRole, error)
+	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
+	UpdateRestoreOperationFailed(ctx context.Context, arg UpdateRestoreOperationFailedParams) error
+	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
+	UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfigurationParams) (SsoConfiguration, error)
+	UpdateSecurityScanCompleted(ctx context.Context, arg UpdateSecurityScanCompletedParams) error
+	UpdateSecurityScanFailed(ctx context.Context, id uuid.UUID) error
+	UpdateToolEnabled(ctx context.Context, arg UpdateToolEnabledParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpsertClusterHealthStatus(ctx context.Context, arg UpsertClusterHealthStatusParams) (ClusterHealthStatus, error)
+	UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error)
+	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfiguration, error)
 }
 
 var _ Querier = (*Queries)(nil)
