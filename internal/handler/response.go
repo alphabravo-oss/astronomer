@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 // RespondJSON writes a JSON response wrapped in {"data": payload}.
@@ -24,14 +25,19 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 }
 
 // RespondPaginated writes a paginated JSON response matching DRF list format.
-func RespondPaginated(w http.ResponseWriter, status int, items any, total int64, limit, offset int) {
+// It extracts limit and offset from the request's query parameters,
+// defaulting to limit=20 and offset=0. Always responds with status 200.
+func RespondPaginated(w http.ResponseWriter, r *http.Request, items any, total int64) {
+	limit := queryInt(r, "limit", 20)
+	offset := queryInt(r, "offset", 0)
+
 	resp := paginatedResponse{
 		Data:  items,
 		Count: total,
 	}
 
 	if offset+limit < int(total) {
-		next := fmt.Sprintf("?limit=%d&offset=%d", limit, offset+limit)
+		next := fmt.Sprintf("%s?limit=%d&offset=%d", r.URL.Path, limit, offset+limit)
 		resp.Next = &next
 	}
 
@@ -40,11 +46,24 @@ func RespondPaginated(w http.ResponseWriter, status int, items any, total int64,
 		if prevOffset < 0 {
 			prevOffset = 0
 		}
-		prev := fmt.Sprintf("?limit=%d&offset=%d", limit, prevOffset)
+		prev := fmt.Sprintf("%s?limit=%d&offset=%d", r.URL.Path, limit, prevOffset)
 		resp.Previous = &prev
 	}
 
-	writeJSON(w, status, resp)
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// queryInt extracts an integer query parameter with a default fallback.
+func queryInt(r *http.Request, key string, defaultVal int) int {
+	s := r.URL.Query().Get(key)
+	if s == "" {
+		return defaultVal
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return defaultVal
+	}
+	return v
 }
 
 type paginatedResponse struct {

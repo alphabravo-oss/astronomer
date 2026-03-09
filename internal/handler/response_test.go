@@ -66,9 +66,10 @@ func TestRespondError(t *testing.T) {
 func TestRespondPaginated(t *testing.T) {
 	t.Run("middle page has next and previous", func(t *testing.T) {
 		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/items?limit=10&offset=20", nil)
 
 		items := []string{"a", "b", "c"}
-		RespondPaginated(w, http.StatusOK, items, 100, 10, 20)
+		RespondPaginated(w, r, items, 100)
 
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected status 200, got %d", w.Code)
@@ -93,21 +94,22 @@ func TestRespondPaginated(t *testing.T) {
 		if body.Next == nil {
 			t.Fatal("expected next to be non-nil")
 		}
-		if *body.Next != "?limit=10&offset=30" {
-			t.Fatalf("expected next=?limit=10&offset=30, got %s", *body.Next)
+		if *body.Next != "/api/items?limit=10&offset=30" {
+			t.Fatalf("expected next=/api/items?limit=10&offset=30, got %s", *body.Next)
 		}
 		if body.Previous == nil {
 			t.Fatal("expected previous to be non-nil")
 		}
-		if *body.Previous != "?limit=10&offset=10" {
-			t.Fatalf("expected previous=?limit=10&offset=10, got %s", *body.Previous)
+		if *body.Previous != "/api/items?limit=10&offset=10" {
+			t.Fatalf("expected previous=/api/items?limit=10&offset=10, got %s", *body.Previous)
 		}
 	})
 
 	t.Run("first page has no previous", func(t *testing.T) {
 		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/items?limit=10&offset=0", nil)
 
-		RespondPaginated(w, http.StatusOK, []string{"a"}, 50, 10, 0)
+		RespondPaginated(w, r, []string{"a"}, 50)
 
 		var body struct {
 			Next     *string `json:"next"`
@@ -126,8 +128,9 @@ func TestRespondPaginated(t *testing.T) {
 
 	t.Run("last page has no next", func(t *testing.T) {
 		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/items?limit=10&offset=20", nil)
 
-		RespondPaginated(w, http.StatusOK, []string{"a"}, 25, 10, 20)
+		RespondPaginated(w, r, []string{"a"}, 25)
 
 		var body struct {
 			Next     *string `json:"next"`
@@ -141,6 +144,30 @@ func TestRespondPaginated(t *testing.T) {
 		}
 		if body.Previous == nil {
 			t.Fatal("expected previous to be non-nil")
+		}
+	})
+
+	t.Run("defaults to limit=20 offset=0 when no query params", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/items", nil)
+
+		RespondPaginated(w, r, []string{"a"}, 50)
+
+		var body struct {
+			Next     *string `json:"next"`
+			Previous *string `json:"previous"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body.Next == nil {
+			t.Fatal("expected next to be non-nil")
+		}
+		if *body.Next != "/api/items?limit=20&offset=20" {
+			t.Fatalf("expected next=/api/items?limit=20&offset=20, got %s", *body.Next)
+		}
+		if body.Previous != nil {
+			t.Fatalf("expected previous to be nil, got %v", *body.Previous)
 		}
 	})
 }
