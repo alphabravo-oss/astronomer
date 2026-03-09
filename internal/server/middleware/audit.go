@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// PathResourceMap maps URL path segments to human-readable resource type names,
+// pathResourceMap maps URL path segments to human-readable resource type names,
 // matching the Python Django middleware behaviour.
-var PathResourceMap = map[string]string{
+var pathResourceMap = map[string]string{
 	"clusters":      "cluster",
 	"workloads":     "workload",
 	"pods":          "pod",
@@ -47,7 +47,7 @@ var PathResourceMap = map[string]string{
 	"settings":      "settings",
 }
 
-var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // mutatingMethods is the set of HTTP methods that trigger audit logging.
 var mutatingMethods = map[string]bool{
@@ -70,9 +70,19 @@ type statusWriter struct {
 	status int
 }
 
+// WriteHeader captures the status code before delegating to the underlying writer.
 func (sw *statusWriter) WriteHeader(code int) {
 	sw.status = code
 	sw.ResponseWriter.WriteHeader(code)
+}
+
+// Write captures an implicit 200 status (the first call to Write sends a 200
+// if WriteHeader has not been called) and delegates to the underlying writer.
+func (sw *statusWriter) Write(b []byte) (int, error) {
+	if sw.status == 0 {
+		sw.status = http.StatusOK
+	}
+	return sw.ResponseWriter.Write(b)
 }
 
 // AuditLog returns middleware that logs mutating API requests.
@@ -100,7 +110,7 @@ func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
 			}
 
 			start := time.Now()
-			sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
 
 			// Only log successful responses.
@@ -130,7 +140,7 @@ func parsePathResource(path string) (string, string) {
 
 	var resourceType, resourceID string
 	for i, seg := range segments {
-		if rt, ok := PathResourceMap[seg]; ok {
+		if rt, ok := pathResourceMap[seg]; ok {
 			resourceType = rt
 			resourceID = ""
 			// Check if the next segment is a UUID resource ID.

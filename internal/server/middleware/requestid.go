@@ -12,13 +12,30 @@ type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
+// maxRequestIDLen is the maximum allowed length for an X-Request-ID header value.
+const maxRequestIDLen = 256
+
+// isValidRequestID checks that the request ID is within the length cap and
+// contains no control characters. This prevents log injection attacks.
+func isValidRequestID(id string) bool {
+	if len(id) > maxRequestIDLen {
+		return false
+	}
+	for _, c := range id {
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
 // RequestID is middleware that checks for an incoming X-Request-ID header.
-// If present it reuses the value; otherwise it generates a new UUID.
+// If present and valid it reuses the value; otherwise it generates a new UUID.
 // The request ID is stored in the request context and set as a response header.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
-		if id == "" {
+		if id == "" || !isValidRequestID(id) {
 			id = uuid.New().String()
 		}
 

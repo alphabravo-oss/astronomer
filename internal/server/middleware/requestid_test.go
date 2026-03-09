@@ -50,6 +50,45 @@ func TestRequestIDMiddleware_ReusesID(t *testing.T) {
 	}
 }
 
+func TestRequestIDMiddleware_RejectsControlChars(t *testing.T) {
+	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Request-ID", "bad\nvalue")
+	handler.ServeHTTP(rr, req)
+
+	got := rr.Header().Get("X-Request-ID")
+	if got == "bad\nvalue" {
+		t.Fatal("expected control-char request ID to be rejected")
+	}
+	if len(got) != 36 {
+		t.Fatalf("expected regenerated UUID (len 36), got %q (len %d)", got, len(got))
+	}
+}
+
+func TestRequestIDMiddleware_RejectsTooLong(t *testing.T) {
+	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	long := make([]byte, 300)
+	for i := range long {
+		long[i] = 'a'
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Request-ID", string(long))
+	handler.ServeHTTP(rr, req)
+
+	got := rr.Header().Get("X-Request-ID")
+	if len(got) == 300 {
+		t.Fatal("expected overlong request ID to be rejected")
+	}
+	if len(got) != 36 {
+		t.Fatalf("expected regenerated UUID (len 36), got %q (len %d)", got, len(got))
+	}
+}
+
 func TestGetRequestID(t *testing.T) {
 	t.Run("with value", func(t *testing.T) {
 		ctx := context.WithValue(context.Background(), requestIDKey, "abc-456")
