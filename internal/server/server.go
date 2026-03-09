@@ -19,7 +19,7 @@ type Server struct {
 
 // New creates a new Server with the given config and logger.
 func New(cfg *config.Config, logger *slog.Logger) *Server {
-	router := NewRouter(cfg)
+	router := NewRouter(cfg, nil)
 
 	s := &Server{
 		handler: router,

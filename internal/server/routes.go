@@ -10,11 +10,13 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
-func NewRouter(cfg *config.Config) chi.Router {
+// If bootstrap is nil (e.g. in tests without DB), stub handlers are used.
+func NewRouter(cfg *config.Config, bootstrap *handler.BootstrapHandler) chi.Router {
 	r := chi.NewRouter()
 
 	// Middleware
@@ -49,18 +51,24 @@ func NewRouter(cfg *config.Config) chi.Router {
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		// Bootstrap
-		r.Get("/bootstrap/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"bootstrapped":  false,
-				"server_url":    "",
-				"platform_name": "Astronomer",
+		if bootstrap != nil {
+			r.Get("/bootstrap/", bootstrap.GetBootstrapStatus)
+			r.Post("/bootstrap/complete/", bootstrap.CompleteBootstrap)
+		} else {
+			// Stub handlers for tests without DB
+			r.Get("/bootstrap/", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"bootstrapped":  false,
+					"server_url":    "",
+					"platform_name": "Astronomer",
+				})
 			})
-		})
 
-		r.Post("/bootstrap/complete/", func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "Not Implemented", http.StatusNotImplemented)
-		})
+			r.Post("/bootstrap/complete/", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "Not Implemented", http.StatusNotImplemented)
+			})
+		}
 	})
 
 	return r
