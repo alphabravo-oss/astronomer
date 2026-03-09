@@ -110,3 +110,9 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 func RequireAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 	return Auth(jwtManager)
 }
+
+// SetAuthenticatedUserForTest injects an AuthenticatedUser into the context.
+// This is intended for use in tests only.
+func SetAuthenticatedUserForTest(ctx context.Context, user *AuthenticatedUser) context.Context {
+	return context.WithValue(ctx, userContextKey, user)
+}
