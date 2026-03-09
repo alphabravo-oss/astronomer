@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    # Port offset from default (5432->5433) to allow co-existence with the Python stack
     ports:
       - "5433:5432"
     environment:
@@ -14,9 +15,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - astronomer-go
 
   redis:
     image: redis:7-alpine
+    # Port offset from default (6379->6380) to allow co-existence with the Python stack
     ports:
       - "6380:6379"
     command: redis-server --appendonly yes
@@ -27,20 +31,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - astronomer-go
 
   server:
     build:
       context: ../
       dockerfile: deploy/docker/Dockerfile.server
+    # Port offset from default (8000->8001) to allow co-existence with the Python stack
     ports:
       - "8001:8000"
     environment:
       DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      DJANGO_SECRET_KEY: local-dev-secret-key-change-in-production
-      DJANGO_ENV: development
-      DJANGO_DEBUG: "true"
+      SECRET_KEY: local-dev-secret-key-change-in-production
+      ENV: development
+      DEBUG: "true"
+      ALLOWED_HOSTS: "*"
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       LOG_LEVEL: debug
     depends_on:
@@ -48,7 +55,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/health/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - astronomer-go
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  astronomer-go:
+    name: astronomer-go

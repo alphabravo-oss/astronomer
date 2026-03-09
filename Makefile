@@ -1,4 +1,4 @@
-.PHONY: help build test lint run sqlc migrate-up migrate-down migrate-create clean dev dev-down dev-clean
+.PHONY: help build test lint fmt vet run sqlc sqlc-generate docker-build migrate-up migrate-down migrate-create clean dev dev-down dev-clean
 
 # ── Variables ────────────────────────────────────────────────────────────────
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -30,11 +30,19 @@ test: ## Run tests with race detector
 lint: ## Run golangci-lint
 	golangci-lint run ./...
 
+fmt: ## Format Go source files
+	go fmt ./...
+
+vet: ## Vet Go source files
+	go vet ./...
+
 run: ## Run the server locally
 	go run -ldflags '$(LDFLAGS)' ./cmd/server
 
-sqlc: ## Generate sqlc code
+sqlc-generate: ## Generate sqlc code
 	sqlc generate
+
+sqlc: sqlc-generate ## Alias for sqlc-generate
 
 migrate-up: ## Run all migrations up
 	migrate -database "$(DATABASE_URL)" -path internal/db/migrations up
@@ -45,6 +53,9 @@ migrate-down: ## Roll back one migration
 migrate-create: ## Create a new migration (NAME=<name>)
 	@if [ -z "$(NAME)" ]; then echo "Usage: make migrate-create NAME=<name>"; exit 1; fi
 	migrate create -ext sql -dir internal/db/migrations -seq $(NAME)
+
+docker-build: ## Build server Docker image
+	docker build -f deploy/docker/Dockerfile.server -t astronomer-go-server:$(VERSION) .
 
 clean: ## Remove build artifacts
 	rm -rf bin/
