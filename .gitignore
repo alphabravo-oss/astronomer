@@ -1,0 +1,16 @@
+# Binaries
+/server
+/agent
+/worker
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Environment
+.env
