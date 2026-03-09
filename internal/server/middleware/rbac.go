@@ -1,0 +1,83 @@
+package middleware
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+)
+
+// RBACQuerier looks up role bindings for a user.
+type RBACQuerier interface {
+	GetUserBindings(ctx context.Context, userID string) ([]rbac.RoleBinding, error)
+}
+
+// RequirePermission creates middleware that checks if the authenticated user
+// has the required permission (resource + verb) at the appropriate scope.
+// Scope is determined from URL params: {cluster_id} and {project_id}.
+func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := GetAuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				resp := map[string]interface{}{
+					"error": map[string]string{
+						"code":    "authentication_required",
+						"message": "Authentication is required to access this resource",
+					},
+				}
+				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				return
+			}
+
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				resp := map[string]interface{}{
+					"error": map[string]string{
+						"code":    "internal_error",
+						"message": "Failed to retrieve user permissions",
+					},
+				}
+				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				return
+			}
+
+			var clusterID, projectID uuid.UUID
+			if cid := chi.URLParam(r, "cluster_id"); cid != "" {
+				parsed, err := uuid.Parse(cid)
+				if err == nil {
+					clusterID = parsed
+				}
+			}
+			if pid := chi.URLParam(r, "project_id"); pid != "" {
+				parsed, err := uuid.Parse(pid)
+				if err == nil {
+					projectID = parsed
+				}
+			}
+
+			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				resp := map[string]interface{}{
+					"error": map[string]string{
+						"code":    "permission_denied",
+						"message": "You do not have permission to perform this action",
+					},
+				}
+				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
