@@ -10,7 +10,7 @@ LDFLAGS      = -s -w \
                -X $(MODULE)/pkg/version.GitCommit=$(GIT_COMMIT) \
                -X $(MODULE)/pkg/version.BuildDate=$(BUILD_DATE)
 
-DATABASE_URL ?= postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable
+DATABASE_URL ?= postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
 
 # ── Targets ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ migrate-create: ## Create a new migration (NAME=<name>)
 	migrate create -ext sql -dir internal/db/migrations -seq $(NAME)
 
 docker-build: ## Build server Docker image
-	docker build -f deploy/docker/Dockerfile.server -t astronomer-go-server:$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(shell git rev-parse --short HEAD) --build-arg BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ) -f deploy/docker/Dockerfile.server -t astronomer-go-server:$(VERSION) .
 
 clean: ## Remove build artifacts
 	rm -rf bin/
