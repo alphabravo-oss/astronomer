@@ -22,6 +22,7 @@ func NewRouter(cfg *config.Config) chi.Router {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(30 * time.Second))
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
