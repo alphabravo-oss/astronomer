@@ -11,6 +11,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -24,6 +25,10 @@ func NewRouter(
 	projects *handler.ProjectHandler,
 	tools *handler.ToolHandler,
 	audit *handler.AuditHandler,
+	hub *tunnel.Hub,
+	proxyHandler *tunnel.ProxyHandler,
+	execConsumer *tunnel.ExecConsumer,
+	logsConsumer *tunnel.LogsConsumer,
 ) chi.Router {
 	r := chi.NewRouter()
 
@@ -108,6 +113,26 @@ func NewRouter(
 			})
 		}
 	})
+
+	// Tunnel WebSocket (agent connection)
+	if hub != nil {
+		r.Get("/api/v1/ws/agent/tunnel/{cluster_id}/", hub.HandleWebSocket)
+	}
+
+	// K8s API proxy through tunnel
+	if proxyHandler != nil {
+		r.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxyHandler.HandleK8sProxy)
+	}
+
+	// Pod exec WebSocket
+	if execConsumer != nil {
+		r.Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", execConsumer.HandleExec)
+	}
+
+	// Pod logs WebSocket
+	if logsConsumer != nil {
+		r.Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", logsConsumer.HandleLogs)
+	}
 
 	return r
 }
