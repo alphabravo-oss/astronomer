@@ -8,9 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPool creates a pgxpool connection pool with sensible defaults and
-// verifies connectivity with a ping before returning.
-func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+// DB wraps a pgxpool.Pool with convenience methods.
+type DB struct {
+	pool *pgxpool.Pool
+}
+
+// Connect creates a new DB with a configured connection pool and verifies
+// connectivity with a ping before returning.
+func Connect(ctx context.Context, databaseURL string) (*DB, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing database URL: %w", err)
@@ -32,5 +37,20 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
-	return pool, nil
+	return &DB{pool: pool}, nil
+}
+
+// Close closes the underlying connection pool.
+func (d *DB) Close() {
+	d.pool.Close()
+}
+
+// Pool returns the underlying pgxpool.Pool.
+func (d *DB) Pool() *pgxpool.Pool {
+	return d.pool
+}
+
+// Health pings the database and returns an error if unreachable.
+func (d *DB) Health(ctx context.Context) error {
+	return d.pool.Ping(ctx)
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -23,46 +24,124 @@ func testServer(t *testing.T) *Server {
 func TestHealthEndpoint(t *testing.T) {
 	srv := testServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/health/", nil)
-	rec := httptest.NewRecorder()
-
-	srv.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantFields []string
+	}{
+		{
+			name:       "GET /health/ returns status, version, and time",
+			method:     http.MethodGet,
+			path:       "/health/",
+			wantStatus: http.StatusOK,
+			wantFields: []string{"status", "version", "time"},
+		},
+		{
+			name:       "GET /health without trailing slash",
+			method:     http.MethodGet,
+			path:       "/health",
+			wantStatus: http.StatusOK,
+			wantFields: []string{"status", "version", "time"},
+		},
 	}
 
-	var body map[string]string
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decoding response body: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			rec := httptest.NewRecorder()
 
-	if body["status"] != "ok" {
-		t.Errorf("expected status \"ok\", got %q", body["status"])
+			srv.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, rec.Code)
+			}
+
+			var body map[string]string
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decoding response body: %v", err)
+			}
+
+			for _, field := range tt.wantFields {
+				if _, ok := body[field]; !ok {
+					t.Errorf("expected field %q in response, got %v", field, body)
+				}
+			}
+
+			if body["status"] != "ok" {
+				t.Errorf("expected status \"ok\", got %q", body["status"])
+			}
+		})
 	}
 }
 
-func TestBootstrapStatusEndpoint(t *testing.T) {
+func TestBootstrapEndpoints(t *testing.T) {
 	srv := testServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap/", nil)
-	rec := httptest.NewRecorder()
-
-	srv.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		wantStatus     int
+		wantJSON       map[string]interface{}
+		wantBodySubstr string
+	}{
+		{
+			name:       "GET /api/v1/bootstrap/ returns bootstrap status",
+			method:     http.MethodGet,
+			path:       "/api/v1/bootstrap/",
+			wantStatus: http.StatusOK,
+			wantJSON: map[string]interface{}{
+				"bootstrapped":  false,
+				"platform_name": "Astronomer",
+				"server_url":    "",
+			},
+		},
+		{
+			name:           "POST /api/v1/bootstrap/complete/ returns 501",
+			method:         http.MethodPost,
+			path:           "/api/v1/bootstrap/complete/",
+			wantStatus:     http.StatusNotImplemented,
+			wantBodySubstr: "Not Implemented",
+		},
 	}
 
-	var body map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decoding response body: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			rec := httptest.NewRecorder()
 
-	if body["bootstrapped"] != false {
-		t.Errorf("expected bootstrapped=false, got %v", body["bootstrapped"])
-	}
-	if body["platform_name"] != "Astronomer" {
-		t.Errorf("expected platform_name=\"Astronomer\", got %v", body["platform_name"])
+			srv.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, rec.Code)
+			}
+
+			if tt.wantJSON != nil {
+				var body map[string]interface{}
+				if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+					t.Fatalf("decoding response body: %v", err)
+				}
+
+				for key, want := range tt.wantJSON {
+					got, ok := body[key]
+					if !ok {
+						t.Errorf("expected field %q in response", key)
+						continue
+					}
+					if got != want {
+						t.Errorf("field %q: expected %v, got %v", key, want, got)
+					}
+				}
+			}
+
+			if tt.wantBodySubstr != "" {
+				bodyStr := rec.Body.String()
+				if !strings.Contains(bodyStr, tt.wantBodySubstr) {
+					t.Errorf("expected body to contain %q, got %q", tt.wantBodySubstr, bodyStr)
+				}
+			}
+		})
 	}
 }
