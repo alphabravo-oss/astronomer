@@ -16,7 +16,15 @@ import (
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
 // If bootstrap is nil (e.g. in tests without DB), stub handlers are used.
-func NewRouter(cfg *config.Config, bootstrap *handler.BootstrapHandler) chi.Router {
+// Optional handler parameters (projects, tools, audit) may be nil; routes are
+// only registered when the corresponding handler is provided.
+func NewRouter(
+	cfg *config.Config,
+	bootstrap *handler.BootstrapHandler,
+	projects *handler.ProjectHandler,
+	tools *handler.ToolHandler,
+	audit *handler.AuditHandler,
+) chi.Router {
 	r := chi.NewRouter()
 
 	// Middleware
@@ -67,6 +75,36 @@ func NewRouter(cfg *config.Config, bootstrap *handler.BootstrapHandler) chi.Rout
 
 			r.Post("/bootstrap/complete/", func(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Not Implemented", http.StatusNotImplemented)
+			})
+		}
+
+		// Projects
+		if projects != nil {
+			r.Route("/projects", func(r chi.Router) {
+				r.Get("/", projects.List)
+				r.Post("/", projects.Create)
+				r.Get("/{id}/", projects.Get)
+				r.Put("/{id}/", projects.Update)
+				r.Delete("/{id}/", projects.Delete)
+			})
+
+			r.Get("/clusters/{cluster_id}/projects/", projects.ListByCluster)
+		}
+
+		// Tools
+		if tools != nil {
+			r.Route("/tools", func(r chi.Router) {
+				r.Get("/", tools.List)
+				r.Get("/{id}/", tools.Get)
+				r.Get("/slug/{slug}/", tools.GetBySlug)
+			})
+		}
+
+		// Audit logs
+		if audit != nil {
+			r.Route("/audit", func(r chi.Router) {
+				r.Get("/", audit.List)
+				r.Get("/{id}/", audit.Get)
 			})
 		}
 	})
