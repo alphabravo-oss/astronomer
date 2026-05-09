@@ -13,6 +13,14 @@ func RespondJSON(w http.ResponseWriter, status int, payload any) {
 	writeJSON(w, status, resp)
 }
 
+// RespondJSONUnwrapped writes a JSON response without the {"data": ...} wrapper.
+// Used for endpoints that must match the Python/DRF response contract directly
+// (bootstrap status, login token payload, auth/me, etc.) — the Next.js frontend
+// reads these top-level keys without an unwrap layer.
+func RespondJSONUnwrapped(w http.ResponseWriter, status int, payload any) {
+	writeJSON(w, status, payload)
+}
+
 // RespondError writes a JSON error response matching DRF format.
 func RespondError(w http.ResponseWriter, status int, code, message string) {
 	resp := map[string]any{

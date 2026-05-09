@@ -5,21 +5,70 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/google/uuid"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/hibiken/asynq"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
+
+// busPublisherAdapter bridges the *events.Bus into the tunnel.LifecyclePublisher
+// interface (the tunnel package can't import events directly without a cycle).
+type busPublisherAdapter struct{ bus *events.Bus }
+
+func (a busPublisherAdapter) Publish(eventType string, data any) {
+	a.bus.Publish(events.Type(eventType), data)
+}
+
+// resolveCallbackBaseURL builds the OAuth callback prefix used when registering
+// SSO providers. It prefers platform_configuration.server_url so the production
+// deployment URL is always honoured; falls back to a localhost-friendly default
+// if no platform record exists yet (e.g. pre-bootstrap).
+func resolveCallbackBaseURL(ctx context.Context, _ *config.Config, queries *sqlc.Queries) string {
+	base := "http://localhost:8000"
+	if queries == nil {
+		return base + "/api/v1/auth"
+	}
+	if cfg, err := queries.GetPlatformConfig(ctx); err == nil && strings.TrimSpace(cfg.ServerUrl) != "" {
+		base = strings.TrimRight(cfg.ServerUrl, "/")
+	}
+	return base + "/api/v1/auth"
+}
 
 // Server wraps the HTTP server and its dependencies.
 type Server struct {
 	httpServer *http.Server
 	handler    http.Handler
 	logger     *slog.Logger
+	db         *db.DB
+	cancel     context.CancelFunc
+	queue      *asynq.Client
+	// Encryptor is the Fernet encryptor wired into handlers that surface
+	// encrypted columns (argocd auth tokens, sso client secrets, etc.).
+	Encryptor *auth.Encryptor
+	// SSO drives the OAuth login/callback flow. May be nil if no providers
+	// are configured at boot.
+	SSO *auth.SSOManager
 }
 
 // New creates a new Server with the given config and logger.
 func New(cfg *config.Config, logger *slog.Logger) *Server {
-	router := NewRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := NewRouter(cfg, RouterDependencies{})
 
 	s := &Server{
 		handler: router,
@@ -27,13 +76,312 @@ func New(cfg *config.Config, logger *slog.Logger) *Server {
 	}
 
 	s.httpServer = &http.Server{
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Handler: router,
+		// ReadHeaderTimeout caps the slowloris exposure but does not bound the
+		// long-lived WebSocket tunnel connection (which lives in /api/v1/ws/...).
+		// Keep ReadTimeout/WriteTimeout at zero so the WS connection is not
+		// forcibly closed mid-stream. Per-handler timeouts cover REST routes.
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	return s
+}
+
+// NewApp creates a fully wired production server with database-backed handlers.
+func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Server, error) {
+	database, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	queries := sqlc.New(database.Pool())
+	jwtManager := auth.NewJWTManager(cfg.SecretKey, cfg.SessionTimeoutMinutes)
+
+	// Best-effort Fernet encryptor + SSO manager. Both are optional: if the
+	// encryption key is missing or invalid we still come up so dev/local
+	// stacks without secrets don't break — a warning is logged. Handlers
+	// that need decryption skip the work when the encryptor is nil.
+	var (
+		encryptor  *auth.Encryptor
+		ssoManager *auth.SSOManager
+	)
+	if cfg.EncryptionKey != "" {
+		enc, encErr := auth.NewEncryptor(cfg.EncryptionKey)
+		if encErr != nil {
+			logger.Warn("failed to initialise encryptor", "error", encErr)
+		} else {
+			encryptor = enc
+			callbackBase := resolveCallbackBaseURL(ctx, cfg, queries)
+			ssoManager = auth.NewSSOManager(encryptor, jwtManager, callbackBase)
+			if loadErr := ssoManager.LoadFromDatabase(ctx, queries); loadErr != nil {
+				logger.Warn("failed to load sso providers", "error", loadErr)
+			}
+		}
+	} else {
+		logger.Warn("ASTRONOMER_ENCRYPTION_KEY is not set; encrypted columns will be returned as ciphertext and SSO is disabled")
+	}
+
+	bus := events.NewBus()
+	hub := tunnel.NewHubWithValidator(logger, queries)
+	hub.SetPublisher(busPublisherAdapter{bus: bus})
+	remoteServer := tunnel2.NewRemoteServer(logger, queries)
+	requester := handler.NewTunnelK8sRequester(hub)
+	helmRequester := handler.NewTunnelHelmRequester(hub)
+	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
+	monitoringHandler.SetLogger(logger)
+	argocdHandler := handler.NewArgoCDHandler(queries)
+	argocdHandler.SetLogger(logger)
+	argocdHandler.SetEncryptor(encryptor)
+	toolHandler := handler.NewToolHandlerWithHelm(queries, helmRequester)
+	toolHandler.SetLogger(logger)
+	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
+	catalogHandler.SetLogger(logger)
+	backupHandler := handler.NewBackupHandler(queries)
+	// Phase B2 — Velero backup engine wiring. Handler degrades cleanly when
+	// these aren't set; we set them here so the running stack uses real Velero
+	// CRs + real S3 SigV4 probes instead of the legacy stub paths.
+	backupHandler.SetEncryptor(encryptor)
+	backupHandler.SetK8sRequester(requester)
+	backupHandler.SetLogger(logger)
+	loggingHandler := handler.NewLoggingHandler(queries)
+	securityHandler := handler.NewSecurityHandler(queries)
+	// Phase B5 — CIS scans wiring (handler creates ClusterScan CRs through the
+	// tunnel and runs an in-process poller until the report lands).
+	securityHandler.SetK8sRequester(requester)
+	securityHandler.SetClusterQuerier(queries)
+	securityHandler.SetLogger(logger)
+	workloadHandler := handler.NewWorkloadHandlerWithDeps(queries, requester)
+	workloadHandler.SetLogger(logger)
+	rbacEngine := rbac.NewEngine()
+	rbacQuerier := appmiddleware.NewSQLCRBACQuerier(queries)
+	monitoringHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	argocdHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	toolHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
+	if redisErr != nil {
+		redisOpt = asynq.RedisClientOpt{Addr: "localhost:6379"}
+	}
+	queue := asynq.NewClient(redisOpt)
+	// Phase B5 — give the security handler the asynq queue. The handler's
+	// IngestEnqueuer interface is satisfied directly by *asynq.Client.
+	securityHandler.SetIngestQueue(queue)
+	// Persister lets the in-process poller write ClusterScan reports back to
+	// our security_scan_results rows.
+	securityHandler.SetIngestPersister(queries)
+	// Phase B3 — project enforcement controller: wire the project handler with
+	// the asynq queue (for AddNamespace → enqueue project:reconcile) and the
+	// shared K8sRequester (for ResourceQuota / LimitRange / NetworkPolicy
+	// server-side apply through the tunnel).
+	projectHandler := handler.NewProjectHandler(queries)
+	projectHandler.SetTaskQueue(queue)
+	projectHandler.SetK8sRequester(requester)
+	projectHandler.SetLogger(logger)
+	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
+
+	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
+	authHandler.SetPasswordRehasher(queries)
+	authHandler.SetRoleBindings(queries)
+	authHandler.SetAuditWriter(queries)
+	authHandler.SetLogger(logger)
+
+	var ssoHandler *handler.SSOHandler
+	if ssoManager != nil {
+		ssoHandler = handler.NewSSOHandler(ssoManager, queries, jwtManager, "/")
+	}
+
+	// Phase B4 — Dex shim handler. Always wire it (even pre-encryption-key)
+	// so the connector wizard is browseable at /auth/dex/connector-types/;
+	// secret round-trips silently no-op when the encryptor is nil and the
+	// /apply endpoint short-circuits with a 503 when the K8s requester is
+	// unavailable.
+	dexHandler := handler.NewDexHandler(queries)
+	dexHandler.SetEncryptor(encryptor)
+	dexHandler.SetK8sRequester(requester)
+	dexHandler.SetLogger(logger)
+
+	clusterHandler := handler.NewClusterHandler(queries)
+	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
+	// / Delete. The bus implements the EventPublisher interface naturally.
+	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
+	// Wire metrics: tunnel requester for remote clusters, in-cluster clients
+	// for the local cluster. Both are nil-safe; missing deps fall back to zero.
+	clusterHandler.SetMetricsRequester(requester)
+	if restCfg, err := rest.InClusterConfig(); err == nil {
+		if cs, err := kubernetes.NewForConfig(restCfg); err == nil {
+			if mc, err := metricsv.NewForConfig(restCfg); err == nil {
+				clusterHandler.SetMetricsLocalClient(cs, mc)
+			} else {
+				clusterHandler.SetMetricsLocalClient(cs, nil)
+			}
+		}
+	}
+
+	// Share the same metrics provider with the workload handler so per-node
+	// CPU/memory usage on the node-detail page comes from the same fetch (and
+	// the same cache) as the dashboard cluster card.
+	workloadHandler.SetMetricsProvider(clusterHandler.MetricsProvider())
+
+	deps := RouterDependencies{
+		JWT:          jwtManager,
+		AuthQueries:  queries,
+		Bootstrap:    handler.NewBootstrapHandler(queries, jwtManager),
+		Auth:         authHandler,
+		SSO:          ssoHandler,
+		Clusters:     clusterHandler,
+		Projects:     projectHandler,
+		Tools:        toolHandler,
+		Audit:        handler.NewAuditHandler(queries),
+		Alerting:     handler.NewAlertingHandlerWithDeps(queries, requester),
+		ArgoCD:       argocdHandler,
+		Backups:      backupHandler,
+		Catalog:      catalogHandler,
+		Logging:      loggingHandler,
+		Monitoring:   monitoringHandler,
+		ControlPlane: controlPlaneHandler,
+		Resources:       handler.NewResourceHandlerWithQueries(queries, requester),
+		ResourcesSearch: handler.NewResourcesSearchHandler(queries, requester),
+		DexConfig:       dexHandler,
+		RBAC:         handler.NewRBACHandler(queries),
+		RBACQueries:  rbacQuerier,
+		RBACEngine:   rbacEngine,
+		Security:     securityHandler,
+		ServiceProxy: handler.NewServiceProxyHandler(requester),
+		Workloads:    workloadHandler,
+		Hub:          hub,
+		Proxy:        tunnel.NewProxyHandler(hub, logger),
+		Exec:         tunnel.NewExecConsumer(hub, logger),
+		Logs:         tunnel.NewLogsConsumer(hub, logger),
+		RemoteServer:  remoteServer,
+		RemoteQueries: queries,
+		EventStream:   handler.NewEventStreamHandler(bus),
+	}
+	// EventSource cannot send Authorization headers, so the stream handler
+	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
+	// manager + token querier the rest of the API uses.
+	deps.EventStream.SetAuth(jwtManager, queries)
+
+	// ArgoCD UI reverse proxy. Defaults to the in-cluster service URL but
+	// is overridable via the `ARGOCD_UI_UPSTREAM` env var. If construction
+	// fails (e.g. the URL is malformed), the proxy stays nil and the route
+	// registration in NewRouter no-ops — the rest of the app still boots.
+	upstream := cfg.ArgoCDUIUpstream
+	if upstream == "" {
+		upstream = "http://argocd-server.argocd.svc.cluster.local:80"
+	}
+	if argoUIProxy, err := handler.NewArgoCDUIProxy(upstream, logger); err != nil {
+		logger.Warn("argocd UI proxy disabled", "error", err)
+	} else {
+		// Single sign-on: wire a token source that decrypts the local-cluster
+		// ArgoCD instance's stored auth_token on demand. The proxy injects
+		// that as the upstream `argocd.token` cookie so users skip ArgoCD's
+		// own login page. Only effective when the encryptor is configured
+		// AND a local-cluster instance row has been created.
+		if encryptor != nil {
+			argoUIProxy.SetSessionTokenSource(&localClusterArgoCDTokenSource{
+				queries:   queries,
+				encryptor: encryptor,
+				log:       logger,
+			})
+		}
+		deps.ArgoCDUIProxy = argoUIProxy
+	}
+
+	router := NewRouter(cfg, deps)
+
+	s := &Server{
+		handler:   router,
+		logger:    logger,
+		db:        database,
+		queue:     queue,
+		Encryptor: encryptor,
+		SSO:       ssoManager,
+	}
+	s.httpServer = &http.Server{
+		Handler: router,
+		// ReadHeaderTimeout caps the slowloris exposure but does not bound the
+		// long-lived WebSocket tunnel connection (which lives in /api/v1/ws/...).
+		// Keep ReadTimeout/WriteTimeout at zero so the WS connection is not
+		// forcibly closed mid-stream. Per-handler timeouts cover REST routes.
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	reconcileCtx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	monitoringHandler.StartReconciler(reconcileCtx)
+	argocdHandler.StartReconciler(reconcileCtx)
+	toolHandler.StartReconciler(reconcileCtx)
+	catalogHandler.StartReconciler(reconcileCtx)
+	controlPlaneHandler.StartEvaluator(reconcileCtx)
+	workloadHandler.StartReconciler(reconcileCtx)
+	// Phase B3 — configure the worker-task runtime in this process too, so the
+	// in-process project reconciler (and other server-side cron sweeps that
+	// rely on the same runtime) have the K8sRequester. The dedicated worker
+	// process configures a runtime without K8s access — it runs DB-only tasks.
+	// This server-side runtime is the one that actually applies manifests
+	// through the tunnel.
+	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
+		Queries:        queries,
+		Log:            logger,
+		AgentImageRepo: cfg.AgentImageRepository,
+		AgentImageTag:  cfg.AgentImageTag,
+		PlatformName:   "Astronomer",
+		K8s:            requester,
+	})
+	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
+	// DB lease handles multiple worker pods racing on the same row).
+	projectHandler.StartReconciler(reconcileCtx)
+	// Kick an initial sweep so the first add-namespace doesn't wait a full
+	// ticker tick before any enforcement lands. Best-effort — failures here
+	// are logged inside HandleProjectReconcileAll and the periodic loop will
+	// retry.
+	go func() {
+		time.Sleep(2 * time.Second)
+		_ = tasks.HandleProjectReconcileAll(reconcileCtx, nil)
+	}()
+
+	// Live metrics + status publisher: emits cluster.metrics every 10s for
+	// each active cluster and flips active<->disconnected when heartbeats
+	// age past the threshold (with cluster.status_changed fan-out).
+	livemetrics.New(bus, queries, clusterHandler.MetricsProvider(), logger).Start(reconcileCtx)
+
+	// Local cluster auto-registration (Rancher pattern). Both calls are
+	// best-effort: when running outside a kubernetes cluster (laptop dev,
+	// some test scenarios) rest.InClusterConfig fails and StartLocalAgent
+	// degrades to a warning. The DB row still gets created so the UI shows
+	// the management cluster even if its data plane is offline.
+	if localCluster, err := bootstrapLocalCluster(reconcileCtx, logger, queries); err != nil {
+		logger.Warn("local cluster bootstrap failed", "error", err)
+	} else if localCluster != nil {
+		// Tell the workload handler which cluster ID is local so node-detail
+		// requests against it use the in-process k8s client (no tunnel hop).
+		workloadHandler.SetLocalClusterID(localCluster.ID.String())
+		if err := StartLocalAgent(reconcileCtx, logger, queries, localCluster.ID); err != nil {
+			logger.Warn("local agent start failed", "error", err)
+		}
+	}
+
+	return s, nil
+}
+
+// bootstrapLocalCluster ensures the local cluster row exists. It builds a
+// transient in-cluster k8s client purely to enrich the row with version /
+// node-count metadata; if InClusterConfig is unavailable, the row is still
+// created with empty discovery fields.
+func bootstrapLocalCluster(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries) (*sqlc.Cluster, error) {
+	restCfg, restErr := rest.InClusterConfig()
+	var clientset *kubernetes.Clientset
+	if restErr != nil {
+		logger.Warn("local cluster discovery skipped: not running in-cluster", "error", restErr)
+		restCfg = nil
+	} else if cs, err := kubernetes.NewForConfig(restCfg); err != nil {
+		logger.Warn("local cluster discovery skipped: clientset error", "error", err)
+	} else {
+		clientset = cs
+	}
+	return EnsureLocalCluster(ctx, queries, clientset, restCfg)
 }
 
 // Start begins listening on the given address. It blocks until the server stops.
@@ -48,10 +396,75 @@ func (s *Server) Start(addr string) error {
 
 // Shutdown gracefully shuts down the server with a deadline.
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.httpServer.Shutdown(ctx)
+	if s.cancel != nil {
+		s.cancel()
+	}
+	err := s.httpServer.Shutdown(ctx)
+	if s.db != nil {
+		s.db.Close()
+	}
+	if s.queue != nil {
+		s.queue.Close()
+	}
+	return err
 }
 
 // ServeHTTP implements http.Handler, useful for testing.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
+}
+
+// localClusterArgoCDTokenSource implements handler.SessionTokenSource by
+// looking up the management cluster's ArgoCD instance row and decrypting its
+// stored auth_token. The result is the value of the upstream `argocd.token`
+// cookie that ArgoCD's UI honours; the proxy stamps it onto outgoing requests
+// so users land in an authenticated session without a second login prompt.
+//
+// Returns ("", nil) when there is no local cluster row yet, no ArgoCD
+// instance registered for it, or no encrypted token stored. Errors during
+// decryption are propagated so the proxy can log them and fall through.
+type localClusterArgoCDTokenSource struct {
+	queries   *sqlc.Queries
+	encryptor *auth.Encryptor
+	log       *slog.Logger
+}
+
+func (s *localClusterArgoCDTokenSource) UpstreamSessionToken(ctx context.Context) (string, error) {
+	if s == nil || s.queries == nil || s.encryptor == nil {
+		return "", nil
+	}
+	// Find the local cluster row by listing and filtering — no
+	// dedicated GetLocalCluster query exists today, but is_local has at
+	// most one row by partial-unique index, so this is O(N) only over
+	// the (small) cluster set.
+	clusters, err := s.queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 200, Offset: 0})
+	if err != nil {
+		return "", err
+	}
+	var localID uuid.UUID
+	for _, c := range clusters {
+		if c.IsLocal {
+			localID = c.ID
+			break
+		}
+	}
+	if localID == uuid.Nil {
+		return "", nil
+	}
+	instances, err := s.queries.ListInstancesByCluster(ctx, sqlc.ListInstancesByClusterParams{
+		ClusterID: localID,
+		Limit:     1,
+		Offset:    0,
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(instances) == 0 || instances[0].AuthTokenEncrypted == "" {
+		return "", nil
+	}
+	plain, err := s.encryptor.Decrypt(instances[0].AuthTokenEncrypted)
+	if err != nil {
+		return "", err
+	}
+	return plain, nil
 }

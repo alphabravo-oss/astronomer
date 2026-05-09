@@ -1,0 +1,9 @@
+# Astronomer Go - raw manifests (no templating).
+# DEV DEFAULTS — review before applying to anything that matters.
+# Apply with: kubectl apply -f deploy/k8s/
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer
+  labels:
+    app.kubernetes.io/part-of: astronomer

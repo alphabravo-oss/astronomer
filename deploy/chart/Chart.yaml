@@ -1,0 +1,18 @@
+apiVersion: v2
+name: astronomer
+description: Astronomer Go management plane (server + worker + dependencies)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://astronomer.io
+sources:
+  - https://github.com/alphabravocompany/astronomer-go
+maintainers:
+  - name: Astronomer Team
+    email: team@astronomer.io
+keywords:
+  - kubernetes
+  - multi-cluster
+  - management
+  - golang

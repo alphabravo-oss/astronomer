@@ -250,6 +250,20 @@ func (q *Queries) CreateNotificationChannel(ctx context.Context, arg CreateNotif
 	return i, err
 }
 
+const deleteAlertEventsOlderThan = `-- name: DeleteAlertEventsOlderThan :execrows
+DELETE FROM alert_events WHERE fired_at < $1
+`
+
+// Deletes alert events older than the supplied cutoff. Used by the scheduled
+// cleanup_old_alert_events worker.
+func (q *Queries) DeleteAlertEventsOlderThan(ctx context.Context, firedAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAlertEventsOlderThan, firedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteAlertRule = `-- name: DeleteAlertRule :exec
 DELETE FROM alert_rules WHERE id = $1
 `

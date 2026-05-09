@@ -51,13 +51,21 @@ func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.R
 			}
 
 			var clusterID, projectID uuid.UUID
-			if cid := chi.URLParam(r, "cluster_id"); cid != "" {
+			clusterParam := chi.URLParam(r, "cluster_id")
+			if clusterParam == "" && resource == rbac.ResourceClusters {
+				clusterParam = chi.URLParam(r, "id")
+			}
+			if cid := clusterParam; cid != "" {
 				parsed, err := uuid.Parse(cid)
 				if err == nil {
 					clusterID = parsed
 				}
 			}
-			if pid := chi.URLParam(r, "project_id"); pid != "" {
+			projectParam := chi.URLParam(r, "project_id")
+			if projectParam == "" && resource == rbac.ResourceProjects {
+				projectParam = chi.URLParam(r, "id")
+			}
+			if pid := projectParam; pid != "" {
 				parsed, err := uuid.Parse(pid)
 				if err == nil {
 					projectID = parsed

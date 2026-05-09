@@ -54,25 +54,27 @@ func TestNewScheduler(t *testing.T) {
 
 func TestTaskConstants(t *testing.T) {
 	expected := map[string]string{
-		"TypeHealthCheck":        "cluster:health_check",
-		"TypeAlertEvaluation":    "alert:evaluate",
-		"TypeCatalogSync":        "catalog:sync",
-		"TypeMetricsAggregation": "metrics:aggregate",
-		"TypeBackupExecution":    "backup:execute",
-		"TypeSecurityScan":       "security:scan",
-		"TypeNotificationSend":   "notification:send",
-		"TypeAgentManifest":      "agent:generate_manifest",
+		"TypeHealthCheck":         "cluster:health_check",
+		"TypeAlertEvaluation":     "alert:evaluate",
+		"TypeCatalogSync":         "catalog:sync",
+		"TypeMetricsAggregation":  "metrics:aggregate",
+		"TypeMonitoringReconcile": "monitoring:reconcile",
+		"TypeBackupExecution":     "backup:execute",
+		"TypeSecurityScan":        "security:scan",
+		"TypeNotificationSend":    "notification:send",
+		"TypeAgentManifest":       "agent:generate_manifest",
 	}
 
 	actual := map[string]string{
-		"TypeHealthCheck":        TypeHealthCheck,
-		"TypeAlertEvaluation":    TypeAlertEvaluation,
-		"TypeCatalogSync":        TypeCatalogSync,
-		"TypeMetricsAggregation": TypeMetricsAggregation,
-		"TypeBackupExecution":    TypeBackupExecution,
-		"TypeSecurityScan":       TypeSecurityScan,
-		"TypeNotificationSend":   TypeNotificationSend,
-		"TypeAgentManifest":      TypeAgentManifest,
+		"TypeHealthCheck":         TypeHealthCheck,
+		"TypeAlertEvaluation":     TypeAlertEvaluation,
+		"TypeCatalogSync":         TypeCatalogSync,
+		"TypeMetricsAggregation":  TypeMetricsAggregation,
+		"TypeMonitoringReconcile": TypeMonitoringReconcile,
+		"TypeBackupExecution":     TypeBackupExecution,
+		"TypeSecurityScan":        TypeSecurityScan,
+		"TypeNotificationSend":    TypeNotificationSend,
+		"TypeAgentManifest":       TypeAgentManifest,
 	}
 
 	for name, want := range expected {
@@ -186,6 +188,13 @@ func TestHandleMetricsAggregationEmptyPayload(t *testing.T) {
 	task := asynq.NewTask(TypeMetricsAggregation, nil)
 	if err := tasks.HandleMetricsAggregation(context.Background(), task); err != nil {
 		t.Fatalf("HandleMetricsAggregation: %v", err)
+	}
+}
+
+func TestHandleMonitoringReconcileEmptyPayload(t *testing.T) {
+	task := asynq.NewTask(TypeMonitoringReconcile, nil)
+	if err := tasks.HandleMonitoringReconcile(context.Background(), task); err != nil {
+		t.Fatalf("HandleMonitoringReconcile: %v", err)
 	}
 }
 

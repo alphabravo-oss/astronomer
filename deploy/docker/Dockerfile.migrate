@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1.6
+# ── Migrate image ─────────────────────────────────────────────────────────────
+# Uses the upstream golang-migrate binary baked with our SQL migration files.
+# Run as: docker run ... astronomer-go-migrate \
+#   -database "$DATABASE_URL" -path /migrations up
+FROM migrate/migrate:v4.18.1
+
+# /migrations is the conventional path used by the migrate binary.
+COPY internal/db/migrations /migrations
+
+# The base image entrypoint is /usr/local/bin/migrate, so callers only need
+# to pass migrate-style args (e.g. -database <url> -path /migrations up).
+ENTRYPOINT ["migrate"]
+CMD ["-help"]

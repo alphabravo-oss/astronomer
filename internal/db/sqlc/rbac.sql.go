@@ -47,13 +47,14 @@ func (q *Queries) CountProjectRoles(ctx context.Context) (int64, error) {
 }
 
 const createClusterRole = `-- name: CreateClusterRole :one
-INSERT INTO cluster_roles (name, description, permissions, rules, is_builtin)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at
+INSERT INTO cluster_roles (name, display_name, description, permissions, rules, is_builtin)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
 `
 
 type CreateClusterRoleParams struct {
 	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
 	Permissions json.RawMessage `json:"permissions"`
 	Rules       json.RawMessage `json:"rules"`
@@ -63,6 +64,7 @@ type CreateClusterRoleParams struct {
 func (q *Queries) CreateClusterRole(ctx context.Context, arg CreateClusterRoleParams) (ClusterRole, error) {
 	row := q.db.QueryRow(ctx, createClusterRole,
 		arg.Name,
+		arg.DisplayName,
 		arg.Description,
 		arg.Permissions,
 		arg.Rules,
@@ -78,6 +80,7 @@ func (q *Queries) CreateClusterRole(ctx context.Context, arg CreateClusterRolePa
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -116,13 +119,14 @@ func (q *Queries) CreateClusterRoleBinding(ctx context.Context, arg CreateCluste
 }
 
 const createGlobalRole = `-- name: CreateGlobalRole :one
-INSERT INTO global_roles (name, description, permissions, rules, is_builtin)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at
+INSERT INTO global_roles (name, display_name, description, permissions, rules, is_builtin)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
 `
 
 type CreateGlobalRoleParams struct {
 	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
 	Permissions json.RawMessage `json:"permissions"`
 	Rules       json.RawMessage `json:"rules"`
@@ -132,6 +136,7 @@ type CreateGlobalRoleParams struct {
 func (q *Queries) CreateGlobalRole(ctx context.Context, arg CreateGlobalRoleParams) (GlobalRole, error) {
 	row := q.db.QueryRow(ctx, createGlobalRole,
 		arg.Name,
+		arg.DisplayName,
 		arg.Description,
 		arg.Permissions,
 		arg.Rules,
@@ -147,6 +152,7 @@ func (q *Queries) CreateGlobalRole(ctx context.Context, arg CreateGlobalRolePara
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -178,13 +184,14 @@ func (q *Queries) CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalR
 }
 
 const createProjectRole = `-- name: CreateProjectRole :one
-INSERT INTO project_roles (name, description, permissions, rules, is_builtin)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at
+INSERT INTO project_roles (name, display_name, description, permissions, rules, is_builtin)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
 `
 
 type CreateProjectRoleParams struct {
 	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
 	Permissions json.RawMessage `json:"permissions"`
 	Rules       json.RawMessage `json:"rules"`
@@ -194,6 +201,7 @@ type CreateProjectRoleParams struct {
 func (q *Queries) CreateProjectRole(ctx context.Context, arg CreateProjectRoleParams) (ProjectRole, error) {
 	row := q.db.QueryRow(ctx, createProjectRole,
 		arg.Name,
+		arg.DisplayName,
 		arg.Description,
 		arg.Permissions,
 		arg.Rules,
@@ -209,6 +217,7 @@ func (q *Queries) CreateProjectRole(ctx context.Context, arg CreateProjectRolePa
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -387,7 +396,7 @@ func (q *Queries) GetClusterRoleBindingsByUserID(ctx context.Context, userID pgt
 
 const getClusterRoleByID = `-- name: GetClusterRoleByID :one
 
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM cluster_roles WHERE id = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM cluster_roles WHERE id = $1
 `
 
 // Cluster Roles
@@ -403,12 +412,13 @@ func (q *Queries) GetClusterRoleByID(ctx context.Context, id uuid.UUID) (Cluster
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
 
 const getClusterRoleByName = `-- name: GetClusterRoleByName :one
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM cluster_roles WHERE name = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM cluster_roles WHERE name = $1
 `
 
 func (q *Queries) GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error) {
@@ -423,6 +433,7 @@ func (q *Queries) GetClusterRoleByName(ctx context.Context, name string) (Cluste
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -511,7 +522,7 @@ func (q *Queries) GetGlobalRoleBindingsByUserID(ctx context.Context, userID pgty
 
 const getGlobalRoleByID = `-- name: GetGlobalRoleByID :one
 
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM global_roles WHERE id = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM global_roles WHERE id = $1
 `
 
 // Global Roles
@@ -527,12 +538,13 @@ func (q *Queries) GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (GlobalRo
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
 
 const getGlobalRoleByName = `-- name: GetGlobalRoleByName :one
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM global_roles WHERE name = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM global_roles WHERE name = $1
 `
 
 func (q *Queries) GetGlobalRoleByName(ctx context.Context, name string) (GlobalRole, error) {
@@ -547,6 +559,7 @@ func (q *Queries) GetGlobalRoleByName(ctx context.Context, name string) (GlobalR
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -638,7 +651,7 @@ func (q *Queries) GetProjectRoleBindingsByUserID(ctx context.Context, userID pgt
 
 const getProjectRoleByID = `-- name: GetProjectRoleByID :one
 
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM project_roles WHERE id = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM project_roles WHERE id = $1
 `
 
 // Project Roles
@@ -654,12 +667,13 @@ func (q *Queries) GetProjectRoleByID(ctx context.Context, id uuid.UUID) (Project
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
 
 const getProjectRoleByName = `-- name: GetProjectRoleByName :one
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM project_roles WHERE name = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM project_roles WHERE name = $1
 `
 
 func (q *Queries) GetProjectRoleByName(ctx context.Context, name string) (ProjectRole, error) {
@@ -674,12 +688,13 @@ func (q *Queries) GetProjectRoleByName(ctx context.Context, name string) (Projec
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
 
 const getUserClusterRoles = `-- name: GetUserClusterRoles :many
-SELECT cr.id, cr.name, cr.description, cr.permissions, cr.rules, cr.is_builtin, cr.created_at, cr.updated_at FROM cluster_roles cr
+SELECT cr.id, cr.name, cr.description, cr.permissions, cr.rules, cr.is_builtin, cr.created_at, cr.updated_at, cr.display_name FROM cluster_roles cr
 INNER JOIN cluster_role_bindings crb ON cr.id = crb.role_id
 WHERE crb.user_id = $1 AND crb.cluster_id = $2
 `
@@ -707,6 +722,7 @@ func (q *Queries) GetUserClusterRoles(ctx context.Context, arg GetUserClusterRol
 			&i.IsBuiltin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -719,7 +735,7 @@ func (q *Queries) GetUserClusterRoles(ctx context.Context, arg GetUserClusterRol
 }
 
 const getUserGlobalRoles = `-- name: GetUserGlobalRoles :many
-SELECT gr.id, gr.name, gr.description, gr.permissions, gr.rules, gr.is_builtin, gr.created_at, gr.updated_at FROM global_roles gr
+SELECT gr.id, gr.name, gr.description, gr.permissions, gr.rules, gr.is_builtin, gr.created_at, gr.updated_at, gr.display_name FROM global_roles gr
 INNER JOIN global_role_bindings grb ON gr.id = grb.role_id
 WHERE grb.user_id = $1
 `
@@ -742,6 +758,7 @@ func (q *Queries) GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([
 			&i.IsBuiltin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -754,7 +771,7 @@ func (q *Queries) GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([
 }
 
 const getUserProjectRoles = `-- name: GetUserProjectRoles :many
-SELECT pr.id, pr.name, pr.description, pr.permissions, pr.rules, pr.is_builtin, pr.created_at, pr.updated_at FROM project_roles pr
+SELECT pr.id, pr.name, pr.description, pr.permissions, pr.rules, pr.is_builtin, pr.created_at, pr.updated_at, pr.display_name FROM project_roles pr
 INNER JOIN project_role_bindings prb ON pr.id = prb.role_id
 WHERE prb.user_id = $1 AND prb.project_id = $2
 `
@@ -782,6 +799,7 @@ func (q *Queries) GetUserProjectRoles(ctx context.Context, arg GetUserProjectRol
 			&i.IsBuiltin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -869,7 +887,7 @@ func (q *Queries) ListClusterRoleBindingsByCluster(ctx context.Context, arg List
 }
 
 const listClusterRoles = `-- name: ListClusterRoles :many
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM cluster_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM cluster_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClusterRolesParams struct {
@@ -895,6 +913,7 @@ func (q *Queries) ListClusterRoles(ctx context.Context, arg ListClusterRolesPara
 			&i.IsBuiltin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -943,7 +962,7 @@ func (q *Queries) ListGlobalRoleBindings(ctx context.Context, arg ListGlobalRole
 }
 
 const listGlobalRoles = `-- name: ListGlobalRoles :many
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM global_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM global_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListGlobalRolesParams struct {
@@ -969,6 +988,7 @@ func (q *Queries) ListGlobalRoles(ctx context.Context, arg ListGlobalRolesParams
 			&i.IsBuiltin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -1056,7 +1076,7 @@ func (q *Queries) ListProjectRoleBindingsByProject(ctx context.Context, arg List
 }
 
 const listProjectRoles = `-- name: ListProjectRoles :many
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at FROM project_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM project_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectRolesParams struct {
@@ -1082,6 +1102,7 @@ func (q *Queries) ListProjectRoles(ctx context.Context, arg ListProjectRolesPara
 			&i.IsBuiltin,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -1096,16 +1117,18 @@ func (q *Queries) ListProjectRoles(ctx context.Context, arg ListProjectRolesPara
 const updateClusterRole = `-- name: UpdateClusterRole :one
 UPDATE cluster_roles SET
     name = $2,
-    description = $3,
-    permissions = $4,
-    rules = $5
+    display_name = $3,
+    description = $4,
+    permissions = $5,
+    rules = $6
 WHERE id = $1
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
 `
 
 type UpdateClusterRoleParams struct {
 	ID          uuid.UUID       `json:"id"`
 	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
 	Permissions json.RawMessage `json:"permissions"`
 	Rules       json.RawMessage `json:"rules"`
@@ -1115,6 +1138,7 @@ func (q *Queries) UpdateClusterRole(ctx context.Context, arg UpdateClusterRolePa
 	row := q.db.QueryRow(ctx, updateClusterRole,
 		arg.ID,
 		arg.Name,
+		arg.DisplayName,
 		arg.Description,
 		arg.Permissions,
 		arg.Rules,
@@ -1129,6 +1153,7 @@ func (q *Queries) UpdateClusterRole(ctx context.Context, arg UpdateClusterRolePa
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -1136,16 +1161,18 @@ func (q *Queries) UpdateClusterRole(ctx context.Context, arg UpdateClusterRolePa
 const updateGlobalRole = `-- name: UpdateGlobalRole :one
 UPDATE global_roles SET
     name = $2,
-    description = $3,
-    permissions = $4,
-    rules = $5
+    display_name = $3,
+    description = $4,
+    permissions = $5,
+    rules = $6
 WHERE id = $1
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
 `
 
 type UpdateGlobalRoleParams struct {
 	ID          uuid.UUID       `json:"id"`
 	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
 	Permissions json.RawMessage `json:"permissions"`
 	Rules       json.RawMessage `json:"rules"`
@@ -1155,6 +1182,7 @@ func (q *Queries) UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRolePara
 	row := q.db.QueryRow(ctx, updateGlobalRole,
 		arg.ID,
 		arg.Name,
+		arg.DisplayName,
 		arg.Description,
 		arg.Permissions,
 		arg.Rules,
@@ -1169,6 +1197,7 @@ func (q *Queries) UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRolePara
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }
@@ -1176,16 +1205,18 @@ func (q *Queries) UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRolePara
 const updateProjectRole = `-- name: UpdateProjectRole :one
 UPDATE project_roles SET
     name = $2,
-    description = $3,
-    permissions = $4,
-    rules = $5
+    display_name = $3,
+    description = $4,
+    permissions = $5,
+    rules = $6
 WHERE id = $1
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
 `
 
 type UpdateProjectRoleParams struct {
 	ID          uuid.UUID       `json:"id"`
 	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
 	Permissions json.RawMessage `json:"permissions"`
 	Rules       json.RawMessage `json:"rules"`
@@ -1195,6 +1226,7 @@ func (q *Queries) UpdateProjectRole(ctx context.Context, arg UpdateProjectRolePa
 	row := q.db.QueryRow(ctx, updateProjectRole,
 		arg.ID,
 		arg.Name,
+		arg.DisplayName,
 		arg.Description,
 		arg.Permissions,
 		arg.Rules,
@@ -1209,6 +1241,7 @@ func (q *Queries) UpdateProjectRole(ctx context.Context, arg UpdateProjectRolePa
 		&i.IsBuiltin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DisplayName,
 	)
 	return i, err
 }

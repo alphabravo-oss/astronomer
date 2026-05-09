@@ -16,3 +16,15 @@ bin/
 # Environment
 .env
 .worktrees/
+
+# Local debugging / one-off agent install YAMLs from manual ops
+.tmp/
+
+# Helm / kube cache dirs (when running uncontained)
+.cache/
+.config/
+.local/
+
+# Test output
+coverage.out
+*.test

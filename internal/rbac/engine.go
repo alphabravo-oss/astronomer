@@ -14,10 +14,16 @@ func NewEngine() *Engine {
 // at the specified scope (global, cluster, or project).
 //
 // Check order (first match wins):
-//  1. Global roles (apply everywhere)
-//  2. Cluster roles (if clusterID provided)
-//  3. Project roles (if projectID provided)
+//  1. Superuser binding (IsSuperuser=true) short-circuits to true
+//  2. Global roles (apply everywhere)
+//  3. Cluster roles (if clusterID provided)
+//  4. Project roles (if projectID provided)
 func (e *Engine) CheckPermission(bindings []RoleBinding, resource Resource, verb Verb, clusterID, projectID uuid.UUID) bool {
+	for _, b := range bindings {
+		if b.IsSuperuser {
+			return true
+		}
+	}
 	for _, b := range bindings {
 		if !e.bindingApplies(b, clusterID, projectID) {
 			continue
@@ -26,6 +32,17 @@ func (e *Engine) CheckPermission(bindings []RoleBinding, resource Resource, verb
 			if e.matchRule(rule, resource, verb) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// CheckSuperuser returns true if any binding marks the user as a superuser.
+// This is a convenience helper for callers that only need the bypass check.
+func (e *Engine) CheckSuperuser(bindings []RoleBinding) bool {
+	for _, b := range bindings {
+		if b.IsSuperuser {
+			return true
 		}
 	}
 	return false

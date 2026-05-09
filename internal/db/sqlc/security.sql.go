@@ -46,6 +46,60 @@ func (q *Queries) CountSecurityScanResults(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const createCISScan = `-- name: CreateCISScan :one
+INSERT INTO security_scan_results (
+    cluster_id, scan_type, status, summary, results,
+    cluster_scan_name, initiated_by_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings
+`
+
+type CreateCISScanParams struct {
+	ClusterID       uuid.UUID       `json:"cluster_id"`
+	ScanType        string          `json:"scan_type"`
+	Status          string          `json:"status"`
+	Summary         json.RawMessage `json:"summary"`
+	Results         json.RawMessage `json:"results"`
+	ClusterScanName string          `json:"cluster_scan_name"`
+	InitiatedByID   pgtype.UUID     `json:"initiated_by_id"`
+}
+
+// Phase B5: explicit constructor that records the upstream ClusterScan CR name
+// so the worker can poll the matching ClusterScanReport for ingestion.
+func (q *Queries) CreateCISScan(ctx context.Context, arg CreateCISScanParams) (SecurityScanResult, error) {
+	row := q.db.QueryRow(ctx, createCISScan,
+		arg.ClusterID,
+		arg.ScanType,
+		arg.Status,
+		arg.Summary,
+		arg.Results,
+		arg.ClusterScanName,
+		arg.InitiatedByID,
+	)
+	var i SecurityScanResult
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ScanType,
+		&i.Status,
+		&i.Summary,
+		&i.Results,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.InitiatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
+	)
+	return i, err
+}
+
 const createClusterSecurityPolicy = `-- name: CreateClusterSecurityPolicy :one
 INSERT INTO cluster_security_policies (cluster_id, template_id, sync_status)
 VALUES ($1, $2, $3)
@@ -137,7 +191,7 @@ func (q *Queries) CreatePodSecurityTemplate(ctx context.Context, arg CreatePodSe
 const createSecurityScanResult = `-- name: CreateSecurityScanResult :one
 INSERT INTO security_scan_results (cluster_id, scan_type, status, summary, results, initiated_by_id)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at
+RETURNING id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings
 `
 
 type CreateSecurityScanResultParams struct {
@@ -171,6 +225,12 @@ func (q *Queries) CreateSecurityScanResult(ctx context.Context, arg CreateSecuri
 		&i.InitiatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
 	)
 	return i, err
 }
@@ -332,7 +392,7 @@ func (q *Queries) GetPolicyByCluster(ctx context.Context, clusterID uuid.UUID) (
 
 const getSecurityScanResultByID = `-- name: GetSecurityScanResultByID :one
 
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at FROM security_scan_results WHERE id = $1
+SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results WHERE id = $1
 `
 
 // Security Scan Results
@@ -351,6 +411,12 @@ func (q *Queries) GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (
 		&i.InitiatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ClusterScanName,
+		&i.Passed,
+		&i.Failed,
+		&i.Warned,
+		&i.Skipped,
+		&i.Findings,
 	)
 	return i, err
 }
@@ -440,7 +506,7 @@ func (q *Queries) ListPodSecurityTemplates(ctx context.Context, arg ListPodSecur
 }
 
 const listScansByCluster = `-- name: ListScansByCluster :many
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at FROM security_scan_results WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListScansByClusterParams struct {
@@ -470,6 +536,12 @@ func (q *Queries) ListScansByCluster(ctx context.Context, arg ListScansByCluster
 			&i.InitiatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ClusterScanName,
+			&i.Passed,
+			&i.Failed,
+			&i.Warned,
+			&i.Skipped,
+			&i.Findings,
 		); err != nil {
 			return nil, err
 		}
@@ -482,7 +554,7 @@ func (q *Queries) ListScansByCluster(ctx context.Context, arg ListScansByCluster
 }
 
 const listScansByClusterAndType = `-- name: ListScansByClusterAndType :many
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at FROM security_scan_results WHERE cluster_id = $1 AND scan_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4
+SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results WHERE cluster_id = $1 AND scan_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4
 `
 
 type ListScansByClusterAndTypeParams struct {
@@ -518,6 +590,12 @@ func (q *Queries) ListScansByClusterAndType(ctx context.Context, arg ListScansBy
 			&i.InitiatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ClusterScanName,
+			&i.Passed,
+			&i.Failed,
+			&i.Warned,
+			&i.Skipped,
+			&i.Findings,
 		); err != nil {
 			return nil, err
 		}
@@ -530,7 +608,7 @@ func (q *Queries) ListScansByClusterAndType(ctx context.Context, arg ListScansBy
 }
 
 const listSecurityScanResults = `-- name: ListSecurityScanResults :many
-SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at FROM security_scan_results ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, cluster_id, scan_type, status, summary, results, started_at, completed_at, initiated_by_id, created_at, updated_at, cluster_scan_name, passed, failed, warned, skipped, findings FROM security_scan_results ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListSecurityScanResultsParams struct {
@@ -559,6 +637,12 @@ func (q *Queries) ListSecurityScanResults(ctx context.Context, arg ListSecurityS
 			&i.InitiatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ClusterScanName,
+			&i.Passed,
+			&i.Failed,
+			&i.Warned,
+			&i.Skipped,
+			&i.Findings,
 		); err != nil {
 			return nil, err
 		}
@@ -723,5 +807,67 @@ UPDATE security_scan_results SET status = 'failed', completed_at = now() WHERE i
 
 func (q *Queries) UpdateSecurityScanFailed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, updateSecurityScanFailed, id)
+	return err
+}
+
+const updateSecurityScanFailedWithMessage = `-- name: UpdateSecurityScanFailedWithMessage :exec
+UPDATE security_scan_results SET
+    status = 'failed',
+    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb($1::text), true),
+    completed_at = now()
+WHERE id = $2
+`
+
+type UpdateSecurityScanFailedWithMessageParams struct {
+	ErrorMessage string    `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+}
+
+// Phase B5: failure path that preserves the operator/agent message so users
+// can see *why* an ingest timed out, instead of a blank "failed" badge.
+func (q *Queries) UpdateSecurityScanFailedWithMessage(ctx context.Context, arg UpdateSecurityScanFailedWithMessageParams) error {
+	_, err := q.db.Exec(ctx, updateSecurityScanFailedWithMessage, arg.ErrorMessage, arg.ID)
+	return err
+}
+
+const updateSecurityScanReport = `-- name: UpdateSecurityScanReport :exec
+UPDATE security_scan_results SET
+    status = 'completed',
+    summary = $2,
+    results = $3,
+    passed = $4,
+    failed = $5,
+    warned = $6,
+    skipped = $7,
+    findings = $8,
+    completed_at = now()
+WHERE id = $1
+`
+
+type UpdateSecurityScanReportParams struct {
+	ID       uuid.UUID       `json:"id"`
+	Summary  json.RawMessage `json:"summary"`
+	Results  json.RawMessage `json:"results"`
+	Passed   int32           `json:"passed"`
+	Failed   int32           `json:"failed"`
+	Warned   int32           `json:"warned"`
+	Skipped  int32           `json:"skipped"`
+	Findings json.RawMessage `json:"findings"`
+}
+
+// Phase B5: full report ingestion. Writes flattened counts + findings in one
+// statement so the row reaches its terminal state atomically and the UI never
+// sees a half-populated scan.
+func (q *Queries) UpdateSecurityScanReport(ctx context.Context, arg UpdateSecurityScanReportParams) error {
+	_, err := q.db.Exec(ctx, updateSecurityScanReport,
+		arg.ID,
+		arg.Summary,
+		arg.Results,
+		arg.Passed,
+		arg.Failed,
+		arg.Warned,
+		arg.Skipped,
+		arg.Findings,
+	)
 	return err
 }

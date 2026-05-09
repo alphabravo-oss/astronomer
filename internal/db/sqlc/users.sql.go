@@ -69,6 +69,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
+	return err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at FROM users WHERE email = $1
 `
@@ -256,5 +265,21 @@ type UpdateUserPasswordParams struct {
 
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.Password)
+	return err
+}
+
+const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
+UPDATE users SET password = $2, updated_at = now() WHERE id = $1
+`
+
+type UpdateUserPasswordHashParams struct {
+	ID       uuid.UUID `json:"id"`
+	Password string    `json:"password"`
+}
+
+// Convenience alias used by the login flow when an inherited Django
+// PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
+func (q *Queries) UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error {
+	_, err := q.db.Exec(ctx, updateUserPasswordHash, arg.ID, arg.Password)
 	return err
 }

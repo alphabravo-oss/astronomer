@@ -20,6 +20,14 @@ const (
 	MsgK8sRequest  MessageType = "K8S_REQUEST"
 	MsgK8sResponse MessageType = "K8S_RESPONSE"
 
+	// K8s API proxy — streaming variant for long-lived responses (Watch).
+	// The server sends a K8S_STREAM_REQUEST when it detects a Watch-shaped
+	// HTTP request (?watch=true, Accept: stream=watch, /watch/ path). The
+	// agent replies with one MsgK8sStreamFrame{Kind:"header"}, zero or more
+	// {Kind:"data"} frames, then exactly one {Kind:"end"}.
+	MsgK8sStreamRequest MessageType = "K8S_STREAM_REQUEST"
+	MsgK8sStreamFrame   MessageType = "K8S_STREAM_FRAME"
+
 	// Helm operations
 	MsgHelmInstall   MessageType = "HELM_INSTALL"
 	MsgHelmUpgrade   MessageType = "HELM_UPGRADE"
@@ -37,6 +45,9 @@ const (
 	MsgLogStart   MessageType = "LOG_START"
 	MsgLogData    MessageType = "LOG_DATA"
 	MsgLogEnd     MessageType = "LOG_END"
+	// MsgLogStop is the server's request to terminate a log stream early.
+	// The agent closes the underlying stream and emits LOG_END.
+	MsgLogStop MessageType = "LOG_STOP"
 
 	// Health & metrics
 	MsgMetricsReport MessageType = "METRICS_REPORT"
@@ -47,14 +58,34 @@ const (
 	MsgRBACSyncRequest MessageType = "RBAC_SYNC_REQUEST"
 	MsgRBACSyncResult  MessageType = "RBAC_SYNC_RESULT"
 
-	// Service proxy
+	// Service proxy (legacy aliases retained for backwards compatibility).
 	MsgProxyRequest  MessageType = "PROXY_REQUEST"
 	MsgProxyResponse MessageType = "PROXY_RESPONSE"
 
-	// Metrics / status reporting
-	MsgMetrics         MessageType = "METRICS"
+	// Service proxy: forwards an HTTP request to an in-cluster Service via the
+	// agent. The agent makes the HTTP call to <svc>.<ns>.svc.cluster.local:<port>
+	// and returns the response. Bodies are base64-encoded for binary safety.
+	MsgServiceProxyRequest  MessageType = "SERVICE_PROXY_REQUEST"
+	MsgServiceProxyResponse MessageType = "SERVICE_PROXY_RESPONSE"
+
+	// Metrics / status reporting.
+	// MsgMetrics carries detailed cluster CPU/memory/node/namespace metrics on
+	// a separate ticker (config.MetricsInterval). Heartbeat carries lightweight
+	// liveness data on its own (faster) ticker.
+	MsgMetrics          MessageType = "METRICS"
 	MsgHelmStatusResult MessageType = "HELM_STATUS_RESULT"
-	MsgError           MessageType = "ERROR"
+	MsgError            MessageType = "ERROR"
+
+	// MsgStateUpdate is a coarse-grained "an object in the cluster changed"
+	// notification fed by the agent's SharedInformerFactory. The server
+	// translates a STATE_UPDATE into a `cluster.k8s_changed` SSE event so the
+	// dashboard can invalidate its cached resource lists without polling.
+	//
+	// State updates are best-effort and rate-limited on both sides; subscribers
+	// should treat them as invalidation hints, not authoritative deltas. They
+	// never carry resource bodies — only enough metadata for the UI to know
+	// what to refetch.
+	MsgStateUpdate MessageType = "STATE_UPDATE"
 )
 
 // Message is the envelope for all tunnel communication.
@@ -97,6 +128,32 @@ type K8sResponsePayload struct {
 	StatusCode int               `json:"status_code"`
 	Headers    map[string]string `json:"headers,omitempty"`
 	Body       string            `json:"body,omitempty"` // base64 encoded
+}
+
+// K8sStreamFrameKind is the discriminator for K8sStreamFrame.
+type K8sStreamFrameKind string
+
+const (
+	// K8sStreamFrameHeader carries StatusCode + Headers. Sent first.
+	K8sStreamFrameHeader K8sStreamFrameKind = "header"
+	// K8sStreamFrameData carries one chunk of body bytes.
+	K8sStreamFrameData K8sStreamFrameKind = "data"
+	// K8sStreamFrameEnd terminates the stream. May carry an Error string if
+	// the upstream connection failed mid-flight.
+	K8sStreamFrameEnd K8sStreamFrameKind = "end"
+)
+
+// K8sStreamFrame is one frame of a streaming k8s proxy response. The lifecycle
+// is exactly one Header, then zero or more Data frames, then exactly one End.
+// All Data frames carry base64-encoded chunks; chunk size is agent-chosen and
+// MUST NOT be assumed to align with watch-event boundaries — the consumer is
+// responsible for re-framing the JSON-on-newlines protocol that k8s emits.
+type K8sStreamFrame struct {
+	Kind       K8sStreamFrameKind `json:"kind"`
+	StatusCode int                `json:"status_code,omitempty"`
+	Headers    map[string]string  `json:"headers,omitempty"`
+	Body       string             `json:"body,omitempty"` // base64 (data frames)
+	Error      string             `json:"error,omitempty"`
 }
 
 // HelmRequestPayload represents a Helm operation request.
@@ -181,4 +238,93 @@ type RBACSyncResultPayload struct {
 	Applied int      `json:"applied"`
 	Removed int      `json:"removed"`
 	Errors  []string `json:"errors,omitempty"`
+}
+
+// ServiceProxyRequestPayload is sent by the server to ask the agent to forward
+// an HTTP request to an in-cluster Service. The agent dials
+// <ServiceName>.<Namespace>.svc.cluster.local:<Port>.
+//
+// Body is base64-encoded for binary safety (matches Go's K8sRequestPayload
+// convention). The Python-era `body_encoding` field is omitted; bodies on the
+// Go protocol are ALWAYS base64.
+type ServiceProxyRequestPayload struct {
+	ServiceName string            `json:"service_name"`
+	Namespace   string            `json:"namespace"`
+	Port        int               `json:"port"`
+	Method      string            `json:"method"`
+	Path        string            `json:"path"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        string            `json:"body,omitempty"` // base64 encoded
+	TimeoutSecs int               `json:"timeout_secs,omitempty"`
+}
+
+// ServiceProxyResponsePayload is the agent's response. Body is always
+// base64-encoded.
+type ServiceProxyResponsePayload struct {
+	StatusCode int               `json:"status_code"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Body       string            `json:"body,omitempty"` // base64 encoded
+	Error      string            `json:"error,omitempty"`
+}
+
+// StateUpdateOp is the kind of mutation observed by an informer.
+type StateUpdateOp string
+
+const (
+	StateUpdateOpAdded    StateUpdateOp = "added"
+	StateUpdateOpModified StateUpdateOp = "modified"
+	StateUpdateOpDeleted  StateUpdateOp = "deleted"
+)
+
+// StateUpdatePayload is the body of a STATE_UPDATE message. It carries only
+// metadata: never an object body. ConfigMaps and Secrets in particular MUST
+// have their `data` fields stripped on the agent before serialization — the
+// dashboard treats this as an invalidation hint and refetches via the normal
+// k8s proxy with the user's RBAC scope.
+//
+// CoalesceKey is an optional hint for the server-side rate limiter. When
+// empty, the server falls back to `kind|namespace|name`. Callers that want to
+// collapse e.g. all pods in a Deployment to a single key can pre-compute it.
+type StateUpdatePayload struct {
+	Op              StateUpdateOp `json:"op"`
+	Kind            string        `json:"kind"`
+	APIGroup        string        `json:"api_group,omitempty"`
+	APIVersion      string        `json:"api_version,omitempty"`
+	Namespace       string        `json:"namespace,omitempty"`
+	Name            string        `json:"name"`
+	ResourceVersion string        `json:"resource_version,omitempty"`
+	CoalesceKey     string        `json:"coalesce_key,omitempty"`
+}
+
+// NodeMetrics is per-node usage data.
+type NodeMetrics struct {
+	Name              string  `json:"name"`
+	CPUUsageMillicore int64   `json:"cpu_usage_millicore"`
+	CPUCapacityMilli  int64   `json:"cpu_capacity_millicore"`
+	MemoryUsageBytes  int64   `json:"memory_usage_bytes"`
+	MemoryCapacity    int64   `json:"memory_capacity_bytes"`
+	CPUPercent        float64 `json:"cpu_percent"`
+	MemoryPercent     float64 `json:"memory_percent"`
+}
+
+// NamespaceMetrics is per-namespace usage data.
+type NamespaceMetrics struct {
+	Name             string `json:"name"`
+	PodCount         int    `json:"pod_count"`
+	CPUUsageMilli    int64  `json:"cpu_usage_millicore"`
+	MemoryUsageBytes int64  `json:"memory_usage_bytes"`
+}
+
+// MetricsPayload carries cluster-wide and per-node/namespace metrics. Sent on
+// a separate ticker from heartbeat so observability tools can ingest it
+// independently.
+type MetricsPayload struct {
+	Timestamp          string             `json:"timestamp"`
+	MetricsAvailable   bool               `json:"metrics_available"`
+	ClusterCPUUsage    float64            `json:"cluster_cpu_usage"`
+	ClusterMemoryUsage float64            `json:"cluster_memory_usage"`
+	ClusterPodCount    int                `json:"cluster_pod_count"`
+	ClusterNodeCount   int                `json:"cluster_node_count"`
+	Nodes              []NodeMetrics      `json:"nodes,omitempty"`
+	Namespaces         []NamespaceMetrics `json:"namespaces,omitempty"`
 }

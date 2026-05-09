@@ -38,7 +38,15 @@ func HandleMetricsAggregation(ctx context.Context, t *asynq.Task) error {
 		slog.InfoContext(ctx, "aggregating metrics for all clusters")
 	}
 
-	// TODO: Read recent health check results, compute aggregates, store in metrics tables.
+	if runtimeDeps.Queries != nil {
+		task, err := NewHealthCheckTask(HealthCheckPayload{ClusterID: p.ClusterID})
+		if err != nil {
+			return err
+		}
+		if err := HandleHealthCheck(ctx, task); err != nil {
+			return err
+		}
+	}
 
 	slog.InfoContext(ctx, "metrics aggregation complete")
 	return nil

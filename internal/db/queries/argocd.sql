@@ -79,3 +79,29 @@ SELECT count(*) FROM argocd_applications;
 
 -- name: CountAppsByInstance :one
 SELECT count(*) FROM argocd_applications WHERE argocd_instance_id = $1;
+
+-- ArgoCD Managed Clusters (Phase B1)
+-- Index of which of OUR clusters have been registered into each upstream
+-- ArgoCD instance. The upstream truth lives in the ArgoCD cluster Secret in
+-- the argocd namespace; this table makes list/unregister cheap and gives the
+-- ApplicationSet UI something to label-target.
+
+-- name: CreateArgoCDManagedCluster :one
+INSERT INTO argocd_managed_clusters (argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetArgoCDManagedCluster :one
+SELECT * FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2;
+
+-- name: ListArgoCDManagedClusters :many
+SELECT * FROM argocd_managed_clusters WHERE argocd_instance_id = $1 ORDER BY created_at ASC;
+
+-- name: DeleteArgoCDManagedCluster :exec
+DELETE FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2;
+
+-- name: UpdateArgoCDManagedClusterLabels :one
+UPDATE argocd_managed_clusters
+SET labels = $3, updated_at = now()
+WHERE argocd_instance_id = $1 AND cluster_id = $2
+RETURNING *;

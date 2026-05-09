@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "astronomer.fullname" . }}-worker
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "worker") | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "worker") | nindent 8 }}
+      {{- with .Values.worker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for postgres..."
+              until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
+              echo "postgres up"
+        - name: wait-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for redis..."
+              until nc -z {{ include "astronomer.fullname" . }}-redis 6379; do sleep 1; done
+              echo "redis up"
+      containers:
+        - name: worker
+          image: {{ include "astronomer.image" (dict "context" . "component" "worker") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "astronomer.fullname" . }}-config
+            - secretRef:
+                name: {{ include "astronomer.fullname" . }}-secrets
+          {{- with .Values.worker.env }}
+          env:
+            {{- range $k, $v := . }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

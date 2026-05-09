@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -135,6 +136,48 @@ func (q *Queries) CreateArgoCDInstance(ctx context.Context, arg CreateArgoCDInst
 	return i, err
 }
 
+const createArgoCDManagedCluster = `-- name: CreateArgoCDManagedCluster :one
+
+INSERT INTO argocd_managed_clusters (argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at
+`
+
+type CreateArgoCDManagedClusterParams struct {
+	ArgocdInstanceID  uuid.UUID       `json:"argocd_instance_id"`
+	ClusterID         uuid.UUID       `json:"cluster_id"`
+	ClusterSecretName string          `json:"cluster_secret_name"`
+	ServerUrl         string          `json:"server_url"`
+	Labels            json.RawMessage `json:"labels"`
+}
+
+// ArgoCD Managed Clusters (Phase B1)
+// Index of which of OUR clusters have been registered into each upstream
+// ArgoCD instance. The upstream truth lives in the ArgoCD cluster Secret in
+// the argocd namespace; this table makes list/unregister cheap and gives the
+// ApplicationSet UI something to label-target.
+func (q *Queries) CreateArgoCDManagedCluster(ctx context.Context, arg CreateArgoCDManagedClusterParams) (ArgocdManagedCluster, error) {
+	row := q.db.QueryRow(ctx, createArgoCDManagedCluster,
+		arg.ArgocdInstanceID,
+		arg.ClusterID,
+		arg.ClusterSecretName,
+		arg.ServerUrl,
+		arg.Labels,
+	)
+	var i ArgocdManagedCluster
+	err := row.Scan(
+		&i.ID,
+		&i.ArgocdInstanceID,
+		&i.ClusterID,
+		&i.ClusterSecretName,
+		&i.ServerUrl,
+		&i.Labels,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteArgoCDApplication = `-- name: DeleteArgoCDApplication :exec
 DELETE FROM argocd_applications WHERE id = $1
 `
@@ -150,6 +193,20 @@ DELETE FROM argocd_instances WHERE id = $1
 
 func (q *Queries) DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteArgoCDInstance, id)
+	return err
+}
+
+const deleteArgoCDManagedCluster = `-- name: DeleteArgoCDManagedCluster :exec
+DELETE FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2
+`
+
+type DeleteArgoCDManagedClusterParams struct {
+	ArgocdInstanceID uuid.UUID `json:"argocd_instance_id"`
+	ClusterID        uuid.UUID `json:"cluster_id"`
+}
+
+func (q *Queries) DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgoCDManagedClusterParams) error {
+	_, err := q.db.Exec(ctx, deleteArgoCDManagedCluster, arg.ArgocdInstanceID, arg.ClusterID)
 	return err
 }
 
@@ -252,6 +309,31 @@ func (q *Queries) GetArgoCDInstanceByName(ctx context.Context, name string) (Arg
 		&i.VerifySsl,
 		&i.IsHealthy,
 		&i.LastSync,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getArgoCDManagedCluster = `-- name: GetArgoCDManagedCluster :one
+SELECT id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2
+`
+
+type GetArgoCDManagedClusterParams struct {
+	ArgocdInstanceID uuid.UUID `json:"argocd_instance_id"`
+	ClusterID        uuid.UUID `json:"cluster_id"`
+}
+
+func (q *Queries) GetArgoCDManagedCluster(ctx context.Context, arg GetArgoCDManagedClusterParams) (ArgocdManagedCluster, error) {
+	row := q.db.QueryRow(ctx, getArgoCDManagedCluster, arg.ArgocdInstanceID, arg.ClusterID)
+	var i ArgocdManagedCluster
+	err := row.Scan(
+		&i.ID,
+		&i.ArgocdInstanceID,
+		&i.ClusterID,
+		&i.ClusterSecretName,
+		&i.ServerUrl,
+		&i.Labels,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -438,6 +520,39 @@ func (q *Queries) ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstanc
 	return items, nil
 }
 
+const listArgoCDManagedClusters = `-- name: ListArgoCDManagedClusters :many
+SELECT id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at FROM argocd_managed_clusters WHERE argocd_instance_id = $1 ORDER BY created_at ASC
+`
+
+func (q *Queries) ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error) {
+	rows, err := q.db.Query(ctx, listArgoCDManagedClusters, argocdInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArgocdManagedCluster{}
+	for rows.Next() {
+		var i ArgocdManagedCluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArgocdInstanceID,
+			&i.ClusterID,
+			&i.ClusterSecretName,
+			&i.ServerUrl,
+			&i.Labels,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstancesByCluster = `-- name: ListInstancesByCluster :many
 SELECT id, name, cluster_id, api_url, auth_token_encrypted, verify_ssl, is_healthy, last_sync, created_at, updated_at FROM argocd_instances WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
@@ -594,4 +709,33 @@ type UpdateArgoCDInstanceHealthParams struct {
 func (q *Queries) UpdateArgoCDInstanceHealth(ctx context.Context, arg UpdateArgoCDInstanceHealthParams) error {
 	_, err := q.db.Exec(ctx, updateArgoCDInstanceHealth, arg.ID, arg.IsHealthy)
 	return err
+}
+
+const updateArgoCDManagedClusterLabels = `-- name: UpdateArgoCDManagedClusterLabels :one
+UPDATE argocd_managed_clusters
+SET labels = $3, updated_at = now()
+WHERE argocd_instance_id = $1 AND cluster_id = $2
+RETURNING id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at
+`
+
+type UpdateArgoCDManagedClusterLabelsParams struct {
+	ArgocdInstanceID uuid.UUID       `json:"argocd_instance_id"`
+	ClusterID        uuid.UUID       `json:"cluster_id"`
+	Labels           json.RawMessage `json:"labels"`
+}
+
+func (q *Queries) UpdateArgoCDManagedClusterLabels(ctx context.Context, arg UpdateArgoCDManagedClusterLabelsParams) (ArgocdManagedCluster, error) {
+	row := q.db.QueryRow(ctx, updateArgoCDManagedClusterLabels, arg.ArgocdInstanceID, arg.ClusterID, arg.Labels)
+	var i ArgocdManagedCluster
+	err := row.Scan(
+		&i.ID,
+		&i.ArgocdInstanceID,
+		&i.ClusterID,
+		&i.ClusterSecretName,
+		&i.ServerUrl,
+		&i.Labels,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

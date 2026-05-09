@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -44,9 +45,19 @@ func TestNewHealthReporter(t *testing.T) {
 func TestHealthEndpoints(t *testing.T) {
 	log := slog.Default()
 	hr := NewHealthReporter(nil, log, 30, 60)
+	hr.SetClusterID("cluster-abc")
 	mux := hr.healthMux()
 
-	t.Run("healthz returns 200", func(t *testing.T) {
+	decode := func(t *testing.T, body string) map[string]any {
+		t.Helper()
+		var out map[string]any
+		if err := json.Unmarshal([]byte(body), &out); err != nil {
+			t.Fatalf("body is not JSON: %v (body=%q)", err, body)
+		}
+		return out
+	}
+
+	t.Run("healthz returns 200 JSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
@@ -54,12 +65,22 @@ func TestHealthEndpoints(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("expected status 200, got %d", w.Code)
 		}
-		if w.Body.String() != "ok" {
-			t.Errorf("expected body 'ok', got %q", w.Body.String())
+		if got := w.Header().Get("Content-Type"); got != "application/json" {
+			t.Errorf("expected JSON content type, got %q", got)
+		}
+		body := decode(t, w.Body.String())
+		if body["status"] != "ok" {
+			t.Errorf("expected status=ok, got %v", body["status"])
+		}
+		if body["cluster_id"] != "cluster-abc" {
+			t.Errorf("expected cluster_id=cluster-abc, got %v", body["cluster_id"])
+		}
+		if _, ok := body["uptime_seconds"]; !ok {
+			t.Error("expected uptime_seconds field present")
 		}
 	})
 
-	t.Run("readyz returns 503 when not connected", func(t *testing.T) {
+	t.Run("readyz returns 503 JSON when not connected", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
@@ -67,12 +88,13 @@ func TestHealthEndpoints(t *testing.T) {
 		if w.Code != http.StatusServiceUnavailable {
 			t.Errorf("expected status 503, got %d", w.Code)
 		}
-		if w.Body.String() != "not connected" {
-			t.Errorf("expected body 'not connected', got %q", w.Body.String())
+		body := decode(t, w.Body.String())
+		if body["status"] != "not_connected" {
+			t.Errorf("expected status=not_connected, got %v", body["status"])
 		}
 	})
 
-	t.Run("readyz returns 200 when connected", func(t *testing.T) {
+	t.Run("readyz returns 200 JSON when connected", func(t *testing.T) {
 		hr.SetConnected(true)
 		req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 		w := httptest.NewRecorder()
@@ -81,8 +103,9 @@ func TestHealthEndpoints(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Errorf("expected status 200, got %d", w.Code)
 		}
-		if w.Body.String() != "ok" {
-			t.Errorf("expected body 'ok', got %q", w.Body.String())
+		body := decode(t, w.Body.String())
+		if body["status"] != "ok" {
+			t.Errorf("expected status=ok, got %v", body["status"])
 		}
 	})
 }

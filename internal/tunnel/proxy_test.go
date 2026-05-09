@@ -225,6 +225,123 @@ func TestWriteK8sResponse(t *testing.T) {
 	}
 }
 
+func TestIsWatchRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *http.Request
+		want bool
+	}{
+		{
+			name: "non-watch GET",
+			req:  httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods", nil),
+			want: false,
+		},
+		{
+			name: "watch=true query",
+			req:  httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods?watch=true", nil),
+			want: true,
+		},
+		{
+			name: "watch=1 query",
+			req:  httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods?watch=1", nil),
+			want: true,
+		},
+		{
+			name: "Accept stream=watch",
+			req: func() *http.Request {
+				r := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods", nil)
+				r.Header.Set("Accept", "application/json;stream=watch")
+				return r
+			}(),
+			want: true,
+		},
+		{
+			name: "/watch/ path segment",
+			req:  httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/watch/pods", nil),
+			want: true,
+		},
+		{
+			name: "watch=false explicitly",
+			req:  httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods?watch=false", nil),
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isWatchRequest(tt.req); got != tt.want {
+				t.Errorf("isWatchRequest = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHandleK8sProxy_StreamingWatch(t *testing.T) {
+	hub := NewHub(slog.Default())
+
+	agent := &AgentConnection{
+		ClusterID: "cluster-watch",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.mu.Lock()
+	hub.agents["cluster-watch"] = agent
+	hub.mu.Unlock()
+
+	proxy := NewProxyHandler(hub, slog.Default())
+	router := chi.NewRouter()
+	router.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxy.HandleK8sProxy)
+
+	go func() {
+		msg := <-agent.sendCh
+		if msg.Type != protocol.MsgK8sStreamRequest {
+			t.Errorf("expected K8S_STREAM_REQUEST, got %s", msg.Type)
+			return
+		}
+		stream, ok := agent.Streams.GetStream(msg.StreamID)
+		if !ok {
+			return
+		}
+		// Header
+		hdr, _ := json.Marshal(protocol.K8sStreamFrame{
+			Kind:       protocol.K8sStreamFrameHeader,
+			StatusCode: 200,
+			Headers:    map[string]string{"Content-Type": "application/json"},
+		})
+		stream.DataCh <- hdr
+		// Two data chunks
+		for _, chunk := range []string{`{"type":"ADDED","object":{"kind":"Pod","metadata":{"name":"a"}}}` + "\n", `{"type":"MODIFIED","object":{"kind":"Pod","metadata":{"name":"a"}}}` + "\n"} {
+			d, _ := json.Marshal(protocol.K8sStreamFrame{
+				Kind: protocol.K8sStreamFrameData,
+				Body: base64.StdEncoding.EncodeToString([]byte(chunk)),
+			})
+			stream.DataCh <- d
+		}
+		// End
+		end, _ := json.Marshal(protocol.K8sStreamFrame{Kind: protocol.K8sStreamFrameEnd})
+		stream.DataCh <- end
+	}()
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/clusters/cluster-watch/k8s/api/v1/pods?watch=true", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected Content-Type application/json, got %q", ct)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"name":"a"`) {
+		t.Fatalf("expected watch events in body, got: %s", body)
+	}
+	if !strings.Contains(body, `"ADDED"`) || !strings.Contains(body, `"MODIFIED"`) {
+		t.Fatalf("expected both ADDED and MODIFIED events, got: %s", body)
+	}
+}
+
 func TestWriteK8sResponse_ZeroStatusCode(t *testing.T) {
 	resp := &protocol.K8sResponsePayload{
 		StatusCode: 0,

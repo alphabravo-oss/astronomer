@@ -314,6 +314,39 @@ func TestCheckPermission(t *testing.T) {
 			projectID: nilUUID,
 			want:      false,
 		},
+		{
+			name: "superuser bypass grants any resource/verb regardless of bindings",
+			bindings: []RoleBinding{
+				{UserID: "u1", IsSuperuser: true},
+			},
+			resource:  ResourceArgoCD,
+			verb:      VerbSync,
+			clusterID: clusterA,
+			projectID: projectA,
+			want:      true,
+		},
+		{
+			name: "superuser bypass grants delete on rbac",
+			bindings: []RoleBinding{
+				{UserID: "u1", IsSuperuser: true},
+			},
+			resource:  ResourceRBAC,
+			verb:      VerbDelete,
+			clusterID: nilUUID,
+			projectID: nilUUID,
+			want:      true,
+		},
+		{
+			name: "superuser flag overrides empty rules",
+			bindings: []RoleBinding{
+				{UserID: "u1", IsSuperuser: true, RoleRules: []Rule{{Resource: "clusters", Verbs: []string{"read"}}}},
+			},
+			resource:  ResourceClusters,
+			verb:      VerbDelete,
+			clusterID: nilUUID,
+			projectID: nilUUID,
+			want:      true,
+		},
 	}
 
 	for _, tt := range tests {

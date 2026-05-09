@@ -88,16 +88,14 @@ func TestBootstrapGetStatus_NotBootstrapped(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	data, ok := body["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'data' wrapper, got: %v", body)
+	// Frontend middleware reads top-level keys (no "data" wrapper) to mirror
+	// the original Django/DRF contract. The handler intentionally calls
+	// RespondJSONUnwrapped — assert that here.
+	if body["bootstrapped"] != false {
+		t.Fatalf("expected bootstrapped=false, got %v", body["bootstrapped"])
 	}
-
-	if data["bootstrapped"] != false {
-		t.Fatalf("expected bootstrapped=false, got %v", data["bootstrapped"])
-	}
-	if data["platform_name"] != "Astronomer" {
-		t.Fatalf("expected platform_name=Astronomer, got %v", data["platform_name"])
+	if body["platform_name"] != "Astronomer" {
+		t.Fatalf("expected platform_name=Astronomer, got %v", body["platform_name"])
 	}
 }
 
@@ -129,19 +127,14 @@ func TestBootstrapGetStatus_Bootstrapped(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	data, ok := body["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'data' wrapper, got: %v", body)
+	if body["bootstrapped"] != true {
+		t.Fatalf("expected bootstrapped=true, got %v", body["bootstrapped"])
 	}
-
-	if data["bootstrapped"] != true {
-		t.Fatalf("expected bootstrapped=true, got %v", data["bootstrapped"])
+	if body["server_url"] != "https://example.com" {
+		t.Fatalf("expected server_url=https://example.com, got %v", body["server_url"])
 	}
-	if data["server_url"] != "https://example.com" {
-		t.Fatalf("expected server_url=https://example.com, got %v", data["server_url"])
-	}
-	if data["platform_name"] != "My Platform" {
-		t.Fatalf("expected platform_name=My Platform, got %v", data["platform_name"])
+	if body["platform_name"] != "My Platform" {
+		t.Fatalf("expected platform_name=My Platform, got %v", body["platform_name"])
 	}
 }
 

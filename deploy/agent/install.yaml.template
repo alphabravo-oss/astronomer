@@ -1,0 +1,357 @@
+# ============================================================================
+# Astronomer Cluster Agent - Kubernetes Installation Manifest
+#
+# This template is rendered by the Astronomer management server with
+# cluster-specific values. Placeholders use {{PLACEHOLDER}} syntax.
+#
+# Placeholders:
+#   {{SERVER_URL}}           - Management server WebSocket URL
+#   {{CLUSTER_ID}}           - Unique cluster identifier
+#   {{REGISTRATION_TOKEN}}   - Bearer token for agent authentication
+#   {{CA_CERT}}              - Base64-encoded CA certificate (optional)
+#   {{AGENT_IMAGE}}          - Full agent container image reference
+# ============================================================================
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: astronomer-agent
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+automountServiceAccountToken: true
+
+---
+# ClusterRole - the agent needs broad read access and RBAC management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: astronomer-agent
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+  # Full access to proxy Kubernetes API requests from the management server
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  # Non-resource URLs (healthz, metrics, etc.)
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: astronomer-agent
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: astronomer-agent
+subjects:
+  - kind: ServiceAccount
+    name: astronomer-agent
+    namespace: astronomer-system
+
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: astronomer-agent-config
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+data:
+  SERVER_URL: "{{SERVER_URL}}"
+  CLUSTER_ID: "{{CLUSTER_ID}}"
+  LOG_LEVEL: "INFO"
+  HEALTH_PORT: "8081"
+  HEARTBEAT_INTERVAL: "30"
+  METRICS_INTERVAL: "60"
+
+---
+# Secret for the registration token
+apiVersion: v1
+kind: Secret
+metadata:
+  name: astronomer-agent-token
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+type: Opaque
+stringData:
+  token: "{{REGISTRATION_TOKEN}}"
+
+---
+# Secret for the CA certificate (if provided)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: astronomer-agent-ca
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+type: Opaque
+data:
+  ca.crt: "{{CA_CERT}}"
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astronomer-agent
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer-agent
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: astronomer-agent
+        app.kubernetes.io/component: agent
+        app.kubernetes.io/part-of: astronomer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: astronomer-agent
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: "{{AGENT_IMAGE}}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - astronomer-agent
+            - connect
+          args:
+            - "--server-url=$(ASTRONOMER_SERVER_URL)"
+            - "--token=$(ASTRONOMER_TOKEN)"
+            - "--cluster-id=$(ASTRONOMER_CLUSTER_ID)"
+            - "--ca-cert=/etc/astronomer/tls/ca.crt"
+            - "--log-level=$(ASTRONOMER_LOG_LEVEL)"
+            - "--health-port=$(ASTRONOMER_HEALTH_PORT)"
+            - "--heartbeat-interval=$(ASTRONOMER_HEARTBEAT_INTERVAL)"
+            - "--metrics-interval=$(ASTRONOMER_METRICS_INTERVAL)"
+          env:
+            - name: ASTRONOMER_SERVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: SERVER_URL
+            - name: ASTRONOMER_CLUSTER_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: CLUSTER_ID
+            - name: ASTRONOMER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: astronomer-agent-token
+                  key: token
+            - name: ASTRONOMER_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: LOG_LEVEL
+            - name: ASTRONOMER_HEALTH_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: HEALTH_PORT
+            - name: ASTRONOMER_HEARTBEAT_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: HEARTBEAT_INTERVAL
+            - name: ASTRONOMER_METRICS_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: METRICS_INTERVAL
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: ca-cert
+              mountPath: /etc/astronomer/tls
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: ca-cert
+          secret:
+            secretName: astronomer-agent-ca
+            optional: true
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+
+---
+# Service for health check endpoint
+apiVersion: v1
+kind: Service
+metadata:
+  name: astronomer-agent
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+spec:
+  type: ClusterIP
+  ports:
+    - name: health
+      port: 8080
+      targetPort: health
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+
+---
+# NetworkPolicy - allow egress to management server and Kubernetes API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: astronomer-agent
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer-agent
+      app.kubernetes.io/component: agent
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    # Allow health check probes from kubelet and monitoring
+    - ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow HTTPS to management server (external)
+    - ports:
+        - port: 443
+          protocol: TCP
+    # Allow access to Kubernetes API server
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+
+---
+# PodDisruptionBudget - ensure the agent is always available
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: astronomer-agent
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer-agent
+      app.kubernetes.io/component: agent

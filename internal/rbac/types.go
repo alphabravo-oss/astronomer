@@ -15,6 +15,11 @@ const (
 	ResourceSecurity   Resource = "security"
 	ResourceRBAC       Resource = "rbac"
 	ResourceSettings   Resource = "settings"
+	ResourceArgoCD     Resource = "argocd"
+	ResourceSSO        Resource = "sso"
+	ResourceUsers      Resource = "users"
+	ResourceAuditLogs  Resource = "audit_logs"
+	ResourceAgents     Resource = "agents"
 	ResourceWildcard   Resource = "*"
 )
 
@@ -33,6 +38,8 @@ const (
 	VerbExec     Verb = "exec"
 	VerbLogs     Verb = "logs"
 	VerbProxy    Verb = "proxy"
+	VerbSync     Verb = "sync"
+	VerbManage   Verb = "manage"
 	VerbWildcard Verb = "*"
 )
 
@@ -50,4 +57,8 @@ type RoleBinding struct {
 	// Scope context
 	ClusterID string // empty for global
 	ProjectID string // empty for global/cluster
+	// IsSuperuser short-circuits permission checks to true. The middleware
+	// emits a single synthetic binding with this flag when the underlying
+	// user record has is_superuser=true on the users table.
+	IsSuperuser bool
 }

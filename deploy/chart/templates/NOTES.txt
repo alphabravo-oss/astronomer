@@ -1,0 +1,35 @@
+Astronomer Go has been installed!
+
+Release name : {{ .Release.Name }}
+Namespace    : {{ .Release.Namespace }}
+Chart version: {{ .Chart.Version }} (app {{ .Chart.AppVersion }})
+
+Server image : {{ include "astronomer.image" (dict "context" . "component" "server") }}
+Worker image : {{ include "astronomer.image" (dict "context" . "component" "worker") }}
+Migrate image: {{ include "astronomer.image" (dict "context" . "component" "migrate") }}
+
+Migrations were applied via a pre-install/pre-upgrade Helm hook Job.
+
+{{- if .Values.ingress.enabled }}
+
+Access the platform at:
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+
+For local k3d clusters, ensure your loadbalancer maps :80/:443:
+  k3d cluster create astronomer-mgmt \
+    --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+
+Then point a hosts entry (or rely on *.localtest.me which always resolves to 127.0.0.1):
+  curl -H "Host: {{ .Values.ingress.host }}" http://localhost:8080/health/
+{{- else }}
+
+Ingress is disabled. Port-forward the server Service:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "astronomer.fullname" . }}-server 8000:{{ .Values.server.service.port }}
+  curl http://127.0.0.1:8000/health/
+{{- end }}
+
+To check pod status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To watch worker logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=worker --tail=100 -f

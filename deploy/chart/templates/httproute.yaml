@@ -1,0 +1,111 @@
+{{- /*
+Gateway API resources (replacing the deprecated Ingress controller pattern).
+
+Spec: https://gateway-api.sigs.k8s.io/
+Background: https://www.kubernetes.dev/blog/2025/11/12/ingress-nginx-retirement/
+
+We deploy:
+  * One Gateway listening on :80 across all the configured hostnames
+  * Two HTTPRoutes — REST/API + UI — both attached to the Gateway
+
+The chart is implementation-agnostic: any Gateway-API-conformant controller
+(NGINX Gateway Fabric, Envoy Gateway, Cilium, Traefik, etc.) can serve it as
+long as a GatewayClass with the configured name exists in the cluster.
+*/ -}}
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "astronomer.fullname" . }}
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className | quote }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- if .Values.gateway.tls.enabled }}
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.tls.secretName | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+
+---
+# UI route — catches everything except /api/* and /health/* (those go to server)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "astronomer.fullname" . }}-ui
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "frontend") | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ include "astronomer.fullname" . }}
+  hostnames:
+    {{- range .Values.gateway.hosts }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        {{- if .Values.frontend.enabled }}
+        - name: {{ include "astronomer.fullname" . }}-frontend
+          port: 3000
+        {{- else }}
+        - name: {{ include "astronomer.fullname" . }}-server
+          port: {{ .Values.server.service.port }}
+        {{- end }}
+
+---
+# API route — anything under /api/v1/ goes to the Go server, including the
+# WebSocket tunnel at /api/v1/ws/...
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "astronomer.fullname" . }}-api
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "server") | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ include "astronomer.fullname" . }}
+  hostnames:
+    {{- range .Values.gateway.hosts }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/
+        - path:
+            type: PathPrefix
+            value: /health/
+        # The auth-gated reverse proxy that fronts the ArgoCD UI lives on
+        # the Go server (internal/handler/argocd_ui_proxy.go), so route
+        # /argocd/* to the same backend as /api/*. Enforces Astronomer auth
+        # via cookie or bearer header before forwarding upstream.
+        - path:
+            type: PathPrefix
+            value: /argocd/
+        - path:
+            type: Exact
+            value: /argocd
+      backendRefs:
+        - name: {{ include "astronomer.fullname" . }}-server
+          port: {{ .Values.server.service.port }}
+{{- end }}

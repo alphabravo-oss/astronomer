@@ -1,0 +1,184 @@
+# =============================================================================
+# Astronomer Go - Helm chart default values
+# =============================================================================
+# Defaults are tuned for local k3d / development. For production, override:
+#   - image.*.tag
+#   - secrets.* (must come from a real secret source, not a literal)
+#   - postgres.enabled / redis.enabled (set to false to use a managed DB/cache)
+#   - ingress.host (must be a real DNS name)
+
+# Optional convenience: have the chart create the namespace itself.
+createNamespace: false
+namespace: astronomer
+
+# -- Override the auto-generated chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# Container images
+# =============================================================================
+image:
+  registry: ""           # Empty registry = use local images (k3d-imported).
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  server:
+    repository: astronomer-go-server
+    tag: dev
+  worker:
+    repository: astronomer-go-worker
+    tag: dev
+  agent:
+    # Used by the server when rendering install.yaml.template for new clusters.
+    repository: astronomer-go-agent
+    tag: dev
+  migrate:
+    repository: astronomer-go-migrate
+    tag: dev
+
+# =============================================================================
+# Server (HTTP API)
+# =============================================================================
+server:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8000
+  podAnnotations: {}
+  env: {}
+  # Liveness/readiness use /health/.
+  probes:
+    enabled: true
+    livenessPath: /health/
+    readinessPath: /health/
+
+# =============================================================================
+# Worker (Redis-backed job runner)
+# =============================================================================
+worker:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  podAnnotations: {}
+  env: {}
+
+# =============================================================================
+# Database / Cache (gated, set false to BYO)
+# =============================================================================
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+  user: astronomer
+  password: astronomer    # Override in production!
+  database: astronomer
+  port: 5432
+  storage:
+    size: 8Gi
+    storageClassName: ""
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+  port: 6379
+  storage:
+    size: 2Gi
+    storageClassName: ""
+
+# =============================================================================
+# Migrations
+# =============================================================================
+migrate:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# =============================================================================
+# Connection strings (consumed by server + worker)
+# =============================================================================
+# When postgres.enabled / redis.enabled are true, hosts default to the
+# in-chart Service names. Override these for BYO DB/cache.
+config:
+  databaseURL: ""        # Defaults to postgres://USER:PASS@<release>-postgres:5432/<db>
+  redisURL: ""           # Defaults to redis://<release>-redis:6379/0
+  env: development
+  debug: "true"
+  logLevel: info
+  allowedHosts: "*"
+  corsAllowedOrigins: "http://astronomer.localtest.me"
+  agentImageRepository: astronomer-go-agent
+  agentImageTag: dev
+
+# =============================================================================
+# Secrets — set these from --set-file or external secret manager in real usage.
+# =============================================================================
+secrets:
+  secretKey: "local-dev-secret-key-change-in-production"
+  encryptionKey: "local-dev-encryption-key-change-in-prod-32b"
+  githubClientID: ""
+  githubClientSecret: ""
+  googleClientID: ""
+  googleClientSecret: ""
+  oidcClientID: ""
+  oidcClientSecret: ""
+
+# =============================================================================
+# Ingress
+# =============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  host: astronomer.localtest.me
+  path: /
+  pathType: Prefix
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
+
+# =============================================================================
+# Service Account
+# =============================================================================
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# =============================================================================
+# Pod-level scheduling
+# =============================================================================
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# =============================================================================
+# Gateway API (replaces deprecated Ingress)
+# =============================================================================
+gateway:
+  enabled: true
+  className: nginx
+  hosts:
+    - astronomer.localtest.me
+  tls:
+    enabled: false
+    secretName: ""

@@ -116,6 +116,11 @@ UPDATE alert_events SET acknowledged_by_id = $2, acknowledged_at = now() WHERE i
 -- name: CountAlertEvents :one
 SELECT count(*) FROM alert_events;
 
+-- name: DeleteAlertEventsOlderThan :execrows
+-- Deletes alert events older than the supplied cutoff. Used by the scheduled
+-- cleanup_old_alert_events worker.
+DELETE FROM alert_events WHERE fired_at < $1;
+
 -- Alert Silences
 
 -- name: GetAlertSilenceByID :one

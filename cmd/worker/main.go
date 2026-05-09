@@ -9,7 +9,10 @@ import (
 	"syscall"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -26,6 +29,20 @@ func main() {
 		log.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+
+	database, err := db.Connect(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Error("failed to connect database", "error", err)
+		os.Exit(1)
+	}
+	defer database.Close()
+	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
+		Queries:        sqlc.New(database.Pool()),
+		Log:            log,
+		AgentImageRepo: cfg.AgentImageRepository,
+		AgentImageTag:  cfg.AgentImageTag,
+		PlatformName:   "Astronomer",
+	})
 
 	// Create worker and scheduler.
 	w := worker.NewWorker(cfg.RedisURL, log)

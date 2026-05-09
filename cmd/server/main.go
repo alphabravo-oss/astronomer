@@ -41,7 +41,11 @@ func main() {
 		"env", cfg.Env,
 	)
 
-	srv := server.New(cfg, logger)
+	srv, err := server.NewApp(context.Background(), cfg, logger)
+	if err != nil {
+		logger.Error("failed to initialize server", "error", err)
+		os.Exit(1)
+	}
 
 	// Graceful shutdown on SIGINT / SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

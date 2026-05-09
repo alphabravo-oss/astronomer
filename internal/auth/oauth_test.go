@@ -1,8 +1,12 @@
 package auth
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"golang.org/x/oauth2"
 )
 
 // helper to create an SSOManager with a real Encryptor for tests.
@@ -220,5 +224,39 @@ func TestSSORegisterProviderUnknown(t *testing.T) {
 	err := mgr.RegisterProvider("bitbucket", "client-id", secret, "", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown provider type, got nil")
+	}
+}
+
+func TestFetchOIDCUserInfoFromIDToken(t *testing.T) {
+	mgr, _ := newTestSSOManager(t)
+	claims := map[string]any{
+		"email":              "alice@example.com",
+		"preferred_username": "alice",
+		"given_name":         "Alice",
+		"family_name":        "Smith",
+		"picture":            "https://example.com/avatar.png",
+		"groups":             []string{"devops", "platform"},
+	}
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatalf("Marshal claims: %v", err)
+	}
+	token := &oauth2.Token{}
+	token = token.WithExtra(map[string]any{
+		"id_token": "header." + base64.RawURLEncoding.EncodeToString(payload) + ".sig",
+	})
+
+	info, err := mgr.fetchOIDCUserInfo(token)
+	if err != nil {
+		t.Fatalf("fetchOIDCUserInfo: %v", err)
+	}
+	if info.Provider != "oidc" {
+		t.Fatalf("Provider = %q, want oidc", info.Provider)
+	}
+	if info.Email != "alice@example.com" || info.Username != "alice" {
+		t.Fatalf("unexpected OIDC identity: %#v", info)
+	}
+	if len(info.Groups) != 2 || info.Groups[0] != "devops" {
+		t.Fatalf("unexpected OIDC groups: %#v", info.Groups)
 	}
 }

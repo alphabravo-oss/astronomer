@@ -95,11 +95,46 @@ INSERT INTO security_scan_results (cluster_id, scan_type, status, summary, resul
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
+-- Phase B5: explicit constructor that records the upstream ClusterScan CR name
+-- so the worker can poll the matching ClusterScanReport for ingestion.
+-- name: CreateCISScan :one
+INSERT INTO security_scan_results (
+    cluster_id, scan_type, status, summary, results,
+    cluster_scan_name, initiated_by_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
 -- name: UpdateSecurityScanCompleted :exec
 UPDATE security_scan_results SET status = 'completed', summary = $2, results = $3, completed_at = now() WHERE id = $1;
 
+-- Phase B5: full report ingestion. Writes flattened counts + findings in one
+-- statement so the row reaches its terminal state atomically and the UI never
+-- sees a half-populated scan.
+-- name: UpdateSecurityScanReport :exec
+UPDATE security_scan_results SET
+    status = 'completed',
+    summary = $2,
+    results = $3,
+    passed = $4,
+    failed = $5,
+    warned = $6,
+    skipped = $7,
+    findings = $8,
+    completed_at = now()
+WHERE id = $1;
+
 -- name: UpdateSecurityScanFailed :exec
 UPDATE security_scan_results SET status = 'failed', completed_at = now() WHERE id = $1;
+
+-- Phase B5: failure path that preserves the operator/agent message so users
+-- can see *why* an ingest timed out, instead of a blank "failed" badge.
+-- name: UpdateSecurityScanFailedWithMessage :exec
+UPDATE security_scan_results SET
+    status = 'failed',
+    summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb(sqlc.arg(error_message)::text), true),
+    completed_at = now()
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteSecurityScanResult :exec
 DELETE FROM security_scan_results WHERE id = $1;

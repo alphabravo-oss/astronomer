@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -155,6 +157,105 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondPaginated(w, r, items, total)
+}
+
+// Export handles GET /api/v1/audit/export/?format=csv.
+// Streams audit log entries as CSV. Same filters as the list endpoint.
+func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "csv"
+	}
+	if format != "csv" {
+		RespondError(w, http.StatusBadRequest, "invalid_format", "Only 'csv' export format is supported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="audit_log_export.csv"`)
+	w.WriteHeader(http.StatusOK)
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	// Header row.
+	_ = writer.Write([]string{
+		"id", "created_at", "user_id", "action", "resource_type",
+		"resource_id", "resource_name", "user_agent", "request_id", "detail",
+	})
+
+	userIDStr := r.URL.Query().Get("user_id")
+	resourceType := r.URL.Query().Get("resource_type")
+	action := r.URL.Query().Get("action")
+
+	const pageSize = 500
+	offset := int32(0)
+	for {
+		logs, err := h.fetchExportPage(r.Context(), userIDStr, resourceType, action, pageSize, offset)
+		if err != nil {
+			// Mid-stream error: log a CSV row with the error and stop.
+			_ = writer.Write([]string{"error", "", "", "", "", "", "", "", "", err.Error()})
+			return
+		}
+		if len(logs) == 0 {
+			return
+		}
+		for _, entry := range logs {
+			row := []string{
+				entry.ID.String(),
+				entry.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+				csvNullableUUID(entry.UserID),
+				entry.Action,
+				entry.ResourceType,
+				entry.ResourceID,
+				entry.ResourceName,
+				entry.UserAgent,
+				entry.RequestID,
+				string(entry.Detail),
+			}
+			_ = writer.Write(row)
+		}
+		writer.Flush()
+		if len(logs) < pageSize {
+			return
+		}
+		offset += pageSize
+	}
+}
+
+func (h *AuditHandler) fetchExportPage(ctx context.Context, userIDStr, resourceType, action string, limit, offset int32) ([]sqlc.AuditLog, error) {
+	switch {
+	case userIDStr != "":
+		uid, err := uuid.Parse(userIDStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid user_id")
+		}
+		return h.queries.ListAuditLogsByUser(ctx, sqlc.ListAuditLogsByUserParams{
+			UserID: pgtype.UUID{Bytes: uid, Valid: true},
+			Limit:  limit,
+			Offset: offset,
+		})
+	case resourceType != "":
+		return h.queries.ListAuditLogsByResourceType(ctx, sqlc.ListAuditLogsByResourceTypeParams{
+			ResourceType: resourceType,
+			Limit:        limit,
+			Offset:       offset,
+		})
+	case action != "":
+		return h.queries.ListAuditLogsByAction(ctx, sqlc.ListAuditLogsByActionParams{
+			Action: action,
+			Limit:  limit,
+			Offset: offset,
+		})
+	}
+	return h.queries.ListAuditLogs(ctx, sqlc.ListAuditLogsParams{Limit: limit, Offset: offset})
+}
+
+func csvNullableUUID(id pgtype.UUID) string {
+	if id.Valid {
+		return uuid.UUID(id.Bytes).String()
+	}
+	return ""
 }
 
 // Get handles GET /api/v1/audit/{id}/.

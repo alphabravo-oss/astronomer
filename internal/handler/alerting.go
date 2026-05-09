@@ -3,12 +3,16 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -19,33 +23,49 @@ type AlertingQuerier interface {
 	ListNotificationChannels(ctx context.Context, arg sqlc.ListNotificationChannelsParams) ([]sqlc.NotificationChannel, error)
 	GetNotificationChannelByID(ctx context.Context, id uuid.UUID) (sqlc.NotificationChannel, error)
 	CreateNotificationChannel(ctx context.Context, arg sqlc.CreateNotificationChannelParams) (sqlc.NotificationChannel, error)
+	UpdateNotificationChannel(ctx context.Context, arg sqlc.UpdateNotificationChannelParams) (sqlc.NotificationChannel, error)
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
 	CountNotificationChannels(ctx context.Context) (int64, error)
 	// Rules
 	ListAlertRules(ctx context.Context, arg sqlc.ListAlertRulesParams) ([]sqlc.AlertRule, error)
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (sqlc.AlertRule, error)
 	CreateAlertRule(ctx context.Context, arg sqlc.CreateAlertRuleParams) (sqlc.AlertRule, error)
+	UpdateAlertRule(ctx context.Context, arg sqlc.UpdateAlertRuleParams) (sqlc.AlertRule, error)
 	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
+	AddAlertRuleChannel(ctx context.Context, arg sqlc.AddAlertRuleChannelParams) error
+	RemoveAlertRuleChannel(ctx context.Context, arg sqlc.RemoveAlertRuleChannelParams) error
+	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]sqlc.NotificationChannel, error)
 	CountAlertRules(ctx context.Context) (int64, error)
 	// Events
 	ListAlertEvents(ctx context.Context, arg sqlc.ListAlertEventsParams) ([]sqlc.AlertEvent, error)
+	ListAlertEventsByRule(ctx context.Context, arg sqlc.ListAlertEventsByRuleParams) ([]sqlc.AlertEvent, error)
 	GetAlertEventByID(ctx context.Context, id uuid.UUID) (sqlc.AlertEvent, error)
+	AcknowledgeAlertEvent(ctx context.Context, arg sqlc.AcknowledgeAlertEventParams) error
+	UpdateAlertEventStatus(ctx context.Context, arg sqlc.UpdateAlertEventStatusParams) error
 	CountAlertEvents(ctx context.Context) (int64, error)
 	// Silences
 	ListAlertSilences(ctx context.Context, arg sqlc.ListAlertSilencesParams) ([]sqlc.AlertSilence, error)
 	CreateAlertSilence(ctx context.Context, arg sqlc.CreateAlertSilenceParams) (sqlc.AlertSilence, error)
 	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
 	CountAlertSilences(ctx context.Context) (int64, error)
+	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+	GetDefaultMonitoringBackend(ctx context.Context) (sqlc.MonitoringBackend, error)
+	UpsertDefaultMonitoringBackend(ctx context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error)
 }
 
 // AlertingHandler handles alerting endpoints.
 type AlertingHandler struct {
-	queries AlertingQuerier
+	queries   AlertingQuerier
+	requester K8sRequester
 }
 
 // NewAlertingHandler creates a new alerting handler.
 func NewAlertingHandler(queries AlertingQuerier) *AlertingHandler {
 	return &AlertingHandler{queries: queries}
+}
+
+func NewAlertingHandlerWithDeps(queries AlertingQuerier, requester K8sRequester) *AlertingHandler {
+	return &AlertingHandler{queries: queries, requester: requester}
 }
 
 // --- Request types ---
@@ -54,28 +74,40 @@ func NewAlertingHandler(queries AlertingQuerier) *AlertingHandler {
 type CreateChannelRequest struct {
 	Name          string          `json:"name"`
 	ChannelType   string          `json:"channel_type"`
+	Type          string          `json:"type"`
 	Configuration json.RawMessage `json:"configuration"`
+	Config        json.RawMessage `json:"config"`
 	Enabled       bool            `json:"enabled"`
 }
 
 // CreateAlertRuleRequest represents the request body for creating an alert rule.
 type CreateAlertRuleRequest struct {
-	Name            string          `json:"name"`
-	ClusterID       *uuid.UUID      `json:"cluster_id"`
-	RuleType        string          `json:"rule_type"`
-	Configuration   json.RawMessage `json:"configuration"`
-	Severity        string          `json:"severity"`
-	Enabled         bool            `json:"enabled"`
-	CooldownMinutes int32           `json:"cooldown_minutes"`
+	Name                   string            `json:"name"`
+	Description            string            `json:"description"`
+	ClusterID              *uuid.UUID        `json:"cluster_id"`
+	RuleType               string            `json:"rule_type"`
+	Type                   string            `json:"type"`
+	Configuration          json.RawMessage   `json:"configuration"`
+	Query                  string            `json:"query"`
+	Threshold              *float64          `json:"threshold"`
+	Duration               string            `json:"duration"`
+	Labels                 map[string]string `json:"labels"`
+	Annotations            map[string]string `json:"annotations"`
+	NotificationChannelIDs []string          `json:"notificationChannelIds"`
+	Severity               string            `json:"severity"`
+	Enabled                bool              `json:"enabled"`
+	CooldownMinutes        int32             `json:"cooldown_minutes"`
 }
 
 // CreateSilenceRequest represents the request body for creating an alert silence.
 type CreateSilenceRequest struct {
-	RuleID    *uuid.UUID `json:"rule_id"`
-	ClusterID *uuid.UUID `json:"cluster_id"`
-	Reason    string     `json:"reason"`
-	StartsAt  time.Time  `json:"starts_at"`
-	EndsAt    time.Time  `json:"ends_at"`
+	RuleID    *uuid.UUID        `json:"rule_id"`
+	ClusterID *uuid.UUID        `json:"cluster_id"`
+	Reason    string            `json:"reason"`
+	StartsAt  time.Time         `json:"starts_at"`
+	EndsAt    time.Time         `json:"ends_at"`
+	Duration  string            `json:"duration"`
+	Matchers  map[string]string `json:"matchers"`
 }
 
 // --- Channel Endpoints ---
@@ -94,13 +126,11 @@ func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountNotificationChannels(r.Context())
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count notification channels")
-		return
+	items := make([]map[string]any, 0, len(channels))
+	for _, channel := range channels {
+		items = append(items, notificationChannelResponse(channel))
 	}
-
-	RespondPaginated(w, r, channels, total)
+	RespondJSON(w, http.StatusOK, items)
 }
 
 // CreateChannel handles POST /api/v1/alerting/channels/.
@@ -118,22 +148,35 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 
 	configuration := req.Configuration
 	if configuration == nil {
+		configuration = req.Config
+	}
+	if configuration == nil {
 		configuration = json.RawMessage(`{}`)
+	}
+	channelType := req.ChannelType
+	if channelType == "" {
+		channelType = req.Type
 	}
 
 	channel, err := h.queries.CreateNotificationChannel(r.Context(), sqlc.CreateNotificationChannelParams{
 		Name:          req.Name,
-		ChannelType:   req.ChannelType,
+		ChannelType:   channelType,
 		Configuration: configuration,
 		Enabled:       req.Enabled,
-		CreatedByID:   pgtype.UUID{}, // TODO: extract from auth context
+		CreatedByID:   currentUserUUID(r),
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create notification channel")
 		return
 	}
+	_ = h.syncSharedAlertingAssets(r.Context())
 
-	RespondJSON(w, http.StatusCreated, channel)
+	recordAudit(r, h.queries, "alert.channel.create", "notification_channel", channel.ID.String(), channel.Name, map[string]any{
+		"channel_type": channel.ChannelType,
+		"enabled":      channel.Enabled,
+	})
+
+	RespondJSON(w, http.StatusCreated, notificationChannelResponse(channel))
 }
 
 // GetChannel handles GET /api/v1/alerting/channels/{id}/.
@@ -150,7 +193,77 @@ func (h *AlertingHandler) GetChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, channel)
+	RespondJSON(w, http.StatusOK, notificationChannelResponse(channel))
+}
+
+// UpdateChannel handles PUT /api/v1/alerting/channels/{id}/.
+func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
+		return
+	}
+
+	current, err := h.queries.GetNotificationChannelByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Notification channel not found")
+		return
+	}
+
+	var req CreateChannelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.Configuration == nil {
+		req.Configuration = req.Config
+	}
+	if req.Configuration == nil {
+		req.Configuration = current.Configuration
+	}
+	if req.Name == "" {
+		req.Name = current.Name
+	}
+	if req.ChannelType == "" {
+		req.ChannelType = req.Type
+	}
+	if req.ChannelType == "" {
+		req.ChannelType = current.ChannelType
+	}
+
+	channel, err := h.queries.UpdateNotificationChannel(r.Context(), sqlc.UpdateNotificationChannelParams{
+		ID:            id,
+		Name:          req.Name,
+		ChannelType:   req.ChannelType,
+		Configuration: req.Configuration,
+		Enabled:       req.Enabled,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update notification channel")
+		return
+	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+
+	recordAudit(r, h.queries, "alert.channel.update", "notification_channel", channel.ID.String(), channel.Name, map[string]any{
+		"channel_type": channel.ChannelType,
+		"enabled":      channel.Enabled,
+	})
+
+	RespondJSON(w, http.StatusOK, notificationChannelResponse(channel))
+}
+
+// TestChannel handles POST /api/v1/alerting/channels/{id}/test/.
+func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
+		return
+	}
+	if _, err := h.queries.GetNotificationChannelByID(r.Context(), id); err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Notification channel not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Notification channel configuration is valid"})
 }
 
 // DeleteChannel handles DELETE /api/v1/alerting/channels/{id}/.
@@ -161,10 +274,17 @@ func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	channelName := ""
+	if existing, lookupErr := h.queries.GetNotificationChannelByID(r.Context(), id); lookupErr == nil {
+		channelName = existing.Name
+	}
 	if err := h.queries.DeleteNotificationChannel(r.Context(), id); err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Notification channel not found")
 		return
 	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+
+	recordAudit(r, h.queries, "alert.channel.delete", "notification_channel", id.String(), channelName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -185,13 +305,11 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountAlertRules(r.Context())
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count alert rules")
-		return
+	items := make([]map[string]any, 0, len(rules))
+	for _, rule := range rules {
+		items = append(items, h.alertRuleResponse(r.Context(), rule))
 	}
-
-	RespondPaginated(w, r, rules, total)
+	RespondJSON(w, http.StatusOK, items)
 }
 
 // CreateRule handles POST /api/v1/alerting/rules/.
@@ -207,32 +325,44 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configuration := req.Configuration
-	if configuration == nil {
-		configuration = json.RawMessage(`{}`)
-	}
+	configuration := alertRuleConfiguration(req)
 
 	var clusterID pgtype.UUID
 	if req.ClusterID != nil {
 		clusterID = pgtype.UUID{Bytes: *req.ClusterID, Valid: true}
 	}
+	ruleType := req.RuleType
+	if ruleType == "" {
+		ruleType = req.Type
+	}
 
 	rule, err := h.queries.CreateAlertRule(r.Context(), sqlc.CreateAlertRuleParams{
 		Name:            req.Name,
 		ClusterID:       clusterID,
-		RuleType:        req.RuleType,
+		RuleType:        ruleType,
 		Configuration:   configuration,
 		Severity:        req.Severity,
 		Enabled:         req.Enabled,
 		CooldownMinutes: req.CooldownMinutes,
-		CreatedByID:     pgtype.UUID{}, // TODO: extract from auth context
+		CreatedByID:     currentUserUUID(r),
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create alert rule")
 		return
 	}
+	if err := h.syncRuleChannels(r.Context(), rule.ID, req.NotificationChannelIDs); err != nil {
+		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to associate notification channels")
+		return
+	}
+	_ = h.syncSharedAlertingAssets(r.Context())
 
-	RespondJSON(w, http.StatusCreated, rule)
+	recordAudit(r, h.queries, "alert.rule.create", "alert_rule", rule.ID.String(), rule.Name, map[string]any{
+		"rule_type": rule.RuleType,
+		"severity":  rule.Severity,
+		"enabled":   rule.Enabled,
+	})
+
+	RespondJSON(w, http.StatusCreated, h.alertRuleResponse(r.Context(), rule))
 }
 
 // GetRule handles GET /api/v1/alerting/rules/{id}/.
@@ -249,7 +379,72 @@ func (h *AlertingHandler) GetRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, rule)
+	RespondJSON(w, http.StatusOK, h.alertRuleResponse(r.Context(), rule))
+}
+
+// UpdateRule handles PUT /api/v1/alerting/rules/{id}/.
+func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid rule ID")
+		return
+	}
+
+	current, err := h.queries.GetAlertRuleByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Alert rule not found")
+		return
+	}
+
+	var req CreateAlertRuleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.Name == "" {
+		req.Name = current.Name
+	}
+	if req.RuleType == "" {
+		req.RuleType = req.Type
+	}
+	if req.RuleType == "" {
+		req.RuleType = current.RuleType
+	}
+	if req.Severity == "" {
+		req.Severity = current.Severity
+	}
+	if req.CooldownMinutes == 0 {
+		req.CooldownMinutes = current.CooldownMinutes
+	}
+	req.Configuration = alertRuleConfigurationWithFallback(req, current.Configuration)
+
+	rule, err := h.queries.UpdateAlertRule(r.Context(), sqlc.UpdateAlertRuleParams{
+		ID:              id,
+		Name:            req.Name,
+		RuleType:        req.RuleType,
+		Configuration:   req.Configuration,
+		Severity:        req.Severity,
+		Enabled:         req.Enabled,
+		CooldownMinutes: req.CooldownMinutes,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update alert rule")
+		return
+	}
+	if len(req.NotificationChannelIDs) > 0 {
+		if err := h.syncRuleChannels(r.Context(), rule.ID, req.NotificationChannelIDs); err != nil {
+			RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update notification channels")
+			return
+		}
+	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+
+	recordAudit(r, h.queries, "alert.rule.update", "alert_rule", rule.ID.String(), rule.Name, map[string]any{
+		"severity": rule.Severity,
+		"enabled":  rule.Enabled,
+	})
+
+	RespondJSON(w, http.StatusOK, h.alertRuleResponse(r.Context(), rule))
 }
 
 // DeleteRule handles DELETE /api/v1/alerting/rules/{id}/.
@@ -260,10 +455,17 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ruleName := ""
+	if existing, lookupErr := h.queries.GetAlertRuleByID(r.Context(), id); lookupErr == nil {
+		ruleName = existing.Name
+	}
 	if err := h.queries.DeleteAlertRule(r.Context(), id); err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Alert rule not found")
 		return
 	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+
+	recordAudit(r, h.queries, "alert.rule.delete", "alert_rule", id.String(), ruleName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -284,13 +486,24 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountAlertEvents(r.Context())
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count alert events")
-		return
+	statusFilter := r.URL.Query().Get("status")
+	severityFilter := r.URL.Query().Get("severity")
+	clusterFilter := r.URL.Query().Get("clusterId")
+	items := make([]map[string]any, 0, len(events))
+	for _, event := range events {
+		item := h.alertEventResponse(r.Context(), event)
+		if statusFilter != "" && item["status"] != statusFilter {
+			continue
+		}
+		if severityFilter != "" && item["severity"] != severityFilter {
+			continue
+		}
+		if clusterFilter != "" && item["clusterId"] != clusterFilter {
+			continue
+		}
+		items = append(items, item)
 	}
-
-	RespondPaginated(w, r, events, total)
+	RespondJSON(w, http.StatusOK, items)
 }
 
 // GetEvent handles GET /api/v1/alerting/events/{id}/.
@@ -307,7 +520,53 @@ func (h *AlertingHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, event)
+	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
+}
+
+// AcknowledgeEvent handles POST /api/v1/alerting/events/{id}/acknowledge/.
+func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid event ID")
+		return
+	}
+	if _, err := h.queries.GetAlertEventByID(r.Context(), id); err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Alert event not found")
+		return
+	}
+	if err := h.queries.AcknowledgeAlertEvent(r.Context(), sqlc.AcknowledgeAlertEventParams{
+		ID:               id,
+		AcknowledgedByID: currentUserUUID(r),
+	}); err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to acknowledge alert event")
+		return
+	}
+	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
+	recordAudit(r, h.queries, "alert.event.acknowledge", "alert_event", id.String(), "", nil)
+	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
+}
+
+// ResolveEvent handles POST /api/v1/alerting/events/{id}/resolve/.
+func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid event ID")
+		return
+	}
+	if _, err := h.queries.GetAlertEventByID(r.Context(), id); err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Alert event not found")
+		return
+	}
+	if err := h.queries.UpdateAlertEventStatus(r.Context(), sqlc.UpdateAlertEventStatusParams{
+		ID:     id,
+		Status: "resolved",
+	}); err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to resolve alert event")
+		return
+	}
+	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
+	recordAudit(r, h.queries, "alert.event.resolve", "alert_event", id.String(), "", nil)
+	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
 }
 
 // --- Silence Endpoints ---
@@ -326,13 +585,11 @@ func (h *AlertingHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountAlertSilences(r.Context())
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count alert silences")
-		return
+	items := make([]map[string]any, 0, len(silences))
+	for _, silence := range silences {
+		items = append(items, alertSilenceResponse(silence))
 	}
-
-	RespondPaginated(w, r, silences, total)
+	RespondJSON(w, http.StatusOK, items)
 }
 
 // CreateSilence handles POST /api/v1/alerting/silences/.
@@ -349,16 +606,24 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if req.EndsAt.IsZero() {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Silence end time is required")
-		return
+		if req.Duration == "" {
+			RespondError(w, http.StatusBadRequest, "validation_error", "Silence end time is required")
+			return
+		}
 	}
 
 	var ruleID pgtype.UUID
+	if req.RuleID == nil {
+		req.RuleID = parseMatcherUUID(req.Matchers, "rule_id", "ruleId")
+	}
 	if req.RuleID != nil {
 		ruleID = pgtype.UUID{Bytes: *req.RuleID, Valid: true}
 	}
 
 	var clusterID pgtype.UUID
+	if req.ClusterID == nil {
+		req.ClusterID = parseMatcherUUID(req.Matchers, "cluster_id", "clusterId")
+	}
 	if req.ClusterID != nil {
 		clusterID = pgtype.UUID{Bytes: *req.ClusterID, Valid: true}
 	}
@@ -367,21 +632,114 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 	if startsAt.IsZero() {
 		startsAt = time.Now()
 	}
+	endsAt := req.EndsAt
+	if endsAt.IsZero() {
+		duration, err := time.ParseDuration(req.Duration)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "validation_error", "Invalid silence duration")
+			return
+		}
+		endsAt = startsAt.Add(duration)
+	}
 
 	silence, err := h.queries.CreateAlertSilence(r.Context(), sqlc.CreateAlertSilenceParams{
 		RuleID:      ruleID,
 		ClusterID:   clusterID,
 		Reason:      req.Reason,
 		StartsAt:    startsAt,
-		EndsAt:      req.EndsAt,
-		CreatedByID: pgtype.UUID{}, // TODO: extract from auth context
+		EndsAt:      endsAt,
+		CreatedByID: currentUserUUID(r),
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create alert silence")
 		return
 	}
+	_ = h.syncSharedAlertingAssets(r.Context())
 
-	RespondJSON(w, http.StatusCreated, silence)
+	recordAudit(r, h.queries, "alert.silence.create", "alert_silence", silence.ID.String(), req.Reason, map[string]any{
+		"starts_at": startsAt.UTC().Format(time.RFC3339),
+		"ends_at":   endsAt.UTC().Format(time.RFC3339),
+	})
+
+	RespondJSON(w, http.StatusCreated, alertSilenceResponse(silence))
+}
+
+// EnableRule handles POST /api/v1/alerts/rules/{id}/enable/.
+func (h *AlertingHandler) EnableRule(w http.ResponseWriter, r *http.Request) {
+	h.setRuleEnabled(w, r, true)
+}
+
+// DisableRule handles POST /api/v1/alerts/rules/{id}/disable/.
+func (h *AlertingHandler) DisableRule(w http.ResponseWriter, r *http.Request) {
+	h.setRuleEnabled(w, r, false)
+}
+
+func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid rule ID")
+		return
+	}
+	current, err := h.queries.GetAlertRuleByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Alert rule not found")
+		return
+	}
+	rule, err := h.queries.UpdateAlertRule(r.Context(), sqlc.UpdateAlertRuleParams{
+		ID:              id,
+		Name:            current.Name,
+		RuleType:        current.RuleType,
+		Configuration:   current.Configuration,
+		Severity:        current.Severity,
+		Enabled:         enabled,
+		CooldownMinutes: current.CooldownMinutes,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update alert rule")
+		return
+	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+	RespondJSON(w, http.StatusOK, h.alertRuleResponse(r.Context(), rule))
+}
+
+// ExpireSilence handles POST /api/v1/alerts/silences/{id}/expire/.
+// Currently this deletes the silence (we lack an UpdateAlertSilence query).
+// The response shape preserves the original record for the UI to refresh.
+func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid silence ID")
+		return
+	}
+	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "load_error", "Failed to load silence")
+		return
+	}
+	var match *sqlc.AlertSilence
+	for i := range silences {
+		if silences[i].ID == id {
+			match = &silences[i]
+			break
+		}
+	}
+	if match == nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Alert silence not found")
+		return
+	}
+	if !match.EndsAt.After(time.Now()) {
+		RespondError(w, http.StatusBadRequest, "already_expired", "This silence has already expired.")
+		return
+	}
+	if err := h.queries.DeleteAlertSilence(r.Context(), id); err != nil {
+		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to expire silence")
+		return
+	}
+	_ = h.syncSharedAlertingAssets(r.Context())
+	expired := *match
+	expired.EndsAt = time.Now()
+	recordAudit(r, h.queries, "alert.silence.expire", "alert_silence", id.String(), match.Reason, nil)
+	RespondJSON(w, http.StatusOK, alertSilenceResponse(expired))
 }
 
 // DeleteSilence handles DELETE /api/v1/alerting/silences/{id}/.
@@ -396,6 +754,708 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusNotFound, "not_found", "Alert silence not found")
 		return
 	}
+	_ = h.syncSharedAlertingAssets(r.Context())
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AlertingHandler) syncSharedAlertingAssets(ctx context.Context) error {
+	if h.requester == nil || h.queries == nil {
+		return nil
+	}
+	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	meta := sharedThanosMetadata(backend)
+	clusterID := stringFromMap(meta, "managementClusterId")
+	namespace := defaultString(stringFromMap(meta, "namespace"), "monitoring")
+	if clusterID == "" {
+		return nil
+	}
+
+	rules, err := h.queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: 1000, Offset: 0})
+	if err != nil {
+		return err
+	}
+	channels, err := h.queries.ListNotificationChannels(ctx, sqlc.ListNotificationChannelsParams{Limit: 1000, Offset: 0})
+	if err != nil {
+		return err
+	}
+	silences, err := h.queries.ListAlertSilences(ctx, sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
+	if err != nil {
+		return err
+	}
+
+	ruleContent, err := h.renderRulerRules(ctx, rules)
+	if err != nil {
+		return err
+	}
+	alertmanagerRouting, err := h.renderAlertmanagerConfig(ctx, channels, rules)
+	if err != nil {
+		return err
+	}
+	silenceContent, err := h.renderSilenceInventory(silences)
+	if err != nil {
+		return err
+	}
+	alertmanagerEndpoints, ok, err := h.renderThanosAlertmanagerEndpoints(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := ensureNamespaceWithRequester(ctx, h.requester, clusterID, namespace); err != nil {
+		return err
+	}
+	if err := applyConfigMap(ctx, h.requester, clusterID, namespace, "astronomer-ruler-rules", map[string]string{
+		"rules.yaml": ruleContent,
+	}); err != nil {
+		return err
+	}
+	if err := applyConfigMap(ctx, h.requester, clusterID, namespace, "astronomer-alertmanager-routing", map[string]string{
+		"alertmanager.yaml": alertmanagerRouting,
+	}); err != nil {
+		return err
+	}
+	if err := applyConfigMap(ctx, h.requester, clusterID, namespace, "astronomer-alert-silences", map[string]string{
+		"silences.yaml": silenceContent,
+	}); err != nil {
+		return err
+	}
+	if ok {
+		if err := applySecret(ctx, h.requester, clusterID, namespace, "astronomer-thanos-rule-alertmanagers", map[string]string{
+			"config": alertmanagerEndpoints,
+		}); err != nil {
+			return err
+		}
+	}
+	if err := h.persistSharedAlertingAssetHashes(ctx, backend, map[string]any{
+		"rulerRules":              specHash(ruleContent),
+		"alertmanagerRouting":     specHash(alertmanagerRouting),
+		"silenceInventory":        specHash(silenceContent),
+		"thanosAlertmanagerPeers": specHash(alertmanagerEndpoints),
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *AlertingHandler) persistSharedAlertingAssetHashes(ctx context.Context, backend sqlc.MonitoringBackend, hashes map[string]any) error {
+	authCfg := decodeJSONMap(backend.AuthConfig)
+	authCfg["sharedAlertingAssets"] = map[string]any{
+		"hashes":    hashes,
+		"updatedAt": time.Now().UTC().Format(time.RFC3339),
+	}
+	raw, err := json.Marshal(authCfg)
+	if err != nil {
+		return err
+	}
+	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, sqlc.UpsertDefaultMonitoringBackendParams{
+		BackendType:        backend.BackendType,
+		QueryUrl:           backend.QueryUrl,
+		AlertmanagerUrl:    backend.AlertmanagerUrl,
+		TenantID:           backend.TenantID,
+		AuthType:           backend.AuthType,
+		AuthConfig:         raw,
+		DefaultStepSeconds: backend.DefaultStepSeconds,
+		TimeoutSeconds:     backend.TimeoutSeconds,
+		CreatedByID:        backend.CreatedByID,
+	})
+	return err
+}
+
+func (h *AlertingHandler) renderRulerRules(ctx context.Context, rules []sqlc.AlertRule) (string, error) {
+	groupRules := make([]map[string]any, 0, len(rules))
+	for _, rule := range rules {
+		if !rule.Enabled {
+			continue
+		}
+		cfg := decodeJSONMap(rule.Configuration)
+		expr := strings.TrimSpace(stringFromMap(cfg, "query"))
+		if expr == "" {
+			expr = fallbackPromExpr(rule, cfg)
+		}
+		if expr == "" {
+			continue
+		}
+		alertName := sanitizePromRuleName(rule.Name)
+		labels := mapStringMap(cfg["labels"])
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels["severity"] = defaultString(rule.Severity, "warning")
+		labels["astronomer_rule_id"] = rule.ID.String()
+		if rule.ClusterID.Valid {
+			labels["astronomer_cluster_id"] = uuid.UUID(rule.ClusterID.Bytes).String()
+		}
+		annotations := mapStringMap(cfg["annotations"])
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		if annotations["summary"] == "" {
+			annotations["summary"] = firstNonEmptyString(stringFromMap(cfg, "description"), rule.Name)
+		}
+		groupRules = append(groupRules, map[string]any{
+			"alert":       alertName,
+			"expr":        expr,
+			"for":         defaultString(stringFromMap(cfg, "duration"), "5m"),
+			"labels":      labels,
+			"annotations": annotations,
+		})
+	}
+	payload := map[string]any{
+		"groups": []map[string]any{{
+			"name":  "astronomer.rules",
+			"rules": groupRules,
+		}},
+	}
+	raw, err := yaml.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (h *AlertingHandler) renderAlertmanagerConfig(ctx context.Context, channels []sqlc.NotificationChannel, rules []sqlc.AlertRule) (string, error) {
+	receivers := []map[string]any{{"name": "null"}}
+	routes := []map[string]any{}
+	for _, channel := range channels {
+		if !channel.Enabled {
+			continue
+		}
+		receiverName := "channel-" + channel.ID.String()
+		receiver := map[string]any{"name": receiverName}
+		cfg := decodeJSONMap(channel.Configuration)
+		switch strings.ToLower(channel.ChannelType) {
+		case "slack":
+			if webhook, ok := firstConfigString(cfg, "url", "webhook_url"); ok {
+				receiver["webhook_configs"] = []map[string]any{{"url": webhook, "send_resolved": true}}
+			}
+		case "webhook":
+			if webhook, ok := firstConfigString(cfg, "url", "webhook_url"); ok {
+				receiver["webhook_configs"] = []map[string]any{{"url": webhook, "send_resolved": true}}
+			}
+		case "email":
+			if email, ok := firstConfigString(cfg, "email", "address"); ok {
+				receiver["email_configs"] = []map[string]any{{"to": email, "send_resolved": true}}
+			}
+		default:
+			continue
+		}
+		receivers = append(receivers, receiver)
+		channelRules, err := h.rulesForChannel(ctx, rules, channel.ID)
+		if err != nil {
+			return "", err
+		}
+		for _, rule := range channelRules {
+			routes = append(routes, map[string]any{
+				"receiver": receiverName,
+				"matchers": []string{fmt.Sprintf(`astronomer_rule_id="%s"`, rule.ID.String())},
+				"continue": true,
+			})
+		}
+	}
+	payload := map[string]any{
+		"global": map[string]any{
+			"resolve_timeout": "5m",
+		},
+		"route": map[string]any{
+			"receiver":        "null",
+			"group_by":        []string{"alertname", "astronomer_rule_id", "cluster"},
+			"group_wait":      "30s",
+			"group_interval":  "5m",
+			"repeat_interval": "3h",
+			"routes":          routes,
+		},
+		"receivers": receivers,
+	}
+	raw, err := yaml.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (h *AlertingHandler) renderSilenceInventory(silences []sqlc.AlertSilence) (string, error) {
+	items := make([]map[string]any, 0, len(silences))
+	for _, silence := range silences {
+		items = append(items, map[string]any{
+			"id":        silence.ID.String(),
+			"clusterId": nullableUUID(silence.ClusterID),
+			"ruleId":    nullableUUID(silence.RuleID),
+			"reason":    silence.Reason,
+			"startsAt":  silence.StartsAt.UTC().Format(time.RFC3339),
+			"endsAt":    silence.EndsAt.UTC().Format(time.RFC3339),
+		})
+	}
+	raw, err := yaml.Marshal(map[string]any{"silences": items})
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (h *AlertingHandler) renderThanosAlertmanagerEndpoints(ctx context.Context) (string, bool, error) {
+	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if strings.TrimSpace(backend.AlertmanagerUrl) == "" {
+		return "", false, nil
+	}
+	payload := map[string]any{
+		"alertmanagers": []map[string]any{{
+			"static_configs": []string{backend.AlertmanagerUrl},
+			"scheme":         alertmanagerScheme(backend.AlertmanagerUrl),
+			"timeout":        "10s",
+			"api_version":    "v2",
+		}},
+	}
+	raw, err := yaml.Marshal(payload)
+	if err != nil {
+		return "", false, err
+	}
+	return string(raw), true, nil
+}
+
+func (h *AlertingHandler) rulesForChannel(ctx context.Context, allRules []sqlc.AlertRule, channelID uuid.UUID) ([]sqlc.AlertRule, error) {
+	matched := make([]sqlc.AlertRule, 0)
+	for _, rule := range allRules {
+		channels, err := h.queries.ListChannelsForAlertRule(ctx, rule.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, channel := range channels {
+			if channel.ID == channelID {
+				matched = append(matched, rule)
+				break
+			}
+		}
+	}
+	return matched, nil
+}
+
+func fallbackPromExpr(rule sqlc.AlertRule, cfg map[string]any) string {
+	clusterMatcher := ""
+	if rule.ClusterID.Valid {
+		clusterMatcher = fmt.Sprintf(`{cluster_id="%s"}`, uuid.UUID(rule.ClusterID.Bytes).String())
+	}
+	switch strings.ToLower(rule.RuleType) {
+	case "absence", "deadman":
+		return fmt.Sprintf(`absent(up%s)`, clusterMatcher)
+	default:
+		threshold := float64(0)
+		if v := numberOrNil(cfg["threshold"]); v != nil {
+			threshold, _ = v.(float64)
+		}
+		query := strings.ToLower(stringFromMap(cfg, "query"))
+		switch {
+		case strings.Contains(query, "cpu"):
+			return fmt.Sprintf(`sum(rate(node_cpu_seconds_total{mode!="idle"%s}[5m])) > %.2f`, promMatcherSuffix(clusterMatcher), threshold)
+		case strings.Contains(query, "memory"):
+			return fmt.Sprintf(`sum(node_memory_MemTotal_bytes%s - node_memory_MemAvailable_bytes%s) > %.2f`, clusterMatcher, clusterMatcher, threshold)
+		default:
+			return ""
+		}
+	}
+}
+
+func promMatcherSuffix(matcher string) string {
+	if matcher == "" {
+		return ""
+	}
+	return "," + strings.TrimPrefix(strings.TrimSuffix(matcher, "}"), "{")
+}
+
+func sanitizePromRuleName(name string) string {
+	replacer := strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
+	return replacer.Replace(name)
+}
+
+func alertmanagerScheme(rawURL string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(rawURL)), "https://") {
+		return "https"
+	}
+	return "http"
+}
+
+func firstConfigString(cfg map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := cfg[key].(string); ok && strings.TrimSpace(value) != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func ensureNamespaceWithRequester(ctx context.Context, requester K8sRequester, clusterID, namespace string) error {
+	path := fmt.Sprintf("/api/v1/namespaces/%s", namespace)
+	resp, err := requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < http.StatusBadRequest {
+		return nil
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		return ensureSuccess(resp)
+	}
+	body, err := json.Marshal(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Namespace",
+		"metadata": map[string]any{
+			"name": namespace,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	resp, err = requester.Do(ctx, clusterID, http.MethodPost, "/api/v1/namespaces", body, requestHeaders("application/json"))
+	if err != nil {
+		return err
+	}
+	return ensureSuccess(resp)
+}
+
+func applyConfigMap(ctx context.Context, requester K8sRequester, clusterID, namespace, name string, data map[string]string) error {
+	body, err := json.Marshal(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"data": data,
+	})
+	if err != nil {
+		return err
+	}
+	return applyNamedResource(ctx, requester, clusterID, namespace, "configmaps", name, body)
+}
+
+func applySecret(ctx context.Context, requester K8sRequester, clusterID, namespace, name string, stringData map[string]string) error {
+	body, err := json.Marshal(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+		},
+		"type":       "Opaque",
+		"stringData": stringData,
+	})
+	if err != nil {
+		return err
+	}
+	return applyNamedResource(ctx, requester, clusterID, namespace, "secrets", name, body)
+}
+
+func applyNamedResource(ctx context.Context, requester K8sRequester, clusterID, namespace, plural, name string, body []byte) error {
+	patchPath := fmt.Sprintf("/api/v1/namespaces/%s/%s/%s", namespace, plural, name)
+	resp, err := requester.Do(ctx, clusterID, http.MethodPatch, patchPath, body, requestHeaders("application/merge-patch+json"))
+	if err == nil && resp != nil && resp.StatusCode != http.StatusNotFound {
+		return ensureSuccess(resp)
+	}
+	createPath := fmt.Sprintf("/api/v1/namespaces/%s/%s", namespace, plural)
+	resp, err = requester.Do(ctx, clusterID, http.MethodPost, createPath, body, requestHeaders("application/json"))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return nil
+	}
+	return ensureSuccess(resp)
+}
+
+func (h *AlertingHandler) alertRuleResponse(ctx context.Context, rule sqlc.AlertRule) map[string]any {
+	cfg := decodeJSONMap(rule.Configuration)
+	activeAlerts := 0
+	clusterName := any(nil)
+	if events, err := h.queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
+		RuleID: rule.ID,
+		Limit:  200,
+		Offset: 0,
+	}); err == nil {
+		for _, event := range events {
+			if event.Status == "firing" || event.Status == "acknowledged" {
+				activeAlerts++
+			}
+		}
+	}
+	if rule.ClusterID.Valid {
+		if cluster, err := h.queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes)); err == nil {
+			clusterName = cluster.DisplayName
+			if clusterName == "" {
+				clusterName = cluster.Name
+			}
+		}
+	}
+	channelIDs := []string{}
+	if channels, err := h.queries.ListChannelsForAlertRule(ctx, rule.ID); err == nil {
+		channelIDs = make([]string, 0, len(channels))
+		for _, channel := range channels {
+			channelIDs = append(channelIDs, channel.ID.String())
+		}
+	}
+	return map[string]any{
+		"id":                     rule.ID.String(),
+		"name":                   rule.Name,
+		"description":            stringFromMap(cfg, "description"),
+		"type":                   defaultString(stringFromMap(cfg, "type"), rule.RuleType),
+		"severity":               rule.Severity,
+		"clusterId":              nullableUUID(rule.ClusterID),
+		"clusterName":            clusterName,
+		"namespace":              stringFromMap(cfg, "namespace"),
+		"enabled":                rule.Enabled,
+		"query":                  stringFromMap(cfg, "query"),
+		"threshold":              numberOrNil(cfg["threshold"]),
+		"duration":               defaultString(stringFromMap(cfg, "duration"), "5m"),
+		"activeAlerts":           activeAlerts,
+		"labels":                 mapStringMap(cfg["labels"]),
+		"annotations":            mapStringMap(cfg["annotations"]),
+		"notificationChannelIds": channelIDs,
+		"createdAt":              rule.CreatedAt.UTC().Format(time.RFC3339),
+		"updatedAt":              rule.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func notificationChannelResponse(channel sqlc.NotificationChannel) map[string]any {
+	return map[string]any{
+		"id":        channel.ID.String(),
+		"name":      channel.Name,
+		"type":      channel.ChannelType,
+		"enabled":   channel.Enabled,
+		"config":    decodeJSONMap(channel.Configuration),
+		"createdAt": channel.CreatedAt.UTC().Format(time.RFC3339),
+		"updatedAt": channel.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func (h *AlertingHandler) alertEventResponse(ctx context.Context, event sqlc.AlertEvent) map[string]any {
+	ruleName := ""
+	severity := "warning"
+	clusterName := any(nil)
+	if rule, err := h.queries.GetAlertRuleByID(ctx, event.RuleID); err == nil {
+		ruleName = rule.Name
+		severity = rule.Severity
+	}
+	if event.ClusterID.Valid {
+		if cluster, err := h.queries.GetClusterByID(ctx, uuid.UUID(event.ClusterID.Bytes)); err == nil {
+			clusterName = cluster.DisplayName
+			if clusterName == "" {
+				clusterName = cluster.Name
+			}
+		}
+	}
+	details := decodeJSONMap(event.Details)
+	resp := map[string]any{
+		"id":             event.ID.String(),
+		"ruleId":         event.RuleID.String(),
+		"ruleName":       ruleName,
+		"severity":       severity,
+		"status":         event.Status,
+		"message":        event.Message,
+		"clusterId":      nullableUUID(event.ClusterID),
+		"clusterName":    clusterName,
+		"namespace":      stringFromMap(details, "namespace"),
+		"resource":       stringFromMap(details, "resource"),
+		"labels":         mapStringMap(details["labels"]),
+		"firedAt":        event.FiredAt.UTC().Format(time.RFC3339),
+		"acknowledgedAt": nullableTime(event.AcknowledgedAt),
+		"acknowledgedBy": nullableUUID(event.AcknowledgedByID),
+		"resolvedAt":     nullableTime(event.ResolvedAt),
+		"resolvedBy":     nil,
+	}
+	return resp
+}
+
+func alertSilenceResponse(silence sqlc.AlertSilence) map[string]any {
+	return map[string]any{
+		"id":        silence.ID.String(),
+		"reason":    silence.Reason,
+		"matchers":  map[string]string{"cluster_id": nullableUUIDString(silence.ClusterID), "rule_id": nullableUUIDString(silence.RuleID)},
+		"startsAt":  silence.StartsAt.UTC().Format(time.RFC3339),
+		"endsAt":    silence.EndsAt.UTC().Format(time.RFC3339),
+		"duration":  silence.EndsAt.Sub(silence.StartsAt).String(),
+		"createdBy": nullableUUID(silence.CreatedByID),
+		"createdAt": silence.CreatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func parseMatcherUUID(matchers map[string]string, keys ...string) *uuid.UUID {
+	for _, key := range keys {
+		if matchers == nil {
+			return nil
+		}
+		value := strings.TrimSpace(matchers[key])
+		if value == "" {
+			continue
+		}
+		if id, err := uuid.Parse(value); err == nil {
+			return &id
+		}
+	}
+	return nil
+}
+
+func alertRuleConfiguration(req CreateAlertRuleRequest) json.RawMessage {
+	cfg := map[string]any{
+		"description": req.Description,
+		"type":        defaultString(req.Type, req.RuleType),
+		"query":       req.Query,
+		"duration":    defaultString(req.Duration, "5m"),
+		"labels":      req.Labels,
+		"annotations": req.Annotations,
+	}
+	if req.Threshold != nil {
+		cfg["threshold"] = *req.Threshold
+	}
+	data, _ := json.Marshal(cfg)
+	return data
+}
+
+func alertRuleConfigurationWithFallback(req CreateAlertRuleRequest, current json.RawMessage) json.RawMessage {
+	cfg := decodeJSONMap(current)
+	if req.Description != "" {
+		cfg["description"] = req.Description
+	}
+	if req.Type != "" || req.RuleType != "" {
+		cfg["type"] = defaultString(req.Type, req.RuleType)
+	}
+	if req.Query != "" {
+		cfg["query"] = req.Query
+	}
+	if req.Duration != "" {
+		cfg["duration"] = req.Duration
+	}
+	if req.Threshold != nil {
+		cfg["threshold"] = *req.Threshold
+	}
+	if req.Labels != nil {
+		cfg["labels"] = req.Labels
+	}
+	if req.Annotations != nil {
+		cfg["annotations"] = req.Annotations
+	}
+	data, _ := json.Marshal(cfg)
+	return data
+}
+
+func (h *AlertingHandler) syncRuleChannels(ctx context.Context, ruleID uuid.UUID, channelIDs []string) error {
+	existing, err := h.queries.ListChannelsForAlertRule(ctx, ruleID)
+	if err != nil {
+		return err
+	}
+	existingSet := map[string]sqlc.NotificationChannel{}
+	for _, channel := range existing {
+		existingSet[channel.ID.String()] = channel
+	}
+	targetSet := map[string]struct{}{}
+	for _, id := range channelIDs {
+		targetSet[id] = struct{}{}
+		if _, ok := existingSet[id]; ok {
+			continue
+		}
+		parsed, err := uuid.Parse(id)
+		if err != nil {
+			return err
+		}
+		if err := h.queries.AddAlertRuleChannel(ctx, sqlc.AddAlertRuleChannelParams{
+			AlertRuleID:           ruleID,
+			NotificationChannelID: parsed,
+		}); err != nil {
+			return err
+		}
+	}
+	for id, channel := range existingSet {
+		if _, ok := targetSet[id]; ok {
+			continue
+		}
+		if err := h.queries.RemoveAlertRuleChannel(ctx, sqlc.RemoveAlertRuleChannelParams{
+			AlertRuleID:           ruleID,
+			NotificationChannelID: channel.ID,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func decodeJSONMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func mapStringMap(v any) map[string]string {
+	out := map[string]string{}
+	raw, ok := v.(map[string]any)
+	if !ok {
+		return out
+	}
+	for k, value := range raw {
+		if s, ok := value.(string); ok {
+			out[k] = s
+		}
+	}
+	return out
+}
+
+func stringFromMap(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func numberOrNil(v any) any {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return n
+	default:
+		return nil
+	}
+}
+
+func nullableUUID(id pgtype.UUID) any {
+	if id.Valid {
+		return uuid.UUID(id.Bytes).String()
+	}
+	return nil
+}
+
+func nullableUUIDString(id pgtype.UUID) string {
+	if id.Valid {
+		return uuid.UUID(id.Bytes).String()
+	}
+	return ""
+}
+
+func nullableTime(ts pgtype.Timestamptz) any {
+	if ts.Valid {
+		return ts.Time.UTC().Format(time.RFC3339)
+	}
+	return nil
 }

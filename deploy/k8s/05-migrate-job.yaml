@@ -1,0 +1,36 @@
+# Runs the migrate image to apply all pending migrations.
+# Re-create the Job (delete + apply) on each migration release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: astronomer-migrate
+  namespace: astronomer
+  labels:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/component: migrate
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: astronomer-go-migrate:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-database"
+            - "$(DATABASE_URL)"
+            - "-path"
+            - "/migrations"
+            - "up"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-config
+                  key: DATABASE_URL

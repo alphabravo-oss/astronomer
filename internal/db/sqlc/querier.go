@@ -6,6 +6,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,10 +14,15 @@ import (
 
 type Querier interface {
 	AcknowledgeAlertEvent(ctx context.Context, arg AcknowledgeAlertEventParams) error
+	AcknowledgeControlPlaneAlert(ctx context.Context, arg AcknowledgeControlPlaneAlertParams) (ControlPlaneAlert, error)
 	// Alert Rule Channels (M2M)
 	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
 	// Pipeline <-> Output M2M
 	AddPipelineOutput(ctx context.Context, arg AddPipelineOutputParams) error
+	// Atomically bump the lease so other workers SKIP this row for the given TTL.
+	// Returns the row only if we acquired the lease (locked_until expired or null).
+	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
+	CompleteArgoCDOperationWithResult(ctx context.Context, arg CompleteArgoCDOperationWithResultParams) (ArgocdOperation, error)
 	CountAPITokens(ctx context.Context) (int64, error)
 	CountActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountAgentConnections(ctx context.Context) (int64, error)
@@ -60,16 +66,32 @@ type Querier interface {
 	CreateAlertSilence(ctx context.Context, arg CreateAlertSilenceParams) (AlertSilence, error)
 	CreateArgoCDApplication(ctx context.Context, arg CreateArgoCDApplicationParams) (ArgocdApplication, error)
 	CreateArgoCDInstance(ctx context.Context, arg CreateArgoCDInstanceParams) (ArgocdInstance, error)
+	// ArgoCD Managed Clusters (Phase B1)
+	// Index of which of OUR clusters have been registered into each upstream
+	// ArgoCD instance. The upstream truth lives in the ArgoCD cluster Secret in
+	// the argocd namespace; this table makes list/unregister cheap and gives the
+	// ApplicationSet UI something to label-target.
+	CreateArgoCDManagedCluster(ctx context.Context, arg CreateArgoCDManagedClusterParams) (ArgocdManagedCluster, error)
+	CreateArgoCDOperation(ctx context.Context, arg CreateArgoCDOperationParams) (ArgocdOperation, error)
+	CreateArgoCDOperationEvent(ctx context.Context, arg CreateArgoCDOperationEventParams) (ArgocdOperationEvent, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	CreateBackup(ctx context.Context, arg CreateBackupParams) (Backup, error)
 	CreateBackupSchedule(ctx context.Context, arg CreateBackupScheduleParams) (BackupSchedule, error)
 	CreateBackupStorageConfig(ctx context.Context, arg CreateBackupStorageConfigParams) (BackupStorageConfig, error)
+	// Phase B5: explicit constructor that records the upstream ClusterScan CR name
+	// so the worker can poll the matching ClusterScanReport for ingestion.
+	CreateCISScan(ctx context.Context, arg CreateCISScanParams) (SecurityScanResult, error)
+	CreateCatalogOperation(ctx context.Context, arg CreateCatalogOperationParams) (CatalogOperation, error)
+	CreateCatalogOperationEvent(ctx context.Context, arg CreateCatalogOperationEventParams) (CatalogOperationEvent, error)
 	CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error)
 	CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error)
 	CreateClusterRole(ctx context.Context, arg CreateClusterRoleParams) (ClusterRole, error)
 	CreateClusterRoleBinding(ctx context.Context, arg CreateClusterRoleBindingParams) (ClusterRoleBinding, error)
 	CreateClusterSecurityPolicy(ctx context.Context, arg CreateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error)
 	CreateClusterTool(ctx context.Context, arg CreateClusterToolParams) (ClusterTool, error)
+	CreateControlPlaneAlert(ctx context.Context, arg CreateControlPlaneAlertParams) (ControlPlaneAlert, error)
+	CreateControlPlaneSilence(ctx context.Context, arg CreateControlPlaneSilenceParams) (ControlPlaneSilence, error)
+	CreateDexConnector(ctx context.Context, arg CreateDexConnectorParams) (DexConnector, error)
 	CreateGlobalRole(ctx context.Context, arg CreateGlobalRoleParams) (GlobalRole, error)
 	CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalRoleBindingParams) (GlobalRoleBinding, error)
 	CreateHelmChart(ctx context.Context, arg CreateHelmChartParams) (HelmChart, error)
@@ -78,6 +100,8 @@ type Querier interface {
 	CreateInstalledChart(ctx context.Context, arg CreateInstalledChartParams) (InstalledChart, error)
 	CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutputParams) (LoggingOutput, error)
 	CreateLoggingPipeline(ctx context.Context, arg CreateLoggingPipelineParams) (LoggingPipeline, error)
+	CreateMonitoringOperation(ctx context.Context, arg CreateMonitoringOperationParams) (MonitoringOperation, error)
+	CreateMonitoringOperationEvent(ctx context.Context, arg CreateMonitoringOperationEventParams) (MonitoringOperationEvent, error)
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
 	CreatePodSecurityTemplate(ctx context.Context, arg CreatePodSecurityTemplateParams) (PodSecurityTemplate, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
@@ -86,13 +110,21 @@ type Querier interface {
 	CreateRestoreOperation(ctx context.Context, arg CreateRestoreOperationParams) (RestoreOperation, error)
 	CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfigurationParams) (SsoConfiguration, error)
 	CreateSecurityScanResult(ctx context.Context, arg CreateSecurityScanResultParams) (SecurityScanResult, error)
+	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
+	CreateToolOperationEvent(ctx context.Context, arg CreateToolOperationEventParams) (ToolOperationEvent, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateWorkloadOperation(ctx context.Context, arg CreateWorkloadOperationParams) (WorkloadOperation, error)
+	CreateWorkloadOperationEvent(ctx context.Context, arg CreateWorkloadOperationEventParams) (WorkloadOperationEvent, error)
 	DeleteAPIToken(ctx context.Context, id uuid.UUID) error
 	DeleteAgentConnection(ctx context.Context, id uuid.UUID) error
+	// Deletes alert events older than the supplied cutoff. Used by the scheduled
+	// cleanup_old_alert_events worker.
+	DeleteAlertEventsOlderThan(ctx context.Context, firedAt time.Time) (int64, error)
 	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
 	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDApplication(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error
+	DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgoCDManagedClusterParams) error
 	DeleteAuditLog(ctx context.Context, id uuid.UUID) error
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
@@ -102,6 +134,9 @@ type Querier interface {
 	DeleteClusterRoleBinding(ctx context.Context, id uuid.UUID) error
 	DeleteClusterSecurityPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteClusterTool(ctx context.Context, id uuid.UUID) error
+	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error
+	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
+	DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
 	DeleteGlobalRole(ctx context.Context, id uuid.UUID) error
 	DeleteGlobalRoleBinding(ctx context.Context, id uuid.UUID) error
 	DeleteHelmChart(ctx context.Context, id uuid.UUID) error
@@ -113,16 +148,28 @@ type Querier interface {
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
 	DeletePodSecurityTemplate(ctx context.Context, id uuid.UUID) error
 	DeleteProject(ctx context.Context, id uuid.UUID) error
+	DeleteProjectNamespace(ctx context.Context, arg DeleteProjectNamespaceParams) error
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
 	DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) error
 	DeleteRestoreOperation(ctx context.Context, id uuid.UUID) error
 	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
 	DeleteSecurityScanResult(ctx context.Context, id uuid.UUID) error
+	DeleteUser(ctx context.Context, id uuid.UUID) error
+	// Idempotently create-or-return the singleton "local" cluster row that
+	// represents the Kubernetes cluster the server itself runs in. Uses a CTE
+	// so the round-trip both inserts (when no local row exists yet) and selects
+	// (when one already does). The clusters_one_local partial unique index makes
+	// the ON CONFLICT branch reachable; if the conflicting row was inserted by a
+	// concurrent server replica, the SELECT in the UNION returns it.
+	EnsureLocalCluster(ctx context.Context, arg EnsureLocalClusterParams) (EnsureLocalClusterRow, error)
+	FailArgoCDOperationWithResult(ctx context.Context, arg FailArgoCDOperationWithResultParams) (ArgocdOperation, error)
 	// API Tokens
 	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
 	GetActiveAlertSilences(ctx context.Context) ([]AlertSilence, error)
 	GetActiveAlertSilencesByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertSilence, error)
 	GetActiveConnectionByCluster(ctx context.Context, clusterID uuid.UUID) (AgentConnection, error)
+	GetActiveControlPlaneAlert(ctx context.Context, arg GetActiveControlPlaneAlertParams) (ControlPlaneAlert, error)
+	GetActiveControlPlaneSilences(ctx context.Context) ([]ControlPlaneSilence, error)
 	GetActiveSchedules(ctx context.Context) ([]BackupSchedule, error)
 	GetAgentConnectionByID(ctx context.Context, id uuid.UUID) (AgentConnection, error)
 	// Alert Events
@@ -137,6 +184,8 @@ type Querier interface {
 	// ArgoCD Instances
 	GetArgoCDInstanceByID(ctx context.Context, id uuid.UUID) (ArgocdInstance, error)
 	GetArgoCDInstanceByName(ctx context.Context, name string) (ArgocdInstance, error)
+	GetArgoCDManagedCluster(ctx context.Context, arg GetArgoCDManagedClusterParams) (ArgocdManagedCluster, error)
+	GetArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	GetAuditLogByID(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	// Backups
 	GetBackupByID(ctx context.Context, id uuid.UUID) (Backup, error)
@@ -144,9 +193,12 @@ type Querier interface {
 	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
 	// Backup Storage Configs
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
+	GetCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
 	GetClusterByName(ctx context.Context, name string) (Cluster, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
+	GetClusterMonitoringConfig(ctx context.Context, clusterID uuid.UUID) (ClusterMonitoringConfig, error)
+	GetClusterMonitoringContext(ctx context.Context, clusterID uuid.UUID) (GetClusterMonitoringContextRow, error)
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (ClusterRegistryConfig, error)
 	// Cluster Role Bindings
 	GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (ClusterRoleBinding, error)
@@ -159,7 +211,16 @@ type Querier interface {
 	GetClusterSecurityPolicyByID(ctx context.Context, id uuid.UUID) (ClusterSecurityPolicy, error)
 	GetClusterToolByID(ctx context.Context, id uuid.UUID) (ClusterTool, error)
 	GetDefaultBackupStorageConfig(ctx context.Context) (BackupStorageConfig, error)
+	GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlanePolicy, error)
+	GetDefaultMonitoringBackend(ctx context.Context) (MonitoringBackend, error)
 	GetDefaultPodSecurityTemplate(ctx context.Context) (PodSecurityTemplate, error)
+	// Phase B4: Dex shim CRUD.
+	// The Dex install itself is just a normal cluster_tools row (see migration
+	// 023). Sensitive fields inside `config` are encrypted by the handler before
+	// they ever land here; sqlc passes the JSONB through unchanged.
+	GetDexConnectorByID(ctx context.Context, id uuid.UUID) (DexConnector, error)
+	GetDexConnectorByName(ctx context.Context, name string) (DexConnector, error)
+	GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error)
 	GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguration, error)
 	// Global Role Bindings
 	GetGlobalRoleBindingByID(ctx context.Context, id uuid.UUID) (GlobalRoleBinding, error)
@@ -180,11 +241,15 @@ type Querier interface {
 	// Installed Charts
 	GetInstalledChartByID(ctx context.Context, id uuid.UUID) (InstalledChart, error)
 	GetInstalledChartByRelease(ctx context.Context, arg GetInstalledChartByReleaseParams) (InstalledChart, error)
+	GetLatestArgoCDOperationForTarget(ctx context.Context, arg GetLatestArgoCDOperationForTargetParams) (ArgocdOperation, error)
 	GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (HelmChartVersion, error)
+	GetLatestMonitoringOperationForTarget(ctx context.Context, arg GetLatestMonitoringOperationForTargetParams) (MonitoringOperation, error)
+	GetLatestToolOperationForTarget(ctx context.Context, arg GetLatestToolOperationForTargetParams) (ToolOperation, error)
 	// Logging Outputs
 	GetLoggingOutputByID(ctx context.Context, id uuid.UUID) (LoggingOutput, error)
 	// Logging Pipelines
 	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (LoggingPipeline, error)
+	GetMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	// Notification Channels
 	GetNotificationChannelByID(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
 	GetPlatformConfig(ctx context.Context) (PlatformConfiguration, error)
@@ -201,6 +266,10 @@ type Querier interface {
 	// Project Roles
 	GetProjectRoleByID(ctx context.Context, id uuid.UUID) (ProjectRole, error)
 	GetProjectRoleByName(ctx context.Context, name string) (ProjectRole, error)
+	// The is_used filter is intentionally NOT applied: until the server issues a
+	// long-lived agent token in CONNECT_ACK, the same registration token is the
+	// only credential the agent has, and reconnect attempts must succeed up to
+	// expires_at. is_used remains a tracking column for the future flow.
 	GetRegistrationTokenByToken(ctx context.Context, token string) (ClusterRegistrationToken, error)
 	// Restore Operations
 	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (RestoreOperation, error)
@@ -211,12 +280,14 @@ type Querier interface {
 	GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (SecurityScanResult, error)
 	GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error)
 	GetToolBySlug(ctx context.Context, slug string) (ClusterTool, error)
+	GetToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserClusterRoles(ctx context.Context, arg GetUserClusterRolesParams) ([]ClusterRole, error)
 	GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([]GlobalRole, error)
 	GetUserProjectRoles(ctx context.Context, arg GetUserProjectRolesParams) ([]ProjectRole, error)
+	GetWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error)
 	ListActiveAlertsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertRule, error)
 	ListActiveConnections(ctx context.Context) ([]AgentConnection, error)
@@ -228,11 +299,15 @@ type Querier interface {
 	ListAlertRulesByCluster(ctx context.Context, arg ListAlertRulesByClusterParams) ([]AlertRule, error)
 	ListAlertRulesForChannel(ctx context.Context, notificationChannelID uuid.UUID) ([]AlertRule, error)
 	ListAlertSilences(ctx context.Context, arg ListAlertSilencesParams) ([]AlertSilence, error)
+	ListAllProjectNamespaces(ctx context.Context) ([]ProjectNamespace, error)
 	ListAllTokensByUser(ctx context.Context, arg ListAllTokensByUserParams) ([]ApiToken, error)
 	ListAppsByInstance(ctx context.Context, arg ListAppsByInstanceParams) ([]ArgocdApplication, error)
 	ListAppsByInstanceAndProject(ctx context.Context, arg ListAppsByInstanceAndProjectParams) ([]ArgocdApplication, error)
 	ListArgoCDApplications(ctx context.Context, arg ListArgoCDApplicationsParams) ([]ArgocdApplication, error)
 	ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstancesParams) ([]ArgocdInstance, error)
+	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error)
+	ListArgoCDOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ArgocdOperationEvent, error)
+	ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperationsParams) ([]ArgocdOperation, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	ListAuditLogsByAction(ctx context.Context, arg ListAuditLogsByActionParams) ([]AuditLog, error)
 	ListAuditLogsByRequestID(ctx context.Context, requestID string) ([]AuditLog, error)
@@ -244,6 +319,8 @@ type Querier interface {
 	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)
 	ListBackupsByStatus(ctx context.Context, arg ListBackupsByStatusParams) ([]Backup, error)
 	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
+	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
+	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
 	ListChartVersions(ctx context.Context, arg ListChartVersionsParams) ([]HelmChartVersion, error)
 	ListChartsByCategory(ctx context.Context, arg ListChartsByCategoryParams) ([]HelmChart, error)
@@ -256,6 +333,10 @@ type Querier interface {
 	ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error)
 	ListClustersByStatus(ctx context.Context, arg ListClustersByStatusParams) ([]Cluster, error)
 	ListConnectionsByCluster(ctx context.Context, arg ListConnectionsByClusterParams) ([]AgentConnection, error)
+	ListControlPlaneAlerts(ctx context.Context, arg ListControlPlaneAlertsParams) ([]ControlPlaneAlert, error)
+	ListControlPlaneSilences(ctx context.Context, arg ListControlPlaneSilencesParams) ([]ControlPlaneSilence, error)
+	ListDexConnectors(ctx context.Context) ([]DexConnector, error)
+	ListEnabledDexConnectors(ctx context.Context) ([]DexConnector, error)
 	ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error)
 	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListEnabledOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]LoggingOutput, error)
@@ -272,12 +353,21 @@ type Querier interface {
 	ListInstancesByCluster(ctx context.Context, arg ListInstancesByClusterParams) ([]ArgocdInstance, error)
 	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)
 	ListLoggingPipelines(ctx context.Context, arg ListLoggingPipelinesParams) ([]LoggingPipeline, error)
+	ListMonitoringBackends(ctx context.Context) ([]MonitoringBackend, error)
+	ListMonitoringOperationEvents(ctx context.Context, operationID uuid.UUID) ([]MonitoringOperationEvent, error)
+	ListMonitoringOperations(ctx context.Context, arg ListMonitoringOperationsParams) ([]MonitoringOperation, error)
 	ListNotificationChannels(ctx context.Context, arg ListNotificationChannelsParams) ([]NotificationChannel, error)
 	ListOutputsByCluster(ctx context.Context, arg ListOutputsByClusterParams) ([]LoggingOutput, error)
 	ListOutputsForPipeline(ctx context.Context, loggingPipelineID uuid.UUID) ([]LoggingOutput, error)
+	ListPendingArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
+	ListPendingCatalogOperations(ctx context.Context, limit int32) ([]CatalogOperation, error)
+	ListPendingMonitoringOperations(ctx context.Context, limit int32) ([]MonitoringOperation, error)
+	ListPendingToolOperations(ctx context.Context, limit int32) ([]ToolOperation, error)
+	ListPendingWorkloadOperations(ctx context.Context, limit int32) ([]WorkloadOperation, error)
 	ListPipelinesByCluster(ctx context.Context, arg ListPipelinesByClusterParams) ([]LoggingPipeline, error)
 	ListPipelinesForOutput(ctx context.Context, loggingOutputID uuid.UUID) ([]LoggingPipeline, error)
 	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
+	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectRoleBindings(ctx context.Context, arg ListProjectRoleBindingsParams) ([]ProjectRoleBinding, error)
 	ListProjectRoleBindingsByProject(ctx context.Context, arg ListProjectRoleBindingsByProjectParams) ([]ProjectRoleBinding, error)
 	ListProjectRoles(ctx context.Context, arg ListProjectRolesParams) ([]ProjectRole, error)
@@ -285,17 +375,53 @@ type Querier interface {
 	ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error)
 	ListRestoreOperations(ctx context.Context, arg ListRestoreOperationsParams) ([]RestoreOperation, error)
 	ListRestoreOperationsByBackup(ctx context.Context, backupID uuid.UUID) ([]RestoreOperation, error)
+	ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
+	ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]Backup, error)
+	ListRunningRestoresForPolling(ctx context.Context, limit int32) ([]RestoreOperation, error)
 	ListSSOConfigurations(ctx context.Context, arg ListSSOConfigurationsParams) ([]SsoConfiguration, error)
 	ListScansByCluster(ctx context.Context, arg ListScansByClusterParams) ([]SecurityScanResult, error)
 	ListScansByClusterAndType(ctx context.Context, arg ListScansByClusterAndTypeParams) ([]SecurityScanResult, error)
 	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
 	ListTokensByUser(ctx context.Context, arg ListTokensByUserParams) ([]ApiToken, error)
+	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ToolOperationEvent, error)
+	ListToolOperations(ctx context.Context, arg ListToolOperationsParams) ([]ToolOperation, error)
 	ListToolsByCategory(ctx context.Context, category string) ([]ClusterTool, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
+	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)
+	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
+	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)
+	MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
+	MarkArgoCDOperationSuperseded(ctx context.Context, arg MarkArgoCDOperationSupersededParams) (ArgocdOperation, error)
+	MarkCatalogOperationCompleted(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	MarkCatalogOperationFailed(ctx context.Context, arg MarkCatalogOperationFailedParams) (CatalogOperation, error)
+	MarkCatalogOperationRunning(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	MarkCatalogOperationSuperseded(ctx context.Context, arg MarkCatalogOperationSupersededParams) (CatalogOperation, error)
+	MarkMonitoringOperationCompleted(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
+	MarkMonitoringOperationFailed(ctx context.Context, arg MarkMonitoringOperationFailedParams) (MonitoringOperation, error)
+	MarkMonitoringOperationRunning(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
+	MarkMonitoringOperationSuperseded(ctx context.Context, arg MarkMonitoringOperationSupersededParams) (MonitoringOperation, error)
+	MarkProjectNamespaceReconciled(ctx context.Context, arg MarkProjectNamespaceReconciledParams) error
 	MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error
+	MarkToolOperationCompleted(ctx context.Context, id uuid.UUID) (ToolOperation, error)
+	MarkToolOperationFailed(ctx context.Context, arg MarkToolOperationFailedParams) (ToolOperation, error)
+	MarkToolOperationRunning(ctx context.Context, id uuid.UUID) (ToolOperation, error)
+	MarkToolOperationSuperseded(ctx context.Context, arg MarkToolOperationSupersededParams) (ToolOperation, error)
+	MarkWorkloadOperationCompleted(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	MarkWorkloadOperationFailed(ctx context.Context, arg MarkWorkloadOperationFailedParams) (WorkloadOperation, error)
+	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
 	RemovePipelineOutput(ctx context.Context, arg RemovePipelineOutputParams) error
+	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
+	RequeueCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	RequeueMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
+	RequeueToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
+	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
+	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
+	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
 	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg UpdateAgentConnectionStatusParams) error
@@ -304,6 +430,8 @@ type Querier interface {
 	UpdateArgoCDApplication(ctx context.Context, arg UpdateArgoCDApplicationParams) (ArgocdApplication, error)
 	UpdateArgoCDInstance(ctx context.Context, arg UpdateArgoCDInstanceParams) (ArgocdInstance, error)
 	UpdateArgoCDInstanceHealth(ctx context.Context, arg UpdateArgoCDInstanceHealthParams) error
+	UpdateArgoCDManagedClusterLabels(ctx context.Context, arg UpdateArgoCDManagedClusterLabelsParams) (ArgocdManagedCluster, error)
+	UpdateArgoCDOperationProgress(ctx context.Context, arg UpdateArgoCDOperationProgressParams) (ArgocdOperation, error)
 	UpdateBackupCompleted(ctx context.Context, arg UpdateBackupCompletedParams) error
 	UpdateBackupFailed(ctx context.Context, arg UpdateBackupFailedParams) error
 	UpdateBackupSchedule(ctx context.Context, arg UpdateBackupScheduleParams) (BackupSchedule, error)
@@ -311,6 +439,7 @@ type Querier interface {
 	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
 	UpdateBackupStatus(ctx context.Context, arg UpdateBackupStatusParams) error
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
+	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
 	UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error)
 	UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error
 	UpdateClusterRole(ctx context.Context, arg UpdateClusterRoleParams) (ClusterRole, error)
@@ -319,6 +448,7 @@ type Querier interface {
 	UpdateClusterSecurityPolicyFailed(ctx context.Context, arg UpdateClusterSecurityPolicyFailedParams) error
 	UpdateClusterStatus(ctx context.Context, arg UpdateClusterStatusParams) error
 	UpdateClusterTool(ctx context.Context, arg UpdateClusterToolParams) (ClusterTool, error)
+	UpdateDexConnector(ctx context.Context, arg UpdateDexConnectorParams) (DexConnector, error)
 	UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRoleParams) (GlobalRole, error)
 	UpdateHelmChart(ctx context.Context, arg UpdateHelmChartParams) (HelmChart, error)
 	UpdateHelmRepository(ctx context.Context, arg UpdateHelmRepositoryParams) (HelmRepository, error)
@@ -334,16 +464,32 @@ type Querier interface {
 	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
 	UpdateRestoreOperationFailed(ctx context.Context, arg UpdateRestoreOperationFailedParams) error
 	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
+	UpdateRestoreVeleroIdentity(ctx context.Context, arg UpdateRestoreVeleroIdentityParams) error
 	UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfigurationParams) (SsoConfiguration, error)
 	UpdateSecurityScanCompleted(ctx context.Context, arg UpdateSecurityScanCompletedParams) error
 	UpdateSecurityScanFailed(ctx context.Context, id uuid.UUID) error
+	// Phase B5: failure path that preserves the operator/agent message so users
+	// can see *why* an ingest timed out, instead of a blank "failed" badge.
+	UpdateSecurityScanFailedWithMessage(ctx context.Context, arg UpdateSecurityScanFailedWithMessageParams) error
+	// Phase B5: full report ingestion. Writes flattened counts + findings in one
+	// statement so the row reaches its terminal state atomically and the UI never
+	// sees a half-populated scan.
+	UpdateSecurityScanReport(ctx context.Context, arg UpdateSecurityScanReportParams) error
 	UpdateToolEnabled(ctx context.Context, arg UpdateToolEnabledParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// Convenience alias used by the login flow when an inherited Django
+	// PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
+	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpsertClusterHealthStatus(ctx context.Context, arg UpsertClusterHealthStatusParams) (ClusterHealthStatus, error)
+	UpsertClusterMonitoringConfig(ctx context.Context, arg UpsertClusterMonitoringConfigParams) (ClusterMonitoringConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error)
+	UpsertDefaultControlPlanePolicy(ctx context.Context, arg UpsertDefaultControlPlanePolicyParams) (ControlPlanePolicy, error)
+	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
+	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfiguration, error)
+	UpsertProjectNamespace(ctx context.Context, arg UpsertProjectNamespaceParams) (ProjectNamespace, error)
 }
 
 var _ Querier = (*Queries)(nil)

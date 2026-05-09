@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -17,13 +18,17 @@ import (
 type LogHandler struct {
 	client *kubernetes.Clientset
 	log    *slog.Logger
+
+	mu       sync.Mutex
+	sessions map[string]context.CancelFunc
 }
 
 // NewLogHandler creates a new LogHandler.
 func NewLogHandler(client *kubernetes.Clientset, log *slog.Logger) *LogHandler {
 	return &LogHandler{
-		client: client,
-		log:    log,
+		client:   client,
+		log:      log,
+		sessions: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -54,16 +59,29 @@ func (h *LogHandler) HandleLogStart(ctx context.Context, msg *protocol.Message, 
 		opts.TailLines = &lines
 	}
 
+	// Per-session context so MsgLogStop can cancel an active follow.
+	sessionCtx, cancel := context.WithCancel(ctx)
+
 	req := h.client.CoreV1().Pods(payload.Namespace).GetLogs(payload.Pod, opts)
-	stream, err := req.Stream(ctx)
+	stream, err := req.Stream(sessionCtx)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("open log stream: %w", err)
 	}
+
+	h.mu.Lock()
+	h.sessions[streamID] = cancel
+	h.mu.Unlock()
 
 	// Stream logs in a goroutine.
 	go func() {
 		defer stream.Close()
+		defer cancel()
 		defer func() {
+			h.mu.Lock()
+			delete(h.sessions, streamID)
+			h.mu.Unlock()
+
 			endPayload, _ := json.Marshal(map[string]string{"reason": "stream_closed"})
 			_ = sendFn(&protocol.Message{
 				Type:     protocol.MsgLogEnd,
@@ -91,10 +109,25 @@ func (h *LogHandler) HandleLogStart(ctx context.Context, msg *protocol.Message, 
 				return
 			}
 		}
-		if err := scanner.Err(); err != nil {
+		if err := scanner.Err(); err != nil && sessionCtx.Err() == nil {
 			h.log.Error("log scanner error", "stream_id", streamID, "error", err)
 		}
 	}()
 
+	return nil
+}
+
+// HandleLogStop terminates an active log stream early. The streaming goroutine
+// will emit LOG_END when it observes the cancellation.
+func (h *LogHandler) HandleLogStop(msg *protocol.Message) error {
+	h.mu.Lock()
+	cancel, ok := h.sessions[msg.StreamID]
+	h.mu.Unlock()
+	if !ok {
+		// No active session — nothing to do, not an error.
+		h.log.Debug("log stop for unknown stream", "stream_id", msg.StreamID)
+		return nil
+	}
+	cancel()
 	return nil
 }

@@ -1,0 +1,66 @@
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: {{ .Values.redis.port }}
+      targetPort: redis
+      protocol: TCP
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 4 }}
+spec:
+  serviceName: {{ include "astronomer.fullname" . }}-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.redis.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.storage.size }}
+{{- end }}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,11 @@ import (
 const (
 	// k8sProxyTimeout is the maximum time to wait for a K8s response from the agent.
 	k8sProxyTimeout = 30 * time.Second
+
+	// k8sStreamHeaderTimeout caps how long we wait for the agent's first frame
+	// on a streaming request. Once the header arrives we stop applying any
+	// timeout and let the client/agent decide when to close.
+	k8sStreamHeaderTimeout = 30 * time.Second
 )
 
 // ProxyHandler forwards K8s API requests through the tunnel to agents.
@@ -36,9 +42,15 @@ func NewProxyHandler(hub *Hub, log *slog.Logger) *ProxyHandler {
 	return &ProxyHandler{hub: hub, log: log}
 }
 
-// HandleK8sProxy handles all requests to /api/v1/clusters/{cluster_id}/k8s/*
-// It wraps the HTTP request as a K8S_REQUEST message, sends it through the tunnel,
-// and waits for a K8S_RESPONSE.
+// HandleK8sProxy handles all requests to /api/v1/clusters/{cluster_id}/k8s/*.
+//
+// For ordinary HTTP requests it wraps the request as a K8S_REQUEST and waits
+// for a single K8S_RESPONSE. For Watch-shaped requests (?watch=true,
+// Accept: stream=watch, /watch/ path segment) it sends K8S_STREAM_REQUEST
+// and forwards each K8S_STREAM_FRAME chunk to the client via http.Flusher.
+// Watch responses have no server-side timeout once the first frame arrives —
+// they last until either the client disconnects or the agent closes the
+// upstream stream.
 func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	if clusterID == "" {
@@ -83,21 +95,31 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	streaming := isWatchRequest(r)
+	msgType := protocol.MsgK8sRequest
+	if streaming {
+		msgType = protocol.MsgK8sStreamRequest
+	}
+
 	msg := &protocol.Message{
-		Type:      protocol.MsgK8sRequest,
+		Type:      msgType,
 		StreamID:  streamID,
 		ClusterID: clusterID,
 		Timestamp: time.Now().UTC(),
 		Payload:   payloadBytes,
 	}
 
-	// Send K8S_REQUEST to agent.
 	if err := p.hub.SendToAgent(clusterID, msg); err != nil {
 		p.log.Error("failed to send to agent",
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
 		http.Error(w, `{"error":"failed to send request to agent"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	if streaming {
+		p.consumeStreamingResponse(w, r, stream, clusterID)
 		return
 	}
 
@@ -126,6 +148,155 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// isWatchRequest reports whether r is a Kubernetes Watch request that needs
+// streaming proxy semantics. Matches what kubectl/client-go and ArgoCD's
+// live-state controller emit.
+func isWatchRequest(r *http.Request) bool {
+	q := r.URL.Query()
+	if v := q.Get("watch"); v == "true" || v == "1" {
+		return true
+	}
+	if accept := r.Header.Get("Accept"); strings.Contains(accept, "stream=watch") {
+		return true
+	}
+	if strings.Contains(r.URL.Path, "/watch/") {
+		return true
+	}
+	return false
+}
+
+// consumeStreamingResponse drains K8sStreamFrame frames from the agent and
+// flushes each chunk to the HTTP client. It returns once an end frame is
+// received, the stream closes, or the client disconnects.
+//
+// The first frame must be a header. After that, headers cannot be amended
+// (HTTP semantics); any further header frames are ignored.
+func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.Request, stream *Stream, clusterID string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, `{"error":"streaming not supported by ResponseWriter"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Wait for the first frame (must be header) with a bounded timeout.
+	headerCtx, headerCancel := context.WithTimeout(r.Context(), k8sStreamHeaderTimeout)
+	defer headerCancel()
+
+	var firstFrame protocol.K8sStreamFrame
+	select {
+	case data := <-stream.DataCh:
+		if err := json.Unmarshal(data, &firstFrame); err != nil {
+			p.log.Error("invalid k8s stream header",
+				slog.String("cluster_id", clusterID),
+				slog.String("error", err.Error()),
+			)
+			http.Error(w, `{"error":"invalid stream header from agent"}`, http.StatusBadGateway)
+			return
+		}
+	case <-stream.DoneCh:
+		http.Error(w, `{"error":"stream closed before header"}`, http.StatusBadGateway)
+		return
+	case <-headerCtx.Done():
+		if r.Context().Err() != nil {
+			return // client disconnected
+		}
+		http.Error(w, `{"error":"timeout waiting for stream header"}`, http.StatusGatewayTimeout)
+		return
+	}
+
+	if firstFrame.Kind != protocol.K8sStreamFrameHeader {
+		// Agent terminated before sending a header (e.g. immediate error).
+		if firstFrame.Kind == protocol.K8sStreamFrameEnd && firstFrame.Error != "" {
+			http.Error(w, `{"error":`+strconv.Quote(firstFrame.Error)+`}`, http.StatusBadGateway)
+			return
+		}
+		http.Error(w, `{"error":"first frame was not a header"}`, http.StatusBadGateway)
+		return
+	}
+
+	// Apply headers + status. Skip hop-by-hop and content-length: chunked.
+	for k, v := range firstFrame.Headers {
+		if isHopByHopHeader(k) || strings.EqualFold(k, "Content-Length") {
+			continue
+		}
+		w.Header().Set(k, v)
+	}
+	statusCode := firstFrame.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+	w.WriteHeader(statusCode)
+	flusher.Flush()
+
+	// Pump frames until end or disconnect. No timeout — this is a long-poll.
+	for {
+		select {
+		case data := <-stream.DataCh:
+			var frame protocol.K8sStreamFrame
+			if err := json.Unmarshal(data, &frame); err != nil {
+				p.log.Warn("invalid k8s stream frame, terminating stream",
+					slog.String("cluster_id", clusterID),
+					slog.String("error", err.Error()),
+				)
+				return
+			}
+			switch frame.Kind {
+			case protocol.K8sStreamFrameData:
+				if frame.Body == "" {
+					continue
+				}
+				bodyBytes, err := base64.StdEncoding.DecodeString(frame.Body)
+				if err != nil {
+					bodyBytes = []byte(frame.Body)
+				}
+				if _, werr := w.Write(bodyBytes); werr != nil {
+					return
+				}
+				flusher.Flush()
+			case protocol.K8sStreamFrameEnd:
+				return
+			case protocol.K8sStreamFrameHeader:
+				// Already sent — ignore late header frames.
+				continue
+			default:
+				p.log.Warn("unknown k8s stream frame kind",
+					slog.String("cluster_id", clusterID),
+					slog.String("kind", string(frame.Kind)),
+				)
+			}
+		case <-stream.DoneCh:
+			return
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// isClientOnlyHeader reports whether a request header from the dashboard /
+// browser should be stripped before forwarding the request to the kubernetes
+// API. Authorization is the most important one — see buildK8sRequestPayload.
+func isClientOnlyHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "authorization", "cookie", "host":
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
+		return true
+	}
+	return false
+}
+
+// isHopByHopHeader reports whether name is an HTTP/1.1 hop-by-hop header
+// that should not be forwarded. See RFC 7230 §6.1.
+func isHopByHopHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+		"te", "trailers", "transfer-encoding", "upgrade":
+		return true
+	}
+	return false
+}
+
 // buildK8sRequestPayload constructs a K8sRequestPayload from an HTTP request.
 func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error) {
 	// Extract the K8s path: everything after /k8s/ in the URL.
@@ -136,12 +307,21 @@ func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error
 		path = path + "?" + r.URL.RawQuery
 	}
 
-	// Copy relevant headers.
+	// Forward only headers that make sense at the kubernetes API. Drop:
+	//   - Authorization: this is the caller's Astronomer JWT, not a k8s
+	//     bearer; client-go's transport refuses to overwrite it, so the
+	//     agent's SA token is bypassed and k8s returns 401.
+	//   - Cookie / Host / X-Forwarded-* : browser/proxy headers that are
+	//     either wrong (Host) or noise at the upstream.
 	headers := make(map[string]string)
 	for key, values := range r.Header {
-		if len(values) > 0 {
-			headers[key] = values[0]
+		if len(values) == 0 {
+			continue
 		}
+		if isClientOnlyHeader(key) {
+			continue
+		}
+		headers[key] = values[0]
 	}
 
 	// Read and base64-encode the body.

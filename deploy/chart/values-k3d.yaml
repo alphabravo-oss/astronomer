@@ -1,0 +1,81 @@
+# k3d-local override of values.yaml
+# Generated for astronomer-mgmt cluster smoke test.
+
+createNamespace: false   # We'll let helm --create-namespace handle it.
+
+config:
+  env: development
+  debug: "true"
+  logLevel: debug
+  corsAllowedOrigins: "http://astronomer.localtest.me:8080,http://localhost:8080,http://astronomer.178.156.239.231.nip.io:8080,http://178.156.239.231.nip.io:8080,http://178.156.239.231:8080"
+
+secrets:
+  secretKey: "k3d-smoke-test-jwt-signing-key-32-chars"
+  # Real, valid Fernet key (32 bytes, urlsafe base64). Don't reuse outside of dev.
+  encryptionKey: "3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo="
+
+# Gateway API (replacing the deprecated ingress controller pattern).
+# className must match a GatewayClass on the cluster — for NGINX Gateway Fabric
+# it's "nginx".
+gateway:
+  enabled: true
+  className: nginx
+  hosts:
+    - astronomer.localtest.me
+    - host.k3d.internal
+    - astronomer.178.156.239.231.nip.io
+    - 178.156.239.231.nip.io
+  tls:
+    enabled: false
+    secretName: ""
+
+# Legacy Ingress block kept gated-off for compatibility — chart now uses Gateway API.
+ingress:
+  enabled: false
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: astronomer-frontend
+    tag: dev
+  # Runtime env reaches the in-cluster server service (used by SSR + middleware).
+  # Client-side Next.js uses the build-time baked default (relative /api/v1) so the browser still works.
+  apiBaseUrl: "http://astronomer-server:8000"
+  wsBaseUrl: "ws://astronomer-server:8000/api/v1/ws"
+  hostAliases:
+    - ip: "10.43.199.40"
+      hostnames:
+        - astronomer.178.156.239.231.nip.io
+        - 178.156.239.231.nip.io
+        - astronomer.localtest.me
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+
+# Make probes lenient so a slow first boot doesn't trip the controller.
+server:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+
+worker:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+migrate:
+  # The server pod runs migrations via initContainer, so the standalone Job is redundant.
+  enabled: false
+
+postgres:
+  enabled: true
+  storage:
+    size: 2Gi
+
+redis:
+  enabled: true
+  storage:
+    size: 512Mi

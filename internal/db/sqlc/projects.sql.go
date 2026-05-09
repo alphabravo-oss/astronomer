@@ -13,6 +13,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimProjectNamespaceReconcile = `-- name: ClaimProjectNamespaceReconcile :one
+UPDATE project_namespaces
+SET    locked_until = $4
+WHERE  project_id = $1
+  AND  cluster_id = $2
+  AND  namespace  = $3
+  AND  (locked_until IS NULL OR locked_until < now())
+RETURNING project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at
+`
+
+type ClaimProjectNamespaceReconcileParams struct {
+	ProjectID   uuid.UUID          `json:"project_id"`
+	ClusterID   uuid.UUID          `json:"cluster_id"`
+	Namespace   string             `json:"namespace"`
+	LockedUntil pgtype.Timestamptz `json:"locked_until"`
+}
+
+// Atomically bump the lease so other workers SKIP this row for the given TTL.
+// Returns the row only if we acquired the lease (locked_until expired or null).
+func (q *Queries) ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error) {
+	row := q.db.QueryRow(ctx, claimProjectNamespaceReconcile,
+		arg.ProjectID,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.LockedUntil,
+	)
+	var i ProjectNamespace
+	err := row.Scan(
+		&i.ProjectID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.LastReconciledAt,
+		&i.LastReconcileError,
+		&i.LockedUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const countProjects = `-- name: CountProjects :one
 SELECT count(*) FROM projects
 `
@@ -36,19 +76,21 @@ func (q *Queries) CountProjectsByCluster(ctx context.Context, clusterID uuid.UUI
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at
+INSERT INTO projects (name, display_name, description, cluster_id, namespaces, resource_quota, limit_range, network_policy_mode, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode
 `
 
 type CreateProjectParams struct {
-	Name          string          `json:"name"`
-	DisplayName   string          `json:"display_name"`
-	Description   string          `json:"description"`
-	ClusterID     uuid.UUID       `json:"cluster_id"`
-	Namespaces    json.RawMessage `json:"namespaces"`
-	ResourceQuota json.RawMessage `json:"resource_quota"`
-	CreatedByID   pgtype.UUID     `json:"created_by_id"`
+	Name              string          `json:"name"`
+	DisplayName       string          `json:"display_name"`
+	Description       string          `json:"description"`
+	ClusterID         uuid.UUID       `json:"cluster_id"`
+	Namespaces        json.RawMessage `json:"namespaces"`
+	ResourceQuota     json.RawMessage `json:"resource_quota"`
+	LimitRange        json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode string          `json:"network_policy_mode"`
+	CreatedByID       pgtype.UUID     `json:"created_by_id"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -59,6 +101,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.ClusterID,
 		arg.Namespaces,
 		arg.ResourceQuota,
+		arg.LimitRange,
+		arg.NetworkPolicyMode,
 		arg.CreatedByID,
 	)
 	var i Project
@@ -73,6 +117,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LimitRange,
+		&i.NetworkPolicyMode,
 	)
 	return i, err
 }
@@ -86,8 +132,24 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteProjectNamespace = `-- name: DeleteProjectNamespace :exec
+DELETE FROM project_namespaces
+WHERE project_id = $1 AND cluster_id = $2 AND namespace = $3
+`
+
+type DeleteProjectNamespaceParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) DeleteProjectNamespace(ctx context.Context, arg DeleteProjectNamespaceParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectNamespace, arg.ProjectID, arg.ClusterID, arg.Namespace)
+	return err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at FROM projects WHERE id = $1
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -104,12 +166,14 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LimitRange,
+		&i.NetworkPolicyMode,
 	)
 	return i, err
 }
 
 const getProjectByNameAndCluster = `-- name: GetProjectByNameAndCluster :one
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at FROM projects WHERE name = $1 AND cluster_id = $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects WHERE name = $1 AND cluster_id = $2
 `
 
 type GetProjectByNameAndClusterParams struct {
@@ -131,12 +195,83 @@ func (q *Queries) GetProjectByNameAndCluster(ctx context.Context, arg GetProject
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LimitRange,
+		&i.NetworkPolicyMode,
 	)
 	return i, err
 }
 
+const listAllProjectNamespaces = `-- name: ListAllProjectNamespaces :many
+SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at FROM project_namespaces
+ORDER BY project_id, cluster_id, namespace
+`
+
+func (q *Queries) ListAllProjectNamespaces(ctx context.Context) ([]ProjectNamespace, error) {
+	rows, err := q.db.Query(ctx, listAllProjectNamespaces)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectNamespace{}
+	for rows.Next() {
+		var i ProjectNamespace
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ClusterID,
+			&i.Namespace,
+			&i.LastReconciledAt,
+			&i.LastReconcileError,
+			&i.LockedUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectNamespaces = `-- name: ListProjectNamespaces :many
+SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at FROM project_namespaces
+WHERE project_id = $1
+ORDER BY namespace ASC
+`
+
+func (q *Queries) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error) {
+	rows, err := q.db.Query(ctx, listProjectNamespaces, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectNamespace{}
+	for rows.Next() {
+		var i ProjectNamespace
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ClusterID,
+			&i.Namespace,
+			&i.LastReconciledAt,
+			&i.LastReconcileError,
+			&i.LockedUntil,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectsParams struct {
@@ -164,6 +299,8 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LimitRange,
+			&i.NetworkPolicyMode,
 		); err != nil {
 			return nil, err
 		}
@@ -176,7 +313,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 }
 
 const listProjectsByCluster = `-- name: ListProjectsByCluster :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListProjectsByClusterParams struct {
@@ -205,6 +342,8 @@ func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByC
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LimitRange,
+			&i.NetworkPolicyMode,
 		); err != nil {
 			return nil, err
 		}
@@ -216,22 +355,55 @@ func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByC
 	return items, nil
 }
 
+const markProjectNamespaceReconciled = `-- name: MarkProjectNamespaceReconciled :exec
+UPDATE project_namespaces
+SET    last_reconciled_at   = now(),
+       last_reconcile_error = $4,
+       locked_until         = NULL,
+       updated_at           = now()
+WHERE  project_id = $1
+  AND  cluster_id = $2
+  AND  namespace  = $3
+`
+
+type MarkProjectNamespaceReconciledParams struct {
+	ProjectID          uuid.UUID `json:"project_id"`
+	ClusterID          uuid.UUID `json:"cluster_id"`
+	Namespace          string    `json:"namespace"`
+	LastReconcileError string    `json:"last_reconcile_error"`
+}
+
+func (q *Queries) MarkProjectNamespaceReconciled(ctx context.Context, arg MarkProjectNamespaceReconciledParams) error {
+	_, err := q.db.Exec(ctx, markProjectNamespaceReconciled,
+		arg.ProjectID,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.LastReconcileError,
+	)
+	return err
+}
+
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET
-    display_name = $2,
-    description = $3,
-    namespaces = $4,
-    resource_quota = $5
+    display_name        = $2,
+    description         = $3,
+    namespaces          = $4,
+    resource_quota      = $5,
+    limit_range         = $6,
+    network_policy_mode = $7,
+    updated_at          = now()
 WHERE id = $1
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode
 `
 
 type UpdateProjectParams struct {
-	ID            uuid.UUID       `json:"id"`
-	DisplayName   string          `json:"display_name"`
-	Description   string          `json:"description"`
-	Namespaces    json.RawMessage `json:"namespaces"`
-	ResourceQuota json.RawMessage `json:"resource_quota"`
+	ID                uuid.UUID       `json:"id"`
+	DisplayName       string          `json:"display_name"`
+	Description       string          `json:"description"`
+	Namespaces        json.RawMessage `json:"namespaces"`
+	ResourceQuota     json.RawMessage `json:"resource_quota"`
+	LimitRange        json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode string          `json:"network_policy_mode"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -241,6 +413,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Description,
 		arg.Namespaces,
 		arg.ResourceQuota,
+		arg.LimitRange,
+		arg.NetworkPolicyMode,
 	)
 	var i Project
 	err := row.Scan(
@@ -252,6 +426,38 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Namespaces,
 		&i.ResourceQuota,
 		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LimitRange,
+		&i.NetworkPolicyMode,
+	)
+	return i, err
+}
+
+const upsertProjectNamespace = `-- name: UpsertProjectNamespace :one
+INSERT INTO project_namespaces (project_id, cluster_id, namespace)
+VALUES ($1, $2, $3)
+ON CONFLICT (project_id, cluster_id, namespace) DO UPDATE
+    SET updated_at = now()
+RETURNING project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at
+`
+
+type UpsertProjectNamespaceParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) UpsertProjectNamespace(ctx context.Context, arg UpsertProjectNamespaceParams) (ProjectNamespace, error) {
+	row := q.db.QueryRow(ctx, upsertProjectNamespace, arg.ProjectID, arg.ClusterID, arg.Namespace)
+	var i ProjectNamespace
+	err := row.Scan(
+		&i.ProjectID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.LastReconciledAt,
+		&i.LastReconcileError,
+		&i.LockedUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

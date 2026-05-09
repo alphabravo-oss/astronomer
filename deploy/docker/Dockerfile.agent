@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1.6
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache git
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-s -w \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=${GIT_COMMIT} \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
+    -o /bin/astronomer-agent ./cmd/agent
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /bin/astronomer-agent /usr/local/bin/astronomer-agent
+
+# The agent exposes its health/metrics probe on 8080 (HEALTH_PORT) by default.
+EXPOSE 8080
+
+USER nobody
+
+ENTRYPOINT ["astronomer-agent"]

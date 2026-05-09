@@ -1,0 +1,256 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"sync"
+	"testing"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+)
+
+// recordingSender captures every Send call. Drop-in replacement for the live
+// TunnelClient in tests so we can assert the exact sequence of frames the
+// subscriber emits.
+type recordingSender struct {
+	mu   sync.Mutex
+	msgs []*protocol.Message
+}
+
+func (r *recordingSender) Send(msg *protocol.Message) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.msgs = append(r.msgs, msg)
+	return nil
+}
+
+func (r *recordingSender) Snapshot() []*protocol.Message {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*protocol.Message, len(r.msgs))
+	copy(out, r.msgs)
+	return out
+}
+
+// TestStateRateLimiterCollapsesBurst verifies that a burst on the same key
+// emits exactly one accept and the rest are dropped within the window.
+func TestStateRateLimiterCollapsesBurst(t *testing.T) {
+	r := newStateRateLimiter(1*time.Second, 60*time.Second)
+	// Pin time to make the test deterministic.
+	now := time.Unix(0, 0)
+	r.now = func() time.Time { return now }
+
+	if !r.Allow("Pod|default|web") {
+		t.Fatal("first Allow should pass")
+	}
+	for i := 0; i < 5; i++ {
+		if r.Allow("Pod|default|web") {
+			t.Fatalf("Allow #%d on the same key within window should be dropped", i)
+		}
+	}
+
+	// Advance past the window; next Allow should pass again.
+	now = now.Add(2 * time.Second)
+	if !r.Allow("Pod|default|web") {
+		t.Fatal("Allow after window should pass")
+	}
+}
+
+// TestStateRateLimiterIndependentKeys verifies different keys don't share
+// budgets — a key collision would mean the dashboard misses unrelated updates.
+func TestStateRateLimiterIndependentKeys(t *testing.T) {
+	r := newStateRateLimiter(1*time.Second, 60*time.Second)
+	now := time.Unix(0, 0)
+	r.now = func() time.Time { return now }
+
+	keys := []string{
+		"Pod|default|a",
+		"Pod|default|b",
+		"Pod|kube-system|a",
+		"Service|default|a",
+		"Deployment|default|a",
+	}
+	for _, k := range keys {
+		if !r.Allow(k) {
+			t.Fatalf("first Allow for distinct key %q should pass", k)
+		}
+	}
+	if r.size() != len(keys) {
+		t.Fatalf("expected %d tracked keys, got %d", len(keys), r.size())
+	}
+}
+
+// TestStateRateLimiterEviction verifies the eviction sweep frees old entries.
+func TestStateRateLimiterEviction(t *testing.T) {
+	r := newStateRateLimiter(1*time.Second, 60*time.Second)
+	now := time.Unix(0, 0)
+	r.now = func() time.Time { return now }
+
+	r.Allow("Pod|default|a")
+	r.Allow("Pod|default|b")
+
+	if got := r.size(); got != 2 {
+		t.Fatalf("expected 2 keys, got %d", got)
+	}
+
+	// Evict everything older than now: should drop both.
+	dropped := r.evictOlderThan(now.Add(time.Second))
+	if dropped != 2 {
+		t.Fatalf("expected 2 evictions, got %d", dropped)
+	}
+	if r.size() != 0 {
+		t.Fatalf("expected 0 keys after evict, got %d", r.size())
+	}
+}
+
+// TestStateUpdatePayloadRoundTrip verifies the wire format encodes and
+// decodes losslessly. A round-trip mismatch would silently break the
+// dashboard's invalidation logic.
+func TestStateUpdatePayloadRoundTrip(t *testing.T) {
+	original := protocol.StateUpdatePayload{
+		Op:              protocol.StateUpdateOpModified,
+		Kind:            "Deployment",
+		APIGroup:        "apps",
+		APIVersion:      "v1",
+		Namespace:       "production",
+		Name:            "frontend",
+		ResourceVersion: "12345",
+		CoalesceKey:     "Deployment|production|frontend",
+	}
+
+	body, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded protocol.StateUpdatePayload
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if decoded != original {
+		t.Fatalf("round-trip mismatch:\noriginal=%+v\ndecoded=%+v", original, decoded)
+	}
+}
+
+// TestStateUpdatePayloadOmitsEmpty verifies optional fields don't show up on
+// the wire when empty — keeps the JSON small for high-frequency updates.
+func TestStateUpdatePayloadOmitsEmpty(t *testing.T) {
+	minimal := protocol.StateUpdatePayload{
+		Op:   protocol.StateUpdateOpAdded,
+		Kind: "Node",
+		Name: "node-1",
+	}
+	body, err := json.Marshal(minimal)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(body)
+	expected := `{"op":"added","kind":"Node","name":"node-1"}`
+	if got != expected {
+		t.Fatalf("wire format unexpected:\nwant %s\n got %s", expected, got)
+	}
+}
+
+// TestStateSubscriberEmitsOnPodCreate is the end-to-end happy path: a fake
+// clientset, a recording sender, and a Pod create. The subscriber should
+// publish exactly one MsgStateUpdate for the new Pod within a short window.
+func TestStateSubscriberEmitsOnPodCreate(t *testing.T) {
+	// Tighten the eviction tickers and lengthen the cutoff so the test can
+	// finish quickly without flaking.
+	defer setStateSubscriberTunables(50*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
+
+	client := fake.NewSimpleClientset()
+	sender := &recordingSender{}
+	logger := slog.New(slog.NewTextHandler(testWriter{t}, nil))
+
+	subscriber := NewStateSubscriber(client, sender, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go subscriber.Run(ctx)
+
+	// Give the informer factory a beat to start watching.
+	time.Sleep(100 * time.Millisecond)
+
+	// Create a Pod. The fake clientset's tracker turns this into an Add event
+	// that the informer broadcasts to the registered handler.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "echo",
+			Namespace:       "default",
+			ResourceVersion: "1",
+		},
+	}
+	if _, err := client.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create pod: %v", err)
+	}
+
+	// Poll for the emit; up to 2s (the informer's first list happens
+	// asynchronously, then the watch picks up the create).
+	deadline := time.Now().Add(2 * time.Second)
+	var found *protocol.StateUpdatePayload
+	for time.Now().Before(deadline) {
+		for _, m := range sender.Snapshot() {
+			if m.Type != protocol.MsgStateUpdate {
+				continue
+			}
+			var p protocol.StateUpdatePayload
+			if err := json.Unmarshal(m.Payload, &p); err != nil {
+				continue
+			}
+			if p.Kind == "Pod" && p.Name == "echo" {
+				found = &p
+				break
+			}
+		}
+		if found != nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if found == nil {
+		t.Fatalf("expected a STATE_UPDATE for Pod default/echo, got none. captured=%d", len(sender.Snapshot()))
+	}
+	if found.Op != protocol.StateUpdateOpAdded {
+		t.Errorf("expected op=added, got %s", found.Op)
+	}
+	if found.Namespace != "default" {
+		t.Errorf("expected namespace=default, got %s", found.Namespace)
+	}
+}
+
+// setStateSubscriberTunables overrides the package-level tuning vars for
+// testing and returns a restore func.
+func setStateSubscriberTunables(minInterval, evictAfter, evictEvery, eventCutoff time.Duration) func() {
+	prevMin := stateSubscriberMinInterval
+	prevEvictAfter := stateSubscriberEvictAfter
+	prevEvictEvery := stateSubscriberEvictEvery
+	prevEventCutoff := stateSubscriberEventCutoff
+	stateSubscriberMinInterval = minInterval
+	stateSubscriberEvictAfter = evictAfter
+	stateSubscriberEvictEvery = evictEvery
+	stateSubscriberEventCutoff = eventCutoff
+	return func() {
+		stateSubscriberMinInterval = prevMin
+		stateSubscriberEvictAfter = prevEvictAfter
+		stateSubscriberEvictEvery = prevEvictEvery
+		stateSubscriberEventCutoff = prevEventCutoff
+	}
+}
+
+// testWriter routes slog output to the test log so failures show context.
+type testWriter struct{ t *testing.T }
+
+func (w testWriter) Write(p []byte) (int, error) {
+	w.t.Logf("%s", string(p))
+	return len(p), nil
+}

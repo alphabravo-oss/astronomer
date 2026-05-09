@@ -29,8 +29,16 @@ RETURNING *;
 -- name: UpdateUserPassword :exec
 UPDATE users SET password = $2, updated_at = now() WHERE id = $1;
 
+-- name: UpdateUserPasswordHash :exec
+-- Convenience alias used by the login flow when an inherited Django
+-- PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
+UPDATE users SET password = $2, updated_at = now() WHERE id = $1;
+
 -- name: UpdateUserLastLogin :exec
 UPDATE users SET last_login = now() WHERE id = $1;
 
 -- name: CountUsers :one
 SELECT count(*) FROM users;
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1;

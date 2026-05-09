@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -87,6 +88,9 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("websocket dial: %w", err)
 	}
+
+	// Default read limit (32 KiB) is too small for proxied k8s API responses.
+	conn.SetReadLimit(16 << 20)
 
 	// Send CONNECT message.
 	connectPayload := protocol.ConnectPayload{
@@ -179,6 +183,8 @@ func (tc *TunnelClient) run(ctx context.Context) {
 }
 
 // BackoffDuration calculates the exponential backoff duration for a given attempt.
+// Deterministic: no jitter. Used by tests; production code uses
+// BackoffDurationWithJitter.
 func BackoffDuration(attempt int, baseSeconds, maxSeconds int) time.Duration {
 	backoff := float64(baseSeconds) * math.Pow(2, float64(attempt))
 	if backoff > float64(maxSeconds) {
@@ -187,10 +193,33 @@ func BackoffDuration(attempt int, baseSeconds, maxSeconds int) time.Duration {
 	return time.Duration(backoff) * time.Second
 }
 
-// reconnectLoop attempts to reconnect with exponential backoff.
+// BackoffDurationWithJitter applies +/- 25% jitter to the exponential backoff
+// to spread reconnect storms across many agents. The cap is applied AFTER
+// computing the base exponential, so the jittered value can briefly exceed
+// the cap by up to 25% — that's the point: if all agents disconnect at once,
+// they should not all retry in lockstep at exactly maxSeconds.
+//
+// The jitter factor is uniformly distributed in [0.75, 1.25].
+func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *rand.Rand) time.Duration {
+	backoff := float64(baseSeconds) * math.Pow(2, float64(attempt))
+	if backoff > float64(maxSeconds) {
+		backoff = float64(maxSeconds)
+	}
+	// 25% jitter: factor in [0.75, 1.25].
+	var jitter float64
+	if rng != nil {
+		jitter = 0.75 + rng.Float64()*0.5
+	} else {
+		jitter = 0.75 + rand.Float64()*0.5
+	}
+	return time.Duration(backoff*jitter) * time.Second
+}
+
+// reconnectLoop attempts to reconnect with jittered exponential backoff.
 func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for attempt := 0; ; attempt++ {
-		wait := BackoffDuration(attempt, tc.config.ReconnectBackoff, tc.config.MaxReconnect)
+		wait := BackoffDurationWithJitter(attempt, tc.config.ReconnectBackoff, tc.config.MaxReconnect, rng)
 		tc.log.Info("reconnecting", "attempt", attempt+1, "backoff", wait)
 
 		select {

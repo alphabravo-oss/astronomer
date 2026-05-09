@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v3/pkg/registry"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -24,7 +24,28 @@ type HelmHandler struct {
 }
 
 // NewHelmHandler creates a new Helm operations handler.
+//
+// The Helm SDK derives its cache/config/data dirs from XDG env vars and HOME.
+// The agent runs as a non-root user inside a read-only-root container with
+// HOME=/, so without these overrides the SDK tries to write to /.cache/helm/*
+// on the first chart fetch and crashes with "permission denied". Force every
+// helm-managed dir to /tmp; values caller-provided via env still win.
 func NewHelmHandler(log *slog.Logger) *HelmHandler {
+	setIfEmpty := func(k, v string) {
+		if os.Getenv(k) == "" {
+			_ = os.Setenv(k, v)
+		}
+	}
+	setIfEmpty("HELM_CACHE_HOME", "/tmp/helm/cache")
+	setIfEmpty("HELM_CONFIG_HOME", "/tmp/helm/config")
+	setIfEmpty("HELM_DATA_HOME", "/tmp/helm/data")
+	setIfEmpty("HELM_REGISTRY_CONFIG", "/tmp/helm/config/registry/config.json")
+	setIfEmpty("HELM_REPOSITORY_CONFIG", "/tmp/helm/config/repositories.yaml")
+	setIfEmpty("HELM_REPOSITORY_CACHE", "/tmp/helm/cache/repository")
+	setIfEmpty("XDG_CACHE_HOME", "/tmp/.cache")
+	setIfEmpty("XDG_CONFIG_HOME", "/tmp/.config")
+	setIfEmpty("XDG_DATA_HOME", "/tmp/.local/share")
+
 	return &HelmHandler{
 		settings: cli.New(),
 		log:      log,
@@ -73,30 +94,53 @@ func decodeHelmRequest(msg *protocol.Message) (*protocol.HelmRequestPayload, err
 }
 
 // locateChart resolves and loads a chart from the request parameters.
+//
+// OCI charts are resolved via a registry client wired into the install
+// action's ChartPathOptions; the helm SDK requires this to be set whenever
+// the chart name has the oci:// prefix (otherwise LocateChart returns
+// "missing registry client").
 func (h *HelmHandler) locateChart(req *protocol.HelmRequestPayload) (string, error) {
 	// If a direct chart URL is provided, use it.
 	if req.ChartURL != "" {
 		return req.ChartURL, nil
 	}
 
-	// If a repo URL is provided, add a temporary entry and resolve.
-	if req.RepoURL != "" {
-		entry := &repo.Entry{
-			Name: "astronomer-tmp",
-			URL:  req.RepoURL,
-		}
-		cr, err := repo.NewChartRepository(entry, getter.All(h.settings))
-		if err != nil {
-			return "", fmt.Errorf("create chart repo: %w", err)
-		}
-		if _, err := cr.DownloadIndexFile(); err != nil {
-			return "", fmt.Errorf("download repo index: %w", err)
-		}
+	// Compose the lookup name: an OCI repo URL + chart name yields a single
+	// ref like oci://ghcr.io/argoproj/argo-helm/argo-cd. Traditional helm
+	// repos use the chart-name-only form and rely on RepoURL/index.yaml.
+	chartName := req.ChartName
+	repoURL := strings.TrimSpace(req.RepoURL)
+	isOCI := strings.HasPrefix(strings.ToLower(repoURL), "oci://") ||
+		strings.HasPrefix(strings.ToLower(chartName), "oci://")
+	if isOCI && !strings.HasPrefix(strings.ToLower(chartName), "oci://") && repoURL != "" {
+		chartName = strings.TrimRight(repoURL, "/") + "/" + strings.TrimLeft(req.ChartName, "/")
 	}
 
-	cp, err := action.NewInstall(nil).ChartPathOptions.LocateChart(req.ChartName, h.settings)
+	// Pass a non-nil *action.Configuration. Helm v3.20+ derefs cfg fields on
+	// some chart-resolution paths, so action.NewInstall(nil) panics with a
+	// nil pointer in LocateChart. We don't need a fully-initialized
+	// configuration to locate a chart — an empty struct is enough.
+	install := action.NewInstall(&action.Configuration{})
+	if isOCI {
+		rc, err := registry.NewClient()
+		if err != nil {
+			return "", fmt.Errorf("init OCI registry client: %w", err)
+		}
+		install.SetRegistryClient(rc)
+	}
+	// For traditional helm repos, set RepoURL so the SDK fetches the index
+	// itself and resolves chartName against it. Without this, LocateChart
+	// requires either a "repo_name/chart" prefix (we don't register repos
+	// in helm config) or a fully-qualified chart URL.
+	if repoURL != "" && !isOCI {
+		install.ChartPathOptions.RepoURL = repoURL
+	}
+	if req.Version != "" {
+		install.ChartPathOptions.Version = req.Version
+	}
+	cp, err := install.ChartPathOptions.LocateChart(chartName, h.settings)
 	if err != nil {
-		return "", fmt.Errorf("locate chart %s: %w", req.ChartName, err)
+		return "", fmt.Errorf("locate chart %s: %w", chartName, err)
 	}
 	return cp, nil
 }

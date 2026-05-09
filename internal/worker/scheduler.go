@@ -39,6 +39,16 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 60s", TypeAlertEvaluation, "alert rule evaluation"},
 		{"@every 6h", TypeCatalogSync, "catalog sync"},
 		{"@every 5m", TypeMetricsAggregation, "metrics aggregation"},
+		{"@every 2m", TypeMonitoringReconcile, "monitoring reconciliation"},
+		{"@every 6h", TypeCleanupExpiredRegistrationTokens, "cleanup expired registration tokens"},
+		{"0 2 * * *", TypeCleanupOldAlertEvents, "cleanup old alert events (daily 02:00)"},
+		{"@every 1h", TypeRunScheduledBackups, "run scheduled backups"},
+		{"0 3 * * *", TypeEnforceBackupRetention, "enforce backup retention (daily 03:00)"},
+		// Phase B3: re-apply project ResourceQuota / LimitRange / NetworkPolicy
+		// across every project_namespaces row. The handler also enqueues a
+		// per-namespace reconcile on AddNamespace; this sweep covers drift
+		// and missed-delivery cases.
+		{"@every 5m", TypeProjectReconcileAll, "project enforcement sweep"},
 	}
 
 	for _, e := range entries {

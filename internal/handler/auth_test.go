@@ -43,6 +43,15 @@ func (m *mockUserQuerier) GetUserByEmail(_ context.Context, email string) (sqlc.
 	return u, nil
 }
 
+func (m *mockUserQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
+	for _, u := range m.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return sqlc.User{}, fmt.Errorf("no rows in result set")
+}
+
 func (m *mockUserQuerier) GetUserByUsername(_ context.Context, username string) (sqlc.User, error) {
 	u, ok := m.users["username:"+username]
 	if !ok {

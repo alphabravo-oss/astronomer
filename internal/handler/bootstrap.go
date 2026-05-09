@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -79,7 +80,9 @@ func (h *BootstrapHandler) GetBootstrapStatus(w http.ResponseWriter, r *http.Req
 		resp.Bootstrapped = platform.BootstrappedAt.Valid
 	}
 
-	RespondJSON(w, http.StatusOK, resp)
+	// Frontend middleware reads `data.bootstrapped` at the top level (matches the
+	// original DRF contract), so do not wrap this response.
+	RespondJSONUnwrapped(w, http.StatusOK, resp)
 }
 
 // CompleteBootstrap handles POST /api/v1/bootstrap/complete/.
@@ -190,6 +193,21 @@ func (h *BootstrapHandler) CompleteBootstrap(w http.ResponseWriter, r *http.Requ
 		},
 		Platform: platform,
 	}
+
+	// Bootstrap: the actor IS the freshly-created admin, so attribute the row
+	// to that user even though no auth middleware ran on this request. The
+	// platform_configurations table uses an int32 PK; render it as a string
+	// so the generic resource_id column can hold it.
+	platformID := strconv.Itoa(int(platform.ID))
+	recordAuditAs(r, h.queries, pgtype.UUID{Bytes: user.ID, Valid: true},
+		"platform.bootstrap", "platform", platformID, req.PlatformName,
+		map[string]any{
+			"server_url":  req.ServerURL,
+			"admin_email": req.Email,
+			"admin_id":    user.ID.String(),
+			"platform_id": platformID,
+		},
+	)
 
 	RespondJSON(w, http.StatusCreated, resp)
 }

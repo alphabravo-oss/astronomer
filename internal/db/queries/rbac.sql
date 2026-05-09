@@ -10,16 +10,17 @@ SELECT * FROM global_roles WHERE name = $1;
 SELECT * FROM global_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: CreateGlobalRole :one
-INSERT INTO global_roles (name, description, permissions, rules, is_builtin)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO global_roles (name, display_name, description, permissions, rules, is_builtin)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: UpdateGlobalRole :one
 UPDATE global_roles SET
     name = $2,
-    description = $3,
-    permissions = $4,
-    rules = $5
+    display_name = $3,
+    description = $4,
+    permissions = $5,
+    rules = $6
 WHERE id = $1
 RETURNING *;
 
@@ -68,16 +69,17 @@ SELECT * FROM cluster_roles WHERE name = $1;
 SELECT * FROM cluster_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: CreateClusterRole :one
-INSERT INTO cluster_roles (name, description, permissions, rules, is_builtin)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO cluster_roles (name, display_name, description, permissions, rules, is_builtin)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: UpdateClusterRole :one
 UPDATE cluster_roles SET
     name = $2,
-    description = $3,
-    permissions = $4,
-    rules = $5
+    display_name = $3,
+    description = $4,
+    permissions = $5,
+    rules = $6
 WHERE id = $1
 RETURNING *;
 
@@ -129,16 +131,17 @@ SELECT * FROM project_roles WHERE name = $1;
 SELECT * FROM project_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: CreateProjectRole :one
-INSERT INTO project_roles (name, description, permissions, rules, is_builtin)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO project_roles (name, display_name, description, permissions, rules, is_builtin)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: UpdateProjectRole :one
 UPDATE project_roles SET
     name = $2,
-    description = $3,
-    permissions = $4,
-    rules = $5
+    display_name = $3,
+    description = $4,
+    permissions = $5,
+    rules = $6
 WHERE id = $1
 RETURNING *;
 

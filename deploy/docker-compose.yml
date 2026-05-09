@@ -34,10 +34,29 @@ services:
     networks:
       - astronomer-go
 
+  migrate:
+    build:
+      context: ../
+      dockerfile: deploy/docker/Dockerfile.migrate
+    image: astronomer-go-migrate:dev
+    command:
+      - "-database"
+      - "postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable"
+      - "-path"
+      - "/migrations"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - astronomer-go
+
   server:
     build:
       context: ../
       dockerfile: deploy/docker/Dockerfile.server
+    image: astronomer-go-server:dev
     # Port offset from default (8000->8001) to allow co-existence with the Python stack
     ports:
       - "8001:8000"
@@ -45,6 +64,7 @@ services:
       DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: local-dev-secret-key-change-in-production
+      ENCRYPTION_KEY: local-dev-encryption-key-change-in-prod-32b
       ENV: development
       DEBUG: "true"
       ALLOWED_HOSTS: "*"
@@ -55,12 +75,53 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - astronomer-go
+
+  worker:
+    build:
+      context: ../
+      dockerfile: deploy/docker/Dockerfile.worker
+    image: astronomer-go-worker:dev
+    environment:
+      DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: local-dev-secret-key-change-in-production
+      ENCRYPTION_KEY: local-dev-encryption-key-change-in-prod-32b
+      ENV: development
+      LOG_LEVEL: debug
+      AGENT_IMAGE_REPOSITORY: astronomer-go-agent
+      AGENT_IMAGE_TAG: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - astronomer-go
+
+  # Optional reverse proxy (enable with --profile nginx).
+  nginx:
+    profiles: ["nginx"]
+    build:
+      context: ../
+      dockerfile: deploy/nginx/Dockerfile.nginx
+    image: astronomer-go-nginx:dev
+    ports:
+      - "8080:80"
+    depends_on:
+      server:
+        condition: service_healthy
     networks:
       - astronomer-go
 

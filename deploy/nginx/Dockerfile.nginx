@@ -1,0 +1,8 @@
+# syntax=docker/dockerfile:1.6
+FROM nginx:1.27-alpine
+
+# Drop the default site and ship our config.
+RUN rm /etc/nginx/conf.d/default.conf
+COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf
+
+EXPOSE 80

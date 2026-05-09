@@ -1,0 +1,45 @@
+{{- if .Values.migrate.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astronomer.fullname" . }}-migrate
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "migrate") | nindent 4 }}
+  annotations:
+    # Re-runnable on every release; deleted on the next install/upgrade.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "-database"
+            - "$(DATABASE_URL)"
+            - "-path"
+            - "/migrations"
+            - "up"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "astronomer.fullname" . }}-config
+                  key: DATABASE_URL
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+{{- end }}

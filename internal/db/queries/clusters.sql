@@ -1,6 +1,48 @@
 -- name: GetClusterByID :one
 SELECT * FROM clusters WHERE id = $1;
 
+-- name: EnsureLocalCluster :one
+-- Idempotently create-or-return the singleton "local" cluster row that
+-- represents the Kubernetes cluster the server itself runs in. Uses a CTE
+-- so the round-trip both inserts (when no local row exists yet) and selects
+-- (when one already does). The clusters_one_local partial unique index makes
+-- the ON CONFLICT branch reachable; if the conflicting row was inserted by a
+-- concurrent server replica, the SELECT in the UNION returns it.
+WITH inserted AS (
+    INSERT INTO clusters (
+        name,
+        display_name,
+        description,
+        status,
+        api_server_url,
+        distribution,
+        kubernetes_version,
+        node_count,
+        is_local,
+        environment,
+        provider
+    )
+    SELECT
+        sqlc.arg(name)::varchar,
+        sqlc.arg(display_name)::varchar,
+        sqlc.arg(description)::text,
+        sqlc.arg(status)::varchar,
+        sqlc.arg(api_server_url)::varchar,
+        sqlc.arg(distribution)::varchar,
+        sqlc.arg(kubernetes_version)::varchar,
+        sqlc.arg(node_count)::integer,
+        true,
+        'production',
+        'other'
+    WHERE NOT EXISTS (SELECT 1 FROM clusters WHERE is_local = true)
+    ON CONFLICT DO NOTHING
+    RETURNING *
+)
+SELECT * FROM inserted
+UNION ALL
+SELECT * FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
+LIMIT 1;
+
 -- name: GetClusterByName :one
 SELECT * FROM clusters WHERE name = $1;
 
@@ -11,8 +53,8 @@ SELECT * FROM clusters ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 SELECT * FROM clusters WHERE status = sqlc.arg(status) ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateCluster :one
-INSERT INTO clusters (name, display_name, description, environment, region, provider, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: UpdateCluster :one
@@ -65,10 +107,17 @@ VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetRegistrationTokenByToken :one
-SELECT * FROM cluster_registration_tokens WHERE token = $1 AND is_used = false AND expires_at > now();
+-- The is_used filter is intentionally NOT applied: until the server issues a
+-- long-lived agent token in CONNECT_ACK, the same registration token is the
+-- only credential the agent has, and reconnect attempts must succeed up to
+-- expires_at. is_used remains a tracking column for the future flow.
+SELECT * FROM cluster_registration_tokens WHERE token = $1 AND expires_at > now();
 
 -- name: MarkRegistrationTokenUsed :exec
 UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
+
+-- name: DeleteExpiredRegistrationTokens :execrows
+DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = true AND updated_at < now() - INTERVAL '7 days');
 
 -- name: GetClusterRegistryConfig :one
 SELECT * FROM cluster_registry_configs WHERE cluster_id = $1;

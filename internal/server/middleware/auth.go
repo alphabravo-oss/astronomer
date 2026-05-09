@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/google/uuid"
 )
 
 // authContextKey is an unexported type for auth-related context keys.
@@ -25,6 +28,13 @@ type AuthenticatedUser struct {
 	Username string
 	// AuthMethod indicates how the user was authenticated ("jwt" or "api_token").
 	AuthMethod string
+}
+
+// TokenUserQuerier resolves API tokens to concrete users.
+type TokenUserQuerier interface {
+	GetTokenByHash(ctx context.Context, tokenHash string) (sqlc.ApiToken, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
+	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 }
 
 // GetAuthenticatedUser extracts the authenticated user from context.
@@ -53,6 +63,11 @@ func authError(w http.ResponseWriter, code, message string) {
 //  2. Authorization: Bearer <jwt>   -> JWT validation
 //  3. No auth -> 401
 func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
+	return AuthWithQueries(jwtManager, nil)
+}
+
+// AuthWithQueries authenticates requests via JWT or API token, using DB lookups when provided.
+func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
@@ -76,14 +91,35 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 			var user *AuthenticatedUser
 
 			if strings.HasPrefix(token, "astro_") {
-				// API token path: hash the token and create a placeholder user.
-				// The actual DB lookup will be wired in later.
 				hash := sha256.Sum256([]byte(token))
 				tokenHash := hex.EncodeToString(hash[:])
-
-				user = &AuthenticatedUser{
-					ID:         "api_token:" + tokenHash[:12],
-					AuthMethod: "api_token",
+				if queries == nil {
+					user = &AuthenticatedUser{
+						ID:         "api_token:" + tokenHash[:12],
+						AuthMethod: "api_token",
+					}
+				} else {
+					apiToken, err := queries.GetTokenByHash(r.Context(), tokenHash)
+					if err != nil {
+						authError(w, "authentication_required", "Invalid or expired token")
+						return
+					}
+					if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
+						authError(w, "authentication_required", "Invalid or expired token")
+						return
+					}
+					dbUser, err := queries.GetUserByID(r.Context(), apiToken.UserID)
+					if err != nil || !dbUser.IsActive {
+						authError(w, "authentication_required", "Invalid or expired token")
+						return
+					}
+					_ = queries.UpdateAPITokenLastUsed(r.Context(), apiToken.ID)
+					user = &AuthenticatedUser{
+						ID:         dbUser.ID.String(),
+						Email:      dbUser.Email,
+						Username:   dbUser.Username,
+						AuthMethod: "api_token",
+					}
 				}
 			} else {
 				// JWT path
@@ -97,6 +133,12 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 					ID:         claims.UserID.String(),
 					AuthMethod: "jwt",
 				}
+				if queries != nil {
+					if dbUser, err := queries.GetUserByID(r.Context(), claims.UserID); err == nil {
+						user.Email = dbUser.Email
+						user.Username = dbUser.Username
+					}
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), userContextKey, user)
@@ -108,7 +150,12 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 // RequireAuth is an alias for Auth that makes it explicit at the call site
 // that authentication is mandatory for the wrapped routes.
 func RequireAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
-	return Auth(jwtManager)
+	return AuthWithQueries(jwtManager, nil)
+}
+
+// RequireAuthWithQueries is the DB-backed variant used in production.
+func RequireAuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func(http.Handler) http.Handler {
+	return AuthWithQueries(jwtManager, queries)
 }
 
 // SetAuthenticatedUserForTest injects an AuthenticatedUser into the context.
