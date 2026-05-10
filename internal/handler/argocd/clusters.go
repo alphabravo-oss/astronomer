@@ -56,6 +56,9 @@ type ClusterRegistration struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	// ProjectName scopes the cluster to a single AppProject (optional).
 	Project string `json:"project,omitempty"`
+	// Upsert tells ArgoCD to update an existing registration when the cluster
+	// already exists with different credentials or labels.
+	Upsert bool `json:"-"`
 }
 
 // Cluster is the projection ArgoCD returns for a registered cluster.
@@ -82,8 +85,12 @@ func (c *Client) RegisterCluster(ctx context.Context, reg ClusterRegistration) (
 	if err != nil {
 		return nil, err
 	}
+	path := "/api/v1/clusters"
+	if reg.Upsert {
+		path += "?upsert=true"
+	}
 	var out Cluster
-	if err := c.do(ctx, http.MethodPost, "/api/v1/clusters", body, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, path, body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

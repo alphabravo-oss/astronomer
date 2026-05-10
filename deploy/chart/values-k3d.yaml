@@ -36,6 +36,12 @@ ingress:
 frontend:
   enabled: true
   replicaCount: 1
+  podDisruptionBudget:
+    enabled: false
+  affinity:
+    enabled: false
+  topologySpread:
+    enabled: false
   image:
     repository: astronomer-frontend
     tag: dev
@@ -71,11 +77,13 @@ migrate:
   enabled: false
 
 postgres:
-  enabled: true
+  bundled:
+    enabled: true
   storage:
     size: 2Gi
 
 redis:
-  enabled: true
+  bundled:
+    enabled: true
   storage:
     size: 512Mi

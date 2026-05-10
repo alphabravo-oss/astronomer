@@ -241,12 +241,14 @@ func TestCreateApplicationSetWithClusterGenerator(t *testing.T) {
 
 func TestRegisterCluster(t *testing.T) {
 	var seenPath string
+	var seenQuery string
 	var seenBody map[string]any
 	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s", r.Method)
 		}
 		seenPath = r.URL.Path
+		seenQuery = r.URL.RawQuery
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &seenBody)
 		_, _ = w.Write([]byte(`{"name":"prod-cluster","server":"https://prod.example.com","labels":{"astronomer.io/environment":"prod"}}`))
@@ -262,6 +264,7 @@ func TestRegisterCluster(t *testing.T) {
 			},
 		},
 		Labels: map[string]string{"astronomer.io/environment": "prod"},
+		Upsert: true,
 	})
 	if err != nil {
 		t.Fatalf("RegisterCluster: %v", err)
@@ -271,6 +274,9 @@ func TestRegisterCluster(t *testing.T) {
 	}
 	if seenPath != "/api/v1/clusters" {
 		t.Errorf("path = %s", seenPath)
+	}
+	if seenQuery != "upsert=true" {
+		t.Errorf("query = %s", seenQuery)
 	}
 	if seenBody["server"] != "https://prod.example.com" {
 		t.Errorf("server = %v", seenBody["server"])

@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
@@ -35,6 +36,7 @@ type ToolQuerier interface {
 	GetInstalledChartByRelease(ctx context.Context, arg sqlc.GetInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
 	CreateInstalledChart(ctx context.Context, arg sqlc.CreateInstalledChartParams) (sqlc.InstalledChart, error)
 	UpdateInstalledChartStatus(ctx context.Context, arg sqlc.UpdateInstalledChartStatusParams) error
+	AdoptInstalledChartByRelease(ctx context.Context, arg sqlc.AdoptInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
 	UpdateInstalledChartValues(ctx context.Context, arg sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error)
 	DeleteInstalledChart(ctx context.Context, id uuid.UUID) error
 	CreateToolOperation(ctx context.Context, arg sqlc.CreateToolOperationParams) (sqlc.ToolOperation, error)
@@ -181,6 +183,71 @@ func (h *ToolHandler) TriggerReconcile() {
 	case h.trigger <- struct{}{}:
 	default:
 	}
+}
+
+// EnsureInstalled synchronously installs or adopts a tool release on the given
+// cluster. It is intended for platform-owned bootstrap flows, where waiting
+// for the async operation queue would only add startup lag and complexity.
+func (h *ToolHandler) EnsureInstalled(ctx context.Context, clusterID uuid.UUID, slug, releaseName, preset, valuesYAML string) (sqlc.InstalledChart, error) {
+	if h == nil || h.queries == nil {
+		return sqlc.InstalledChart{}, errors.New("tool handler not configured")
+	}
+	tool, err := h.queries.GetToolBySlug(ctx, slug)
+	if err != nil {
+		return sqlc.InstalledChart{}, err
+	}
+	if releaseName == "" {
+		releaseName = slug
+	}
+	charts, _ := parseToolCharts(tool.Charts)
+	chart := firstChart(charts)
+	namespace := chartNamespace(tool, chart)
+	if item, err := h.findInstalledTool(ctx, clusterID, slug); err == nil {
+		return item, nil
+	} else if !errors.Is(err, errInstalledChartNotFound) {
+		return sqlc.InstalledChart{}, err
+	}
+
+	env := toolOperationEnvelope{
+		ClusterID:   clusterID.String(),
+		ToolSlug:    slug,
+		ReleaseName: releaseName,
+		Namespace:   namespace,
+		Preset:      preset,
+		ValuesYAML:  valuesYAML,
+		ChartName:   chart.ChartName,
+		RepoURL:     chart.RepoURL,
+		Version:     tool.VersionConstraint,
+	}
+	if status, exists, err := existingHelmReleaseStatus(ctx, h.helm, env.ClusterID, env.ReleaseName, env.Namespace); err != nil {
+		return sqlc.InstalledChart{}, err
+	} else if exists {
+		if err := adoptExistingToolRelease(ctx, h.queries, clusterID, env, status); err != nil {
+			return sqlc.InstalledChart{}, err
+		}
+	} else {
+		result, err := h.sendHelmRaw(ctx, env, protocol.MsgHelmInstall)
+		if err != nil {
+			return sqlc.InstalledChart{}, err
+		}
+		if _, err := h.queries.CreateInstalledChart(ctx, sqlc.CreateInstalledChartParams{
+			ClusterID:      clusterID,
+			ReleaseName:    env.ReleaseName,
+			Namespace:      env.Namespace,
+			ValuesOverride: env.ValuesYAML,
+			Status:         normalizeToolStatus(result.Status),
+			Revision:       int32(result.Revision),
+			ToolSlug:       pgtype.Text{String: env.ToolSlug, Valid: true},
+			PresetUsed:     pgtype.Text{String: env.Preset, Valid: env.Preset != ""},
+		}); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return h.findInstalledTool(ctx, clusterID, slug)
+			}
+			return sqlc.InstalledChart{}, err
+		}
+	}
+	return h.findInstalledTool(ctx, clusterID, slug)
 }
 
 func (h *ToolHandler) runReconciler(ctx context.Context) {
@@ -459,6 +526,12 @@ func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool adoption")
 		return
 	}
+	recordAudit(r, h.queries, "tool.adopt", "tool", tool.ID.String(), slug, map[string]any{
+		"cluster_id":   req.ClusterID,
+		"release_name": req.ReleaseName,
+		"namespace":    chartNamespace(tool, chart),
+		"operation_id": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, toolOperationResponse(op))
 }
 
@@ -872,6 +945,12 @@ func toolStatusFromInstalled(status string) string {
 	}
 }
 
+type toolInstallPersister interface {
+	GetInstalledChartByRelease(ctx context.Context, arg sqlc.GetInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
+	CreateInstalledChart(ctx context.Context, arg sqlc.CreateInstalledChartParams) (sqlc.InstalledChart, error)
+	AdoptInstalledChartByRelease(ctx context.Context, arg sqlc.AdoptInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
+}
+
 func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env toolOperationEnvelope, userID pgtype.UUID) (sqlc.ToolOperation, error) {
 	payload, err := json.Marshal(env)
 	if err != nil {
@@ -1015,6 +1094,21 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 		} else if !errors.Is(err, errInstalledChartNotFound) {
 			return err
 		}
+		status, exists, err := existingHelmReleaseStatus(ctx, h.helm, env.ClusterID, env.ReleaseName, env.Namespace)
+		if err != nil {
+			return err
+		}
+		if exists {
+			h.recordToolOperationEvent(ctx, op.ID, "info", "adopt", "existing Helm release detected; adopting into Astronomer state", map[string]any{
+				"clusterId":   env.ClusterID,
+				"toolSlug":    env.ToolSlug,
+				"releaseName": env.ReleaseName,
+				"namespace":   env.Namespace,
+				"status":      status.Status,
+				"revision":    status.Revision,
+			})
+			return adoptExistingToolRelease(ctx, h.queries, clusterID, env, status)
+		}
 		result, err := h.sendHelmRaw(ctx, env, protocol.MsgHelmInstall)
 		if err != nil {
 			return err
@@ -1110,6 +1204,70 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 	default:
 		return fmt.Errorf("unsupported tool operation type: %s", op.OperationType)
 	}
+}
+
+func existingHelmReleaseStatus(ctx context.Context, helm HelmRequester, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, bool, error) {
+	if helm == nil {
+		return nil, false, errors.New("helm requester not configured")
+	}
+	status, err := helm.Status(ctx, clusterID, releaseName, namespace)
+	if err == nil {
+		return status, true, nil
+	}
+	if isHelmReleaseNotFound(err) {
+		return nil, false, nil
+	}
+	return nil, false, err
+}
+
+func adoptExistingToolRelease(ctx context.Context, queries toolInstallPersister, clusterID uuid.UUID, env toolOperationEnvelope, status *protocol.HelmResultPayload) error {
+	if queries == nil {
+		return errors.New("tool queries not configured")
+	}
+	if status == nil {
+		return errors.New("helm status not provided")
+	}
+	preset := pgtype.Text{String: env.Preset, Valid: env.Preset != ""}
+	toolSlug := pgtype.Text{String: env.ToolSlug, Valid: env.ToolSlug != ""}
+	params := sqlc.GetInstalledChartByReleaseParams{
+		ClusterID:   clusterID,
+		ReleaseName: env.ReleaseName,
+		Namespace:   env.Namespace,
+	}
+	if _, err := queries.GetInstalledChartByRelease(ctx, params); err == nil {
+		_, err = queries.AdoptInstalledChartByRelease(ctx, sqlc.AdoptInstalledChartByReleaseParams{
+			ClusterID:      clusterID,
+			ReleaseName:    env.ReleaseName,
+			Namespace:      env.Namespace,
+			ToolSlug:       toolSlug,
+			PresetUsed:     preset,
+			ValuesOverride: env.ValuesYAML,
+			Status:         normalizeToolStatus(status.Status),
+			Revision:       int32(status.Revision),
+		})
+		return err
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	_, err := queries.CreateInstalledChart(ctx, sqlc.CreateInstalledChartParams{
+		ClusterID:      clusterID,
+		ReleaseName:    env.ReleaseName,
+		Namespace:      env.Namespace,
+		ValuesOverride: env.ValuesYAML,
+		Status:         normalizeToolStatus(status.Status),
+		Revision:       int32(status.Revision),
+		ToolSlug:       toolSlug,
+		PresetUsed:     preset,
+	})
+	return err
+}
+
+func isHelmReleaseNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "release: not found") || strings.Contains(msg, "release not found")
 }
 
 func operationTargetKey(clusterID uuid.UUID, slug string) string {
@@ -1337,6 +1495,36 @@ func VeleroChartCoordinates() toolChart {
 	}
 }
 
+// Supportability / TLS posture — cert-manager
+//
+// Catalog entry for `cert-manager` from the Jetstack Helm repo. It can run on
+// either the management cluster or workload clusters; Astronomer uses it
+// primarily to automate TLS for the management Gateway, but operators may also
+// use it for app/workload ingress on managed clusters.
+//
+// The actual `cluster_tools` row is seeded in migration
+// `033_cert_manager_tool.up.sql` (idempotent INSERT … ON CONFLICT DO NOTHING)
+// so existing installs gain the entry on upgrade.
+const (
+	CertManagerToolSlug         = "cert-manager"
+	CertManagerToolName         = "cert-manager"
+	CertManagerChartName        = "cert-manager"
+	CertManagerChartRepoURL     = "https://charts.jetstack.io"
+	CertManagerChartCategory    = "security"
+	CertManagerDefaultNamespace = "cert-manager"
+)
+
+// CertManagerChartCoordinates returns the chart coordinates for cert-manager
+// as the same struct shape stored under `cluster_tools.charts`.
+func CertManagerChartCoordinates() toolChart {
+	return toolChart{
+		ChartName: CertManagerChartName,
+		RepoURL:   CertManagerChartRepoURL,
+		Namespace: CertManagerDefaultNamespace,
+		Order:     0,
+	}
+}
+
 // VeleroDefaultValuesYAML is the conservative defaults snippet baked into the
 // catalog `presets["default"]`. We intentionally leave both backupStorageLocation
 // and volumeSnapshotLocation empty — the BackupStorageLocation is owned by
@@ -1423,4 +1611,3 @@ func (h *ToolHandler) checkToolScope(ctx context.Context, slug string, clusterID
 	}
 	return "", true
 }
-

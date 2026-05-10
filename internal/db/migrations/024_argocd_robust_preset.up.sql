@@ -42,6 +42,7 @@ SET presets = jsonb_set(
         '    policy.default: "role:readonly"\n'
         '    policy.csv: |\n'
         '      g, astronomer, role:admin\n'
+        ::text
     )
 )
 WHERE slug = 'argocd';

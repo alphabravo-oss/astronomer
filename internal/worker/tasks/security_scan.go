@@ -273,8 +273,11 @@ func reschedule(ctx context.Context, p SecurityScanIngestPayload, reason string)
 // the report exists, (nil, false, nil) when the operator hasn't produced
 // one yet, and (nil, false, err) for unexpected errors.
 func fetchClusterScanReport(ctx context.Context, fetcher SecurityIngestK8sFetcher, clusterID, scanName string) (map[string]any, bool, error) {
-	path := fmt.Sprintf("/apis/cis.cattle.io/v1/namespaces/%s/clusterscanreports/%s",
-		cisOperatorNamespace, scanName)
+	reportName, found, err := resolveClusterScanReportName(ctx, fetcher, clusterID, scanName)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	path := fmt.Sprintf("/apis/cis.cattle.io/v1/clusterscanreports/%s", reportName)
 	resp, err := fetcher.Do(ctx, clusterID, http.MethodGet, path, nil, map[string]string{"Accept": "application/json"})
 	if err != nil {
 		return nil, false, err
@@ -294,6 +297,84 @@ func fetchClusterScanReport(ctx context.Context, fetcher SecurityIngestK8sFetche
 		return nil, false, err
 	}
 	return out, true, nil
+}
+
+func resolveClusterScanReportName(ctx context.Context, fetcher SecurityIngestK8sFetcher, clusterID, scanName string) (string, bool, error) {
+	if name, found, err := fetchClusterScanReportNameFromScan(ctx, fetcher, clusterID, scanName); err != nil || found {
+		return name, found, err
+	}
+	return findClusterScanReportNameByOwner(ctx, fetcher, clusterID, scanName)
+}
+
+func fetchClusterScanReportNameFromScan(ctx context.Context, fetcher SecurityIngestK8sFetcher, clusterID, scanName string) (string, bool, error) {
+	path := fmt.Sprintf("/apis/cis.cattle.io/v1/clusterscans/%s", scanName)
+	resp, err := fetcher.Do(ctx, clusterID, http.MethodGet, path, nil, map[string]string{"Accept": "application/json"})
+	if err != nil {
+		return "", false, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", false, nil
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", false, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	body, err := decodeIngestBody(resp)
+	if err != nil {
+		return "", false, err
+	}
+	var scan struct {
+		Status struct {
+			ReportName string `json:"reportName"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal(body, &scan); err != nil {
+		return "", false, err
+	}
+	if scan.Status.ReportName == "" {
+		return "", false, nil
+	}
+	return scan.Status.ReportName, true, nil
+}
+
+func findClusterScanReportNameByOwner(ctx context.Context, fetcher SecurityIngestK8sFetcher, clusterID, scanName string) (string, bool, error) {
+	resp, err := fetcher.Do(ctx, clusterID, http.MethodGet, "/apis/cis.cattle.io/v1/clusterscanreports", nil, map[string]string{"Accept": "application/json"})
+	if err != nil {
+		return "", false, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", false, nil
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", false, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	body, err := decodeIngestBody(resp)
+	if err != nil {
+		return "", false, err
+	}
+	var list struct {
+		Items []struct {
+			Metadata struct {
+				Name            string `json:"name"`
+				OwnerReferences []struct {
+					Name string `json:"name"`
+				} `json:"ownerReferences"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		return "", false, err
+	}
+	for _, item := range list.Items {
+		if item.Metadata.Name == scanName {
+			return item.Metadata.Name, true, nil
+		}
+		for _, owner := range item.Metadata.OwnerReferences {
+			if owner.Name == scanName {
+				return item.Metadata.Name, true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 // CISCounts is exported so tests can assert against it.

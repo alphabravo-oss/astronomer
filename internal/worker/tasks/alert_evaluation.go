@@ -35,128 +35,130 @@ func NewAlertEvaluationTask(payload AlertEvaluationPayload) (*asynq.Task, error)
 
 // HandleAlertEvaluation evaluates all enabled alert rules against current metrics.
 func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
-	var p AlertEvaluationPayload
-	if len(t.Payload()) > 0 {
-		if err := json.Unmarshal(t.Payload(), &p); err != nil {
-			return fmt.Errorf("unmarshal alert evaluation payload: %w", err)
-		}
-	}
-
-	if p.RuleID != "" {
-		slog.InfoContext(ctx, "evaluating alert rule", "rule_id", p.RuleID)
-	} else {
-		slog.InfoContext(ctx, "evaluating all alert rules")
-	}
-
-	if runtimeDeps.Queries == nil {
-		slog.InfoContext(ctx, "alert evaluation runtime not configured, skipping DB evaluation")
-		return nil
-	}
-
-	rules, err := alertRulesForEvaluation(ctx, p.RuleID)
-	if err != nil {
-		return err
-	}
-	for _, rule := range rules {
-		triggered, message, details, targetClusterID, err := evaluateRule(ctx, rule)
-		if err != nil {
-			return err
-		}
-		silence, err := activeSilenceForRule(ctx, rule, targetClusterID)
-		if err != nil {
-			return err
-		}
-		existingEvents, err := runtimeDeps.Queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
-			RuleID: rule.ID,
-			Limit:  200,
-			Offset: 0,
-		})
-		if err != nil {
-			return err
-		}
-		activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
-		if !triggered {
-			for _, event := range activeEvents {
-				if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
-					ID:         event.ID,
-					Status:     "resolved",
-					ResolvedAt: pgTime(time.Now()),
-				}); err != nil {
-					return err
-				}
+	return runPeriodicTaskWithLeader(ctx, "alert:evaluate", func() error {
+		var p AlertEvaluationPayload
+		if len(t.Payload()) > 0 {
+			if err := json.Unmarshal(t.Payload(), &p); err != nil {
+				return fmt.Errorf("unmarshal alert evaluation payload: %w", err)
 			}
-			continue
 		}
-		if silence != nil && len(activeEvents) > 0 {
-			for _, event := range activeEvents {
-				if event.Status == "silenced" {
-					continue
-				}
-				if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
-					ID:     event.ID,
-					Status: "silenced",
-				}); err != nil {
-					return err
-				}
+
+		if p.RuleID != "" {
+			slog.InfoContext(ctx, "evaluating alert rule", "rule_id", p.RuleID)
+		} else {
+			slog.InfoContext(ctx, "evaluating all alert rules")
+		}
+
+		if runtimeDeps.Queries == nil {
+			slog.InfoContext(ctx, "alert evaluation runtime not configured, skipping DB evaluation")
+			return nil
+		}
+
+		rules, err := alertRulesForEvaluation(ctx, p.RuleID)
+		if err != nil {
+			return err
+		}
+		for _, rule := range rules {
+			triggered, message, details, targetClusterID, err := evaluateRule(ctx, rule)
+			if err != nil {
+				return err
 			}
-			continue
-		}
-		if len(activeEvents) > 0 {
-			runtimeLogger().InfoContext(ctx, "alert already active, skipping duplicate event", "rule_id", rule.ID.String())
-			continue
-		}
-		if !cooldownElapsed(rule, existingEvents, targetClusterID) {
-			runtimeLogger().InfoContext(ctx, "alert cooldown active, skipping event", "rule_id", rule.ID.String())
-			continue
-		}
-		status := "firing"
-		if silence != nil {
-			status = "silenced"
-			detailMap := decodeWorkerJSONMap(details)
-			detailMap["silence_reason"] = silence.Reason
-			detailMap["silence_id"] = silence.ID.String()
-			details, _ = json.Marshal(detailMap)
-			message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
-		}
-		event, err := runtimeDeps.Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
-			RuleID:    rule.ID,
-			ClusterID: targetClusterID,
-			Status:    status,
-			Message:   message,
-			Details:   details,
-		})
-		if err != nil {
-			return err
-		}
-		if silence != nil {
-			runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
-			continue
-		}
-		channels, err := runtimeDeps.Queries.ListChannelsForAlertRule(ctx, rule.ID)
-		if err != nil {
-			return err
-		}
-		for _, channel := range channels {
-			if !channel.Enabled {
+			silence, err := activeSilenceForRule(ctx, rule, targetClusterID)
+			if err != nil {
+				return err
+			}
+			existingEvents, err := runtimeDeps.Queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
+				RuleID: rule.ID,
+				Limit:  200,
+				Offset: 0,
+			})
+			if err != nil {
+				return err
+			}
+			activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
+			if !triggered {
+				for _, event := range activeEvents {
+					if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+						ID:         event.ID,
+						Status:     "resolved",
+						ResolvedAt: pgTime(time.Now()),
+					}); err != nil {
+						return err
+					}
+				}
 				continue
 			}
-			task, err := NewNotificationSendTask(NotificationSendPayload{
-				Channel:    channel.ChannelType,
-				Subject:    "Astronomer alert: " + rule.Name,
-				Body:       message,
-				Recipients: notificationRecipients(channel),
+			if silence != nil && len(activeEvents) > 0 {
+				for _, event := range activeEvents {
+					if event.Status == "silenced" {
+						continue
+					}
+					if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+						ID:     event.ID,
+						Status: "silenced",
+					}); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if len(activeEvents) > 0 {
+				runtimeLogger().InfoContext(ctx, "alert already active, skipping duplicate event", "rule_id", rule.ID.String())
+				continue
+			}
+			if !cooldownElapsed(rule, existingEvents, targetClusterID) {
+				runtimeLogger().InfoContext(ctx, "alert cooldown active, skipping event", "rule_id", rule.ID.String())
+				continue
+			}
+			status := "firing"
+			if silence != nil {
+				status = "silenced"
+				detailMap := decodeWorkerJSONMap(details)
+				detailMap["silence_reason"] = silence.Reason
+				detailMap["silence_id"] = silence.ID.String()
+				details, _ = json.Marshal(detailMap)
+				message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
+			}
+			event, err := runtimeDeps.Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
+				RuleID:    rule.ID,
+				ClusterID: targetClusterID,
+				Status:    status,
+				Message:   message,
+				Details:   details,
 			})
-			if err == nil && task != nil {
-				runtimeLogger().InfoContext(ctx, "prepared alert notification",
-					"event_id", event.ID.String(),
-					"channel_id", channel.ID.String(),
-					"recipient_count", len(notificationRecipients(channel)))
+			if err != nil {
+				return err
+			}
+			if silence != nil {
+				runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
+				continue
+			}
+			channels, err := runtimeDeps.Queries.ListChannelsForAlertRule(ctx, rule.ID)
+			if err != nil {
+				return err
+			}
+			for _, channel := range channels {
+				if !channel.Enabled {
+					continue
+				}
+				task, err := NewNotificationSendTask(NotificationSendPayload{
+					Channel:    channel.ChannelType,
+					Subject:    "Astronomer alert: " + rule.Name,
+					Body:       message,
+					Recipients: notificationRecipients(channel),
+				})
+				if err == nil && task != nil {
+					runtimeLogger().InfoContext(ctx, "prepared alert notification",
+						"event_id", event.ID.String(),
+						"channel_id", channel.ID.String(),
+						"recipient_count", len(notificationRecipients(channel)))
+				}
 			}
 		}
-	}
 
-	slog.InfoContext(ctx, "alert evaluation complete")
-	return nil
+		slog.InfoContext(ctx, "alert evaluation complete")
+		return nil
+	})
 }
 
 func alertRulesForEvaluation(ctx context.Context, ruleID string) ([]sqlc.AlertRule, error) {

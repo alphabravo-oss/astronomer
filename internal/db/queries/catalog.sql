@@ -130,6 +130,16 @@ RETURNING *;
 -- name: UpdateInstalledChartStatus :exec
 UPDATE installed_charts SET status = $2, revision = $3 WHERE id = $1;
 
+-- name: AdoptInstalledChartByRelease :one
+UPDATE installed_charts SET
+    tool_slug = $4,
+    preset_used = $5,
+    values_override = $6,
+    status = $7,
+    revision = $8
+WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
+RETURNING *;
+
 -- name: UpdateInstalledChartValues :one
 UPDATE installed_charts SET
     values_override = $2,

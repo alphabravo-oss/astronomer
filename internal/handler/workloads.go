@@ -64,7 +64,6 @@ type WorkloadQuerier interface {
 	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (sqlc.WorkloadOperation, error)
 	CreateWorkloadOperationEvent(ctx context.Context, arg sqlc.CreateWorkloadOperationEventParams) (sqlc.WorkloadOperationEvent, error)
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]sqlc.WorkloadOperationEvent, error)
-	CreateAuditLog(ctx context.Context, arg sqlc.CreateAuditLogParams) (sqlc.AuditLog, error)
 }
 
 type workloadOperationEnvelope struct {
@@ -1217,20 +1216,7 @@ func (h *WorkloadHandler) recordWorkloadAudit(r *http.Request, action, kind, nam
 	if h == nil || h.queries == nil {
 		return
 	}
-	raw, err := json.Marshal(detail)
-	if err != nil {
-		raw = json.RawMessage(`{}`)
-	}
-	_, _ = h.queries.CreateAuditLog(r.Context(), sqlc.CreateAuditLogParams{
-		UserID:       currentUserUUID(r),
-		Action:       action,
-		ResourceType: "workload",
-		ResourceID:   kind + "/" + namespace + "/" + name,
-		ResourceName: name,
-		Detail:       raw,
-		UserAgent:    r.UserAgent(),
-		RequestID:    middleware.GetRequestID(r.Context()),
-	})
+	recordAudit(r, h.queries, action, "workload", kind+"/"+namespace+"/"+name, name, detail)
 }
 
 func podToMap(clusterID string, pod podResource) map[string]any {

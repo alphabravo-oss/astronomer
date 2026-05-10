@@ -1,11 +1,20 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // pathResourceMap maps URL path segments to human-readable resource type names,
@@ -59,9 +68,15 @@ var mutatingMethods = map[string]bool{
 
 // skipPaths lists API paths that should never be audit-logged.
 var skipPaths = map[string]bool{
-	"/api/v1/auth/login":        true,
-	"/api/v1/auth/refresh":      true,
-	"/api/v1/bootstrap/complete": true,
+	"/api/v1/auth/login":           true,
+	"/api/v1/auth/refresh":         true,
+	"/api/v1/auth/logout":          true,
+	"/api/v1/auth/change-password": true,
+	"/api/v1/bootstrap/complete":   true,
+}
+
+type AuditWriterV1 interface {
+	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
 // statusWriter wraps http.ResponseWriter to capture the status code.
@@ -89,6 +104,12 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 // It only logs POST/PUT/PATCH/DELETE to /api/ paths (excluding skip paths)
 // when the response status is < 400.
 func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
+	return AuditLogWithWriter(log, nil)
+}
+
+// AuditLogWithWriter extends AuditLog with best-effort persistence to the
+// partitioned audit_log v1 table. When writer is nil, only structured logs are emitted.
+func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Only log mutating methods.
@@ -128,9 +149,102 @@ func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
 				"status", sw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
 				"request_id", GetRequestID(r.Context()),
+				"correlation_id", GetCorrelationID(r.Context()),
 			)
+			writeAuditLog(r, sw.status, writer, resourceType, resourceID, start)
 		})
 	}
+}
+
+func writeAuditLog(r *http.Request, status int, writer any, resourceType, resourceID string, start time.Time) {
+	if writer == nil || r == nil {
+		return
+	}
+	action := "request." + strings.ToLower(r.Method)
+	durationMs := time.Since(start).Milliseconds()
+	detail := map[string]any{
+		"method":      r.Method,
+		"path":        r.URL.Path,
+		"status":      status,
+		"duration_ms": durationMs,
+		"auth_method": authMethod(r.Context()),
+	}
+	if writerV1, ok := writer.(AuditWriterV1); ok && writerV1 != nil {
+		audit.Record(r.Context(), writerV1, audit.Event{
+			Source:          "http",
+			CorrelationID:   GetCorrelationID(r.Context()),
+			UserID:          currentUserUUID(r.Context()),
+			ActorAuthMethod: authMethod(r.Context()),
+			Action:          action,
+			ResourceType:    resourceType,
+			ResourceID:      resourceID,
+			ResourceName:    "",
+			HTTPMethod:      r.Method,
+			Path:            r.URL.Path,
+			StatusCode:      int32(status),
+			DurationMs:      durationMs,
+			RequestID:       GetRequestID(r.Context()),
+			IPAddress:       remoteIPAddr(r),
+			UserAgent:       r.UserAgent(),
+			Detail:          detail,
+		})
+	}
+}
+
+func currentUserUUID(ctx context.Context) pgtype.UUID {
+	user, ok := GetAuthenticatedUser(ctx)
+	if !ok || user == nil {
+		return pgtype.UUID{}
+	}
+	id, err := uuid.Parse(user.ID)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id, Valid: true}
+}
+
+func authMethod(ctx context.Context) string {
+	user, ok := GetAuthenticatedUser(ctx)
+	if !ok || user == nil {
+		return ""
+	}
+	return user.AuthMethod
+}
+
+func remoteIPAddr(r *http.Request) *netip.Addr {
+	if r == nil {
+		return nil
+	}
+	candidates := []string{}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			candidates = append(candidates, strings.TrimSpace(xff[:idx]))
+		} else {
+			candidates = append(candidates, strings.TrimSpace(xff))
+		}
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		candidates = append(candidates, strings.TrimSpace(xri))
+	}
+	if r.RemoteAddr != "" {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			candidates = append(candidates, r.RemoteAddr)
+		} else {
+			candidates = append(candidates, host)
+		}
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		addr, err := netip.ParseAddr(c)
+		if err != nil {
+			continue
+		}
+		return &addr
+	}
+	return nil
 }
 
 // parsePathResource walks the URL path segments and returns the last matched

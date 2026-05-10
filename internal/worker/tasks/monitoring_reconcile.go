@@ -29,51 +29,53 @@ func NewMonitoringReconcileTask(payload MonitoringReconcilePayload) (*asynq.Task
 }
 
 func HandleMonitoringReconcile(ctx context.Context, t *asynq.Task) error {
-	var p MonitoringReconcilePayload
-	if len(t.Payload()) > 0 {
-		if err := json.Unmarshal(t.Payload(), &p); err != nil {
-			return fmt.Errorf("unmarshal monitoring reconcile payload: %w", err)
+	return runPeriodicTaskWithLeader(ctx, "monitoring:reconcile", func() error {
+		var p MonitoringReconcilePayload
+		if len(t.Payload()) > 0 {
+			if err := json.Unmarshal(t.Payload(), &p); err != nil {
+				return fmt.Errorf("unmarshal monitoring reconcile payload: %w", err)
+			}
 		}
-	}
 
-	if runtimeDeps.Queries == nil {
-		slog.InfoContext(ctx, "monitoring reconcile runtime not configured, skipping")
-		return nil
-	}
-
-	backend, err := runtimeDeps.Queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			slog.InfoContext(ctx, "default monitoring backend not configured, skipping reconcile")
+		if runtimeDeps.Queries == nil {
+			slog.InfoContext(ctx, "monitoring reconcile runtime not configured, skipping")
 			return nil
 		}
-		return fmt.Errorf("load monitoring backend: %w", err)
-	}
 
-	backend, client, backendHealthy, err := reconcileMonitoringBackend(ctx, backend)
-	if err != nil {
-		return err
-	}
-	if client == nil {
-		slog.InfoContext(ctx, "monitoring backend query URL not configured, skipping cluster reconciliation")
+		backend, err := runtimeDeps.Queries.GetDefaultMonitoringBackend(ctx)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				slog.InfoContext(ctx, "default monitoring backend not configured, skipping reconcile")
+				return nil
+			}
+			return fmt.Errorf("load monitoring backend: %w", err)
+		}
+
+		backend, client, backendHealthy, err := reconcileMonitoringBackend(ctx, backend)
+		if err != nil {
+			return err
+		}
+		if client == nil {
+			slog.InfoContext(ctx, "monitoring backend query URL not configured, skipping cluster reconciliation")
+			return nil
+		}
+
+		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 1000, Offset: 0})
+		if err != nil {
+			return fmt.Errorf("list clusters: %w", err)
+		}
+
+		for _, cluster := range clusters {
+			if p.ClusterID != "" && cluster.ID.String() != p.ClusterID {
+				continue
+			}
+			if err := reconcileClusterMonitoring(ctx, client, cluster, backend, backendHealthy); err != nil {
+				runtimeLogger().WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
+			}
+		}
+
 		return nil
-	}
-
-	clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		return fmt.Errorf("list clusters: %w", err)
-	}
-
-	for _, cluster := range clusters {
-		if p.ClusterID != "" && cluster.ID.String() != p.ClusterID {
-			continue
-		}
-		if err := reconcileClusterMonitoring(ctx, client, cluster, backend, backendHealthy); err != nil {
-			runtimeLogger().WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
-		}
-	}
-
-	return nil
+	})
 }
 
 func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBackend) (sqlc.MonitoringBackend, *imonitoring.Client, bool, error) {

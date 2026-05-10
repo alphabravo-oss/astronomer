@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"time"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -48,6 +49,7 @@ type ClusterQuerier interface {
 	// Registry config
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
+	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
 }
 
 // EventPublisher is the minimal contract ClusterHandler depends on for
@@ -72,12 +74,17 @@ type ClusterHandler struct {
 	// publisher fans out cluster.created / cluster.updated / cluster.deleted
 	// events. Optional and nil-safe: when not wired the CRUD path simply
 	// doesn't notify SSE subscribers.
-	publisher EventPublisher
+	publisher  EventPublisher
+	agentImage string
 }
 
 // NewClusterHandler creates a new cluster handler.
 func NewClusterHandler(queries ClusterQuerier) *ClusterHandler {
-	return &ClusterHandler{queries: queries, metrics: clustermetrics.NewProvider()}
+	return &ClusterHandler{
+		queries:    queries,
+		metrics:    clustermetrics.NewProvider(),
+		agentImage: "ghcr.io/alphabravocompany/astronomer-go-agent:latest",
+	}
 }
 
 // SetMetricsLocalClient wires the in-process kubernetes clientset used to
@@ -116,6 +123,19 @@ func (h *ClusterHandler) MetricsProvider() *clustermetrics.Provider {
 		return nil
 	}
 	return h.metrics
+}
+
+func (h *ClusterHandler) SetAgentImage(repository, tag string) {
+	if h == nil {
+		return
+	}
+	if repository == "" {
+		repository = "ghcr.io/alphabravocompany/astronomer-go-agent"
+	}
+	if tag == "" {
+		tag = "latest"
+	}
+	h.agentImage = repository + ":" + tag
 }
 
 // SetEventPublisher wires the SSE bus so cluster CRUD operations fan out
@@ -510,10 +530,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		"expires_at": token.ExpiresAt.UTC().Format(time.RFC3339),
 	})
 
-	// TODO: render the actual install.yaml.template from astronomer/agent/manifests
-	// once the template renderer is ported. For now we emit a minimal placeholder
-	// manifest sufficient for the UI to render and the curl installer to consume.
-	manifest := renderAgentInstallManifest(cluster, token.Token, agentServerURL(r))
+	manifest := h.renderAgentInstallManifest(cluster, token.Token, agentServerURL(r))
 
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="astronomer-agent-%s.yaml"`, cluster.Name))
@@ -744,30 +761,18 @@ func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL string) map
 	}
 }
 
-func renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) string {
-	// TODO: replace this stub with the real template renderer once the
-	// agent install template (astronomer/agent/manifests/install.yaml.template)
-	// is ported to Go.
-	return fmt.Sprintf(`# Astronomer agent install manifest (placeholder)
-# cluster: %s
-# server: %s
-# token: %s
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: astronomer-agent
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: astronomer-agent-credentials
-  namespace: astronomer-agent
-type: Opaque
-stringData:
-  cluster-id: %s
-  registration-token: %s
-  server-url: %s
-`, cluster.Name, serverURL, token, cluster.ID.String(), token, serverURL)
+func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) string {
+	agentImage := "ghcr.io/alphabravocompany/astronomer-go-agent:latest"
+	if h != nil && h.agentImage != "" {
+		agentImage = h.agentImage
+	}
+	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
+		ServerURL:         serverURL,
+		ClusterID:         cluster.ID.String(),
+		RegistrationToken: token,
+		CACert:            "",
+		AgentImage:        agentImage,
+	})
 }
 
 func agentServerURL(r *http.Request) string {
@@ -828,4 +833,21 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 	})
 
 	RespondJSON(w, http.StatusOK, config)
+}
+
+// DeleteRegistryConfig handles DELETE /api/v1/clusters/{id}/registry/.
+func (h *ClusterHandler) DeleteRegistryConfig(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+
+	if err := h.queries.DeleteClusterRegistryConfig(r.Context(), id); err != nil {
+		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete registry config")
+		return
+	}
+
+	recordAudit(r, h.queries, "cluster.registry.delete", "cluster", id.String(), "", nil)
+	w.WriteHeader(http.StatusNoContent)
 }

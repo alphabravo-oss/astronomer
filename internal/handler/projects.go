@@ -34,11 +34,12 @@ type ProjectQuerier interface {
 	DeleteProject(ctx context.Context, id uuid.UUID) error
 	CountProjects(ctx context.Context) (int64, error)
 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	CreateAuditLog(ctx context.Context, arg sqlc.CreateAuditLogParams) (sqlc.AuditLog, error)
 
 	// Phase B3 additions: per-namespace reconcile state. Kept as the same
 	// interface so a single sqlc.*Queries instance can satisfy everything,
 	// and so test fakes only need to implement the methods they exercise.
+	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
+	GetDefaultPodSecurityTemplate(ctx context.Context) (sqlc.PodSecurityTemplate, error)
 	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
 	DeleteProjectNamespace(ctx context.Context, arg sqlc.DeleteProjectNamespaceParams) error
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
@@ -62,6 +63,7 @@ type ProjectHandler struct {
 	log       *slog.Logger
 
 	reconcileOnce sync.Once
+	runTask       func(context.Context, *asynq.Task) error
 }
 
 // NewProjectHandler creates a new project handler. Phase B3 introduces extra
@@ -69,7 +71,10 @@ type ProjectHandler struct {
 // setters below so the constructor signature stays compatible with all
 // existing call sites (server.go, tests).
 func NewProjectHandler(queries ProjectQuerier) *ProjectHandler {
-	return &ProjectHandler{queries: queries}
+	return &ProjectHandler{
+		queries: queries,
+		runTask: tasks.HandleProjectReconcile,
+	}
 }
 
 // SetTaskQueue wires the asynq client used to enqueue project:reconcile and
@@ -597,9 +602,11 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	RespondJSON(w, http.StatusOK, projectToResponse(updated))
 }
 
-// upsertAndEnqueue persists the project_namespaces row and enqueues an apply
-// task. Both halves are best-effort: a failure here is logged but does not
-// fail the calling HTTP request — the periodic sweep will reconverge.
+// upsertAndEnqueue persists the project_namespaces row and schedules an apply
+// task. When the server has a live tunnel requester, we execute the task
+// in-process so enforcement does not depend on the Redis worker, which has no
+// cluster access. Queue enqueue remains as a fallback for contexts that do not
+// have a requester wired.
 func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, clusterID uuid.UUID, namespace string) {
 	if h.queries == nil {
 		return
@@ -611,9 +618,6 @@ func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, cluste
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		h.logger().Warn("upsert project_namespace", "project_id", projectID.String(), "namespace", namespace, "error", err)
 	}
-	if h.queue == nil {
-		return
-	}
 	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
 		ProjectID: projectID.String(),
 		ClusterID: clusterID.String(),
@@ -624,14 +628,37 @@ func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, cluste
 		h.logger().Warn("build project reconcile task", "error", err)
 		return
 	}
+	if h.requester != nil {
+		h.dispatchProjectTask(ctx, task)
+		return
+	}
+	if h.queue == nil {
+		return
+	}
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project reconcile task", "error", err)
 	}
 }
 
 // enqueueCleanup is the RemoveNamespace counterpart. The task itself deletes
-// the project_namespaces row and the in-cluster managed CRs.
-func (h *ProjectHandler) enqueueCleanup(_ context.Context, projectID, clusterID uuid.UUID, namespace string) {
+// the project_namespaces row and the in-cluster managed CRs. As with apply,
+// a live requester means we should execute locally instead of depending on the
+// external worker.
+func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterID uuid.UUID, namespace string) {
+	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
+		ProjectID: projectID.String(),
+		ClusterID: clusterID.String(),
+		Namespace: namespace,
+		Op:        "remove",
+	})
+	if err != nil {
+		h.logger().Warn("build project cleanup task", "error", err)
+		return
+	}
+	if h.requester != nil {
+		h.dispatchProjectTask(ctx, task)
+		return
+	}
 	if h.queue == nil {
 		// Without an asynq client wired we still attempt the synchronous DB
 		// half so the row goes away and the UI reflects the removal. The
@@ -643,19 +670,28 @@ func (h *ProjectHandler) enqueueCleanup(_ context.Context, projectID, clusterID 
 		})
 		return
 	}
-	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
-		ProjectID: projectID.String(),
-		ClusterID: clusterID.String(),
-		Namespace: namespace,
-		Op:        "remove",
-	})
-	if err != nil {
-		h.logger().Warn("build project cleanup task", "error", err)
-		return
-	}
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project cleanup task", "error", err)
 	}
+}
+
+func (h *ProjectHandler) dispatchProjectTask(ctx context.Context, task *asynq.Task) {
+	if h == nil || task == nil {
+		return
+	}
+	runTask := h.runTask
+	if runTask == nil {
+		runTask = tasks.HandleProjectReconcile
+	}
+	go func() {
+		runCtx := context.Background()
+		if ctx != nil {
+			runCtx = context.WithoutCancel(ctx)
+		}
+		if err := runTask(runCtx, task); err != nil {
+			h.logger().Warn("run project reconcile task locally", "type", task.Type(), "error", err)
+		}
+	}()
 }
 
 func decodeNamespaceList(raw json.RawMessage) []string {
@@ -700,20 +736,7 @@ func (h *ProjectHandler) recordProjectAudit(r *http.Request, action string, proj
 	if h == nil || h.queries == nil {
 		return
 	}
-	raw, err := json.Marshal(detail)
-	if err != nil {
-		raw = json.RawMessage(`{}`)
-	}
-	_, _ = h.queries.CreateAuditLog(r.Context(), sqlc.CreateAuditLogParams{
-		UserID:       currentUserUUID(r),
-		Action:       action,
-		ResourceType: "project",
-		ResourceID:   project.ID.String(),
-		ResourceName: project.Name,
-		Detail:       raw,
-		UserAgent:    r.UserAgent(),
-		RequestID:    middleware.GetRequestID(r.Context()),
-	})
+	recordAudit(r, h.queries, action, "project", project.ID.String(), project.Name, detail)
 }
 
 func decodeJSONArray(raw json.RawMessage) []any {
@@ -737,6 +760,14 @@ type projectQuerierAdapter struct{ q ProjectQuerier }
 
 func (a projectQuerierAdapter) GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error) {
 	return a.q.GetProjectByID(ctx, id)
+}
+
+func (a projectQuerierAdapter) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
+	return a.q.GetClusterRegistryConfig(ctx, clusterID)
+}
+
+func (a projectQuerierAdapter) GetDefaultPodSecurityTemplate(ctx context.Context) (sqlc.PodSecurityTemplate, error) {
+	return a.q.GetDefaultPodSecurityTemplate(ctx)
 }
 
 func (a projectQuerierAdapter) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error) {

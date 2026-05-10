@@ -14,55 +14,59 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// AuditQuerier abstracts audit-log-related database queries.
-type AuditQuerier interface {
-	GetAuditLogByID(ctx context.Context, id uuid.UUID) (sqlc.AuditLog, error)
-	ListAuditLogs(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
-	ListAuditLogsByUser(ctx context.Context, arg sqlc.ListAuditLogsByUserParams) ([]sqlc.AuditLog, error)
-	ListAuditLogsByResourceType(ctx context.Context, arg sqlc.ListAuditLogsByResourceTypeParams) ([]sqlc.AuditLog, error)
-	ListAuditLogsByAction(ctx context.Context, arg sqlc.ListAuditLogsByActionParams) ([]sqlc.AuditLog, error)
-	CountAuditLogs(ctx context.Context) (int64, error)
-	CountAuditLogsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+type auditReaderV1 interface {
+	GetAuditLogV1ByID(ctx context.Context, id uuid.UUID) (sqlc.AuditLog, error)
+	ListAuditLogV1(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1ByUser(ctx context.Context, arg sqlc.ListAuditLogsByUserParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1ByResourceType(ctx context.Context, arg sqlc.ListAuditLogsByResourceTypeParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1ByAction(ctx context.Context, arg sqlc.ListAuditLogsByActionParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1Since(ctx context.Context, arg sqlc.ListAuditLogsSinceParams) ([]sqlc.AuditLog, error)
+	CountAuditLogV1(ctx context.Context) (int64, error)
+	CountAuditLogV1ByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 }
 
 // AuditHandler handles audit log endpoints.
 type AuditHandler struct {
-	queries AuditQuerier
+	queries auditReaderV1
 }
 
 // NewAuditHandler creates a new audit handler.
-func NewAuditHandler(queries AuditQuerier) *AuditHandler {
+func NewAuditHandler(queries auditReaderV1) *AuditHandler {
 	return &AuditHandler{queries: queries}
 }
 
 // AuditLogResponse represents an audit log entry in API responses.
 type AuditLogResponse struct {
-	ID           string          `json:"id"`
-	UserID       *string         `json:"user_id"`
-	Action       string          `json:"action"`
-	ResourceType string          `json:"resource_type"`
-	ResourceID   string          `json:"resource_id"`
-	ResourceName string          `json:"resource_name"`
-	Detail       json.RawMessage `json:"detail"`
-	IPAddress    *string         `json:"ip_address"`
-	UserAgent    string          `json:"user_agent"`
-	RequestID    string          `json:"request_id"`
-	CreatedAt    string          `json:"created_at"`
-	UpdatedAt    string          `json:"updated_at"`
+	ID            string          `json:"id"`
+	UserID        *string         `json:"user_id"`
+	Source        string          `json:"source"`
+	CorrelationID string          `json:"correlation_id"`
+	Action        string          `json:"action"`
+	ResourceType  string          `json:"resource_type"`
+	ResourceID    string          `json:"resource_id"`
+	ResourceName  string          `json:"resource_name"`
+	Detail        json.RawMessage `json:"detail"`
+	IPAddress     *string         `json:"ip_address"`
+	UserAgent     string          `json:"user_agent"`
+	RequestID     string          `json:"request_id"`
+	CreatedAt     string          `json:"created_at"`
+	UpdatedAt     string          `json:"updated_at"`
 }
 
 func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 	resp := AuditLogResponse{
-		ID:           a.ID.String(),
-		Action:       a.Action,
-		ResourceType: a.ResourceType,
-		ResourceID:   a.ResourceID,
-		ResourceName: a.ResourceName,
-		Detail:       a.Detail,
-		UserAgent:    a.UserAgent,
-		RequestID:    a.RequestID,
-		CreatedAt:    a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:    a.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ID:            a.ID.String(),
+		Source:        a.Source,
+		CorrelationID: a.CorrelationID,
+		Action:        a.Action,
+		ResourceType:  a.ResourceType,
+		ResourceID:    a.ResourceID,
+		ResourceName:  a.ResourceName,
+		Detail:        a.Detail,
+		UserAgent:     a.UserAgent,
+		RequestID:     a.RequestID,
+		CreatedAt:     a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:     a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
 	if a.UserID.Valid {
 		s := uuid.UUID(a.UserID.Bytes).String()
@@ -84,6 +88,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	userIDStr := r.URL.Query().Get("user_id")
 	resourceType := r.URL.Query().Get("resource_type")
 	action := r.URL.Query().Get("action")
+	sinceIDStr := r.URL.Query().Get("since")
 
 	var (
 		logs  []sqlc.AuditLog
@@ -92,6 +97,21 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	)
 
 	switch {
+	case sinceIDStr != "":
+		sinceID, parseErr := uuid.Parse(sinceIDStr)
+		if parseErr != nil {
+			RespondError(w, http.StatusBadRequest, "invalid_since", "Invalid since cursor")
+			return
+		}
+		logs, err = h.listAuditLogsSince(r.Context(), sqlc.ListAuditLogsSinceParams{
+			SinceID: sinceID,
+			Limit:   limit,
+		})
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			return
+		}
+		total = int64(len(logs))
 	case userIDStr != "":
 		uid, parseErr := uuid.Parse(userIDStr)
 		if parseErr != nil {
@@ -99,7 +119,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		pgtypeUID := pgtype.UUID{Bytes: uid, Valid: true}
-		logs, err = h.queries.ListAuditLogsByUser(r.Context(), sqlc.ListAuditLogsByUserParams{
+		logs, err = h.listAuditLogsByUser(r.Context(), sqlc.ListAuditLogsByUserParams{
 			UserID: pgtypeUID,
 			Limit:  limit,
 			Offset: offset,
@@ -108,10 +128,10 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
 			return
 		}
-		total, err = h.queries.CountAuditLogsByUser(r.Context(), pgtypeUID)
+		total, err = h.countAuditLogsByUser(r.Context(), pgtypeUID)
 
 	case resourceType != "":
-		logs, err = h.queries.ListAuditLogsByResourceType(r.Context(), sqlc.ListAuditLogsByResourceTypeParams{
+		logs, err = h.listAuditLogsByResourceType(r.Context(), sqlc.ListAuditLogsByResourceTypeParams{
 			ResourceType: resourceType,
 			Limit:        limit,
 			Offset:       offset,
@@ -120,10 +140,10 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
 			return
 		}
-		total, err = h.queries.CountAuditLogs(r.Context())
+		total, err = h.countAuditLogs(r.Context())
 
 	case action != "":
-		logs, err = h.queries.ListAuditLogsByAction(r.Context(), sqlc.ListAuditLogsByActionParams{
+		logs, err = h.listAuditLogsByAction(r.Context(), sqlc.ListAuditLogsByActionParams{
 			Action: action,
 			Limit:  limit,
 			Offset: offset,
@@ -132,10 +152,10 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
 			return
 		}
-		total, err = h.queries.CountAuditLogs(r.Context())
+		total, err = h.countAuditLogs(r.Context())
 
 	default:
-		logs, err = h.queries.ListAuditLogs(r.Context(), sqlc.ListAuditLogsParams{
+		logs, err = h.listAuditLogs(r.Context(), sqlc.ListAuditLogsParams{
 			Limit:  limit,
 			Offset: offset,
 		})
@@ -143,7 +163,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
 			return
 		}
-		total, err = h.queries.CountAuditLogs(r.Context())
+		total, err = h.countAuditLogs(r.Context())
 	}
 
 	if err != nil {
@@ -180,13 +200,19 @@ func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 	// Header row.
 	_ = writer.Write([]string{
-		"id", "created_at", "user_id", "action", "resource_type",
-		"resource_id", "resource_name", "user_agent", "request_id", "detail",
+		"id", "created_at", "user_id", "source", "correlation_id", "action",
+		"resource_type", "resource_id", "resource_name", "user_agent",
+		"request_id", "detail",
 	})
 
 	userIDStr := r.URL.Query().Get("user_id")
 	resourceType := r.URL.Query().Get("resource_type")
 	action := r.URL.Query().Get("action")
+	sinceIDStr := r.URL.Query().Get("since")
+	if sinceIDStr != "" {
+		_ = writer.Write([]string{"error", "", "", "", "", "", "", "", "", "", "", "since cursor export is not supported"})
+		return
+	}
 
 	const pageSize = 500
 	offset := int32(0)
@@ -205,6 +231,8 @@ func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
 				entry.ID.String(),
 				entry.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 				csvNullableUUID(entry.UserID),
+				entry.Source,
+				entry.CorrelationID,
 				entry.Action,
 				entry.ResourceType,
 				entry.ResourceID,
@@ -230,25 +258,25 @@ func (h *AuditHandler) fetchExportPage(ctx context.Context, userIDStr, resourceT
 		if err != nil {
 			return nil, fmt.Errorf("invalid user_id")
 		}
-		return h.queries.ListAuditLogsByUser(ctx, sqlc.ListAuditLogsByUserParams{
+		return h.listAuditLogsByUser(ctx, sqlc.ListAuditLogsByUserParams{
 			UserID: pgtype.UUID{Bytes: uid, Valid: true},
 			Limit:  limit,
 			Offset: offset,
 		})
 	case resourceType != "":
-		return h.queries.ListAuditLogsByResourceType(ctx, sqlc.ListAuditLogsByResourceTypeParams{
+		return h.listAuditLogsByResourceType(ctx, sqlc.ListAuditLogsByResourceTypeParams{
 			ResourceType: resourceType,
 			Limit:        limit,
 			Offset:       offset,
 		})
 	case action != "":
-		return h.queries.ListAuditLogsByAction(ctx, sqlc.ListAuditLogsByActionParams{
+		return h.listAuditLogsByAction(ctx, sqlc.ListAuditLogsByActionParams{
 			Action: action,
 			Limit:  limit,
 			Offset: offset,
 		})
 	}
-	return h.queries.ListAuditLogs(ctx, sqlc.ListAuditLogsParams{Limit: limit, Offset: offset})
+	return h.listAuditLogs(ctx, sqlc.ListAuditLogsParams{Limit: limit, Offset: offset})
 }
 
 func csvNullableUUID(id pgtype.UUID) string {
@@ -267,11 +295,43 @@ func (h *AuditHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auditLog, err := h.queries.GetAuditLogByID(r.Context(), id)
+	auditLog, err := h.getAuditLogByID(r.Context(), id)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Audit log entry not found")
 		return
 	}
 
 	RespondJSON(w, http.StatusOK, auditLogToResponse(auditLog))
+}
+
+func (h *AuditHandler) getAuditLogByID(ctx context.Context, id uuid.UUID) (sqlc.AuditLog, error) {
+	return h.queries.GetAuditLogV1ByID(ctx, id)
+}
+
+func (h *AuditHandler) listAuditLogs(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error) {
+	return h.queries.ListAuditLogV1(ctx, arg)
+}
+
+func (h *AuditHandler) listAuditLogsByUser(ctx context.Context, arg sqlc.ListAuditLogsByUserParams) ([]sqlc.AuditLog, error) {
+	return h.queries.ListAuditLogV1ByUser(ctx, arg)
+}
+
+func (h *AuditHandler) listAuditLogsByResourceType(ctx context.Context, arg sqlc.ListAuditLogsByResourceTypeParams) ([]sqlc.AuditLog, error) {
+	return h.queries.ListAuditLogV1ByResourceType(ctx, arg)
+}
+
+func (h *AuditHandler) listAuditLogsByAction(ctx context.Context, arg sqlc.ListAuditLogsByActionParams) ([]sqlc.AuditLog, error) {
+	return h.queries.ListAuditLogV1ByAction(ctx, arg)
+}
+
+func (h *AuditHandler) listAuditLogsSince(ctx context.Context, arg sqlc.ListAuditLogsSinceParams) ([]sqlc.AuditLog, error) {
+	return h.queries.ListAuditLogV1Since(ctx, arg)
+}
+
+func (h *AuditHandler) countAuditLogs(ctx context.Context) (int64, error) {
+	return h.queries.CountAuditLogV1(ctx)
+}
+
+func (h *AuditHandler) countAuditLogsByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	return h.queries.CountAuditLogV1ByUser(ctx, userID)
 }

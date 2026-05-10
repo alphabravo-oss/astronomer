@@ -2,14 +2,17 @@ package tasks
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -19,6 +22,10 @@ import (
 // worker/tasks package and the handler package.
 type K8sRequester interface {
 	Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error)
+}
+
+type LeaderElector interface {
+	TryLeader(ctx context.Context, jobName string) (release func(), held bool, err error)
 }
 
 type RuntimeQuerier interface {
@@ -79,13 +86,15 @@ type RuntimeQuerier interface {
 }
 
 type RuntimeDependencies struct {
-	Queries        RuntimeQuerier
-	HTTPClient     *http.Client
-	Log            *slog.Logger
-	AgentImageRepo string
-	AgentImageTag  string
-	PlatformName   string
-	ServerURL      string
+	Queries                 RuntimeQuerier
+	HTTPClient              *http.Client
+	Log                     *slog.Logger
+	AgentImageRepo          string
+	AgentImageTag           string
+	PlatformName            string
+	ServerURL               string
+	AuditLogRetentionMonths int
+	Leader                  LeaderElector
 	// K8s is the tunnel-backed Kubernetes API requester used by B2 (Velero)
 	// and B5 (cis-operator) for CR round-trips. Optional — when nil, those
 	// tasks degrade gracefully (e.g. mark the row failed with a clear
@@ -94,6 +103,19 @@ type RuntimeDependencies struct {
 }
 
 var runtimeDeps RuntimeDependencies
+
+var workerLeaderHeld = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "astronomer",
+		Name:      "worker_leader_held",
+		Help:      "Whether the current Astronomer process holds the advisory lock for a periodic worker job.",
+	},
+	observability.MetricLabels("job"),
+)
+
+func init() {
+	prometheus.MustRegister(workerLeaderHeld)
+}
 
 func ConfigureRuntime(deps RuntimeDependencies) {
 	runtimeDeps = deps
@@ -112,6 +134,9 @@ func ConfigureRuntime(deps RuntimeDependencies) {
 	if runtimeDeps.PlatformName == "" {
 		runtimeDeps.PlatformName = "Astronomer"
 	}
+	if runtimeDeps.AuditLogRetentionMonths <= 0 {
+		runtimeDeps.AuditLogRetentionMonths = 13
+	}
 }
 
 func resetRuntime() {
@@ -123,6 +148,28 @@ func runtimeLogger() *slog.Logger {
 		return runtimeDeps.Log
 	}
 	return slog.Default()
+}
+
+func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() error) error {
+	if runtimeDeps.Leader == nil {
+		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(1)
+		defer workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
+		return fn()
+	}
+	release, held, err := runtimeDeps.Leader.TryLeader(ctx, jobName)
+	if err != nil {
+		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
+		return fmt.Errorf("acquire leader lock for %s: %w", jobName, err)
+	}
+	if !held {
+		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
+		runtimeLogger().DebugContext(ctx, "periodic task skipped on non-leader replica", "job", jobName)
+		return nil
+	}
+	workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(1)
+	defer workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
+	defer release()
+	return fn()
 }
 
 func emptyUUID() pgtype.UUID {

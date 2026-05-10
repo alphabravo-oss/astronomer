@@ -1,7 +1,8 @@
 .PHONY: help build test lint fmt vet run sqlc sqlc-generate \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
-        k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete
+        k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
+        validate-live-b6 validate-live-argocd validate-live-argocd-register-appset validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects
 
 # ── Variables ────────────────────────────────────────────────────────────────
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -33,7 +34,7 @@ DOCKER_BUILD_ARGS = \
 # ── Targets ──────────────────────────────────────────────────────────────────
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build all binaries to bin/
@@ -102,6 +103,36 @@ k3d-import-all: docker-build-all ## Build & import all images into k3d
 
 k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLUSTER))
 	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) ./scripts/k3d-bootstrap.sh
+
+validate-live-b6: ## Validate live cluster.k8s_changed SSE flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-b6.sh
+
+validate-live-argocd: ## Validate live ArgoCD create/patch/delete flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-argocd.sh
+
+validate-live-argocd-register-appset: ## Validate live ArgoCD register + ApplicationSet fan-out flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-argocd-register-appset.sh
+
+validate-live-dex: ## Validate live Dex connector apply + redirect flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-dex.sh
+
+validate-live-dex-oidc: ## Validate live Dex external OIDC callback flow (requires docker; set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-dex-oidc.sh
+
+validate-live-generic-oidc: ## Validate live direct generic OIDC callback flow (requires docker; set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-generic-oidc.sh
+
+validate-live-velero: ## Validate live Velero backup + restore flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-velero.sh
+
+validate-live-cis: ## Validate live CIS scan + report ingestion flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-cis.sh
+
+validate-live-oci: ## Validate live OCI catalog create/sync/install flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-oci.sh
+
+validate-live-projects: ## Validate live project enforcement + audit flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-projects.sh
 
 # ── Helm / kubectl ───────────────────────────────────────────────────────────
 

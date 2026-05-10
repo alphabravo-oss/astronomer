@@ -1,17 +1,23 @@
 package tunnel
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -77,7 +83,7 @@ func testServerAndClient(t *testing.T, h *Hub) (*httptest.Server, *websocket.Con
 }
 
 // connectAgent sends a CONNECT message and reads the CONNECT_ACK.
-func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clusterID, agentID string) {
+func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clusterID, agentID string) protocol.ConnectAckPayload {
 	t.Helper()
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID:    clusterID,
@@ -108,10 +114,12 @@ func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clust
 	if !ackPayload.Accepted {
 		t.Fatalf("expected accepted=true, got false: %s", ackPayload.Reason)
 	}
+	return ackPayload
 }
 
 func TestAgentConnectAndDisconnect(t *testing.T) {
-	h := NewHub(slog.Default())
+	var buf bytes.Buffer
+	h := NewHub(slog.New(slog.NewJSONHandler(&buf, nil)))
 	_, conn, ctx := testServerAndClient(t, h)
 
 	connectAgent(t, conn, ctx, "cluster-1", "agent-1")
@@ -145,6 +153,13 @@ func TestAgentConnectAndDisconnect(t *testing.T) {
 	}
 	if len(h.ConnectedClusters()) != 0 {
 		t.Fatal("expected 0 connected clusters after disconnect")
+	}
+	body := buf.String()
+	if !strings.Contains(body, `"event":"agent_connected"`) {
+		t.Fatalf("expected agent_connected event log, got %s", body)
+	}
+	if !strings.Contains(body, `"event":"agent_disconnected"`) {
+		t.Fatalf("expected agent_disconnected event log, got %s", body)
 	}
 }
 
@@ -231,6 +246,86 @@ func TestBroadcastToAll(t *testing.T) {
 	for _, conn := range conns {
 		conn.Close(websocket.StatusNormalClosure, "done")
 	}
+}
+
+func TestAgentConnectionPersistenceLifecycle(t *testing.T) {
+	clusterID := "945db76b-d7f3-4e6c-8c70-6ca50ca514f4"
+	validator := &recordingValidator{tokenClusterID: clusterID}
+	h := NewHubWithValidator(slog.Default(), validator)
+	_, conn, ctx := testServerAndClient(t, h)
+
+	connectAgent(t, conn, ctx, clusterID, "agent-persist")
+	time.Sleep(50 * time.Millisecond)
+
+	creates := validator.SnapshotCreates()
+	if len(creates) != 1 {
+		t.Fatalf("expected 1 persisted connection row, got %d", len(creates))
+	}
+	disconnectedClusters := validator.SnapshotDisconnectedClusters()
+	if len(disconnectedClusters) != 1 || disconnectedClusters[0].String() != clusterID {
+		t.Fatalf("expected stale-session cleanup for cluster %s, got %v", clusterID, disconnectedClusters)
+	}
+	if creates[0].ClusterID.String() != clusterID {
+		t.Fatalf("expected cluster id %s, got %s", clusterID, creates[0].ClusterID)
+	}
+	if creates[0].AgentID != "agent-persist" {
+		t.Fatalf("expected agent id agent-persist, got %s", creates[0].AgentID)
+	}
+	if creates[0].SessionID == "" {
+		t.Fatal("expected non-empty session id to be persisted")
+	}
+	if creates[0].Status != "connected" {
+		t.Fatalf("expected status connected, got %s", creates[0].Status)
+	}
+
+	heartbeatPayload, _ := json.Marshal(protocol.HeartbeatPayload{AgentVersion: "1.0.0"})
+	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: heartbeatPayload}); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	if got := len(validator.SnapshotPings()); got == 0 {
+		t.Fatal("expected persisted ping update after heartbeat")
+	}
+
+	conn.Close(websocket.StatusNormalClosure, "done")
+	time.Sleep(100 * time.Millisecond)
+
+	disconnects := validator.SnapshotDisconnects()
+	if len(disconnects) != 1 {
+		t.Fatalf("expected 1 persisted disconnect, got %d", len(disconnects))
+	}
+	if disconnects[0].Status != "disconnected" {
+		t.Fatalf("expected status disconnected, got %s", disconnects[0].Status)
+	}
+	if !disconnects[0].DisconnectedAt.Valid {
+		t.Fatal("expected disconnected_at to be set")
+	}
+}
+
+func TestConnectAckRotatesToDurableAgentToken(t *testing.T) {
+	clusterID := "945db76b-d7f3-4e6c-8c70-6ca50ca514f4"
+	validator := &recordingValidator{tokenClusterID: clusterID}
+	h := NewHubWithValidator(slog.Default(), validator)
+	_, conn, ctx := testServerAndClient(t, h)
+
+	ack := connectAgent(t, conn, ctx, clusterID, "agent-rotate")
+	if ack.AgentToken == "" {
+		t.Fatal("expected durable agent token in CONNECT_ACK")
+	}
+
+	upserts := validator.SnapshotAgentTokenUpserts()
+	if len(upserts) != 1 {
+		t.Fatalf("expected 1 durable token upsert, got %d", len(upserts))
+	}
+	if upserts[0].ClusterID.String() != clusterID {
+		t.Fatalf("expected cluster id %s, got %s", clusterID, upserts[0].ClusterID)
+	}
+	if upserts[0].Token != ack.AgentToken {
+		t.Fatalf("expected ack token to match persisted token")
+	}
+
+	conn.Close(websocket.StatusNormalClosure, "done")
 }
 
 // --- StreamManager tests ---
@@ -452,6 +547,51 @@ func TestHandleMessageErrorRoutesToStream(t *testing.T) {
 	}
 }
 
+func TestHandleMessageK8sResponseCountsDroppedEventWhenStreamFull(t *testing.T) {
+	oldInstanceID := observability.InstanceID()
+	observability.SetInstanceID("test-tunnel-route")
+	t.Cleanup(func() {
+		observability.SetInstanceID(oldInstanceID)
+	})
+
+	h := NewHub(slog.Default())
+	sm := NewStreamManager(10)
+	agent := &AgentConnection{
+		ClusterID: "test-cluster",
+		Streams:   sm,
+		sendCh:    make(chan *protocol.Message, 10),
+	}
+
+	stream, _ := sm.CreateStream("req-123")
+	for i := 0; i < cap(stream.DataCh); i++ {
+		stream.DataCh <- []byte("full")
+	}
+
+	responsePayload, _ := json.Marshal(protocol.K8sResponsePayload{StatusCode: 200})
+	msg := &protocol.Message{
+		Type:     protocol.MsgK8sResponse,
+		StreamID: "req-123",
+		Payload:  responsePayload,
+	}
+
+	before := tunnelDroppedCounterValue(t, map[string]string{
+		"astronomer_instance_id": "test-tunnel-route",
+		"component":              "tunnel_stream_route",
+		"reason":                 "channel_full",
+	})
+
+	h.handleMessage(agent, msg)
+
+	after := tunnelDroppedCounterValue(t, map[string]string{
+		"astronomer_instance_id": "test-tunnel-route",
+		"component":              "tunnel_stream_route",
+		"reason":                 "channel_full",
+	})
+	if after != before+1 {
+		t.Fatalf("dropped events counter = %v, want %v", after, before+1)
+	}
+}
+
 func TestHandleMessageUnknownType(t *testing.T) {
 	h := NewHub(slog.Default())
 	agent := &AgentConnection{
@@ -462,4 +602,36 @@ func TestHandleMessageUnknownType(t *testing.T) {
 
 	// Should not panic, just log a warning.
 	h.handleMessage(agent, &protocol.Message{Type: "TOTALLY_UNKNOWN"})
+}
+
+func tunnelDroppedCounterValue(t *testing.T, wantLabels map[string]string) float64 {
+	t.Helper()
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	for _, family := range families {
+		if family.GetName() != "astronomer_dropped_events_total" {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			if tunnelDroppedLabelsMatch(metric.GetLabel(), wantLabels) && metric.Counter != nil {
+				return metric.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+func tunnelDroppedLabelsMatch(labels []*dto.LabelPair, want map[string]string) bool {
+	if len(labels) != len(want) {
+		return false
+	}
+	for _, label := range labels {
+		if want[label.GetName()] != label.GetValue() {
+			return false
+		}
+	}
+	return true
 }

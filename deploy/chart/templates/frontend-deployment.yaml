@@ -7,6 +7,8 @@ metadata:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "frontend") | nindent 4 }}
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
+  strategy:
+    {{- toYaml .Values.frontend.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "frontend") | nindent 6 }}
@@ -22,6 +24,14 @@ spec:
       {{- with .Values.frontend.hostAliases }}
       hostAliases:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.frontend.affinity.enabled }}
+      affinity:
+        {{- include "astronomer.componentAffinity" (dict "context" . "component" "frontend" "enabled" .Values.frontend.affinity.enabled) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.frontend.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "astronomer.componentTopologySpread" (dict "context" . "component" "frontend" "enabled" .Values.frontend.topologySpread.enabled "maxSkew" .Values.frontend.topologySpread.maxSkew "whenUnsatisfiable" .Values.frontend.topologySpread.whenUnsatisfiable) | nindent 8 }}
       {{- end }}
       containers:
         - name: frontend

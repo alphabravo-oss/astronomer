@@ -4,7 +4,7 @@
 # Defaults are tuned for local k3d / development. For production, override:
 #   - image.*.tag
 #   - secrets.* (must come from a real secret source, not a literal)
-#   - postgres.enabled / redis.enabled (set to false to use a managed DB/cache)
+#   - postgres.bundled.enabled / redis.bundled.enabled
 #   - ingress.host (must be a real DNS name)
 
 # Optional convenience: have the chart create the namespace itself.
@@ -37,10 +37,58 @@ image:
     tag: dev
 
 # =============================================================================
+# Frontend (optional Next.js dashboard)
+# =============================================================================
+frontend:
+  enabled: false
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  affinity:
+    enabled: true
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
+  image:
+    repository: astronomer-frontend
+    tag: dev
+  apiBaseUrl: "http://astronomer-server:8000"
+  wsBaseUrl: "ws://astronomer-server:8000/api/v1/ws"
+  hostAliases: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# =============================================================================
 # Server (HTTP API)
 # =============================================================================
 server:
-  replicaCount: 1
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  affinity:
+    enabled: true
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
   resources:
     requests:
       cpu: 100m
@@ -51,19 +99,36 @@ server:
   service:
     type: ClusterIP
     port: 8000
-  podAnnotations: {}
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "9090"
   env: {}
-  # Liveness/readiness use /health/.
+  # Liveness stays on the cheap process check; readiness uses dependency-aware /readyz.
   probes:
     enabled: true
     livenessPath: /health/
-    readinessPath: /health/
+    readinessPath: /readyz
 
 # =============================================================================
 # Worker (Redis-backed job runner)
 # =============================================================================
 worker:
-  replicaCount: 1
+  replicaCount: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  affinity:
+    enabled: true
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
   resources:
     requests:
       cpu: 100m
@@ -71,14 +136,21 @@ worker:
     limits:
       cpu: 1000m
       memory: 1Gi
-  podAnnotations: {}
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "9090"
+  # Example:
+  # env:
+  #   AUDIT_LOG_RETENTION_MONTHS: "13"
   env: {}
 
 # =============================================================================
-# Database / Cache (gated, set false to BYO)
+# Database / Cache
 # =============================================================================
 postgres:
-  enabled: true
+  bundled:
+    enabled: true
   image:
     repository: postgres
     tag: 16-alpine
@@ -89,9 +161,15 @@ postgres:
   storage:
     size: 8Gi
     storageClassName: ""
+  external:
+    dsn: ""
+    dsnSecretRef:
+      name: ""
+      key: ""
 
 redis:
-  enabled: true
+  bundled:
+    enabled: true
   image:
     repository: redis
     tag: 7-alpine
@@ -99,6 +177,13 @@ redis:
   storage:
     size: 2Gi
     storageClassName: ""
+  external:
+    address: ""
+    passwordSecretRef:
+      name: ""
+      key: ""
+    tls: false
+    database: 0
 
 # =============================================================================
 # Migrations
@@ -113,10 +198,16 @@ migrate:
       cpu: 500m
       memory: 256Mi
 
+preflight:
+  enabled: true
+  image:
+    repository: bitnami/kubectl
+    tag: latest
+
 # =============================================================================
 # Connection strings (consumed by server + worker)
 # =============================================================================
-# When postgres.enabled / redis.enabled are true, hosts default to the
+# When postgres.bundled.enabled / redis.bundled.enabled are true, hosts default to the
 # in-chart Service names. Override these for BYO DB/cache.
 config:
   databaseURL: ""        # Defaults to postgres://USER:PASS@<release>-postgres:5432/<db>
@@ -177,8 +268,25 @@ affinity: {}
 gateway:
   enabled: true
   className: nginx
+  annotations: {}
   hosts:
     - astronomer.localtest.me
   tls:
     enabled: false
     secretName: ""
+    certManager:
+      enabled: false
+      issuerName: ""
+      issuerKind: ClusterIssuer
+      issuerGroup: cert-manager.io
+
+# =============================================================================
+# Metrics scraping
+# =============================================================================
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: ""
+    labels: {}

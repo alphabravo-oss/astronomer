@@ -35,14 +35,15 @@ func (q *Queries) CountAgentConnections(ctx context.Context) (int64, error) {
 }
 
 const createAgentConnection = `-- name: CreateAgentConnection :one
-INSERT INTO agent_connections (cluster_id, agent_id, status, channel_name, pod_name, node_name, agent_version)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, cluster_id, agent_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at
+INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at
 `
 
 type CreateAgentConnectionParams struct {
 	ClusterID    uuid.UUID `json:"cluster_id"`
 	AgentID      string    `json:"agent_id"`
+	SessionID    string    `json:"session_id"`
 	Status       string    `json:"status"`
 	ChannelName  string    `json:"channel_name"`
 	PodName      string    `json:"pod_name"`
@@ -54,6 +55,7 @@ func (q *Queries) CreateAgentConnection(ctx context.Context, arg CreateAgentConn
 	row := q.db.QueryRow(ctx, createAgentConnection,
 		arg.ClusterID,
 		arg.AgentID,
+		arg.SessionID,
 		arg.Status,
 		arg.ChannelName,
 		arg.PodName,
@@ -65,6 +67,7 @@ func (q *Queries) CreateAgentConnection(ctx context.Context, arg CreateAgentConn
 		&i.ID,
 		&i.ClusterID,
 		&i.AgentID,
+		&i.SessionID,
 		&i.ConnectedAt,
 		&i.DisconnectedAt,
 		&i.LastPing,
@@ -88,8 +91,19 @@ func (q *Queries) DeleteAgentConnection(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const disconnectActiveConnectionsByCluster = `-- name: DisconnectActiveConnectionsByCluster :exec
+UPDATE agent_connections
+SET status = 'disconnected', disconnected_at = now()
+WHERE cluster_id = $1 AND status = 'connected'
+`
+
+func (q *Queries) DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, disconnectActiveConnectionsByCluster, clusterID)
+	return err
+}
+
 const getActiveConnectionByCluster = `-- name: GetActiveConnectionByCluster :one
-SELECT id, cluster_id, agent_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE cluster_id = $1 AND status = 'connected' ORDER BY connected_at DESC LIMIT 1
+SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE cluster_id = $1 AND status = 'connected' ORDER BY connected_at DESC LIMIT 1
 `
 
 func (q *Queries) GetActiveConnectionByCluster(ctx context.Context, clusterID uuid.UUID) (AgentConnection, error) {
@@ -99,6 +113,7 @@ func (q *Queries) GetActiveConnectionByCluster(ctx context.Context, clusterID uu
 		&i.ID,
 		&i.ClusterID,
 		&i.AgentID,
+		&i.SessionID,
 		&i.ConnectedAt,
 		&i.DisconnectedAt,
 		&i.LastPing,
@@ -114,7 +129,7 @@ func (q *Queries) GetActiveConnectionByCluster(ctx context.Context, clusterID uu
 }
 
 const getAgentConnectionByID = `-- name: GetAgentConnectionByID :one
-SELECT id, cluster_id, agent_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE id = $1
+SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE id = $1
 `
 
 func (q *Queries) GetAgentConnectionByID(ctx context.Context, id uuid.UUID) (AgentConnection, error) {
@@ -124,6 +139,7 @@ func (q *Queries) GetAgentConnectionByID(ctx context.Context, id uuid.UUID) (Age
 		&i.ID,
 		&i.ClusterID,
 		&i.AgentID,
+		&i.SessionID,
 		&i.ConnectedAt,
 		&i.DisconnectedAt,
 		&i.LastPing,
@@ -139,7 +155,7 @@ func (q *Queries) GetAgentConnectionByID(ctx context.Context, id uuid.UUID) (Age
 }
 
 const listActiveConnections = `-- name: ListActiveConnections :many
-SELECT id, cluster_id, agent_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE status = 'connected' ORDER BY connected_at DESC
+SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE status = 'connected' ORDER BY connected_at DESC
 `
 
 func (q *Queries) ListActiveConnections(ctx context.Context) ([]AgentConnection, error) {
@@ -155,6 +171,7 @@ func (q *Queries) ListActiveConnections(ctx context.Context) ([]AgentConnection,
 			&i.ID,
 			&i.ClusterID,
 			&i.AgentID,
+			&i.SessionID,
 			&i.ConnectedAt,
 			&i.DisconnectedAt,
 			&i.LastPing,
@@ -177,7 +194,7 @@ func (q *Queries) ListActiveConnections(ctx context.Context) ([]AgentConnection,
 }
 
 const listAgentConnections = `-- name: ListAgentConnections :many
-SELECT id, cluster_id, agent_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListAgentConnectionsParams struct {
@@ -198,6 +215,7 @@ func (q *Queries) ListAgentConnections(ctx context.Context, arg ListAgentConnect
 			&i.ID,
 			&i.ClusterID,
 			&i.AgentID,
+			&i.SessionID,
 			&i.ConnectedAt,
 			&i.DisconnectedAt,
 			&i.LastPing,
@@ -220,7 +238,7 @@ func (q *Queries) ListAgentConnections(ctx context.Context, arg ListAgentConnect
 }
 
 const listConnectionsByCluster = `-- name: ListConnectionsByCluster :many
-SELECT id, cluster_id, agent_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE cluster_id = $1 ORDER BY connected_at DESC LIMIT $2 OFFSET $3
+SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE cluster_id = $1 ORDER BY connected_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListConnectionsByClusterParams struct {
@@ -242,6 +260,7 @@ func (q *Queries) ListConnectionsByCluster(ctx context.Context, arg ListConnecti
 			&i.ID,
 			&i.ClusterID,
 			&i.AgentID,
+			&i.SessionID,
 			&i.ConnectedAt,
 			&i.DisconnectedAt,
 			&i.LastPing,

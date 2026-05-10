@@ -13,6 +13,9 @@ func TestRequestIDMiddleware_GeneratesID(t *testing.T) {
 		if id == "" {
 			t.Fatal("expected request ID in context, got empty string")
 		}
+		if correlationID := GetCorrelationID(r.Context()); correlationID != id {
+			t.Fatalf("expected matching correlation ID, got %q and %q", correlationID, id)
+		}
 	}))
 
 	rr := httptest.NewRecorder()
@@ -22,6 +25,9 @@ func TestRequestIDMiddleware_GeneratesID(t *testing.T) {
 	got := rr.Header().Get("X-Request-ID")
 	if got == "" {
 		t.Fatal("expected X-Request-ID response header, got empty string")
+	}
+	if correlation := rr.Header().Get("X-Correlation-Id"); correlation != got {
+		t.Fatalf("expected matching X-Correlation-Id header, got %q and %q", correlation, got)
 	}
 	// Basic UUID length check: 8-4-4-4-12 = 36 chars.
 	if len(got) != 36 {
@@ -45,8 +51,36 @@ func TestRequestIDMiddleware_ReusesID(t *testing.T) {
 	if got := rr.Header().Get("X-Request-ID"); got != incoming {
 		t.Fatalf("expected X-Request-ID header %q, got %q", incoming, got)
 	}
+	if got := rr.Header().Get("X-Correlation-Id"); got != incoming {
+		t.Fatalf("expected X-Correlation-Id header %q, got %q", incoming, got)
+	}
 	if ctxID != incoming {
 		t.Fatalf("expected context request ID %q, got %q", incoming, ctxID)
+	}
+}
+
+func TestRequestIDMiddleware_PrefersCorrelationID(t *testing.T) {
+	const incoming = "corr-123"
+
+	var ctxID string
+	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctxID = GetCorrelationID(r.Context())
+	}))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Correlation-Id", incoming)
+	req.Header.Set("X-Request-ID", "request-456")
+	handler.ServeHTTP(rr, req)
+
+	if ctxID != incoming {
+		t.Fatalf("expected context correlation ID %q, got %q", incoming, ctxID)
+	}
+	if got := rr.Header().Get("X-Request-ID"); got != incoming {
+		t.Fatalf("expected X-Request-ID header %q, got %q", incoming, got)
+	}
+	if got := rr.Header().Get("X-Correlation-Id"); got != incoming {
+		t.Fatalf("expected X-Correlation-Id header %q, got %q", incoming, got)
 	}
 }
 

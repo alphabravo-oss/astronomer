@@ -2,10 +2,16 @@ package middleware
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // newTestLogger returns a slog.Logger that writes JSON to the provided buffer.
@@ -77,10 +83,10 @@ func TestAuditLog_SkipPaths(t *testing.T) {
 
 func TestParsePathResource(t *testing.T) {
 	tests := []struct {
-		name         string
-		path         string
-		wantType     string
-		wantID       string
+		name     string
+		path     string
+		wantType string
+		wantID   string
 	}{
 		{
 			name:     "clusters path",
@@ -160,5 +166,133 @@ func TestStatusWriter_ExplicitWriteHeader(t *testing.T) {
 
 	if sw.status != http.StatusCreated {
 		t.Fatalf("expected status 201 after WriteHeader(201), got %d", sw.status)
+	}
+}
+
+type fakeAuditWriter struct {
+	lastV1 *sqlc.CreateAuditLogV1Params
+}
+
+type fakeAuditWriterV1Only struct {
+	lastV1 *sqlc.CreateAuditLogV1Params
+}
+
+func (f *fakeAuditWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.lastV1 = &arg
+	return nil
+}
+
+func (f *fakeAuditWriterV1Only) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.lastV1 = &arg
+	return nil
+}
+
+func TestAuditLogWithWriter_PersistsAuditRow(t *testing.T) {
+	var buf bytes.Buffer
+	writer := &fakeAuditWriter{}
+	mw := AuditLogWithWriter(newTestLogger(&buf), writer)
+	handler := mw(okHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/660e8400-e29b-41d4-a716-446655440000/", nil)
+	req.RemoteAddr = "203.0.113.9:1234"
+	req.Header.Set("User-Agent", "audit-test")
+	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		ID:         "550e8400-e29b-41d4-a716-446655440000",
+		AuthMethod: "jwt",
+	})
+	ctx = context.WithValue(ctx, contextKey("request_id"), "req-1")
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if writer.lastV1 == nil {
+		t.Fatal("expected audit v1 row to be persisted")
+	}
+	if writer.lastV1.Action != "request.post" {
+		t.Fatalf("action = %q, want request.post", writer.lastV1.Action)
+	}
+	if writer.lastV1.ResourceType != "cluster" {
+		t.Fatalf("resource_type = %q, want cluster", writer.lastV1.ResourceType)
+	}
+	if writer.lastV1.ResourceID != "660e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("resource_id = %q", writer.lastV1.ResourceID)
+	}
+	if writer.lastV1.RequestID != "req-1" {
+		t.Fatalf("request_id = %q, want req-1", writer.lastV1.RequestID)
+	}
+	if writer.lastV1.CorrelationID != "req-1" {
+		t.Fatalf("correlation_id = %q, want req-1", writer.lastV1.CorrelationID)
+	}
+	if writer.lastV1.Source != "http" {
+		t.Fatalf("source = %q, want http", writer.lastV1.Source)
+	}
+	if !writer.lastV1.UserID.Valid || writer.lastV1.UserID.Bytes != uuid.MustParse("550e8400-e29b-41d4-a716-446655440000") {
+		t.Fatalf("user_id = %+v, want authenticated user UUID", writer.lastV1.UserID)
+	}
+	if writer.lastV1.IpAddress == nil || writer.lastV1.IpAddress.String() != "203.0.113.9" {
+		t.Fatalf("ip_address = %v, want 203.0.113.9", writer.lastV1.IpAddress)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(writer.lastV1.Detail, &detail); err != nil {
+		t.Fatalf("unmarshal detail: %v", err)
+	}
+	if detail["auth_method"] != "jwt" {
+		t.Fatalf("auth_method = %v, want jwt", detail["auth_method"])
+	}
+	if writer.lastV1.StatusCode != int32(http.StatusOK) {
+		t.Fatalf("audit v1 status_code = %d, want 200", writer.lastV1.StatusCode)
+	}
+	if writer.lastV1.HTTPMethod != http.MethodPost {
+		t.Fatalf("audit v1 http_method = %q", writer.lastV1.HTTPMethod)
+	}
+}
+
+func TestAuditLogWithWriter_V1OnlyWriter(t *testing.T) {
+	var buf bytes.Buffer
+	writer := &fakeAuditWriterV1Only{}
+	mw := AuditLogWithWriter(newTestLogger(&buf), writer)
+	handler := mw(okHandler)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/660e8400-e29b-41d4-a716-446655440000/", nil)
+	req.RemoteAddr = "203.0.113.9:1234"
+	req.Header.Set("User-Agent", "audit-test")
+	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		ID:         "550e8400-e29b-41d4-a716-446655440000",
+		AuthMethod: "jwt",
+	})
+	ctx = context.WithValue(ctx, contextKey("request_id"), "req-v1")
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if writer.lastV1 == nil {
+		t.Fatal("expected audit v1 row to be persisted")
+	}
+	if writer.lastV1.Source != "http" {
+		t.Fatalf("source = %q, want http", writer.lastV1.Source)
+	}
+	if writer.lastV1.CorrelationID != "req-v1" {
+		t.Fatalf("correlation_id = %q, want req-v1", writer.lastV1.CorrelationID)
+	}
+	if writer.lastV1.Action != "request.delete" {
+		t.Fatalf("action = %q, want request.delete", writer.lastV1.Action)
+	}
+	if writer.lastV1.RequestID != "req-v1" {
+		t.Fatalf("request_id = %q, want req-v1", writer.lastV1.RequestID)
+	}
+}
+
+func TestAuditLogWithWriter_SkipAuthPaths(t *testing.T) {
+	var buf bytes.Buffer
+	writer := &fakeAuditWriter{}
+	mw := AuditLogWithWriter(newTestLogger(&buf), writer)
+	handler := mw(okHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if writer.lastV1 != nil {
+		t.Fatal("expected skip path not to persist audit row")
 	}
 }

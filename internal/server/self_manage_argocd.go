@@ -1,0 +1,548 @@
+package server
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	authv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
+)
+
+const (
+	localArgoInstanceName        = "local"
+	localArgoReleaseName         = "argocd"
+	localArgoNamespace           = "argocd"
+	localArgoAPIURL              = "http://argocd-server.argocd.svc.cluster.local/argocd"
+	localArgoRepoSecretName      = "astronomer-self-repo"
+	localArgoClusterSecretName   = "astronomer-local-cluster"
+	localArgoApplicationName     = "astronomer-self-manage"
+	localArgoRepoURL             = "http://astronomer-server.astronomer.svc.cluster.local:8000/helm-repo/astronomer-v2"
+	localArgoAppControllerSA     = "argocd-application-controller"
+	localArgoAppControllerTTL    = 24 * time.Hour
+	localArgoBootstrapPeriod     = 30 * time.Second
+	localArgoBootstrapTimeout    = 15 * time.Second
+	localAstronomerReleaseName   = "astronomer"
+	localAstronomerNamespace     = "astronomer"
+)
+
+var argocdApplicationGVR = schema.GroupVersionResource{
+	Group:    "argoproj.io",
+	Version:  "v1alpha1",
+	Resource: "applications",
+}
+
+func startLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, toolHandler *handler.ToolHandler, encryptor *auth.Encryptor, localCluster *sqlc.Cluster) {
+	if logger == nil || cfg == nil || queries == nil || toolHandler == nil || localCluster == nil {
+		return
+	}
+	restCfg, err := rest.InClusterConfig()
+	if err != nil {
+		logger.Warn("local argocd self-management disabled: not running in-cluster", "error", err)
+		return
+	}
+	k8s, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		logger.Warn("local argocd self-management disabled: kubernetes client error", "error", err)
+		return
+	}
+	dyn, err := dynamic.NewForConfig(restCfg)
+	if err != nil {
+		logger.Warn("local argocd self-management disabled: dynamic client error", "error", err)
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(localArgoBootstrapPeriod)
+		defer ticker.Stop()
+		for {
+			runCtx, cancel := context.WithTimeout(ctx, localArgoBootstrapTimeout)
+			err := reconcileLocalArgoSelfManagement(runCtx, logger, cfg, queries, encryptor, k8s, dyn, *localCluster, toolHandler)
+			cancel()
+			if err != nil {
+				logger.Warn("local argocd self-management reconcile failed", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+}
+
+func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, encryptor *auth.Encryptor, k8s kubernetes.Interface, dyn dynamic.Interface, localCluster sqlc.Cluster, toolHandler *handler.ToolHandler) error {
+	if _, err := toolHandler.EnsureInstalled(ctx, localCluster.ID, handler.ArgoCDToolSlug, localArgoReleaseName, "default", handler.ArgoCDDefaultValuesYAML); err != nil {
+		return fmt.Errorf("ensure argocd tool installed: %w", err)
+	}
+	if err := waitForDeploymentReady(ctx, k8s, localArgoNamespace, "argocd-server"); err != nil {
+		return fmt.Errorf("argocd-server not ready: %w", err)
+	}
+
+	token, tokenErr := loginToArgoCDWithInitialAdminSecret(ctx, k8s, localArgoAPIURL)
+	instance, err := ensureLocalArgoInstanceRow(ctx, queries, encryptor, localCluster.ID, token)
+	if err != nil {
+		return fmt.Errorf("ensure argocd instance row: %w", err)
+	}
+	if tokenErr != nil && logger != nil {
+		logger.Warn("argocd instance row created without upstream session token", "error", tokenErr)
+	}
+
+	clusterSecretName, err := ensureLocalArgoClusterSecret(ctx, k8s, localCluster)
+	if err != nil {
+		return fmt.Errorf("ensure argocd local cluster secret: %w", err)
+	}
+	if err := ensureLocalManagedClusterRow(ctx, queries, instance.ID, localCluster, clusterSecretName); err != nil {
+		return fmt.Errorf("ensure argocd managed cluster row: %w", err)
+	}
+	if err := ensureLocalArgoRepoSecret(ctx, k8s); err != nil {
+		return fmt.Errorf("ensure argocd repo secret: %w", err)
+	}
+
+	platform, err := queries.GetPlatformConfig(ctx)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	serverURL := strings.TrimSpace(platform.ServerUrl)
+	if serverURL == "" {
+		return nil
+	}
+	valuesYAML, err := buildSelfManagedAstronomerValues(ctx, cfg, k8s, serverURL)
+	if err != nil {
+		return fmt.Errorf("build self-managed values: %w", err)
+	}
+	if err := ensureSelfManagedAstronomerApplication(ctx, dyn, localCluster, valuesYAML); err != nil {
+		return fmt.Errorf("ensure self-managed application: %w", err)
+	}
+	return nil
+}
+
+func waitForDeploymentReady(ctx context.Context, k8s kubernetes.Interface, namespace, name string) error {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		deploy, err := k8s.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err == nil && deploy.Status.AvailableReplicas >= 1 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func ensureLocalArgoInstanceRow(ctx context.Context, queries *sqlc.Queries, encryptor *auth.Encryptor, clusterID uuid.UUID, token string) (sqlc.ArgocdInstance, error) {
+	authColumn := strings.TrimSpace(token)
+	if encryptor != nil && authColumn != "" {
+		ciphertext, err := encryptor.Encrypt(authColumn)
+		if err != nil {
+			return sqlc.ArgocdInstance{}, err
+		}
+		authColumn = ciphertext
+	}
+	instance, err := queries.GetArgoCDInstanceByName(ctx, localArgoInstanceName)
+	if err == nil {
+		if authColumn == "" {
+			authColumn = instance.AuthTokenEncrypted
+		}
+		return queries.UpdateArgoCDInstance(ctx, sqlc.UpdateArgoCDInstanceParams{
+			ID:                 instance.ID,
+			Name:               localArgoInstanceName,
+			ApiUrl:             localArgoAPIURL,
+			AuthTokenEncrypted: authColumn,
+			VerifySsl:          false,
+		})
+	}
+	if err != pgx.ErrNoRows {
+		return sqlc.ArgocdInstance{}, err
+	}
+	return queries.CreateArgoCDInstance(ctx, sqlc.CreateArgoCDInstanceParams{
+		Name:               localArgoInstanceName,
+		ClusterID:          clusterID,
+		ApiUrl:             localArgoAPIURL,
+		AuthTokenEncrypted: authColumn,
+		VerifySsl:          false,
+	})
+}
+
+func ensureLocalManagedClusterRow(ctx context.Context, queries *sqlc.Queries, instanceID uuid.UUID, cluster sqlc.Cluster, secretName string) error {
+	labels, _ := json.Marshal(map[string]string{
+		"astronomer.io/cluster-id":   cluster.ID.String(),
+		"astronomer.io/cluster-name": cluster.Name,
+	})
+	_, err := queries.CreateArgoCDManagedCluster(ctx, sqlc.CreateArgoCDManagedClusterParams{
+		ArgocdInstanceID:  instanceID,
+		ClusterID:         cluster.ID,
+		ClusterSecretName: secretName,
+		ServerUrl:         cluster.ApiServerUrl,
+		Labels:            labels,
+	})
+	return err
+}
+
+func ensureLocalArgoRepoSecret(ctx context.Context, k8s kubernetes.Interface) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      localArgoRepoSecretName,
+			Namespace: localArgoNamespace,
+			Labels: map[string]string{
+				"argocd.argoproj.io/secret-type": "repository",
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"name": []byte("astronomer-local"),
+			"type": []byte("helm"),
+			"url":  []byte(localArgoRepoURL),
+		},
+	}
+	return applySecret(ctx, k8s, secret)
+}
+
+func ensureLocalArgoClusterSecret(ctx context.Context, k8s kubernetes.Interface, cluster sqlc.Cluster) (string, error) {
+	token, err := createLocalArgoApplicationControllerToken(ctx, k8s)
+	if err != nil {
+		return "", err
+	}
+	cfg := map[string]any{
+		"bearerToken": token,
+		"tlsClientConfig": map[string]any{
+			"insecure": cluster.CaCertificate == "",
+		},
+	}
+	if cluster.CaCertificate != "" {
+		cfg["tlsClientConfig"].(map[string]any)["caData"] = cluster.CaCertificate
+	}
+	cfgJSON, err := json.Marshal(cfg)
+	if err != nil {
+		return "", err
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      localArgoClusterSecretName,
+			Namespace: localArgoNamespace,
+			Labels: map[string]string{
+				"argocd.argoproj.io/secret-type": "cluster",
+				"astronomer.io/cluster-id":       cluster.ID.String(),
+				"astronomer.io/cluster-name":     cluster.Name,
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"name":   []byte(cluster.Name),
+			"server": []byte(cluster.ApiServerUrl),
+			"config": cfgJSON,
+		},
+	}
+	return localArgoClusterSecretName, applySecret(ctx, k8s, secret)
+}
+
+func createLocalArgoApplicationControllerToken(ctx context.Context, k8s kubernetes.Interface) (string, error) {
+	duration := int64(localArgoAppControllerTTL.Seconds())
+	req, err := k8s.CoreV1().ServiceAccounts(localArgoNamespace).CreateToken(ctx, localArgoAppControllerSA, &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			ExpirationSeconds: &duration,
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(req.Status.Token), nil
+}
+
+func applySecret(ctx context.Context, k8s kubernetes.Interface, secret *corev1.Secret) error {
+	current, err := k8s.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = k8s.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	current.Labels = secret.Labels
+	current.Type = secret.Type
+	current.Data = secret.Data
+	_, err = k8s.CoreV1().Secrets(secret.Namespace).Update(ctx, current, metav1.UpdateOptions{})
+	return err
+}
+
+func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string) (string, error) {
+	secret, err := k8s.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-secrets", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	parsedURL, err := url.Parse(serverURL)
+	if err != nil {
+		return "", err
+	}
+	host := parsedURL.Hostname()
+	if host == "" {
+		return "", fmt.Errorf("server_url host is empty")
+	}
+	serverImage, serverReplicas, migrateImage, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-server")
+	if err != nil {
+		return "", err
+	}
+	workerImage, workerReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-worker")
+	if err != nil {
+		return "", err
+	}
+	frontendImage, frontendReplicas, _, frontendErr := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend")
+	frontendEnabled := frontendErr == nil
+
+	values := map[string]any{
+		"ingress": map[string]any{
+			"enabled": false,
+		},
+		"gateway": map[string]any{
+			"enabled":   true,
+			"className": "nginx",
+			"hosts":     []string{host},
+			"tls": map[string]any{
+				"enabled":    false,
+				"secretName": "",
+			},
+		},
+		"config": map[string]any{
+			"corsAllowedOrigins": serverURL,
+			"agentImageRepository": cfg.AgentImageRepository,
+			"agentImageTag":        cfg.AgentImageTag,
+		},
+		"image": map[string]any{
+			"server":  serverImage,
+			"worker":  workerImage,
+			"migrate": migrateImage,
+			"agent": map[string]any{
+				"repository": cfg.AgentImageRepository,
+				"tag":        cfg.AgentImageTag,
+			},
+		},
+		"server": map[string]any{
+			"replicaCount": serverReplicas,
+		},
+		"worker": map[string]any{
+			"replicaCount": workerReplicas,
+		},
+		"frontend": map[string]any{
+			"enabled":      frontendEnabled,
+			"replicaCount": frontendReplicas,
+		},
+		"preflight": map[string]any{
+			"enabled": false,
+		},
+		"migrate": map[string]any{
+			"enabled": false,
+		},
+		"secrets": map[string]any{
+			"secretKey":     string(secret.Data["SECRET_KEY"]),
+			"encryptionKey": string(secret.Data["ASTRONOMER_ENCRYPTION_KEY"]),
+		},
+	}
+	if password, ok := secret.Data["POSTGRES_PASSWORD"]; ok {
+		values["postgres"] = map[string]any{
+			"password": string(password),
+		}
+	}
+	if frontendEnabled {
+		values["image"].(map[string]any)["frontend"] = frontendImage
+	}
+	return string(yamlOrPanic(values)), nil
+}
+
+func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, name string) (map[string]any, int32, map[string]any, error) {
+	deploy, err := k8s.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	replicas := int32(1)
+	if deploy.Spec.Replicas != nil {
+		replicas = *deploy.Spec.Replicas
+	}
+	var mainImage map[string]any
+	var migrateImage map[string]any
+	for _, c := range deploy.Spec.Template.Spec.Containers {
+		if c.Name == "server" || c.Name == "worker" || c.Name == "frontend" {
+			mainImage = parseImageRef(c.Image)
+			break
+		}
+	}
+	for _, c := range deploy.Spec.Template.Spec.InitContainers {
+		if c.Name == "migrate" {
+			migrateImage = parseImageRef(c.Image)
+			break
+		}
+	}
+	if mainImage == nil {
+		return nil, 0, nil, fmt.Errorf("deployment %s has no primary image", name)
+	}
+	return mainImage, replicas, migrateImage, nil
+}
+
+func parseImageRef(ref string) map[string]any {
+	ref = strings.TrimSpace(ref)
+	name := ref
+	tag := "latest"
+	if i := strings.LastIndex(ref, "@"); i >= 0 {
+		name = ref[:i]
+	}
+	if i := strings.LastIndex(name, ":"); i >= 0 && i > strings.LastIndex(name, "/") {
+		tag = name[i+1:]
+		name = name[:i]
+	}
+	return map[string]any{
+		"repository": name,
+		"tag":        tag,
+	}
+}
+
+func ensureSelfManagedAstronomerApplication(ctx context.Context, dyn dynamic.Interface, cluster sqlc.Cluster, valuesYAML string) error {
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "argoproj.io/v1alpha1",
+			"kind":       "Application",
+			"metadata": map[string]any{
+				"name":      localArgoApplicationName,
+				"namespace": localArgoNamespace,
+				"labels": map[string]any{
+					"astronomer.io/platform-owned": "true",
+				},
+			},
+			"spec": map[string]any{
+				"project": "default",
+				"source": map[string]any{
+					"repoURL":        localArgoRepoURL,
+					"chart":          "astronomer",
+					"targetRevision": "0.1.0",
+					"helm": map[string]any{
+						"releaseName": localAstronomerReleaseName,
+						"values":      valuesYAML,
+					},
+				},
+				"destination": map[string]any{
+					"server":    cluster.ApiServerUrl,
+					"namespace": localAstronomerNamespace,
+				},
+				"syncPolicy": map[string]any{
+					"automated": map[string]any{
+						"prune":    true,
+						"selfHeal": true,
+					},
+				},
+			},
+		},
+	}
+	res := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
+	current, err := res.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = res.Create(ctx, obj, metav1.CreateOptions{})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if currentValues, found, err := unstructured.NestedString(current.Object, "spec", "source", "helm", "values"); err == nil && found && strings.TrimSpace(currentValues) != "" {
+		mergedValues, mergeErr := mergeSelfManagedValues(currentValues, valuesYAML)
+		if mergeErr != nil {
+			return mergeErr
+		}
+		if err := unstructured.SetNestedField(obj.Object, mergedValues, "spec", "source", "helm", "values"); err != nil {
+			return err
+		}
+	}
+	obj.SetResourceVersion(current.GetResourceVersion())
+	_, err = res.Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func mergeSelfManagedValues(currentValuesYAML, bootstrapValuesYAML string) (string, error) {
+	currentValues := map[string]any{}
+	if err := yaml.Unmarshal([]byte(currentValuesYAML), &currentValues); err != nil {
+		return "", fmt.Errorf("parse current self-managed values: %w", err)
+	}
+	bootstrapValues := map[string]any{}
+	if err := yaml.Unmarshal([]byte(bootstrapValuesYAML), &bootstrapValues); err != nil {
+		return "", fmt.Errorf("parse bootstrap self-managed values: %w", err)
+	}
+	for _, key := range []string{"config", "gateway", "image", "ingress", "migrate", "postgres", "preflight", "secrets"} {
+		if value, ok := bootstrapValues[key]; ok {
+			currentValues[key] = value
+		}
+	}
+	data, err := yaml.Marshal(currentValues)
+	if err != nil {
+		return "", fmt.Errorf("marshal merged self-managed values: %w", err)
+	}
+	return string(data), nil
+}
+
+func loginToArgoCDWithInitialAdminSecret(ctx context.Context, k8s kubernetes.Interface, apiURL string) (string, error) {
+	secret, err := k8s.CoreV1().Secrets(localArgoNamespace).Get(ctx, "argocd-initial-admin-secret", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	password := strings.TrimSpace(string(secret.Data["password"]))
+	if password == "" {
+		return "", fmt.Errorf("argocd initial admin password is empty")
+	}
+	payload, _ := json.Marshal(map[string]string{
+		"username": "admin",
+		"password": password,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(apiURL, "/")+"/api/v1/session", bytes.NewReader(payload))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("argocd session login failed with status %d", resp.StatusCode)
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(out.Token) == "" {
+		return "", fmt.Errorf("argocd session login returned empty token")
+	}
+	return out.Token, nil
+}
+
+func yamlOrPanic(v any) []byte {
+	data, err := yaml.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -13,11 +14,11 @@ import (
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/remoteproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/remoteproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -42,6 +43,7 @@ type RouterDependencies struct {
 	Monitoring   *handler.MonitoringHandler
 	ControlPlane *handler.ControlPlaneHandler
 	Resources    *handler.ResourceHandler
+	PlatformCharts *handler.PlatformChartRepoHandler
 	RBAC         *handler.RBACHandler
 	RBACQueries  appmiddleware.RBACQuerier
 	RBACEngine   *rbac.Engine
@@ -66,6 +68,8 @@ type RouterDependencies struct {
 	// ResourcesSearch fans a single resource-list query out across every
 	// active cluster (Phase A3 of the Rancher-parity plan).
 	ResourcesSearch *handler.ResourcesSearchHandler
+	// Readyz exposes control-plane dependency readiness checks.
+	Readyz http.Handler
 	// DexConfig owns CRUD for Dex connectors / settings and renders the
 	// running Dex instance's ConfigMap (Phase B4 of the Rancher-parity plan).
 	DexConfig *handler.DexHandler
@@ -80,10 +84,11 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(chimiddleware.RequestID)
+	r.Use(appmiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(appmiddleware.Metrics)
 	// NOTE: chimiddleware.Timeout is applied per-group below — it MUST NOT be
 	// applied globally because /api/v1/ws/... carries long-lived WebSocket
 	// connections that would otherwise be force-closed at the timeout.
@@ -109,6 +114,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	})
 	r.Get("/health", healthHandler)
 	r.Get("/health/", healthHandler)
+	if deps.PlatformCharts != nil {
+		r.Get("/helm-repo/astronomer/index.yaml", deps.PlatformCharts.ServeIndex)
+		r.Get("/helm-repo/astronomer/"+deps.PlatformCharts.ArchiveName(), deps.PlatformCharts.ServeArchive)
+		r.Get("/helm-repo/astronomer-v2/index.yaml", deps.PlatformCharts.ServeIndex)
+		r.Get("/helm-repo/astronomer-v2/"+deps.PlatformCharts.ArchiveName(), deps.PlatformCharts.ServeArchive)
+	}
+	if deps.Readyz != nil {
+		r.Handle("/readyz", deps.Readyz)
+		r.Handle("/readyz/", deps.Readyz)
+	}
 
 	// ArgoCD UI reverse proxy — top-level `/argocd/*` (NOT under `/api/v1`)
 	// because the upstream argocd-server is configured with
@@ -154,7 +169,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		}
 
 		if deps.Auth != nil {
-			r.Post("/auth/login/", deps.Auth.Login)
+			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/login/", deps.Auth.Login)
 			r.Post("/auth/refresh/", deps.Auth.Refresh)
 			r.Post("/auth/logout/", deps.Auth.Logout)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/change-password/", deps.Auth.ChangePassword)
@@ -167,7 +182,9 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// SSO OAuth handshake. Both routes are public — Login redirects to the
 		// provider, Callback validates state + exchanges the code for tokens.
 		if deps.SSO != nil {
+			r.Get("/auth/login/{provider}", deps.SSO.Login)
 			r.Get("/auth/login/{provider}/", deps.SSO.Login)
+			r.Get("/auth/callback/{provider}", deps.SSO.Callback)
 			r.Get("/auth/callback/{provider}/", deps.SSO.Callback)
 		}
 
@@ -177,7 +194,8 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 				r.Get("/general/", deps.Resources.GetGeneralSettings)
 				r.Put("/general/", deps.Resources.UpdateGeneralSettings)
 				r.Get("/sso/", deps.Resources.ListSSOProviders)
-				r.Post("/sso/", deps.Resources.CreateSSOProvider)
+				r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/sso/", deps.Resources.CreateSSOProvider)
+				r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/sso/{id}/", deps.Resources.DeleteSSOProvider)
 				r.Get("/audit-logs/", deps.Resources.ListAuditLogs)
 				if deps.Monitoring != nil {
 					r.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
@@ -213,6 +231,9 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
 			authenticated.Use(appmiddleware.RequireAuthWithQueries(deps.JWT, deps.AuthQueries))
+			if deps.RemoteQueries != nil {
+				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
+			}
 			r.Mount("/", authenticated)
 		}
 
@@ -283,6 +304,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/register/", deps.Clusters.GenerateRegistrationToken)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/registry/", deps.Clusters.GetRegistryConfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/registry/", deps.Clusters.UpdateRegistryConfig)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/{id}/registry/", deps.Clusters.DeleteRegistryConfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/manifest/", deps.Clusters.GetManifest)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/kubeconfig/", deps.Clusters.GetKubeconfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/{id}/generate-kubeconfig/", deps.Clusters.GenerateKubeconfig)
@@ -658,8 +680,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	// response includes per-cluster errors + counts so the UI can surface
 	// partial failures gracefully.
 	if deps.ResourcesSearch != nil {
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).
-			Get("/resources/search/", deps.ResourcesSearch.Search)
+		r.Get("/resources/search/", deps.ResourcesSearch.Search)
 	}
 
 	// --- Phase B5: CIS scans via cis-operator ------------------------------

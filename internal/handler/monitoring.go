@@ -508,6 +508,12 @@ func (h *MonitoringHandler) InstallSharedThanosStack(w http.ResponseWriter, r *h
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_thanos.install", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": req.ManagementClusterID,
+		"namespace":           req.Namespace,
+		"releaseName":         req.ReleaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -535,6 +541,12 @@ func (h *MonitoringHandler) UpgradeSharedThanosStack(w http.ResponseWriter, r *h
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_thanos.upgrade", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": req.ManagementClusterID,
+		"namespace":           req.Namespace,
+		"releaseName":         req.ReleaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -571,6 +583,12 @@ func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *h
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_thanos.replace", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": clusterID,
+		"namespace":           namespace,
+		"releaseName":         releaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -612,6 +630,12 @@ func (h *MonitoringHandler) UninstallSharedThanosStack(w http.ResponseWriter, r 
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_thanos.uninstall", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": clusterID,
+		"namespace":           namespace,
+		"releaseName":         releaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -711,6 +735,12 @@ func (h *MonitoringHandler) InstallSharedAlertmanager(w http.ResponseWriter, r *
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_alertmanager.install", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": req.ManagementClusterID,
+		"namespace":           req.Namespace,
+		"releaseName":         req.ReleaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -738,6 +768,12 @@ func (h *MonitoringHandler) UpgradeSharedAlertmanager(w http.ResponseWriter, r *
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_alertmanager.upgrade", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": req.ManagementClusterID,
+		"namespace":           req.Namespace,
+		"releaseName":         req.ReleaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -775,6 +811,12 @@ func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_alertmanager.replace", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": clusterID,
+		"namespace":           namespace,
+		"releaseName":         releaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -816,6 +858,12 @@ func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.shared_alertmanager.uninstall", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
+		"managementClusterId": clusterID,
+		"namespace":           namespace,
+		"releaseName":         releaseName,
+		"operationId":         op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -966,6 +1014,11 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to save cluster monitoring config")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.cluster_config.update", "cluster_monitoring_config", clusterCfg.ClusterID.String(), clusterCfg.PrometheusReleaseName, map[string]any{
+		"backendId":      clusterCfg.BackendID.String(),
+		"stackNamespace": clusterCfg.StackNamespace,
+		"status":         clusterCfg.Status,
+	})
 	RespondJSON(w, http.StatusOK, clusterMonitoringConfigResponse(clusterCfg))
 }
 
@@ -1005,6 +1058,10 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.stack.install", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
+		"namespace":   req.Namespace,
+		"operationId": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -1037,6 +1094,10 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.stack.upgrade", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
+		"namespace":   req.Namespace,
+		"operationId": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -1061,6 +1122,10 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.stack.replace", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
+		"namespace":   req.Namespace,
+		"operationId": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 
@@ -1111,6 +1176,10 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
 		return
 	}
+	recordAudit(r, h.queries, "monitoring.stack.uninstall", "cluster_monitoring_config", clusterID, cfg.PrometheusReleaseName, map[string]any{
+		"namespace":   cfg.StackNamespace,
+		"operationId": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
 }
 

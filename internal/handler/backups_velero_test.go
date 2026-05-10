@@ -75,12 +75,12 @@ func TestRenderVeleroBackup_OmitsEmptyOptionals(t *testing.T) {
 
 func TestRenderVeleroSchedule_NestedTemplate(t *testing.T) {
 	got := renderVeleroSchedule(VeleroScheduleRender{
-		Name:              "sched-daily",
-		Namespace:         "velero",
-		BackupStorageName: "primary-s3",
-		Cron:              "0 2 * * *",
+		Name:               "sched-daily",
+		Namespace:          "velero",
+		BackupStorageName:  "primary-s3",
+		Cron:               "0 2 * * *",
 		IncludedNamespaces: []string{"prod"},
-		TTL:               "720h",
+		TTL:                "720h",
 	})
 	if got["kind"] != "Schedule" {
 		t.Fatalf("kind = %v", got["kind"])
@@ -410,6 +410,9 @@ func (f *fakeBackupQuerier) CountBackupStorageConfigs(ctx context.Context) (int6
 func (f *fakeBackupQuerier) ListBackups(ctx context.Context, arg sqlc.ListBackupsParams) ([]sqlc.Backup, error) {
 	return nil, nil
 }
+func (f *fakeBackupQuerier) ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]sqlc.Backup, error) {
+	return nil, nil
+}
 func (f *fakeBackupQuerier) GetBackupByID(ctx context.Context, id uuid.UUID) (sqlc.Backup, error) {
 	return sqlc.Backup{}, errors.New("not implemented")
 }
@@ -420,6 +423,15 @@ func (f *fakeBackupQuerier) UpdateBackupVeleroIdentity(ctx context.Context, arg 
 	return nil
 }
 func (f *fakeBackupQuerier) UpdateBackupStarted(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (f *fakeBackupQuerier) UpdateBackupCompleted(ctx context.Context, arg sqlc.UpdateBackupCompletedParams) error {
+	return nil
+}
+func (f *fakeBackupQuerier) UpdateBackupFailed(ctx context.Context, arg sqlc.UpdateBackupFailedParams) error {
+	return nil
+}
+func (f *fakeBackupQuerier) TouchBackupPolling(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 func (f *fakeBackupQuerier) DeleteBackup(ctx context.Context, id uuid.UUID) error {
@@ -449,8 +461,26 @@ func (f *fakeBackupQuerier) CountBackupSchedules(ctx context.Context) (int64, er
 func (f *fakeBackupQuerier) ListRestoreOperations(ctx context.Context, arg sqlc.ListRestoreOperationsParams) ([]sqlc.RestoreOperation, error) {
 	return nil, nil
 }
+func (f *fakeBackupQuerier) ListRunningRestoresForPolling(ctx context.Context, limit int32) ([]sqlc.RestoreOperation, error) {
+	return nil, nil
+}
+func (f *fakeBackupQuerier) GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (sqlc.RestoreOperation, error) {
+	return sqlc.RestoreOperation{}, errors.New("not implemented")
+}
 func (f *fakeBackupQuerier) CreateRestoreOperation(ctx context.Context, arg sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error) {
 	return sqlc.RestoreOperation{}, errors.New("not implemented")
+}
+func (f *fakeBackupQuerier) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (f *fakeBackupQuerier) UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+func (f *fakeBackupQuerier) UpdateRestoreOperationFailed(ctx context.Context, arg sqlc.UpdateRestoreOperationFailedParams) error {
+	return nil
+}
+func (f *fakeBackupQuerier) TouchRestorePolling(ctx context.Context, id uuid.UUID) error {
+	return nil
 }
 func (f *fakeBackupQuerier) CountRestoreOperations(ctx context.Context) (int64, error) {
 	return 0, nil
@@ -527,4 +557,3 @@ func TestSignAWSV4_StableSignature(t *testing.T) {
 		t.Fatalf("X-Amz-Date = %q", h)
 	}
 }
-

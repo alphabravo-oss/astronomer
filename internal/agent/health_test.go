@@ -5,7 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 func TestNewHealthReporter(t *testing.T) {
@@ -106,6 +109,24 @@ func TestHealthEndpoints(t *testing.T) {
 		body := decode(t, w.Body.String())
 		if body["status"] != "ok" {
 			t.Errorf("expected status=ok, got %v", body["status"])
+		}
+	})
+
+	t.Run("metrics returns prometheus scrape output", func(t *testing.T) {
+		agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues("Pod")...).Add(0)
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", w.Code)
+		}
+		if got := w.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
+			t.Errorf("expected Prometheus text content type, got %q", got)
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, "astronomer_agent_state_updates_received_total") {
+			t.Errorf("expected agent metric in scrape output, got %q", body)
 		}
 	})
 }

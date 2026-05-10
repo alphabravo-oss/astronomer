@@ -17,6 +17,29 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: {{ include "astronomer.fullname" . }}
+  {{- $gatewayAnnotations := dict -}}
+  {{- with .Values.gateway.annotations }}
+  {{- range $k, $v := . }}
+  {{- $_ := set $gatewayAnnotations $k $v }}
+  {{- end }}
+  {{- end }}
+  {{- if and .Values.gateway.tls.enabled .Values.gateway.tls.certManager.enabled .Values.gateway.tls.certManager.issuerName }}
+  {{- if eq .Values.gateway.tls.certManager.issuerKind "ClusterIssuer" }}
+  {{- $_ := set $gatewayAnnotations "cert-manager.io/cluster-issuer" .Values.gateway.tls.certManager.issuerName }}
+  {{- else }}
+  {{- $_ := set $gatewayAnnotations "cert-manager.io/issuer" .Values.gateway.tls.certManager.issuerName }}
+  {{- end }}
+  {{- if and .Values.gateway.tls.certManager.issuerKind (ne .Values.gateway.tls.certManager.issuerKind "Issuer") (ne .Values.gateway.tls.certManager.issuerKind "ClusterIssuer") }}
+  {{- $_ := set $gatewayAnnotations "cert-manager.io/issuer-kind" .Values.gateway.tls.certManager.issuerKind }}
+  {{- end }}
+  {{- if and .Values.gateway.tls.certManager.issuerGroup (ne .Values.gateway.tls.certManager.issuerGroup "cert-manager.io") }}
+  {{- $_ := set $gatewayAnnotations "cert-manager.io/issuer-group" .Values.gateway.tls.certManager.issuerGroup }}
+  {{- end }}
+  {{- end }}
+  {{- if gt (len $gatewayAnnotations) 0 }}
+  annotations:
+    {{- toYaml $gatewayAnnotations | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "astronomer.labels" . | nindent 4 }}
 spec:
@@ -43,7 +66,8 @@ spec:
     {{- end }}
 
 ---
-# UI route — catches everything except /api/* and /health/* (those go to server)
+# UI route — catches everything except /api/*, /health/*, /readyz*, and
+# /metrics (those go to server)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -95,6 +119,15 @@ spec:
         - path:
             type: PathPrefix
             value: /health/
+        - path:
+            type: Exact
+            value: /health
+        - path:
+            type: PathPrefix
+            value: /readyz/
+        - path:
+            type: Exact
+            value: /readyz
         # The auth-gated reverse proxy that fronts the ArgoCD UI lives on
         # the Go server (internal/handler/argocd_ui_proxy.go), so route
         # /argocd/* to the same backend as /api/*. Enforces Astronomer auth

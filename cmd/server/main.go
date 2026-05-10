@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -35,7 +38,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
-	logger.Info("starting astronomer server",
+	observability.WithEvent(logger, "server_starting").Info("starting astronomer server",
 		"version", version.Version,
 		"commit", version.GitCommit,
 		"env", cfg.Env,
@@ -46,28 +49,46 @@ func main() {
 		logger.Error("failed to initialize server", "error", err)
 		os.Exit(1)
 	}
+	if srv.DB() != nil {
+		if _, err := observability.EnsureInstanceID(context.Background(), sqlc.New(srv.DB().Pool())); err != nil {
+			logger.Error("failed to ensure observability instance id", "error", err)
+			os.Exit(1)
+		}
+		logger = observability.Logger(logger)
+		slog.SetDefault(logger)
+	}
 
 	// Graceful shutdown on SIGINT / SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	if srv.DB() != nil {
+		db.StartMetricsReporter(ctx, srv.DB().Pool(), logger)
+	}
+
 	go func() {
 		if err := srv.Start(":8000"); err != nil {
-			logger.Error("server error", "error", err)
+			observability.WithEvent(logger, "server_runtime_error").Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+	go func() {
+		if err := server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger); err != nil {
+			observability.WithEvent(logger, "server_metrics_listener_error").Error("server metrics listener error", "error", err)
 			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	logger.Info("shutting down server")
+	observability.WithEvent(logger, "server_stopping").Info("shutting down server")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("shutdown error", "error", err)
+		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("server stopped")
+	observability.WithEvent(logger, "server_stopped").Info("server stopped")
 }

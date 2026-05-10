@@ -23,6 +23,8 @@ package tunnel
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -34,8 +36,10 @@ import (
 	"nhooyr.io/websocket/wsjson"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -56,6 +60,7 @@ type AgentConnection struct {
 	AgentID      string
 	AgentVersion string
 	SessionID    string
+	DBID         uuid.UUID
 	Conn         *websocket.Conn
 	Streams      *StreamManager
 	cancel       context.CancelFunc
@@ -107,8 +112,16 @@ func (h *Hub) publish(eventType string, clusterID, sessionID, agentVersion strin
 type AgentTokenValidator interface {
 	GetRegistrationTokenByToken(ctx context.Context, token string) (sqlc.ClusterRegistrationToken, error)
 	MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error
+	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterAgentToken, error)
+	GetClusterAgentTokenByToken(ctx context.Context, token string) (sqlc.ClusterAgentToken, error)
+	UpsertClusterAgentToken(ctx context.Context, arg sqlc.UpsertClusterAgentTokenParams) (sqlc.ClusterAgentToken, error)
+	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
 	UpdateClusterHeartbeat(ctx context.Context, arg sqlc.UpdateClusterHeartbeatParams) error
 	UpsertClusterHealthStatus(ctx context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error)
+	CreateAgentConnection(ctx context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error)
+	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
+	UpdateAgentConnectionStatus(ctx context.Context, arg sqlc.UpdateAgentConnectionStatusParams) error
+	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 }
 
 // NewHub creates a new Hub.
@@ -177,41 +190,38 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn.Close(websocket.StatusProtocolError, "cluster_id and token are required")
 		return
 	}
-
+	ackPayload := protocol.ConnectAckPayload{Accepted: true}
 	if h.validator != nil {
-		tokenRecord, err := h.validator.GetRegistrationTokenByToken(ctx, payload.Token)
+		clusterID, err := uuid.Parse(payload.ClusterID)
 		if err != nil {
-			h.log.Warn("invalid registration token", slog.String("cluster_id", payload.ClusterID))
-			h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
-			conn.Close(websocket.StatusPolicyViolation, "invalid registration token")
+			h.log.Warn("invalid cluster id in connect payload", slog.String("cluster_id", payload.ClusterID))
+			conn.Close(websocket.StatusProtocolError, "invalid cluster_id")
 			return
 		}
-		if tokenRecord.ClusterID.String() != payload.ClusterID {
-			h.log.Warn("registration token cluster mismatch",
-				slog.String("expected_cluster_id", tokenRecord.ClusterID.String()),
-				slog.String("provided_cluster_id", payload.ClusterID),
+		tokenKind, durableToken, err := h.validateAndMaybeRotateToken(ctx, clusterID, payload)
+		if err != nil {
+			h.log.Warn("agent authentication failed",
+				slog.String("cluster_id", payload.ClusterID),
+				slog.String("error", err.Error()),
 			)
 			h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
-			conn.Close(websocket.StatusPolicyViolation, "registration token does not match cluster")
+			conn.Close(websocket.StatusPolicyViolation, err.Error())
 			return
 		}
-		if err := h.validator.MarkRegistrationTokenUsed(ctx, tokenRecord.ID); err != nil {
-			h.log.Error("failed to mark registration token used", slog.String("error", err.Error()))
-			conn.Close(websocket.StatusInternalError, "failed to mark token used")
-			return
+		if tokenKind == "registration" && durableToken != "" && durableToken != payload.Token {
+			ackPayload.AgentToken = durableToken
 		}
 	}
 
 	// 3. Generate session ID and send CONNECT_ACK.
 	sessionID := fmt.Sprintf("session-%s-%d", payload.ClusterID, time.Now().UnixNano())
-
-	ackPayload, _ := json.Marshal(protocol.ConnectAckPayload{
-		Accepted: true,
-	})
+	ackPayload.SessionID = sessionID
+	ackPayload.ServerVersion = ""
+	ackBody, _ := json.Marshal(ackPayload)
 
 	ackMsg := &protocol.Message{
 		Type:    protocol.MsgConnectAck,
-		Payload: ackPayload,
+		Payload: ackBody,
 	}
 
 	writeCtx, writeCancel := context.WithTimeout(ctx, writeTimeout)
@@ -234,6 +244,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		cancel:       cancel,
 		sendCh:       make(chan *protocol.Message, sendChannelSize),
 	}
+	h.persistConnect(ctx, agent)
 
 	// Disconnect any existing connection for this cluster. If we replaced one,
 	// surface that as an agent.reconnecting hint so subscribers can show the
@@ -242,7 +253,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	wasReconnect := false
 	if existing, ok := h.agents[payload.ClusterID]; ok {
-		h.log.Info("replacing existing agent connection",
+		observability.WithEvent(h.log, "agent_reconnecting").Info("replacing existing agent connection",
 			slog.String("cluster_id", payload.ClusterID),
 			slog.String("old_session", existing.SessionID),
 		)
@@ -256,7 +267,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		h.publish("agent.reconnecting", payload.ClusterID, sessionID, payload.AgentVersion)
 	}
 
-	h.log.Info("agent connected",
+	observability.WithEvent(h.log, "agent_connected").Info("agent connected",
 		slog.String("cluster_id", payload.ClusterID),
 		slog.String("agent_id", payload.AgentID),
 		slog.String("agent_version", payload.AgentVersion),
@@ -287,10 +298,11 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	agent.Streams.CloseAll()
 	conn.Close(websocket.StatusNormalClosure, "disconnected")
 
-	h.log.Info("agent disconnected",
+	observability.WithEvent(h.log, "agent_disconnected").Info("agent disconnected",
 		slog.String("cluster_id", agent.ClusterID),
 		slog.String("session_id", agent.SessionID),
 	)
+	h.persistDisconnect(context.Background(), agent)
 	h.publish("cluster.disconnected", agent.ClusterID, agent.SessionID, agent.AgentVersion)
 }
 
@@ -309,6 +321,7 @@ func (h *Hub) readPump(ctx context.Context, agent *AgentConnection) {
 			agent.cancel()
 			return
 		}
+		recordAgentMessage(agent.ClusterID, "inbound")
 		h.handleMessage(agent, &msg)
 	}
 }
@@ -354,6 +367,7 @@ func (h *Hub) writePump(ctx context.Context, agent *AgentConnection) {
 				return
 			}
 			writeCancel()
+			recordAgentMessage(agent.ClusterID, "outbound")
 		}
 	}
 }
@@ -425,4 +439,132 @@ func (h *Hub) ConnectedClusters() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func (h *Hub) persistConnect(ctx context.Context, agent *AgentConnection) {
+	if h.validator == nil {
+		return
+	}
+	clusterID, err := uuid.Parse(agent.ClusterID)
+	if err != nil {
+		h.log.Warn("failed to persist agent connection: invalid cluster id",
+			slog.String("cluster_id", agent.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	if err := h.validator.DisconnectActiveConnectionsByCluster(ctx, clusterID); err != nil {
+		h.log.Warn("failed to disconnect existing agent sessions",
+			slog.String("cluster_id", agent.ClusterID),
+			slog.String("error", err.Error()),
+		)
+	}
+	row, err := h.validator.CreateAgentConnection(ctx, sqlc.CreateAgentConnectionParams{
+		ClusterID:    clusterID,
+		AgentID:      agent.AgentID,
+		SessionID:    agent.SessionID,
+		Status:       "connected",
+		ChannelName:  "",
+		PodName:      "",
+		NodeName:     "",
+		AgentVersion: agent.AgentVersion,
+	})
+	if err != nil {
+		h.log.Warn("failed to persist agent connection",
+			slog.String("cluster_id", agent.ClusterID),
+			slog.String("session_id", agent.SessionID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	agent.DBID = row.ID
+}
+
+func (h *Hub) persistDisconnect(ctx context.Context, agent *AgentConnection) {
+	if h.validator == nil || agent.DBID == uuid.Nil {
+		return
+	}
+	disconnectedAt := pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+	if err := h.validator.UpdateAgentConnectionStatus(ctx, sqlc.UpdateAgentConnectionStatusParams{
+		ID:             agent.DBID,
+		Status:         "disconnected",
+		DisconnectedAt: disconnectedAt,
+	}); err != nil {
+		h.log.Warn("failed to persist agent disconnect",
+			slog.String("cluster_id", agent.ClusterID),
+			slog.String("session_id", agent.SessionID),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+func (h *Hub) persistPing(agent *AgentConnection) {
+	if h.validator == nil || agent.DBID == uuid.Nil {
+		return
+	}
+	if err := h.validator.UpdateAgentConnectionPing(context.Background(), agent.DBID); err != nil {
+		h.log.Warn("failed to persist agent ping",
+			slog.String("cluster_id", agent.ClusterID),
+			slog.String("session_id", agent.SessionID),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UUID, payload protocol.ConnectPayload) (string, string, error) {
+	registrationToken, regErr := h.validator.GetRegistrationTokenByToken(ctx, payload.Token)
+	if regErr == nil {
+		if registrationToken.ClusterID != clusterID {
+			return "", "", fmt.Errorf("registration token does not match cluster")
+		}
+		if err := h.validator.MarkRegistrationTokenUsed(ctx, registrationToken.ID); err != nil {
+			return "", "", fmt.Errorf("failed to mark token used")
+		}
+		durable, err := h.ensureClusterAgentToken(ctx, clusterID)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to issue agent token")
+		}
+		return "registration", durable, nil
+	}
+
+	agentToken, agentErr := h.validator.GetClusterAgentTokenByToken(ctx, payload.Token)
+	if agentErr == nil {
+		if agentToken.ClusterID != clusterID {
+			return "", "", fmt.Errorf("agent token does not match cluster")
+		}
+		if err := h.validator.TouchClusterAgentToken(ctx, agentToken.ID); err != nil {
+			h.log.Warn("failed to touch cluster agent token",
+				slog.String("cluster_id", payload.ClusterID),
+				slog.String("error", err.Error()),
+			)
+		}
+		return "agent", agentToken.Token, nil
+	}
+
+	return "", "", fmt.Errorf("invalid registration token")
+}
+
+func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (string, error) {
+	if tok, err := h.validator.GetClusterAgentTokenByClusterID(ctx, clusterID); err == nil && tok.Token != "" {
+		if err := h.validator.TouchClusterAgentToken(ctx, tok.ID); err != nil {
+			h.log.Warn("failed to touch existing cluster agent token",
+				slog.String("cluster_id", clusterID.String()),
+				slog.String("error", err.Error()),
+			)
+		}
+		return tok.Token, nil
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := base64.URLEncoding.EncodeToString(b)
+	row, err := h.validator.UpsertClusterAgentToken(ctx, sqlc.UpsertClusterAgentTokenParams{
+		ClusterID: clusterID,
+		Token:     token,
+	})
+	if err != nil {
+		return "", err
+	}
+	return row.Token, nil
 }

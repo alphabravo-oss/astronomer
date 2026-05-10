@@ -8,9 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/jackc/pgx/v5/pgtype"
 	"helm.sh/helm/v3/pkg/registry"
 
@@ -19,6 +21,7 @@ import (
 
 // OCIPrefix identifies an OCI Helm registry URL.
 const OCIPrefix = "oci://"
+const maxOCIChartVersionsPerChart = 10
 
 // IsOCIRepo reports whether the given URL is an OCI Helm registry reference.
 //
@@ -96,6 +99,7 @@ func (h *CatalogHandler) fetchAndIngestOCIRepo(ctx context.Context, repo sqlc.He
 			h.log.Warn("OCI tags fetch failed", "chart", chartRef, "error", tagErr)
 			continue
 		}
+		tags = selectOCITags(tags, maxOCIChartVersionsPerChart)
 		if len(tags) == 0 {
 			continue
 		}
@@ -103,7 +107,7 @@ func (h *CatalogHandler) fetchAndIngestOCIRepo(ctx context.Context, repo sqlc.He
 		// Pull the latest tag's manifest first to populate chart metadata
 		// (description, icon, home, etc.) before we create the HelmChart row.
 		latest, latestErr := rc.Pull(chartRef+":"+tags[0],
-			registry.PullOptWithChart(false),
+			registry.PullOptWithChart(true),
 			registry.PullOptIgnoreMissingProv(true),
 		)
 		if latestErr != nil {
@@ -160,7 +164,7 @@ func (h *CatalogHandler) fetchAndIngestOCIRepo(ctx context.Context, repo sqlc.He
 			pulled := latest
 			if tag != tags[0] {
 				p, perr := rc.Pull(chartRef+":"+tag,
-					registry.PullOptWithChart(false),
+					registry.PullOptWithChart(true),
 					registry.PullOptIgnoreMissingProv(true),
 				)
 				if perr != nil {
@@ -200,6 +204,35 @@ func (h *CatalogHandler) fetchAndIngestOCIRepo(ctx context.Context, repo sqlc.He
 	}
 
 	return chartCount, versionCount, nil
+}
+
+func selectOCITags(tags []string, limit int) []string {
+	filtered := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" || strings.HasSuffix(tag, "-metadata") {
+			continue
+		}
+		filtered = append(filtered, tag)
+	}
+	slices.SortStableFunc(filtered, func(a, b string) int {
+		va, errA := semver.NewVersion(a)
+		vb, errB := semver.NewVersion(b)
+		switch {
+		case errA == nil && errB == nil:
+			return vb.Compare(va)
+		case errA == nil:
+			return -1
+		case errB == nil:
+			return 1
+		default:
+			return strings.Compare(b, a)
+		}
+	})
+	if limit > 0 && len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+	return filtered
 }
 
 // ociChartMeta is a flattened, schema-friendly view of the bits of

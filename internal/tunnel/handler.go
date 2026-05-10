@@ -11,16 +11,16 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // stateUpdateMinInterval is the minimum gap between two cluster.k8s_changed
-// fan-outs for the same (cluster, kind, namespace) tuple. The agent already
-// rate-limits at 1s per (kind, ns, name); this server-side limiter is a
-// belt-and-suspenders against multiple agents misbehaving and against a
-// flood of distinct names within a single namespace (e.g. ReplicaSet rolling
-// every Pod under one Deployment).
+// fan-outs for the same coalescing key. The agent already rate-limits at 1s
+// per object name and may supply a narrower payload.CoalesceKey; this
+// server-side limiter is a belt-and-suspenders against multiple agents
+// misbehaving and against flood bursts that would otherwise spam SSE clients.
 const stateUpdateMinInterval = 500 * time.Millisecond
 
 // handleMessage dispatches incoming messages from an agent by type.
@@ -32,6 +32,9 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 
 	case protocol.MsgHeartbeat:
 		h.handleHeartbeat(conn, msg)
+
+	case protocol.MsgMetrics:
+		h.handleMetrics(conn, msg)
 
 	case protocol.MsgK8sResponse:
 		h.routeToStream(conn, msg)
@@ -71,7 +74,7 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 // handlePong processes PONG responses from agents.
 func (h *Hub) handlePong(conn *AgentConnection, _ *protocol.Message) {
 	h.log.Debug("pong received", slog.String("cluster_id", conn.ClusterID))
-	// In a full implementation, this would update last_ping in the database.
+	h.persistPing(conn)
 }
 
 // handleHeartbeat processes HEARTBEAT messages from agents.
@@ -80,6 +83,7 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		slog.String("cluster_id", conn.ClusterID),
 		slog.Int("payload_len", len(msg.Payload)),
 	)
+	h.persistPing(conn)
 	if h.validator == nil {
 		return
 	}
@@ -147,6 +151,65 @@ func (h *Hub) publishHeartbeat(clusterID string, payload protocol.HeartbeatPaylo
 	})
 }
 
+// handleMetrics processes METRICS messages from agents. Unlike HEARTBEAT,
+// these frames carry the richer node/namespace snapshot emitted on the slower
+// metrics ticker. We persist the aggregate health snapshot and fan out an
+// immediate cluster.metrics event so subscribers do not have to wait for the
+// background publisher loop to notice the change.
+func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
+	if h.validator == nil {
+		return
+	}
+	clusterID, err := uuid.Parse(conn.ClusterID)
+	if err != nil {
+		h.log.Warn("invalid cluster id on metrics", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+	var payload protocol.MetricsPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		h.log.Warn("invalid metrics payload",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	conditions, _ := json.Marshal(map[string]any{
+		"connected":         true,
+		"source":            "agent-metrics",
+		"timestamp":         payload.Timestamp,
+		"metrics_available": payload.MetricsAvailable,
+	})
+	if _, err := h.validator.UpsertClusterHealthStatus(context.Background(), sqlc.UpsertClusterHealthStatusParams{
+		ClusterID:          clusterID,
+		CpuUsagePercent:    payload.ClusterCPUUsage,
+		MemoryUsagePercent: payload.ClusterMemoryUsage,
+		PodCount:           int32(payload.ClusterPodCount),
+		NodeCount:          int32(payload.ClusterNodeCount),
+		Conditions:         conditions,
+	}); err != nil {
+		h.log.Warn("failed to upsert cluster health from metrics", slog.String("error", err.Error()))
+	}
+
+	h.mu.RLock()
+	p := h.publisher
+	h.mu.RUnlock()
+	if p == nil {
+		return
+	}
+	p.Publish("cluster.metrics", map[string]any{
+		"cluster_id":        conn.ClusterID,
+		"cpu_percentage":    payload.ClusterCPUUsage,
+		"memory_percentage": payload.ClusterMemoryUsage,
+		"pod_count":         payload.ClusterPodCount,
+		"node_count":        payload.ClusterNodeCount,
+		"timestamp":         payload.Timestamp,
+		"metrics_available": payload.MetricsAvailable,
+		"nodes":             payload.Nodes,
+		"namespaces":        payload.Namespaces,
+	})
+}
+
 // routeToStream routes a message to the appropriate waiting stream.
 func (h *Hub) routeToStream(conn *AgentConnection, msg *protocol.Message) {
 	streamID := msg.StreamID
@@ -175,6 +238,7 @@ func (h *Hub) routeToStream(conn *AgentConnection, msg *protocol.Message) {
 	select {
 	case stream.DataCh <- msg.Payload:
 	default:
+		observability.RecordDroppedEvent("tunnel_stream_route", "channel_full")
 		h.log.Warn("stream data channel full, dropping message",
 			slog.String("stream_id", streamID),
 			slog.String("cluster_id", conn.ClusterID),
@@ -191,12 +255,14 @@ func (h *Hub) routeToStream(conn *AgentConnection, msg *protocol.Message) {
 func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	var payload protocol.StateUpdatePayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("invalid", "unknown")...).Inc()
 		h.log.Warn("invalid STATE_UPDATE payload",
 			slog.String("cluster_id", conn.ClusterID),
 			slog.String("error", err.Error()),
 		)
 		return
 	}
+	tunnelStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(payload.Kind)...).Inc()
 	h.log.Debug("received MsgStateUpdate",
 		slog.String("cluster_id", conn.ClusterID),
 		slog.String("kind", payload.Kind),
@@ -205,8 +271,9 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	)
 
 	limiter := h.stateLimiter()
-	key := fmt.Sprintf("%s|%s|%s", conn.ClusterID, payload.Kind, payload.Namespace)
+	key := fmt.Sprintf("%s|%s", conn.ClusterID, stateUpdateKey(payload))
 	if !limiter.allow(key) {
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", payload.Kind)...).Inc()
 		h.log.Debug("MsgStateUpdate rate-limited", slog.String("key", key))
 		return
 	}
@@ -215,6 +282,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	p := h.publisher
 	h.mu.RUnlock()
 	if p == nil {
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("no_publisher", payload.Kind)...).Inc()
 		h.log.Warn("MsgStateUpdate received but no publisher set")
 		return
 	}
@@ -232,6 +300,14 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 		"name":             payload.Name,
 		"resource_version": payload.ResourceVersion,
 	})
+	tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("published", payload.Kind)...).Inc()
+}
+
+func stateUpdateKey(payload protocol.StateUpdatePayload) string {
+	if payload.CoalesceKey != "" {
+		return payload.CoalesceKey
+	}
+	return fmt.Sprintf("%s|%s|%s", payload.Kind, payload.Namespace, payload.Name)
 }
 
 // stateLimiter lazily initializes (under the hub mutex) and returns the

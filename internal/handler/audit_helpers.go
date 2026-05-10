@@ -2,8 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -11,77 +9,19 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
-// auditWriter is the minimal write-side abstraction used by recordAudit. It is
-// satisfied by any sqlc-generated *Queries instance (and by every handler-level
-// *Querier interface that lifts CreateAuditLog into its method set), which is
-// why each handler can simply pass its existing `queries` field to recordAudit
-// without a separate dependency wire-up.
-//
-// We intentionally do NOT reuse handler.AuditQuerier (defined in audit.go) for
-// this — that interface is read-side, used by AuditHandler to render the list
-// / get / export endpoints. Audit emission and audit reading are independent
-// concerns and conflating them would force every handler that needs to emit
-// audit rows to also pretend to implement the read APIs.
-type auditWriter interface {
-	CreateAuditLog(ctx context.Context, arg sqlc.CreateAuditLogParams) (sqlc.AuditLog, error)
-}
-
-// auditSecretKeys lists the well-known body fields whose values must never
-// land in audit_logs.detail. Keys are matched case-insensitively. Keep the
-// list short and conservative — over-eager redaction makes audit rows useless
-// for debugging.
-var auditSecretKeys = map[string]struct{}{
-	"password":              {},
-	"current_password":      {},
-	"new_password":          {},
-	"registry_password":     {},
-	"token":                 {},
-	"auth_token":            {},
-	"auth_token_encrypted":  {},
-	"client_secret":         {},
-	"secret":                {},
-	"private_key":           {},
-	"ca_bundle":             {},
-	"kubeconfig":            {},
-	"bind_password":         {},
-	"bindpw":                {},
-	"access_key":            {},
-	"secret_key":            {},
-	"aws_secret_access_key": {},
-}
-
-// sanitizeDetail returns a copy of detail with well-known secret-bearing keys
-// replaced by the literal "[redacted]". Recurses one level into nested maps;
-// callers should pre-sanitize anything truly sensitive before calling
-// recordAudit.
-func sanitizeDetail(in map[string]any) map[string]any {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		lk := strings.ToLower(k)
-		if _, redact := auditSecretKeys[lk]; redact {
-			out[k] = "[redacted]"
-			continue
-		}
-		if nested, ok := v.(map[string]any); ok {
-			out[k] = sanitizeDetail(nested)
-			continue
-		}
-		out[k] = v
-	}
-	return out
+type auditWriterV1 interface {
+	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
 // remoteIPAddr extracts a parseable IP address from the request, preferring
 // X-Forwarded-For when present (load-balancer terminations are the common
 // case), then X-Real-IP, then RemoteAddr. Returns nil when no parseable value
-// is found — the audit_logs.ip_address column is nullable.
+// is found — the audit ip_address column is nullable.
 func remoteIPAddr(r *http.Request) *netip.Addr {
 	if r == nil {
 		return nil
@@ -125,11 +65,9 @@ func remoteIPAddr(r *http.Request) *netip.Addr {
 // keys; pass nil to omit detail.
 //
 // The querier argument is typed `any` so each handler can pass its existing
-// concrete *Querier interface field without that interface having to embed
-// CreateAuditLog. We type-assert to auditWriter at runtime: the production
-// *sqlc.Queries implementation satisfies it, and test fakes that don't
-// implement it simply skip the audit write (which keeps the test surface
-// small without forcing every fake to grow a stub).
+// concrete *Querier interface field without that interface having to embed a
+// specific audit write method. The production *sqlc.Queries implementation
+// satisfies the v1 interface; narrow test fakes may satisfy it or neither.
 //
 // resourceID may be empty (e.g. failed login where no DB row exists);
 // resourceName likewise. Action and resourceType are required by convention
@@ -138,11 +76,10 @@ func recordAudit(r *http.Request, q any, action, resourceType, resourceID, resou
 	if r == nil {
 		return
 	}
-	writer, ok := q.(auditWriter)
-	if !ok || writer == nil {
+	if q == nil {
 		return
 	}
-	emitAuditRow(r.Context(), r, writer, currentUserUUID(r), action, resourceType, resourceID, resourceName, detail)
+	emitAuditRow(r.Context(), r, q, currentUserUUID(r), action, resourceType, resourceID, resourceName, detail)
 }
 
 // recordAuditAs is the variant used when the user_id has to be resolved
@@ -154,48 +91,62 @@ func recordAuditAs(r *http.Request, q any, userID pgtype.UUID, action, resourceT
 	if r == nil {
 		return
 	}
-	writer, ok := q.(auditWriter)
-	if !ok || writer == nil {
+	if q == nil {
 		return
 	}
-	emitAuditRow(r.Context(), r, writer, userID, action, resourceType, resourceID, resourceName, detail)
+	emitAuditRow(r.Context(), r, q, userID, action, resourceType, resourceID, resourceName, detail)
 }
 
-func emitAuditRow(ctx context.Context, r *http.Request, q auditWriter, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, detail map[string]any) {
-	var raw json.RawMessage
-	if detail != nil {
-		safe := sanitizeDetail(detail)
-		buf, err := json.Marshal(safe)
-		if err != nil {
-			buf = []byte(`{}`)
-		}
-		raw = buf
-	} else {
-		raw = json.RawMessage(`{}`)
-	}
+func emitAuditRow(ctx context.Context, r *http.Request, q any, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, detail map[string]any) {
 	ua := ""
 	if r != nil {
 		ua = r.UserAgent()
 	}
 	requestID := middleware.GetRequestID(ctx)
+	correlationID := middleware.GetCorrelationID(ctx)
 	ip := remoteIPAddr(r)
-	if _, err := q.CreateAuditLog(ctx, sqlc.CreateAuditLogParams{
-		UserID:       userID,
-		Action:       action,
-		ResourceType: resourceType,
-		ResourceID:   resourceID,
-		ResourceName: resourceName,
-		Detail:       raw,
-		IpAddress:    ip,
-		UserAgent:    ua,
-		RequestID:    requestID,
-	}); err != nil {
-		// Best-effort: never propagate, but make it observable to operators.
-		slog.Default().Warn("audit log insert failed",
-			"action", action,
-			"resource_type", resourceType,
-			"resource_id", resourceID,
-			"error", err,
-		)
+	if v1, ok := q.(auditWriterV1); ok && v1 != nil {
+		audit.Record(ctx, v1, audit.Event{
+			Source:          "service",
+			CorrelationID:   correlationID,
+			UserID:          userID,
+			ActorAuthMethod: authMethodFromRequest(r),
+			Action:          action,
+			ResourceType:    resourceType,
+			ResourceID:      resourceID,
+			ResourceName:    resourceName,
+			HTTPMethod:      requestMethod(r),
+			Path:            requestPath(r),
+			StatusCode:      0,
+			DurationMs:      0,
+			RequestID:       requestID,
+			IPAddress:       ip,
+			UserAgent:       ua,
+			Detail:          detail,
+		})
 	}
+}
+
+func authMethodFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if user, ok := middleware.GetAuthenticatedUser(r.Context()); ok && user != nil {
+		return user.AuthMethod
+	}
+	return ""
+}
+
+func requestMethod(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return r.Method
+}
+
+func requestPath(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	return r.URL.Path
 }

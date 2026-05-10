@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -124,6 +126,9 @@ type StateSubscriber struct {
 	sender  stateSender
 	log     *slog.Logger
 	limiter *stateRateLimiter
+	ready   atomic.Bool
+	readyCh chan struct{}
+	once    sync.Once
 
 	// startedAt is captured before the informer factory starts so the Events
 	// filter can drop pre-existing items (resyncs include them as Adds).
@@ -142,7 +147,25 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		sender:    sender,
 		log:       log,
 		limiter:   newStateRateLimiter(stateSubscriberMinInterval, stateSubscriberEvictAfter),
+		readyCh:   make(chan struct{}),
 		startedAt: time.Now(),
+	}
+}
+
+// WaitReady blocks until the informer caches have synced and the subscriber is
+// ready to emit live updates, or until ctx is cancelled.
+func (s *StateSubscriber) WaitReady(ctx context.Context) bool {
+	if s == nil {
+		return false
+	}
+	if s.ready.Load() {
+		return true
+	}
+	select {
+	case <-s.readyCh:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
@@ -178,6 +201,8 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 			s.log.Warn("state subscriber: cache failed to sync (RBAC?)", "type", fmt.Sprintf("%T", typ))
 		}
 	}
+	s.ready.Store(true)
+	s.once.Do(func() { close(s.readyCh) })
 	s.log.Info("state subscriber started", "resync_period", stateSubscriberResyncPeriod.String())
 
 	// Eviction goroutine.
@@ -228,6 +253,9 @@ func (s *StateSubscriber) registerEvents(factory informers.SharedInformerFactory
 			if !ok {
 				return
 			}
+			if !s.ready.Load() {
+				return
+			}
 			// Drop Events older than the cutoff so we don't flood on startup.
 			if !s.eventIsRecent(obj) {
 				return
@@ -239,6 +267,9 @@ func (s *StateSubscriber) registerEvents(factory informers.SharedInformerFactory
 			if !ok {
 				return
 			}
+			if !s.ready.Load() {
+				return
+			}
 			if !s.eventIsRecent(newObj) {
 				return
 			}
@@ -247,6 +278,9 @@ func (s *StateSubscriber) registerEvents(factory informers.SharedInformerFactory
 		DeleteFunc: func(obj any) {
 			meta, ok := metaFromObj(obj)
 			if !ok {
+				return
+			}
+			if !s.ready.Load() {
 				return
 			}
 			s.dispatch(protocol.StateUpdateOpDeleted, "Event", "events.k8s.io", "v1", meta)
@@ -261,16 +295,26 @@ func (s *StateSubscriber) attach(inf cache.SharedIndexInformer, kind, apiGroup, 
 	_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if meta, ok := metaFromObj(obj); ok {
+				if !s.ready.Load() {
+					s.log.Debug("state subscriber: suppressing bootstrap add", "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
+					return
+				}
 				s.dispatch(protocol.StateUpdateOpAdded, kind, apiGroup, apiVersion, meta)
 			}
 		},
 		UpdateFunc: func(_, newObj any) {
 			if meta, ok := metaFromObj(newObj); ok {
+				if !s.ready.Load() {
+					return
+				}
 				s.dispatch(protocol.StateUpdateOpModified, kind, apiGroup, apiVersion, meta)
 			}
 		},
 		DeleteFunc: func(obj any) {
 			if meta, ok := metaFromObj(obj); ok {
+				if !s.ready.Load() {
+					return
+				}
 				s.dispatch(protocol.StateUpdateOpDeleted, kind, apiGroup, apiVersion, meta)
 			}
 		},
@@ -286,7 +330,9 @@ func (s *StateSubscriber) attach(inf cache.SharedIndexInformer, kind, apiGroup, 
 func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, apiVersion string, meta metav1.Object) {
 	key := fmt.Sprintf("%s|%s|%s", kind, meta.GetNamespace(), meta.GetName())
 	s.log.Debug("state subscriber received event", "op", op, "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
+	agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(kind)...).Inc()
 	if !s.limiter.Allow(key) {
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", kind)...).Inc()
 		s.log.Debug("state subscriber rate-limited", "key", key)
 		return
 	}
@@ -302,6 +348,7 @@ func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, ap
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("marshal_failed", kind)...).Inc()
 		s.log.Warn("state subscriber: marshal failed", "kind", kind, "error", err)
 		return
 	}
@@ -311,11 +358,13 @@ func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, ap
 		Payload:   body,
 	}
 	if err := s.sender.Send(msg); err != nil {
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("send_failed", kind)...).Inc()
 		// The send channel is bounded; on overflow we drop and let the next
 		// emit win the race.
 		s.log.Warn("state subscriber: send failed", "kind", kind, "error", err)
 		return
 	}
+	agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("queued", kind)...).Inc()
 	s.log.Debug("state subscriber sent", "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
 }
 

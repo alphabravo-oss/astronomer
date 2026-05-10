@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astronomer.fullname" . }}-worker-metrics
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "worker") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 4 }}

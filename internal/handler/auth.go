@@ -32,11 +32,11 @@ type UserQuerier interface {
 
 // AuthAuditWriter is the optional audit-writer dependency for AuthHandler.
 // Wired separately because UserQuerier is used by tests with narrow fakes
-// that do not (and should not) implement CreateAuditLog. Auth-handler is
+// that do not (and should not) implement the audit writer. Auth-handler is
 // also unique in that it must record a user_id on success but accept an
 // anonymous (NULL) user_id on failed login.
 type AuthAuditWriter interface {
-	CreateAuditLog(ctx context.Context, arg sqlc.CreateAuditLogParams) (sqlc.AuditLog, error)
+	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
 // PasswordRehasher updates a user's password column. It is satisfied by the
@@ -315,13 +315,26 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims, err := h.jwt.ValidateToken(req.Refresh)
-	if err != nil || claims.TokenType != auth.RefreshToken {
+	if err != nil {
+		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
+			"reason": "invalid_token",
+		})
+		RespondError(w, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
+		return
+	}
+	if claims.TokenType != auth.RefreshToken {
+		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.refresh_failed", "user", claims.UserID.String(), "", map[string]any{
+			"reason": "wrong_token_type",
+		})
 		RespondError(w, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
 		return
 	}
 
 	user, err := h.queries.GetUserByID(r.Context(), claims.UserID)
 	if err != nil || !user.IsActive {
+		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.refresh_failed", "user", claims.UserID.String(), "", map[string]any{
+			"reason": "user_not_active",
+		})
 		RespondError(w, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
 		return
 	}
@@ -331,6 +344,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "token_error", "Failed to generate token")
 		return
 	}
+
+	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.refresh", "user", user.ID.String(), user.Username, nil)
 
 	RespondJSON(w, http.StatusOK, map[string]string{
 		"token":   accessToken,
@@ -635,6 +650,12 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	recordAudit(r, h.audit, "auth.token.create", "api_token", token.ID.String(), token.Name, map[string]any{
+		"prefix":          token.Prefix,
+		"expires_in_days": req.ExpiresInDays,
+		"scopes":          req.Scopes,
+	})
+
 	var expiresAtStr *string
 	if token.ExpiresAt.Valid {
 		s := token.ExpiresAt.Time.UTC().Format("2006-01-02T15:04:05Z")
@@ -754,6 +775,10 @@ func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "revoke_error", "Failed to revoke token")
 		return
 	}
+
+	recordAudit(r, h.audit, "auth.token.revoke", "api_token", token.ID.String(), token.Name, map[string]any{
+		"prefix": token.Prefix,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -58,6 +58,7 @@ type DexQuerier interface {
 
 	GetDexSettings(ctx context.Context, id uuid.UUID) (sqlc.DexSetting, error)
 	UpsertDexSettings(ctx context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error)
+	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 
 	// SSO bridge — register-as-sso writes here.
 	GetSSOConfigurationByProvider(ctx context.Context, provider string) (sqlc.SsoConfiguration, error)
@@ -369,14 +370,14 @@ type connectorRequest struct {
 
 // settingsRequest is the JSON shape PUT /settings accepts.
 type settingsRequest struct {
-	IssuerURL      string         `json:"issuer_url"`
-	ClusterID      string         `json:"cluster_id"`
-	Namespace      string         `json:"namespace"`
-	ReleaseName    string         `json:"release_name"`
-	ConfigmapName  string         `json:"configmap_name"`
-	PublicClients  []map[string]any `json:"public_clients"`
-	Expiry         map[string]any `json:"expiry"`
-	Extra          map[string]any `json:"extra"`
+	IssuerURL     string           `json:"issuer_url"`
+	ClusterID     string           `json:"cluster_id"`
+	Namespace     string           `json:"namespace"`
+	ReleaseName   string           `json:"release_name"`
+	ConfigmapName string           `json:"configmap_name"`
+	PublicClients []map[string]any `json:"public_clients"`
+	Expiry        map[string]any   `json:"expiry"`
+	Extra         map[string]any   `json:"extra"`
 }
 
 // ListConnectorTypes exposes the registry so the UI can render its wizard.
@@ -667,9 +668,10 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, settingsResponse(row))
 }
 
-// Apply renders the full Dex config from settings + connectors and writes it
-// to the management cluster's ConfigMap so Dex hot-reloads. Returns 503 when
-// the K8s requester is not configured (e.g. before the tunnel is up).
+// Apply renders the full Dex config from settings + connectors, writes it to
+// the management cluster's ConfigMap, then forces a Deployment rollout so the
+// running Dex pod picks up the new file contents. Returns 503 when the K8s
+// requester is not configured (e.g. before the tunnel is up).
 //
 // POST /api/v1/auth/dex/apply/
 func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
@@ -705,10 +707,15 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadGateway, "apply_error", err.Error())
 		return
 	}
+	if err := h.restartDeployment(r.Context(), clusterID, settings.Namespace, settings.ReleaseName); err != nil {
+		RespondError(w, http.StatusBadGateway, "restart_error", err.Error())
+		return
+	}
 	recordAudit(r, h.queries, "dex.config.apply", "dex_settings", settings.ID.String(), settings.ReleaseName, map[string]any{
 		"cluster_id":      clusterID,
 		"namespace":       settings.Namespace,
 		"configmap_name":  settings.ConfigmapName,
+		"deployment_name": settings.ReleaseName,
 		"connector_count": len(connectors),
 	})
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -716,6 +723,7 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		"cluster_id":      clusterID,
 		"namespace":       settings.Namespace,
 		"configmap_name":  settings.ConfigmapName,
+		"deployment_name": settings.ReleaseName,
 		"connector_count": len(connectors),
 		"applied_at":      time.Now().UTC().Format(time.RFC3339),
 	})
@@ -771,6 +779,12 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		}
 		encryptedSecret = ct
 	}
+	if updatedSettings, err := h.syncAstronomerPublicClient(r.Context(), settings, req.ClientID, req.ClientSecret); err == nil {
+		settings = updatedSettings
+	} else {
+		RespondError(w, http.StatusInternalServerError, "settings_error", "Failed to update Dex public client settings")
+		return
+	}
 	cfgBytes, _ := json.Marshal(map[string]any{"issuer_url": settings.IssuerUrl})
 	// If the dex SSO row already exists, update it; otherwise create.
 	existing, getErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
@@ -801,13 +815,13 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 			"updated":    true,
 		})
 		RespondJSON(w, http.StatusOK, map[string]any{
-			"provider":    updated.Provider,
-			"id":          updated.ID.String(),
-			"is_enabled":  updated.IsEnabled,
-			"client_id":   updated.ClientID,
-			"issuer_url":  settings.IssuerUrl,
+			"provider":     updated.Provider,
+			"id":           updated.ID.String(),
+			"is_enabled":   updated.IsEnabled,
+			"client_id":    updated.ClientID,
+			"issuer_url":   settings.IssuerUrl,
 			"display_name": updated.DisplayName,
-			"updated":     true,
+			"updated":      true,
 		})
 		return
 	}
@@ -843,6 +857,117 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *DexHandler) syncAstronomerPublicClient(ctx context.Context, settings sqlc.DexSetting, clientID, clientSecret string) (sqlc.DexSetting, error) {
+	if h == nil || h.queries == nil {
+		return settings, nil
+	}
+	cfg, err := h.queries.GetPlatformConfig(ctx)
+	if err != nil || strings.TrimSpace(cfg.ServerUrl) == "" {
+		return settings, nil
+	}
+	base := strings.TrimRight(strings.TrimSpace(cfg.ServerUrl), "/")
+	callback := base + "/api/v1/auth/callback/dex"
+	callbackSlash := callback + "/"
+
+	clients := make([]map[string]any, 0)
+	if len(settings.PublicClients) > 0 {
+		_ = json.Unmarshal(settings.PublicClients, &clients)
+	}
+	found := false
+	for i := range clients {
+		id, _ := clients[i]["id"].(string)
+		if id != clientID {
+			continue
+		}
+		found = true
+		clients[i]["name"] = firstNonEmpty(asString(clients[i]["name"]), "Astronomer")
+		if clientSecret != "" {
+			clients[i]["secret"] = clientSecret
+		}
+		clients[i]["redirectURIs"] = mergeStringList(clients[i]["redirectURIs"], []string{callback, callbackSlash})
+	}
+	if !found {
+		client := map[string]any{
+			"id":           clientID,
+			"name":         "Astronomer",
+			"redirectURIs": []string{callback, callbackSlash},
+		}
+		if clientSecret != "" {
+			client["secret"] = clientSecret
+		}
+		clients = append(clients, client)
+	}
+
+	publicBytes, _ := json.Marshal(clients)
+	if len(publicBytes) == 0 {
+		publicBytes = []byte("[]")
+	}
+	updated, err := h.queries.UpsertDexSettings(ctx, sqlc.UpsertDexSettingsParams{
+		ID:            settings.ID,
+		IssuerUrl:     settings.IssuerUrl,
+		ClusterID:     settings.ClusterID,
+		Namespace:     settings.Namespace,
+		ReleaseName:   settings.ReleaseName,
+		ConfigmapName: settings.ConfigmapName,
+		PublicClients: publicBytes,
+		Expiry:        settings.Expiry,
+		Extra:         settings.Extra,
+	})
+	if err != nil {
+		return settings, err
+	}
+	return updated, nil
+}
+
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func mergeStringList(existing any, add []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	switch vals := existing.(type) {
+	case []string:
+		for _, v := range vals {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			if _, ok := seen[v]; ok {
+				continue
+			}
+			seen[v] = struct{}{}
+			out = append(out, v)
+		}
+	case []any:
+		for _, raw := range vals {
+			v, _ := raw.(string)
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			if _, ok := seen[v]; ok {
+				continue
+			}
+			seen[v] = struct{}{}
+			out = append(out, v)
+		}
+	}
+	for _, v := range add {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
 // connectorResponse builds the JSON shape we return on every connector read.
 // Sensitive fields are redacted.
 func (h *DexHandler) connectorResponse(row sqlc.DexConnector) map[string]any {
@@ -862,15 +987,15 @@ func (h *DexHandler) connectorResponse(row sqlc.DexConnector) map[string]any {
 
 func defaultSettingsResponse() map[string]any {
 	return map[string]any{
-		"issuer_url":      "",
-		"cluster_id":      "",
-		"namespace":       "dex",
-		"release_name":    "dex",
-		"configmap_name":  "astronomer-dex-config",
-		"public_clients":  []any{},
-		"expiry":          map[string]any{},
-		"extra":           map[string]any{},
-		"configured":      false,
+		"issuer_url":     "",
+		"cluster_id":     "",
+		"namespace":      "dex",
+		"release_name":   "dex",
+		"configmap_name": "astronomer-dex-config",
+		"public_clients": []any{},
+		"expiry":         map[string]any{},
+		"extra":          map[string]any{},
+		"configured":     false,
 	}
 }
 
@@ -880,16 +1005,16 @@ func settingsResponse(row sqlc.DexSetting) map[string]any {
 		clusterID = uuid.UUID(row.ClusterID.Bytes).String()
 	}
 	return map[string]any{
-		"issuer_url":      row.IssuerUrl,
-		"cluster_id":      clusterID,
-		"namespace":       row.Namespace,
-		"release_name":    row.ReleaseName,
-		"configmap_name":  row.ConfigmapName,
-		"public_clients":  json.RawMessage(row.PublicClients),
-		"expiry":          json.RawMessage(row.Expiry),
-		"extra":           json.RawMessage(row.Extra),
-		"configured":      true,
-		"updated_at":      row.UpdatedAt.UTC().Format(time.RFC3339),
+		"issuer_url":     row.IssuerUrl,
+		"cluster_id":     clusterID,
+		"namespace":      row.Namespace,
+		"release_name":   row.ReleaseName,
+		"configmap_name": row.ConfigmapName,
+		"public_clients": json.RawMessage(row.PublicClients),
+		"expiry":         json.RawMessage(row.Expiry),
+		"extra":          json.RawMessage(row.Extra),
+		"configured":     true,
+		"updated_at":     row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -947,6 +1072,11 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 	for _, c := range connectors {
 		raw := decodeJSONMap(c.Config)
 		h.decryptSecretFields(c.Type, raw)
+		if spec, ok := dexConnectorRegistry[strings.ToLower(c.Type)]; ok && containsField(spec.Optional, "redirectURI") {
+			if isEmptyValue(raw["redirectURI"]) {
+				raw["redirectURI"] = strings.TrimRight(settings.IssuerUrl, "/") + "/callback"
+			}
+		}
 		out = append(out, map[string]any{
 			"type":   c.Type,
 			"id":     c.Name,
@@ -973,9 +1103,19 @@ func firstNonEmpty(s ...string) string {
 	return ""
 }
 
+func containsField(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
 // applyConfigMap PATCHes (or POSTs, on 404) the ConfigMap holding Dex's config.
 // The `config.yaml` key matches the volumeMount path the chart's defaults set
-// up; Dex's in-process file watcher hot-reloads when the file changes.
+// up. Apply() follows this with a Deployment rollout because hot-reload is not
+// reliable enough for the current stack.
 func (h *DexHandler) applyConfigMap(ctx context.Context, clusterID, namespace, name string, configYAML []byte) error {
 	body, err := json.Marshal(map[string]any{
 		"apiVersion": "v1",
@@ -1011,6 +1151,29 @@ func (h *DexHandler) applyConfigMap(ctx context.Context, clusterID, namespace, n
 		if err != nil {
 			return err
 		}
+	}
+	return ensureSuccess(resp)
+}
+
+func (h *DexHandler) restartDeployment(ctx context.Context, clusterID, namespace, name string) error {
+	body, err := json.Marshal(map[string]any{
+		"spec": map[string]any{
+			"template": map[string]any{
+				"metadata": map[string]any{
+					"annotations": map[string]any{
+						"kubectl.kubernetes.io/restartedAt": time.Now().UTC().Format(time.RFC3339),
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("/apis/apps/v1/namespaces/%s/deployments/%s", namespace, name)
+	resp, err := h.k8s.Do(ctx, clusterID, http.MethodPatch, path, body, requestHeaders("application/merge-patch+json"))
+	if err != nil {
+		return err
 	}
 	return ensureSuccess(resp)
 }

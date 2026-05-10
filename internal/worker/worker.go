@@ -9,23 +9,25 @@ import (
 
 // Task type constants
 const (
-	TypeHealthCheck                       = "cluster:health_check"
-	TypeAlertEvaluation                   = "alert:evaluate"
-	TypeCatalogSync                       = "catalog:sync"
-	TypeMetricsAggregation                = "metrics:aggregate"
-	TypeMonitoringReconcile               = "monitoring:reconcile"
-	TypeBackupExecution                   = "backup:execute"
-	TypeSecurityScan                      = "security:scan"
+	TypeHealthCheck         = "cluster:health_check"
+	TypeAlertEvaluation     = "alert:evaluate"
+	TypeCatalogSync         = "catalog:sync"
+	TypeMetricsAggregation  = "metrics:aggregate"
+	TypeMonitoringReconcile = "monitoring:reconcile"
+	TypeBackupExecution     = "backup:execute"
+	TypeSecurityScan        = "security:scan"
 	// Phase B5: cis-operator report ingestion. Re-enqueues itself every 30s
 	// for up to ~30 min until the matching ClusterScanReport is available.
-	TypeSecurityIngest                    = tasks.SecurityIngestType
-	TypeNotificationSend                  = "notification:send"
-	TypeAgentManifest                     = "agent:generate_manifest"
-	TypeCleanupExpiredRegistrationTokens  = tasks.CleanupExpiredRegistrationTokensType
-	TypeCleanupOldAlertEvents             = tasks.CleanupOldAlertEventsType
-	TypeRunScheduledBackups               = tasks.RunScheduledBackupsType
-	TypeEnforceBackupRetention            = tasks.EnforceBackupRetentionType
-	TypeRunRestore                        = tasks.RunRestoreType
+	TypeSecurityIngest                   = tasks.SecurityIngestType
+	TypeNotificationSend                 = "notification:send"
+	TypeAgentManifest                    = "agent:generate_manifest"
+	TypeCleanupExpiredRegistrationTokens = tasks.CleanupExpiredRegistrationTokensType
+	TypeCleanupOldAlertEvents            = tasks.CleanupOldAlertEventsType
+	TypeEnsureAuditLogPartitions         = tasks.EnsureAuditLogPartitionsType
+	TypeEnforceAuditLogRetention         = tasks.EnforceAuditLogRetentionType
+	TypeRunScheduledBackups              = tasks.RunScheduledBackupsType
+	TypeEnforceBackupRetention           = tasks.EnforceBackupRetentionType
+	TypeRunRestore                       = tasks.RunRestoreType
 	// Phase B3: project enforcement controller. ProjectReconcile runs for a
 	// single (project, cluster, namespace); ProjectReconcileAll is the
 	// periodic sweep that walks every project_namespaces row using a
@@ -67,23 +69,25 @@ func NewWorker(redisURL string, log *slog.Logger) *Worker {
 
 // RegisterHandlers sets up all task handlers on the mux.
 func (w *Worker) RegisterHandlers() {
-	w.mux.HandleFunc(TypeHealthCheck, tasks.HandleHealthCheck)
-	w.mux.HandleFunc(TypeAlertEvaluation, tasks.HandleAlertEvaluation)
-	w.mux.HandleFunc(TypeCatalogSync, tasks.HandleCatalogSync)
-	w.mux.HandleFunc(TypeMetricsAggregation, tasks.HandleMetricsAggregation)
-	w.mux.HandleFunc(TypeMonitoringReconcile, tasks.HandleMonitoringReconcile)
-	w.mux.HandleFunc(TypeBackupExecution, tasks.HandleBackupExecution)
-	w.mux.HandleFunc(TypeSecurityScan, tasks.HandleSecurityScan)
-	w.mux.HandleFunc(TypeSecurityIngest, tasks.HandleSecurityIngest)
-	w.mux.HandleFunc(TypeNotificationSend, tasks.HandleNotificationSend)
-	w.mux.HandleFunc(TypeAgentManifest, tasks.HandleAgentManifest)
-	w.mux.HandleFunc(TypeCleanupExpiredRegistrationTokens, tasks.HandleCleanupRegistrationTokens)
-	w.mux.HandleFunc(TypeCleanupOldAlertEvents, tasks.HandleCleanupAlertEvents)
-	w.mux.HandleFunc(TypeRunScheduledBackups, tasks.HandleRunScheduledBackups)
-	w.mux.HandleFunc(TypeEnforceBackupRetention, tasks.HandleEnforceBackupRetention)
-	w.mux.HandleFunc(TypeRunRestore, tasks.HandleRunRestore)
-	w.mux.HandleFunc(TypeProjectReconcile, tasks.HandleProjectReconcile)
-	w.mux.HandleFunc(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll)
+	w.mux.HandleFunc(TypeHealthCheck, instrumentTask(TypeHealthCheck, tasks.HandleHealthCheck))
+	w.mux.HandleFunc(TypeAlertEvaluation, instrumentTask(TypeAlertEvaluation, tasks.HandleAlertEvaluation))
+	w.mux.HandleFunc(TypeCatalogSync, instrumentTask(TypeCatalogSync, tasks.HandleCatalogSync))
+	w.mux.HandleFunc(TypeMetricsAggregation, instrumentTask(TypeMetricsAggregation, tasks.HandleMetricsAggregation))
+	w.mux.HandleFunc(TypeMonitoringReconcile, instrumentTask(TypeMonitoringReconcile, tasks.HandleMonitoringReconcile))
+	w.mux.HandleFunc(TypeBackupExecution, instrumentTask(TypeBackupExecution, tasks.HandleBackupExecution))
+	w.mux.HandleFunc(TypeSecurityScan, instrumentTask(TypeSecurityScan, tasks.HandleSecurityScan))
+	w.mux.HandleFunc(TypeSecurityIngest, instrumentTask(TypeSecurityIngest, tasks.HandleSecurityIngest))
+	w.mux.HandleFunc(TypeNotificationSend, instrumentTask(TypeNotificationSend, tasks.HandleNotificationSend))
+	w.mux.HandleFunc(TypeAgentManifest, instrumentTask(TypeAgentManifest, tasks.HandleAgentManifest))
+	w.mux.HandleFunc(TypeCleanupExpiredRegistrationTokens, instrumentTask(TypeCleanupExpiredRegistrationTokens, tasks.HandleCleanupRegistrationTokens))
+	w.mux.HandleFunc(TypeCleanupOldAlertEvents, instrumentTask(TypeCleanupOldAlertEvents, tasks.HandleCleanupAlertEvents))
+	w.mux.HandleFunc(TypeEnsureAuditLogPartitions, instrumentTask(TypeEnsureAuditLogPartitions, tasks.HandleEnsureAuditLogPartitions))
+	w.mux.HandleFunc(TypeEnforceAuditLogRetention, instrumentTask(TypeEnforceAuditLogRetention, tasks.HandleEnforceAuditLogRetention))
+	w.mux.HandleFunc(TypeRunScheduledBackups, instrumentTask(TypeRunScheduledBackups, tasks.HandleRunScheduledBackups))
+	w.mux.HandleFunc(TypeEnforceBackupRetention, instrumentTask(TypeEnforceBackupRetention, tasks.HandleEnforceBackupRetention))
+	w.mux.HandleFunc(TypeRunRestore, instrumentTask(TypeRunRestore, tasks.HandleRunRestore))
+	w.mux.HandleFunc(TypeProjectReconcile, instrumentTask(TypeProjectReconcile, tasks.HandleProjectReconcile))
+	w.mux.HandleFunc(TypeProjectReconcileAll, instrumentTask(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll))
 
 	w.log.Info("registered all task handlers")
 }

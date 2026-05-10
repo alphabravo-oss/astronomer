@@ -2,6 +2,10 @@ package handler
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,6 +39,7 @@ type SSOHandler struct {
 	queries  SSOQuerier
 	jwt      *auth.JWTManager
 	frontend string
+	now      func() time.Time
 
 	// stateStore is a small in-memory CSRF state store. The token expires
 	// after 10 minutes; callbacks must arrive in that window.
@@ -45,6 +50,12 @@ type SSOHandler struct {
 type ssoState struct {
 	provider  string
 	expiresAt time.Time
+}
+
+type signedSSOStateCookie struct {
+	Provider  string `json:"provider"`
+	State     string `json:"state"`
+	ExpiresAt int64  `json:"expires_at"`
 }
 
 // NewSSOHandler constructs an SSO handler. frontendURL is used as the
@@ -58,6 +69,7 @@ func NewSSOHandler(manager *auth.SSOManager, queries SSOQuerier, jwt *auth.JWTMa
 		queries:  queries,
 		jwt:      jwt,
 		frontend: frontendURL,
+		now:      time.Now,
 		states:   make(map[string]ssoState),
 	}
 }
@@ -85,13 +97,18 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.rememberState(state, provider)
+	cookieValue, err := h.signStateCookie(provider, state)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "sso_error", "Failed to persist SSO state")
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "astro_sso_state",
-		Value:    state,
+		Value:    cookieValue,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Expires:  time.Now().Add(10 * time.Minute),
+		Expires:  h.now().Add(10 * time.Minute),
 	})
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
@@ -127,13 +144,16 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusForbidden, "sso_invalid_state", "OAuth state did not match")
 		return
 	}
-	if cookie, err := r.Cookie("astro_sso_state"); err == nil {
-		// Best-effort cookie validation; mismatch is reported as a security failure.
-		if cookie.Value != state {
-			RespondError(w, http.StatusForbidden, "sso_invalid_state", "OAuth state cookie mismatch")
-			return
-		}
+	cookie, err := r.Cookie("astro_sso_state")
+	if err != nil {
+		RespondError(w, http.StatusForbidden, "sso_invalid_state", "OAuth state cookie missing")
+		return
 	}
+	if !h.verifyStateCookie(cookie.Value, provider, state) {
+		RespondError(w, http.StatusForbidden, "sso_invalid_state", "OAuth state cookie mismatch")
+		return
+	}
+	defer http.SetCookie(w, &http.Cookie{Name: "astro_sso_state", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 
 	info, err := h.manager.HandleCallback(r.Context(), provider, code, state)
 	if err != nil {
@@ -229,7 +249,7 @@ func (h *SSOHandler) findOrCreateUser(ctx context.Context, info *auth.SSOUserInf
 func (h *SSOHandler) rememberState(state, provider string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.states[state] = ssoState{provider: provider, expiresAt: time.Now().Add(10 * time.Minute)}
+	h.states[state] = ssoState{provider: provider, expiresAt: h.now().Add(10 * time.Minute)}
 	h.gcStatesLocked()
 }
 
@@ -241,19 +261,72 @@ func (h *SSOHandler) consumeState(state, provider string) bool {
 		return false
 	}
 	delete(h.states, state)
-	if time.Now().After(st.expiresAt) {
+	if h.now().After(st.expiresAt) {
 		return false
 	}
 	return st.provider == provider
 }
 
 func (h *SSOHandler) gcStatesLocked() {
-	now := time.Now()
+	now := h.now()
 	for k, v := range h.states {
 		if now.After(v.expiresAt) {
 			delete(h.states, k)
 		}
 	}
+}
+
+func (h *SSOHandler) signStateCookie(provider, state string) (string, error) {
+	payload := signedSSOStateCookie{
+		Provider:  provider,
+		State:     state,
+		ExpiresAt: h.now().Add(10 * time.Minute).Unix(),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(raw)
+	mac := h.cookieMAC(encoded)
+	if mac == "" {
+		return "", errors.New("jwt manager not configured")
+	}
+	return encoded + "." + mac, nil
+}
+
+func (h *SSOHandler) verifyStateCookie(value, provider, state string) bool {
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 {
+		return false
+	}
+	if want := h.cookieMAC(parts[0]); want == "" || !hmac.Equal([]byte(parts[1]), []byte(want)) {
+		return false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	var payload signedSSOStateCookie
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return false
+	}
+	if payload.Provider != provider || payload.State != state {
+		return false
+	}
+	return payload.ExpiresAt >= h.now().Unix()
+}
+
+func (h *SSOHandler) cookieMAC(value string) string {
+	if h == nil || h.jwt == nil {
+		return ""
+	}
+	key := h.jwt.SecretKey()
+	if len(key) == 0 {
+		return ""
+	}
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(value))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 // SSOConfigQuerier is unused by this handler today but reserved for the

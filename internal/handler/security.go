@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -579,18 +581,30 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 	if profile == "" {
 		profile = strings.TrimSpace(req.ScanType)
 	}
+	explicitProfile := profile != ""
 
+	clusterDistribution := ""
 	// Resolve the cluster so we can default the profile when the caller didn't
 	// supply one. Distribution → profile map matches the cis-operator preset
 	// names so we don't have to install custom ClusterScanProfiles.
 	if profile == "" && h.clusters != nil {
 		cluster, err := h.clusters.GetClusterByID(r.Context(), req.ClusterID)
 		if err == nil {
+			clusterDistribution = cluster.Distribution
 			profile = defaultCISProfileForDistribution(cluster.Distribution)
 		}
 	}
 	if profile == "" {
 		profile = "cis-1.8"
+	}
+	if h.k8s != nil {
+		resolveInput := profile
+		if !explicitProfile {
+			resolveInput = ""
+		}
+		if resolved := h.resolveClusterScanProfileName(r.Context(), req.ClusterID, clusterDistribution, resolveInput); strings.TrimSpace(resolved) != "" {
+			profile = resolved
+		}
 	}
 
 	scanName := fmt.Sprintf("astronomer-cis-%d", time.Now().UTC().Unix())
@@ -708,8 +722,11 @@ func (h *SecurityHandler) markScanFailed(ctx context.Context, scanID uuid.UUID, 
 // in the cluster, (nil, false, nil) when cis-operator hasn't generated it
 // yet, and (nil, false, err) for unexpected errors.
 func (h *SecurityHandler) fetchClusterScanReport(ctx context.Context, clusterID uuid.UUID, scanName string) (map[string]any, bool, error) {
-	path := fmt.Sprintf("/apis/cis.cattle.io/v1/namespaces/%s/clusterscanreports/%s",
-		cisOperatorNamespace, scanName)
+	reportName, found, err := h.resolveClusterScanReportName(ctx, clusterID, scanName)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	path := fmt.Sprintf("/apis/cis.cattle.io/v1/clusterscanreports/%s", reportName)
 	resp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
 		return nil, false, err
@@ -725,6 +742,77 @@ func (h *SecurityHandler) fetchClusterScanReport(ctx context.Context, clusterID 
 		return nil, false, err
 	}
 	return out, true, nil
+}
+
+func (h *SecurityHandler) resolveClusterScanReportName(ctx context.Context, clusterID uuid.UUID, scanName string) (string, bool, error) {
+	if name, found, err := h.fetchClusterScanReportNameFromScan(ctx, clusterID, scanName); err != nil || found {
+		return name, found, err
+	}
+	return h.findClusterScanReportNameByOwner(ctx, clusterID, scanName)
+}
+
+func (h *SecurityHandler) fetchClusterScanReportNameFromScan(ctx context.Context, clusterID uuid.UUID, scanName string) (string, bool, error) {
+	path := fmt.Sprintf("/apis/cis.cattle.io/v1/clusterscans/%s", scanName)
+	resp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return "", false, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", false, nil
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", false, responseError(resp)
+	}
+	var scan struct {
+		Status struct {
+			ReportName string `json:"reportName"`
+		} `json:"status"`
+	}
+	if err := parseJSONResponse(resp, &scan); err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(scan.Status.ReportName) == "" {
+		return "", false, nil
+	}
+	return scan.Status.ReportName, true, nil
+}
+
+func (h *SecurityHandler) findClusterScanReportNameByOwner(ctx context.Context, clusterID uuid.UUID, scanName string) (string, bool, error) {
+	resp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodGet,
+		"/apis/cis.cattle.io/v1/clusterscanreports", nil, requestHeaders(""))
+	if err != nil {
+		return "", false, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", false, nil
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", false, responseError(resp)
+	}
+	var list struct {
+		Items []struct {
+			Metadata struct {
+				Name            string `json:"name"`
+				OwnerReferences []struct {
+					Name string `json:"name"`
+				} `json:"ownerReferences"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := parseJSONResponse(resp, &list); err != nil {
+		return "", false, err
+	}
+	for _, item := range list.Items {
+		if item.Metadata.Name == scanName {
+			return item.Metadata.Name, true, nil
+		}
+		for _, owner := range item.Metadata.OwnerReferences {
+			if owner.Name == scanName {
+				return item.Metadata.Name, true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 // GetScanFull handles GET /api/v1/security/scans/{id}/ — returns the row
@@ -847,8 +935,7 @@ func (h *SecurityHandler) createClusterScanCR(ctx context.Context, clusterID uui
 		"apiVersion": "cis.cattle.io/v1",
 		"kind":       "ClusterScan",
 		"metadata": map[string]any{
-			"name":      scanName,
-			"namespace": cisOperatorNamespace,
+			"name": scanName,
 			"labels": map[string]string{
 				"app.kubernetes.io/managed-by": "astronomer-go",
 			},
@@ -861,12 +948,140 @@ func (h *SecurityHandler) createClusterScanCR(ctx context.Context, clusterID uui
 		return err
 	}
 	resp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodPost,
-		fmt.Sprintf("/apis/cis.cattle.io/v1/namespaces/%s/clusterscans", cisOperatorNamespace),
+		"/apis/cis.cattle.io/v1/clusterscans",
 		body, requestHeaders("application/json"))
 	if err != nil {
 		return err
 	}
 	return ensureSuccess(resp)
+}
+
+type cisClusterScanProfile struct {
+	Name      string
+	Benchmark string
+}
+
+func (h *SecurityHandler) resolveClusterScanProfileName(ctx context.Context, clusterID uuid.UUID, distribution, profile string) string {
+	profile = strings.TrimSpace(profile)
+	profiles, err := h.listClusterScanProfiles(ctx, clusterID)
+	if err != nil || len(profiles) == 0 {
+		return profile
+	}
+	if profile != "" {
+		for _, item := range profiles {
+			if item.Name == profile || item.Benchmark == profile {
+				return item.Name
+			}
+		}
+		return profile
+	}
+	if recommended, ok := recommendClusterScanProfileName(distribution, profiles); ok {
+		return recommended
+	}
+	return profile
+}
+
+func (h *SecurityHandler) listClusterScanProfiles(ctx context.Context, clusterID uuid.UUID) ([]cisClusterScanProfile, error) {
+	if h == nil || h.k8s == nil {
+		return nil, nil
+	}
+	resp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodGet,
+		"/apis/cis.cattle.io/v1/clusterscanprofiles", nil, requestHeaders(""))
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return nil, err
+	}
+	var list struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Spec struct {
+				Benchmark string `json:"benchmarkVersion"`
+			} `json:"spec"`
+		} `json:"items"`
+	}
+	if err := parseJSONResponse(resp, &list); err != nil {
+		return nil, err
+	}
+	out := make([]cisClusterScanProfile, 0, len(list.Items))
+	for _, item := range list.Items {
+		out = append(out, cisClusterScanProfile{
+			Name:      item.Metadata.Name,
+			Benchmark: item.Spec.Benchmark,
+		})
+	}
+	return out, nil
+}
+
+var cisBenchmarkVersionRE = regexp.MustCompile(`(\d+)\.(\d+)`)
+
+func recommendClusterScanProfileName(distribution string, profiles []cisClusterScanProfile) (string, bool) {
+	prefix := cisProfileBenchmarkPrefix(distribution)
+	bestName := ""
+	bestMajor := -1
+	bestMinor := -1
+	bestPermissive := false
+	for _, profile := range profiles {
+		if !strings.HasPrefix(profile.Benchmark, prefix) {
+			continue
+		}
+		major, minor := parseCISBenchmarkVersion(profile.Benchmark)
+		permissive := strings.Contains(profile.Name, "permissive") || strings.Contains(profile.Benchmark, "permissive")
+		if bestName == "" ||
+			major > bestMajor ||
+			(major == bestMajor && minor > bestMinor) ||
+			(major == bestMajor && minor == bestMinor && permissive && !bestPermissive) {
+			bestName = profile.Name
+			bestMajor = major
+			bestMinor = minor
+			bestPermissive = permissive
+		}
+	}
+	if bestName != "" {
+		return bestName, true
+	}
+	if prefix != "cis-" {
+		return recommendClusterScanProfileName("", profiles)
+	}
+	return "", false
+}
+
+func cisProfileBenchmarkPrefix(distribution string) string {
+	switch strings.ToLower(strings.TrimSpace(distribution)) {
+	case "rke", "rke1":
+		return "rke-"
+	case "rke2":
+		return "rke2-"
+	case "k3s":
+		return "k3s-"
+	case "eks":
+		return "eks-"
+	case "aks":
+		return "aks-"
+	case "gke":
+		return "gke-"
+	default:
+		return "cis-"
+	}
+}
+
+func parseCISBenchmarkVersion(s string) (int, int) {
+	matches := cisBenchmarkVersionRE.FindStringSubmatch(s)
+	if len(matches) != 3 {
+		return -1, -1
+	}
+	major, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return -1, -1
+	}
+	minor, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return -1, -1
+	}
+	return major, minor
 }
 
 // CISFinding is the normalized shape we store in `findings` and surface to
@@ -926,19 +1141,19 @@ func scanWithFindings(scan sqlc.SecurityScanResult) map[string]any {
 func defaultCISProfileForDistribution(distribution string) string {
 	switch strings.ToLower(strings.TrimSpace(distribution)) {
 	case "rke", "rke1":
-		return "rke-cis-1.8-permissive"
+		return "rke-profile-permissive-1.8"
 	case "rke2":
-		return "rke2-cis-1.8-permissive"
+		return "rke2-cis-1.8-profile-permissive"
 	case "k3s":
-		return "k3s-cis-1.8-permissive"
+		return "k3s-cis-1.8-profile-permissive"
 	case "eks":
-		return "eks-cis-1.5"
+		return "eks-profile-1.5.0"
 	case "aks":
-		return "aks-cis-1.0"
+		return "aks-profile"
 	case "gke":
-		return "gke-cis-1.5"
+		return "gke-profile-1.6.0"
 	default:
-		return "cis-1.8"
+		return "cis-1.8-profile"
 	}
 }
 

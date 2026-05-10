@@ -16,6 +16,7 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // HealthReporter sends periodic health data to the server.
@@ -429,6 +430,7 @@ func (hr *HealthReporter) healthMux() *http.ServeMux {
 			hr.writeHealthJSON(w, http.StatusServiceUnavailable, "not_connected")
 		}
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 
 	return mux
 }

@@ -36,11 +36,12 @@ import (
 
 // fakeDexQuerier is an in-memory DexQuerier used by every test in this file.
 type fakeDexQuerier struct {
-	connectors  map[uuid.UUID]sqlc.DexConnector
-	settings    *sqlc.DexSetting
-	ssoByProv   map[string]sqlc.SsoConfiguration
-	createErr   error
-	upsertErr   error
+	connectors map[uuid.UUID]sqlc.DexConnector
+	settings   *sqlc.DexSetting
+	platform   *sqlc.PlatformConfiguration
+	ssoByProv  map[string]sqlc.SsoConfiguration
+	createErr  error
+	upsertErr  error
 }
 
 func newFakeDexQuerier() *fakeDexQuerier {
@@ -153,6 +154,13 @@ func (f *fakeDexQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDex
 	}
 	f.settings = &row
 	return row, nil
+}
+
+func (f *fakeDexQuerier) GetPlatformConfig(_ context.Context) (sqlc.PlatformConfiguration, error) {
+	if f.platform == nil {
+		return sqlc.PlatformConfiguration{}, errors.New("not found")
+	}
+	return *f.platform, nil
 }
 
 func (f *fakeDexQuerier) GetSSOConfigurationByProvider(_ context.Context, provider string) (sqlc.SsoConfiguration, error) {
@@ -481,16 +489,32 @@ func proxyToHTTPTest(srv *httptest.Server) func(req stubReq) (*protocol.K8sRespo
 }
 
 func TestApply_PatchesConfigMapOnLiveCluster(t *testing.T) {
-	// Mock K8s API: respond 200 to PATCH on /api/v1/namespaces/dex/configmaps/astronomer-dex-config.
+	// Mock K8s API: write the ConfigMap, then restart the Dex deployment.
 	var seenMethod, seenPath string
 	var seenBody []byte
+	var configMapBody []byte
+	var sawRestart bool
 	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenMethod = r.Method
 		seenPath = r.URL.Path
 		seenBody, _ = io.ReadAll(r.Body)
+		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/namespaces/dex/configmaps/astronomer-dex-config" {
+			configMapBody = append([]byte(nil), seenBody...)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"kind":"ConfigMap","metadata":{"name":"astronomer-dex-config"}}`))
+			return
+		}
+		if r.Method == http.MethodPatch && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
+			sawRestart = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"kind":"Deployment","metadata":{"name":"dex"}}`))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"kind":"ConfigMap","metadata":{"name":"astronomer-dex-config"}}`))
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"kind":"Status","status":"Failure","reason":"NotFound"}`))
 	}))
 	defer mockK8s.Close()
 
@@ -534,32 +558,53 @@ func TestApply_PatchesConfigMapOnLiveCluster(t *testing.T) {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
 	if seenMethod != http.MethodPatch {
-		t.Errorf("expected PATCH, got %s", seenMethod)
+		t.Errorf("expected final request to be PATCH, got %s", seenMethod)
 	}
-	if seenPath != "/api/v1/namespaces/dex/configmaps/astronomer-dex-config" {
-		t.Errorf("unexpected path: %s", seenPath)
+	if seenPath != "/apis/apps/v1/namespaces/dex/deployments/dex" {
+		t.Errorf("unexpected final path: %s", seenPath)
 	}
-	if !bytes.Contains(seenBody, []byte("config.yaml")) {
-		t.Errorf("body missing config.yaml key: %s", seenBody)
+	if !bytes.Contains(configMapBody, []byte("config.yaml")) {
+		t.Errorf("configmap body missing config.yaml key: %s", configMapBody)
 	}
-	if !bytes.Contains(seenBody, []byte("microsoft")) {
-		t.Errorf("body missing connector type: %s", seenBody)
+	if !bytes.Contains(configMapBody, []byte("microsoft")) {
+		t.Errorf("configmap body missing connector type: %s", configMapBody)
+	}
+	if !sawRestart {
+		t.Fatalf("expected deployment restart patch")
+	}
+	if !bytes.Contains(seenBody, []byte("kubectl.kubernetes.io/restartedAt")) {
+		t.Errorf("restart patch missing restartedAt annotation: %s", seenBody)
 	}
 }
 
 func TestApply_FallsBackToPostOnNotFound(t *testing.T) {
 	var requests []string
+	var configMapBody []byte
+	var restartBody []byte
 	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
+		body, _ := io.ReadAll(r.Body)
 		// First (PATCH) returns 404 to simulate "configmap doesn't exist yet".
-		// Second (POST) creates it.
-		if r.Method == http.MethodPatch {
+		// Second (POST) creates it. Third PATCH restarts the deployment.
+		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/namespaces/dex/configmaps/astronomer-dex-config" {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"kind":"Status","status":"Failure","reason":"NotFound"}`))
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"kind":"ConfigMap"}`))
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/namespaces/dex/configmaps" {
+			configMapBody = append([]byte(nil), body...)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"kind":"ConfigMap"}`))
+			return
+		}
+		if r.Method == http.MethodPatch && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
+			restartBody = append([]byte(nil), body...)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"kind":"Deployment"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"kind":"Status","status":"Failure","reason":"NotFound"}`))
 	}))
 	defer mockK8s.Close()
 
@@ -586,11 +631,19 @@ func TestApply_FallsBackToPostOnNotFound(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if len(requests) < 2 {
-		t.Fatalf("expected PATCH then POST, got %#v", requests)
+	if len(requests) != 3 {
+		t.Fatalf("expected config PATCH, config POST, deployment PATCH; got %#v", requests)
 	}
-	if !strings.HasPrefix(requests[0], "PATCH ") || !strings.HasPrefix(requests[1], "POST ") {
-		t.Errorf("expected PATCH then POST, got %#v", requests)
+	if requests[0] != "PATCH /api/v1/namespaces/dex/configmaps/astronomer-dex-config" ||
+		requests[1] != "POST /api/v1/namespaces/dex/configmaps" ||
+		requests[2] != "PATCH /apis/apps/v1/namespaces/dex/deployments/dex" {
+		t.Errorf("unexpected request sequence: %#v", requests)
+	}
+	if !bytes.Contains(configMapBody, []byte("config.yaml")) {
+		t.Errorf("configmap body missing config.yaml key: %s", configMapBody)
+	}
+	if !bytes.Contains(restartBody, []byte("kubectl.kubernetes.io/restartedAt")) {
+		t.Errorf("restart patch missing restartedAt annotation: %s", restartBody)
 	}
 }
 
@@ -709,6 +762,11 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	q := newFakeDexQuerier()
 	keyStr, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(keyStr)
+	q.platform = &sqlc.PlatformConfiguration{
+		ID:           1,
+		ServerUrl:    "http://astronomer.example.com",
+		PlatformName: "Astronomer",
+	}
 	q.settings = &sqlc.DexSetting{
 		ID:            dexSettingsSingletonID,
 		IssuerUrl:     "https://dex.example.com",
@@ -754,6 +812,75 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	if cfg["issuer_url"] != "https://dex.example.com" {
 		t.Errorf("issuer_url not stored in sso config: %v", cfg)
 	}
+	var clients []map[string]any
+	if err := json.Unmarshal(q.settings.PublicClients, &clients); err != nil {
+		t.Fatalf("unmarshal public_clients: %v", err)
+	}
+	if len(clients) != 1 {
+		t.Fatalf("public clients len=%d want 1", len(clients))
+	}
+	gotURIs := mergeStringList(clients[0]["redirectURIs"], nil)
+	if !containsString(gotURIs, "http://astronomer.example.com/api/v1/auth/callback/dex") {
+		t.Fatalf("missing normalized callback URI: %v", gotURIs)
+	}
+	if !containsString(gotURIs, "http://astronomer.example.com/api/v1/auth/callback/dex/") {
+		t.Fatalf("missing slash callback URI: %v", gotURIs)
+	}
+	if clients[0]["secret"] != "shared-secret" {
+		t.Fatalf("public client secret not synchronized")
+	}
+}
+
+func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
+	q := newFakeDexQuerier()
+	h := NewDexHandler(q)
+	settings := sqlc.DexSetting{
+		ID:            dexSettingsSingletonID,
+		IssuerUrl:     "https://dex.example.com/dex",
+		Namespace:     "dex",
+		ReleaseName:   "dex",
+		ConfigmapName: "astronomer-dex-config",
+		ClusterID:     pgtype.UUID{Bytes: uuid.New(), Valid: true},
+		PublicClients: json.RawMessage(`[]`),
+		Expiry:        json.RawMessage(`{}`),
+		Extra:         json.RawMessage(`{}`),
+	}
+	connectors := []sqlc.DexConnector{
+		{
+			ID:          uuid.New(),
+			Name:        "oidc-live",
+			Type:        "oidc",
+			DisplayName: "OIDC Live",
+			Config:      json.RawMessage(`{"issuer":"https://issuer.example.com","clientID":"id","clientSecret":"secret"}`),
+			Enabled:     true,
+		},
+	}
+	rendered, err := h.renderDexConfig(settings, connectors)
+	if err != nil {
+		t.Fatalf("renderDexConfig error: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(rendered, &doc); err != nil {
+		t.Fatalf("unmarshal yaml: %v", err)
+	}
+	connList, _ := doc["connectors"].([]any)
+	if len(connList) != 1 {
+		t.Fatalf("connectors len=%d want 1", len(connList))
+	}
+	conn, _ := connList[0].(map[string]any)
+	cfg, _ := conn["config"].(map[string]any)
+	if got := cfg["redirectURI"]; got != "https://dex.example.com/dex/callback" {
+		t.Fatalf("redirectURI=%v", got)
+	}
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestUpdateSettings_RejectsMissingIssuer(t *testing.T) {

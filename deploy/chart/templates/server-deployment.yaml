@@ -6,6 +6,8 @@ metadata:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "server") | nindent 4 }}
 spec:
   replicas: {{ .Values.server.replicaCount }}
+  strategy:
+    {{- toYaml .Values.server.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 6 }}
@@ -24,6 +26,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
         - name: wait-postgres
           image: busybox:1.36
           command:
@@ -33,6 +36,7 @@ spec:
               echo "waiting for postgres..."
               until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
               echo "postgres up"
+        {{- end }}
         - name: migrate
           image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -43,11 +47,19 @@ spec:
             - "/migrations"
             - "up"
           env:
+            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
+                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+            {{- else }}
             - name: DATABASE_URL
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "astronomer.fullname" . }}-config
                   key: DATABASE_URL
+            {{- end }}
       containers:
         - name: server
           image: {{ include "astronomer.image" (dict "context" . "component" "server") | quote }}
@@ -56,16 +68,39 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "astronomer.fullname" . }}-config
             - secretRef:
                 name: {{ include "astronomer.fullname" . }}-secrets
-          {{- with .Values.server.env }}
+          {{- if or .Values.postgres.external.dsnSecretRef.name .Values.redis.external.address .Values.redis.external.passwordSecretRef.name .Values.server.env }}
           env:
+            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
+                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+            {{- end }}
+            {{- if .Values.redis.external.passwordSecretRef.name }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.external.passwordSecretRef.name | quote }}
+                  key: {{ .Values.redis.external.passwordSecretRef.key | quote }}
+            {{- end }}
+            {{- if .Values.redis.external.address }}
+            - name: REDIS_URL
+              value: {{ include "astronomer.redisURL" . | quote }}
+            {{- end }}
+            {{- with .Values.server.env }}
             {{- range $k, $v := . }}
             - name: {{ $k }}
               value: {{ $v | quote }}
+            {{- end }}
             {{- end }}
           {{- end }}
           {{- if .Values.server.probes.enabled }}
@@ -96,7 +131,14 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- if .Values.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else if .Values.server.affinity.enabled }}
+      affinity:
+        {{- include "astronomer.componentAffinity" (dict "context" . "component" "server" "enabled" .Values.server.affinity.enabled) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.server.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "astronomer.componentTopologySpread" (dict "context" . "component" "server" "enabled" .Values.server.topologySpread.enabled "maxSkew" .Values.server.topologySpread.maxSkew "whenUnsatisfiable" .Values.server.topologySpread.whenUnsatisfiable) | nindent 8 }}
       {{- end }}

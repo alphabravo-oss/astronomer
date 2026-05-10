@@ -140,6 +140,11 @@ const createArgoCDManagedCluster = `-- name: CreateArgoCDManagedCluster :one
 
 INSERT INTO argocd_managed_clusters (argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (argocd_instance_id, cluster_id) DO UPDATE SET
+    cluster_secret_name = EXCLUDED.cluster_secret_name,
+    server_url = EXCLUDED.server_url,
+    labels = EXCLUDED.labels,
+    updated_at = now()
 RETURNING id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at
 `
 

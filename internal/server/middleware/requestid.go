@@ -12,6 +12,11 @@ type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
+const (
+	requestIDHeader     = "X-Request-ID"
+	correlationIDHeader = "X-Correlation-Id"
+)
+
 // maxRequestIDLen is the maximum allowed length for an X-Request-ID header value.
 const maxRequestIDLen = 256
 
@@ -29,18 +34,23 @@ func isValidRequestID(id string) bool {
 	return true
 }
 
-// RequestID is middleware that checks for an incoming X-Request-ID header.
-// If present and valid it reuses the value; otherwise it generates a new UUID.
-// The request ID is stored in the request context and set as a response header.
+// RequestID prefers an incoming X-Correlation-Id header, then X-Request-ID.
+// If neither header is present and valid it generates a new UUID. The shared
+// identifier is stored in the request context and echoed back in both response
+// headers so downstream systems can use either convention.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get("X-Request-ID")
+		id := r.Header.Get(correlationIDHeader)
+		if id == "" {
+			id = r.Header.Get(requestIDHeader)
+		}
 		if id == "" || !isValidRequestID(id) {
 			id = uuid.New().String()
 		}
 
 		ctx := context.WithValue(r.Context(), requestIDKey, id)
-		w.Header().Set("X-Request-ID", id)
+		w.Header().Set(requestIDHeader, id)
+		w.Header().Set(correlationIDHeader, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -52,4 +62,11 @@ func GetRequestID(ctx context.Context) string {
 		return id
 	}
 	return ""
+}
+
+// GetCorrelationID returns the same shared request correlation identifier used
+// by GetRequestID. This alias makes call sites explicit when the identifier is
+// persisted for cross-service traceability rather than just local request logs.
+func GetCorrelationID(ctx context.Context) string {
+	return GetRequestID(ctx)
 }

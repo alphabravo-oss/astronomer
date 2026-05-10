@@ -20,12 +20,16 @@ For local k3d clusters, ensure your loadbalancer maps :80/:443:
     --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
 
 Then point a hosts entry (or rely on *.localtest.me which always resolves to 127.0.0.1):
-  curl -H "Host: {{ .Values.ingress.host }}" http://localhost:8080/health/
+  curl -H "Host: {{ .Values.ingress.host }}" http://localhost:8080/readyz
 {{- else }}
 
 Ingress is disabled. Port-forward the server Service:
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "astronomer.fullname" . }}-server 8000:{{ .Values.server.service.port }}
-  curl http://127.0.0.1:8000/health/
+  curl http://127.0.0.1:8000/readyz
+
+Worker / server Prometheus metrics are exposed on the dedicated metrics port
+inside each pod (default `:9090`) and should be scraped directly rather than
+through the public Gateway route.
 {{- end }}
 
 To check pod status:

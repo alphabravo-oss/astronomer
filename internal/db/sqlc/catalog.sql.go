@@ -13,6 +13,60 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptInstalledChartByRelease = `-- name: AdoptInstalledChartByRelease :one
+UPDATE installed_charts SET
+    tool_slug = $4,
+    preset_used = $5,
+    values_override = $6,
+    status = $7,
+    revision = $8
+WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at
+`
+
+type AdoptInstalledChartByReleaseParams struct {
+	ClusterID      uuid.UUID   `json:"cluster_id"`
+	ReleaseName    string      `json:"release_name"`
+	Namespace      string      `json:"namespace"`
+	ToolSlug       pgtype.Text `json:"tool_slug"`
+	PresetUsed     pgtype.Text `json:"preset_used"`
+	ValuesOverride string      `json:"values_override"`
+	Status         string      `json:"status"`
+	Revision       int32       `json:"revision"`
+}
+
+func (q *Queries) AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error) {
+	row := q.db.QueryRow(ctx, adoptInstalledChartByRelease,
+		arg.ClusterID,
+		arg.ReleaseName,
+		arg.Namespace,
+		arg.ToolSlug,
+		arg.PresetUsed,
+		arg.ValuesOverride,
+		arg.Status,
+		arg.Revision,
+	)
+	var i InstalledChart
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ChartVersionID,
+		&i.ReleaseName,
+		&i.Namespace,
+		&i.ValuesOverride,
+		&i.Status,
+		&i.Revision,
+		&i.Notes,
+		&i.InstalledByID,
+		&i.RequestID,
+		&i.ToolSlug,
+		&i.PresetUsed,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const countChartVersions = `-- name: CountChartVersions :one
 SELECT count(*) FROM helm_chart_versions WHERE chart_id = $1
 `

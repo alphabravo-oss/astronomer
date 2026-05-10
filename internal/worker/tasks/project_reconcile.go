@@ -19,9 +19,12 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,9 +55,10 @@ const projectNamespaceLabelKey = "astronomer.io/project-id"
 // Managed object names. Stable so re-apply lands on the same object and so
 // the cleanup path (RemoveNamespace) can DELETE deterministically.
 const (
-	managedQuotaName         = "astronomer-quota"
-	managedLimitRangeName    = "astronomer-limits"
-	managedNetworkPolicyName = "astronomer-isolation"
+	managedQuotaName          = "astronomer-quota"
+	managedLimitRangeName     = "astronomer-limits"
+	managedNetworkPolicyName  = "astronomer-isolation"
+	managedRegistrySecretName = "astronomer-registry"
 )
 
 // reconcileLeaseTTL is how long a worker holds the lease for a single
@@ -69,6 +73,8 @@ const reconcileLeaseTTL = 30 * time.Second
 // ConfigureProjectReconcile.
 type ProjectReconcileQuerier interface {
 	GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
+	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
+	GetDefaultPodSecurityTemplate(ctx context.Context) (sqlc.PodSecurityTemplate, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
 	ListAllProjectNamespaces(ctx context.Context) ([]sqlc.ProjectNamespace, error)
 	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
@@ -187,45 +193,51 @@ func HandleProjectReconcile(ctx context.Context, t *asynq.Task) error {
 // reconciles only the ones it claims. Other workers running concurrently
 // pick up disjoint rows.
 func HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
-	if projectDeps.Queries == nil || projectDeps.Requester == nil {
-		runtimeLogger().InfoContext(ctx, "project reconcile runtime not configured, skipping sweep")
+	return runPeriodicTaskWithLeader(ctx, ProjectReconcileAllType, func() error {
+		if projectDeps.Queries == nil || projectDeps.Requester == nil {
+			runtimeLogger().InfoContext(ctx, "project reconcile runtime not configured, skipping sweep")
+			return nil
+		}
+		rows, err := projectDeps.Queries.ListAllProjectNamespaces(ctx)
+		if err != nil {
+			return fmt.Errorf("list project namespaces: %w", err)
+		}
+		for _, row := range rows {
+			lease := pgtype.Timestamptz{Time: time.Now().UTC().Add(reconcileLeaseTTL), Valid: true}
+			claimed, err := projectDeps.Queries.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
+				ProjectID:   row.ProjectID,
+				ClusterID:   row.ClusterID,
+				Namespace:   row.Namespace,
+				LockedUntil: lease,
+			})
+			if err != nil {
+				// pgx returns ErrNoRows when the lease is held by someone else.
+				// That's the normal cooperative path — skip silently.
+				continue
+			}
+			project, err := projectDeps.Queries.GetProjectByID(ctx, claimed.ProjectID)
+			if err != nil {
+				runtimeLogger().WarnContext(ctx, "project lookup failed during sweep", "project_id", claimed.ProjectID.String(), "error", err)
+				_ = markReconciled(ctx, projectDeps.Queries, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error())
+				continue
+			}
+			if err := reconcileProjectNamespace(ctx, projectDeps.Queries, projectDeps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
+				runtimeLogger().WarnContext(ctx, "project reconcile failed", "project_id", claimed.ProjectID.String(), "namespace", claimed.Namespace, "error", err)
+			}
+		}
 		return nil
-	}
-	rows, err := projectDeps.Queries.ListAllProjectNamespaces(ctx)
-	if err != nil {
-		return fmt.Errorf("list project namespaces: %w", err)
-	}
-	for _, row := range rows {
-		lease := pgtype.Timestamptz{Time: time.Now().UTC().Add(reconcileLeaseTTL), Valid: true}
-		claimed, err := projectDeps.Queries.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
-			ProjectID:   row.ProjectID,
-			ClusterID:   row.ClusterID,
-			Namespace:   row.Namespace,
-			LockedUntil: lease,
-		})
-		if err != nil {
-			// pgx returns ErrNoRows when the lease is held by someone else.
-			// That's the normal cooperative path — skip silently.
-			continue
-		}
-		project, err := projectDeps.Queries.GetProjectByID(ctx, claimed.ProjectID)
-		if err != nil {
-			runtimeLogger().WarnContext(ctx, "project lookup failed during sweep", "project_id", claimed.ProjectID.String(), "error", err)
-			_ = markReconciled(ctx, projectDeps.Queries, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error())
-			continue
-		}
-		if err := reconcileProjectNamespace(ctx, projectDeps.Queries, projectDeps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
-			runtimeLogger().WarnContext(ctx, "project reconcile failed", "project_id", claimed.ProjectID.String(), "namespace", claimed.Namespace, "error", err)
-		}
-	}
-	return nil
+	})
 }
 
 // reconcileProjectNamespace renders and applies the three managed objects
 // for a single (project, cluster, namespace) and records the outcome.
 func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, project sqlc.Project, clusterID uuid.UUID, namespace string) error {
 	clusterIDStr := clusterID.String()
-	if err := labelNamespace(ctx, requester, clusterIDStr, namespace, project.ID.String()); err != nil {
+	labels, err := projectNamespaceLabels(ctx, q, namespace, project.ID.String())
+	if err != nil {
+		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("resolve psa labels: %v", err))
+	}
+	if err := labelNamespace(ctx, requester, clusterIDStr, namespace, labels); err != nil {
 		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("label namespace: %v", err))
 	}
 
@@ -254,6 +266,10 @@ func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, r
 		}
 	}
 
+	if err := reconcileProjectRegistryAccess(ctx, q, requester, clusterID, namespace); err != nil {
+		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("reconcile image pull secret: %v", err))
+	}
+
 	return markReconciled(ctx, q, project.ID, clusterID, namespace, "")
 }
 
@@ -264,6 +280,7 @@ func removeProjectEnforcement(ctx context.Context, requester ProjectK8sRequester
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedQuotaName))
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/limitranges/%s", namespace, managedLimitRangeName))
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/apis/networking.k8s.io/v1/namespaces/%s/networkpolicies/%s", namespace, managedNetworkPolicyName))
+	_ = removeProjectRegistryAccess(ctx, requester, clusterID, namespace)
 	// Strip the label by writing an empty value via a JSON-merge-patch on
 	// the namespace metadata. (Server-side apply with an empty label set
 	// would clear all labels we own; merge-patch with null is the surgical
@@ -281,9 +298,17 @@ func removeProjectEnforcement(ctx context.Context, requester ProjectK8sRequester
 // namespace via JSON-merge-patch so the "allow-same-project" NetworkPolicy
 // selector can find peers. We patch instead of SSA to avoid stomping any
 // other labels owned by external controllers.
-func labelNamespace(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace, projectID string) error {
-	patch := fmt.Sprintf(`{"metadata":{"labels":{%q:%q}}}`, projectNamespaceLabelKey, projectID)
-	resp, err := requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s", namespace), []byte(patch), map[string]string{
+func labelNamespace(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, labels map[string]string) error {
+	patchBody := map[string]any{
+		"metadata": map[string]any{
+			"labels": labels,
+		},
+	}
+	raw, err := json.Marshal(patchBody)
+	if err != nil {
+		return err
+	}
+	resp, err := requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s", namespace), raw, map[string]string{
 		"Content-Type": "application/merge-patch+json",
 		"Accept":       "application/json",
 	})
@@ -294,6 +319,238 @@ func labelNamespace(ctx context.Context, requester ProjectK8sRequester, clusterI
 		return fmt.Errorf("label namespace failed: status=%d body=%s", resp.StatusCode, string(resp.Body))
 	}
 	return nil
+}
+
+func projectNamespaceLabels(ctx context.Context, q ProjectReconcileQuerier, namespace, projectID string) (map[string]string, error) {
+	labels := map[string]string{
+		projectNamespaceLabelKey: projectID,
+	}
+	if q == nil {
+		return labels, nil
+	}
+	template, err := q.GetDefaultPodSecurityTemplate(ctx)
+	if err != nil {
+		// No default template configured is a valid steady state.
+		if strings.Contains(strings.ToLower(err.Error()), "no rows") {
+			return labels, nil
+		}
+		return nil, err
+	}
+	if namespaceExemptedByTemplate(template, namespace) {
+		return labels, nil
+	}
+	for k, v := range podSecurityNamespaceLabels(template) {
+		labels[k] = v
+	}
+	return labels, nil
+}
+
+func podSecurityNamespaceLabels(tpl sqlc.PodSecurityTemplate) map[string]string {
+	labels := map[string]string{}
+	addPodSecurityLabel(labels, "pod-security.kubernetes.io/enforce", tpl.EnforceLevel)
+	addPodSecurityLabel(labels, "pod-security.kubernetes.io/enforce-version", tpl.EnforceVersion)
+	addPodSecurityLabel(labels, "pod-security.kubernetes.io/audit", tpl.AuditLevel)
+	addPodSecurityLabel(labels, "pod-security.kubernetes.io/audit-version", tpl.AuditVersion)
+	addPodSecurityLabel(labels, "pod-security.kubernetes.io/warn", tpl.WarnLevel)
+	addPodSecurityLabel(labels, "pod-security.kubernetes.io/warn-version", tpl.WarnVersion)
+	return labels
+}
+
+func addPodSecurityLabel(labels map[string]string, key, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	labels[key] = value
+}
+
+func namespaceExemptedByTemplate(tpl sqlc.PodSecurityTemplate, namespace string) bool {
+	if len(tpl.ExemptNamespaces) == 0 {
+		return false
+	}
+	var exemptions []string
+	if err := json.Unmarshal(tpl.ExemptNamespaces, &exemptions); err != nil {
+		return false
+	}
+	for _, item := range exemptions {
+		if strings.TrimSpace(item) == namespace {
+			return true
+		}
+	}
+	return false
+}
+
+func reconcileProjectRegistryAccess(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, clusterID uuid.UUID, namespace string) error {
+	if q == nil {
+		return nil
+	}
+	cfg, err := q.GetClusterRegistryConfig(ctx, clusterID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no rows") {
+			return removeProjectRegistryAccess(ctx, requester, clusterID.String(), namespace)
+		}
+		return err
+	}
+	if !hasUsableRegistryConfig(cfg) {
+		return removeProjectRegistryAccess(ctx, requester, clusterID.String(), namespace)
+	}
+	if err := applyRegistrySecret(ctx, requester, clusterID.String(), namespace, cfg); err != nil {
+		return err
+	}
+	return ensureDefaultServiceAccountPullSecret(ctx, requester, clusterID.String(), namespace, managedRegistrySecretName)
+}
+
+func removeProjectRegistryAccess(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string) error {
+	if err := removeDefaultServiceAccountPullSecret(ctx, requester, clusterID, namespace, managedRegistrySecretName); err != nil {
+		return err
+	}
+	return deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, managedRegistrySecretName))
+}
+
+func hasUsableRegistryConfig(cfg sqlc.ClusterRegistryConfig) bool {
+	return strings.TrimSpace(cfg.PrivateRegistryUrl) != "" &&
+		strings.TrimSpace(cfg.RegistryUsername) != "" &&
+		strings.TrimSpace(cfg.RegistryPassword) != ""
+}
+
+func applyRegistrySecret(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, cfg sqlc.ClusterRegistryConfig) error {
+	authKey := normalizeRegistryAuthKey(cfg.PrivateRegistryUrl)
+	dockerCfg := map[string]any{
+		"auths": map[string]any{
+			authKey: map[string]any{
+				"username": cfg.RegistryUsername,
+				"password": cfg.RegistryPassword,
+				"auth":     base64.StdEncoding.EncodeToString([]byte(cfg.RegistryUsername + ":" + cfg.RegistryPassword)),
+			},
+		},
+	}
+	rawDockerCfg, err := json.Marshal(dockerCfg)
+	if err != nil {
+		return err
+	}
+	secret := map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      managedRegistrySecretName,
+			"namespace": namespace,
+			"labels": map[string]any{
+				"app.kubernetes.io/managed-by": projectFieldManager,
+			},
+		},
+		"type": "kubernetes.io/dockerconfigjson",
+		"data": map[string]any{
+			".dockerconfigjson": base64.StdEncoding.EncodeToString(rawDockerCfg),
+		},
+	}
+	return serverSideApply(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, managedRegistrySecretName), secret)
+}
+
+func ensureDefaultServiceAccountPullSecret(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace, secretName string) error {
+	secrets, err := currentServiceAccountPullSecrets(ctx, requester, clusterID, namespace)
+	if err != nil {
+		return err
+	}
+	for _, existing := range secrets {
+		if existing == secretName {
+			return nil
+		}
+	}
+	secrets = append(secrets, secretName)
+	return patchDefaultServiceAccountPullSecrets(ctx, requester, clusterID, namespace, secrets)
+}
+
+func removeDefaultServiceAccountPullSecret(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace, secretName string) error {
+	secrets, err := currentServiceAccountPullSecrets(ctx, requester, clusterID, namespace)
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(secrets))
+	found := false
+	for _, existing := range secrets {
+		if existing == secretName {
+			found = true
+			continue
+		}
+		filtered = append(filtered, existing)
+	}
+	if !found {
+		return nil
+	}
+	return patchDefaultServiceAccountPullSecrets(ctx, requester, clusterID, namespace, filtered)
+}
+
+func currentServiceAccountPullSecrets(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string) ([]string, error) {
+	resp, err := requester.Do(ctx, clusterID, http.MethodGet, fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/default", namespace), nil, map[string]string{
+		"Accept": "application/json",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("get default serviceaccount failed: status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	var doc struct {
+		ImagePullSecrets []struct {
+			Name string `json:"name"`
+		} `json:"imagePullSecrets"`
+	}
+	if len(resp.Body) > 0 {
+		if err := json.Unmarshal(resp.Body, &doc); err != nil {
+			return nil, fmt.Errorf("decode default serviceaccount: %w", err)
+		}
+	}
+	out := make([]string, 0, len(doc.ImagePullSecrets))
+	for _, item := range doc.ImagePullSecrets {
+		name := strings.TrimSpace(item.Name)
+		if name != "" {
+			out = append(out, name)
+		}
+	}
+	return out, nil
+}
+
+func patchDefaultServiceAccountPullSecrets(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, secrets []string) error {
+	items := make([]map[string]string, 0, len(secrets))
+	for _, name := range secrets {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		items = append(items, map[string]string{"name": name})
+	}
+	patch := map[string]any{
+		"imagePullSecrets": items,
+	}
+	raw, err := json.Marshal(patch)
+	if err != nil {
+		return err
+	}
+	resp, err := requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/default", namespace), raw, map[string]string{
+		"Content-Type": "application/strategic-merge-patch+json",
+		"Accept":       "application/json",
+	})
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("patch default serviceaccount failed: status=%d body=%s", resp.StatusCode, string(resp.Body))
+	}
+	return nil
+}
+
+func normalizeRegistryAuthKey(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return trimmed
+	}
+	if parsed, err := url.Parse(trimmed); err == nil && parsed.Host != "" {
+		return strings.TrimSuffix(parsed.Host+parsed.Path, "/")
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(trimmed, "https://"), "http://"), "/")
 }
 
 // serverSideApply PATCHes the manifest using K8s server-side apply. The
@@ -406,19 +663,19 @@ func buildHardSpec(raw json.RawMessage) map[string]any {
 	}
 	// Friendly aliases that the UI already exposes.
 	aliases := map[string]string{
-		"cpu":              "cpu",
-		"memory":           "memory",
-		"pods":             "pods",
-		"requests.cpu":     "requests.cpu",
-		"requests.memory":  "requests.memory",
-		"limits.cpu":       "limits.cpu",
-		"limits.memory":    "limits.memory",
-		"requests.storage": "requests.storage",
-		"storage":          "requests.storage",
+		"cpu":                    "cpu",
+		"memory":                 "memory",
+		"pods":                   "pods",
+		"requests.cpu":           "requests.cpu",
+		"requests.memory":        "requests.memory",
+		"limits.cpu":             "limits.cpu",
+		"limits.memory":          "limits.memory",
+		"requests.storage":       "requests.storage",
+		"storage":                "requests.storage",
 		"persistentvolumeclaims": "persistentvolumeclaims",
-		"services":         "services",
-		"configmaps":       "configmaps",
-		"secrets":          "secrets",
+		"services":               "services",
+		"configmaps":             "configmaps",
+		"secrets":                "secrets",
 	}
 	for k, v := range decoded {
 		if v == nil {
@@ -446,7 +703,7 @@ func hasLimitRangeFields(raw json.RawMessage) bool {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return false
 	}
-	for _, k := range []string{"default", "defaultRequest", "max", "min"} {
+	for _, k := range []string{"default", "default_request", "defaultRequest", "max", "min"} {
 		if m, ok := decoded[k].(map[string]any); ok && len(m) > 0 {
 			return true
 		}
@@ -464,9 +721,21 @@ func renderLimitRange(namespace string, raw json.RawMessage) map[string]any {
 	limit := map[string]any{
 		"type": "Container",
 	}
-	for _, k := range []string{"default", "defaultRequest", "max", "min"} {
-		if m, ok := decoded[k].(map[string]any); ok && len(m) > 0 {
-			limit[k] = m
+	for _, alias := range []struct {
+		source string
+		target string
+	}{
+		{source: "default", target: "default"},
+		{source: "defaultRequest", target: "defaultRequest"},
+		{source: "default_request", target: "defaultRequest"},
+		{source: "max", target: "max"},
+		{source: "min", target: "min"},
+	} {
+		if _, exists := limit[alias.target]; exists {
+			continue
+		}
+		if m, ok := decoded[alias.source].(map[string]any); ok && len(m) > 0 {
+			limit[alias.target] = m
 		}
 	}
 	return map[string]any{

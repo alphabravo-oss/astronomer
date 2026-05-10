@@ -106,6 +106,28 @@ func TestParseOCIAuthConfig(t *testing.T) {
 	}
 }
 
+func TestSelectOCITags(t *testing.T) {
+	t.Parallel()
+
+	got := selectOCITags([]string{
+		"7.7.10",
+		"7.7.12-metadata",
+		"7.7.12",
+		" 7.7.11 ",
+		"",
+		"latest",
+	}, 3)
+	want := []string{"7.7.12", "7.7.11", "7.7.10"}
+	if len(got) != len(want) {
+		t.Fatalf("len(selectOCITags()) = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("selectOCITags()[%d] = %q, want %q (%v)", i, got[i], want[i], got)
+		}
+	}
+}
+
 func TestOCIMetadataFromPull(t *testing.T) {
 	// Construct a synthetic Helm chart manifest and verify we extract the
 	// fields we persist on HelmChart. We use the public helm types directly

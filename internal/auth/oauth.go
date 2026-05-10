@@ -272,6 +272,15 @@ func (m *SSOManager) EnabledProviders() []string {
 	return out
 }
 
+// RemoveProvider unregisters a provider from the in-memory manager. It is
+// used by settings CRUD so a deleted provider stops being offered immediately
+// without waiting for a server restart.
+func (m *SSOManager) RemoveProvider(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.providers, strings.ToLower(name))
+}
+
 // SSOProviderConfig is the shape we expect inside the sso_configurations.config
 // JSONB blob. issuer_url is required for any non-built-in provider.
 // scopes / redirect_url are optional overrides.

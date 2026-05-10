@@ -727,6 +727,15 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installation")
 		return
 	}
+	recordAudit(r, h.queries, "catalog.installation.create", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
+		"cluster_id":       installation.ClusterID.String(),
+		"namespace":        installation.Namespace,
+		"chart_version_id": req.ChartVersionID,
+		"chart_name":       chart.Name,
+		"repo_url":         repo.Url,
+		"version":          version.Version,
+		"operation_id":     op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, map[string]any{
 		"installation": installation,
 		"operation":    catalogOperationResponse(op),
@@ -766,6 +775,11 @@ func (h *CatalogHandler) DeleteInstallation(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue uninstall")
 		return
 	}
+	recordAudit(r, h.queries, "catalog.installation.delete", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
+		"cluster_id":   installation.ClusterID.String(),
+		"namespace":    installation.Namespace,
+		"operation_id": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, catalogOperationResponse(op))
 }
 
@@ -861,6 +875,14 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installed chart upgrade")
 		return
 	}
+	recordAudit(r, h.queries, "catalog.installation.upgrade", "installed_chart", installed.ID.String(), installed.ReleaseName, map[string]any{
+		"cluster_id":   installed.ClusterID.String(),
+		"namespace":    installed.Namespace,
+		"chart_name":   chart.Name,
+		"repo_url":     repo.Url,
+		"version":      version.Version,
+		"operation_id": op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, map[string]any{
 		"installation": updated,
 		"operation":    catalogOperationResponse(op),
@@ -901,6 +923,12 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue rollback")
 		return
 	}
+	recordAudit(r, h.queries, "catalog.installation.rollback", "installed_chart", current.ID.String(), current.ReleaseName, map[string]any{
+		"cluster_id":        current.ClusterID.String(),
+		"namespace":         current.Namespace,
+		"rollback_revision": int(max(current.Revision-1, 1)),
+		"operation_id":      op.ID.String(),
+	})
 	RespondJSON(w, http.StatusAccepted, catalogOperationResponse(op))
 }
 

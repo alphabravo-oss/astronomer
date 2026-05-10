@@ -40,12 +40,54 @@ func (s *stubValidator) MarkRegistrationTokenUsed(_ context.Context, _ uuid.UUID
 	return nil
 }
 
+func (s *stubValidator) GetClusterAgentTokenByClusterID(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterAgentToken, error) {
+	return sqlc.ClusterAgentToken{}, errNotFound{}
+}
+
+func (s *stubValidator) GetClusterAgentTokenByToken(_ context.Context, token string) (sqlc.ClusterAgentToken, error) {
+	return sqlc.ClusterAgentToken{}, errNotFound{}
+}
+
+func (s *stubValidator) UpsertClusterAgentToken(_ context.Context, arg sqlc.UpsertClusterAgentTokenParams) (sqlc.ClusterAgentToken, error) {
+	return sqlc.ClusterAgentToken{
+		ID:        uuid.New(),
+		ClusterID: arg.ClusterID,
+		Token:     arg.Token,
+	}, nil
+}
+
+func (s *stubValidator) TouchClusterAgentToken(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
 func (s *stubValidator) UpdateClusterHeartbeat(_ context.Context, _ sqlc.UpdateClusterHeartbeatParams) error {
 	return nil
 }
 
 func (s *stubValidator) UpsertClusterHealthStatus(_ context.Context, _ sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error) {
 	return sqlc.ClusterHealthStatus{}, nil
+}
+
+func (s *stubValidator) CreateAgentConnection(_ context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error) {
+	return sqlc.AgentConnection{
+		ID:        uuid.New(),
+		ClusterID: arg.ClusterID,
+		AgentID:   arg.AgentID,
+		SessionID: arg.SessionID,
+		Status:    arg.Status,
+	}, nil
+}
+
+func (s *stubValidator) DisconnectActiveConnectionsByCluster(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
+func (s *stubValidator) UpdateAgentConnectionStatus(_ context.Context, _ sqlc.UpdateAgentConnectionStatusParams) error {
+	return nil
+}
+
+func (s *stubValidator) UpdateAgentConnectionPing(_ context.Context, _ uuid.UUID) error {
+	return nil
 }
 
 type errNotFound struct{}

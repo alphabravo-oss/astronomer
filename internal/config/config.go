@@ -8,8 +8,8 @@ import (
 
 // Config holds all configuration for the application.
 type Config struct {
-	DatabaseURL    string `mapstructure:"database_url"`
-	RedisURL       string `mapstructure:"redis_url"`
+	DatabaseURL     string `mapstructure:"database_url"`
+	RedisURL        string `mapstructure:"redis_url"`
 	CeleryBrokerURL string `mapstructure:"celery_broker_url"`
 
 	SecretKey string `mapstructure:"secret_key"`
@@ -37,12 +37,21 @@ type Config struct {
 
 	LogLevel string `mapstructure:"log_level"`
 
+	AuditLogRetentionMonths int `mapstructure:"audit_log_retention_months"`
+	ServerMetricsAddr       string `mapstructure:"server_metrics_addr"`
+	WorkerMetricsAddr       string `mapstructure:"worker_metrics_addr"`
+
 	// ArgoCDUIUpstream is the in-cluster URL of argocd-server. The /argocd/*
 	// reverse proxy mounted on the public Astronomer router forwards browser
 	// traffic here after Astronomer's JWT/cookie auth has cleared. ArgoCD
 	// must be deployed with `server.rootpath: /argocd` so its SPA emits
 	// asset and API URLs under that prefix.
 	ArgoCDUIUpstream string `mapstructure:"argocd_ui_upstream"`
+
+	// ArgoCDClusterProxyBaseURL is the base URL upstream ArgoCD should use
+	// when talking to Astronomer-managed remote clusters through the tunnel
+	// proxy. The registration handler appends /api/v1/clusters/{id}/k8s.
+	ArgoCDClusterProxyBaseURL string `mapstructure:"argocd_cluster_proxy_base_url"`
 }
 
 // CORSOrigins returns the allowed origins as a slice.
@@ -74,6 +83,9 @@ func Load() (*Config, error) {
 	v.BindEnv("database_url")
 	v.BindEnv("redis_url")
 	v.BindEnv("secret_key")
+	v.BindEnv("audit_log_retention_months")
+	v.BindEnv("server_metrics_addr")
+	v.BindEnv("worker_metrics_addr")
 
 	v.SetDefault("database_url", "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable")
 	v.SetDefault("redis_url", "redis://localhost:6379/0")
@@ -84,8 +96,13 @@ func Load() (*Config, error) {
 	v.SetDefault("session_timeout_minutes", 60)
 	v.SetDefault("agent_token_expiry_hours", 24)
 	v.SetDefault("log_level", "info")
+	v.SetDefault("audit_log_retention_months", 13)
+	v.SetDefault("server_metrics_addr", ":9090")
+	v.SetDefault("worker_metrics_addr", ":9090")
 	v.SetDefault("argocd_ui_upstream", "http://argocd-server.argocd.svc.cluster.local:80")
+	v.SetDefault("argocd_cluster_proxy_base_url", "http://astronomer-server.astronomer.svc.cluster.local:8000")
 	v.BindEnv("argocd_ui_upstream")
+	v.BindEnv("argocd_cluster_proxy_base_url")
 
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {

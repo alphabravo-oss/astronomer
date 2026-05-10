@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -13,19 +14,23 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type ResourceHandler struct {
 	requester K8sRequester
 	queries   ResourceQuerier
+	sso       SSOSettingsQuerier
+	encryptor *auth.Encryptor
+	ssoMgr    SSOProviderRegistrar
 }
 
 type ResourceQuerier interface {
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 	UpsertPlatformConfig(ctx context.Context, arg sqlc.UpsertPlatformConfigParams) (sqlc.PlatformConfiguration, error)
-	ListAuditLogs(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
-	CountAuditLogs(ctx context.Context) (int64, error)
+	ListAuditLogV1(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
+	CountAuditLogV1(ctx context.Context) (int64, error)
 	ListUsers(ctx context.Context, arg sqlc.ListUsersParams) ([]sqlc.User, error)
 	CountUsers(ctx context.Context) (int64, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
@@ -36,6 +41,24 @@ type ResourceQuerier interface {
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg sqlc.UpdateUserPasswordParams) error
 }
+
+type SSOSettingsQuerier interface {
+	ListSSOConfigurations(ctx context.Context, arg sqlc.ListSSOConfigurationsParams) ([]sqlc.SsoConfiguration, error)
+	GetEnabledSSOProviders(ctx context.Context) ([]sqlc.SsoConfiguration, error)
+	GetSSOConfigurationByProvider(ctx context.Context, provider string) (sqlc.SsoConfiguration, error)
+	GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (sqlc.SsoConfiguration, error)
+	CreateSSOConfiguration(ctx context.Context, arg sqlc.CreateSSOConfigurationParams) (sqlc.SsoConfiguration, error)
+	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
+}
+
+type SSOProviderRegistrar interface {
+	RegisterProvider(name, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error
+	RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error
+	HasProvider(name string) bool
+	RemoveProvider(name string)
+}
+
+var ssoProviderSlugPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type resourceDef struct {
 	apiBase    string
@@ -77,7 +100,23 @@ func NewResourceHandlerWithRequester(requester K8sRequester) *ResourceHandler {
 }
 
 func NewResourceHandlerWithQueries(queries ResourceQuerier, requester K8sRequester) *ResourceHandler {
-	return &ResourceHandler{queries: queries, requester: requester}
+	h := &ResourceHandler{queries: queries, requester: requester}
+	if sso, ok := any(queries).(SSOSettingsQuerier); ok {
+		h.sso = sso
+	}
+	return h
+}
+
+func (h *ResourceHandler) SetSSOManager(mgr SSOProviderRegistrar) {
+	if h != nil {
+		h.ssoMgr = mgr
+	}
+}
+
+func (h *ResourceHandler) SetEncryptor(enc *auth.Encryptor) {
+	if h != nil {
+		h.encryptor = enc
+	}
 }
 
 func (h *ResourceHandler) ListResources(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +256,7 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 	serverURL := ""
 	telemetry := true
 	var bootstrappedAt pgtype.Timestamptz
+	instanceID := uuid.Nil
 
 	if h.queries != nil {
 		if cfg, err := h.queries.GetPlatformConfig(r.Context()); err == nil {
@@ -224,6 +264,7 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 			serverURL = cfg.ServerUrl
 			telemetry = cfg.TelemetryEnabled
 			bootstrappedAt = cfg.BootstrappedAt
+			instanceID = cfg.InstanceID
 		}
 	}
 
@@ -247,6 +288,7 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 		PlatformName:     platformName,
 		TelemetryEnabled: telemetry,
 		BootstrappedAt:   bootstrappedAt,
+		InstanceID:       instanceID,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "settings_error", "Failed to update platform settings")
@@ -275,31 +317,268 @@ func boolOrDefault(p *bool, d bool) bool {
 	return *p
 }
 
+func ssoConfigurationToResponse(row sqlc.SsoConfiguration) SSOProviderResponse {
+	cfg := map[string]string{}
+	var parsed auth.SSOProviderConfig
+	if len(row.Config) > 0 && json.Unmarshal(row.Config, &parsed) == nil {
+		if parsed.IssuerURL != "" {
+			cfg["metadataUrl"] = parsed.IssuerURL + "/.well-known/openid-configuration"
+		}
+		if parsed.RedirectURL != "" {
+			cfg["redirectUrl"] = parsed.RedirectURL
+		}
+		if len(parsed.Scopes) > 0 {
+			cfg["scopes"] = strings.Join(parsed.Scopes, ",")
+		}
+	}
+	if len(row.AllowedOrganizations) > 0 {
+		var orgs []string
+		if json.Unmarshal(row.AllowedOrganizations, &orgs) == nil && len(orgs) > 0 {
+			cfg["allowedOrganizations"] = strings.Join(orgs, ",")
+		}
+	}
+	return SSOProviderResponse{
+		ID:        row.ID.String(),
+		Provider:  row.Provider,
+		Type:      ssoProviderType(row),
+		Name:      defaultString(row.DisplayName, row.Provider),
+		Enabled:   row.IsEnabled,
+		Config:    cfg,
+		CreatedAt: row.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt: row.UpdatedAt.UTC().Format(timeLayout),
+	}
+}
+
+func ssoProviderType(row sqlc.SsoConfiguration) string {
+	if row.Provider == "github" || row.Provider == "google" {
+		return row.Provider
+	}
+	return "oidc"
+}
+
+func ssoProviderKeyFromName(name string) string {
+	slug := strings.ToLower(strings.TrimSpace(name))
+	slug = ssoProviderSlugPattern.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	return slug
+}
+
+func normalizeOIDCIssuerURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.TrimRight(value, "/")
+	const suffix = "/.well-known/openid-configuration"
+	if strings.HasSuffix(value, suffix) {
+		return strings.TrimSuffix(value, suffix)
+	}
+	return value
+}
+
+func csvStringToJSON(raw string) json.RawMessage {
+	items := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		value := strings.TrimSpace(part)
+		if value != "" {
+			items = append(items, value)
+		}
+	}
+	if len(items) == 0 {
+		return json.RawMessage(`[]`)
+	}
+	encoded, err := json.Marshal(items)
+	if err != nil {
+		return json.RawMessage(`[]`)
+	}
+	return encoded
+}
+
+func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, providerType string, cfg auth.SSOProviderConfig, clientID, secretEncrypted string) error {
+	if h == nil || h.ssoMgr == nil {
+		return fmt.Errorf("sso manager is not configured")
+	}
+	if providerType == "oidc" {
+		return h.ssoMgr.RegisterOIDCProvider(ctx, providerKey, cfg.IssuerURL, clientID, secretEncrypted, cfg.RedirectURL, cfg.Scopes)
+	}
+	return h.ssoMgr.RegisterProvider(providerType, clientID, secretEncrypted, cfg.RedirectURL, cfg.Scopes)
+}
+
 func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Request) {
-	RespondJSON(w, http.StatusOK, []any{})
+	if h.sso == nil {
+		RespondJSON(w, http.StatusOK, []any{})
+		return
+	}
+	rows, err := h.sso.GetEnabledSSOProviders(r.Context())
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "sso_error", "Failed to load SSO providers")
+		return
+	}
+	items := make([]SSOProviderResponse, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, ssoConfigurationToResponse(row))
+	}
+	RespondJSON(w, http.StatusOK, items)
+}
+
+type SSOProviderRequest struct {
+	Type    string               `json:"type"`
+	Name    string               `json:"name"`
+	Enabled *bool                `json:"enabled"`
+	Config  SSOProviderConfigDTO `json:"config"`
+}
+
+type SSOProviderConfigDTO struct {
+	ClientID             string `json:"client_id"`
+	ClientSecret         string `json:"client_secret"`
+	MetadataURL          string `json:"metadata_url"`
+	AllowedOrganizations string `json:"allowed_organizations"`
+	AutoCreateUsers      *bool  `json:"auto_create_users"`
+}
+
+type SSOProviderResponse struct {
+	ID        string            `json:"id"`
+	Provider  string            `json:"provider"`
+	Type      string            `json:"type"`
+	Name      string            `json:"name"`
+	Enabled   bool              `json:"enabled"`
+	Config    map[string]string `json:"config"`
+	CreatedAt string            `json:"created_at"`
+	UpdatedAt string            `json:"updated_at"`
 }
 
 // CreateSSOProvider handles POST /api/v1/settings/sso/.
-//
-// SSO provider storage is out of scope for the Go server — providers are
-// configured today via env vars and surfaced to the frontend by SSO.Login.
-// We accept the body, log it, and echo it back so the frontend's "Add SSO
-// provider" form doesn't 405. A persistent SSO provider table is tracked
-// for follow-up.
 func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Request) {
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+	if h.sso == nil || h.encryptor == nil || h.ssoMgr == nil {
+		RespondError(w, http.StatusServiceUnavailable, "sso_unavailable", "SSO provider management is not configured")
+		return
+	}
+	var req SSOProviderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
 		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
-	if body == nil {
-		body = map[string]any{}
+	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", "Provider name is required")
+		return
 	}
-	body["id"] = uuid.New().String()
-	if _, ok := body["enabled"]; !ok {
-		body["enabled"] = false
+	switch req.Type {
+	case "github", "google", "oidc":
+	default:
+		RespondError(w, http.StatusBadRequest, "unsupported_provider", "Supported provider types are github, google, and oidc")
+		return
 	}
-	RespondJSON(w, http.StatusCreated, body)
+	if strings.TrimSpace(req.Config.ClientID) == "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", "Client ID is required")
+		return
+	}
+	if strings.TrimSpace(req.Config.ClientSecret) == "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", "Client secret is required")
+		return
+	}
+	if req.Type == "oidc" && strings.TrimSpace(req.Config.MetadataURL) == "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", "metadata_url is required for OIDC providers")
+		return
+	}
+
+	providerKey := req.Type
+	if req.Type == "oidc" {
+		providerKey = ssoProviderKeyFromName(req.Name)
+		if providerKey == "" {
+			RespondError(w, http.StatusBadRequest, "validation_error", "Provider name must contain letters or numbers")
+			return
+		}
+	}
+	if _, err := h.sso.GetSSOConfigurationByProvider(r.Context(), providerKey); err == nil {
+		RespondError(w, http.StatusConflict, "provider_exists", "An SSO provider with this key already exists")
+		return
+	}
+
+	issuerURL := normalizeOIDCIssuerURL(req.Config.MetadataURL)
+	config := auth.SSOProviderConfig{}
+	if req.Type == "oidc" {
+		config.IssuerURL = issuerURL
+	}
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "encode_error", "Failed to encode SSO config")
+		return
+	}
+	secretEncrypted, err := h.encryptor.Encrypt(req.Config.ClientSecret)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt SSO client secret")
+		return
+	}
+
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	allowedOrgs := csvStringToJSON(req.Config.AllowedOrganizations)
+	autoCreateUsers := true
+	if req.Config.AutoCreateUsers != nil {
+		autoCreateUsers = *req.Config.AutoCreateUsers
+	}
+
+	if enabled {
+		if err := h.registerSSOProvider(r.Context(), providerKey, req.Type, config, req.Config.ClientID, secretEncrypted); err != nil {
+			RespondError(w, http.StatusBadRequest, "registration_error", err.Error())
+			return
+		}
+	}
+
+	created, err := h.sso.CreateSSOConfiguration(r.Context(), sqlc.CreateSSOConfigurationParams{
+		Provider:              providerKey,
+		IsEnabled:             enabled,
+		DisplayName:           req.Name,
+		Config:                configJSON,
+		ClientID:              strings.TrimSpace(req.Config.ClientID),
+		ClientSecretEncrypted: secretEncrypted,
+		AllowedOrganizations:  allowedOrgs,
+		AllowedDomains:        json.RawMessage(`[]`),
+		AutoCreateUsers:       autoCreateUsers,
+		DefaultGlobalRoleID:   pgtype.UUID{},
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create SSO provider")
+		return
+	}
+
+	recordAudit(r, h.queries, "sso.provider.create", "sso_provider", created.ID.String(), created.DisplayName, map[string]any{
+		"provider": providerKey,
+		"type":     ssoProviderType(created),
+		"enabled":  created.IsEnabled,
+	})
+	RespondJSON(w, http.StatusCreated, ssoConfigurationToResponse(created))
+}
+
+// DeleteSSOProvider handles DELETE /api/v1/settings/sso/{id}/.
+func (h *ResourceHandler) DeleteSSOProvider(w http.ResponseWriter, r *http.Request) {
+	if h.sso == nil {
+		RespondError(w, http.StatusServiceUnavailable, "sso_unavailable", "SSO provider management is not configured")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid SSO provider ID")
+		return
+	}
+	existing, err := h.sso.GetSSOConfigurationByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "SSO provider not found")
+		return
+	}
+	if err := h.sso.DeleteSSOConfiguration(r.Context(), id); err != nil {
+		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete SSO provider")
+		return
+	}
+	if h.ssoMgr != nil {
+		h.ssoMgr.RemoveProvider(existing.Provider)
+	}
+	recordAudit(r, h.queries, "sso.provider.delete", "sso_provider", existing.ID.String(), existing.DisplayName, map[string]any{
+		"provider": existing.Provider,
+		"type":     ssoProviderType(existing),
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
@@ -307,7 +586,7 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 		RespondJSON(w, http.StatusOK, []any{})
 		return
 	}
-	logs, err := h.queries.ListAuditLogs(r.Context(), sqlc.ListAuditLogsParams{
+	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
 		Limit:  int32(queryInt(r, "limit", 20)),
 		Offset: 0,
 	})
@@ -334,7 +613,7 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		RespondPaginated(w, r, []any{}, 0)
 		return
 	}
-	logs, err := h.queries.ListAuditLogs(r.Context(), sqlc.ListAuditLogsParams{
+	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
 		Limit:  int32(queryInt(r, "limit", 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
@@ -342,7 +621,7 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusInternalServerError, "audit_error", "Failed to load audit logs")
 		return
 	}
-	total, _ := h.queries.CountAuditLogs(r.Context())
+	total, _ := countAuditLogsForResource(r.Context(), h.queries)
 	items := make([]map[string]any, 0, len(logs))
 	for _, item := range logs {
 		items = append(items, map[string]any{
@@ -359,6 +638,20 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	RespondPaginated(w, r, items, total)
+}
+
+func listAuditLogsForResource(ctx context.Context, q any, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error) {
+	if v1, ok := q.(auditReaderV1); ok && v1 != nil {
+		return v1.ListAuditLogV1(ctx, arg)
+	}
+	return nil, fmt.Errorf("audit v1 reader not configured")
+}
+
+func countAuditLogsForResource(ctx context.Context, q any) (int64, error) {
+	if v1, ok := q.(auditReaderV1); ok && v1 != nil {
+		return v1.CountAuditLogV1(ctx)
+	}
+	return 0, fmt.Errorf("audit v1 reader not configured")
 }
 
 func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {

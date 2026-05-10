@@ -13,6 +13,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // resourcesSearchMaxConcurrency caps how many clusters we hit in parallel for
@@ -49,6 +50,7 @@ const (
 type ResourcesSearchHandler struct {
 	requester K8sRequester
 	queries   ResourcesSearchQuerier
+	authz     authorizationSupport
 }
 
 // ResourcesSearchQuerier is the minimal slice of sqlc.Queries the search
@@ -63,6 +65,10 @@ type ResourcesSearchQuerier interface {
 // partially-wired servers degrade rather than panic.
 func NewResourcesSearchHandler(queries ResourcesSearchQuerier, requester K8sRequester) *ResourcesSearchHandler {
 	return &ResourcesSearchHandler{queries: queries, requester: requester}
+}
+
+func (h *ResourcesSearchHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	h.authz.SetAuthorization(engine, querier)
 }
 
 // searchResourceDef is a local copy of the resourceDef shape from
@@ -141,16 +147,6 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Authorization: the route-level middleware (registered in routes.go)
-	// already enforces a baseline `read` permission on a representative
-	// resource. The per-type rbacResource here is recorded for future
-	// enforcement once the rbac.Engine is plumbed into this handler — it
-	// would require either an inline engine reference or a dynamic
-	// permission middleware that reads the request's `type` query param.
-	// For now the route middleware + the agent tunnel's own auth are the
-	// gate.
-	_ = def.rbacResource
-
 	namespace := strings.TrimSpace(q.Get("namespace"))
 	labelSelector := strings.TrimSpace(q.Get("label"))
 	fieldSelector := strings.TrimSpace(q.Get("field"))
@@ -174,6 +170,15 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "list_clusters_failed", "Failed to list active clusters")
+		return
+	}
+	clusters, authErr := h.authorizedSearchClusters(r.Context(), clusters, def.rbacResource)
+	if authErr != nil {
+		RespondError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+		return
+	}
+	if len(clusters) == 0 {
+		RespondError(w, http.StatusForbidden, "permission_denied", "You do not have permission to search this resource type")
 		return
 	}
 
@@ -276,6 +281,23 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 		"type":             resourceType,
 		"truncated":        false,
 	})
+}
+
+func (h *ResourcesSearchHandler) authorizedSearchClusters(ctx context.Context, clusters []sqlc.Cluster, resource rbac.Resource) ([]sqlc.Cluster, error) {
+	bindings, restricted, err := h.authz.bindingsForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !restricted {
+		return clusters, nil
+	}
+	filtered := make([]sqlc.Cluster, 0, len(clusters))
+	for _, c := range clusters {
+		if h.authz.allowsCluster(bindings, c.ID, resource, rbac.VerbRead) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered, nil
 }
 
 // queryCluster runs a single-cluster list against the agent tunnel and
@@ -514,4 +536,3 @@ func stringValueAny(item map[string]any, key string) string {
 	}
 	return fmt.Sprint(v)
 }
-

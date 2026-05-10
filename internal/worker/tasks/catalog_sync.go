@@ -37,63 +37,65 @@ func NewCatalogSyncTask(payload CatalogSyncPayload) (*asynq.Task, error) {
 
 // HandleCatalogSync syncs Helm repositories and updates chart listings.
 func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
-	var p CatalogSyncPayload
-	if len(t.Payload()) > 0 {
-		if err := json.Unmarshal(t.Payload(), &p); err != nil {
-			return fmt.Errorf("unmarshal catalog sync payload: %w", err)
+	return runPeriodicTaskWithLeader(ctx, "catalog:sync", func() error {
+		var p CatalogSyncPayload
+		if len(t.Payload()) > 0 {
+			if err := json.Unmarshal(t.Payload(), &p); err != nil {
+				return fmt.Errorf("unmarshal catalog sync payload: %w", err)
+			}
 		}
-	}
 
-	if p.RepositoryURL != "" {
-		slog.InfoContext(ctx, "syncing catalog repository", "url", p.RepositoryURL)
-	} else {
-		slog.InfoContext(ctx, "syncing all catalog repositories")
-	}
-
-	if runtimeDeps.Queries == nil {
-		slog.InfoContext(ctx, "catalog sync runtime not configured, skipping repository sync")
-		return nil
-	}
-
-	repos, err := runtimeDeps.Queries.ListEnabledHelmRepositories(ctx)
-	if err != nil {
-		return err
-	}
-	for _, repoRecord := range repos {
-		if p.RepositoryURL != "" && repoRecord.Url != p.RepositoryURL {
-			continue
+		if p.RepositoryURL != "" {
+			slog.InfoContext(ctx, "syncing catalog repository", "url", p.RepositoryURL)
+		} else {
+			slog.InfoContext(ctx, "syncing all catalog repositories")
 		}
-		indexURL, err := repositoryIndexURL(repoRecord.Url)
+
+		if runtimeDeps.Queries == nil {
+			slog.InfoContext(ctx, "catalog sync runtime not configured, skipping repository sync")
+			return nil
+		}
+
+		repos, err := runtimeDeps.Queries.ListEnabledHelmRepositories(ctx)
 		if err != nil {
 			return err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
-		if err != nil {
-			return err
-		}
-		resp, err := runtimeDeps.HTTPClient.Do(req)
-		if err != nil {
-			return err
-		}
-		if resp.StatusCode >= http.StatusBadRequest {
+		for _, repoRecord := range repos {
+			if p.RepositoryURL != "" && repoRecord.Url != p.RepositoryURL {
+				continue
+			}
+			indexURL, err := repositoryIndexURL(repoRecord.Url)
+			if err != nil {
+				return err
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
+			if err != nil {
+				return err
+			}
+			resp, err := runtimeDeps.HTTPClient.Do(req)
+			if err != nil {
+				return err
+			}
+			if resp.StatusCode >= http.StatusBadRequest {
+				resp.Body.Close()
+				return fmt.Errorf("catalog repository %s returned status %d", repoRecord.Url, resp.StatusCode)
+			}
+			indexFile, err := decodeIndex(resp)
 			resp.Body.Close()
-			return fmt.Errorf("catalog repository %s returned status %d", repoRecord.Url, resp.StatusCode)
+			if err != nil {
+				return err
+			}
+			if err := syncRepositoryIndex(ctx, repoRecord.ID, indexFile); err != nil {
+				return err
+			}
+			if err := runtimeDeps.Queries.UpdateHelmRepositoryLastSynced(ctx, repoRecord.ID); err != nil {
+				return err
+			}
 		}
-		indexFile, err := decodeIndex(resp)
-		resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		if err := syncRepositoryIndex(ctx, repoRecord.ID, indexFile); err != nil {
-			return err
-		}
-		if err := runtimeDeps.Queries.UpdateHelmRepositoryLastSynced(ctx, repoRecord.ID); err != nil {
-			return err
-		}
-	}
 
-	slog.InfoContext(ctx, "catalog sync complete")
-	return nil
+		slog.InfoContext(ctx, "catalog sync complete")
+		return nil
+	})
 }
 
 func repositoryIndexURL(base string) (string, error) {

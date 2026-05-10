@@ -24,10 +24,12 @@ func NewEnforceBackupRetentionTask() *asynq.Task {
 // to enqueue without error and so a future iteration can extend it (for
 // example, to vacuum failed backup rows older than N days).
 func HandleEnforceBackupRetention(ctx context.Context, _ *asynq.Task) error {
-	if runtimeDeps.Queries == nil {
-		runtimeLogger().DebugContext(ctx, "backup retention runtime not configured, skipping")
+	return runPeriodicTaskWithLeader(ctx, EnforceBackupRetentionType, func() error {
+		if runtimeDeps.Queries == nil {
+			runtimeLogger().DebugContext(ctx, "backup retention runtime not configured, skipping")
+			return nil
+		}
+		runtimeLogger().DebugContext(ctx, "backup retention is delegated to Velero TTL; nothing to do")
 		return nil
-	}
-	runtimeLogger().DebugContext(ctx, "backup retention is delegated to Velero TTL; nothing to do")
-	return nil
+	})
 }

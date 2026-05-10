@@ -42,6 +42,8 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 2m", TypeMonitoringReconcile, "monitoring reconciliation"},
 		{"@every 6h", TypeCleanupExpiredRegistrationTokens, "cleanup expired registration tokens"},
 		{"0 2 * * *", TypeCleanupOldAlertEvents, "cleanup old alert events (daily 02:00)"},
+		{"0 1 * * *", TypeEnsureAuditLogPartitions, "ensure audit_log monthly partitions (daily 01:00)"},
+		{"30 1 * * *", TypeEnforceAuditLogRetention, "enforce audit_log retention (daily 01:30)"},
 		{"@every 1h", TypeRunScheduledBackups, "run scheduled backups"},
 		{"0 3 * * *", TypeEnforceBackupRetention, "enforce backup retention (daily 03:00)"},
 		// Phase B3: re-apply project ResourceQuota / LimitRange / NetworkPolicy

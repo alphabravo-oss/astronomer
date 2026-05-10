@@ -30,35 +30,37 @@ func NewHealthCheckTask(payload HealthCheckPayload) (*asynq.Task, error) {
 
 // HandleHealthCheck checks all active cluster connections and updates health status.
 func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
-	var p HealthCheckPayload
-	if len(t.Payload()) > 0 {
-		if err := json.Unmarshal(t.Payload(), &p); err != nil {
-			return fmt.Errorf("unmarshal health check payload: %w", err)
+	return runPeriodicTaskWithLeader(ctx, "cluster:health_check", func() error {
+		var p HealthCheckPayload
+		if len(t.Payload()) > 0 {
+			if err := json.Unmarshal(t.Payload(), &p); err != nil {
+				return fmt.Errorf("unmarshal health check payload: %w", err)
+			}
 		}
-	}
 
-	if p.ClusterID != "" {
-		slog.InfoContext(ctx, "running health check for cluster", "cluster_id", p.ClusterID)
-	} else {
-		slog.InfoContext(ctx, "running health check for all clusters")
-	}
+		if p.ClusterID != "" {
+			slog.InfoContext(ctx, "running health check for cluster", "cluster_id", p.ClusterID)
+		} else {
+			slog.InfoContext(ctx, "running health check for all clusters")
+		}
 
-	if runtimeDeps.Queries == nil {
-		slog.InfoContext(ctx, "health check runtime not configured, skipping DB updates")
-		return nil
-	}
+		if runtimeDeps.Queries == nil {
+			slog.InfoContext(ctx, "health check runtime not configured, skipping DB updates")
+			return nil
+		}
 
-	clusters, err := healthCheckTargets(ctx, p.ClusterID)
-	if err != nil {
-		return err
-	}
-	for _, cluster := range clusters {
-		if err := updateClusterHealth(ctx, cluster); err != nil {
+		clusters, err := healthCheckTargets(ctx, p.ClusterID)
+		if err != nil {
 			return err
 		}
-	}
-	slog.InfoContext(ctx, "health check complete")
-	return nil
+		for _, cluster := range clusters {
+			if err := updateClusterHealth(ctx, cluster); err != nil {
+				return err
+			}
+		}
+		slog.InfoContext(ctx, "health check complete")
+		return nil
+	})
 }
 
 func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, error) {

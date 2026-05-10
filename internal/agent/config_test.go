@@ -40,6 +40,12 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.HealthAddr != ":8081" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":8081")
 	}
+	if cfg.TokenSecretName != "astronomer-agent-token" {
+		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "astronomer-agent-token")
+	}
+	if cfg.TokenSecretKey != "token" {
+		t.Errorf("TokenSecretKey = %q, want %q", cfg.TokenSecretKey, "token")
+	}
 }
 
 func TestLoadAgentConfig_CustomValues(t *testing.T) {
@@ -52,6 +58,8 @@ func TestLoadAgentConfig_CustomValues(t *testing.T) {
 	t.Setenv("ASTRONOMER_HEARTBEAT_INTERVAL", "15")
 	t.Setenv("ASTRONOMER_METRICS_INTERVAL", "120")
 	t.Setenv("ASTRONOMER_HEALTH_ADDR", ":9090")
+	t.Setenv("ASTRONOMER_TOKEN_SECRET_NAME", "custom-secret")
+	t.Setenv("ASTRONOMER_TOKEN_SECRET_KEY", "agent-token")
 
 	cfg, err := LoadAgentConfig()
 	if err != nil {
@@ -75,6 +83,12 @@ func TestLoadAgentConfig_CustomValues(t *testing.T) {
 	}
 	if cfg.HealthAddr != ":9090" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":9090")
+	}
+	if cfg.TokenSecretName != "custom-secret" {
+		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "custom-secret")
+	}
+	if cfg.TokenSecretKey != "agent-token" {
+		t.Errorf("TokenSecretKey = %q, want %q", cfg.TokenSecretKey, "agent-token")
 	}
 }
 

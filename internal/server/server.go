@@ -12,7 +12,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/google/uuid"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
@@ -20,7 +19,9 @@ import (
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -35,19 +36,22 @@ func (a busPublisherAdapter) Publish(eventType string, data any) {
 	a.bus.Publish(events.Type(eventType), data)
 }
 
-// resolveCallbackBaseURL builds the OAuth callback prefix used when registering
-// SSO providers. It prefers platform_configuration.server_url so the production
-// deployment URL is always honoured; falls back to a localhost-friendly default
-// if no platform record exists yet (e.g. pre-bootstrap).
+// resolveCallbackBaseURL builds the API base URL used when registering SSO
+// providers. The auth package appends `/auth/callback/{provider}` itself, so
+// this function must stop at `/api/v1` rather than `/api/v1/auth`.
+//
+// It prefers platform_configuration.server_url so the production deployment URL
+// is always honoured; falls back to a localhost-friendly default if no
+// platform record exists yet (e.g. pre-bootstrap).
 func resolveCallbackBaseURL(ctx context.Context, _ *config.Config, queries *sqlc.Queries) string {
 	base := "http://localhost:8000"
 	if queries == nil {
-		return base + "/api/v1/auth"
+		return base + "/api/v1"
 	}
 	if cfg, err := queries.GetPlatformConfig(ctx); err == nil && strings.TrimSpace(cfg.ServerUrl) != "" {
 		base = strings.TrimRight(cfg.ServerUrl, "/")
 	}
-	return base + "/api/v1/auth"
+	return base + "/api/v1"
 }
 
 // Server wraps the HTTP server and its dependencies.
@@ -64,6 +68,12 @@ type Server struct {
 	// SSO drives the OAuth login/callback flow. May be nil if no providers
 	// are configured at boot.
 	SSO *auth.SSOManager
+}
+
+// DB returns the primary application database wrapper when this server was
+// built via NewApp. Nil for tests or lightweight routers built with New.
+func (s *Server) DB() *db.DB {
+	return s.db
 }
 
 // New creates a new Server with the given config and logger.
@@ -133,6 +143,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	argocdHandler := handler.NewArgoCDHandler(queries)
 	argocdHandler.SetLogger(logger)
 	argocdHandler.SetEncryptor(encryptor)
+	argocdHandler.SetClusterProxyBaseURL(cfg.ArgoCDClusterProxyBaseURL)
 	toolHandler := handler.NewToolHandlerWithHelm(queries, helmRequester)
 	toolHandler.SetLogger(logger)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
@@ -203,6 +214,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	dexHandler.SetLogger(logger)
 
 	clusterHandler := handler.NewClusterHandler(queries)
+	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
@@ -211,6 +223,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterHandler.SetMetricsRequester(requester)
 	if restCfg, err := rest.InClusterConfig(); err == nil {
 		if cs, err := kubernetes.NewForConfig(restCfg); err == nil {
+			argocdHandler.SetKubernetesClient(cs)
 			if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 				clusterHandler.SetMetricsLocalClient(cs, mc)
 			} else {
@@ -223,6 +236,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// CPU/memory usage on the node-detail page comes from the same fetch (and
 	// the same cache) as the dashboard cluster card.
 	workloadHandler.SetMetricsProvider(clusterHandler.MetricsProvider())
+
+	resourceHandler := handler.NewResourceHandlerWithQueries(queries, requester)
+	resourceHandler.SetEncryptor(encryptor)
+	resourceHandler.SetSSOManager(ssoManager)
+	platformCharts, chartRepoErr := handler.NewPlatformChartRepoHandler()
+	if chartRepoErr != nil {
+		return nil, chartRepoErr
+	}
 
 	deps := RouterDependencies{
 		JWT:          jwtManager,
@@ -241,19 +262,25 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Logging:      loggingHandler,
 		Monitoring:   monitoringHandler,
 		ControlPlane: controlPlaneHandler,
-		Resources:       handler.NewResourceHandlerWithQueries(queries, requester),
-		ResourcesSearch: handler.NewResourcesSearchHandler(queries, requester),
-		DexConfig:       dexHandler,
-		RBAC:         handler.NewRBACHandler(queries),
-		RBACQueries:  rbacQuerier,
-		RBACEngine:   rbacEngine,
-		Security:     securityHandler,
-		ServiceProxy: handler.NewServiceProxyHandler(requester),
-		Workloads:    workloadHandler,
-		Hub:          hub,
-		Proxy:        tunnel.NewProxyHandler(hub, logger),
-		Exec:         tunnel.NewExecConsumer(hub, logger),
-		Logs:         tunnel.NewLogsConsumer(hub, logger),
+		Resources:    resourceHandler,
+		PlatformCharts: platformCharts,
+		ResourcesSearch: func() *handler.ResourcesSearchHandler {
+			h := handler.NewResourcesSearchHandler(queries, requester)
+			h.SetAuthorization(rbacEngine, rbacQuerier)
+			return h
+		}(),
+		Readyz:        newReadinessHandler(database, queue, hub),
+		DexConfig:     dexHandler,
+		RBAC:          handler.NewRBACHandler(queries),
+		RBACQueries:   rbacQuerier,
+		RBACEngine:    rbacEngine,
+		Security:      securityHandler,
+		ServiceProxy:  handler.NewServiceProxyHandler(requester),
+		Workloads:     workloadHandler,
+		Hub:           hub,
+		Proxy:         tunnel.NewProxyHandler(hub, logger),
+		Exec:          tunnel.NewExecConsumer(hub, logger),
+		Logs:          tunnel.NewLogsConsumer(hub, logger),
 		RemoteServer:  remoteServer,
 		RemoteQueries: queries,
 		EventStream:   handler.NewEventStreamHandler(bus),
@@ -312,6 +339,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	s.cancel = cancel
 	monitoringHandler.StartReconciler(reconcileCtx)
 	argocdHandler.StartReconciler(reconcileCtx)
+	backupHandler.StartReconciler(reconcileCtx)
 	toolHandler.StartReconciler(reconcileCtx)
 	catalogHandler.StartReconciler(reconcileCtx)
 	controlPlaneHandler.StartEvaluator(reconcileCtx)
@@ -328,6 +356,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		AgentImageRepo: cfg.AgentImageRepository,
 		AgentImageTag:  cfg.AgentImageTag,
 		PlatformName:   "Astronomer",
+		Leader:         leader.New(database.Pool(), logger),
 		K8s:            requester,
 	})
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
@@ -346,6 +375,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// each active cluster and flips active<->disconnected when heartbeats
 	// age past the threshold (with cluster.status_changed fan-out).
 	livemetrics.New(bus, queries, clusterHandler.MetricsProvider(), logger).Start(reconcileCtx)
+	tunnel.StartConnectionMetricsReporter(reconcileCtx, queries, logger)
 
 	// Local cluster auto-registration (Rancher pattern). Both calls are
 	// best-effort: when running outside a kubernetes cluster (laptop dev,
@@ -361,6 +391,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		if err := StartLocalAgent(reconcileCtx, logger, queries, localCluster.ID); err != nil {
 			logger.Warn("local agent start failed", "error", err)
 		}
+		startLocalArgoSelfManagement(reconcileCtx, logger, cfg, queries, toolHandler, encryptor, localCluster)
 	}
 
 	return s, nil

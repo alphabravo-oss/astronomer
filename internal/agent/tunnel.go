@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"nhooyr.io/websocket"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -139,6 +140,14 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	if !ack.Accepted {
 		conn.Close(websocket.StatusNormalClosure, "rejected")
 		return fmt.Errorf("connection rejected: %s", ack.Reason)
+	}
+	if ack.AgentToken != "" && ack.AgentToken != tc.config.AgentToken {
+		tc.config.AgentToken = ack.AgentToken
+		if err := persistRotatedToken(ctx, tc.config, ack.AgentToken); err != nil {
+			tc.log.Warn("failed to persist rotated agent token", "error", err)
+		} else {
+			tc.log.Info("rotated durable agent token")
+		}
 	}
 
 	tc.conn = conn
@@ -317,6 +326,7 @@ func (tc *TunnelClient) Send(msg *protocol.Message) error {
 	case tc.sendCh <- msg:
 		return nil
 	default:
+		observability.RecordDroppedEvent("agent_tunnel_send", "channel_full")
 		return fmt.Errorf("send channel full, dropping message type=%s", msg.Type)
 	}
 }

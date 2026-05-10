@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -152,6 +156,12 @@ func TestSend(t *testing.T) {
 }
 
 func TestSendChannelFull(t *testing.T) {
+	oldInstanceID := observability.InstanceID()
+	observability.SetInstanceID("test-agent-tunnel")
+	t.Cleanup(func() {
+		observability.SetInstanceID(oldInstanceID)
+	})
+
 	cfg := testConfig()
 	log := testLogger()
 	tc := NewTunnelClient(cfg, log)
@@ -162,10 +172,55 @@ func TestSendChannelFull(t *testing.T) {
 	}
 
 	// Next send should fail.
+	before := droppedEventsCounterValue(t, map[string]string{
+		"astronomer_instance_id": "test-agent-tunnel",
+		"component":              "agent_tunnel_send",
+		"reason":                 "channel_full",
+	})
 	err := tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
 	if err == nil {
 		t.Error("expected error when channel is full, got nil")
 	}
+	after := droppedEventsCounterValue(t, map[string]string{
+		"astronomer_instance_id": "test-agent-tunnel",
+		"component":              "agent_tunnel_send",
+		"reason":                 "channel_full",
+	})
+	if after != before+1 {
+		t.Fatalf("dropped events counter = %v, want %v", after, before+1)
+	}
+}
+
+func droppedEventsCounterValue(t *testing.T, wantLabels map[string]string) float64 {
+	t.Helper()
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	for _, family := range families {
+		if family.GetName() != "astronomer_dropped_events_total" {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			if droppedEventsLabelsMatch(metric.GetLabel(), wantLabels) && metric.Counter != nil {
+				return metric.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+func droppedEventsLabelsMatch(labels []*dto.LabelPair, want map[string]string) bool {
+	if len(labels) != len(want) {
+		return false
+	}
+	for _, label := range labels {
+		if want[label.GetName()] != label.GetValue() {
+			return false
+		}
+	}
+	return true
 }
 
 func TestIsConnected(t *testing.T) {

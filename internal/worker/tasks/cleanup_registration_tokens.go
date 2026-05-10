@@ -18,22 +18,24 @@ func NewCleanupRegistrationTokensTask() *asynq.Task {
 }
 
 // HandleCleanupRegistrationTokens removes expired cluster registration tokens.
-// Cron: every 6h (matches Python ``cleanup_expired_registration_tokens``).
+// Cron: every 6h (matches Python “cleanup_expired_registration_tokens“).
 func HandleCleanupRegistrationTokens(ctx context.Context, _ *asynq.Task) error {
-	if runtimeDeps.Queries == nil {
-		runtimeLogger().InfoContext(ctx, "registration token cleanup runtime not configured, skipping")
+	return runPeriodicTaskWithLeader(ctx, CleanupExpiredRegistrationTokensType, func() error {
+		if runtimeDeps.Queries == nil {
+			runtimeLogger().InfoContext(ctx, "registration token cleanup runtime not configured, skipping")
+			return nil
+		}
+		q, ok := runtimeDeps.Queries.(interface {
+			DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
+		})
+		if !ok {
+			return fmt.Errorf("registration token cleanup not supported by runtime querier")
+		}
+		rows, err := q.DeleteExpiredRegistrationTokens(ctx)
+		if err != nil {
+			return fmt.Errorf("delete expired registration tokens: %w", err)
+		}
+		runtimeLogger().InfoContext(ctx, "removed expired registration tokens", "rows", rows)
 		return nil
-	}
-	q, ok := runtimeDeps.Queries.(interface {
-		DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
 	})
-	if !ok {
-		return fmt.Errorf("registration token cleanup not supported by runtime querier")
-	}
-	rows, err := q.DeleteExpiredRegistrationTokens(ctx)
-	if err != nil {
-		return fmt.Errorf("delete expired registration tokens: %w", err)
-	}
-	runtimeLogger().InfoContext(ctx, "removed expired registration tokens", "rows", rows)
-	return nil
 }

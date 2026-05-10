@@ -116,6 +116,15 @@ func (q *Queries) DeleteCluster(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteClusterRegistryConfig = `-- name: DeleteClusterRegistryConfig :exec
+DELETE FROM cluster_registry_configs WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteClusterRegistryConfig, clusterID)
+	return err
+}
+
 const deleteExpiredRegistrationTokens = `-- name: DeleteExpiredRegistrationTokens :execrows
 DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = true AND updated_at < now() - INTERVAL '7 days')
 `
@@ -240,6 +249,42 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsLocal,
+	)
+	return i, err
+}
+
+const getClusterAgentTokenByClusterID = `-- name: GetClusterAgentTokenByClusterID :one
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at FROM cluster_agent_tokens WHERE cluster_id = $1
+`
+
+func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error) {
+	row := q.db.QueryRow(ctx, getClusterAgentTokenByClusterID, clusterID)
+	var i ClusterAgentToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Token,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getClusterAgentTokenByToken = `-- name: GetClusterAgentTokenByToken :one
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at FROM cluster_agent_tokens WHERE token = $1
+`
+
+func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, token string) (ClusterAgentToken, error) {
+	row := q.db.QueryRow(ctx, getClusterAgentTokenByToken, token)
+	var i ClusterAgentToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Token,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -488,6 +533,15 @@ func (q *Queries) MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
+const touchClusterAgentToken = `-- name: TouchClusterAgentToken :exec
+UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1
+`
+
+func (q *Queries) TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchClusterAgentToken, id)
+	return err
+}
+
 const updateCluster = `-- name: UpdateCluster :one
 UPDATE clusters SET
     display_name = $2,
@@ -588,6 +642,34 @@ type UpdateClusterStatusParams struct {
 func (q *Queries) UpdateClusterStatus(ctx context.Context, arg UpdateClusterStatusParams) error {
 	_, err := q.db.Exec(ctx, updateClusterStatus, arg.ID, arg.Status)
 	return err
+}
+
+const upsertClusterAgentToken = `-- name: UpsertClusterAgentToken :one
+INSERT INTO cluster_agent_tokens (cluster_id, token, last_used_at)
+VALUES ($1, $2, now())
+ON CONFLICT (cluster_id) DO UPDATE SET
+    token = EXCLUDED.token,
+    last_used_at = now()
+RETURNING id, cluster_id, token, last_used_at, created_at, updated_at
+`
+
+type UpsertClusterAgentTokenParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Token     string    `json:"token"`
+}
+
+func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error) {
+	row := q.db.QueryRow(ctx, upsertClusterAgentToken, arg.ClusterID, arg.Token)
+	var i ClusterAgentToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Token,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertClusterHealthStatus = `-- name: UpsertClusterHealthStatus :one

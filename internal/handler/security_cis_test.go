@@ -1,8 +1,14 @@
 package handler
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
+	"net/http"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/google/uuid"
 )
 
 // TestFlattenCISReport feeds a representative ClusterScanReport (matching the
@@ -217,21 +223,173 @@ func TestDefaultCISProfileForDistribution(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"":       "cis-1.8",
-		"rke":    "rke-cis-1.8-permissive",
-		"rke1":   "rke-cis-1.8-permissive",
-		"rke2":   "rke2-cis-1.8-permissive",
-		"k3s":    "k3s-cis-1.8-permissive",
-		"eks":    "eks-cis-1.5",
-		"aks":    "aks-cis-1.0",
-		"gke":    "gke-cis-1.5",
-		"vanilla": "cis-1.8",
-		"  RKE2 ": "rke2-cis-1.8-permissive", // case + whitespace tolerance
+		"":        "cis-1.8-profile",
+		"rke":     "rke-profile-permissive-1.8",
+		"rke1":    "rke-profile-permissive-1.8",
+		"rke2":    "rke2-cis-1.8-profile-permissive",
+		"k3s":     "k3s-cis-1.8-profile-permissive",
+		"eks":     "eks-profile-1.5.0",
+		"aks":     "aks-profile",
+		"gke":     "gke-profile-1.6.0",
+		"vanilla": "cis-1.8-profile",
+		"  RKE2 ": "rke2-cis-1.8-profile-permissive", // case + whitespace tolerance
 	}
 	for input, want := range cases {
 		got := defaultCISProfileForDistribution(input)
 		if got != want {
 			t.Errorf("distribution=%q: got %q, want %q", input, got, want)
 		}
+	}
+}
+
+type cisTestRequester struct {
+	lastPath string
+	resp     *protocol.K8sResponsePayload
+	resps    map[string]*protocol.K8sResponsePayload
+}
+
+func (r *cisTestRequester) Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	r.lastPath = method + " " + path
+	if r.resps != nil {
+		if resp, ok := r.resps[r.lastPath]; ok {
+			return resp, nil
+		}
+	}
+	if r.resp != nil {
+		return r.resp, nil
+	}
+	return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+}
+
+func TestResolveClusterScanProfileNameAcceptsBenchmarkVersion(t *testing.T) {
+	t.Parallel()
+
+	list := map[string]any{
+		"items": []map[string]any{
+			{
+				"metadata": map[string]any{"name": "k3s-cis-1.8-profile-permissive"},
+				"spec":     map[string]any{"benchmarkVersion": "k3s-cis-1.8-permissive"},
+			},
+		},
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	req := &cisTestRequester{
+		resp: &protocol.K8sResponsePayload{
+			StatusCode: http.StatusOK,
+			Body:       base64.StdEncoding.EncodeToString(raw),
+		},
+	}
+	h := &SecurityHandler{k8s: req}
+
+	got := h.resolveClusterScanProfileName(context.Background(), uuid.New(), "k3s", "k3s-cis-1.8-permissive")
+	if got != "k3s-cis-1.8-profile-permissive" {
+		t.Fatalf("resolveClusterScanProfileName() = %q", got)
+	}
+	if req.lastPath != "GET /apis/cis.cattle.io/v1/clusterscanprofiles" {
+		t.Fatalf("unexpected path %q", req.lastPath)
+	}
+}
+
+func TestResolveClusterScanProfileNameRecommendsHighestLiveProfile(t *testing.T) {
+	t.Parallel()
+
+	list := map[string]any{
+		"items": []map[string]any{
+			{
+				"metadata": map[string]any{"name": "k3s-cis-1.8-profile-permissive"},
+				"spec":     map[string]any{"benchmarkVersion": "k3s-cis-1.8-permissive"},
+			},
+			{
+				"metadata": map[string]any{"name": "k3s-cis-1.10-profile"},
+				"spec":     map[string]any{"benchmarkVersion": "k3s-cis-1.10"},
+			},
+			{
+				"metadata": map[string]any{"name": "k3s-cis-1.11-profile"},
+				"spec":     map[string]any{"benchmarkVersion": "k3s-cis-1.11"},
+			},
+		},
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	req := &cisTestRequester{
+		resp: &protocol.K8sResponsePayload{
+			StatusCode: http.StatusOK,
+			Body:       base64.StdEncoding.EncodeToString(raw),
+		},
+	}
+	h := &SecurityHandler{k8s: req}
+
+	got := h.resolveClusterScanProfileName(context.Background(), uuid.New(), "k3s", "")
+	if got != "k3s-cis-1.11-profile" {
+		t.Fatalf("resolveClusterScanProfileName() = %q", got)
+	}
+	if req.lastPath != "GET /apis/cis.cattle.io/v1/clusterscanprofiles" {
+		t.Fatalf("unexpected path %q", req.lastPath)
+	}
+}
+
+func TestFetchClusterScanReportFallsBackToOwnerMatchedList(t *testing.T) {
+	t.Parallel()
+
+	list := map[string]any{
+		"items": []map[string]any{
+			{
+				"metadata": map[string]any{
+					"name": "scan-report-demo-xyz789",
+					"ownerReferences": []map[string]any{
+						{"name": "demo"},
+					},
+				},
+			},
+		},
+	}
+	report := map[string]any{
+		"apiVersion": "cis.cattle.io/v1",
+		"kind":       "ClusterScanReport",
+		"metadata":   map[string]any{"name": "scan-report-demo-xyz789"},
+	}
+	listRaw, err := json.Marshal(list)
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	reportRaw, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	req := &cisTestRequester{
+		resps: map[string]*protocol.K8sResponsePayload{
+			"GET /apis/cis.cattle.io/v1/clusterscans/demo": {
+				StatusCode: http.StatusOK,
+				Body:       base64.StdEncoding.EncodeToString([]byte(`{"status":{}}`)),
+			},
+			"GET /apis/cis.cattle.io/v1/clusterscanreports": {
+				StatusCode: http.StatusOK,
+				Body:       base64.StdEncoding.EncodeToString(listRaw),
+			},
+			"GET /apis/cis.cattle.io/v1/clusterscanreports/scan-report-demo-xyz789": {
+				StatusCode: http.StatusOK,
+				Body:       base64.StdEncoding.EncodeToString(reportRaw),
+			},
+		},
+	}
+	h := &SecurityHandler{k8s: req}
+
+	got, found, err := h.fetchClusterScanReport(context.Background(), uuid.New(), "demo")
+	if err != nil {
+		t.Fatalf("fetchClusterScanReport() error = %v", err)
+	}
+	if !found {
+		t.Fatal("expected report to be found")
+	}
+	if got["kind"] != "ClusterScanReport" {
+		t.Fatalf("kind = %v", got["kind"])
+	}
+	if req.lastPath != "GET /apis/cis.cattle.io/v1/clusterscanreports/scan-report-demo-xyz789" {
+		t.Fatalf("unexpected path %q", req.lastPath)
 	}
 }

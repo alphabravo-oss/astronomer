@@ -1,0 +1,76 @@
+{{- if .Values.preflight.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astronomer.fullname" . }}-preflight
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: preflight
+          image: "{{ .Values.preflight.image.repository }}:{{ .Values.preflight.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              if [ "{{ .Values.gateway.enabled }}" = "true" ]; then
+                if ! kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1; then
+                  echo "Refusing release: Gateway API CRD gateways.gateway.networking.k8s.io is missing."
+                  echo "Install Gateway API support and a compatible controller before installing this chart."
+                  exit 1
+                fi
+
+                if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
+                  echo "Refusing release: Gateway API CRD httproutes.gateway.networking.k8s.io is missing."
+                  echo "Install Gateway API support and a compatible controller before installing this chart."
+                  exit 1
+                fi
+
+                if ! kubectl get gatewayclass "{{ .Values.gateway.className }}" >/dev/null 2>&1; then
+                  echo "Refusing release: GatewayClass {{ .Values.gateway.className }} is missing."
+                  echo "Install a Gateway controller that provides that class before installing this chart."
+                  exit 1
+                fi
+
+                echo "Gateway API prerequisites found."
+              fi
+
+              if [ "{{ include "astronomer.postgresBundledEnabled" . }}" = "true" ]; then
+                echo "Bundled Postgres remains enabled; preflight passes."
+                exit 0
+              fi
+
+              legacy_pvc="data-{{ include "astronomer.fullname" . }}-postgres-0"
+              if kubectl get pvc "${legacy_pvc}" -n "{{ .Release.Namespace }}" >/dev/null 2>&1; then
+                echo "Refusing upgrade: detected legacy bundled Postgres PVC ${legacy_pvc} in namespace {{ .Release.Namespace }}."
+                echo "Externalize or migrate the database first. See docs/migrations/2026-05-postgres-cnpg.md."
+                exit 1
+              fi
+
+              echo "No legacy bundled Postgres PVC detected; preflight passes."
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+{{- end }}

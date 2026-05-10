@@ -19,6 +19,7 @@ type Querier interface {
 	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
 	// Pipeline <-> Output M2M
 	AddPipelineOutput(ctx context.Context, arg AddPipelineOutputParams) error
+	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
@@ -32,8 +33,6 @@ type Querier interface {
 	CountAppsByInstance(ctx context.Context, argocdInstanceID uuid.UUID) (int64, error)
 	CountArgoCDApplications(ctx context.Context) (int64, error)
 	CountArgoCDInstances(ctx context.Context) (int64, error)
-	CountAuditLogs(ctx context.Context) (int64, error)
-	CountAuditLogsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountBackupSchedules(ctx context.Context) (int64, error)
 	CountBackupStorageConfigs(ctx context.Context) (int64, error)
 	CountBackups(ctx context.Context) (int64, error)
@@ -74,7 +73,6 @@ type Querier interface {
 	CreateArgoCDManagedCluster(ctx context.Context, arg CreateArgoCDManagedClusterParams) (ArgocdManagedCluster, error)
 	CreateArgoCDOperation(ctx context.Context, arg CreateArgoCDOperationParams) (ArgocdOperation, error)
 	CreateArgoCDOperationEvent(ctx context.Context, arg CreateArgoCDOperationEventParams) (ArgocdOperationEvent, error)
-	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	CreateBackup(ctx context.Context, arg CreateBackupParams) (Backup, error)
 	CreateBackupSchedule(ctx context.Context, arg CreateBackupScheduleParams) (BackupSchedule, error)
 	CreateBackupStorageConfig(ctx context.Context, arg CreateBackupStorageConfigParams) (BackupStorageConfig, error)
@@ -125,11 +123,11 @@ type Querier interface {
 	DeleteArgoCDApplication(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgoCDManagedClusterParams) error
-	DeleteAuditLog(ctx context.Context, id uuid.UUID) error
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
+	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
 	DeleteClusterRole(ctx context.Context, id uuid.UUID) error
 	DeleteClusterRoleBinding(ctx context.Context, id uuid.UUID) error
 	DeleteClusterSecurityPolicy(ctx context.Context, id uuid.UUID) error
@@ -155,6 +153,7 @@ type Querier interface {
 	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
 	DeleteSecurityScanResult(ctx context.Context, id uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
 	// Idempotently create-or-return the singleton "local" cluster row that
 	// represents the Kubernetes cluster the server itself runs in. Uses a CTE
 	// so the round-trip both inserts (when no local row exists yet) and selects
@@ -186,7 +185,6 @@ type Querier interface {
 	GetArgoCDInstanceByName(ctx context.Context, name string) (ArgocdInstance, error)
 	GetArgoCDManagedCluster(ctx context.Context, arg GetArgoCDManagedClusterParams) (ArgocdManagedCluster, error)
 	GetArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
-	GetAuditLogByID(ctx context.Context, id uuid.UUID) (AuditLog, error)
 	// Backups
 	GetBackupByID(ctx context.Context, id uuid.UUID) (Backup, error)
 	// Backup Schedules
@@ -194,6 +192,8 @@ type Querier interface {
 	// Backup Storage Configs
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
 	GetCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error)
+	GetClusterAgentTokenByToken(ctx context.Context, token string) (ClusterAgentToken, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
 	GetClusterByName(ctx context.Context, name string) (Cluster, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
@@ -308,12 +308,6 @@ type Querier interface {
 	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error)
 	ListArgoCDOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ArgocdOperationEvent, error)
 	ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperationsParams) ([]ArgocdOperation, error)
-	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
-	ListAuditLogsByAction(ctx context.Context, arg ListAuditLogsByActionParams) ([]AuditLog, error)
-	ListAuditLogsByRequestID(ctx context.Context, requestID string) ([]AuditLog, error)
-	ListAuditLogsByResource(ctx context.Context, arg ListAuditLogsByResourceParams) ([]AuditLog, error)
-	ListAuditLogsByResourceType(ctx context.Context, arg ListAuditLogsByResourceTypeParams) ([]AuditLog, error)
-	ListAuditLogsByUser(ctx context.Context, arg ListAuditLogsByUserParams) ([]AuditLog, error)
 	ListBackupSchedules(ctx context.Context, arg ListBackupSchedulesParams) ([]BackupSchedule, error)
 	ListBackupStorageConfigs(ctx context.Context, arg ListBackupStorageConfigsParams) ([]BackupStorageConfig, error)
 	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)
@@ -421,6 +415,7 @@ type Querier interface {
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
+	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
 	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
@@ -482,6 +477,7 @@ type Querier interface {
 	// Convenience alias used by the login flow when an inherited Django
 	// PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
+	UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error)
 	UpsertClusterHealthStatus(ctx context.Context, arg UpsertClusterHealthStatusParams) (ClusterHealthStatus, error)
 	UpsertClusterMonitoringConfig(ctx context.Context, arg UpsertClusterMonitoringConfigParams) (ClusterMonitoringConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error)

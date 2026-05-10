@@ -12,6 +12,8 @@ type AgentConfig struct {
 	ClusterID         string `mapstructure:"cluster_id"`         // Cluster UUID
 	AgentToken        string `mapstructure:"agent_token"`        // Registration token
 	AgentID           string `mapstructure:"agent_id"`           // Unique agent instance ID
+	TokenSecretName   string `mapstructure:"token_secret_name"`  // K8s Secret holding the durable token
+	TokenSecretKey    string `mapstructure:"token_secret_key"`   // Secret key to rewrite on rotation
 	ReconnectBackoff  int    `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
 	MaxReconnect      int    `mapstructure:"max_reconnect"`      // Max backoff seconds (default 300)
 	HeartbeatInterval int    `mapstructure:"heartbeat_interval"` // Seconds (default 30)
@@ -31,6 +33,8 @@ func LoadAgentConfig() (*AgentConfig, error) {
 	v.SetDefault("cluster_id", "")
 	v.SetDefault("agent_token", "")
 	v.SetDefault("agent_id", "")
+	v.SetDefault("token_secret_name", "astronomer-agent-token")
+	v.SetDefault("token_secret_key", "token")
 	v.SetDefault("reconnect_backoff", 5)
 	v.SetDefault("max_reconnect", 300)
 	v.SetDefault("heartbeat_interval", 30)

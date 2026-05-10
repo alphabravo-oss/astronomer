@@ -21,6 +21,15 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
+type recordingAuthAuditWriter struct {
+	rows []sqlc.CreateAuditLogV1Params
+}
+
+func (w *recordingAuthAuditWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	w.rows = append(w.rows, arg)
+	return nil
+}
+
 // mockUserQuerier implements UserQuerier for testing.
 type mockUserQuerier struct {
 	users map[string]sqlc.User // keyed by email and username
@@ -229,6 +238,67 @@ func TestLogin(t *testing.T) {
 	}
 }
 
+func TestRefresh(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	user := makeTestUser(t, true)
+
+	t.Run("successful refresh writes audit", func(t *testing.T) {
+		accessToken, refreshToken, err := jwtMgr.GenerateTokenPair(user.ID)
+		if err != nil {
+			t.Fatalf("generate token pair: %v", err)
+		}
+		if accessToken == "" || refreshToken == "" {
+			t.Fatal("expected non-empty token pair")
+		}
+
+		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		auditWriter := &recordingAuthAuditWriter{}
+		handler.SetAuditWriter(auditWriter)
+
+		body := fmt.Sprintf(`{"refresh":%q}`, refreshToken)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		handler.Refresh(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d; body: %s", w.Code, w.Body.String())
+		}
+		if len(auditWriter.rows) != 1 {
+			t.Fatalf("expected 1 audit row, got %d", len(auditWriter.rows))
+		}
+		if auditWriter.rows[0].Action != "auth.refresh" {
+			t.Fatalf("action = %q, want auth.refresh", auditWriter.rows[0].Action)
+		}
+		if auditWriter.rows[0].ResourceID != user.ID.String() {
+			t.Fatalf("resource_id = %q, want %q", auditWriter.rows[0].ResourceID, user.ID.String())
+		}
+	})
+
+	t.Run("invalid refresh token writes failure audit", func(t *testing.T) {
+		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		auditWriter := &recordingAuthAuditWriter{}
+		handler.SetAuditWriter(auditWriter)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", strings.NewReader(`{"refresh":"bad-token"}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		handler.Refresh(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected status 401, got %d; body: %s", w.Code, w.Body.String())
+		}
+		if len(auditWriter.rows) != 1 {
+			t.Fatalf("expected 1 audit row, got %d", len(auditWriter.rows))
+		}
+		if auditWriter.rows[0].Action != "auth.refresh_failed" {
+			t.Fatalf("action = %q, want auth.refresh_failed", auditWriter.rows[0].Action)
+		}
+	})
+}
+
 // --- Token CRUD Tests ---
 
 // mockTokenQuerier implements TokenQuerier for testing.
@@ -334,6 +404,8 @@ func TestCreateToken(t *testing.T) {
 	t.Run("successful creation", func(t *testing.T) {
 		tokenQ := newMockTokenQuerier()
 		handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+		auditWriter := &recordingAuthAuditWriter{}
+		handler.SetAuditWriter(auditWriter)
 
 		body := `{"name": "My Token", "expires_in_days": 90, "scopes": ["read"]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/tokens/", strings.NewReader(body))
@@ -377,6 +449,15 @@ func TestCreateToken(t *testing.T) {
 
 		if data["id"] == nil || data["id"] == "" {
 			t.Fatal("expected non-empty id")
+		}
+		if len(auditWriter.rows) != 1 {
+			t.Fatalf("expected 1 audit row, got %d", len(auditWriter.rows))
+		}
+		if auditWriter.rows[0].Action != "auth.token.create" {
+			t.Fatalf("action = %q, want auth.token.create", auditWriter.rows[0].Action)
+		}
+		if auditWriter.rows[0].ResourceType != "api_token" {
+			t.Fatalf("resource_type = %q, want api_token", auditWriter.rows[0].ResourceType)
 		}
 	})
 
@@ -491,6 +572,8 @@ func TestRevokeToken(t *testing.T) {
 		}
 
 		handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+		auditWriter := &recordingAuthAuditWriter{}
+		handler.SetAuditWriter(auditWriter)
 
 		// Use chi router to inject URL params.
 		r := chi.NewRouter()
@@ -509,6 +592,15 @@ func TestRevokeToken(t *testing.T) {
 		// Verify the token is now revoked.
 		if !tokenQ.tokens[tokenID].IsRevoked {
 			t.Fatal("expected token to be revoked")
+		}
+		if len(auditWriter.rows) != 1 {
+			t.Fatalf("expected 1 audit row, got %d", len(auditWriter.rows))
+		}
+		if auditWriter.rows[0].Action != "auth.token.revoke" {
+			t.Fatalf("action = %q, want auth.token.revoke", auditWriter.rows[0].Action)
+		}
+		if auditWriter.rows[0].ResourceID != tokenID.String() {
+			t.Fatalf("resource_id = %q, want %q", auditWriter.rows[0].ResourceID, tokenID.String())
 		}
 	})
 

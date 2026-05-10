@@ -1,0 +1,595 @@
+---
+# Source: astronomer/templates/server-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: release-name-astronomer-server
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: server
+---
+# Source: astronomer/templates/worker-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: release-name-astronomer-worker
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: worker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: worker
+---
+# Source: astronomer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+---
+# Source: astronomer/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: release-name-astronomer-secrets
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+type: Opaque
+stringData:
+  SECRET_KEY: "local-dev-secret-key-change-in-production"
+  # The Go config reads this with `mapstructure:"astronomer_encryption_key"`,
+  # so the env var name must be ASTRONOMER_ENCRYPTION_KEY (not bare ENCRYPTION_KEY).
+  ASTRONOMER_ENCRYPTION_KEY: "local-dev-encryption-key-change-in-prod-32b"
+  GITHUB_CLIENT_ID: ""
+  GITHUB_CLIENT_SECRET: ""
+  GOOGLE_CLIENT_ID: ""
+  GOOGLE_CLIENT_SECRET: ""
+  OIDC_CLIENT_ID: ""
+  OIDC_CLIENT_SECRET: ""
+---
+# Source: astronomer/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-astronomer-config
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+data:
+  DATABASE_URL: "postgres://u:p@db.example:5432/app?sslmode=require"
+  REDIS_URL: "redis://redis.example:6379/0"
+  ENV: "development"
+  DEBUG: "true"
+  LOG_LEVEL: "info"
+  ALLOWED_HOSTS: "*"
+  CORS_ALLOWED_ORIGINS: "http://astronomer.localtest.me"
+  AGENT_IMAGE_REPOSITORY: "astronomer-go-agent"
+  AGENT_IMAGE_TAG: "dev"
+---
+# Source: astronomer/templates/serviceaccount.yaml
+# ClusterRole granting the embedded local agent the same broad in-cluster
+# access an externally-installed astronomer-agent gets via its install
+# manifest. This is intentionally Rancher-style: the management cluster the
+# server runs in is treated as a fully managed cluster, so the server's
+# in-process agent goroutine needs full read/write across all API groups
+# (k8s proxy, exec, logs, RBAC sync, helm install/upgrade/uninstall).
+#
+# Scope is identical to a managed-cluster agent on purpose — narrowing this
+# would make the local cluster a second-class citizen in the UI (some
+# resources visible, others not).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+---
+# Source: astronomer/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: release-name-astronomer
+subjects:
+  - kind: ServiceAccount
+    name: release-name-astronomer
+    namespace: default
+---
+# Source: astronomer/templates/server-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-astronomer-server
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: server
+---
+# Source: astronomer/templates/server-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name-astronomer-server
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: server
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: server
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: release-name-astronomer
+      initContainers:
+        - name: migrate
+          image: "astronomer-go-migrate:dev"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-database"
+            - "$(DATABASE_URL)"
+            - "-path"
+            - "/migrations"
+            - "up"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: release-name-astronomer-config
+                  key: DATABASE_URL
+      containers:
+        - name: server
+          image: "astronomer-go-server:dev"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: release-name-astronomer-config
+            - secretRef:
+                name: release-name-astronomer-secrets
+          env:
+            - name: REDIS_URL
+              value: "redis://redis.example:6379/0"
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      affinity:
+        
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: astronomer
+                    app.kubernetes.io/instance: release-name
+                    app.kubernetes.io/component: server
+      topologySpreadConstraints:
+        
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: astronomer
+              app.kubernetes.io/instance: release-name
+              app.kubernetes.io/component: server
+---
+# Source: astronomer/templates/worker-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name-astronomer-worker
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: release-name-astronomer
+      initContainers:
+      containers:
+        - name: worker
+          image: "astronomer-go-worker:dev"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: release-name-astronomer-config
+            - secretRef:
+                name: release-name-astronomer-secrets
+          env:
+            - name: REDIS_URL
+              value: "redis://redis.example:6379/0"
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      affinity:
+        
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: astronomer
+                    app.kubernetes.io/instance: release-name
+                    app.kubernetes.io/component: worker
+      topologySpreadConstraints:
+        
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: astronomer
+              app.kubernetes.io/instance: release-name
+              app.kubernetes.io/component: worker
+---
+# Source: astronomer/templates/httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+spec:
+  gatewayClassName: "nginx"
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+# Source: astronomer/templates/httproute.yaml
+# UI route — catches everything except /api/* and /health/* (those go to server)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: release-name-astronomer-ui
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: frontend
+spec:
+  parentRefs:
+    - name: release-name-astronomer
+  hostnames:
+    - "astronomer.localtest.me"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: release-name-astronomer-server
+          port: 8000
+---
+# Source: astronomer/templates/httproute.yaml
+# API route — anything under /api/v1/ goes to the Go server, including the
+# WebSocket tunnel at /api/v1/ws/...
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: release-name-astronomer-api
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: server
+spec:
+  parentRefs:
+    - name: release-name-astronomer
+  hostnames:
+    - "astronomer.localtest.me"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/
+        - path:
+            type: PathPrefix
+            value: /health/
+        - path:
+            type: Exact
+            value: /health
+        - path:
+            type: Exact
+            value: /metrics
+        # The auth-gated reverse proxy that fronts the ArgoCD UI lives on
+        # the Go server (internal/handler/argocd_ui_proxy.go), so route
+        # /argocd/* to the same backend as /api/*. Enforces Astronomer auth
+        # via cookie or bearer header before forwarding upstream.
+        - path:
+            type: PathPrefix
+            value: /argocd/
+        - path:
+            type: Exact
+            value: /argocd
+      backendRefs:
+        - name: release-name-astronomer-server
+          port: 8000
+---
+# Source: astronomer/templates/migrate-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: release-name-astronomer-migrate
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: migrate
+  annotations:
+    # Re-runnable on every release; deleted on the next install/upgrade.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: release-name-astronomer
+      containers:
+        - name: migrate
+          image: "astronomer-go-migrate:dev"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-database"
+            - "$(DATABASE_URL)"
+            - "-path"
+            - "/migrations"
+            - "up"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: release-name-astronomer-config
+                  key: DATABASE_URL
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+---
+# Source: astronomer/templates/preflight-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: release-name-astronomer-preflight
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: preflight
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: preflight
+    spec:
+      restartPolicy: Never
+      serviceAccountName: release-name-astronomer
+      containers:
+        - name: preflight
+          image: "bitnami/kubectl:1.31.4"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              if [ "false" = "true" ]; then
+                echo "Bundled Postgres remains enabled; preflight passes."
+                exit 0
+              fi
+
+              legacy_pvc="data-release-name-astronomer-postgres-0"
+              if kubectl get pvc "${legacy_pvc}" -n "default" >/dev/null 2>&1; then
+                echo "Refusing upgrade: detected legacy bundled Postgres PVC ${legacy_pvc} in namespace default."
+                echo "Externalize or migrate the database first. See docs/migrations/2026-05-postgres-cnpg.md."
+                exit 1
+              fi
+
+              echo "No legacy bundled Postgres PVC detected; preflight passes."
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

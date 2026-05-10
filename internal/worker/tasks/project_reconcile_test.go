@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -20,7 +21,8 @@ import (
 
 // TestRenderResourceQuota_TypicalShape verifies the canonical shape of a
 // rendered ResourceQuota for the example called out in the plan:
-//   { "cpu": "4", "memory": "8Gi", "pods": "20" }
+//
+//	{ "cpu": "4", "memory": "8Gi", "pods": "20" }
 //
 // This is the load-bearing assertion: every byte of this output is read by
 // the K8s API server, and a typo is silently catastrophic.
@@ -91,6 +93,22 @@ func TestRenderLimitRange_Container(t *testing.T) {
 	}
 }
 
+func TestRenderLimitRange_AcceptsSnakeCaseDefaultRequest(t *testing.T) {
+	raw := json.RawMessage(`{
+		"default": {"cpu":"500m","memory":"512Mi"},
+		"default_request": {"cpu":"100m","memory":"128Mi"}
+	}`)
+	got := renderLimitRange("team-a", raw)
+	limit := got["spec"].(map[string]any)["limits"].([]any)[0].(map[string]any)
+	defaultRequest, ok := limit["defaultRequest"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing defaultRequest in rendered LimitRange: %+v", limit)
+	}
+	if defaultRequest["cpu"] != "100m" || defaultRequest["memory"] != "128Mi" {
+		t.Fatalf("unexpected defaultRequest: %+v", defaultRequest)
+	}
+}
+
 // TestRenderNetworkPolicy_Modes covers the three documented modes:
 // none (handled outside this fn), isolated (deny-all), allow-same-project.
 func TestRenderNetworkPolicy_Modes(t *testing.T) {
@@ -144,6 +162,12 @@ func TestNormalizeNetworkPolicyMode(t *testing.T) {
 	}
 }
 
+func TestHasLimitRangeFields_AcceptsSnakeCaseDefaultRequest(t *testing.T) {
+	if !hasLimitRangeFields(json.RawMessage(`{"default_request":{"cpu":"100m"}}`)) {
+		t.Fatal("expected snake_case default_request to count as a limit-range field")
+	}
+}
+
 // --- worker task end-to-end tests -----------------------------------------
 
 // fakeProjectRequester captures every call the reconcile task makes so the
@@ -152,7 +176,8 @@ type fakeProjectRequester struct {
 	mu    sync.Mutex
 	calls []fakeCall
 	// fail is consulted per call. If true, returns a 500 response.
-	failOnce bool
+	failOnce                         bool
+	defaultServiceAccountPullSecrets []string
 }
 
 type fakeCall struct {
@@ -166,22 +191,64 @@ func (f *fakeProjectRequester) Do(_ context.Context, _, method, path string, bod
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, fakeCall{method: method, path: path, body: body, headers: headers})
+	if method == http.MethodGet && strings.Contains(path, "/serviceaccounts/default") {
+		type saPullSecret struct {
+			Name string `json:"name"`
+		}
+		resp := struct {
+			ImagePullSecrets []saPullSecret `json:"imagePullSecrets"`
+		}{}
+		for _, item := range f.defaultServiceAccountPullSecrets {
+			resp.ImagePullSecrets = append(resp.ImagePullSecrets, saPullSecret{Name: item})
+		}
+		raw, _ := json.Marshal(resp)
+		return &ProjectK8sResponse{StatusCode: http.StatusOK, Body: raw}, nil
+	}
 	if f.failOnce {
 		f.failOnce = false
 		return &ProjectK8sResponse{StatusCode: http.StatusInternalServerError, Body: []byte(`{"message":"boom"}`)}, nil
+	}
+	if method == http.MethodPatch && strings.Contains(path, "/serviceaccounts/default") {
+		var patch struct {
+			ImagePullSecrets []struct {
+				Name string `json:"name"`
+			} `json:"imagePullSecrets"`
+		}
+		if err := json.Unmarshal(body, &patch); err == nil {
+			f.defaultServiceAccountPullSecrets = f.defaultServiceAccountPullSecrets[:0]
+			for _, item := range patch.ImagePullSecrets {
+				f.defaultServiceAccountPullSecrets = append(f.defaultServiceAccountPullSecrets, item.Name)
+			}
+		}
 	}
 	return &ProjectK8sResponse{StatusCode: http.StatusOK, Body: nil}, nil
 }
 
 // fakeProjectQuerier is the minimum surface needed by reconcile tests.
 type fakeProjectQuerier struct {
-	project sqlc.Project
+	project            sqlc.Project
+	registryConfig     sqlc.ClusterRegistryConfig
+	registryConfigErr  error
+	defaultTemplate    sqlc.PodSecurityTemplate
+	defaultTemplateErr error
 	// last captured Mark call (for assertions)
 	lastMark *sqlc.MarkProjectNamespaceReconciledParams
 }
 
 func (f *fakeProjectQuerier) GetProjectByID(_ context.Context, _ uuid.UUID) (sqlc.Project, error) {
 	return f.project, nil
+}
+func (f *fakeProjectQuerier) GetClusterRegistryConfig(_ context.Context, _ uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
+	if f.registryConfigErr != nil {
+		return sqlc.ClusterRegistryConfig{}, f.registryConfigErr
+	}
+	return f.registryConfig, nil
+}
+func (f *fakeProjectQuerier) GetDefaultPodSecurityTemplate(_ context.Context) (sqlc.PodSecurityTemplate, error) {
+	if f.defaultTemplateErr != nil {
+		return sqlc.PodSecurityTemplate{}, f.defaultTemplateErr
+	}
+	return f.defaultTemplate, nil
 }
 func (f *fakeProjectQuerier) ListProjectNamespaces(_ context.Context, _ uuid.UUID) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
@@ -217,6 +284,15 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 			ResourceQuota:     json.RawMessage(`{"cpu":"4","memory":"8Gi","pods":"20"}`),
 			NetworkPolicyMode: "isolated",
 		},
+		registryConfigErr: errors.New("no rows in result set"),
+		defaultTemplate: sqlc.PodSecurityTemplate{
+			EnforceLevel:   "baseline",
+			EnforceVersion: "latest",
+			AuditLevel:     "restricted",
+			AuditVersion:   "latest",
+			WarnLevel:      "restricted",
+			WarnVersion:    "latest",
+		},
 	}
 	r := &fakeProjectRequester{}
 
@@ -230,13 +306,26 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 		t.Errorf("expected empty last_reconcile_error, got %q", q.lastMark.LastReconcileError)
 	}
 
-	// Four calls: label PATCH on ns, SSA quota, DELETE limitrange (no fields
-	// in the project), SSA network policy.
-	if got, want := len(r.calls), 4; got != want {
+	// Seven calls: label PATCH on ns, SSA quota, DELETE limitrange (no fields
+	// in the project), SSA network policy, GET default SA, PATCH default SA
+	// skip is not needed because no registry config means reconcile only does a
+	// cleanup GET on the default SA plus DELETE managed secret.
+	if got, want := len(r.calls), 6; got != want {
 		t.Fatalf("expected %d API calls, got %d: %+v", want, got, r.calls)
 	}
 	if !strings.HasSuffix(r.calls[0].path, "/api/v1/namespaces/team-a") || r.calls[0].method != http.MethodPatch {
 		t.Errorf("first call should be ns label PATCH, got %+v", r.calls[0])
+	}
+	var namespacePatch map[string]any
+	if err := json.Unmarshal(r.calls[0].body, &namespacePatch); err != nil {
+		t.Fatalf("unmarshal namespace patch: %v", err)
+	}
+	labels := namespacePatch["metadata"].(map[string]any)["labels"].(map[string]any)
+	if labels[projectNamespaceLabelKey] != projectID.String() {
+		t.Fatalf("expected namespace patch to set project label, got %+v", labels)
+	}
+	if labels["pod-security.kubernetes.io/enforce"] != "baseline" {
+		t.Fatalf("expected namespace patch to set PSA labels, got %+v", labels)
 	}
 	quotaCall := r.calls[1]
 	if !strings.Contains(quotaCall.path, "/resourcequotas/"+managedQuotaName) {
@@ -255,6 +344,12 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 	if !strings.Contains(r.calls[3].path, "/networkpolicies/"+managedNetworkPolicyName) {
 		t.Errorf("fourth call should target managed NetworkPolicy, got %+v", r.calls[3])
 	}
+	if r.calls[4].method != http.MethodGet || !strings.Contains(r.calls[4].path, "/serviceaccounts/default") {
+		t.Errorf("fifth call should GET the default serviceaccount, got %+v", r.calls[4])
+	}
+	if r.calls[5].method != http.MethodDelete || !strings.Contains(r.calls[5].path, "/secrets/"+managedRegistrySecretName) {
+		t.Errorf("sixth call should cleanup managed registry secret, got %+v", r.calls[5])
+	}
 }
 
 // TestReconcileProjectNamespace_DeletesNetworkPolicyOnNoneMode confirms the
@@ -267,6 +362,7 @@ func TestReconcileProjectNamespace_DeletesNetworkPolicyOnNoneMode(t *testing.T) 
 			NetworkPolicyMode: "none",
 			ResourceQuota:     json.RawMessage(`{"cpu":"1"}`),
 		},
+		registryConfigErr: errors.New("no rows in result set"),
 	}
 	r := &fakeProjectRequester{}
 	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, uuid.New(), "team-a"); err != nil {
@@ -283,6 +379,56 @@ func TestReconcileProjectNamespace_DeletesNetworkPolicyOnNoneMode(t *testing.T) 
 	}
 }
 
+func TestProjectNamespaceLabels_UsesDefaultPodSecurityTemplate(t *testing.T) {
+	projectID := uuid.NewString()
+	q := &fakeProjectQuerier{
+		defaultTemplate: sqlc.PodSecurityTemplate{
+			EnforceLevel:   "baseline",
+			EnforceVersion: "latest",
+			AuditLevel:     "restricted",
+			AuditVersion:   "latest",
+			WarnLevel:      "restricted",
+			WarnVersion:    "latest",
+		},
+	}
+	labels, err := projectNamespaceLabels(context.Background(), q, "team-a", projectID)
+	if err != nil {
+		t.Fatalf("projectNamespaceLabels: %v", err)
+	}
+	if labels[projectNamespaceLabelKey] != projectID {
+		t.Fatalf("expected project label to be preserved, got %+v", labels)
+	}
+	if labels["pod-security.kubernetes.io/enforce"] != "baseline" {
+		t.Fatalf("expected enforce label, got %+v", labels)
+	}
+	if labels["pod-security.kubernetes.io/audit"] != "restricted" {
+		t.Fatalf("expected audit label, got %+v", labels)
+	}
+	if labels["pod-security.kubernetes.io/warn-version"] != "latest" {
+		t.Fatalf("expected warn version label, got %+v", labels)
+	}
+}
+
+func TestProjectNamespaceLabels_SkipsExemptNamespace(t *testing.T) {
+	projectID := uuid.NewString()
+	q := &fakeProjectQuerier{
+		defaultTemplate: sqlc.PodSecurityTemplate{
+			EnforceLevel:     "baseline",
+			ExemptNamespaces: json.RawMessage(`["kube-system","team-a"]`),
+		},
+	}
+	labels, err := projectNamespaceLabels(context.Background(), q, "team-a", projectID)
+	if err != nil {
+		t.Fatalf("projectNamespaceLabels: %v", err)
+	}
+	if labels[projectNamespaceLabelKey] != projectID {
+		t.Fatalf("expected project label to be preserved, got %+v", labels)
+	}
+	if _, ok := labels["pod-security.kubernetes.io/enforce"]; ok {
+		t.Fatalf("expected exempt namespace to skip PSA labels, got %+v", labels)
+	}
+}
+
 // TestReconcileProjectNamespace_CapturesErrorOnApplyFailure confirms the
 // reconcile error is round-tripped into project_namespaces.last_reconcile_error
 // so the UI can show a red dot.
@@ -292,6 +438,7 @@ func TestReconcileProjectNamespace_CapturesErrorOnApplyFailure(t *testing.T) {
 			ID:            uuid.New(),
 			ResourceQuota: json.RawMessage(`{"cpu":"1"}`),
 		},
+		registryConfigErr: errors.New("no rows in result set"),
 	}
 	r := &fakeProjectRequester{}
 	// First call succeeds (label patch), second fails (quota apply).
@@ -340,6 +487,7 @@ func TestHandleProjectReconcileAll_LeasesAndReconcilesOneRow(t *testing.T) {
 				ClusterID:     clusterID,
 				ResourceQuota: json.RawMessage(`{"cpu":"2"}`),
 			},
+			registryConfigErr: errors.New("no rows in result set"),
 		},
 		rows: []sqlc.ProjectNamespace{{ProjectID: projectID, ClusterID: clusterID, Namespace: "team-a"}},
 	}
@@ -402,6 +550,109 @@ func TestHandleProjectReconcile_RemoveOpDeletesRow(t *testing.T) {
 	for _, c := range r.calls[:3] {
 		if c.method != http.MethodDelete {
 			t.Errorf("expected DELETE, got %s on %s", c.method, c.path)
+		}
+	}
+}
+
+func TestReconcileProjectNamespace_PropagatesRegistrySecretAndServiceAccount(t *testing.T) {
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	q := &fakeProjectQuerier{
+		project: sqlc.Project{
+			ID:                projectID,
+			ClusterID:         clusterID,
+			ResourceQuota:     json.RawMessage(`{"cpu":"1"}`),
+			NetworkPolicyMode: "none",
+		},
+		registryConfig: sqlc.ClusterRegistryConfig{
+			ClusterID:          clusterID,
+			PrivateRegistryUrl: "https://registry.example.com/team",
+			RegistryUsername:   "alice",
+			RegistryPassword:   "secret",
+		},
+	}
+	r := &fakeProjectRequester{
+		defaultServiceAccountPullSecrets: []string{"existing-secret"},
+	}
+
+	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	var secretCall *fakeCall
+	var saPatch *fakeCall
+	for i := range r.calls {
+		call := &r.calls[i]
+		if call.method == http.MethodPatch && strings.Contains(call.path, "/secrets/"+managedRegistrySecretName) {
+			secretCall = call
+		}
+		if call.method == http.MethodPatch && strings.Contains(call.path, "/serviceaccounts/default") {
+			saPatch = call
+		}
+	}
+	if secretCall == nil {
+		t.Fatalf("expected managed registry secret apply call, got %+v", r.calls)
+	}
+	if saPatch == nil {
+		t.Fatalf("expected default serviceaccount patch, got %+v", r.calls)
+	}
+	var secretDoc struct {
+		Type string            `json:"type"`
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(secretCall.body, &secretDoc); err != nil {
+		t.Fatalf("unmarshal secret body: %v", err)
+	}
+	if secretDoc.Type != "kubernetes.io/dockerconfigjson" {
+		t.Fatalf("unexpected secret type %q", secretDoc.Type)
+	}
+	rawDockerCfg, err := base64.StdEncoding.DecodeString(secretDoc.Data[".dockerconfigjson"])
+	if err != nil {
+		t.Fatalf("decode docker config: %v", err)
+	}
+	var dockerCfg map[string]any
+	if err := json.Unmarshal(rawDockerCfg, &dockerCfg); err != nil {
+		t.Fatalf("unmarshal docker config: %v", err)
+	}
+	auths := dockerCfg["auths"].(map[string]any)
+	entry := auths["registry.example.com/team"].(map[string]any)
+	if entry["username"] != "alice" || entry["password"] != "secret" {
+		t.Fatalf("unexpected docker auth entry: %+v", entry)
+	}
+	var saDoc struct {
+		ImagePullSecrets []struct {
+			Name string `json:"name"`
+		} `json:"imagePullSecrets"`
+	}
+	if err := json.Unmarshal(saPatch.body, &saDoc); err != nil {
+		t.Fatalf("unmarshal serviceaccount patch: %v", err)
+	}
+	if got := []string{saDoc.ImagePullSecrets[0].Name, saDoc.ImagePullSecrets[1].Name}; !strings.Contains(strings.Join(got, ","), "existing-secret") || !strings.Contains(strings.Join(got, ","), managedRegistrySecretName) {
+		t.Fatalf("expected existing and managed pull secrets, got %+v", saDoc.ImagePullSecrets)
+	}
+}
+
+func TestRemoveProjectRegistryAccess_StripsManagedServiceAccountSecret(t *testing.T) {
+	r := &fakeProjectRequester{
+		defaultServiceAccountPullSecrets: []string{"existing-secret", managedRegistrySecretName},
+	}
+	if err := removeProjectRegistryAccess(context.Background(), r, uuid.NewString(), "team-a"); err != nil {
+		t.Fatalf("removeProjectRegistryAccess: %v", err)
+	}
+	if got, want := r.defaultServiceAccountPullSecrets, []string{"existing-secret"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("expected managed secret to be removed from serviceaccount, got %+v", got)
+	}
+}
+
+func TestNormalizeRegistryAuthKey(t *testing.T) {
+	cases := map[string]string{
+		"https://registry.example.com/team/": "registry.example.com/team",
+		"http://registry.example.com":        "registry.example.com",
+		"registry.example.com/path":          "registry.example.com/path",
+	}
+	for in, want := range cases {
+		if got := normalizeRegistryAuthKey(in); got != want {
+			t.Fatalf("normalizeRegistryAuthKey(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

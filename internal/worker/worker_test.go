@@ -54,27 +54,31 @@ func TestNewScheduler(t *testing.T) {
 
 func TestTaskConstants(t *testing.T) {
 	expected := map[string]string{
-		"TypeHealthCheck":         "cluster:health_check",
-		"TypeAlertEvaluation":     "alert:evaluate",
-		"TypeCatalogSync":         "catalog:sync",
-		"TypeMetricsAggregation":  "metrics:aggregate",
-		"TypeMonitoringReconcile": "monitoring:reconcile",
-		"TypeBackupExecution":     "backup:execute",
-		"TypeSecurityScan":        "security:scan",
-		"TypeNotificationSend":    "notification:send",
-		"TypeAgentManifest":       "agent:generate_manifest",
+		"TypeHealthCheck":              "cluster:health_check",
+		"TypeAlertEvaluation":          "alert:evaluate",
+		"TypeCatalogSync":              "catalog:sync",
+		"TypeMetricsAggregation":       "metrics:aggregate",
+		"TypeMonitoringReconcile":      "monitoring:reconcile",
+		"TypeBackupExecution":          "backup:execute",
+		"TypeSecurityScan":             "security:scan",
+		"TypeNotificationSend":         "notification:send",
+		"TypeAgentManifest":            "agent:generate_manifest",
+		"TypeEnsureAuditLogPartitions": "audit_log:ensure_partitions",
+		"TypeEnforceAuditLogRetention": "audit_log:enforce_retention",
 	}
 
 	actual := map[string]string{
-		"TypeHealthCheck":         TypeHealthCheck,
-		"TypeAlertEvaluation":     TypeAlertEvaluation,
-		"TypeCatalogSync":         TypeCatalogSync,
-		"TypeMetricsAggregation":  TypeMetricsAggregation,
-		"TypeMonitoringReconcile": TypeMonitoringReconcile,
-		"TypeBackupExecution":     TypeBackupExecution,
-		"TypeSecurityScan":        TypeSecurityScan,
-		"TypeNotificationSend":    TypeNotificationSend,
-		"TypeAgentManifest":       TypeAgentManifest,
+		"TypeHealthCheck":              TypeHealthCheck,
+		"TypeAlertEvaluation":          TypeAlertEvaluation,
+		"TypeCatalogSync":              TypeCatalogSync,
+		"TypeMetricsAggregation":       TypeMetricsAggregation,
+		"TypeMonitoringReconcile":      TypeMonitoringReconcile,
+		"TypeBackupExecution":          TypeBackupExecution,
+		"TypeSecurityScan":             TypeSecurityScan,
+		"TypeNotificationSend":         TypeNotificationSend,
+		"TypeAgentManifest":            TypeAgentManifest,
+		"TypeEnsureAuditLogPartitions": TypeEnsureAuditLogPartitions,
+		"TypeEnforceAuditLogRetention": TypeEnforceAuditLogRetention,
 	}
 
 	for name, want := range expected {

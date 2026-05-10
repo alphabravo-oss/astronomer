@@ -111,6 +111,7 @@ type ConnectPayload struct {
 type ConnectAckPayload struct {
 	SessionID     string `json:"session_id"`
 	ServerVersion string `json:"server_version"`
+	AgentToken    string `json:"agent_token,omitempty"`
 	Accepted      bool   `json:"accepted"`
 	Reason        string `json:"reason,omitempty"`
 }

@@ -1,13 +1,20 @@
 package tunnel
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // recordingPublisher captures every Publish call so tests can assert what
@@ -20,6 +27,163 @@ type recordingPublisher struct {
 type recordedEvent struct {
 	Type string
 	Data any
+}
+
+type recordingValidator struct {
+	mu                 sync.Mutex
+	tokenClusterID     string
+	tokenErr           error
+	clusterAgentToken  sqlc.ClusterAgentToken
+	clusterAgentErr    error
+	upsertArgs         []sqlc.UpsertClusterHealthStatusParams
+	upsertErr          error
+	updateHeartbeatErr error
+	createConnArgs     []sqlc.CreateAgentConnectionParams
+	updateConnArgs     []sqlc.UpdateAgentConnectionStatusParams
+	pingIDs            []uuid.UUID
+	upsertAgentArgs    []sqlc.UpsertClusterAgentTokenParams
+	touchedAgentIDs    []uuid.UUID
+	disconnectClusters []uuid.UUID
+}
+
+func (r *recordingValidator) GetRegistrationTokenByToken(context.Context, string) (sqlc.ClusterRegistrationToken, error) {
+	if r.tokenErr != nil {
+		return sqlc.ClusterRegistrationToken{}, r.tokenErr
+	}
+	if r.tokenClusterID == "" {
+		return sqlc.ClusterRegistrationToken{}, errors.New("not implemented")
+	}
+	clusterID, err := uuid.Parse(r.tokenClusterID)
+	if err != nil {
+		return sqlc.ClusterRegistrationToken{}, err
+	}
+	return sqlc.ClusterRegistrationToken{ID: uuid.New(), ClusterID: clusterID}, nil
+}
+
+func (r *recordingValidator) MarkRegistrationTokenUsed(context.Context, uuid.UUID) error {
+	return nil
+}
+
+func (r *recordingValidator) GetClusterAgentTokenByClusterID(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterAgentToken, error) {
+	if r.clusterAgentErr != nil {
+		return sqlc.ClusterAgentToken{}, r.clusterAgentErr
+	}
+	if r.clusterAgentToken.ClusterID == clusterID && r.clusterAgentToken.Token != "" {
+		return r.clusterAgentToken, nil
+	}
+	return sqlc.ClusterAgentToken{}, errors.New("not found")
+}
+
+func (r *recordingValidator) GetClusterAgentTokenByToken(_ context.Context, token string) (sqlc.ClusterAgentToken, error) {
+	if r.clusterAgentErr != nil {
+		return sqlc.ClusterAgentToken{}, r.clusterAgentErr
+	}
+	if r.clusterAgentToken.Token == token && token != "" {
+		return r.clusterAgentToken, nil
+	}
+	return sqlc.ClusterAgentToken{}, errors.New("not found")
+}
+
+func (r *recordingValidator) UpsertClusterAgentToken(_ context.Context, arg sqlc.UpsertClusterAgentTokenParams) (sqlc.ClusterAgentToken, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.upsertAgentArgs = append(r.upsertAgentArgs, arg)
+	r.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: arg.ClusterID, Token: arg.Token}
+	return r.clusterAgentToken, nil
+}
+
+func (r *recordingValidator) TouchClusterAgentToken(_ context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.touchedAgentIDs = append(r.touchedAgentIDs, id)
+	return nil
+}
+
+func (r *recordingValidator) UpdateClusterHeartbeat(context.Context, sqlc.UpdateClusterHeartbeatParams) error {
+	return r.updateHeartbeatErr
+}
+
+func (r *recordingValidator) UpsertClusterHealthStatus(_ context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.upsertArgs = append(r.upsertArgs, arg)
+	return sqlc.ClusterHealthStatus{}, r.upsertErr
+}
+
+func (r *recordingValidator) CreateAgentConnection(_ context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.createConnArgs = append(r.createConnArgs, arg)
+	return sqlc.AgentConnection{ID: uuid.New(), ClusterID: arg.ClusterID, AgentID: arg.AgentID, SessionID: arg.SessionID, Status: arg.Status}, nil
+}
+
+func (r *recordingValidator) UpdateAgentConnectionStatus(_ context.Context, arg sqlc.UpdateAgentConnectionStatusParams) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updateConnArgs = append(r.updateConnArgs, arg)
+	return nil
+}
+
+func (r *recordingValidator) DisconnectActiveConnectionsByCluster(_ context.Context, clusterID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.disconnectClusters = append(r.disconnectClusters, clusterID)
+	return nil
+}
+
+func (r *recordingValidator) UpdateAgentConnectionPing(_ context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pingIDs = append(r.pingIDs, id)
+	return nil
+}
+
+func (r *recordingValidator) SnapshotUpserts() []sqlc.UpsertClusterHealthStatusParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.UpsertClusterHealthStatusParams, len(r.upsertArgs))
+	copy(out, r.upsertArgs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotCreates() []sqlc.CreateAgentConnectionParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.CreateAgentConnectionParams, len(r.createConnArgs))
+	copy(out, r.createConnArgs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotDisconnects() []sqlc.UpdateAgentConnectionStatusParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.UpdateAgentConnectionStatusParams, len(r.updateConnArgs))
+	copy(out, r.updateConnArgs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotPings() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]uuid.UUID, len(r.pingIDs))
+	copy(out, r.pingIDs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotAgentTokenUpserts() []sqlc.UpsertClusterAgentTokenParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.UpsertClusterAgentTokenParams, len(r.upsertAgentArgs))
+	copy(out, r.upsertAgentArgs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotDisconnectedClusters() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]uuid.UUID, len(r.disconnectClusters))
+	copy(out, r.disconnectClusters)
+	return out
 }
 
 func (r *recordingPublisher) Publish(eventType string, data any) {
@@ -40,6 +204,8 @@ func (r *recordingPublisher) Snapshot() []recordedEvent {
 // agent becomes a `cluster.k8s_changed` SSE event with the cluster_id
 // stitched in.
 func TestHandleStateUpdatePublishesK8sChanged(t *testing.T) {
+	tunnelStateUpdatesReceivedTotal.Reset()
+	tunnelStateUpdatesHandledTotal.Reset()
 	h := NewHub(slog.Default())
 	pub := &recordingPublisher{}
 	h.SetPublisher(pub)
@@ -88,12 +254,20 @@ func TestHandleStateUpdatePublishesK8sChanged(t *testing.T) {
 	if data["name"] != "echo" {
 		t.Errorf("expected name=echo, got %v", data["name"])
 	}
+	if got := counterValue(t, tunnelStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues("Pod")...)); got != 1 {
+		t.Fatalf("received_total{kind=Pod} = %v, want 1", got)
+	}
+	if got := counterValue(t, tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("published", "Pod")...)); got != 1 {
+		t.Fatalf("handled_total{outcome=published,kind=Pod} = %v, want 1", got)
+	}
 }
 
 // TestHandleStateUpdateRateLimited verifies the server-side limiter collapses
 // bursts on the same (cluster, kind, namespace) tuple. Without this, a
 // thousand pod updates inside a Deployment rollout would each fan out.
 func TestHandleStateUpdateRateLimited(t *testing.T) {
+	tunnelStateUpdatesReceivedTotal.Reset()
+	tunnelStateUpdatesHandledTotal.Reset()
 	h := NewHub(slog.Default())
 	pub := &recordingPublisher{}
 	h.SetPublisher(pub)
@@ -117,6 +291,9 @@ func TestHandleStateUpdateRateLimited(t *testing.T) {
 	events := pub.Snapshot()
 	if len(events) != 1 {
 		t.Fatalf("expected the limiter to collapse the burst to 1 event, got %d", len(events))
+	}
+	if got := counterValue(t, tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", "Pod")...)); got != 9 {
+		t.Fatalf("handled_total{outcome=rate_limited,kind=Pod} = %v, want 9", got)
 	}
 }
 
@@ -150,6 +327,54 @@ func TestHandleStateUpdateDistinctKeysPassThrough(t *testing.T) {
 	}
 }
 
+// TestHandleStateUpdateCoalesceKeyRespected verifies the hub honors the
+// caller-provided coalescing hint instead of collapsing solely on kind /
+// namespace or name.
+func TestHandleStateUpdateCoalesceKeyRespected(t *testing.T) {
+	h := NewHub(slog.Default())
+	pub := &recordingPublisher{}
+	h.SetPublisher(pub)
+
+	conn := &AgentConnection{
+		ClusterID: "cluster-coalesce",
+		Streams:   NewStreamManager(10),
+		sendCh:    make(chan *protocol.Message, 10),
+	}
+
+	cases := []protocol.StateUpdatePayload{
+		{
+			Op:          protocol.StateUpdateOpModified,
+			Kind:        "Pod",
+			Namespace:   "default",
+			Name:        "frontend-1",
+			CoalesceKey: "Deployment|default|frontend",
+		},
+		{
+			Op:          protocol.StateUpdateOpModified,
+			Kind:        "Pod",
+			Namespace:   "default",
+			Name:        "frontend-2",
+			CoalesceKey: "Deployment|default|frontend",
+		},
+		{
+			Op:          protocol.StateUpdateOpModified,
+			Kind:        "Pod",
+			Namespace:   "default",
+			Name:        "api-1",
+			CoalesceKey: "Deployment|default|api",
+		},
+	}
+	for _, c := range cases {
+		body, _ := json.Marshal(c)
+		h.handleMessage(conn, &protocol.Message{Type: protocol.MsgStateUpdate, Payload: body})
+	}
+
+	events := pub.Snapshot()
+	if len(events) != 2 {
+		t.Fatalf("expected 2 publishes after coalescing, got %d", len(events))
+	}
+}
+
 // TestStateUpdateLimiterAllow exercises the limiter's tick gating directly.
 // Independent of the hub so a regression here doesn't depend on the
 // publisher plumbing.
@@ -173,6 +398,8 @@ func TestStateUpdateLimiterAllow(t *testing.T) {
 // TestHandleStateUpdateInvalidPayload makes sure malformed payloads don't
 // panic and don't publish anything.
 func TestHandleStateUpdateInvalidPayload(t *testing.T) {
+	tunnelStateUpdatesReceivedTotal.Reset()
+	tunnelStateUpdatesHandledTotal.Reset()
 	h := NewHub(slog.Default())
 	pub := &recordingPublisher{}
 	h.SetPublisher(pub)
@@ -191,4 +418,105 @@ func TestHandleStateUpdateInvalidPayload(t *testing.T) {
 	if got := len(pub.Snapshot()); got != 0 {
 		t.Fatalf("expected 0 publishes for invalid payload, got %d", got)
 	}
+	if got := counterValue(t, tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("invalid", "unknown")...)); got != 1 {
+		t.Fatalf("handled_total{outcome=invalid,kind=unknown} = %v, want 1", got)
+	}
+}
+
+func TestHandleMetricsPublishesClusterMetricsAndPersistsHealth(t *testing.T) {
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	pub := &recordingPublisher{}
+	h.SetPublisher(pub)
+
+	clusterID := uuid.New()
+	conn := &AgentConnection{
+		ClusterID: clusterID.String(),
+		Streams:   NewStreamManager(10),
+		sendCh:    make(chan *protocol.Message, 10),
+	}
+
+	body, _ := json.Marshal(protocol.MetricsPayload{
+		Timestamp:          "2026-05-10T00:05:00Z",
+		MetricsAvailable:   true,
+		ClusterCPUUsage:    42.5,
+		ClusterMemoryUsage: 64.25,
+		ClusterPodCount:    17,
+		ClusterNodeCount:   3,
+		Nodes:              []protocol.NodeMetrics{{Name: "node-a", CPUPercent: 50}},
+		Namespaces:         []protocol.NamespaceMetrics{{Name: "default", PodCount: 8}},
+	})
+	h.handleMessage(conn, &protocol.Message{Type: protocol.MsgMetrics, Payload: body})
+
+	upserts := validator.SnapshotUpserts()
+	if len(upserts) != 1 {
+		t.Fatalf("expected exactly 1 health upsert, got %d", len(upserts))
+	}
+	if upserts[0].ClusterID != clusterID {
+		t.Fatalf("expected cluster id %s, got %s", clusterID, upserts[0].ClusterID)
+	}
+	if upserts[0].CpuUsagePercent != 42.5 {
+		t.Fatalf("expected cpu 42.5, got %v", upserts[0].CpuUsagePercent)
+	}
+	if upserts[0].MemoryUsagePercent != 64.25 {
+		t.Fatalf("expected memory 64.25, got %v", upserts[0].MemoryUsagePercent)
+	}
+	if upserts[0].PodCount != 17 || upserts[0].NodeCount != 3 {
+		t.Fatalf("expected pod/node counts 17/3, got %d/%d", upserts[0].PodCount, upserts[0].NodeCount)
+	}
+
+	events := pub.Snapshot()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 publish, got %d", len(events))
+	}
+	if events[0].Type != "cluster.metrics" {
+		t.Fatalf("expected cluster.metrics, got %s", events[0].Type)
+	}
+	data, ok := events[0].Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any payload, got %T", events[0].Data)
+	}
+	if data["cluster_id"] != clusterID.String() {
+		t.Fatalf("expected cluster_id=%s, got %v", clusterID.String(), data["cluster_id"])
+	}
+	if data["metrics_available"] != true {
+		t.Fatalf("expected metrics_available=true, got %v", data["metrics_available"])
+	}
+	if data["pod_count"] != 17 {
+		t.Fatalf("expected pod_count=17, got %v", data["pod_count"])
+	}
+}
+
+func TestHandleMetricsInvalidPayloadDoesNotPersistOrPublish(t *testing.T) {
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	pub := &recordingPublisher{}
+	h.SetPublisher(pub)
+
+	conn := &AgentConnection{
+		ClusterID: uuid.New().String(),
+		Streams:   NewStreamManager(10),
+		sendCh:    make(chan *protocol.Message, 10),
+	}
+
+	h.handleMessage(conn, &protocol.Message{Type: protocol.MsgMetrics, Payload: []byte("not-json")})
+
+	if got := len(validator.SnapshotUpserts()); got != 0 {
+		t.Fatalf("expected 0 health upserts, got %d", got)
+	}
+	if got := len(pub.Snapshot()); got != 0 {
+		t.Fatalf("expected 0 publishes, got %d", got)
+	}
+}
+
+func counterValue(t *testing.T, c interface{ Write(*dto.Metric) error }) float64 {
+	t.Helper()
+	var m dto.Metric
+	if err := c.Write(&m); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if m.Counter == nil || m.Counter.Value == nil {
+		t.Fatal("expected counter metric value")
+	}
+	return *m.Counter.Value
 }

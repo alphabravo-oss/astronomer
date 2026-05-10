@@ -30,22 +30,24 @@ func NewRunScheduledBackupsTask() *asynq.Task {
 // resource); the data needed for that lives entirely server-side, however,
 // so it is the BackupHandler reconciler's job, not ours.
 func HandleRunScheduledBackups(ctx context.Context, _ *asynq.Task) error {
-	if runtimeDeps.Queries == nil {
-		runtimeLogger().DebugContext(ctx, "scheduled backups runtime not configured, skipping")
+	return runPeriodicTaskWithLeader(ctx, RunScheduledBackupsType, func() error {
+		if runtimeDeps.Queries == nil {
+			runtimeLogger().DebugContext(ctx, "scheduled backups runtime not configured, skipping")
+			return nil
+		}
+		// Touch the schedules table so an out-of-band sanity check in the test
+		// suite can verify this handler still runs without error.
+		schedules, err := runtimeDeps.Queries.GetActiveSchedules(ctx)
+		if err != nil {
+			return fmt.Errorf("listing active backup schedules: %w", err)
+		}
+		if len(schedules) == 0 {
+			return nil
+		}
+		runtimeLogger().DebugContext(ctx, "scheduled backups watchdog complete",
+			"active_schedules", len(schedules),
+			"sampled_at", time.Now().UTC().Format(time.RFC3339),
+		)
 		return nil
-	}
-	// Touch the schedules table so an out-of-band sanity check in the test
-	// suite can verify this handler still runs without error.
-	schedules, err := runtimeDeps.Queries.GetActiveSchedules(ctx)
-	if err != nil {
-		return fmt.Errorf("listing active backup schedules: %w", err)
-	}
-	if len(schedules) == 0 {
-		return nil
-	}
-	runtimeLogger().DebugContext(ctx, "scheduled backups watchdog complete",
-		"active_schedules", len(schedules),
-		"sampled_at", time.Now().UTC().Format(time.RFC3339),
-	)
-	return nil
+	})
 }

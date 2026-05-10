@@ -8,11 +8,12 @@ package sqlc
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getPlatformConfig = `-- name: GetPlatformConfig :one
-SELECT id, server_url, platform_name, telemetry_enabled, bootstrapped_at FROM platform_configuration WHERE id = 1
+SELECT id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id FROM platform_configuration WHERE id = 1
 `
 
 func (q *Queries) GetPlatformConfig(ctx context.Context) (PlatformConfiguration, error) {
@@ -24,19 +25,21 @@ func (q *Queries) GetPlatformConfig(ctx context.Context) (PlatformConfiguration,
 		&i.PlatformName,
 		&i.TelemetryEnabled,
 		&i.BootstrappedAt,
+		&i.InstanceID,
 	)
 	return i, err
 }
 
 const upsertPlatformConfig = `-- name: UpsertPlatformConfig :one
-INSERT INTO platform_configuration (id, server_url, platform_name, telemetry_enabled, bootstrapped_at)
-VALUES (1, $1, $2, $3, $4)
+INSERT INTO platform_configuration (id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id)
+VALUES (1, $1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE SET
     server_url = EXCLUDED.server_url,
     platform_name = EXCLUDED.platform_name,
     telemetry_enabled = EXCLUDED.telemetry_enabled,
-    bootstrapped_at = EXCLUDED.bootstrapped_at
-RETURNING id, server_url, platform_name, telemetry_enabled, bootstrapped_at
+    bootstrapped_at = EXCLUDED.bootstrapped_at,
+    instance_id = EXCLUDED.instance_id
+RETURNING id, server_url, platform_name, telemetry_enabled, bootstrapped_at, instance_id
 `
 
 type UpsertPlatformConfigParams struct {
@@ -44,6 +47,7 @@ type UpsertPlatformConfigParams struct {
 	PlatformName     string             `json:"platform_name"`
 	TelemetryEnabled bool               `json:"telemetry_enabled"`
 	BootstrappedAt   pgtype.Timestamptz `json:"bootstrapped_at"`
+	InstanceID       uuid.UUID          `json:"instance_id"`
 }
 
 func (q *Queries) UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfiguration, error) {
@@ -52,6 +56,7 @@ func (q *Queries) UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformCo
 		arg.PlatformName,
 		arg.TelemetryEnabled,
 		arg.BootstrappedAt,
+		arg.InstanceID,
 	)
 	var i PlatformConfiguration
 	err := row.Scan(
@@ -60,6 +65,7 @@ func (q *Queries) UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformCo
 		&i.PlatformName,
 		&i.TelemetryEnabled,
 		&i.BootstrappedAt,
+		&i.InstanceID,
 	)
 	return i, err
 }

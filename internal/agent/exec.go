@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -180,6 +181,7 @@ func (h *ExecHandler) HandleExecResize(msg *protocol.Message) error {
 		Height: uint16(payload.Height),
 	}:
 	default:
+		observability.RecordDroppedEvent("agent_exec_resize", "channel_full")
 		h.log.Warn("resize channel full, dropping resize event", "stream_id", msg.StreamID)
 	}
 

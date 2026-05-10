@@ -53,10 +53,10 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 	// barely-running cluster). The server should still come up if Discovery
 	// is slow or partial.
 	var (
-		gitVersion string
+		gitVersion   string
 		distribution string
-		nodeCount  int32
-		apiHost    string
+		nodeCount    int32
+		apiHost      string
 	)
 	if restConfig != nil {
 		apiHost = restConfig.Host
@@ -224,7 +224,8 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 
 	go func() {
 		// Wait until the tunnel reports connected so the first heartbeat isn't
-		// dropped on the floor by the send-buffer fast path.
+		// dropped on the floor by the send-buffer fast path and so the informer
+		// subscriber only starts once outbound STATE_UPDATE sends can succeed.
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
 		for !tunnelClient.IsConnected() {
@@ -234,6 +235,8 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 			case <-ticker.C:
 			}
 		}
+		subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
+		go subscriber.Run(ctx)
 		health.SetConnected(true)
 		health.Start(ctx, tunnelClient.Send)
 	}()

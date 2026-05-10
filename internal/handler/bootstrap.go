@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -151,11 +152,16 @@ func (h *BootstrapHandler) CompleteBootstrap(w http.ResponseWriter, r *http.Requ
 
 	// 5. Upsert platform config
 	now := time.Now().UTC()
+	instanceID := uuid.Nil
+	if existing, err := h.queries.GetPlatformConfig(ctx); err == nil {
+		instanceID = existing.InstanceID
+	}
 	platform, err := h.queries.UpsertPlatformConfig(ctx, sqlc.UpsertPlatformConfigParams{
 		ServerUrl:        req.ServerURL,
 		PlatformName:     req.PlatformName,
 		TelemetryEnabled: true,
 		BootstrappedAt:   pgtype.Timestamptz{Time: now, Valid: true},
+		InstanceID:       instanceID,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "config_error", "Failed to save platform configuration")

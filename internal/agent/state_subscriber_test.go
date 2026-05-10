@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -36,6 +38,26 @@ func (r *recordingSender) Snapshot() []*protocol.Message {
 	out := make([]*protocol.Message, len(r.msgs))
 	copy(out, r.msgs)
 	return out
+}
+
+type failingSender struct {
+	err error
+}
+
+func (f failingSender) Send(*protocol.Message) error {
+	return f.err
+}
+
+func counterValue(t *testing.T, c interface{ Write(*dto.Metric) error }) float64 {
+	t.Helper()
+	var m dto.Metric
+	if err := c.Write(&m); err != nil {
+		t.Fatalf("read counter metric: %v", err)
+	}
+	if m.Counter == nil || m.Counter.Value == nil {
+		t.Fatal("expected counter metric value")
+	}
+	return m.Counter.GetValue()
 }
 
 // TestStateRateLimiterCollapsesBurst verifies that a burst on the same key
@@ -162,6 +184,9 @@ func TestStateUpdatePayloadOmitsEmpty(t *testing.T) {
 // clientset, a recording sender, and a Pod create. The subscriber should
 // publish exactly one MsgStateUpdate for the new Pod within a short window.
 func TestStateSubscriberEmitsOnPodCreate(t *testing.T) {
+	agentStateUpdatesReceivedTotal.Reset()
+	agentStateUpdatesHandledTotal.Reset()
+
 	// Tighten the eviction tickers and lengthen the cutoff so the test can
 	// finish quickly without flaking.
 	defer setStateSubscriberTunables(50*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
@@ -177,8 +202,11 @@ func TestStateSubscriberEmitsOnPodCreate(t *testing.T) {
 
 	go subscriber.Run(ctx)
 
-	// Give the informer factory a beat to start watching.
-	time.Sleep(100 * time.Millisecond)
+	readyCtx, readyCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer readyCancel()
+	if !subscriber.WaitReady(readyCtx) {
+		t.Fatal("state subscriber did not become ready")
+	}
 
 	// Create a Pod. The fake clientset's tracker turns this into an Add event
 	// that the informer broadcasts to the registered handler.
@@ -225,6 +253,120 @@ func TestStateSubscriberEmitsOnPodCreate(t *testing.T) {
 	}
 	if found.Namespace != "default" {
 		t.Errorf("expected namespace=default, got %s", found.Namespace)
+	}
+	if got := counterValue(t, agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues("Pod")...)); got != 1 {
+		t.Errorf("expected received_total{kind=Pod}=1, got %v", got)
+	}
+	if got := counterValue(t, agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("queued", "Pod")...)); got != 1 {
+		t.Errorf("expected handled_total{outcome=queued,kind=Pod}=1, got %v", got)
+	}
+}
+
+func TestStateSubscriberSuppressesBootstrapReplay(t *testing.T) {
+	agentStateUpdatesReceivedTotal.Reset()
+	agentStateUpdatesHandledTotal.Reset()
+
+	defer setStateSubscriberTunables(50*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
+
+	client := fake.NewSimpleClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "existing",
+			Namespace:       "default",
+			ResourceVersion: "1",
+		},
+	})
+	sender := &recordingSender{}
+	subscriber := NewStateSubscriber(client, sender, slog.Default())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go subscriber.Run(ctx)
+
+	readyCtx, readyCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer readyCancel()
+	if !subscriber.WaitReady(readyCtx) {
+		t.Fatal("state subscriber did not become ready")
+	}
+
+	for _, m := range sender.Snapshot() {
+		if m.Type != protocol.MsgStateUpdate {
+			continue
+		}
+		var p protocol.StateUpdatePayload
+		if err := json.Unmarshal(m.Payload, &p); err != nil {
+			continue
+		}
+		if p.Kind == "Pod" && p.Name == "existing" {
+			t.Fatalf("unexpected bootstrap STATE_UPDATE for pre-existing object: %+v", p)
+		}
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "fresh",
+			Namespace:       "default",
+			ResourceVersion: "2",
+		},
+	}
+	if _, err := client.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("create pod: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, m := range sender.Snapshot() {
+			if m.Type != protocol.MsgStateUpdate {
+				continue
+			}
+			var p protocol.StateUpdatePayload
+			if err := json.Unmarshal(m.Payload, &p); err != nil {
+				continue
+			}
+			if p.Kind == "Pod" && p.Name == "fresh" && p.Op == protocol.StateUpdateOpAdded {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("expected a post-sync STATE_UPDATE for Pod default/fresh, got none. captured=%d", len(sender.Snapshot()))
+}
+
+func TestStateSubscriberDispatchRateLimitedMetric(t *testing.T) {
+	agentStateUpdatesReceivedTotal.Reset()
+	agentStateUpdatesHandledTotal.Reset()
+
+	subscriber := NewStateSubscriber(nil, &recordingSender{}, slog.Default())
+	meta := &metav1.ObjectMeta{Name: "echo", Namespace: "default", ResourceVersion: "1"}
+
+	subscriber.dispatch(protocol.StateUpdateOpAdded, "Pod", "", "v1", meta)
+	subscriber.dispatch(protocol.StateUpdateOpModified, "Pod", "", "v1", meta)
+
+	if got := counterValue(t, agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues("Pod")...)); got != 2 {
+		t.Fatalf("expected received_total{kind=Pod}=2, got %v", got)
+	}
+	if got := counterValue(t, agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("queued", "Pod")...)); got != 1 {
+		t.Fatalf("expected handled_total{outcome=queued,kind=Pod}=1, got %v", got)
+	}
+	if got := counterValue(t, agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", "Pod")...)); got != 1 {
+		t.Fatalf("expected handled_total{outcome=rate_limited,kind=Pod}=1, got %v", got)
+	}
+}
+
+func TestStateSubscriberDispatchSendFailedMetric(t *testing.T) {
+	agentStateUpdatesReceivedTotal.Reset()
+	agentStateUpdatesHandledTotal.Reset()
+
+	subscriber := NewStateSubscriber(nil, failingSender{err: context.DeadlineExceeded}, slog.Default())
+	meta := &metav1.ObjectMeta{Name: "echo", Namespace: "default", ResourceVersion: "1"}
+
+	subscriber.dispatch(protocol.StateUpdateOpAdded, "Pod", "", "v1", meta)
+
+	if got := counterValue(t, agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues("Pod")...)); got != 1 {
+		t.Fatalf("expected received_total{kind=Pod}=1, got %v", got)
+	}
+	if got := counterValue(t, agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("send_failed", "Pod")...)); got != 1 {
+		t.Fatalf("expected handled_total{outcome=send_failed,kind=Pod}=1, got %v", got)
 	}
 }
 

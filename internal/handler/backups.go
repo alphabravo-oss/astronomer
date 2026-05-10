@@ -33,10 +33,14 @@ type BackupQuerier interface {
 	CountBackupStorageConfigs(ctx context.Context) (int64, error)
 	// Backups
 	ListBackups(ctx context.Context, arg sqlc.ListBackupsParams) ([]sqlc.Backup, error)
+	ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]sqlc.Backup, error)
 	GetBackupByID(ctx context.Context, id uuid.UUID) (sqlc.Backup, error)
 	CreateBackup(ctx context.Context, arg sqlc.CreateBackupParams) (sqlc.Backup, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg sqlc.UpdateBackupVeleroIdentityParams) error
 	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
+	UpdateBackupCompleted(ctx context.Context, arg sqlc.UpdateBackupCompletedParams) error
+	UpdateBackupFailed(ctx context.Context, arg sqlc.UpdateBackupFailedParams) error
+	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	CountBackups(ctx context.Context) (int64, error)
 	// Schedules
@@ -48,7 +52,13 @@ type BackupQuerier interface {
 	CountBackupSchedules(ctx context.Context) (int64, error)
 	// Restore
 	ListRestoreOperations(ctx context.Context, arg sqlc.ListRestoreOperationsParams) ([]sqlc.RestoreOperation, error)
+	ListRunningRestoresForPolling(ctx context.Context, limit int32) ([]sqlc.RestoreOperation, error)
+	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (sqlc.RestoreOperation, error)
 	CreateRestoreOperation(ctx context.Context, arg sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error)
+	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
+	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
+	UpdateRestoreOperationFailed(ctx context.Context, arg sqlc.UpdateRestoreOperationFailedParams) error
+	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
 	CountRestoreOperations(ctx context.Context) (int64, error)
 }
 
@@ -59,11 +69,11 @@ type BackupQuerier interface {
 // the Velero CRs in each cluster, which we round-trip through the existing
 // tunnel K8sRequester.
 type BackupHandler struct {
-	queries   BackupQuerier
-	encryptor *auth.Encryptor
-	requester K8sRequester
+	queries    BackupQuerier
+	encryptor  *auth.Encryptor
+	requester  K8sRequester
 	httpClient *http.Client
-	log       *slog.Logger
+	log        *slog.Logger
 }
 
 // NewBackupHandler creates a new backup handler.
@@ -1091,19 +1101,19 @@ func (h *BackupHandler) decryptCredentials(cfg sqlc.BackupStorageConfig) (string
 // raw access/secret keys are *never* surfaced; we return only metadata.
 func (h *BackupHandler) storageResponse(c sqlc.BackupStorageConfig) map[string]any {
 	out := map[string]any{
-		"id":                c.ID.String(),
-		"name":              c.Name,
-		"storage_type":      c.StorageType,
-		"bucket":            c.Bucket,
-		"prefix":            c.Prefix,
-		"region":            c.Region,
-		"endpoint_url":      c.EndpointUrl,
-		"is_default":        c.IsDefault,
-		"velero_namespace":  c.VeleroNamespace,
-		"bsl_name":          veleroBSLNameFor(c),
-		"created_at":        c.CreatedAt.UTC().Format(time.RFC3339),
-		"updated_at":        c.UpdatedAt.UTC().Format(time.RFC3339),
-		"has_credentials":   c.EncryptedCredentials != "" || c.AccessKey != "",
+		"id":               c.ID.String(),
+		"name":             c.Name,
+		"storage_type":     c.StorageType,
+		"bucket":           c.Bucket,
+		"prefix":           c.Prefix,
+		"region":           c.Region,
+		"endpoint_url":     c.EndpointUrl,
+		"is_default":       c.IsDefault,
+		"velero_namespace": c.VeleroNamespace,
+		"bsl_name":         veleroBSLNameFor(c),
+		"created_at":       c.CreatedAt.UTC().Format(time.RFC3339),
+		"updated_at":       c.UpdatedAt.UTC().Format(time.RFC3339),
+		"has_credentials":  c.EncryptedCredentials != "" || c.AccessKey != "",
 	}
 	if c.ClusterID.Valid {
 		out["cluster_id"] = uuid.UUID(c.ClusterID.Bytes).String()

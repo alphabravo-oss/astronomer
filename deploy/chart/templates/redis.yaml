@@ -1,4 +1,4 @@
-{{- if .Values.redis.enabled }}
+{{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
 apiVersion: v1
 kind: Service
 metadata:

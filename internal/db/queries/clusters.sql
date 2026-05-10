@@ -116,6 +116,23 @@ SELECT * FROM cluster_registration_tokens WHERE token = $1 AND expires_at > now(
 -- name: MarkRegistrationTokenUsed :exec
 UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
 
+-- name: GetClusterAgentTokenByClusterID :one
+SELECT * FROM cluster_agent_tokens WHERE cluster_id = $1;
+
+-- name: GetClusterAgentTokenByToken :one
+SELECT * FROM cluster_agent_tokens WHERE token = $1;
+
+-- name: UpsertClusterAgentToken :one
+INSERT INTO cluster_agent_tokens (cluster_id, token, last_used_at)
+VALUES ($1, $2, now())
+ON CONFLICT (cluster_id) DO UPDATE SET
+    token = EXCLUDED.token,
+    last_used_at = now()
+RETURNING *;
+
+-- name: TouchClusterAgentToken :exec
+UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1;
+
 -- name: DeleteExpiredRegistrationTokens :execrows
 DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = true AND updated_at < now() - INTERVAL '7 days');
 
@@ -132,3 +149,6 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     insecure = EXCLUDED.insecure,
     ca_bundle = EXCLUDED.ca_bundle
 RETURNING *;
+
+-- name: DeleteClusterRegistryConfig :exec
+DELETE FROM cluster_registry_configs WHERE cluster_id = $1;

@@ -1,13 +1,12 @@
 package tasks
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"text/template"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/hibiken/asynq"
 )
 
@@ -64,50 +63,18 @@ func HandleAgentManifest(ctx context.Context, t *asynq.Task) error {
 	if data.ImageTag == "" {
 		data.ImageTag = runtimeDeps.AgentImageTag
 	}
-	tpl := template.Must(template.New("agent-manifest").Parse(agentManifestTemplate))
-	var rendered bytes.Buffer
-	if err := tpl.Execute(&rendered, data); err != nil {
-		return err
-	}
+	rendered := renderAgentManifest(data.ClusterID, data.AgentToken, data.ServerURL, data.ImageRepository, data.ImageTag)
 
-	slog.InfoContext(ctx, "agent manifest generated", "cluster_id", p.ClusterID, "manifest_bytes", rendered.Len())
+	slog.InfoContext(ctx, "agent manifest generated", "cluster_id", p.ClusterID, "manifest_bytes", len(rendered))
 	return nil
 }
 
-const agentManifestTemplate = `apiVersion: v1
-kind: Namespace
-metadata:
-  name: astronomer-system
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: astronomer-agent
-  namespace: astronomer-system
-stringData:
-  AGENT_TOKEN: {{ .AgentToken | printf "%q" }}
-  CLUSTER_ID: {{ .ClusterID | printf "%q" }}
-  SERVER_URL: {{ .ServerURL | printf "%q" }}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: astronomer-agent
-  namespace: astronomer-system
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: astronomer-agent
-  template:
-    metadata:
-      labels:
-        app: astronomer-agent
-    spec:
-      containers:
-      - name: agent
-        image: {{ printf "%s:%s" .ImageRepository .ImageTag | printf "%q" }}
-        envFrom:
-        - secretRef:
-            name: astronomer-agent
-`
+func renderAgentManifest(clusterID, agentToken, serverURL, imageRepository, imageTag string) string {
+	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
+		ServerURL:         serverURL,
+		ClusterID:         clusterID,
+		RegistrationToken: agentToken,
+		CACert:            "",
+		AgentImage:        imageRepository + ":" + imageTag,
+	})
+}

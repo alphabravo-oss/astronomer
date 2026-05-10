@@ -17,6 +17,7 @@ type AgentConnection struct {
 	ID             uuid.UUID          `json:"id"`
 	ClusterID      uuid.UUID          `json:"cluster_id"`
 	AgentID        string             `json:"agent_id"`
+	SessionID      string             `json:"session_id"`
 	ConnectedAt    time.Time          `json:"connected_at"`
 	DisconnectedAt pgtype.Timestamptz `json:"disconnected_at"`
 	LastPing       pgtype.Timestamptz `json:"last_ping"`
@@ -163,18 +164,45 @@ type ArgocdOperationEvent struct {
 }
 
 type AuditLog struct {
-	ID           uuid.UUID       `json:"id"`
-	UserID       pgtype.UUID     `json:"user_id"`
-	Action       string          `json:"action"`
-	ResourceType string          `json:"resource_type"`
-	ResourceID   string          `json:"resource_id"`
-	ResourceName string          `json:"resource_name"`
-	Detail       json.RawMessage `json:"detail"`
-	IpAddress    *netip.Addr     `json:"ip_address"`
-	UserAgent    string          `json:"user_agent"`
-	RequestID    string          `json:"request_id"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID              uuid.UUID       `json:"id"`
+	CreatedAt       time.Time       `json:"created_at"`
+	SchemaVersion   string          `json:"schema_version"`
+	UserID          pgtype.UUID     `json:"user_id"`
+	ActorAuthMethod string          `json:"actor_auth_method"`
+	Action          string          `json:"action"`
+	ResourceType    string          `json:"resource_type"`
+	ResourceID      string          `json:"resource_id"`
+	ResourceName    string          `json:"resource_name"`
+	HttpMethod      string          `json:"http_method"`
+	Path            string          `json:"path"`
+	StatusCode      int32           `json:"status_code"`
+	DurationMs      int64           `json:"duration_ms"`
+	RequestID       string          `json:"request_id"`
+	IpAddress       *netip.Addr     `json:"ip_address"`
+	UserAgent       string          `json:"user_agent"`
+	Detail          json.RawMessage `json:"detail"`
+	Source          string          `json:"source"`
+	CorrelationID   string          `json:"correlation_id"`
+}
+
+type AuditLogDefault struct {
+	ID              uuid.UUID       `json:"id"`
+	CreatedAt       time.Time       `json:"created_at"`
+	SchemaVersion   string          `json:"schema_version"`
+	UserID          pgtype.UUID     `json:"user_id"`
+	ActorAuthMethod string          `json:"actor_auth_method"`
+	Action          string          `json:"action"`
+	ResourceType    string          `json:"resource_type"`
+	ResourceID      string          `json:"resource_id"`
+	ResourceName    string          `json:"resource_name"`
+	HttpMethod      string          `json:"http_method"`
+	Path            string          `json:"path"`
+	StatusCode      int32           `json:"status_code"`
+	DurationMs      int64           `json:"duration_ms"`
+	RequestID       string          `json:"request_id"`
+	IpAddress       *netip.Addr     `json:"ip_address"`
+	UserAgent       string          `json:"user_agent"`
+	Detail          json.RawMessage `json:"detail"`
 }
 
 type Backup struct {
@@ -289,6 +317,15 @@ type Cluster struct {
 	CreatedAt         time.Time          `json:"created_at"`
 	UpdatedAt         time.Time          `json:"updated_at"`
 	IsLocal           bool               `json:"is_local"`
+}
+
+type ClusterAgentToken struct {
+	ID         uuid.UUID          `json:"id"`
+	ClusterID  uuid.UUID          `json:"cluster_id"`
+	Token      string             `json:"token"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
 type ClusterHealthStatus struct {
@@ -656,6 +693,7 @@ type PlatformConfiguration struct {
 	PlatformName     string             `json:"platform_name"`
 	TelemetryEnabled bool               `json:"telemetry_enabled"`
 	BootstrappedAt   pgtype.Timestamptz `json:"bootstrapped_at"`
+	InstanceID       uuid.UUID          `json:"instance_id"`
 }
 
 type PodSecurityTemplate struct {

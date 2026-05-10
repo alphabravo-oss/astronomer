@@ -1,0 +1,2 @@
+DROP FUNCTION IF EXISTS create_audit_log_partition(TIMESTAMPTZ);
+DROP TABLE IF EXISTS audit_log CASCADE;

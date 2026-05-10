@@ -42,6 +42,18 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
 	}
 }
 
+// SecretKey returns a defensive copy of the HMAC signing key so other auth
+// helpers can bind short-lived browser state to the same application secret
+// without sharing mutable backing storage.
+func (m *JWTManager) SecretKey() []byte {
+	if m == nil || len(m.secretKey) == 0 {
+		return nil
+	}
+	out := make([]byte, len(m.secretKey))
+	copy(out, m.secretKey)
+	return out
+}
+
 // GenerateTokenPair creates both access and refresh tokens for a user
 func (m *JWTManager) GenerateTokenPair(userID uuid.UUID) (accessToken, refreshToken string, err error) {
 	accessToken, err = m.GenerateAccessToken(userID)

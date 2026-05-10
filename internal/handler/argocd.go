@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	authv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -23,6 +28,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
+
+var jwtBase64Encoding = base64.URLEncoding
 
 // MaxArgoCDOperationPolls caps the number of times the reconciler will poll
 // upstream ArgoCD for an in-progress operation before declaring it timed out.
@@ -32,6 +39,15 @@ const MaxArgoCDOperationPolls = 60
 // argoCDPollCadence is how often the reconciler revisits running operations
 // to check for completion. Runs as a tick inside runReconciler.
 const argoCDPollCadence = 30 * time.Second
+
+const (
+	argocdNamespace                    = "argocd"
+	argocdApplicationControllerSA      = "argocd-application-controller"
+	localArgoCDTokenDuration           = 24 * time.Hour
+	localArgoCDTokenRefreshWindow      = 2 * time.Hour
+	argocdClusterSecretTypeLabelKey    = "argocd.argoproj.io/secret-type"
+	argocdClusterSecretTypeLabelValue  = "cluster"
+)
 
 // ArgoCDQuerier abstracts the ArgoCD-related database queries needed by ArgoCDHandler.
 type ArgoCDQuerier interface {
@@ -83,6 +99,8 @@ type ArgoCDHandler struct {
 	http      *http.Client
 	authz     authorizationSupport
 	encryptor *auth.Encryptor
+	k8s       kubernetes.Interface
+	clusterProxyBaseURL string
 	mu        sync.Mutex
 	trigger   chan struct{}
 }
@@ -102,6 +120,14 @@ func NewArgoCDHandler(queries ArgoCDQuerier) *ArgoCDHandler {
 // instance responses fall back to omitting the token entirely.
 func (h *ArgoCDHandler) SetEncryptor(e *auth.Encryptor) {
 	h.encryptor = e
+}
+
+func (h *ArgoCDHandler) SetKubernetesClient(client kubernetes.Interface) {
+	h.k8s = client
+}
+
+func (h *ArgoCDHandler) SetClusterProxyBaseURL(baseURL string) {
+	h.clusterProxyBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
 // instanceResponse renders an ArgoCD instance for the API. The encrypted
@@ -1428,6 +1454,7 @@ func (h *ArgoCDHandler) reconcileInstanceHealth(ctx context.Context) {
 		return
 	}
 	for _, instance := range instances {
+		h.refreshLocalManagedClusterRegistrations(ctx, instance)
 		healthy := h.probeInstance(ctx, instance)
 		_ = h.queries.UpdateArgoCDInstanceHealth(ctx, sqlc.UpdateArgoCDInstanceHealthParams{
 			ID:        instance.ID,
@@ -1454,6 +1481,230 @@ func (h *ArgoCDHandler) probeInstance(ctx context.Context, instance sqlc.ArgocdI
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode < http.StatusBadRequest
+}
+
+func (h *ArgoCDHandler) refreshLocalManagedClusterRegistrations(ctx context.Context, instance sqlc.ArgocdInstance) {
+	if h == nil || h.k8s == nil {
+		return
+	}
+	rows, err := h.queries.ListArgoCDManagedClusters(ctx, instance.ID)
+	if err != nil {
+		return
+	}
+	client := h.argoCDClient(instance)
+	for _, row := range rows {
+		cluster, err := h.queries.GetClusterByID(ctx, row.ClusterID)
+		if err != nil || !cluster.IsLocal {
+			continue
+		}
+		if err := h.refreshLocalManagedClusterRegistration(ctx, client, instance.ID, cluster, row); err != nil && h.log != nil {
+			h.log.Warn("failed to refresh local argocd managed cluster registration", "instance_id", instance.ID.String(), "cluster_id", cluster.ID.String(), "error", err)
+		}
+	}
+}
+
+func (h *ArgoCDHandler) defaultManagedClusterServer(cluster sqlc.Cluster) string {
+	if server := strings.TrimSpace(cluster.ApiServerUrl); server != "" {
+		return server
+	}
+	if cluster.IsLocal || h == nil || h.clusterProxyBaseURL == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/api/v1/clusters/%s/k8s", h.clusterProxyBaseURL, cluster.ID.String())
+}
+
+func (h *ArgoCDHandler) refreshLocalManagedClusterRegistration(ctx context.Context, client *argocdclient.Client, instanceID uuid.UUID, cluster sqlc.Cluster, row sqlc.ArgocdManagedCluster) error {
+	desiredServer := strings.TrimSpace(cluster.ApiServerUrl)
+	if desiredServer == "" {
+		desiredServer = strings.TrimSpace(row.ServerUrl)
+	}
+	if desiredServer == "" {
+		return fmt.Errorf("local cluster %s has no api_server_url", cluster.ID)
+	}
+	refresh, err := h.localManagedClusterNeedsRefresh(ctx, row, desiredServer)
+	if err != nil {
+		return err
+	}
+	if !refresh {
+		return nil
+	}
+	return h.upsertLocalManagedClusterRegistration(ctx, client, instanceID, cluster, row, desiredServer)
+}
+
+func (h *ArgoCDHandler) localManagedClusterNeedsRefresh(ctx context.Context, row sqlc.ArgocdManagedCluster, desiredServer string) (bool, error) {
+	if row.ServerUrl != desiredServer {
+		return true, nil
+	}
+	secret, err := h.lookupArgoCDClusterSecret(ctx, row.ClusterSecretName, row.ServerUrl)
+	if err != nil {
+		return false, err
+	}
+	if secret == nil {
+		return true, nil
+	}
+	expiry, ok, err := argoCDClusterTokenExpiry(secret)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return time.Until(expiry) <= localArgoCDTokenRefreshWindow, nil
+}
+
+func (h *ArgoCDHandler) upsertLocalManagedClusterRegistration(ctx context.Context, client *argocdclient.Client, instanceID uuid.UUID, cluster sqlc.Cluster, row sqlc.ArgocdManagedCluster, desiredServer string) error {
+	token, err := h.createLocalArgoCDServiceAccountToken(ctx)
+	if err != nil {
+		return err
+	}
+	labels := managedClusterLabels(cluster)
+	if len(row.Labels) > 0 {
+		var existing map[string]string
+		if err := json.Unmarshal(row.Labels, &existing); err == nil {
+			for k, v := range existing {
+				labels[k] = v
+			}
+		}
+	}
+	reg := argocdclient.ClusterRegistration{
+		Server: desiredServer,
+		Name:   cluster.Name,
+		Upsert: true,
+		Config: argocdclient.ClusterConfig{
+			BearerToken: token,
+			TLSClientConfig: &argocdclient.TLSClientConfig{
+				Insecure: cluster.CaCertificate == "",
+				CAData:   []byte(cluster.CaCertificate),
+			},
+		},
+		Labels: labels,
+	}
+	upstream, err := client.RegisterCluster(ctx, reg)
+	if err != nil {
+		return err
+	}
+	if row.ServerUrl != "" && row.ServerUrl != desiredServer {
+		if err := client.UnregisterCluster(ctx, row.ServerUrl); err != nil && !argocdclient.IsKind(err, argocdclient.ErrNotFound) {
+			return err
+		}
+	}
+	secretName := clusterSecretNameFromServer(ctx, h.k8s, desiredServer)
+	labelsJSON, _ := json.Marshal(labels)
+	_, err = h.queries.CreateArgoCDManagedCluster(ctx, sqlc.CreateArgoCDManagedClusterParams{
+		ArgocdInstanceID:  instanceID,
+		ClusterID:         cluster.ID,
+		ClusterSecretName: firstNonEmptyString(secretName, upstream.Name, cluster.Name),
+		ServerUrl:         desiredServer,
+		Labels:            labelsJSON,
+	})
+	return err
+}
+
+func (h *ArgoCDHandler) createLocalArgoCDServiceAccountToken(ctx context.Context) (string, error) {
+	if h == nil || h.k8s == nil {
+		return "", fmt.Errorf("kubernetes client not configured")
+	}
+	duration := int64(localArgoCDTokenDuration.Seconds())
+	tokenReq, err := h.k8s.CoreV1().ServiceAccounts(argocdNamespace).CreateToken(ctx, argocdApplicationControllerSA, &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			ExpirationSeconds: &duration,
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return "", fmt.Errorf("create argocd application-controller token: %w", err)
+	}
+	return strings.TrimSpace(tokenReq.Status.Token), nil
+}
+
+func (h *ArgoCDHandler) lookupArgoCDClusterSecret(ctx context.Context, secretName, server string) (*corev1.Secret, error) {
+	if h == nil || h.k8s == nil {
+		return nil, nil
+	}
+	if secretName != "" {
+		secret, err := h.k8s.CoreV1().Secrets(argocdNamespace).Get(ctx, secretName, metav1.GetOptions{})
+		if err == nil {
+			return secret, nil
+		}
+	}
+	return findArgoCDClusterSecretByServer(ctx, h.k8s, server)
+}
+
+func managedClusterLabels(cluster sqlc.Cluster) map[string]string {
+	labels := map[string]string{
+		"astronomer.io/cluster-id":   cluster.ID.String(),
+		"astronomer.io/cluster-name": cluster.Name,
+	}
+	if cluster.Environment != "" {
+		labels["astronomer.io/environment"] = cluster.Environment
+	}
+	return labels
+}
+
+func argoCDClusterTokenExpiry(secret *corev1.Secret) (time.Time, bool, error) {
+	if secret == nil || len(secret.Data["config"]) == 0 {
+		return time.Time{}, false, nil
+	}
+	var cfg struct {
+		BearerToken string `json:"bearerToken"`
+	}
+	if err := json.Unmarshal(secret.Data["config"], &cfg); err != nil {
+		return time.Time{}, false, err
+	}
+	return jwtExpiry(cfg.BearerToken)
+}
+
+func jwtExpiry(token string) (time.Time, bool, error) {
+	parts := strings.Split(strings.TrimSpace(token), ".")
+	if len(parts) < 2 {
+		return time.Time{}, false, nil
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	payload, err := decodeBase64URL(parts[1])
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return time.Time{}, false, err
+	}
+	if claims.Exp == 0 {
+		return time.Time{}, false, nil
+	}
+	return time.Unix(claims.Exp, 0).UTC(), true, nil
+}
+
+func decodeBase64URL(raw string) ([]byte, error) {
+	if mod := len(raw) % 4; mod != 0 {
+		raw += strings.Repeat("=", 4-mod)
+	}
+	return jwtBase64Encoding.DecodeString(raw)
+}
+
+func clusterSecretNameFromServer(ctx context.Context, client kubernetes.Interface, server string) string {
+	secret, err := findArgoCDClusterSecretByServer(ctx, client, server)
+	if err != nil || secret == nil {
+		return ""
+	}
+	return secret.Name
+}
+
+func findArgoCDClusterSecretByServer(ctx context.Context, client kubernetes.Interface, server string) (*corev1.Secret, error) {
+	if client == nil || server == "" {
+		return nil, nil
+	}
+	secrets, err := client.CoreV1().Secrets(argocdNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: argocdClusterSecretTypeLabelKey + "=" + argocdClusterSecretTypeLabelValue,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range secrets.Items {
+		if strings.TrimSpace(string(secrets.Items[i].Data["server"])) == server {
+			return &secrets.Items[i], nil
+		}
+	}
+	return nil, nil
 }
 
 // =====================================================================
@@ -1663,6 +1914,10 @@ func (h *ArgoCDHandler) PatchProject(w http.ResponseWriter, r *http.Request) {
 	if translateClientError(w, err) {
 		return
 	}
+	recordAudit(r, h.queries, "argocd.project.update", "argocd_project", "", name, map[string]any{
+		"instance_id":     instance.ID.String(),
+		"patch_byte_size": len(raw),
+	})
 	RespondJSON(w, http.StatusOK, out)
 }
 
@@ -1834,7 +2089,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 
 	server := strings.TrimSpace(req.ServerOverride)
 	if server == "" {
-		server = cluster.ApiServerUrl
+		server = h.defaultManagedClusterServer(cluster)
 	}
 	if server == "" {
 		RespondError(w, http.StatusBadRequest, "validation_error", "cluster has no api_server_url; supply 'server' override")
@@ -1844,7 +2099,15 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	if caData == "" {
 		caData = cluster.CaCertificate
 	}
-	if strings.TrimSpace(req.BearerToken) == "" && !req.Insecure {
+	bearerToken := strings.TrimSpace(req.BearerToken)
+	if bearerToken == "" && cluster.IsLocal {
+		bearerToken, err = h.createLocalArgoCDServiceAccountToken(r.Context())
+		if err != nil {
+			RespondError(w, http.StatusBadGateway, "token_error", "Failed to mint local cluster token: "+err.Error())
+			return
+		}
+	}
+	if bearerToken == "" && !req.Insecure {
 		RespondError(w, http.StatusBadRequest, "validation_error", "bearer_token is required (or set insecure=true with caution)")
 		return
 	}
@@ -1852,13 +2115,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	// Stamp our own labels so ApplicationSet selectors can target by our
 	// cluster ID / name without the user needing to remember the upstream's
 	// label scheme. User-supplied labels win on key collision.
-	labels := map[string]string{
-		"astronomer.io/cluster-id":   cluster.ID.String(),
-		"astronomer.io/cluster-name": cluster.Name,
-	}
-	if cluster.Environment != "" {
-		labels["astronomer.io/environment"] = cluster.Environment
-	}
+	labels := managedClusterLabels(cluster)
 	for k, v := range req.Labels {
 		labels[k] = v
 	}
@@ -1866,8 +2123,9 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	reg := argocdclient.ClusterRegistration{
 		Server: server,
 		Name:   firstNonEmptyString(req.NameOverride, cluster.Name),
+		Upsert: true,
 		Config: argocdclient.ClusterConfig{
-			BearerToken: req.BearerToken,
+			BearerToken: bearerToken,
 			TLSClientConfig: &argocdclient.TLSClientConfig{
 				Insecure: req.Insecure,
 				CAData:   []byte(caData),
@@ -1884,14 +2142,12 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Persist the mapping. ArgoCD doesn't surface a secret name on the
-	// response, so we synthesize a stable label of our own (cluster name)
-	// for the index.
+	secretName := clusterSecretNameFromServer(r.Context(), h.k8s, server)
 	labelsJSON, _ := json.Marshal(labels)
 	_, _ = h.queries.CreateArgoCDManagedCluster(r.Context(), sqlc.CreateArgoCDManagedClusterParams{
 		ArgocdInstanceID:  instance.ID,
 		ClusterID:         cluster.ID,
-		ClusterSecretName: firstNonEmptyString(upstream.Name, cluster.Name),
+		ClusterSecretName: firstNonEmptyString(secretName, upstream.Name, cluster.Name),
 		ServerUrl:         server,
 		Labels:            labelsJSON,
 	})

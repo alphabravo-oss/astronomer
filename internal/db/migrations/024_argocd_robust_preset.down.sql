@@ -18,6 +18,7 @@ SET presets = jsonb_set(
         '  enabled: true\n'
         'dex:\n'
         '  enabled: false\n'
+        ::text
     )
 )
 WHERE slug = 'argocd';

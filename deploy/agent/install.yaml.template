@@ -88,8 +88,7 @@ metadata:
 data:
   SERVER_URL: "{{SERVER_URL}}"
   CLUSTER_ID: "{{CLUSTER_ID}}"
-  LOG_LEVEL: "INFO"
-  HEALTH_PORT: "8081"
+  HEALTH_ADDR: ":8081"
   HEARTBEAT_INTERVAL: "30"
   METRICS_INTERVAL: "60"
 
@@ -153,7 +152,7 @@ spec:
         app.kubernetes.io/part-of: astronomer
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8081"
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: astronomer-agent
@@ -172,15 +171,6 @@ spec:
           command:
             - astronomer-agent
             - connect
-          args:
-            - "--server-url=$(ASTRONOMER_SERVER_URL)"
-            - "--token=$(ASTRONOMER_TOKEN)"
-            - "--cluster-id=$(ASTRONOMER_CLUSTER_ID)"
-            - "--ca-cert=/etc/astronomer/tls/ca.crt"
-            - "--log-level=$(ASTRONOMER_LOG_LEVEL)"
-            - "--health-port=$(ASTRONOMER_HEALTH_PORT)"
-            - "--heartbeat-interval=$(ASTRONOMER_HEARTBEAT_INTERVAL)"
-            - "--metrics-interval=$(ASTRONOMER_METRICS_INTERVAL)"
           env:
             - name: ASTRONOMER_SERVER_URL
               valueFrom:
@@ -192,21 +182,16 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: CLUSTER_ID
-            - name: ASTRONOMER_TOKEN
+            - name: ASTRONOMER_AGENT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: astronomer-agent-token
                   key: token
-            - name: ASTRONOMER_LOG_LEVEL
+            - name: ASTRONOMER_HEALTH_ADDR
               valueFrom:
                 configMapKeyRef:
                   name: astronomer-agent-config
-                  key: LOG_LEVEL
-            - name: ASTRONOMER_HEALTH_PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: astronomer-agent-config
-                  key: HEALTH_PORT
+                  key: HEALTH_ADDR
             - name: ASTRONOMER_HEARTBEAT_INTERVAL
               valueFrom:
                 configMapKeyRef:
@@ -318,7 +303,7 @@ spec:
   ingress:
     # Allow health check probes from kubelet and monitoring
     - ports:
-        - port: 8080
+        - port: 8081
           protocol: TCP
   egress:
     # Allow DNS resolution
@@ -327,9 +312,16 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow HTTPS to management server (external)
+    # Allow management server traffic for both direct TLS endpoints and
+    # local/dev gateways published on high ports.
     - ports:
+        - port: 80
+          protocol: TCP
         - port: 443
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+        - port: 8443
           protocol: TCP
     # Allow access to Kubernetes API server
     - ports:

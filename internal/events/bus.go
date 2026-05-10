@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // Type is the event-type discriminator used by clients to filter / dispatch.
@@ -103,7 +105,7 @@ func (b *Bus) Publish(t Type, data any) {
 		select {
 		case s.ch <- e:
 		default:
-			// drop on slow subscriber
+			observability.RecordDroppedEvent("events_bus", "slow_subscriber")
 		}
 	}
 	b.mu.RUnlock()

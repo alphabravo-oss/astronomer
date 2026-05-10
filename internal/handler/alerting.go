@@ -699,6 +699,13 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
+	action := "alert.rule.disable"
+	if enabled {
+		action = "alert.rule.enable"
+	}
+	recordAudit(r, h.queries, action, "alert_rule", rule.ID.String(), rule.Name, map[string]any{
+		"enabled": enabled,
+	})
 	RespondJSON(w, http.StatusOK, h.alertRuleResponse(r.Context(), rule))
 }
 
@@ -750,12 +757,29 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "load_error", "Failed to load silence")
+		return
+	}
+	var match *sqlc.AlertSilence
+	for i := range silences {
+		if silences[i].ID == id {
+			match = &silences[i]
+			break
+		}
+	}
+	if match == nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Alert silence not found")
+		return
+	}
 	if err := h.queries.DeleteAlertSilence(r.Context(), id); err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Alert silence not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
+	recordAudit(r, h.queries, "alert.silence.delete", "alert_silence", id.String(), match.Reason, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

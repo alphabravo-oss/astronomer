@@ -108,6 +108,17 @@ CREATE TABLE cluster_registration_tokens (
 CREATE INDEX idx_reg_tokens_token_used ON cluster_registration_tokens (token, is_used);
 CREATE INDEX idx_reg_tokens_expires ON cluster_registration_tokens (expires_at);
 
+-- Cluster Agent Tokens
+CREATE TABLE cluster_agent_tokens (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cluster_id   UUID NOT NULL UNIQUE REFERENCES clusters(id) ON DELETE CASCADE,
+    token        VARCHAR(128) NOT NULL UNIQUE,
+    last_used_at TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_cluster_agent_tokens_token ON cluster_agent_tokens (token);
+
 -- Cluster Health Status
 CREATE TABLE cluster_health_statuses (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -598,6 +609,7 @@ CREATE TABLE agent_connections (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cluster_id      UUID NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
     agent_id        VARCHAR(128) NOT NULL,
+    session_id      VARCHAR(255) NOT NULL DEFAULT '',
     connected_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     disconnected_at TIMESTAMPTZ,
     last_ping       TIMESTAMPTZ,
@@ -611,27 +623,56 @@ CREATE TABLE agent_connections (
 );
 CREATE INDEX idx_agent_conns_cluster_status ON agent_connections (cluster_id, status);
 CREATE INDEX idx_agent_conns_agent_id ON agent_connections (agent_id);
+CREATE INDEX idx_agent_conns_session_id ON agent_connections (session_id);
 
--- Audit Logs
-CREATE TABLE audit_logs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID REFERENCES users(id) ON DELETE SET NULL,
-    action          VARCHAR(32) NOT NULL,
-    resource_type   VARCHAR(64) NOT NULL,
-    resource_id     VARCHAR(255) NOT NULL DEFAULT '',
-    resource_name   VARCHAR(255) NOT NULL DEFAULT '',
-    detail          JSONB NOT NULL DEFAULT '{}',
-    ip_address      INET,
-    user_agent      TEXT NOT NULL DEFAULT '',
-    request_id      VARCHAR(64) NOT NULL DEFAULT '',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_audit_logs_action_created ON audit_logs (action, created_at);
-CREATE INDEX idx_audit_logs_resource ON audit_logs (resource_type, resource_id);
-CREATE INDEX idx_audit_logs_user_created ON audit_logs (user_id, created_at);
-CREATE INDEX idx_audit_logs_request_id ON audit_logs (request_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs (created_at);
+-- Audit Log
+CREATE TABLE audit_log (
+    id                  UUID NOT NULL DEFAULT gen_random_uuid(),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    schema_version      VARCHAR(32) NOT NULL DEFAULT 'audit-v1',
+    user_id             UUID REFERENCES users(id) ON DELETE SET NULL,
+    actor_auth_method   VARCHAR(32) NOT NULL DEFAULT '',
+    action              VARCHAR(64) NOT NULL,
+    resource_type       VARCHAR(64) NOT NULL,
+    resource_id         VARCHAR(255) NOT NULL DEFAULT '',
+    resource_name       VARCHAR(255) NOT NULL DEFAULT '',
+    http_method         VARCHAR(16) NOT NULL DEFAULT '',
+    path                TEXT NOT NULL DEFAULT '',
+    status_code         INTEGER NOT NULL DEFAULT 0,
+    duration_ms         BIGINT NOT NULL DEFAULT 0,
+    request_id          VARCHAR(64) NOT NULL DEFAULT '',
+    ip_address          INET,
+    user_agent          TEXT NOT NULL DEFAULT '',
+    detail              JSONB NOT NULL DEFAULT '{}',
+    PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+CREATE INDEX idx_audit_log_action_created ON audit_log (action, created_at DESC);
+CREATE INDEX idx_audit_log_resource ON audit_log (resource_type, resource_id);
+CREATE INDEX idx_audit_log_user_created ON audit_log (user_id, created_at DESC);
+CREATE INDEX idx_audit_log_request_id ON audit_log (request_id);
+CREATE INDEX idx_audit_log_schema_created ON audit_log (schema_version, created_at DESC);
+CREATE TABLE audit_log_default PARTITION OF audit_log DEFAULT;
+
+CREATE OR REPLACE FUNCTION create_audit_log_partition(target_month TIMESTAMPTZ)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    month_start TIMESTAMPTZ := date_trunc('month', target_month);
+    month_end   TIMESTAMPTZ := month_start + INTERVAL '1 month';
+    partition_name TEXT := 'audit_log_' || to_char(month_start, 'YYYY_MM');
+BEGIN
+    EXECUTE format(
+        'CREATE TABLE IF NOT EXISTS %I PARTITION OF audit_log FOR VALUES FROM (%L) TO (%L)',
+        partition_name,
+        month_start,
+        month_end
+    );
+END;
+$$;
+
+SELECT create_audit_log_partition(now());
+SELECT create_audit_log_partition(now() + INTERVAL '1 month');
 
 -- Seed built-in RBAC roles
 INSERT INTO global_roles (name, description, rules, is_builtin) VALUES

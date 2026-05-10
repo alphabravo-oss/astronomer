@@ -1,0 +1,13 @@
+{{- if .Values.server.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "astronomer.fullname" . }}-server
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "server") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.server.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 6 }}
+{{- end }}
