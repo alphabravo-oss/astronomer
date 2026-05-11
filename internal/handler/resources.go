@@ -226,6 +226,14 @@ func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Req
 		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
+	// We record the management-plane audit row even though the actual k8s
+	// API audit happens on the cluster side — this row tracks "user X asked
+	// Astronomer to create resource Y", which is the forensic signal we
+	// want regardless of whether the proxy call ultimately succeeds.
+	recordAudit(r, h.queries, "k8s.resource.create", resourceType, "", "", map[string]any{
+		"cluster_id": clusterID,
+		"namespace":  namespace,
+	})
 	h.proxyJSON(w, r, clusterID, http.MethodPost, path, body, requestHeaders("application/json"))
 }
 
@@ -239,6 +247,10 @@ func (h *ResourceHandler) DeleteNamedResource(w http.ResponseWriter, r *http.Req
 		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
+	recordAudit(r, h.queries, "k8s.resource.delete", resourceType, "", name, map[string]any{
+		"cluster_id": clusterID,
+		"namespace":  namespace,
+	})
 	h.proxyJSON(w, r, clusterID, http.MethodDelete, path, nil, requestHeaders(""))
 }
 
@@ -332,6 +344,10 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 		RespondError(w, http.StatusInternalServerError, "settings_error", "Failed to update platform settings")
 		return
 	}
+	recordAudit(r, h.queries, "settings.general.update", "platform_settings", fmt.Sprintf("%d", cfg.ID), cfg.PlatformName, map[string]any{
+		"platform_name":     cfg.PlatformName,
+		"telemetry_enabled": cfg.TelemetryEnabled,
+	})
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"platformName":           defaultString(cfg.PlatformName, "Astronomer"),
 		"agentHeartbeatInterval": intOrDefault(req.AgentHeartbeatInterval, 30),
@@ -856,6 +872,17 @@ func (h *ResourceHandler) namedResourceRequest(w http.ResponseWriter, r *http.Re
 	headers := requestHeaders("")
 	if method == http.MethodPut {
 		headers = requestHeaders("application/json")
+	}
+	// Audit only the mutating verbs — GET is just a read.
+	switch method {
+	case http.MethodPut:
+		recordAudit(r, h.queries, "k8s.resource.update", resourceType, "", name, map[string]any{
+			"cluster_id": clusterID, "namespace": namespace,
+		})
+	case http.MethodDelete:
+		recordAudit(r, h.queries, "k8s.resource.delete", resourceType, "", name, map[string]any{
+			"cluster_id": clusterID, "namespace": namespace,
+		})
 	}
 	h.proxyJSON(w, r, clusterID, method, path, body, headers)
 }

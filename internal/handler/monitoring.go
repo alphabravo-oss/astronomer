@@ -372,6 +372,10 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.TriggerReconcile()
+	recordAudit(r, h.queries, "monitoring.operation.retry", "monitoring_operation", id.String(), op.TargetKey, map[string]any{
+		"target_type":     op.TargetType,
+		"previous_status": op.Status,
+	})
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(requeued))
 }
 

@@ -511,6 +511,10 @@ func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	h.TriggerReconcile()
+	recordAudit(r, h.queries, "workload.operation.retry", "workload_operation", id.String(), op.TargetKey, map[string]any{
+		"target_type":     op.TargetType,
+		"previous_status": op.Status,
+	})
 	RespondJSON(w, http.StatusAccepted, workloadOperationResponse(requeued))
 }
 
