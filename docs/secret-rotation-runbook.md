@@ -1,0 +1,334 @@
+# Secret rotation runbook
+
+This runbook is the operator-facing procedure for rotating every
+long-lived secret the Astronomer management plane depends on, with no
+downtime where possible and with explicit re-pairing only where
+unavoidable. It is the counterpart to
+[`management-plane-dr-runbook.md`](./management-plane-dr-runbook.md):
+that one covers "the DB is corrupt, restore it"; this one covers "the
+keys are compromised or due for routine rotation, replace them".
+
+The chart exposes four classes of secret. Each has a different blast
+radius and a different rotation procedure, summarised here and detailed
+below:
+
+| Secret                                | Encryption surface                       | Online rotation? | Forces re-pairing? |
+|---------------------------------------|------------------------------------------|------------------|--------------------|
+| `secrets.encryptionKey` (Fernet)      | At-rest column secrets (SSO client secret, ArgoCD auth token, backup creds, Dex connector secrets) | **yes**, with `keyrotate` | no |
+| `secrets.secretKey` (JWT HMAC)        | Every issued access + refresh JWT        | **yes**, two-key window for one refresh-token lifetime (7d) | no |
+| Agent registration tokens             | Per-cluster, used to pair an agent to a cluster row | per-cluster rotation | **yes — re-pair the agent in question** |
+| Admin bootstrap password              | First-login admin account                | n/a — change via the normal password-change UI | n/a |
+
+What survives `pg_restore` from the nightly dump (cross-reference with
+`management-plane-dr-runbook.md`):
+
+- **encryptionKey ciphertexts**: the encrypted bytes are in the dump.
+  The dump is useless without the Fernet key that signed them. Keep
+  the current key list in a key-management system separate from the
+  dump artifacts — anything stored alongside the dump is equivalent to
+  the dump being unencrypted.
+- **JWT signing key**: not stored in the DB, only in the Helm secret.
+  After a `pg_restore` you don't need to do anything special; the
+  server reads whatever is in its Helm secret.
+- **Agent registration tokens**: stored in `cluster_registration_tokens`
+  and restored with the rest of the schema. The agent's side of the
+  pairing (the Secret in its cluster) is **not** in the dump — see the
+  agent rotation section below.
+
+---
+
+## 1. Rotating `secrets.encryptionKey` (Fernet)
+
+The encryption key wraps every column-stored secret: SSO client
+secrets, ArgoCD repo auth tokens, S3 backup credentials, Dex connector
+secrets (LDAP bind password, OIDC client secret, etc.).
+
+The chart and binary support **multi-key** Fernet from
+[`internal/auth/crypto.go`](../internal/auth/crypto.go): `encryptionKey`
+accepts a comma-separated list. The first key is the primary (used to
+encrypt); every listed key is tried in order on decrypt.
+
+The safe procedure is:
+
+### Step 1 — generate a new key
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# or, if you have the keyrotate binary built:
+go run ./cmd/keyrotate -h    # the README mentions GenerateKey internally
+```
+
+Store the new key in your secret manager. Don't lose the old one — you
+need it through the entire procedure.
+
+### Step 2 — promote new key, keep old as fallback
+
+Update the Helm values and roll the server (and worker — it shares the
+same key):
+
+```bash
+helm upgrade --reuse-values astronomer ./deploy/chart \
+  --set-string secrets.encryptionKey="${NEW_KEY},${OLD_KEY}"
+```
+
+Verify the server picked up two keys:
+
+```bash
+kubectl -n astronomer logs deploy/astronomer-server | grep -m1 "encryption keys loaded"
+# → should say "encryption keys loaded count=2"  (or check via /api/v1/admin)
+```
+
+At this point:
+
+- new ciphertexts (writes from the live server) are signed with `NEW_KEY`
+- old ciphertexts (already in the DB) still decrypt because `OLD_KEY`
+  is in the fallback list
+
+### Step 3 — run `keyrotate` to rewrite historical rows
+
+```bash
+# Dry run first — reports what would change without writing.
+keyrotate \
+  --database-url "$DATABASE_URL" \
+  --encryption-key "${NEW_KEY},${OLD_KEY}" \
+  --dry-run
+
+# Then for real:
+keyrotate \
+  --database-url "$DATABASE_URL" \
+  --encryption-key "${NEW_KEY},${OLD_KEY}"
+```
+
+The tool rewrites every row in:
+
+- `sso_configurations.client_secret_encrypted`
+- `argocd_instances.auth_token_encrypted`
+- `backup_storage_configs.encrypted_credentials`
+
+It also prints the count of `dex_connectors` rows: their encrypted
+fields live inside a JSONB blob (per-connector-type schema), so the
+tool does NOT auto-rewrite them. Re-save each Dex connector via the UI
+or:
+
+```bash
+curl -sX PATCH -H "Authorization: Bearer $TOKEN" \
+  $URL/api/v1/dex/connectors/$ID -d '{}'    # zero-diff PATCH forces re-encrypt
+```
+
+When the `keyrotate` summary shows `failed=0`, every column secret is
+now under the new primary.
+
+### Step 4 — drop the old key
+
+```bash
+helm upgrade --reuse-values astronomer ./deploy/chart \
+  --set-string secrets.encryptionKey="${NEW_KEY}"
+```
+
+Verify:
+
+```bash
+kubectl -n astronomer logs deploy/astronomer-server | grep -m1 "encryption keys loaded"
+# → "encryption keys loaded count=1"
+```
+
+If anything fails to decrypt after this, the row was missed in step 3.
+Add `OLD_KEY` back to the fallback list and re-run `keyrotate`.
+
+### Rollback
+
+If something goes wrong at any step before step 4: just keep
+`encryptionKey="${OLD_KEY}"` — the old key has been in the fallback
+list the whole time, so reverting is a single Helm upgrade.
+
+---
+
+## 2. Rotating `secrets.secretKey` (JWT HMAC)
+
+The JWT secret signs every access + refresh token the server issues.
+The longest-lived token type is the refresh token (7 days, see
+[`internal/auth/jwt.go`](../internal/auth/jwt.go)), so the rotation
+window must outlast that.
+
+`JWTManager` is multi-key under the same scheme as the encryption key:
+the primary signs new tokens; any listed key validates.
+
+### Step 1 — generate a new key
+
+```bash
+openssl rand -base64 48     # any high-entropy string ≥32 bytes works
+```
+
+### Step 2 — promote new key, keep old as fallback
+
+```bash
+helm upgrade --reuse-values astronomer ./deploy/chart \
+  --set-string secrets.secretKey="${NEW_JWT},${OLD_JWT}"
+```
+
+New tokens are now signed under `NEW_JWT`. Existing user sessions
+continue to validate because `OLD_JWT` is still in the validator list.
+
+### Step 3 — wait out the refresh-token lifetime
+
+7 days by default (`refreshTokenLifetime` in `internal/auth/jwt.go`).
+At the end of this window, every active session has refreshed at least
+once and now holds a token signed under `NEW_JWT`.
+
+If you cannot wait 7 days (active compromise, compliance pressure),
+force-invalidate all sessions by deleting the row-level session state
+— but there isn't any: JWTs are stateless. Bumping the secret early
+just kicks every logged-in user back to the login page. Decide which
+hurts more.
+
+### Step 4 — drop the old key
+
+```bash
+helm upgrade --reuse-values astronomer ./deploy/chart \
+  --set-string secrets.secretKey="${NEW_JWT}"
+```
+
+Any user still presenting an old-signed token at this point is logged
+out and must reauthenticate. No further action needed.
+
+---
+
+## 3. Rotating an agent registration token
+
+Each cluster row has a long-lived registration token in
+`cluster_registration_tokens` (default 30-day TTL for the embedded
+local agent; see `internal/server/localcluster.go:38`). The agent in
+the managed cluster uses this on every (re)connect.
+
+Rotation **forces re-pairing** because the token has to be replaced in
+both the management DB and the agent's own Secret in its cluster.
+
+### Step 1 — issue a new token (UI)
+
+From `/dashboard/clusters/{id}`, click **Rotate registration token**.
+This calls `POST /api/v1/clusters/{id}/registration-tokens` which
+inserts a new row with a new TTL and returns the bearer string. The
+old token row stays valid until it expires or you delete it.
+
+### Step 2 — update the agent's Secret in its cluster
+
+Render and re-apply the agent manifest the UI emits (it includes the
+new token), or directly patch the Secret in the managed cluster's
+`astronomer` namespace:
+
+```bash
+kubectl -n astronomer patch secret astronomer-agent \
+  --type merge -p '{"stringData":{"AGENT_TOKEN":"'"$NEW_TOKEN"'"}}'
+kubectl -n astronomer rollout restart deploy/astronomer-agent
+```
+
+The agent will reconnect, present the new token, and the existing WS
+tunnel stays up until the old connection drops.
+
+### Step 3 — revoke the old token
+
+Once the agent is confirmed reconnecting under the new token (the
+cluster row's `agent_last_seen_at` advances within the heartbeat
+interval), revoke:
+
+```bash
+psql "$DATABASE_URL" -c "
+  DELETE FROM cluster_registration_tokens
+  WHERE cluster_id = '$CLUSTER_ID' AND token = '$OLD_TOKEN';
+"
+```
+
+The cluster decommission reconciler (`internal/worker/tasks/cluster_decommission.go`)
+runs the same step automatically when a cluster is removed.
+
+---
+
+## 4. Bootstrap password
+
+The bootstrap password (`bootstrap.password` value, env
+`ASTRONOMER_BOOTSTRAP_PASSWORD`) is **first-login only**. After the
+first admin login, the chart's `must_change_password` flow forces a
+real password to be set. The bootstrap value is irrelevant from that
+point on.
+
+To "rotate" it, just change the admin user's password via the normal
+profile UI or `PATCH /api/v1/users/me/password`. The chart's bootstrap
+value isn't consulted again.
+
+If you forgot the admin password entirely and there's no other admin:
+
+```bash
+# Reset directly in the DB. password is bcrypt-hashed.
+HASH=$(python3 -c "
+import bcrypt, sys
+print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(rounds=10)).decode())
+" 'new-admin-password')
+
+psql "$DATABASE_URL" -c "
+  UPDATE users SET password='$HASH', must_change_password=false
+  WHERE username='admin';
+"
+```
+
+---
+
+## 5. What survives a `pg_restore` — and what doesn't
+
+When you restore from the nightly dump per
+[`management-plane-dr-runbook.md`](./management-plane-dr-runbook.md):
+
+| In the dump          | Not in the dump (operator must supply) |
+|----------------------|----------------------------------------|
+| `users` (password hashes) | `secrets.encryptionKey` — the Fernet key that decrypts the columns the dump contains |
+| `sso_configurations` (with `client_secret_encrypted` ciphertext) | `secrets.secretKey` — the JWT signing key |
+| `argocd_instances` (with `auth_token_encrypted` ciphertext) | `bootstrap.password` (irrelevant once an admin exists) |
+| `cluster_registration_tokens` | Agent-side Secret in each managed cluster (the agent reads the token from its own Secret, not from the dump) |
+| `dex_connectors` (with encrypted JSONB fields) | TLS certificate Secret (if `tls.source=secret`) — operator owns the cert lifecycle |
+
+**The two non-obvious gotchas** that the regular DR runbook glosses
+over:
+
+1. After restore, every agent in every managed cluster must
+   re-authenticate. If you restored to a NEW management cluster
+   (different DNS), the agents must also be reconfigured with the new
+   server URL. Use the agent's `kubectl rollout restart` after
+   patching the URL in its config map.
+2. If you restored from a dump that predates your current
+   `encryptionKey` rotation, you need the **OLD** key in your
+   fallback list to decrypt the restored rows. Don't delete old keys
+   from your secret manager until every dump that used them has
+   passed its retention window.
+
+---
+
+## Appendix A — verifying rotation state in production
+
+The `Encryptor` and `JWTManager` both expose `KeyCount()`. A small
+admin endpoint surfaces the live count for ops:
+
+```bash
+curl -sH "Authorization: Bearer $TOKEN" $URL/api/v1/admin/key-status
+# → {"encryption_keys":1,"jwt_keys":1,"as_of":"…"}
+```
+
+`> 1` means a rotation is mid-flight — fine for hours/days, alarming
+for weeks. The recommended SLO is "no key rotation lingers more than
+14 days"; alert on `encryption_keys > 1 AND last_rotation_started_at <
+now() - 14d`.
+
+## Appendix B — `keyrotate` command reference
+
+```text
+keyrotate
+  --database-url <DSN>            (or env DATABASE_URL)
+  --encryption-key "<new>,<old>"  (or env ENCRYPTION_KEY)
+  --dry-run                       no writes, report what would change
+  --batch-size 100                rows per UPDATE
+```
+
+Exit codes:
+- 0 — all rows re-encrypted (or, with `--dry-run`, all rows would
+  successfully re-encrypt)
+- 1 — at least one row failed to decrypt with the configured key list
+  (an old key is missing from `--encryption-key`)
+- 2 — invalid flags or DB connection failure

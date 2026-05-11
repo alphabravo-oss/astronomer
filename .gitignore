@@ -28,3 +28,4 @@ bin/
 # Test output
 coverage.out
 *.test
+/keyrotate

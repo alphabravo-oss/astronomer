@@ -249,3 +249,53 @@ func TestJWTManager(t *testing.T) {
 		t.Run(tt.name, tt.run)
 	}
 }
+
+// Multi-key rotation: tokens signed under the old key must still validate
+// after a new key is promoted to primary; new tokens must sign under the
+// new primary. This mirrors the rotation procedure in
+// docs/secret-rotation-runbook.md.
+func TestJWTManagerMultiKeyRotation(t *testing.T) {
+	oldKey := "jwt-old-test-secret-1234567890ab"
+	newKey := "jwt-new-test-secret-fedcba098765"
+	userID := uuid.New()
+
+	mgrOld := NewJWTManager(oldKey, 60)
+	if mgrOld.KeyCount() != 1 {
+		t.Errorf("KeyCount = %d, want 1", mgrOld.KeyCount())
+	}
+	tokenUnderOld, err := mgrOld.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatalf("GenerateAccessToken(old): %v", err)
+	}
+
+	// Rotation in flight: new primary, old fallback.
+	mgrMixed := NewJWTManager(newKey+","+oldKey, 60)
+	if mgrMixed.KeyCount() != 2 {
+		t.Errorf("KeyCount = %d, want 2", mgrMixed.KeyCount())
+	}
+
+	// Old-signed token still validates.
+	claims, err := mgrMixed.ValidateToken(tokenUnderOld)
+	if err != nil {
+		t.Fatalf("ValidateToken(old): %v", err)
+	}
+	if claims.UserID != userID {
+		t.Errorf("UserID = %v, want %v", claims.UserID, userID)
+	}
+
+	// New tokens are signed under the new primary — they validate
+	// against the new-only manager (the steady-state post-rotation).
+	tokenUnderNew, err := mgrMixed.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatalf("GenerateAccessToken(mixed): %v", err)
+	}
+	mgrNewOnly := NewJWTManager(newKey, 60)
+	if _, err := mgrNewOnly.ValidateToken(tokenUnderNew); err != nil {
+		t.Fatalf("ValidateToken(new token under new-only): %v", err)
+	}
+	// Old token must NOT validate once the old key is dropped — that's the
+	// "wait out token lifetime before dropping" gate.
+	if _, err := mgrNewOnly.ValidateToken(tokenUnderOld); err == nil {
+		t.Error("expected old-keyed token to FAIL under new-only manager")
+	}
+}

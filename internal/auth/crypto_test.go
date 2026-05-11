@@ -163,3 +163,83 @@ func TestNewEncryptorInvalidKey(t *testing.T) {
 		})
 	}
 }
+
+// Multi-key rotation: ciphertext written under an old key must still
+// decrypt after a new key is promoted to primary, and new writes must
+// use the new primary. This is the load-bearing property of the
+// rotation procedure documented in docs/secret-rotation-runbook.md.
+func TestEncryptorMultiKeyRotation(t *testing.T) {
+	oldKey, _ := GenerateKey()
+	newKey, _ := GenerateKey()
+
+	// Step 0: original encryptor, single key.
+	encOld, err := NewEncryptor(oldKey)
+	if err != nil {
+		t.Fatalf("NewEncryptor(old): %v", err)
+	}
+	if encOld.KeyCount() != 1 {
+		t.Errorf("KeyCount = %d, want 1", encOld.KeyCount())
+	}
+	tokenUnderOld, err := encOld.Encrypt("legacy-row")
+	if err != nil {
+		t.Fatalf("Encrypt(old): %v", err)
+	}
+
+	// Step 1: rotation in flight — new key is primary, old is fallback.
+	encMixed, err := NewEncryptor(newKey + "," + oldKey)
+	if err != nil {
+		t.Fatalf("NewEncryptor(new,old): %v", err)
+	}
+	if encMixed.KeyCount() != 2 {
+		t.Errorf("KeyCount = %d, want 2", encMixed.KeyCount())
+	}
+
+	// Old ciphertext still decrypts.
+	got, err := encMixed.Decrypt(tokenUnderOld)
+	if err != nil {
+		t.Fatalf("Decrypt(old token): %v", err)
+	}
+	if got != "legacy-row" {
+		t.Errorf("got %q, want %q", got, "legacy-row")
+	}
+
+	// New writes go to the new primary — decryptable by the new-only
+	// encryptor that step 3 leaves us in.
+	tokenUnderNew, err := encMixed.Encrypt("freshly-written")
+	if err != nil {
+		t.Fatalf("Encrypt(mixed): %v", err)
+	}
+	encNewOnly, err := NewEncryptor(newKey)
+	if err != nil {
+		t.Fatalf("NewEncryptor(new): %v", err)
+	}
+	got, err = encNewOnly.Decrypt(tokenUnderNew)
+	if err != nil {
+		t.Fatalf("Decrypt(new token under new-only): %v", err)
+	}
+	if got != "freshly-written" {
+		t.Errorf("got %q, want %q", got, "freshly-written")
+	}
+
+	// And the old ciphertext fails under the new-only encryptor — this
+	// is the "you must re-encrypt before dropping the old key" gate.
+	if _, err := encNewOnly.Decrypt(tokenUnderOld); err == nil {
+		t.Error("expected old-keyed ciphertext to FAIL under new-only encryptor")
+	}
+}
+
+// Whitespace + empty entries in the comma-separated key list are
+// tolerated so config files can use either inline commas or
+// multi-line YAML strings.
+func TestNewEncryptorWhitespaceTolerance(t *testing.T) {
+	k1, _ := GenerateKey()
+	k2, _ := GenerateKey()
+
+	enc, err := NewEncryptor("  " + k1 + " , " + k2 + " ,  ")
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	if enc.KeyCount() != 2 {
+		t.Errorf("KeyCount = %d, want 2", enc.KeyCount())
+	}
+}
