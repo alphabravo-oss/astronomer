@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,34 +18,66 @@ interface ActionMenuProps {
   items: ActionMenuItem[];
 }
 
+const MENU_WIDTH = 176; // matches w-44
+const MENU_GAP = 4;
+const MENU_MIN_HEIGHT = 120;
+
+// The menu used to render inline as `position: absolute`, which any
+// `overflow-hidden`/`overflow-x-auto` ancestor (every DataTable wrapper, the
+// dashboard main pane, etc.) clipped. We now portal the menu to <body> and
+// position it with `position: fixed` from the trigger button's bounding rect,
+// which dodges every parent overflow boundary cleanly.
 export function ActionMenu({ items }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
-  const [flipUp, setFlipUp] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function handleClose() {
+      setOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+    // Close when the page scrolls or resizes so the menu doesn't drift away
+    // from its trigger; cheaper than recomputing coords on every scroll tick.
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [open]);
+
+  // Recompute position after open so we land relative to the button.
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const flipUp = spaceBelow < MENU_MIN_HEIGHT;
+    const top = flipUp ? rect.top - MENU_GAP : rect.bottom + MENU_GAP;
+    // Right-align under the button: the menu's right edge lines up with the
+    // button's right edge. Clamp to the viewport so it doesn't go offscreen
+    // on narrow widths.
+    let left = rect.right - MENU_WIDTH;
+    if (left < 8) left = 8;
+    if (left + MENU_WIDTH > window.innerWidth - 8) left = window.innerWidth - MENU_WIDTH - 8;
+    setCoords({ top, left });
+  }, [open]);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setFlipUp(spaceBelow < 200);
-    }
     setOpen(!open);
   };
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
         ref={buttonRef}
         onClick={handleToggle}
@@ -54,12 +87,19 @@ export function ActionMenu({ items }: ActionMenuProps) {
         <MoreHorizontal className="h-4 w-4" />
       </button>
 
-      {open && (
+      {open && coords && typeof document !== 'undefined' && createPortal(
         <div
-          className={cn(
-            "absolute right-0 w-44 rounded-md border border-border bg-popover p-1 shadow-lg z-50",
-            flipUp ? "bottom-full mb-1" : "top-full mt-1"
-          )}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            width: MENU_WIDTH,
+            transform: coords.top < (buttonRef.current?.getBoundingClientRect().top ?? 0)
+              ? 'translateY(-100%)'
+              : undefined,
+          }}
+          className="rounded-md border border-border bg-popover p-1 shadow-lg z-[9999]"
           onClick={(e) => e.stopPropagation()}
         >
           {items.map((item, i) => (
@@ -88,8 +128,9 @@ export function ActionMenu({ items }: ActionMenuProps) {
               </button>
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
