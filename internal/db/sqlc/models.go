@@ -646,6 +646,32 @@ type LoggingPipelineOutput struct {
 	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
 }
 
+type LoggingOperation struct {
+	ID            uuid.UUID          `json:"id"`
+	TargetType    string             `json:"target_type"`
+	TargetKey     string             `json:"target_key"`
+	OperationType string             `json:"operation_type"`
+	Payload       json.RawMessage    `json:"payload"`
+	Status        string             `json:"status"`
+	AttemptCount  int32              `json:"attempt_count"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+	ErrorMessage  string             `json:"error_message"`
+	CreatedByID   pgtype.UUID        `json:"created_by_id"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type LoggingOperationEvent struct {
+	ID          uuid.UUID       `json:"id"`
+	OperationID uuid.UUID       `json:"operation_id"`
+	Level       string          `json:"level"`
+	Stage       string          `json:"stage"`
+	Message     string          `json:"message"`
+	Detail      json.RawMessage `json:"detail"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
 type MonitoringBackend struct {
 	ID                 uuid.UUID       `json:"id"`
 	Name               string          `json:"name"`

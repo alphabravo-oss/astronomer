@@ -157,6 +157,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	backupHandler.SetK8sRequester(requester)
 	backupHandler.SetLogger(logger)
 	loggingHandler := handler.NewLoggingHandler(queries)
+	// Logging controller — DB-backed operations table + background reconciler
+	// applies rendered ConfigMaps into the managed cluster's astronomer-logging
+	// namespace via the tunnel K8s requester. Comparison.md §7/§10/§11.
+	loggingHandler.SetK8sRequester(requester)
+	loggingHandler.SetLogger(logger)
 	securityHandler := handler.NewSecurityHandler(queries)
 	// Phase B5 — CIS scans wiring (handler creates ClusterScan CRs through the
 	// tunnel and runs an in-process poller until the report lands).
@@ -349,6 +354,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	backupHandler.StartReconciler(reconcileCtx)
 	toolHandler.StartReconciler(reconcileCtx)
 	catalogHandler.StartReconciler(reconcileCtx)
+	loggingHandler.StartReconciler(reconcileCtx)
 	controlPlaneHandler.StartEvaluator(reconcileCtx)
 	workloadHandler.StartReconciler(reconcileCtx)
 	// Phase B3 — configure the worker-task runtime in this process too, so the
