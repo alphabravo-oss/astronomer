@@ -62,12 +62,42 @@ export function PodLogsViewer({
     }
   );
 
-  // Auto-scroll when following
+  // Auto-scroll when following. We pin to the bottom whenever `follow` is
+  // true and new lines arrive. The `isAutoScrolling` ref tells the scroll
+  // handler below to ignore the programmatic scrollTop write it's about to
+  // see — otherwise the handler would interpret our own scroll as a user
+  // scroll-up and immediately flip `follow` off, defeating the feature.
+  const isAutoScrolling = useRef(false);
   useEffect(() => {
     if (follow && scrollRef.current) {
+      isAutoScrolling.current = true;
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // Release the flag after the browser has painted the scroll write.
+      requestAnimationFrame(() => {
+        isAutoScrolling.current = false;
+      });
     }
   }, [logs, follow]);
+
+  // Detect user scroll-up to pause follow. A threshold of 16px lets us treat
+  // "near the bottom" as still-following so that fractional pixel rounding
+  // from the browser doesn't constantly trip the pause. Scrolling back to
+  // within the threshold re-enables follow automatically.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    function onScroll() {
+      if (isAutoScrolling.current || !el) return;
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 16;
+      setFollow((prev) => {
+        if (prev && !atBottom) return false;
+        if (!prev && atBottom) return true;
+        return prev;
+      });
+    }
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Filter logs by search
   const filteredLogs = useMemo(() => {

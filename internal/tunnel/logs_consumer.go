@@ -1,24 +1,44 @@
 package tunnel
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // LogsConsumer handles WebSocket connections for log streaming.
 // Route: /api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/
+//
+// Auth contract:
+//
+//	Authorization: Bearer <jwt-or-api-token>   (XHR / curl)
+//
+// — or, because browser `new WebSocket(...)` cannot set custom headers —
+//
+//	?token=<jwt-or-api-token>                  (browser fallback)
+//
+// Either path is validated against the same JWTManager and TokenUserQuerier
+// the rest of the API uses. Without `SetAuth`, the handler accepts
+// unauthenticated connections (dev/test mode).
 type LogsConsumer struct {
-	hub *Hub
-	log *slog.Logger
+	hub     *Hub
+	log     *slog.Logger
+	jwt     *auth.JWTManager
+	queries middleware.TokenUserQuerier
 }
 
 // NewLogsConsumer creates a new LogsConsumer.
@@ -29,9 +49,75 @@ func NewLogsConsumer(hub *Hub, log *slog.Logger) *LogsConsumer {
 	return &LogsConsumer{hub: hub, log: log}
 }
 
+// SetAuth wires the JWT manager + token querier so HandleLogs can authenticate
+// connections before performing the WebSocket upgrade. Both arguments are
+// optional; when nil the handler accepts unauthenticated connections.
+func (lc *LogsConsumer) SetAuth(jwt *auth.JWTManager, queries middleware.TokenUserQuerier) {
+	if lc == nil {
+		return
+	}
+	lc.jwt = jwt
+	lc.queries = queries
+}
+
+// authenticate validates the request via Authorization header (preferred)
+// or `?token=` query parameter (browser-WS fallback).
+func (lc *LogsConsumer) authenticate(r *http.Request) bool {
+	if lc.jwt == nil {
+		return true
+	}
+	token := bearerFromHeader(r.Header.Get("Authorization"))
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+	if token == "" {
+		return false
+	}
+	if strings.HasPrefix(token, "astro_") {
+		if lc.queries == nil {
+			return false
+		}
+		hash := sha256.Sum256([]byte(token))
+		hashStr := hex.EncodeToString(hash[:])
+		apiToken, err := lc.queries.GetTokenByHash(r.Context(), hashStr)
+		if err != nil {
+			return false
+		}
+		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
+			return false
+		}
+		dbUser, err := lc.queries.GetUserByID(r.Context(), apiToken.UserID)
+		if err != nil || !dbUser.IsActive {
+			return false
+		}
+		return true
+	}
+	claims, err := lc.jwt.ValidateToken(token)
+	if err != nil {
+		return false
+	}
+	return claims.UserID != uuid.Nil
+}
+
+func bearerFromHeader(h string) string {
+	if h == "" {
+		return ""
+	}
+	parts := strings.SplitN(h, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return parts[1]
+}
+
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent
 // to the frontend client.
 func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
+	if !lc.authenticate(r) {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+
 	clusterID := chi.URLParam(r, "cluster_id")
 	namespace := chi.URLParam(r, "namespace")
 	pod := chi.URLParam(r, "pod")
@@ -56,6 +142,9 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 	agent := lc.hub.GetAgent(clusterID)
 	if agent == nil {
 		lc.log.Warn("no agent connected for cluster", slog.String("cluster_id", clusterID))
+		// Send a structured error frame to the client before closing so the UI
+		// can surface "agent not connected" instead of a silent hang.
+		_ = writeFrontendError(r.Context(), conn, "agent_not_connected", "Cluster agent is not connected")
 		conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
 		return
 	}
@@ -68,6 +157,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
+		_ = writeFrontendError(r.Context(), conn, "stream_create_failed", err.Error())
 		conn.Close(websocket.StatusInternalError, "failed to create stream")
 		return
 	}
@@ -80,8 +170,15 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		if n, err := strconv.Atoi(tl); err == nil {
 			tailLines = n
 		}
+	} else if tl := r.URL.Query().Get("tailLines"); tl != "" {
+		if n, err := strconv.Atoi(tl); err == nil {
+			tailLines = n
+		}
 	}
-	timestamps := r.URL.Query().Get("timestamps") == "true"
+	// Always request timestamps from kubelet so the frontend can render real
+	// per-line times instead of a constant "received-at" value. The
+	// translation loop below parses the RFC3339Nano prefix back out.
+	timestamps := true
 
 	// Send LOG_START to agent.
 	startPayload, _ := json.Marshal(protocol.LogStartPayload{
@@ -106,13 +203,16 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
+		_ = writeFrontendError(r.Context(), conn, "log_start_failed", err.Error())
 		conn.Close(websocket.StatusInternalError, "failed to start log stream")
 		return
 	}
 
 	ctx := r.Context()
 
-	// Forward LOG_DATA from agent → frontend WS.
+	// Forward LOG_DATA from agent → frontend WS, translating the agent's
+	// `{"line":"..."}` envelope into the `{timestamp, message, container,
+	// level}` shape the frontend's PodLog type expects.
 	// On LOG_END or client disconnect, clean up.
 	for {
 		select {
@@ -120,7 +220,8 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+			out := translateLogLine(data, container)
+			if err := conn.Write(ctx, websocket.MessageText, out); err != nil {
 				lc.log.Debug("write to frontend failed", slog.String("error", err.Error()))
 				return
 			}
@@ -130,4 +231,46 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// translateLogLine converts the agent's tunnel envelope `{"line":"..."}` into
+// the frontend's PodLog JSON. When kubelet is asked for timestamps, the line
+// is prefixed with an RFC3339Nano timestamp followed by a single space; we
+// split that off so the UI can render a per-line time. If parsing fails we
+// fall back to `time.Now()` and pass the full line through unchanged.
+func translateLogLine(raw []byte, container string) []byte {
+	var env struct {
+		Line string `json:"line"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		// Not the expected envelope — forward as-is, wrapped.
+		env.Line = string(raw)
+	}
+
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
+	msg := env.Line
+	if sp := strings.IndexByte(env.Line, ' '); sp > 0 {
+		if _, err := time.Parse(time.RFC3339Nano, env.Line[:sp]); err == nil {
+			ts = env.Line[:sp]
+			msg = env.Line[sp+1:]
+		}
+	}
+
+	out, _ := json.Marshal(map[string]string{
+		"timestamp": ts,
+		"message":   msg,
+		"container": container,
+	})
+	return out
+}
+
+// writeFrontendError sends a structured error frame to the frontend WS so the
+// UI can surface a clear error rather than a silent close.
+func writeFrontendError(ctx context.Context, conn *websocket.Conn, code, message string) error {
+	out, _ := json.Marshal(map[string]string{
+		"type":    "error",
+		"code":    code,
+		"message": message,
+	})
+	return conn.Write(ctx, websocket.MessageText, out)
 }
