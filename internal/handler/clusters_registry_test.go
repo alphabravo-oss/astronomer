@@ -71,6 +71,14 @@ func (q *clusterRegistryTestQuerier) DeleteClusterRegistryConfig(_ context.Conte
 	return q.deleteRegistryConfigErr
 }
 
+// ListClusterConditions satisfies the ClusterQuerier interface introduced by
+// the cluster-conditions reconciler. This stub is only used by the registry
+// tests, which never exercise the conditions endpoint, so a nil return is
+// sufficient.
+func (q *clusterRegistryTestQuerier) ListClusterConditions(context.Context, uuid.UUID) ([]sqlc.ClusterCondition, error) {
+	return nil, nil
+}
+
 func TestDeleteRegistryConfig(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}
