@@ -80,26 +80,68 @@ type searchResourceDef struct {
 	apiBase    string
 	plural     string
 	namespaced bool
-	// rbacResource is the RBAC resource type the caller must hold `read` on.
-	// Keeping the mapping table-driven means a new type can be added by
-	// editing one place.
+	// rbacResource is the RBAC resource type the caller must hold `list` on
+	// for a given cluster in order to receive rows from that cluster. Keeping
+	// the mapping table-driven means a new type can be added by editing one
+	// place. The categorization choices below intentionally fold several
+	// related Kubernetes kinds onto a smaller set of RBAC resources from
+	// internal/rbac/types.go:
+	//   - pods, events, endpoints       -> rbac.ResourcePods
+	//   - deployments, statefulsets,
+	//     daemonsets, replicasets,
+	//     jobs, cronjobs                -> rbac.ResourceWorkloads
+	//   - services, ingresses,
+	//     networkpolicies, gateway-api  -> rbac.ResourceWorkloads (networking
+	//     does not have its own resource constant; folding into Workloads
+	//     keeps the RBAC vocabulary stable and matches how the existing
+	//     per-cluster resources handler gates these kinds)
+	//   - secrets, configmaps           -> rbac.ResourceWorkloads (typically
+	//     gated alongside the workloads that consume them)
+	//   - persistentvolumes,
+	//     persistentvolumeclaims,
+	//     storageclasses                -> rbac.ResourceWorkloads
+	//   - cluster-scoped registries
+	//     (nodes, namespaces, PVs, ...) -> rbac.ResourceClusters
+	//   - unknown / default             -> rbac.ResourceWorkloads
 	rbacResource rbac.Resource
 }
 
 var searchResourceDefs = map[string]searchResourceDef{
 	"pods":                   {apiBase: "/api/v1", plural: "pods", namespaced: true, rbacResource: rbac.ResourcePods},
+	"events":                 {apiBase: "/api/v1", plural: "events", namespaced: true, rbacResource: rbac.ResourcePods},
+	"endpoints":              {apiBase: "/api/v1", plural: "endpoints", namespaced: true, rbacResource: rbac.ResourcePods},
 	"services":               {apiBase: "/api/v1", plural: "services", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"configmaps":             {apiBase: "/api/v1", plural: "configmaps", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"secrets":                {apiBase: "/api/v1", plural: "secrets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"namespaces":             {apiBase: "/api/v1", plural: "namespaces", namespaced: false, rbacResource: rbac.ResourceClusters},
 	"nodes":                  {apiBase: "/api/v1", plural: "nodes", namespaced: false, rbacResource: rbac.ResourceClusters},
+	"persistentvolumes":      {apiBase: "/api/v1", plural: "persistentvolumes", namespaced: false, rbacResource: rbac.ResourceWorkloads},
 	"persistentvolumeclaims": {apiBase: "/api/v1", plural: "persistentvolumeclaims", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"storageclasses":         {apiBase: "/apis/storage.k8s.io/v1", plural: "storageclasses", namespaced: false, rbacResource: rbac.ResourceWorkloads},
 	"deployments":            {apiBase: "/apis/apps/v1", plural: "deployments", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"statefulsets":           {apiBase: "/apis/apps/v1", plural: "statefulsets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"daemonsets":             {apiBase: "/apis/apps/v1", plural: "daemonsets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"replicasets":            {apiBase: "/apis/apps/v1", plural: "replicasets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"jobs":                   {apiBase: "/apis/batch/v1", plural: "jobs", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"cronjobs":               {apiBase: "/apis/batch/v1", plural: "cronjobs", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"ingresses":              {apiBase: "/apis/networking.k8s.io/v1", plural: "ingresses", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"networkpolicies":        {apiBase: "/apis/networking.k8s.io/v1", plural: "networkpolicies", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"gateways":               {apiBase: "/apis/gateway.networking.k8s.io/v1", plural: "gateways", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"httproutes":             {apiBase: "/apis/gateway.networking.k8s.io/v1", plural: "httproutes", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+}
+
+// rbacResourceForType maps a search `type` query parameter to the
+// rbac.Resource the caller must hold `list` on. Unknown / unsupported types
+// fall through to rbac.ResourceWorkloads, matching the default categorization
+// documented on searchResourceDef.rbacResource above. This helper exists in
+// addition to searchResourceDefs so that resource-type → RBAC resource lookup
+// works even on paths where the underlying API path mapping is not needed
+// (and is a single, easily-grepped definition of the policy).
+func rbacResourceForType(resourceType string) rbac.Resource {
+	if def, ok := searchResourceDefs[strings.ToLower(strings.TrimSpace(resourceType))]; ok {
+		return def.rbacResource
+	}
+	return rbac.ResourceWorkloads
 }
 
 // searchClusterError is a per-cluster failure surfaced inline in the
@@ -283,6 +325,13 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// authorizedSearchClusters narrows the candidate cluster set to those where
+// the caller holds `<resource>:list` for the requested search type. This is
+// the per-result, per-resource-type filter that replaces the coarse,
+// route-level RBAC gate the search handler used to rely on. Filtering here
+// (a) avoids leaking the existence of clusters the caller cannot see and
+// (b) reduces tunnel load by not even fanning out to clusters whose results
+// would be discarded.
 func (h *ResourcesSearchHandler) authorizedSearchClusters(ctx context.Context, clusters []sqlc.Cluster, resource rbac.Resource) ([]sqlc.Cluster, error) {
 	bindings, restricted, err := h.authz.bindingsForContext(ctx)
 	if err != nil {
@@ -293,7 +342,7 @@ func (h *ResourcesSearchHandler) authorizedSearchClusters(ctx context.Context, c
 	}
 	filtered := make([]sqlc.Cluster, 0, len(clusters))
 	for _, c := range clusters {
-		if h.authz.allowsCluster(bindings, c.ID, resource, rbac.VerbRead) {
+		if h.authz.allowsCluster(bindings, c.ID, resource, rbac.VerbList) {
 			filtered = append(filtered, c)
 		}
 	}
@@ -335,8 +384,11 @@ func (h *ResourcesSearchHandler) queryCluster(ctx context.Context, c sqlc.Cluste
 	case "deployments", "statefulsets", "daemonsets":
 		return flattenSearchWorkloads(clusterID, resourceType, payload), nil
 	default:
-		// Fallback: bare metadata-level shape. Should never happen because
-		// the resourceType has already been validated against searchResourceDefs.
+		// Fallback: bare metadata-level shape. Used for the long tail of
+		// types in searchResourceDefs that don't have a richer flatten
+		// helper (events, endpoints, replicasets, networkpolicies,
+		// gateway-api kinds, persistent volumes, storage classes, ...).
+		// The frontend renders these with the generic name/namespace columns.
 		out := make([]map[string]any, 0)
 		for _, item := range objectItems(payload) {
 			out = append(out, flattenGeneric(clusterID, item))
