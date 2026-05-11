@@ -121,8 +121,10 @@ DELETE FROM installed_charts WHERE cluster_id = $1;
 -- name: DeleteClusterSecurityPoliciesByCluster :execrows
 DELETE FROM cluster_security_policies WHERE cluster_id = $1;
 
--- name: DeleteClusterToolsByCluster :execrows
-DELETE FROM cluster_tools WHERE cluster_id = $1;
+-- (cluster_tools is a catalog table holding built-in tool definitions;
+-- it has no cluster_id and is intentionally NOT touched by the
+-- decommission reconciler. Per-cluster tool state lives in
+-- installed_charts and tool_operations.)
 
 -- name: DeleteProjectNamespacesByCluster :execrows
 DELETE FROM project_namespaces WHERE cluster_id = $1;

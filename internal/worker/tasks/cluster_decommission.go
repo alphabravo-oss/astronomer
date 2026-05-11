@@ -23,9 +23,11 @@
 //     sweeps, so the cluster's history is preserved indefinitely.
 //
 //  4. delete_dependents — remove rows from every table that references
-//     cluster_id (alert_rules, installed_charts, cluster_tools,
-//     project_namespaces, …). Each table's delete count is recorded in the
-//     phases JSONB so an operator can see exactly what was removed.
+//     cluster_id (alert_rules, installed_charts, project_namespaces, …).
+//     Each table's delete count is recorded in the phases JSONB so an
+//     operator can see exactly what was removed. Catalog tables like
+//     cluster_tools that hold built-in definitions (not per-cluster
+//     rows) are NOT touched here — they're cluster-agnostic.
 //
 //  5. tombstone_cluster — set clusters.decommissioned_at = now(). We do NOT
 //     hard-delete the cluster row: that would orphan audit_archive rows
@@ -124,7 +126,6 @@ type ClusterDecommissionQuerier interface {
 	DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteClusterToolsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 
@@ -584,7 +585,6 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		{"alert_rules", q.DeleteAlertRulesByCluster},
 		{"installed_charts", q.DeleteInstalledChartsByCluster},
 		{"cluster_security_policies", q.DeleteClusterSecurityPoliciesByCluster},
-		{"cluster_tools", q.DeleteClusterToolsByCluster},
 		{"project_namespaces", q.DeleteProjectNamespacesByCluster},
 		{"cluster_role_bindings", q.DeleteClusterRoleBindingsByCluster},
 	}

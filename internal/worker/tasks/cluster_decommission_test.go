@@ -39,7 +39,6 @@ type fakeDecommQuerier struct {
 	rulesErr           error
 	chartsErr          error
 	policiesErr        error
-	toolsErr           error
 	projNsErr          error
 	roleBindingsErr    error
 	tombstoneErr       error
@@ -190,10 +189,6 @@ func (f *fakeDecommQuerier) DeleteClusterSecurityPoliciesByCluster(_ context.Con
 	f.bump("DeleteClusterSecurityPoliciesByCluster")
 	return 1, f.policiesErr
 }
-func (f *fakeDecommQuerier) DeleteClusterToolsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
-	f.bump("DeleteClusterToolsByCluster")
-	return 8, f.toolsErr
-}
 func (f *fakeDecommQuerier) DeleteProjectNamespacesByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
 	f.bump("DeleteProjectNamespacesByCluster")
 	return 6, f.projNsErr
@@ -290,7 +285,6 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 		"DeleteAlertRulesByCluster",
 		"DeleteInstalledChartsByCluster",
 		"DeleteClusterSecurityPoliciesByCluster",
-		"DeleteClusterToolsByCluster",
 		"DeleteProjectNamespacesByCluster",
 		"DeleteClusterRoleBindingsByCluster",
 		"TombstoneCluster",

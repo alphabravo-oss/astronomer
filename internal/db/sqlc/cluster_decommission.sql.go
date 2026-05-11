@@ -411,18 +411,6 @@ func (q *Queries) DeleteClusterSecurityPoliciesByCluster(ctx context.Context, cl
 	return result.RowsAffected(), nil
 }
 
-const deleteClusterToolsByCluster = `-- name: DeleteClusterToolsByCluster :execrows
-DELETE FROM cluster_tools WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterToolsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterToolsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteProjectNamespacesByCluster = `-- name: DeleteProjectNamespacesByCluster :execrows
 DELETE FROM project_namespaces WHERE cluster_id = $1
 `
