@@ -43,12 +43,14 @@ export function LogsTab({
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [tailLines, setTailLines] = useState(500);
+  const [tailRange, setTailRange] = useState<TailRange>({ kind: 'lines', n: 500 });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: logs, isLoading, status } = usePodLogs(clusterId, namespace, pod, {
     container,
-    tailLines,
+    tailLines: tailRange.kind === 'lines' ? tailRange.n : undefined,
+    sinceSeconds: tailRange.kind === 'seconds' ? tailRange.s : undefined,
+    noTail: tailRange.kind === 'all',
     follow,
   });
 
@@ -138,7 +140,7 @@ export function LogsTab({
           {container && (
             <span className="font-mono text-foreground/80">· {container}</span>
           )}
-          <TailLinesSelect value={tailLines} onChange={setTailLines} />
+          <TailRangeSelect value={tailRange} onChange={setTailRange} />
         </div>
 
         <div className="flex items-center gap-1">
@@ -294,20 +296,70 @@ export function LogsTab({
   );
 }
 
-// TailLinesSelect — a styled dropdown for the "show last N lines" knob.
+// TailRange — Rancher-style range selector: either a line count, a time
+// window in seconds, or unlimited ("All"). The shape is tagged so the call
+// site can fan out to the right query param (`tail_lines` vs `since_seconds`
+// vs neither) without ambiguity.
+export type TailRange =
+  | { kind: 'lines'; n: number }
+  | { kind: 'seconds'; s: number }
+  | { kind: 'all' };
+
+type TailRangeOption =
+  | { kind: 'lines'; n: number; label: string }
+  | { kind: 'seconds'; s: number; label: string }
+  | { kind: 'all'; label: string };
+
+const TAIL_LINE_OPTIONS: TailRangeOption[] = [
+  { kind: 'lines', n: 100, label: '100 lines' },
+  { kind: 'lines', n: 500, label: '500 lines' },
+  { kind: 'lines', n: 1000, label: '1000 lines' },
+  { kind: 'lines', n: 5000, label: '5000 lines' },
+];
+
+const TAIL_TIME_OPTIONS: TailRangeOption[] = [
+  { kind: 'seconds', s: 5 * 60, label: 'Last 5 minutes' },
+  { kind: 'seconds', s: 15 * 60, label: 'Last 15 minutes' },
+  { kind: 'seconds', s: 60 * 60, label: 'Last 1 hour' },
+  { kind: 'seconds', s: 12 * 60 * 60, label: 'Last 12 hours' },
+  { kind: 'seconds', s: 24 * 60 * 60, label: 'Last 24 hours' },
+  { kind: 'all', label: 'All' },
+];
+
+function labelForRange(r: TailRange): string {
+  if (r.kind === 'lines') {
+    const match = TAIL_LINE_OPTIONS.find((o) => o.kind === 'lines' && o.n === r.n);
+    return match?.label ?? `${r.n} lines`;
+  }
+  if (r.kind === 'seconds') {
+    const match = TAIL_TIME_OPTIONS.find((o) => o.kind === 'seconds' && o.s === r.s);
+    return match?.label ?? `Last ${r.s}s`;
+  }
+  return 'All';
+}
+
+function rangeEquals(a: TailRange, b: TailRangeOption): boolean {
+  if (a.kind === 'lines' && b.kind === 'lines') return a.n === b.n;
+  if (a.kind === 'seconds' && b.kind === 'seconds') return a.s === b.s;
+  if (a.kind === 'all' && b.kind === 'all') return true;
+  return false;
+}
+
+// TailRangeSelect — a styled dropdown for the Rancher-style tail-range knob.
 // Native <select> elements were rendering with browser-default chrome that
 // clashed with the dark/muted toolbar style; this dropdown matches the rest
-// of the toolbar (h-6, 2xs text, border, hover state).
-function TailLinesSelect({
+// of the toolbar (h-6, 2xs text, border, hover state). The popover lists
+// line-count options first, then a thin separator, then time-window options
+// and "All".
+function TailRangeSelect({
   value,
   onChange,
 }: {
-  value: number;
-  onChange: (v: number) => void;
+  value: TailRange;
+  onChange: (v: TailRange) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const options = [100, 500, 1000, 5000];
 
   useEffect(() => {
     if (!open) return;
@@ -320,6 +372,31 @@ function TailLinesSelect({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
+  const pick = (opt: TailRangeOption) => {
+    if (opt.kind === 'lines') onChange({ kind: 'lines', n: opt.n });
+    else if (opt.kind === 'seconds') onChange({ kind: 'seconds', s: opt.s });
+    else onChange({ kind: 'all' });
+    setOpen(false);
+  };
+
+  const renderOption = (opt: TailRangeOption) => {
+    const selected = rangeEquals(value, opt);
+    return (
+      <button
+        key={opt.label}
+        onClick={() => pick(opt)}
+        className={cn(
+          'w-full flex items-center px-2 py-1 rounded text-2xs transition-colors',
+          selected
+            ? 'bg-accent text-foreground'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        )}
+      >
+        <span className="tabular-nums">{opt.label}</span>
+      </button>
+    );
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -327,10 +404,9 @@ function TailLinesSelect({
         className="inline-flex items-center gap-1 h-6 px-2 rounded border border-border bg-background
           text-2xs text-foreground hover:bg-accent transition-colors
           focus:outline-none focus:ring-1 focus:ring-ring"
-        title="Tail lines"
+        title="Tail range"
       >
-        <span className="tabular-nums">{value}</span>
-        <span className="text-muted-foreground">lines</span>
+        <span className="tabular-nums">{labelForRange(value)}</span>
         <svg
           className={cn(
             'h-3 w-3 text-muted-foreground transition-transform',
@@ -343,25 +419,10 @@ function TailLinesSelect({
         </svg>
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-24 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
-          {options.map((n) => (
-            <button
-              key={n}
-              onClick={() => {
-                onChange(n);
-                setOpen(false);
-              }}
-              className={cn(
-                'w-full flex items-center justify-between px-2 py-1 rounded text-2xs transition-colors',
-                n === value
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-              )}
-            >
-              <span className="tabular-nums">{n}</span>
-              <span className="text-muted-foreground/70">lines</span>
-            </button>
-          ))}
+        <div className="absolute left-0 top-full mt-1 w-36 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
+          {TAIL_LINE_OPTIONS.map(renderOption)}
+          <div className="my-1 border-t border-border" />
+          {TAIL_TIME_OPTIONS.map(renderOption)}
         </div>
       )}
     </div>

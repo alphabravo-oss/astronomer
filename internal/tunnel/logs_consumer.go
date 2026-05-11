@@ -167,12 +167,25 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 	follow := r.URL.Query().Get("follow") == "true"
 	tailLines := 0
 	if tl := r.URL.Query().Get("tail_lines"); tl != "" {
-		if n, err := strconv.Atoi(tl); err == nil {
+		if n, err := strconv.Atoi(tl); err == nil && n > 0 {
 			tailLines = n
 		}
 	} else if tl := r.URL.Query().Get("tailLines"); tl != "" {
-		if n, err := strconv.Atoi(tl); err == nil {
+		if n, err := strconv.Atoi(tl); err == nil && n > 0 {
 			tailLines = n
+		}
+	}
+	// since_seconds is mutually exclusive with tail_lines in the UI
+	// (Rancher-style picker). Validate at the WS query-param boundary —
+	// reject non-positive values rather than passing them on to kubelet.
+	var sinceSeconds *int64
+	if ss := r.URL.Query().Get("since_seconds"); ss != "" {
+		if n, err := strconv.ParseInt(ss, 10, 64); err == nil && n > 0 {
+			sinceSeconds = &n
+		}
+	} else if ss := r.URL.Query().Get("sinceSeconds"); ss != "" {
+		if n, err := strconv.ParseInt(ss, 10, 64); err == nil && n > 0 {
+			sinceSeconds = &n
 		}
 	}
 	// Always request timestamps from kubelet so the frontend can render real
@@ -182,12 +195,13 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 
 	// Send LOG_START to agent.
 	startPayload, _ := json.Marshal(protocol.LogStartPayload{
-		Namespace:  namespace,
-		Pod:        pod,
-		Container:  container,
-		Follow:     follow,
-		TailLines:  tailLines,
-		Timestamps: timestamps,
+		Namespace:    namespace,
+		Pod:          pod,
+		Container:    container,
+		Follow:       follow,
+		TailLines:    tailLines,
+		SinceSeconds: sinceSeconds,
+		Timestamps:   timestamps,
 	})
 
 	startMsg := &protocol.Message{

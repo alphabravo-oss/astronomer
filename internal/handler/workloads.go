@@ -702,6 +702,14 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 	} else if t := r.URL.Query().Get("tail_lines"); t != "" {
 		q.Set("tailLines", t)
 	}
+	// Rancher-style time window: when sinceSeconds is set the UI is asking
+	// "give me everything from the last N seconds" instead of "the last N
+	// lines". Forward as the kubelet-native `sinceSeconds` param.
+	if s := r.URL.Query().Get("sinceSeconds"); s != "" {
+		q.Set("sinceSeconds", s)
+	} else if s := r.URL.Query().Get("since_seconds"); s != "" {
+		q.Set("sinceSeconds", s)
+	}
 	if f := r.URL.Query().Get("follow"); f != "" {
 		q.Set("follow", f)
 	}

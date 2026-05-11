@@ -58,6 +58,13 @@ func (h *LogHandler) HandleLogStart(ctx context.Context, msg *protocol.Message, 
 		lines := int64(payload.TailLines)
 		opts.TailLines = &lines
 	}
+	// SinceSeconds is mutually exclusive with TailLines in the UI; if both are
+	// set we still forward both — kubelet handles the combination (it returns
+	// at most TailLines from within the SinceSeconds window).
+	if payload.SinceSeconds != nil && *payload.SinceSeconds > 0 {
+		s := *payload.SinceSeconds
+		opts.SinceSeconds = &s
+	}
 
 	// Per-session context so MsgLogStop can cancel an active follow.
 	sessionCtx, cancel := context.WithCancel(ctx)

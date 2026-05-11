@@ -400,7 +400,20 @@ export function usePodLogs(
   clusterId: string,
   namespace: string,
   pod: string,
-  params?: { container?: string; tailLines?: number; follow?: boolean }
+  params?: {
+    container?: string;
+    tailLines?: number;
+    // sinceSeconds enables Rancher-style time-window queries. When set, it
+    // takes precedence over tailLines (both can be passed, but the UI
+    // picker chooses exactly one mode).
+    sinceSeconds?: number;
+    // noTail disables both the line-count and time-window limits ("All").
+    // We need an explicit flag because `tailLines === undefined` already
+    // means "use the default of 500"; without this we can't represent
+    // "give me everything."
+    noTail?: boolean;
+    follow?: boolean;
+  }
 ) {
   const [streamLogs, setStreamLogs] = useState<PodLog[]>([]);
   // Exposes WS connection state so consumers (e.g. the window-manager tab
@@ -412,13 +425,36 @@ export function usePodLogs(
   // frame.
   const errorShownRef = useRef(false);
 
-  // Initial fetch
+  // Resolve the effective query params once so the initial fetch, the
+  // streaming useEffect, and the queryKey all agree. The precedence is:
+  //   noTail  -> no limit at all
+  //   sinceSeconds set -> time-window mode (kubelet sinceSeconds)
+  //   tailLines set -> line-count mode
+  //   otherwise -> default 500 lines
+  const effectiveTailLines = params?.noTail
+    ? undefined
+    : params?.sinceSeconds && params.sinceSeconds > 0
+      ? undefined
+      : params?.tailLines ?? 500;
+  const effectiveSinceSeconds = params?.noTail
+    ? undefined
+    : params?.sinceSeconds && params.sinceSeconds > 0
+      ? params.sinceSeconds
+      : undefined;
+
+  // Initial fetch — include tail/since in the queryKey so flipping modes
+  // refetches instead of serving the previous mode's cache.
   const query = useQuery({
-    queryKey: queryKeys.podLogs(clusterId, namespace, pod, params?.container),
+    queryKey: [
+      ...queryKeys.podLogs(clusterId, namespace, pod, params?.container),
+      effectiveTailLines ?? 'no-tail',
+      effectiveSinceSeconds ?? 'no-since',
+    ],
     queryFn: () =>
       apiClient.getPodLogs(clusterId, namespace, pod, {
         container: params?.container,
-        tailLines: params?.tailLines || 500,
+        tailLines: effectiveTailLines,
+        sinceSeconds: effectiveSinceSeconds,
       }),
     enabled: !!clusterId && !!namespace && !!pod,
   });
@@ -459,7 +495,11 @@ export function usePodLogs(
           toast.error(`Log stream: ${err.message}`);
         }
       },
-      { follow: true, tailLines: params?.tailLines }
+      {
+        follow: true,
+        tailLines: effectiveTailLines,
+        sinceSeconds: effectiveSinceSeconds,
+      }
     );
 
     cleanupRef.current = cleanup;
@@ -469,7 +509,15 @@ export function usePodLogs(
       cleanupRef.current = null;
       setStatus('idle');
     };
-  }, [clusterId, namespace, pod, params?.container, params?.follow, params?.tailLines]);
+  }, [
+    clusterId,
+    namespace,
+    pod,
+    params?.container,
+    params?.follow,
+    effectiveTailLines,
+    effectiveSinceSeconds,
+  ]);
 
   // Always surface the streamed tail in `allLogs`, even after the caller
   // turned follow off. The previous behavior dropped streamLogs entirely

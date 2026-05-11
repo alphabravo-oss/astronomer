@@ -215,13 +215,19 @@ type ExecResizePayload struct {
 }
 
 // LogStartPayload to initiate log streaming.
+//
+// TailLines and SinceSeconds map directly to k8s PodLogOptions. When
+// SinceSeconds is non-nil the agent passes it through to kubelet; when nil,
+// the older line-count path is used (Rancher-style: the UI picks one or the
+// other, never both).
 type LogStartPayload struct {
-	Namespace  string `json:"namespace"`
-	Pod        string `json:"pod"`
-	Container  string `json:"container"`
-	Follow     bool   `json:"follow"`
-	TailLines  int    `json:"tail_lines,omitempty"`
-	Timestamps bool   `json:"timestamps,omitempty"`
+	Namespace    string `json:"namespace"`
+	Pod          string `json:"pod"`
+	Container    string `json:"container"`
+	Follow       bool   `json:"follow"`
+	TailLines    int    `json:"tail_lines,omitempty"`
+	SinceSeconds *int64 `json:"since_seconds,omitempty"`
+	Timestamps   bool   `json:"timestamps,omitempty"`
 }
 
 // RBACSyncRequestPayload contains RBAC resources to apply.

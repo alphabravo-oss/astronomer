@@ -361,11 +361,24 @@ export async function getPodLogs(
   clusterId: string,
   namespace: string,
   pod: string,
-  params?: { container?: string; tailLines?: number; follow?: boolean }
+  params?: {
+    container?: string;
+    tailLines?: number;
+    sinceSeconds?: number;
+    follow?: boolean;
+  }
 ) {
+  // Map to snake_case so the wire stays consistent with the rest of the
+  // backend (which accepts both, but we standardize here).
+  const query: Record<string, string | number | boolean> = {};
+  if (params?.container) query.container = params.container;
+  if (params?.tailLines && params.tailLines > 0) query.tail_lines = params.tailLines;
+  if (params?.sinceSeconds && params.sinceSeconds > 0)
+    query.since_seconds = params.sinceSeconds;
+  if (params?.follow) query.follow = params.follow;
   const res = await api.get<APIResponse<import('@/types').PodLog[]>>(
     `/workloads/pods/${clusterId}/${namespace}/${pod}/logs`,
-    { params }
+    { params: query }
   );
   return res.data.data;
 }
@@ -380,8 +393,10 @@ export async function getPodLogs(
  * the WS connect path.
  *
  * Options:
- *   - `follow` / `tailLines` are forwarded as query params and used to
- *     drive `kubectl logs --follow` on the agent side.
+ *   - `follow` / `tailLines` / `sinceSeconds` are forwarded as query params
+ *     and used to drive `kubectl logs --follow` on the agent side.
+ *     `tailLines` and `sinceSeconds` are mutually exclusive in the UI
+ *     (Rancher-style picker) — callers should pass one or the other.
  *   - `onError` is fired on connect failures (e.g. agent disconnected) and on
  *     structured `{"type":"error", ...}` frames returned by the backend.
  */
@@ -392,7 +407,7 @@ export function streamPodLogs(
   container: string,
   onMessage: (log: import('@/types').PodLog) => void,
   onError?: (error: { code?: string; message: string }) => void,
-  opts?: { follow?: boolean; tailLines?: number }
+  opts?: { follow?: boolean; tailLines?: number; sinceSeconds?: number }
 ): () => void {
   const base =
     process.env.NEXT_PUBLIC_WS_URL ||
@@ -401,6 +416,8 @@ export function streamPodLogs(
   const params = new URLSearchParams();
   if (opts?.follow) params.set('follow', 'true');
   if (opts?.tailLines && opts.tailLines > 0) params.set('tail_lines', String(opts.tailLines));
+  if (opts?.sinceSeconds && opts.sinceSeconds > 0)
+    params.set('since_seconds', String(opts.sinceSeconds));
   const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
   if (token) params.set('token', token);
 
