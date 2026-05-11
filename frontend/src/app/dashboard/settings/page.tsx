@@ -20,16 +20,19 @@ import {
   Chrome,
   KeyRound,
   Lock,
+  LifeBuoy,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-type TabKey = 'sso' | 'general' | 'tokens' | 'audit';
+type TabKey = 'sso' | 'general' | 'tokens' | 'audit' | 'support';
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'sso', label: 'SSO Providers', icon: Shield },
   { key: 'general', label: 'General', icon: Settings },
   { key: 'tokens', label: 'API Tokens', icon: Key },
   { key: 'audit', label: 'Audit Log', icon: FileText },
+  { key: 'support', label: 'Support', icon: LifeBuoy },
 ];
 
 export default function SettingsPage() {
@@ -479,6 +482,9 @@ export default function SettingsPage() {
             pageSize={25}
           />
         )}
+
+        {/* Support */}
+        {activeTab === 'support' && <SupportTab />}
       </div>
 
       {/* Add SSO Provider Modal */}
@@ -714,6 +720,76 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// SupportTab renders the "Download support bundle" button. The bundle
+// itself is a streaming zip from /api/v1/support-bundle/; superusers only.
+// Errors are surfaced via toast.
+function SupportTab() {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      // Use the shared axios instance so the JWT/auth interceptor stamps
+      // the request; force a binary response so axios doesn't try to JSON-
+      // decode the zip stream.
+      const { default: api } = await import('@/lib/api');
+      const res = await api.get('/support-bundle', { responseType: 'blob', timeout: 120000 });
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      // Server already proposes a filename via Content-Disposition; if axios
+      // didn't surface it, fall back to a sane default.
+      const disposition = res.headers?.['content-disposition'] || '';
+      const match = /filename="([^"]+)"/.exec(disposition);
+      link.download = match?.[1] || `astronomer-support-bundle-${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Support bundle downloaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to download support bundle';
+      toast.error(message);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <LifeBuoy className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">Support bundle</h3>
+            <p className="text-sm text-muted-foreground">
+              Downloads a zip with platform metadata, cluster rows, recent audit
+              log entries, and the last 200 lines of logs from each
+              control-plane pod. Useful when filing a bug or escalating to
+              support.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Passwords, CA certs, and encrypted Argo tokens are redacted.
+              Emails, audit payloads, and pod log contents are <em>not</em> —
+              share the bundle only with people authorized to triage this
+              install.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Download support bundle
+        </button>
+      </div>
     </div>
   );
 }
