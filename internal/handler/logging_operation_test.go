@@ -17,8 +17,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+// stubLoggingRBACQuerier returns canned bindings for the RBAC tests below.
+type stubLoggingRBACQuerier struct {
+	bindings []rbac.RoleBinding
+	err      error
+}
+
+func (s stubLoggingRBACQuerier) GetUserBindings(context.Context, string) ([]rbac.RoleBinding, error) {
+	return s.bindings, s.err
+}
 
 // loggingFakeQuerier is a minimal in-memory implementation of LoggingQuerier
 // sufficient for the handler enqueue + reconciler tests below. We don't try
@@ -509,4 +521,124 @@ func keysOf(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// seedLoggingOperation persists a pending apply operation for the given
+// target cluster + output. Returns the created operation row.
+func seedLoggingOperation(t *testing.T, q *loggingFakeQuerier, clusterID uuid.UUID) sqlc.LoggingOperation {
+	t.Helper()
+	outputID := uuid.New()
+	env := loggingOperationEnvelope{
+		ClusterID:  clusterID.String(),
+		TargetID:   outputID.String(),
+		TargetType: "output",
+		Name:       "rbac-fixture",
+	}
+	payload, _ := json.Marshal(env)
+	op, err := q.CreateLoggingOperation(context.Background(), sqlc.CreateLoggingOperationParams{
+		TargetType:    "output",
+		TargetKey:     outputID.String(),
+		OperationType: "apply",
+		Payload:       payload,
+		Status:        "failed",
+	})
+	if err != nil {
+		t.Fatalf("seed operation: %v", err)
+	}
+	return op
+}
+
+// TestListLoggingOperationsFiltersByPerClusterRBAC seeds operations across
+// three clusters and asserts that ListOperations drops rows whose target
+// cluster the caller can't read. Mirrors the cross-cluster-search RBAC
+// filtering test: silently exclude, never 403.
+func TestListLoggingOperationsFiltersByPerClusterRBAC(t *testing.T) {
+	q := newLoggingFakeQuerier()
+	h := NewLoggingHandler(q)
+
+	clusterA := uuid.New()
+	clusterB := uuid.New()
+	clusterC := uuid.New()
+
+	opA := seedLoggingOperation(t, q, clusterA)
+	_ = seedLoggingOperation(t, q, clusterB) // not visible to caller
+	_ = seedLoggingOperation(t, q, clusterC) // not visible to caller
+
+	// Caller has logging:read on clusterA only. Unrelated workloads grant
+	// on clusterB proves the filter discriminates on resource, not scope.
+	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{
+		bindings: []rbac.RoleBinding{
+			{
+				ClusterID: clusterA.String(),
+				RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbRead)}}},
+			},
+			{
+				ClusterID: clusterB.String(),
+				RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceWorkloads), Verbs: []string{string(rbac.VerbRead)}}},
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logging/operations/", nil)
+	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	rec := httptest.NewRecorder()
+
+	h.ListOperations(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var envelope struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(envelope.Data) != 1 {
+		t.Fatalf("expected exactly 1 visible operation, got %d (body=%s)", len(envelope.Data), rec.Body.String())
+	}
+	if envelope.Data[0]["id"] != opA.ID.String() {
+		t.Fatalf("expected only clusterA op %s, got %v", opA.ID, envelope.Data[0]["id"])
+	}
+}
+
+// TestRetryLoggingOperationDeniedWithoutClusterUpdate asserts a caller
+// with logging:read but no logging:update on the target cluster gets a 403
+// (not a requeue). Sanity-check the "update" verb path for RetryOperation.
+func TestRetryLoggingOperationDeniedWithoutClusterUpdate(t *testing.T) {
+	q := newLoggingFakeQuerier()
+	h := NewLoggingHandler(q)
+
+	clusterID := uuid.New()
+	op := seedLoggingOperation(t, q, clusterID)
+
+	// Caller has read but not update on the target cluster — the
+	// authorizeClusterAction call inside RetryOperation must 403.
+	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{
+		bindings: []rbac.RoleBinding{
+			{
+				ClusterID: clusterID.String(),
+				RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbRead)}}},
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/operations/"+op.ID.String()+"/retry/", nil)
+	rc := chi.NewRouteContext()
+	rc.URLParams.Add("id", op.ID.String())
+	ctx := addRouteCtx(req.Context(), rc)
+	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.RetryOperation(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	// The row must not have been requeued.
+	got := q.operations[op.ID]
+	if got.Status != "failed" {
+		t.Fatalf("status = %q, want failed (operation should not have been requeued)", got.Status)
+	}
 }

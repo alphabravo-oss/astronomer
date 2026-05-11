@@ -11,6 +11,7 @@ const (
 	ResourceMonitoring Resource = "monitoring"
 	ResourceAlerts     Resource = "alerts"
 	ResourceCatalog    Resource = "catalog"
+	ResourceLogging    Resource = "logging"
 	ResourceBackups    Resource = "backups"
 	ResourceSecurity   Resource = "security"
 	ResourceRBAC       Resource = "rbac"
