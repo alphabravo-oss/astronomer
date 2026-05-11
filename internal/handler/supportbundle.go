@@ -85,6 +85,12 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Read-only superuser endpoint that exposes platform internals — leave
+	// an explicit audit trail. The mutating-HTTP audit middleware skips
+	// GET, so this trail wouldn't otherwise exist.
+	recordAudit(r, h.queries, "admin.support_bundle.downloaded",
+		"platform", "", "support-bundle", nil)
+
 	filename := fmt.Sprintf("astronomer-support-bundle-%s.zip",
 		time.Now().UTC().Format("20060102-150405"))
 	w.Header().Set("Content-Type", "application/zip")

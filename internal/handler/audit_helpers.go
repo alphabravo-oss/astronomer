@@ -82,6 +82,14 @@ func recordAudit(r *http.Request, q any, action, resourceType, resourceID, resou
 	emitAuditRow(r.Context(), r, q, currentUserUUID(r), action, resourceType, resourceID, resourceName, detail)
 }
 
+// RecordAuditFromRequest is the exported wrapper around recordAudit. It exists
+// so callers outside the handler package (e.g. routes.go-level handlers like
+// the admin key-status endpoint) can leave audit rows for read-only superuser
+// endpoints that the mutating-HTTP audit middleware skips.
+func RecordAuditFromRequest(r *http.Request, q any, action, resourceType, resourceID, resourceName string, detail map[string]any) {
+	recordAudit(r, q, action, resourceType, resourceID, resourceName, detail)
+}
+
 // recordAuditAs is the variant used when the user_id has to be resolved
 // outside of the request context — the canonical case is auth.Login, where
 // the user isn't yet authenticated by the middleware so currentUserUUID

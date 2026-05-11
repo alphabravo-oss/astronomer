@@ -849,6 +849,16 @@ func keyStatusHandler(deps RouterDependencies) http.HandlerFunc {
 		if deps.JWT != nil {
 			jwtKeys = deps.JWT.KeyCount()
 		}
+
+		// Read-only superuser endpoint that exposes the live key-rotation
+		// state — leave an explicit audit trail. The mutating-HTTP audit
+		// middleware skips GET, so this trail wouldn't otherwise exist.
+		handler.RecordAuditFromRequest(r, deps.AuthQueries, "admin.key_status.viewed",
+			"platform", "", "key-status", map[string]any{
+				"encryption_keys": encKeys,
+				"jwt_keys":        jwtKeys,
+			})
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"encryption_keys": encKeys,
