@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1049,22 +1051,34 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 	}
 }
 
+// fluentBitValuePattern is the safe-character allowlist for values rendered
+// into Fluent Bit config keys. Cluster names, label values, namespace names
+// — anything that lands in a `Key Value` line — must match this. Anything
+// that doesn't gets a `# warning` line instead of the real value, which
+// keeps Fluent Bit's parser happy and prevents config injection from a
+// malformed cluster name.
+var fluentBitValuePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+
 // renderConfigMapData turns the envelope into the ConfigMap data block.
 //
-// For now this is intentionally a minimal placeholder render: we ship the
-// canonical metadata (name, type, enabled, raw configuration JSON) so the
-// ConfigMap is structurally present on the cluster and Fluent Bit's config
-// reloader (or a downstream operator) can pick it up. The actual Fluent Bit
-// snippet rendering — the [OUTPUT] / [FILTER] blocks — is the obvious
-// follow-up and is left as a TODO so the architectural win (DB-backed
-// operations + reconciler + ConfigMap roundtrip) lands first.
+// For outputs we render `output.conf` containing the Fluent Bit `[OUTPUT]`
+// snippet plus a `meta.json` sidecar. For pipelines we render `pipeline.conf`
+// with `[FILTER]` blocks and Match rules, plus `meta.json`. Each block lives
+// in its own ConfigMap entry so a sidecar can compose them without parsing a
+// concatenated megafile.
+//
+// Supported output_type values: elasticsearch, loki, s3, stdout. Anything
+// else renders a `# unsupported output_type` comment so the operator sees
+// the row was received but no live snippet was emitted.
 func (h *LoggingHandler) renderConfigMapData(env loggingOperationEnvelope) (map[string]string, error) {
+	generatedAt := time.Now().UTC().Format(time.RFC3339)
 	meta := map[string]any{
-		"target_id":   env.TargetID,
-		"target_type": env.TargetType,
-		"name":        env.Name,
-		"enabled":     env.Enabled,
-		"placeholder": true,
+		"id":           env.TargetID,
+		"target_type":  env.TargetType,
+		"name":         env.Name,
+		"cluster_id":   env.ClusterID,
+		"enabled":      env.Enabled,
+		"generated_at": generatedAt,
 	}
 	if env.OutputType != "" {
 		meta["output_type"] = env.OutputType
@@ -1076,19 +1090,295 @@ func (h *LoggingHandler) renderConfigMapData(env loggingOperationEnvelope) (map[
 	data := map[string]string{
 		"meta.json": string(metaBytes),
 	}
-	if len(env.Configuration) > 0 {
-		data["configuration.json"] = string(env.Configuration)
-	}
-	if len(env.Namespaces) > 0 {
-		data["namespaces.json"] = string(env.Namespaces)
-	}
-	if len(env.Labels) > 0 {
-		data["labels.json"] = string(env.Labels)
-	}
-	if len(env.Filters) > 0 {
-		data["filters.json"] = string(env.Filters)
+
+	switch env.TargetType {
+	case "output":
+		data["output.conf"] = renderOutputBlock(env)
+	case "pipeline":
+		data["pipeline.conf"] = renderPipelineBlock(env)
+	default:
+		// Unknown target_type — fall back to a comment so the ConfigMap is
+		// still structurally present without misleading config text.
+		data["unknown.conf"] = "# unsupported target_type " + env.TargetType + "\n"
 	}
 	return data, nil
+}
+
+// renderOutputBlock renders the Fluent Bit `[OUTPUT]` snippet for one
+// logging_outputs row. Unknown output_type values produce a comment line
+// instead of a block so the reconciler keeps the ConfigMap up to date but
+// Fluent Bit doesn't reject the file.
+func renderOutputBlock(env loggingOperationEnvelope) string {
+	cfg := decodeConfiguration(env.Configuration)
+	var b strings.Builder
+	b.WriteString("# rendered by astronomer-go logging controller\n")
+	b.WriteString("# output: " + safeComment(env.Name) + " (" + env.OutputType + ")\n")
+	if !env.Enabled {
+		b.WriteString("# note: output is currently disabled\n")
+	}
+	switch env.OutputType {
+	case "elasticsearch":
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "es")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "Host", configString(cfg, "host", ""))
+		writeKV(&b, "Port", configString(cfg, "port", "9200"))
+		writeKV(&b, "Index", configString(cfg, "index", "astronomer"))
+		if v := configString(cfg, "http_user", ""); v != "" {
+			writeKV(&b, "HTTP_User", v)
+		}
+		if v := configString(cfg, "http_passwd", ""); v != "" {
+			writeKV(&b, "HTTP_Passwd", v)
+		}
+		if v := configString(cfg, "tls", ""); v != "" {
+			writeKV(&b, "tls", v)
+		}
+	case "loki":
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "loki")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "Host", configString(cfg, "host", ""))
+		writeKV(&b, "Port", configString(cfg, "port", "3100"))
+		if v := configString(cfg, "labels", ""); v != "" {
+			writeKV(&b, "Labels", v)
+		}
+		if v := configString(cfg, "tenant_id", ""); v != "" {
+			writeKV(&b, "tenant_id", v)
+		}
+	case "s3":
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "s3")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "bucket", configString(cfg, "bucket", ""))
+		writeKV(&b, "region", configString(cfg, "region", "us-east-1"))
+		if v := configString(cfg, "total_file_size", ""); v != "" {
+			writeKV(&b, "total_file_size", v)
+		}
+		if v := configString(cfg, "upload_timeout", ""); v != "" {
+			writeKV(&b, "upload_timeout", v)
+		}
+		if v := configString(cfg, "s3_key_format", ""); v != "" {
+			writeKV(&b, "s3_key_format", v)
+		}
+	case "stdout":
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "stdout")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		if v := configString(cfg, "format", ""); v != "" {
+			writeKV(&b, "Format", v)
+		}
+	default:
+		b.WriteString("# unsupported output_type " + env.OutputType + "; no [OUTPUT] emitted\n")
+	}
+	return b.String()
+}
+
+// renderPipelineBlock renders Match rules for the pipeline's namespaces and
+// `[FILTER]` blocks for any modify labels / declared filters. Pipelines
+// don't emit [OUTPUT] blocks themselves — those come from the linked
+// logging_outputs rows, rendered into separate ConfigMaps.
+func renderPipelineBlock(env loggingOperationEnvelope) string {
+	var b strings.Builder
+	b.WriteString("# rendered by astronomer-go logging controller\n")
+	b.WriteString("# pipeline: " + safeComment(env.Name) + "\n")
+	if !env.Enabled {
+		b.WriteString("# note: pipeline is currently disabled\n")
+	}
+
+	namespaces := decodeStringList(env.Namespaces)
+	if len(namespaces) == 0 {
+		b.WriteString("# no namespaces declared; matches all kube.* records\n")
+	}
+	for _, ns := range namespaces {
+		if !fluentBitValuePattern.MatchString(ns) {
+			b.WriteString("# warning: skipped invalid namespace " + safeComment(ns) + "\n")
+			continue
+		}
+		b.WriteString("# match kube." + ns + ".*\n")
+	}
+
+	labels := decodeStringMap(env.Labels)
+	if len(labels) > 0 {
+		matchPattern := pipelineMatchPattern(namespaces)
+		b.WriteString("[FILTER]\n")
+		writeKV(&b, "Name", "modify")
+		writeKV(&b, "Match", matchPattern)
+		// Sort keys so renders are deterministic — important for unit tests
+		// and for avoiding spurious diffs in ConfigMap apply traffic.
+		keys := make([]string, 0, len(labels))
+		for k := range labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := labels[k]
+			if !fluentBitValuePattern.MatchString(k) {
+				b.WriteString("# warning: skipped invalid label " + safeComment(k) + "\n")
+				continue
+			}
+			if !fluentBitValuePattern.MatchString(v) {
+				b.WriteString("# warning: skipped invalid label " + safeComment(k) + "\n")
+				continue
+			}
+			b.WriteString("    Add         " + k + " " + v + "\n")
+		}
+	}
+
+	for _, f := range decodeFilters(env.Filters) {
+		if f.Type == "" {
+			b.WriteString("# warning: skipped filter with empty type\n")
+			continue
+		}
+		b.WriteString("[FILTER]\n")
+		writeKV(&b, "Name", f.Type)
+		writeKV(&b, "Match", pipelineMatchPattern(namespaces))
+		// Stable iteration order across params for the same reasons as above.
+		keys := make([]string, 0, len(f.Params))
+		for k := range f.Params {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := f.Params[k]
+			if !fluentBitValuePattern.MatchString(k) {
+				b.WriteString("# warning: skipped invalid param " + safeComment(k) + "\n")
+				continue
+			}
+			if !fluentBitValuePattern.MatchString(v) {
+				b.WriteString("# warning: skipped invalid param " + safeComment(k) + "\n")
+				continue
+			}
+			writeKV(&b, k, v)
+		}
+	}
+	return b.String()
+}
+
+// pipelineMatchPattern collapses the namespace list into a single Match tag
+// pattern. Fluent Bit supports a glob, so for one namespace we emit
+// kube.<ns>.* and for many we use kube.* with a note above (the per-ns
+// comment lines above let an operator audit what was intended).
+func pipelineMatchPattern(namespaces []string) string {
+	valid := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		if fluentBitValuePattern.MatchString(ns) {
+			valid = append(valid, ns)
+		}
+	}
+	if len(valid) == 1 {
+		return "kube." + valid[0] + ".*"
+	}
+	return "kube.*"
+}
+
+// loggingFilterSpec mirrors the per-filter shape we accept inside a
+// pipeline's filters JSON column: {type: "...", params: {k: v, ...}}.
+type loggingFilterSpec struct {
+	Type   string            `json:"type"`
+	Params map[string]string `json:"params"`
+}
+
+func decodeFilters(raw json.RawMessage) []loggingFilterSpec {
+	if len(raw) == 0 {
+		return nil
+	}
+	var arr []loggingFilterSpec
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		return arr
+	}
+	// Tolerate the legacy `{}` default that older rows persist; treat it as
+	// "no filters" rather than a parse error.
+	return nil
+}
+
+func decodeStringList(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var arr []string
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil
+	}
+	return arr
+}
+
+func decodeStringMap(raw json.RawMessage) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	// Decode into RawMessage first so we can stringify non-string values
+	// rather than dropping them silently — operators sometimes pass numeric
+	// label values from the UI.
+	var generic map[string]any
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(generic))
+	for k, v := range generic {
+		switch t := v.(type) {
+		case string:
+			out[k] = t
+		case bool:
+			if t {
+				out[k] = "true"
+			} else {
+				out[k] = "false"
+			}
+		case float64:
+			out[k] = fmt.Sprintf("%v", t)
+		}
+	}
+	return out
+}
+
+func decodeConfiguration(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return map[string]any{}
+	}
+	return m
+}
+
+func configString(cfg map[string]any, key, fallback string) string {
+	if v, ok := cfg[key]; ok {
+		switch t := v.(type) {
+		case string:
+			if t != "" {
+				return t
+			}
+		case float64:
+			return fmt.Sprintf("%v", t)
+		case bool:
+			if t {
+				return "true"
+			}
+			return "false"
+		}
+	}
+	return fallback
+}
+
+// writeKV renders one `    Key Value` line in Fluent Bit's classic config
+// format. The leading four-space indent matches Fluent Bit's documented
+// style; the renderer itself uses tabs (per CLAUDE.md house style) but the
+// emitted config is what Fluent Bit will parse, so we keep its conventions.
+func writeKV(b *strings.Builder, key, value string) {
+	b.WriteString("    ")
+	b.WriteString(key)
+	b.WriteString(" ")
+	b.WriteString(value)
+	b.WriteString("\n")
+}
+
+// safeComment strips newlines from a string so it can't break out of a
+// `# comment` line into the surrounding config.
+func safeComment(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return s
 }
 
 func loggingConfigMapName(targetType, targetID string) string {
