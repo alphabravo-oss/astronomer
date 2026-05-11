@@ -176,6 +176,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	argocdHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	toolHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
 	if redisErr != nil {

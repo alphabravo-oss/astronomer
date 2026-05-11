@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // LoggingNamespace is the namespace on the managed cluster where rendered
@@ -74,6 +76,7 @@ type LoggingHandler struct {
 	queries   LoggingQuerier
 	requester K8sRequester
 	log       *slog.Logger
+	authz     authorizationSupport
 	mu        sync.Mutex
 	trigger   chan struct{}
 }
@@ -103,6 +106,16 @@ func (h *LoggingHandler) SetLogger(log *slog.Logger) {
 		return
 	}
 	h.log = log
+}
+
+// SetAuthorization wires per-cluster RBAC for the operations endpoints.
+// Matches the catalog/tools/argocd pattern so the same engine + querier
+// instances are shared across handlers.
+func (h *LoggingHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.authz.SetAuthorization(engine, querier)
 }
 
 // StartReconciler launches the background loop that processes pending logging
@@ -790,8 +803,19 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list logging operations")
 		return
 	}
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		return
+	}
 	items := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
+		if restricted {
+			clusterID, err := h.loggingOperationClusterID(r.Context(), op)
+			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceLogging, rbac.VerbRead) {
+				continue
+			}
+		}
 		items = append(items, loggingOperationResponse(op))
 	}
 	RespondJSON(w, http.StatusOK, items)
@@ -807,6 +831,14 @@ func (h *LoggingHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	op, err := h.queries.GetLoggingOperation(r.Context(), id)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Logging operation not found")
+		return
+	}
+	clusterID, err := h.loggingOperationClusterID(r.Context(), op)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve logging operation target")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbRead) {
 		return
 	}
 	resp := loggingOperationResponse(op)
@@ -830,6 +862,14 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	}
 	if op.Status != "failed" && op.Status != "superseded" {
 		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
+		return
+	}
+	clusterID, err := h.loggingOperationClusterID(r.Context(), op)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve logging operation target")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
 	requeued, err := h.queries.RequeueLoggingOperation(r.Context(), id)
@@ -1179,6 +1219,44 @@ func loggingOperationEventsResponse(events []sqlc.LoggingOperationEvent) []map[s
 		})
 	}
 	return out
+}
+
+// loggingOperationClusterID resolves the target cluster of a logging
+// operation row by decoding its payload envelope (the canonical source —
+// every enqueue path sets ClusterID). For older rows that may have an
+// empty ClusterID (e.g. a delete enqueued before the row carried it), we
+// fall back to looking up the underlying output/pipeline by target_key.
+func (h *LoggingHandler) loggingOperationClusterID(ctx context.Context, op sqlc.LoggingOperation) (uuid.UUID, error) {
+	var env loggingOperationEnvelope
+	if err := json.Unmarshal(op.Payload, &env); err == nil && env.ClusterID != "" {
+		return uuid.Parse(env.ClusterID)
+	}
+	// Fallback: hydrate from the underlying row. The reconciler may have
+	// persisted a payload without cluster_id on legacy operations; we keep
+	// authz correct by resolving through the target table.
+	targetID, parseErr := uuid.Parse(op.TargetKey)
+	if parseErr != nil {
+		return uuid.UUID{}, parseErr
+	}
+	switch op.TargetType {
+	case "output":
+		out, err := h.queries.GetLoggingOutputByID(ctx, targetID)
+		if err != nil {
+			return uuid.UUID{}, err
+		}
+		if !out.ClusterID.Valid {
+			return uuid.UUID{}, errors.New("logging output has no cluster_id")
+		}
+		return uuid.UUID(out.ClusterID.Bytes), nil
+	case "pipeline":
+		pipe, err := h.queries.GetLoggingPipelineByID(ctx, targetID)
+		if err != nil {
+			return uuid.UUID{}, err
+		}
+		return pipe.ClusterID, nil
+	default:
+		return uuid.UUID{}, fmt.Errorf("unknown logging operation target type: %s", op.TargetType)
+	}
 }
 
 func operationIDOrEmpty(op sqlc.LoggingOperation) string {
