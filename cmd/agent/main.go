@@ -141,6 +141,19 @@ func runConnect(logger *slog.Logger) error {
 		svcProxy := agent.NewServiceProxy(logger)
 		tunnel.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
+		// Cluster decommission. Receives MsgDecommission from the server,
+		// uninstalls our managed-side resources (Fluent Bit / logging
+		// namespace, labeled Velero CRs) and finally schedules the agent's
+		// own Deployment for deletion AFTER the ACK is queued for writing.
+		// When the dynamic client can't be constructed (unlikely — same
+		// rest.Config as the typed clientset above), log and continue:
+		// the operator can still kubectl-delete manually.
+		if decomm, err := agent.NewDecommissionHandler(client, restConfig, logger); err != nil {
+			logger.Warn("decommission handler unavailable", "error", err)
+		} else {
+			tunnel.RegisterHandler(protocol.MsgDecommission, decomm.HandleDecommission)
+		}
+
 		// Health reporter (heartbeat + metrics tickers + JSON probes).
 		health := agent.NewHealthReporter(client, logger, cfg.HeartbeatInterval, cfg.MetricsInterval)
 		health.SetAgentVersion(version.Version)

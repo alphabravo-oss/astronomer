@@ -56,6 +56,18 @@ func main() {
 		AuditLogRetentionMonths: cfg.AuditLogRetentionMonths,
 		Leader:                  leader.New(database.Pool(), log),
 	})
+	// Cluster decommission reconciler: the standalone worker process
+	// doesn't have the tunnel hub (the hub lives in the server pod), so
+	// Tunnel is nil. The reconciler treats a nil Tunnel as "agent
+	// unreachable" — the notify_agent + revoke_agent_token phases skip
+	// with a logged warning. Every other phase (archive_audit,
+	// delete_dependents, tombstone_cluster) still runs from here, and
+	// the periodic sweep picks up rows whose worker crashed mid-run.
+	// When the server pod processes a decommission task it has the
+	// hub, so the full flow including tunnel ops works there.
+	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
+		Queries: sqlc.New(database.Pool()),
+	})
 
 	// Create worker and scheduler.
 	w := worker.NewWorker(cfg.RedisURL, log)
