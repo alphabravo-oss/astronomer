@@ -6,7 +6,6 @@ import { Command } from 'cmdk';
 import {
   LayoutDashboard,
   Server,
-  Boxes,
   BarChart3,
   GitBranch,
   Shield,
@@ -20,7 +19,6 @@ import { useClusters } from '@/lib/hooks';
 const pages = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clusters', href: '/dashboard/clusters', icon: Server },
-  { name: 'Workloads', href: '/dashboard/workloads', icon: Boxes },
   { name: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3 },
   { name: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch },
   { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },

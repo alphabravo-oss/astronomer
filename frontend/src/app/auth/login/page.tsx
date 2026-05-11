@@ -38,7 +38,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.email || !form.password) {
-      toast.error('Please enter both email and password');
+      toast.error('Please enter your email/username and password');
       return;
     }
 
@@ -207,20 +207,20 @@ export default function LoginPage() {
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="email" className="text-sm font-medium text-foreground">
-                Email
+              <label htmlFor="identifier" className="text-sm font-medium text-foreground">
+                Email or username
               </label>
               <input
-                id="email"
-                type="email"
+                id="identifier"
+                type="text"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="you@example.com"
+                placeholder="admin or you@example.com"
                 className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
                   text-foreground placeholder:text-muted-foreground
                   focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
                   transition-colors"
-                autoComplete="email"
+                autoComplete="username"
                 autoFocus
               />
             </div>

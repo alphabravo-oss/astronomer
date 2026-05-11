@@ -28,7 +28,6 @@ import (
 type RouterDependencies struct {
 	JWT          *iauth.JWTManager
 	AuthQueries  appmiddleware.TokenUserQuerier
-	Bootstrap    *handler.BootstrapHandler
 	Auth         *handler.AuthHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
@@ -148,25 +147,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// REST-only timeout — does NOT apply to WS routes registered at the
 		// top level (see r.Get("/api/v1/ws/...") below).
 		r.Use(chimiddleware.Timeout(30 * time.Second))
-		// Bootstrap
-		if deps.Bootstrap != nil {
-			r.Get("/bootstrap/", deps.Bootstrap.GetBootstrapStatus)
-			r.Post("/bootstrap/complete/", deps.Bootstrap.CompleteBootstrap)
-		} else {
-			// Stub handlers for tests without DB
-			r.Get("/bootstrap/", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"bootstrapped":  false,
-					"server_url":    "",
-					"platform_name": "Astronomer",
-				})
-			})
-
-			r.Post("/bootstrap/complete/", func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, "Not Implemented", http.StatusNotImplemented)
-			})
-		}
+		// /bootstrap/ and /bootstrap/complete/ were removed when the server
+		// switched to the Rancher-style admin-on-first-boot model: the
+		// startup hook in cmd/server/main.go (auth.EnsureBootstrapAdmin)
+		// creates the admin user, and POST /auth/change-password/ handles
+		// the forced first-login rotation. No HTTP endpoint is needed for
+		// platform first-setup any more.
 
 		if deps.Auth != nil {
 			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/login/", deps.Auth.Login)
@@ -606,7 +592,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 
 	if deps.Resources != nil {
 		r.Get("/clusters/{cluster_id}/resources/{group}/{version}/{kind}/", deps.Resources.ListResources)
-		r.Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses)}/", deps.Resources.ListNamedResources)
+		r.Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/", deps.Resources.ListNamedResources)
 		r.Post("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/", deps.Resources.CreateNamedResource)
 		r.Delete("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/{namespace}/{name}/", deps.Resources.DeleteNamedResource)
 		r.Delete("/clusters/{cluster_id}/resources/{resource_type:(?:persistentvolumes)}/{name}/", deps.Resources.DeleteNamedResource)

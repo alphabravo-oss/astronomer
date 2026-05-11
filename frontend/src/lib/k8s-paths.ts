@@ -56,6 +56,16 @@ const resourceDefs: Record<string, K8sResourceDef> = {
 
   // CRDs
   crds:                    { apiBase: 'apis/apiextensions.k8s.io/v1', namespaced: false, plural: 'customresourcedefinitions' },
+
+  // Gateway API. Keep apiBase in sync with internal/handler/resources.go.
+  gateways:        { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'gateways' },
+  httproutes:      { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'httproutes' },
+  gatewayclasses:  { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: false, plural: 'gatewayclasses' },
+  grpcroutes:      { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'grpcroutes' },
+  tlsroutes:       { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'tlsroutes' },
+  referencegrants: { apiBase: 'apis/gateway.networking.k8s.io/v1',       namespaced: true,  plural: 'referencegrants' },
+  tcproutes:       { apiBase: 'apis/gateway.networking.k8s.io/v1alpha2', namespaced: true,  plural: 'tcproutes' },
+  udproutes:       { apiBase: 'apis/gateway.networking.k8s.io/v1alpha2', namespaced: true,  plural: 'udproutes' },
 };
 
 /**

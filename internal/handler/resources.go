@@ -89,6 +89,19 @@ var resourceDefs = map[string]resourceDef{
 	"k8s-roles":               {apiBase: "/apis/rbac.authorization.k8s.io/v1", namespaced: true, plural: "roles"},
 	"k8s-rolebindings":        {apiBase: "/apis/rbac.authorization.k8s.io/v1", namespaced: true, plural: "rolebindings"},
 	"crds":                    {apiBase: "/apis/apiextensions.k8s.io/v1", namespaced: false, plural: "customresourcedefinitions"},
+
+	// Gateway API. Most resources are GA at gateway.networking.k8s.io/v1.
+	// TCPRoute and UDPRoute remain in v1alpha2 (experimental channel) — clusters
+	// without those CRDs will see "No resources found", which is the correct
+	// behavior.
+	"gateways":        {apiBase: "/apis/gateway.networking.k8s.io/v1", namespaced: true, plural: "gateways"},
+	"httproutes":      {apiBase: "/apis/gateway.networking.k8s.io/v1", namespaced: true, plural: "httproutes"},
+	"gatewayclasses":  {apiBase: "/apis/gateway.networking.k8s.io/v1", namespaced: false, plural: "gatewayclasses"},
+	"grpcroutes":      {apiBase: "/apis/gateway.networking.k8s.io/v1", namespaced: true, plural: "grpcroutes"},
+	"tlsroutes":       {apiBase: "/apis/gateway.networking.k8s.io/v1", namespaced: true, plural: "tlsroutes"},
+	"referencegrants": {apiBase: "/apis/gateway.networking.k8s.io/v1", namespaced: true, plural: "referencegrants"},
+	"tcproutes":       {apiBase: "/apis/gateway.networking.k8s.io/v1alpha2", namespaced: true, plural: "tcproutes"},
+	"udproutes":       {apiBase: "/apis/gateway.networking.k8s.io/v1alpha2", namespaced: true, plural: "udproutes"},
 }
 
 func NewResourceHandler() *ResourceHandler {
@@ -143,8 +156,33 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
-	resp, err := h.do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if h.requester == nil {
+		RespondError(w, http.StatusServiceUnavailable, "proxy_error", "tunnel requester not configured")
+		return
+	}
+	// Bypass h.do so we can treat 404 as "CRD not installed" and return [].
+	// This matters for optional resources like the v1alpha2 Gateway API
+	// routes (TCPRoute / UDPRoute) that many clusters lack — the UI should
+	// show "No resources found", not surface a 503.
+	rawResp, err := h.requester.Do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
+		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		return
+	}
+	if rawResp == nil {
+		RespondError(w, http.StatusServiceUnavailable, "proxy_error", "empty response")
+		return
+	}
+	if rawResp.StatusCode == http.StatusNotFound {
+		RespondJSON(w, http.StatusOK, []map[string]any{})
+		return
+	}
+	if err := ensureSuccess(rawResp); err != nil {
+		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		return
+	}
+	var resp map[string]any
+	if err := parseJSONResponse(rawResp, &resp); err != nil {
 		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
@@ -904,6 +942,22 @@ func flattenNamedResources(clusterID, resourceType string, payload map[string]an
 			out = append(out, flattenPVC(clusterID, item))
 		case "storageclasses":
 			out = append(out, flattenStorageClass(clusterID, item))
+		case "gateways":
+			out = append(out, flattenGateway(clusterID, item))
+		case "httproutes":
+			out = append(out, flattenRouteResource(clusterID, item))
+		case "grpcroutes":
+			out = append(out, flattenRouteResource(clusterID, item))
+		case "tlsroutes":
+			out = append(out, flattenRouteResource(clusterID, item))
+		case "tcproutes":
+			out = append(out, flattenRouteResource(clusterID, item))
+		case "udproutes":
+			out = append(out, flattenRouteResource(clusterID, item))
+		case "gatewayclasses":
+			out = append(out, flattenGatewayClass(clusterID, item))
+		case "referencegrants":
+			out = append(out, flattenReferenceGrant(clusterID, item))
 		default:
 			out = append(out, flattenGeneric(clusterID, item))
 		}
@@ -1103,6 +1157,174 @@ func flattenNetworkPolicy(clusterID string, item map[string]any) map[string]any 
 		"ingressRules": sliceLen(item, "spec", "ingress"),
 		"egressRules":  sliceLen(item, "spec", "egress"),
 		"createdAt":    stringValue(item, "metadata", "creationTimestamp"),
+	}
+}
+
+// findCondition scans status.conditions[] for the first entry whose `type`
+// matches conditionType. Returns ("", false) if not present.
+func findCondition(item map[string]any, conditionType string) (status, reason string, ok bool) {
+	conds, found := nestedSlice(item, "status", "conditions")
+	if !found {
+		return "", "", false
+	}
+	for _, raw := range conds {
+		c, _ := raw.(map[string]any)
+		if c == nil {
+			continue
+		}
+		if stringValueMap(c, "type") == conditionType {
+			return stringValueMap(c, "status"), stringValueMap(c, "reason"), true
+		}
+	}
+	return "", "", false
+}
+
+func flattenGateway(clusterID string, item map[string]any) map[string]any {
+	listeners := []map[string]any{}
+	listenerSummary := []string{}
+	if ls, ok := nestedSlice(item, "spec", "listeners"); ok {
+		for _, raw := range ls {
+			l, _ := raw.(map[string]any)
+			if l == nil {
+				continue
+			}
+			name := stringValueMap(l, "name")
+			proto := stringValueMap(l, "protocol")
+			port := intValue(l, "port")
+			hostname := stringValueMap(l, "hostname")
+			listeners = append(listeners, map[string]any{
+				"name":     name,
+				"protocol": proto,
+				"port":     port,
+				"hostname": hostname,
+			})
+			listenerSummary = append(listenerSummary, fmt.Sprintf("%s:%d", proto, port))
+		}
+	}
+	addresses := []string{}
+	if addrs, ok := nestedSlice(item, "status", "addresses"); ok {
+		for _, raw := range addrs {
+			a, _ := raw.(map[string]any)
+			if a == nil {
+				continue
+			}
+			if v := stringValueMap(a, "value"); v != "" {
+				addresses = append(addresses, v)
+			}
+		}
+	}
+	programmedStatus, _, _ := findCondition(item, "Programmed")
+	acceptedStatus, _, _ := findCondition(item, "Accepted")
+	return map[string]any{
+		"name":             stringValue(item, "metadata", "name"),
+		"namespace":        stringValue(item, "metadata", "namespace"),
+		"clusterId":        clusterID,
+		"clusterName":      "",
+		"gatewayClassName": stringValue(item, "spec", "gatewayClassName"),
+		"listeners":        listeners,
+		"listenerSummary":  listenerSummary,
+		"listenerCount":    len(listeners),
+		"addresses":        addresses,
+		"programmed":       programmedStatus, // "True"/"False"/"Unknown"/""
+		"accepted":         acceptedStatus,
+		"createdAt":        stringValue(item, "metadata", "creationTimestamp"),
+	}
+}
+
+// flattenRouteResource handles HTTPRoute / GRPCRoute / TLSRoute / TCPRoute /
+// UDPRoute. They share the same shape that matters to the UI: parentRefs,
+// hostnames (where applicable), and a rule count.
+func flattenRouteResource(clusterID string, item map[string]any) map[string]any {
+	parentRefs := []map[string]any{}
+	parentSummary := []string{}
+	if refs, ok := nestedSlice(item, "spec", "parentRefs"); ok {
+		for _, raw := range refs {
+			ref, _ := raw.(map[string]any)
+			if ref == nil {
+				continue
+			}
+			name := stringValueMap(ref, "name")
+			ns := stringValueMap(ref, "namespace")
+			section := stringValueMap(ref, "sectionName")
+			parentRefs = append(parentRefs, map[string]any{
+				"name":        name,
+				"namespace":   ns,
+				"sectionName": section,
+				"kind":        stringValueMap(ref, "kind"),
+			})
+			label := name
+			if ns != "" {
+				label = ns + "/" + name
+			}
+			if section != "" {
+				label += "#" + section
+			}
+			parentSummary = append(parentSummary, label)
+		}
+	}
+	return map[string]any{
+		"name":          stringValue(item, "metadata", "name"),
+		"namespace":     stringValue(item, "metadata", "namespace"),
+		"clusterId":     clusterID,
+		"clusterName":   "",
+		"hostnames":     stringSlice(item, "spec", "hostnames"),
+		"parentRefs":    parentRefs,
+		"parentSummary": parentSummary,
+		"ruleCount":     sliceLen(item, "spec", "rules"),
+		"createdAt":     stringValue(item, "metadata", "creationTimestamp"),
+	}
+}
+
+func flattenGatewayClass(clusterID string, item map[string]any) map[string]any {
+	acceptedStatus, _, _ := findCondition(item, "Accepted")
+	return map[string]any{
+		"name":           stringValue(item, "metadata", "name"),
+		"clusterId":      clusterID,
+		"clusterName":    "",
+		"controllerName": stringValue(item, "spec", "controllerName"),
+		"description":    stringValue(item, "spec", "description"),
+		"accepted":       acceptedStatus,
+		"createdAt":      stringValue(item, "metadata", "creationTimestamp"),
+	}
+}
+
+func flattenReferenceGrant(clusterID string, item map[string]any) map[string]any {
+	froms := []map[string]any{}
+	tos := []map[string]any{}
+	if entries, ok := nestedSlice(item, "spec", "from"); ok {
+		for _, raw := range entries {
+			e, _ := raw.(map[string]any)
+			if e == nil {
+				continue
+			}
+			froms = append(froms, map[string]any{
+				"group":     stringValueMap(e, "group"),
+				"kind":      stringValueMap(e, "kind"),
+				"namespace": stringValueMap(e, "namespace"),
+			})
+		}
+	}
+	if entries, ok := nestedSlice(item, "spec", "to"); ok {
+		for _, raw := range entries {
+			e, _ := raw.(map[string]any)
+			if e == nil {
+				continue
+			}
+			tos = append(tos, map[string]any{
+				"group": stringValueMap(e, "group"),
+				"kind":  stringValueMap(e, "kind"),
+				"name":  stringValueMap(e, "name"),
+			})
+		}
+	}
+	return map[string]any{
+		"name":        stringValue(item, "metadata", "name"),
+		"namespace":   stringValue(item, "metadata", "namespace"),
+		"clusterId":   clusterID,
+		"clusterName": "",
+		"from":        froms,
+		"to":          tos,
+		"createdAt":   stringValue(item, "metadata", "creationTimestamp"),
 	}
 }
 

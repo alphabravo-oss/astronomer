@@ -20,6 +20,14 @@ type Config struct {
 	SessionTimeoutMinutes int    `mapstructure:"session_timeout_minutes"`
 	AgentTokenExpiryHours int    `mapstructure:"agent_token_expiry_hours"`
 
+	// ServerURL is the externally-reachable URL of this Astronomer install
+	// (e.g. http://astronomer.example.com:8080). It seeds
+	// platform_configuration.server_url on first boot, which the local
+	// ArgoCD self-management loop reads to discover what hostname to put on
+	// the self-manage HTTPRoute. Optional — if empty, the operator can set
+	// it later from /dashboard/settings.
+	ServerURL string `mapstructure:"server_url"`
+
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
 
 	GithubClientID     string `mapstructure:"github_client_id"`

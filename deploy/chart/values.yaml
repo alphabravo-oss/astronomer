@@ -40,7 +40,7 @@ image:
 # Frontend (optional Next.js dashboard)
 # =============================================================================
 frontend:
-  enabled: false
+  enabled: true
   replicaCount: 2
   strategy:
     type: RollingUpdate
@@ -217,6 +217,12 @@ config:
   logLevel: info
   allowedHosts: "*"
   corsAllowedOrigins: "http://astronomer.localtest.me"
+  # External URL of this install (e.g. http://astronomer.example.com:8080).
+  # Seeded into platform_configuration.server_url on first boot; consumed by
+  # the Argo self-management loop to render the right hostname on the
+  # self-manage HTTPRoute. Leave empty to skip the seed and set later via
+  # /dashboard/settings.
+  serverURL: ""
   agentImageRepository: astronomer-go-agent
   agentImageTag: dev
 
@@ -225,13 +231,35 @@ config:
 # =============================================================================
 secrets:
   secretKey: "local-dev-secret-key-change-in-production"
-  encryptionKey: "local-dev-encryption-key-change-in-prod-32b"
+  # Fernet key (32 random bytes, url-safe base64). REQUIRED to be a real
+  # Fernet key — Astronomer wraps SSO/agent secrets with it. Replace in any
+  # production install (rotation reencrypts all wrapped values). Generate
+  # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  encryptionKey: "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
   githubClientID: ""
   githubClientSecret: ""
   googleClientID: ""
   googleClientSecret: ""
   oidcClientID: ""
   oidcClientSecret: ""
+
+# =============================================================================
+# Bootstrap admin (Rancher-style)
+# =============================================================================
+# On a fresh install (empty users table) the server creates an "admin" user
+# and forces a password change on first login.
+#
+#  - bootstrap.password set to a non-empty string: server uses it as-is.
+#  - bootstrap.password empty (default): the chart generates a random value
+#    on first install (via `lookup` so it survives upgrades), persists it in
+#    {fullname}-bootstrap, and the server reads it from
+#    ASTRONOMER_BOOTSTRAP_PASSWORD.
+#
+# Retrieve the generated value:
+#   kubectl -n <ns> get secret <release>-bootstrap \
+#     -o jsonpath='{.data.password}' | base64 -d
+bootstrap:
+  password: ""
 
 # =============================================================================
 # Ingress

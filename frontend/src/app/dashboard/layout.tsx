@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
-import { useUIStore } from '@/lib/store';
+import { useUIStore, useAuthStore } from '@/lib/store';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +15,17 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { sidebarCollapsed } = useUIStore();
+  const router = useRouter();
+  const mustChangePassword = useAuthStore((s) => s.user?.must_change_password);
+
+  // Bootstrap admin / any user flagged must_change_password: kick them out
+  // to the forced-rotation screen before any dashboard data starts loading.
+  useEffect(() => {
+    if (mustChangePassword) {
+      router.replace('/auth/change-password');
+    }
+  }, [mustChangePassword, router]);
+
   // Hold a single SSE connection open for the whole dashboard; per-page
   // hooks reuse this connection via refcount inside `lib/live-events.ts`.
   useLiveEvents();

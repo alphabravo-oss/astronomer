@@ -42,8 +42,11 @@ type AuthAuditWriter interface {
 // PasswordRehasher updates a user's password column. It is satisfied by the
 // generated sqlc Queries type via UpdateUserPasswordHash and is used by the
 // login handler to opportunistically migrate Django-format hashes to bcrypt.
+// It also clears the bootstrap must_change_password flag after a successful
+// password change via the dashboard.
 type PasswordRehasher interface {
 	UpdateUserPasswordHash(ctx context.Context, arg sqlc.UpdateUserPasswordHashParams) error
+	ClearMustChangePassword(ctx context.Context, id uuid.UUID) error
 }
 
 // RoleBindingsQuerier supplies the aggregated role bindings rendered into
@@ -131,16 +134,17 @@ type LoginRequest struct {
 
 // UserResponse represents the user data in login response.
 type UserResponse struct {
-	ID          string  `json:"id"`
-	Email       string  `json:"email"`
-	Username    string  `json:"username"`
-	FirstName   string  `json:"first_name"`
-	LastName    string  `json:"last_name"`
-	IsActive    bool    `json:"is_active"`
-	IsStaff     bool    `json:"is_staff"`
-	IsSuperuser bool    `json:"is_superuser"`
-	DateJoined  string  `json:"date_joined"`
-	LastLogin   *string `json:"last_login"`
+	ID                 string  `json:"id"`
+	Email              string  `json:"email"`
+	Username           string  `json:"username"`
+	FirstName          string  `json:"first_name"`
+	LastName           string  `json:"last_name"`
+	IsActive           bool    `json:"is_active"`
+	IsStaff            bool    `json:"is_staff"`
+	IsSuperuser        bool    `json:"is_superuser"`
+	DateJoined         string  `json:"date_joined"`
+	LastLogin          *string `json:"last_login"`
+	MustChangePassword bool    `json:"must_change_password"`
 }
 
 // LoginResponse matches the Python AstronomerTokenObtainPairSerializer.
@@ -162,16 +166,17 @@ func userToResponse(user sqlc.User) UserResponse {
 	}
 
 	return UserResponse{
-		ID:          user.ID.String(),
-		Email:       user.Email,
-		Username:    user.Username,
-		FirstName:   user.FirstName,
-		LastName:    user.LastName,
-		IsActive:    user.IsActive,
-		IsStaff:     user.IsStaff,
-		IsSuperuser: user.IsSuperuser,
-		DateJoined:  user.DateJoined.UTC().Format("2006-01-02T15:04:05Z"),
-		LastLogin:   lastLogin,
+		ID:                 user.ID.String(),
+		Email:              user.Email,
+		Username:           user.Username,
+		FirstName:          user.FirstName,
+		LastName:           user.LastName,
+		IsActive:           user.IsActive,
+		IsStaff:            user.IsStaff,
+		IsSuperuser:        user.IsSuperuser,
+		DateJoined:         user.DateJoined.UTC().Format("2006-01-02T15:04:05Z"),
+		LastLogin:          lastLogin,
+		MustChangePassword: user.MustChangePassword,
 	}
 }
 
@@ -429,6 +434,20 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bootstrap admins are flagged must_change_password=true; clear the flag
+	// here so the frontend stops redirecting to the forced-change screen.
+	// Non-bootstrap users have the flag false and this is a no-op.
+	if dbUser.MustChangePassword {
+		if err := h.rehasher.ClearMustChangePassword(r.Context(), userID); err != nil {
+			// Log + audit but don't fail the request: the password has
+			// already been rotated, the worst case is the user sees the
+			// change-password screen once more.
+			if h.log != nil {
+				h.log.Warn("failed to clear must_change_password flag", "user_id", userID.String(), "error", err)
+			}
+		}
+	}
+
 	recordAudit(r, h.audit, "auth.change_password", "user", dbUser.ID.String(), dbUser.Username, nil)
 
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]string{"detail": "Password updated"})
@@ -455,15 +474,16 @@ func (h *AuthHandler) CurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{
-		"id":           dbUser.ID.String(),
-		"email":        dbUser.Email,
-		"username":     dbUser.Username,
-		"first_name":   dbUser.FirstName,
-		"last_name":    dbUser.LastName,
-		"is_active":    dbUser.IsActive,
-		"is_staff":     dbUser.IsStaff,
-		"is_superuser": dbUser.IsSuperuser,
-		"date_joined":  dbUser.DateJoined.UTC().Format("2006-01-02T15:04:05Z"),
+		"id":                   dbUser.ID.String(),
+		"email":                dbUser.Email,
+		"username":             dbUser.Username,
+		"first_name":           dbUser.FirstName,
+		"last_name":            dbUser.LastName,
+		"is_active":            dbUser.IsActive,
+		"is_staff":             dbUser.IsStaff,
+		"is_superuser":         dbUser.IsSuperuser,
+		"must_change_password": dbUser.MustChangePassword,
+		"date_joined":          dbUser.DateJoined.UTC().Format("2006-01-02T15:04:05Z"),
 	}
 	if dbUser.LastLogin.Valid {
 		resp["last_login"] = dbUser.LastLogin.Time.UTC().Format("2006-01-02T15:04:05Z")

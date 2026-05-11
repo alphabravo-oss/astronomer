@@ -72,7 +72,6 @@ var skipPaths = map[string]bool{
 	"/api/v1/auth/refresh":         true,
 	"/api/v1/auth/logout":          true,
 	"/api/v1/auth/change-password": true,
-	"/api/v1/bootstrap/complete":   true,
 }
 
 type AuditWriterV1 interface {

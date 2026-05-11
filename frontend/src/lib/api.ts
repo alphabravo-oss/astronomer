@@ -198,6 +198,14 @@ export async function loginWithCredentials(username: string, password: string) {
   return res.data.data;
 }
 
+export async function changeOwnPassword(currentPassword: string, newPassword: string) {
+  const res = await api.post<{ detail: string }>('/auth/change-password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+  return res.data;
+}
+
 export async function refreshAccessToken(refreshToken: string) {
   const res = await api.post<APIResponse<{ token: string; refresh?: string }>>('/auth/refresh', {
     refresh: refreshToken,
@@ -797,6 +805,70 @@ export async function createNetworkPolicy(clusterId: string, data: Partial<impor
 
 export async function deleteNetworkPolicy(clusterId: string, namespace: string, name: string) {
   await api.delete(`/clusters/${clusterId}/resources/networkpolicies/${namespace}/${name}`);
+}
+
+// --- Gateway API ---
+//
+// List endpoints go through the structured backend route which flattens the
+// upstream Kubernetes object into a UI-friendly row shape (see
+// internal/handler/resources.go). Deletes and YAML edits use the generic K8s
+// proxy via useK8sDelete / useK8sApplyYaml in callers — no per-resource
+// delete helpers needed here.
+
+export async function getGateways(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').Gateway[]>>(
+    `/clusters/${clusterId}/resources/gateways`,
+  );
+  return res.data.data;
+}
+
+export async function getHTTPRoutes(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').HTTPRoute[]>>(
+    `/clusters/${clusterId}/resources/httproutes`,
+  );
+  return res.data.data;
+}
+
+export async function getGatewayClasses(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').GatewayClass[]>>(
+    `/clusters/${clusterId}/resources/gatewayclasses`,
+  );
+  return res.data.data;
+}
+
+export async function getGRPCRoutes(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').GRPCRoute[]>>(
+    `/clusters/${clusterId}/resources/grpcroutes`,
+  );
+  return res.data.data;
+}
+
+export async function getTLSRoutes(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').TLSRoute[]>>(
+    `/clusters/${clusterId}/resources/tlsroutes`,
+  );
+  return res.data.data;
+}
+
+export async function getTCPRoutes(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').TCPRoute[]>>(
+    `/clusters/${clusterId}/resources/tcproutes`,
+  );
+  return res.data.data;
+}
+
+export async function getUDPRoutes(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').UDPRoute[]>>(
+    `/clusters/${clusterId}/resources/udproutes`,
+  );
+  return res.data.data;
+}
+
+export async function getReferenceGrants(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').ReferenceGrant[]>>(
+    `/clusters/${clusterId}/resources/referencegrants`,
+  );
+  return res.data.data;
 }
 
 // --- Projects ---

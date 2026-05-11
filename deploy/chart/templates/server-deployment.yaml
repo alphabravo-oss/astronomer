@@ -76,8 +76,12 @@ spec:
                 name: {{ include "astronomer.fullname" . }}-config
             - secretRef:
                 name: {{ include "astronomer.fullname" . }}-secrets
-          {{- if or .Values.postgres.external.dsnSecretRef.name .Values.redis.external.address .Values.redis.external.passwordSecretRef.name .Values.server.env }}
           env:
+            - name: ASTRONOMER_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.fullname" . }}-bootstrap
+                  key: password
             {{- if .Values.postgres.external.dsnSecretRef.name }}
             - name: DATABASE_URL
               valueFrom:
@@ -102,7 +106,6 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             {{- end }}
-          {{- end }}
           {{- if .Values.server.probes.enabled }}
           livenessProbe:
             httpGet:

@@ -111,6 +111,14 @@ export const queryKeys = {
     services: (clusterId: string) => ['networking', clusterId, 'services'] as const,
     ingresses: (clusterId: string) => ['networking', clusterId, 'ingresses'] as const,
     networkPolicies: (clusterId: string) => ['networking', clusterId, 'networkpolicies'] as const,
+    gateways: (clusterId: string) => ['networking', clusterId, 'gateways'] as const,
+    httpRoutes: (clusterId: string) => ['networking', clusterId, 'httproutes'] as const,
+    gatewayClasses: (clusterId: string) => ['networking', clusterId, 'gatewayclasses'] as const,
+    grpcRoutes: (clusterId: string) => ['networking', clusterId, 'grpcroutes'] as const,
+    tlsRoutes: (clusterId: string) => ['networking', clusterId, 'tlsroutes'] as const,
+    tcpRoutes: (clusterId: string) => ['networking', clusterId, 'tcproutes'] as const,
+    udpRoutes: (clusterId: string) => ['networking', clusterId, 'udproutes'] as const,
+    referenceGrants: (clusterId: string) => ['networking', clusterId, 'referencegrants'] as const,
   },
   projects: {
     all: ['projects'] as const,
@@ -1068,6 +1076,78 @@ export function useDeleteNetworkPolicy() {
     onError: (error: Error) => {
       toast.error(`Failed to delete network policy: ${error.message}`);
     },
+  });
+}
+
+// ============================================================
+// Gateway API Hooks
+// ============================================================
+//
+// Read hooks only. Deletes and YAML edits in callers go through the generic
+// useK8sDelete / useK8sApplyYaml above (with k8sResourcePath from
+// lib/k8s-paths.ts), so we don't need per-resource mutations here.
+
+export function useGateways(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.gateways(clusterId),
+    queryFn: () => apiClient.getGateways(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useHTTPRoutes(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.httpRoutes(clusterId),
+    queryFn: () => apiClient.getHTTPRoutes(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useGatewayClasses(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.gatewayClasses(clusterId),
+    queryFn: () => apiClient.getGatewayClasses(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useGRPCRoutes(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.grpcRoutes(clusterId),
+    queryFn: () => apiClient.getGRPCRoutes(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useTLSRoutes(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.tlsRoutes(clusterId),
+    queryFn: () => apiClient.getTLSRoutes(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useTCPRoutes(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.tcpRoutes(clusterId),
+    queryFn: () => apiClient.getTCPRoutes(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useUDPRoutes(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.udpRoutes(clusterId),
+    queryFn: () => apiClient.getUDPRoutes(clusterId),
+    enabled: !!clusterId,
+  });
+}
+
+export function useReferenceGrants(clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.networking.referenceGrants(clusterId),
+    queryFn: () => apiClient.getReferenceGrants(clusterId),
+    enabled: !!clusterId,
   });
 }
 

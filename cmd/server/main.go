@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -50,12 +51,28 @@ func main() {
 		os.Exit(1)
 	}
 	if srv.DB() != nil {
-		if _, err := observability.EnsureInstanceID(context.Background(), sqlc.New(srv.DB().Pool())); err != nil {
+		queries := sqlc.New(srv.DB().Pool())
+		if _, err := observability.EnsureInstanceID(context.Background(), queries); err != nil {
 			logger.Error("failed to ensure observability instance id", "error", err)
 			os.Exit(1)
 		}
 		logger = observability.Logger(logger)
 		slog.SetDefault(logger)
+		// Rancher-style: if no users exist, create the admin with either
+		// $ASTRONOMER_BOOTSTRAP_PASSWORD or a random password (logged once)
+		// and flag must_change_password so the dashboard forces a rotation
+		// on first sign-in.
+		if err := auth.EnsureBootstrapAdmin(context.Background(), queries, logger); err != nil {
+			logger.Error("failed to ensure bootstrap admin", "error", err)
+			os.Exit(1)
+		}
+		// Seed platform_configuration.server_url from the Helm value so the
+		// local Argo self-management loop knows what hostname to put on the
+		// self-manage Application without requiring a manual settings step.
+		if err := auth.EnsurePlatformConfig(context.Background(), queries, cfg.ServerURL, "", logger); err != nil {
+			logger.Error("failed to ensure platform config", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	// Graceful shutdown on SIGINT / SIGTERM.

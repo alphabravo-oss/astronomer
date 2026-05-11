@@ -202,7 +202,7 @@ export default function SearchPage() {
       case 'jobs':
       case 'cronjobs': {
         const kind = (row.type as string) || resourceType.replace(/s$/, '');
-        router.push(`/dashboard/workloads/${kind.toLowerCase()}/${ns}/${name}`);
+        router.push(`/dashboard/clusters/${cid}/workloads/${kind.toLowerCase()}/${ns}/${name}`);
         return;
       }
       case 'nodes':

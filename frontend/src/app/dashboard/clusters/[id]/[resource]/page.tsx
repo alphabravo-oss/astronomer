@@ -19,6 +19,14 @@ import {
   usePersistentVolumeClaims,
   useStorageClasses,
   useGenericResources,
+  useGateways,
+  useHTTPRoutes,
+  useGatewayClasses,
+  useGRPCRoutes,
+  useTLSRoutes,
+  useTCPRoutes,
+  useUDPRoutes,
+  useReferenceGrants,
   useDeleteService,
   useDeleteIngress,
   useDeleteNetworkPolicy,
@@ -57,8 +65,13 @@ import type {
   PersistentVolumeClaim,
   StorageClass,
   GenericK8sResource,
+  Gateway,
+  GatewayClass,
+  GatewayRoute,
+  ReferenceGrant,
 } from '@/types';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Loader2, Server, Terminal, FileText, Trash2, RotateCw, Scaling,
   Code, Pencil, ShieldBan, ShieldCheck, Unplug, Plus,
@@ -1146,7 +1159,21 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
   const closePanel = () => setPanelState({ open: false, mode: 'terminal', workload: null, pods: [], activePod: null });
 
   const columns = useMemo<Column<Workload>[]>(() => [
-    ...workloadColumns,
+    // Override the shared workloadColumns "name" cell with a Link into the
+    // per-cluster workload detail route so users can drill in from the list.
+    {
+      key: 'name',
+      header: 'Name',
+      accessor: (row) => (
+        <Link
+          href={`/dashboard/clusters/${clusterId}/workloads/${row.kind.toLowerCase()}/${row.namespace}/${row.name}`}
+          className="font-medium text-foreground font-mono text-xs hover:underline"
+        >
+          {row.name}
+        </Link>
+      ),
+    },
+    ...workloadColumns.slice(1),
     {
       key: 'actions',
       header: '',
@@ -1535,6 +1562,458 @@ function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
   );
 }
 
+// ── Gateway API ─────────────────────────────────────────────────────────────
+//
+// Read + YAML edit + delete. No bespoke create forms — users author YAML via
+// the standard CreateResourceDialog only for the four resource types that
+// have templates today (service / ingress / networkpolicy / pvc).
+
+// Renders the True/False/Unknown values that Kubernetes publishes for
+// gateway-api status conditions. Empty string means the controller hasn't
+// emitted the condition yet.
+function ConditionPill({ status, trueLabel, falseLabel }: { status: string; trueLabel: string; falseLabel: string }) {
+  if (!status) return <span className="text-xs text-muted-foreground">—</span>;
+  if (status === 'True') {
+    return <span className="text-xs px-1.5 py-0.5 rounded bg-status-success/10 text-status-success">{trueLabel}</span>;
+  }
+  if (status === 'False') {
+    return <span className="text-xs px-1.5 py-0.5 rounded bg-status-danger/10 text-status-danger">{falseLabel}</span>;
+  }
+  return <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{status}</span>;
+}
+
+const gatewayColumns: Column<Gateway>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'class',
+    header: 'Class',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.gatewayClassName || '-'}</span>,
+  },
+  {
+    key: 'listeners',
+    header: 'Listeners',
+    accessor: (row) => (
+      <div className="flex gap-1 flex-wrap">
+        {row.listenerSummary?.length
+          ? row.listenerSummary.map((s, i) => (
+              <span key={`${s}-${i}`} className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono">{s}</span>
+            ))
+          : <span className="text-xs text-muted-foreground">-</span>}
+      </div>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'addresses',
+    header: 'Addresses',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+        {row.addresses?.join(', ') || '-'}
+      </span>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'programmed',
+    header: 'Programmed',
+    accessor: (row) => <ConditionPill status={row.programmed} trueLabel="Programmed" falseLabel="Failed" />,
+    align: 'center',
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+// Shared column definition for HTTPRoute / GRPCRoute / TLSRoute / TCPRoute /
+// UDPRoute. The L4 routes (TCP/UDP) won't populate hostnames; their column
+// just renders empty.
+const routeColumns: Column<GatewayRoute>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'parents',
+    header: 'Parent Gateways',
+    accessor: (row) => (
+      <div className="flex gap-1 flex-wrap">
+        {row.parentSummary?.length
+          ? row.parentSummary.map((p, i) => (
+              <span key={`${p}-${i}`} className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono">{p}</span>
+            ))
+          : <span className="text-xs text-muted-foreground">-</span>}
+      </div>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'hostnames',
+    header: 'Hostnames',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+        {row.hostnames?.join(', ') || '-'}
+      </span>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'rules',
+    header: 'Rules',
+    accessor: (row) => <span className="tabular-nums text-xs">{row.ruleCount}</span>,
+    align: 'center',
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const gatewayClassColumns: Column<GatewayClass>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'controllerName',
+    header: 'Controller',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono truncate max-w-[280px] block">{row.controllerName}</span>,
+  },
+  {
+    key: 'accepted',
+    header: 'Accepted',
+    accessor: (row) => <ConditionPill status={row.accepted} trueLabel="Accepted" falseLabel="Rejected" />,
+    align: 'center',
+  },
+  {
+    key: 'description',
+    header: 'Description',
+    accessor: (row) => <span className="text-xs text-muted-foreground truncate max-w-[260px] block">{row.description || '-'}</span>,
+    sortable: false,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const referenceGrantColumns: Column<ReferenceGrant>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'from',
+    header: 'From',
+    accessor: (row) => (
+      <div className="flex gap-1 flex-wrap">
+        {row.from?.length
+          ? row.from.map((f, i) => (
+              <span key={`${f.kind}-${f.namespace}-${i}`} className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono">
+                {f.kind}@{f.namespace}
+              </span>
+            ))
+          : <span className="text-xs text-muted-foreground">-</span>}
+      </div>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'to',
+    header: 'To',
+    accessor: (row) => (
+      <div className="flex gap-1 flex-wrap">
+        {row.to?.length
+          ? row.to.map((t, i) => (
+              <span key={`${t.kind}-${t.name}-${i}`} className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono">
+                {t.kind}{t.name ? `/${t.name}` : ''}
+              </span>
+            ))
+          : <span className="text-xs text-muted-foreground">-</span>}
+      </div>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+// useK8sDelete provides the mutation; per-row dialog state lives in each
+// table. Shared utility to render the action menu for a namespaced row.
+function NamespacedActions<T extends { name: string; namespace: string }>({
+  resourceType,
+  kindLabel,
+  row,
+  onView,
+  onDelete,
+}: {
+  resourceType: string;
+  kindLabel: string;
+  row: T;
+  onView: (target: { path: string; title: string }) => void;
+  onDelete: (row: T) => void;
+}) {
+  const path = k8sResourcePath(resourceType, row.name, row.namespace);
+  const title = `${kindLabel}: ${row.namespace}/${row.name}`;
+  return (
+    <ActionMenu
+      items={[
+        { label: 'View YAML', icon: <Code className="h-3.5 w-3.5" />, onClick: () => onView({ path, title }) },
+        { label: 'Edit YAML', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => onView({ path, title }) },
+        { label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => onDelete(row), variant: 'destructive', separator: true },
+      ]}
+    />
+  );
+}
+
+function GatewaysTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useGateways(clusterId);
+  const k8sDelete = useK8sDelete();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Gateway | null>(null);
+
+  const columns = useMemo<Column<Gateway>[]>(() => [
+    ...gatewayColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <NamespacedActions resourceType="gateways" kindLabel="Gateway" row={row} onView={setYamlTarget} onDelete={setDeleteTarget} />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search gateways..." loading={isLoading} emptyMessage="No gateways found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) k8sDelete.mutate(
+            { clusterId, path: k8sResourcePath('gateways', deleteTarget.name, deleteTarget.namespace) },
+            { onSuccess: () => setDeleteTarget(null) },
+          );
+        }}
+        title="Delete Gateway" description={`This will permanently delete the gateway ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={k8sDelete.isPending}
+      />
+    </>
+  );
+}
+
+// Route tables share routeColumns + a delete confirm. The variants only
+// differ in which hook supplies data and which resourceType the K8s path
+// builder gets. Parameterizing keeps drift between them minimal.
+function RouteTable<T extends GatewayRoute>({
+  clusterId, kindLabel, resourceType, data, isLoading, searchPlaceholder, emptyMessage,
+}: {
+  clusterId: string;
+  kindLabel: string;
+  resourceType: string;
+  data: T[] | undefined;
+  isLoading: boolean;
+  searchPlaceholder: string;
+  emptyMessage: string;
+}) {
+  const k8sDelete = useK8sDelete();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<T | null>(null);
+
+  const columns = useMemo<Column<T>[]>(() => [
+    ...(routeColumns as Column<T>[]),
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <NamespacedActions resourceType={resourceType} kindLabel={kindLabel} row={row} onView={setYamlTarget} onDelete={(r) => setDeleteTarget(r as T)} />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], [resourceType, kindLabel]);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder={searchPlaceholder} loading={isLoading} emptyMessage={emptyMessage} />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) k8sDelete.mutate(
+            { clusterId, path: k8sResourcePath(resourceType, deleteTarget.name, deleteTarget.namespace) },
+            { onSuccess: () => setDeleteTarget(null) },
+          );
+        }}
+        title={`Delete ${kindLabel}`} description={`This will permanently delete the ${kindLabel.toLowerCase()} ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={k8sDelete.isPending}
+      />
+    </>
+  );
+}
+
+function HTTPRoutesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useHTTPRoutes(clusterId);
+  return <RouteTable clusterId={clusterId} kindLabel="HTTPRoute" resourceType="httproutes"
+    data={data} isLoading={isLoading} searchPlaceholder="Search HTTPRoutes..." emptyMessage="No HTTPRoutes found" />;
+}
+
+function GRPCRoutesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useGRPCRoutes(clusterId);
+  return <RouteTable clusterId={clusterId} kindLabel="GRPCRoute" resourceType="grpcroutes"
+    data={data} isLoading={isLoading} searchPlaceholder="Search GRPCRoutes..." emptyMessage="No GRPCRoutes found" />;
+}
+
+function TLSRoutesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useTLSRoutes(clusterId);
+  return <RouteTable clusterId={clusterId} kindLabel="TLSRoute" resourceType="tlsroutes"
+    data={data} isLoading={isLoading} searchPlaceholder="Search TLSRoutes..." emptyMessage="No TLSRoutes found" />;
+}
+
+function TCPRoutesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useTCPRoutes(clusterId);
+  return <RouteTable clusterId={clusterId} kindLabel="TCPRoute" resourceType="tcproutes"
+    data={data} isLoading={isLoading} searchPlaceholder="Search TCPRoutes..." emptyMessage="No TCPRoutes found" />;
+}
+
+function UDPRoutesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useUDPRoutes(clusterId);
+  return <RouteTable clusterId={clusterId} kindLabel="UDPRoute" resourceType="udproutes"
+    data={data} isLoading={isLoading} searchPlaceholder="Search UDPRoutes..." emptyMessage="No UDPRoutes found" />;
+}
+
+function GatewayClassesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useGatewayClasses(clusterId);
+  const k8sDelete = useK8sDelete();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GatewayClass | null>(null);
+
+  const columns = useMemo<Column<GatewayClass>[]>(() => [
+    ...gatewayClassColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => {
+        const path = k8sResourcePath('gatewayclasses', row.name);
+        const title = `GatewayClass: ${row.name}`;
+        return (
+          <ActionMenu
+            items={[
+              { label: 'View YAML', icon: <Code className="h-3.5 w-3.5" />, onClick: () => setYamlTarget({ path, title }) },
+              { label: 'Edit YAML', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => setYamlTarget({ path, title }) },
+              { label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => setDeleteTarget(row), variant: 'destructive', separator: true },
+            ]}
+          />
+        );
+      },
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        searchPlaceholder="Search GatewayClasses..." loading={isLoading} emptyMessage="No GatewayClasses found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) k8sDelete.mutate(
+            { clusterId, path: k8sResourcePath('gatewayclasses', deleteTarget.name) },
+            { onSuccess: () => setDeleteTarget(null) },
+          );
+        }}
+        title="Delete GatewayClass" description={`This will permanently delete the gateway class ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={k8sDelete.isPending}
+      />
+    </>
+  );
+}
+
+function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useReferenceGrants(clusterId);
+  const k8sDelete = useK8sDelete();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ReferenceGrant | null>(null);
+
+  const columns = useMemo<Column<ReferenceGrant>[]>(() => [
+    ...referenceGrantColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <NamespacedActions resourceType="referencegrants" kindLabel="ReferenceGrant" row={row} onView={setYamlTarget} onDelete={setDeleteTarget} />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search ReferenceGrants..." loading={isLoading} emptyMessage="No ReferenceGrants found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) k8sDelete.mutate(
+            { clusterId, path: k8sResourcePath('referencegrants', deleteTarget.name, deleteTarget.namespace) },
+            { onSuccess: () => setDeleteTarget(null) },
+          );
+        }}
+        title="Delete ReferenceGrant" description={`This will permanently delete the reference grant ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={k8sDelete.isPending}
+      />
+    </>
+  );
+}
+
 function PVsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumes(clusterId);
   const deletePv = useDeletePV();
@@ -1879,6 +2358,15 @@ const resourceTitles: Record<string, string> = {
   'k8s-rolebindings': 'RoleBindings',
   endpoints: 'Endpoints',
   replicasets: 'ReplicaSets',
+  // Gateway API
+  gateways: 'Gateways',
+  httproutes: 'HTTPRoutes',
+  gatewayclasses: 'Gateway Classes',
+  grpcroutes: 'GRPCRoutes',
+  tlsroutes: 'TLSRoutes',
+  tcproutes: 'TCPRoutes',
+  udproutes: 'UDPRoutes',
+  referencegrants: 'Reference Grants',
 };
 
 const workloadKinds: Record<string, string> = {
@@ -1967,6 +2455,14 @@ export default function ClusterResourcePage() {
       case 'services': return <ServicesTable clusterId={clusterId} />;
       case 'ingresses': return <IngressesTable clusterId={clusterId} />;
       case 'networkpolicies': return <NetworkPoliciesTable clusterId={clusterId} />;
+      case 'gateways': return <GatewaysTable clusterId={clusterId} />;
+      case 'httproutes': return <HTTPRoutesTable clusterId={clusterId} />;
+      case 'gatewayclasses': return <GatewayClassesTable clusterId={clusterId} />;
+      case 'grpcroutes': return <GRPCRoutesTable clusterId={clusterId} />;
+      case 'tlsroutes': return <TLSRoutesTable clusterId={clusterId} />;
+      case 'tcproutes': return <TCPRoutesTable clusterId={clusterId} />;
+      case 'udproutes': return <UDPRoutesTable clusterId={clusterId} />;
+      case 'referencegrants': return <ReferenceGrantsTable clusterId={clusterId} />;
       case 'persistentvolumes': return <PVsTable clusterId={clusterId} />;
       case 'persistentvolumeclaims': return <PVCsTable clusterId={clusterId} />;
       case 'storageclasses': return <StorageClassesTable clusterId={clusterId} />;

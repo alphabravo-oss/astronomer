@@ -1,24 +1,46 @@
 #!/usr/bin/env bash
 # Bootstrap a local k3d cluster and deploy the Astronomer Go management plane.
 #
+# What this script does, in order:
+#   1. Create the k3d cluster (with port mappings) if missing.
+#   2. Install the Gateway API standard CRDs.
+#   3. Install NGINX Gateway Fabric (provides the `nginx` GatewayClass).
+#   4. Build the astronomer Docker images and import them into k3d.
+#   5. helm install astronomer with the right host + server URL.
+#
+# Argo CD is NOT installed here — the astronomer-server self-management loop
+# (internal/server/self_manage_argocd.go) installs Argo and registers the
+# astronomer-self-manage Application automatically about 30s after the
+# server pod is ready.
+#
 # Usage:
 #   ./scripts/k3d-bootstrap.sh
-#   CLUSTER=foo IMG_TAG=v0.2.0 DEPLOY_MODE=helm ./scripts/k3d-bootstrap.sh
+#   CLUSTER=foo IMG_TAG=v0.2.0 HOST=astronomer.foo.nip.io ./scripts/k3d-bootstrap.sh
 #
 # Env vars:
-#   CLUSTER       k3d cluster name           (default: astronomer-mgmt)
-#   IMG_TAG       Image tag to deploy        (default: dev)
-#   DEPLOY_MODE   "helm" or "kubectl"        (default: helm)
-#   NAMESPACE     Target namespace           (default: astronomer)
-#   SKIP_BUILD    Skip docker build step     (default: 0)
+#   CLUSTER       k3d cluster name                           (default: astronomer-mgmt)
+#   IMG_TAG       Image tag to build / deploy                (default: dev)
+#   NAMESPACE     Astronomer release namespace               (default: astronomer)
+#   HOST          External hostname for the dashboard        (default: astronomer.localtest.me)
+#   HTTP_PORT     Host port mapped to the gateway :80        (default: 8080)
+#   SERVER_URL    Override the externally-reachable URL      (default: http://${HOST}:${HTTP_PORT})
+#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.3.0)
+#   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
+#   SKIP_BUILD    Skip docker build step                     (default: 0)
+#   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
 
 set -euo pipefail
 
 CLUSTER="${CLUSTER:-astronomer-mgmt}"
 IMG_TAG="${IMG_TAG:-dev}"
-DEPLOY_MODE="${DEPLOY_MODE:-helm}"
 NAMESPACE="${NAMESPACE:-astronomer}"
+HOST="${HOST:-astronomer.localtest.me}"
+HTTP_PORT="${HTTP_PORT:-8080}"
+SERVER_URL="${SERVER_URL:-http://${HOST}:${HTTP_PORT}}"
+GW_API_VER="${GW_API_VER:-v1.3.0}"
+NGF_VERSION="${NGF_VERSION:-2.6.0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
+SKIP_PREREQS="${SKIP_PREREQS:-0}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -32,7 +54,7 @@ require() { command -v "$1" >/dev/null 2>&1 || fail "missing required tool: $1";
 require k3d
 require kubectl
 require docker
-[[ "$DEPLOY_MODE" == "helm" ]] && require helm
+require helm
 
 IMG_SERVER="astronomer-go-server:${IMG_TAG}"
 IMG_AGENT="astronomer-go-agent:${IMG_TAG}"
@@ -46,14 +68,46 @@ step "Ensuring k3d cluster '${CLUSTER}' exists"
 if k3d cluster list --no-headers 2>/dev/null | awk '{print $1}' | grep -qx "${CLUSTER}"; then
   info "cluster already exists"
 else
+  # Disable k3s's built-in Traefik. We install NGINX Gateway Fabric below;
+  # both controllers fight for :80 via type=LoadBalancer Services and
+  # whichever loses leaves the gateway routes returning 404 from outside
+  # the cluster.
   k3d cluster create "${CLUSTER}" \
-    --port "8080:80@loadbalancer" \
+    --port "${HTTP_PORT}:80@loadbalancer" \
     --port "8443:443@loadbalancer" \
     -p "8000:30080@loadbalancer" \
+    --k3s-arg "--disable=traefik@server:*" \
     --wait
 fi
 
-# ── 2. Build images ──────────────────────────────────────────────────────────
+# ── 2. Gateway API CRDs + NGINX Gateway Fabric ───────────────────────────────
+# The chart in deploy/chart deploys a Gateway + HTTPRoutes; a GatewayClass +
+# controller need to exist before those reconcile cleanly.
+if [[ "${SKIP_PREREQS}" != "1" ]]; then
+  step "Installing Gateway API CRDs (${GW_API_VER})"
+  kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GW_API_VER}/standard-install.yaml"
+
+  step "Installing NGINX Gateway Fabric (chart ${NGF_VERSION})"
+  helm upgrade --install ngf \
+    oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+    --version "${NGF_VERSION}" \
+    --create-namespace --namespace nginx-gateway \
+    --wait --timeout 5m
+
+  step "Waiting for the 'nginx' GatewayClass to be Accepted"
+  for _ in $(seq 1 30); do
+    state=$(kubectl get gatewayclass nginx -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
+    if [[ "$state" == "True" ]]; then
+      info "GatewayClass nginx is Accepted"
+      break
+    fi
+    sleep 2
+  done
+else
+  info "SKIP_PREREQS=1, skipping Gateway API CRDs + NGF install"
+fi
+
+# ── 3. Build images ──────────────────────────────────────────────────────────
 if [[ "${SKIP_BUILD}" != "1" ]]; then
   step "Building Docker images (tag=${IMG_TAG})"
   make IMG_TAG="${IMG_TAG}" docker-build-all
@@ -61,57 +115,49 @@ else
   info "SKIP_BUILD=1, skipping docker build"
 fi
 
-# ── 3. Import images into k3d ────────────────────────────────────────────────
+# ── 4. Import images into k3d ────────────────────────────────────────────────
 step "Importing images into k3d cluster"
 k3d image import \
   "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" \
   -c "${CLUSTER}"
 
-# ── 4. Deploy ────────────────────────────────────────────────────────────────
-case "${DEPLOY_MODE}" in
-  helm)
-    step "Installing Helm chart into namespace '${NAMESPACE}'"
-    helm upgrade --install astronomer deploy/chart \
-      --namespace "${NAMESPACE}" --create-namespace \
-      -f deploy/chart/values.yaml \
-      --set image.server.tag="${IMG_TAG}" \
-      --set image.worker.tag="${IMG_TAG}" \
-      --set image.agent.tag="${IMG_TAG}" \
-      --set image.migrate.tag="${IMG_TAG}" \
-      --set frontend.image.tag="${IMG_TAG}"
-    SERVER_DEPLOY="$(kubectl -n "${NAMESPACE}" get deploy -l app.kubernetes.io/component=server -o name | head -n1)"
-    ;;
-  kubectl)
-    step "Applying raw manifests from deploy/k8s/"
-    kubectl apply -f deploy/k8s/
-    SERVER_DEPLOY="deployment/astronomer-server"
-    ;;
-  *)
-    fail "unknown DEPLOY_MODE=${DEPLOY_MODE} (expected 'helm' or 'kubectl')"
-    ;;
-esac
+# ── 5. Deploy astronomer ─────────────────────────────────────────────────────
+step "Installing Helm chart into namespace '${NAMESPACE}'"
+helm upgrade --install astronomer deploy/chart \
+  --namespace "${NAMESPACE}" --create-namespace \
+  -f deploy/chart/values.yaml \
+  --set image.server.tag="${IMG_TAG}" \
+  --set image.worker.tag="${IMG_TAG}" \
+  --set image.agent.tag="${IMG_TAG}" \
+  --set image.migrate.tag="${IMG_TAG}" \
+  --set frontend.image.tag="${IMG_TAG}" \
+  --set config.serverURL="${SERVER_URL}" \
+  --set config.corsAllowedOrigins="${SERVER_URL}" \
+  --set ingress.enabled=false \
+  --set "gateway.hosts={${HOST}}"
 
-# ── 5. Wait for server ───────────────────────────────────────────────────────
+SERVER_DEPLOY="$(kubectl -n "${NAMESPACE}" get deploy -l app.kubernetes.io/component=server -o name | head -n1)"
+
+# ── 6. Wait for server ───────────────────────────────────────────────────────
 step "Waiting for server deployment to be Available"
 kubectl -n "${NAMESPACE}" wait --for=condition=available --timeout=300s "${SERVER_DEPLOY}" \
   || warn "server did not become Available in 5 minutes; check 'kubectl -n ${NAMESPACE} get pods'"
 
-# ── 6. Print access info ─────────────────────────────────────────────────────
-step "Cluster ready"
-INGRESS_HOST="astronomer.localtest.me"
-if [[ "${DEPLOY_MODE}" == "helm" ]]; then
-  HOST_FROM_ING=$(kubectl -n "${NAMESPACE}" get ingress -o jsonpath='{.items[0].spec.rules[0].host}' 2>/dev/null || true)
-  [[ -n "$HOST_FROM_ING" ]] && INGRESS_HOST="$HOST_FROM_ING"
-fi
+# ── 7. Print access info ─────────────────────────────────────────────────────
+BOOTSTRAP_PW=$(kubectl -n "${NAMESPACE}" get secret astronomer-bootstrap -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
 
 cat <<EOF
 
-  Cluster:      ${CLUSTER}
-  Namespace:    ${NAMESPACE}
-  Ingress URL:  http://${INGRESS_HOST}:8080/
-  Health:       http://${INGRESS_HOST}:8080/health/
+  Cluster:        ${CLUSTER}
+  Namespace:      ${NAMESPACE}
+  URL:            ${SERVER_URL}/
+  Health:         ${SERVER_URL}/health/
 
-  Watch pods:   kubectl -n ${NAMESPACE} get pods -w
-  Server logs:  kubectl -n ${NAMESPACE} logs -l app.kubernetes.io/component=server -f
+  Bootstrap user: admin
+  Bootstrap pw:   ${BOOTSTRAP_PW:-<see kubectl logs OR get secret>}
+
+  Watch pods:     kubectl -n ${NAMESPACE} get pods -w
+  Server logs:    kubectl -n ${NAMESPACE} logs -l app.kubernetes.io/component=server -f
+  Argo self-mgr:  kubectl -n argocd get application astronomer-self-manage -w  # appears ~30s after server is Ready
 
 EOF

@@ -162,6 +162,19 @@ function getClusterNavGroups(clusterId: string): NavGroup[] {
       ],
     },
     {
+      label: 'Gateway API',
+      items: [
+        { label: 'Gateways', href: `${base}/gateways`, icon: Globe },
+        { label: 'HTTPRoutes', href: `${base}/httproutes`, icon: Network },
+        { label: 'GatewayClasses', href: `${base}/gatewayclasses`, icon: Layers },
+        { label: 'GRPCRoutes', href: `${base}/grpcroutes`, icon: Network },
+        { label: 'TLSRoutes', href: `${base}/tlsroutes`, icon: Network },
+        { label: 'TCPRoutes', href: `${base}/tcproutes`, icon: Network },
+        { label: 'UDPRoutes', href: `${base}/udproutes`, icon: Network },
+        { label: 'ReferenceGrants', href: `${base}/referencegrants`, icon: KeyRound },
+      ],
+    },
+    {
       label: 'Storage',
       items: [
         { label: 'PersistentVolumes', href: `${base}/persistentvolumes`, icon: HardDrive, countKey: 'pvs' },

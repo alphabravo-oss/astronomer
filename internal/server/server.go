@@ -248,7 +248,6 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	deps := RouterDependencies{
 		JWT:          jwtManager,
 		AuthQueries:  queries,
-		Bootstrap:    handler.NewBootstrapHandler(queries, jwtManager),
 		Auth:         authHandler,
 		SSO:          ssoHandler,
 		Clusters:     clusterHandler,

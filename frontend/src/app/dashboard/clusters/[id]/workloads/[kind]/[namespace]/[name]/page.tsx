@@ -2,27 +2,24 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useClusterStore } from '@/lib/store';
 import { useWorkload, useWorkloadPods, useWorkloadMetrics } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { MetricCard } from '@/components/ui/metric-card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
-import { formatRelativeTime, formatCPU, formatBytes, cn } from '@/lib/utils';
+import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Pod } from '@/types';
-import { ArrowLeft, Cpu, MemoryStick, Box, Loader2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Box, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 type TabKey = 'pods' | 'logs' | 'metrics';
 
 export default function WorkloadDetailPage() {
   const params = useParams();
+  const clusterId = params.id as string;
   const kind = params.kind as string;
   const namespace = params.namespace as string;
   const name = params.name as string;
-  const { selectedClusterId } = useClusterStore();
-  const clusterId = selectedClusterId || '';
 
   const [activeTab, setActiveTab] = useState<TabKey>('pods');
   const [selectedPod, setSelectedPod] = useState<string>('');
@@ -129,11 +126,11 @@ export default function WorkloadDetailPage() {
       {/* Header */}
       <div>
         <Link
-          href="/dashboard/workloads"
+          href={`/dashboard/clusters/${clusterId}/${kind.toLowerCase()}s`}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
-          Workloads
+          {kind}s
         </Link>
         <div className="flex items-start justify-between">
           <div className="space-y-1">

@@ -15,6 +15,18 @@ INSERT INTO users (email, username, first_name, last_name, password, is_active, 
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
+-- name: CreateBootstrapAdmin :one
+-- Creates the initial admin user that ensure_admin runs on first boot of a
+-- fresh database. Mirrors CreateUser but sets must_change_password=true so
+-- the dashboard forces a rotation of the auto-generated/operator-provided
+-- bootstrap password before any other action.
+INSERT INTO users (email, username, first_name, last_name, password, is_active, is_staff, is_superuser, must_change_password)
+VALUES ($1, $2, $3, $4, $5, true, true, true, true)
+RETURNING *;
+
+-- name: ClearMustChangePassword :exec
+UPDATE users SET must_change_password = false, updated_at = now() WHERE id = $1;
+
 -- name: UpdateUser :one
 UPDATE users SET
     email = $2,

@@ -349,6 +349,12 @@ export interface User {
   enabled: boolean;
   lastLogin: string;
   createdAt: string;
+  // True for the bootstrap admin until its password has been rotated via
+  // POST /api/v1/auth/change-password/. The dashboard middleware redirects
+  // any other route to /auth/change-password while this is set. Backend
+  // emits the field as `must_change_password` (snake_case); the user object
+  // is stored as-received, so callers read the snake_case key.
+  must_change_password?: boolean;
 }
 
 export interface GlobalRole {
@@ -753,6 +759,96 @@ export interface NetworkPolicy {
   policyTypes: string[];
   ingressRules: number;
   egressRules: number;
+  createdAt: string;
+}
+
+// --- Gateway API Types ---
+//
+// Backend flatten functions live in internal/handler/resources.go
+// (flattenGateway / flattenRouteResource / flattenGatewayClass /
+// flattenReferenceGrant). The fields below mirror the JSON they emit.
+
+export interface GatewayListener {
+  name: string;
+  protocol: string;
+  port: number;
+  hostname?: string;
+}
+
+export interface Gateway {
+  name: string;
+  namespace: string;
+  clusterId: string;
+  clusterName: string;
+  gatewayClassName: string;
+  listeners: GatewayListener[];
+  listenerSummary: string[];
+  listenerCount: number;
+  addresses: string[];
+  // Status of the Programmed/Accepted conditions, as raw "True"/"False"/"Unknown"
+  // strings (empty when the status hasn't been published yet).
+  programmed: string;
+  accepted: string;
+  createdAt: string;
+}
+
+export interface RouteParentRef {
+  name: string;
+  namespace?: string;
+  sectionName?: string;
+  kind?: string;
+}
+
+// Shared shape for HTTPRoute, GRPCRoute, TLSRoute, TCPRoute, UDPRoute. They
+// differ in spec (HTTP rules vs raw L4) but agree on the metadata the UI
+// needs: hostnames (when applicable), parent Gateways, and a rule count.
+export interface GatewayRoute {
+  name: string;
+  namespace: string;
+  clusterId: string;
+  clusterName: string;
+  hostnames: string[];
+  parentRefs: RouteParentRef[];
+  parentSummary: string[];
+  ruleCount: number;
+  createdAt: string;
+}
+
+export type HTTPRoute = GatewayRoute;
+export type GRPCRoute = GatewayRoute;
+export type TLSRoute = GatewayRoute;
+export type TCPRoute = GatewayRoute;
+export type UDPRoute = GatewayRoute;
+
+export interface GatewayClass {
+  name: string;
+  clusterId: string;
+  clusterName: string;
+  controllerName: string;
+  description: string;
+  accepted: string;
+  createdAt: string;
+}
+
+export interface ReferenceGrantFrom {
+  group: string;
+  kind: string;
+  namespace: string;
+}
+
+export interface ReferenceGrantTo {
+  group: string;
+  kind: string;
+  name: string;
+}
+
+export interface ReferenceGrant {
+  name: string;
+  namespace: string;
+  clusterId: string;
+  clusterName: string;
+  from: ReferenceGrantFrom[];
+  to: ReferenceGrantTo[];
   createdAt: string;
 }
 
