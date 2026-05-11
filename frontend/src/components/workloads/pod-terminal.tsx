@@ -6,6 +6,8 @@ import { Terminal as TerminalIcon, RefreshCw, X, ChevronDown } from 'lucide-reac
 import { cn } from '@/lib/utils';
 import '@xterm/xterm/css/xterm.css';
 
+export type TerminalConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+
 interface PodTerminalProps {
   clusterId: string;
   namespace: string;
@@ -13,9 +15,16 @@ interface PodTerminalProps {
   container: string;
   containers?: string[];
   onClose?: () => void;
+  // Optional callback so external chrome (e.g. window-manager tab strip)
+  // can mirror the live connection state. Pure addition — existing
+  // callers that don't pass it work exactly as before.
+  onStatusChange?: (status: TerminalConnectionStatus) => void;
+  // Render in "embedded" mode (no header/close button) when the host is
+  // already providing tab chrome.
+  embedded?: boolean;
 }
 
-type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+type ConnectionStatus = TerminalConnectionStatus;
 
 export function PodTerminal({
   clusterId,
@@ -24,6 +33,8 @@ export function PodTerminal({
   container: initialContainer,
   containers = [],
   onClose,
+  onStatusChange,
+  embedded = false,
 }: PodTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const termInstanceRef = useRef<import('@xterm/xterm').Terminal | null>(null);
@@ -35,6 +46,13 @@ export function PodTerminal({
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [showContainerDropdown, setShowContainerDropdown] = useState(false);
   const containerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Mirror status to any external listener (e.g. the window-manager tab
+  // chip). Use an effect rather than calling inside setStatus so the
+  // parent re-render happens after our own commit.
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
 
   const getThemeColors = useCallback(() => {
     const isDark = theme === 'dark' || theme === 'system';
@@ -291,8 +309,14 @@ export function PodTerminal({
   };
 
   return (
-    <div className="flex flex-col h-full rounded-lg border border-border overflow-hidden bg-background">
-      {/* Terminal Header */}
+    <div
+      className={cn(
+        'flex flex-col h-full overflow-hidden bg-background',
+        embedded ? '' : 'rounded-lg border border-border'
+      )}
+    >
+      {/* Terminal Header — hidden when host (e.g. WindowManager) supplies its own chrome */}
+      {!embedded && (
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -365,6 +389,7 @@ export function PodTerminal({
           )}
         </div>
       </div>
+      )}
 
       {/* Terminal Body */}
       <div

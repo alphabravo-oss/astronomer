@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
+import { WindowManager } from '@/components/window-manager/window-manager';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
 import { cn } from '@/lib/utils';
@@ -50,6 +51,12 @@ export default function DashboardLayout({
         <div id="bottom-panel-root" />
       </div>
       <CommandPalette />
+      {/*
+        Mounted once at the dashboard layout level so the bottom drawer
+        persists across navigation between cluster / workload / argo pages.
+        Renders nothing unless tabs are open.
+      */}
+      <WindowManager />
     </div>
   );
 }

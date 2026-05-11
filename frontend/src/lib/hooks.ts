@@ -390,6 +390,12 @@ export function useRestartWorkload() {
 // Pod Logs Hook (with streaming)
 // ============================================================
 
+export type PodLogsStatus =
+  | 'connecting'
+  | 'streaming'
+  | 'disconnected'
+  | 'idle';
+
 export function usePodLogs(
   clusterId: string,
   namespace: string,
@@ -397,6 +403,9 @@ export function usePodLogs(
   params?: { container?: string; tailLines?: number; follow?: boolean }
 ) {
   const [streamLogs, setStreamLogs] = useState<PodLog[]>([]);
+  // Exposes WS connection state so consumers (e.g. the window-manager tab
+  // strip) can show a pill without owning the WS lifecycle themselves.
+  const [status, setStatus] = useState<PodLogsStatus>('idle');
   const cleanupRef = useRef<(() => void) | null>(null);
   // De-duplicate toasts: if the WS errors mid-stream we only want one toast
   // per (pod, container) selection rather than one per reconnect/dropped
@@ -425,17 +434,23 @@ export function usePodLogs(
 
   // Streaming
   useEffect(() => {
-    if (!params?.follow || !clusterId || !namespace || !pod) return;
+    if (!params?.follow || !clusterId || !namespace || !pod) {
+      setStatus('idle');
+      return;
+    }
 
+    setStatus('connecting');
     const cleanup = apiClient.streamPodLogs(
       clusterId,
       namespace,
       pod,
       params?.container || '',
       (log) => {
+        setStatus('streaming');
         setStreamLogs((prev) => [...prev.slice(-2000), log]);
       },
       (err) => {
+        setStatus('disconnected');
         // Surface the first error per stream so the user knows the live
         // tail dropped — but suppress duplicates so a flapping agent
         // doesn't spam the corner of the screen.
@@ -452,6 +467,7 @@ export function usePodLogs(
     return () => {
       cleanup();
       cleanupRef.current = null;
+      setStatus('idle');
     };
   }, [clusterId, namespace, pod, params?.container, params?.follow, params?.tailLines]);
 
@@ -469,6 +485,7 @@ export function usePodLogs(
     data: allLogs,
     streamLogs,
     stopStreaming,
+    status,
   };
 }
 

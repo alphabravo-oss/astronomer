@@ -41,11 +41,9 @@ import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
-import { BottomPanel } from '@/components/ui/bottom-panel';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ScaleDialog } from '@/components/workloads/scale-dialog';
-import { PodTerminal } from '@/components/workloads/pod-terminal';
-import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
+import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { ConfigMapDialog } from '@/components/resources/configmap-dialog';
 import { SecretDialog } from '@/components/resources/secret-dialog';
@@ -980,18 +978,30 @@ function PodsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterPods(clusterId);
   const deletePod = useDeletePod();
 
-  const [panelState, setPanelState] = useState<{
-    open: boolean;
-    mode: 'terminal' | 'logs';
-    pod: Pod | null;
-  }>({ open: false, mode: 'terminal', pod: null });
   const [deleteTarget, setDeleteTarget] = useState<Pod | null>(null);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
 
-  const openPanel = (pod: Pod, mode: 'terminal' | 'logs') => {
-    setPanelState({ open: true, mode, pod });
+  // Open a pod-logs / exec session inside the global WindowManager drawer.
+  // The drawer mounts at the dashboard layout level and persists across
+  // navigation, so we do NOT manage its open/close lifecycle here.
+  const openLogs = (pod: Pod) => {
+    useWindowManagerStore.getState().addTab({
+      kind: 'logs',
+      clusterId,
+      namespace: pod.namespace,
+      pod: pod.name,
+      container: pod.containers[0]?.name,
+    });
   };
-  const closePanel = () => setPanelState({ open: false, mode: 'terminal', pod: null });
+  const openExec = (pod: Pod) => {
+    useWindowManagerStore.getState().addTab({
+      kind: 'exec',
+      clusterId,
+      namespace: pod.namespace,
+      pod: pod.name,
+      container: pod.containers[0]?.name,
+    });
+  };
 
   const columns = useMemo<Column<Pod>[]>(() => [
     ...podColumns,
@@ -1004,13 +1014,13 @@ function PodsTable({ clusterId }: { clusterId: string }) {
             {
               label: 'Execute Shell',
               icon: <Terminal className="h-3.5 w-3.5" />,
-              onClick: () => openPanel(row, 'terminal'),
+              onClick: () => openExec(row),
               disabled: row.phase !== 'Running',
             },
             {
               label: 'View Logs',
               icon: <FileText className="h-3.5 w-3.5" />,
-              onClick: () => openPanel(row, 'logs'),
+              onClick: () => openLogs(row),
             },
             {
               label: 'View YAML',
@@ -1036,49 +1046,10 @@ function PodsTable({ clusterId }: { clusterId: string }) {
     },
   ], []);
 
-  const handlePodChange = (podName: string) => {
-    const pod = data?.find((p) => p.name === podName);
-    if (pod) setPanelState((s) => ({ ...s, pod }));
-  };
-
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search pods..." loading={isLoading} emptyMessage="No pods found" />
-
-      <BottomPanel
-        open={panelState.open}
-        onClose={closePanel}
-        title={panelState.pod?.name || ''}
-        subtitle={panelState.pod?.namespace}
-        tabs={[
-          { key: 'terminal', label: 'Terminal', icon: <Terminal className="h-3.5 w-3.5" /> },
-          { key: 'logs', label: 'Logs', icon: <FileText className="h-3.5 w-3.5" /> },
-        ]}
-        activeTab={panelState.mode}
-        onTabChange={(key) => setPanelState((s) => ({ ...s, mode: key as 'terminal' | 'logs' }))}
-      >
-        {panelState.pod && panelState.mode === 'terminal' && (
-          <PodTerminal
-            clusterId={clusterId}
-            namespace={panelState.pod.namespace}
-            pod={panelState.pod.name}
-            container={panelState.pod.containers[0]?.name || ''}
-            containers={panelState.pod.containers.map((c) => c.name)}
-            onClose={closePanel}
-          />
-        )}
-        {panelState.pod && panelState.mode === 'logs' && (
-          <PodLogsViewer
-            clusterId={clusterId}
-            namespace={panelState.pod.namespace}
-            pods={data?.filter((p) => p.namespace === panelState.pod!.namespace) || []}
-            selectedPod={panelState.pod.name}
-            onPodChange={handlePodChange}
-            className="h-full"
-          />
-        )}
-      </BottomPanel>
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -1126,13 +1097,6 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
     DaemonSet: 'daemonsets',
   };
 
-  const [panelState, setPanelState] = useState<{
-    open: boolean;
-    mode: 'terminal' | 'logs';
-    workload: Workload | null;
-    pods: Pod[];
-    activePod: Pod | null;
-  }>({ open: false, mode: 'terminal', workload: null, pods: [], activePod: null });
   const [scaleTarget, setScaleTarget] = useState<Workload | null>(null);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Workload | null>(null);
@@ -1143,20 +1107,36 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
     DaemonSet: 'daemonset',
   };
 
-  const openWorkloadPanel = async (workload: Workload, mode: 'terminal' | 'logs') => {
+  // Resolve the running pod for a workload then push a tab into the global
+  // WindowManager. We deliberately don't open a per-page panel: the drawer
+  // lives at the dashboard layout level and survives navigation.
+  const openWorkloadInWindowManager = async (
+    workload: Workload,
+    kind: 'logs' | 'exec'
+  ) => {
     try {
-      const pods = await apiClient.getWorkloadPods(clusterId, workload.kind, workload.namespace, workload.name);
+      const pods = await apiClient.getWorkloadPods(
+        clusterId,
+        workload.kind,
+        workload.namespace,
+        workload.name,
+      );
       const runningPod = pods.find((p) => p.phase === 'Running') || pods[0];
       if (!runningPod) {
         toast.error('No pods available for this workload');
         return;
       }
-      setPanelState({ open: true, mode, workload, pods, activePod: runningPod });
+      useWindowManagerStore.getState().addTab({
+        kind,
+        clusterId,
+        namespace: runningPod.namespace,
+        pod: runningPod.name,
+        container: runningPod.containers[0]?.name,
+      });
     } catch {
       toast.error('Failed to fetch workload pods');
     }
   };
-  const closePanel = () => setPanelState({ open: false, mode: 'terminal', workload: null, pods: [], activePod: null });
 
   const columns = useMemo<Column<Workload>[]>(() => [
     // Override the shared workloadColumns "name" cell with a Link into the
@@ -1183,12 +1163,12 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
           {
             label: 'Execute Shell',
             icon: <Terminal className="h-3.5 w-3.5" />,
-            onClick: () => openWorkloadPanel(row, 'terminal'),
+            onClick: () => openWorkloadInWindowManager(row, 'exec'),
           },
           {
             label: 'View Logs',
             icon: <FileText className="h-3.5 w-3.5" />,
-            onClick: () => openWorkloadPanel(row, 'logs'),
+            onClick: () => openWorkloadInWindowManager(row, 'logs'),
           },
           {
             label: 'View YAML',
@@ -1243,11 +1223,6 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
     },
   ], [clusterId]);
 
-  const handlePodChange = (podName: string) => {
-    const pod = panelState.pods.find((p) => p.name === podName);
-    if (pod) setPanelState((s) => ({ ...s, activePod: pod }));
-  };
-
   return (
     <>
       <div className="flex justify-end mb-4">
@@ -1258,40 +1233,6 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
       </div>
       <DataTable data={filtered} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
-
-      <BottomPanel
-        open={panelState.open}
-        onClose={closePanel}
-        title={panelState.workload?.name || ''}
-        subtitle={panelState.workload ? `${panelState.workload.kind} · ${panelState.workload.namespace}` : undefined}
-        tabs={[
-          { key: 'terminal', label: 'Terminal', icon: <Terminal className="h-3.5 w-3.5" /> },
-          { key: 'logs', label: 'Logs', icon: <FileText className="h-3.5 w-3.5" /> },
-        ]}
-        activeTab={panelState.mode}
-        onTabChange={(key) => setPanelState((s) => ({ ...s, mode: key as 'terminal' | 'logs' }))}
-      >
-        {panelState.activePod && panelState.mode === 'terminal' && (
-          <PodTerminal
-            clusterId={clusterId}
-            namespace={panelState.activePod.namespace}
-            pod={panelState.activePod.name}
-            container={panelState.activePod.containers[0]?.name || ''}
-            containers={panelState.activePod.containers.map((c) => c.name)}
-            onClose={closePanel}
-          />
-        )}
-        {panelState.activePod && panelState.mode === 'logs' && (
-          <PodLogsViewer
-            clusterId={clusterId}
-            namespace={panelState.activePod.namespace}
-            pods={panelState.pods}
-            selectedPod={panelState.activePod.name}
-            onPodChange={handlePodChange}
-            className="h-full"
-          />
-        )}
-      </BottomPanel>
 
       <ScaleDialog
         open={!!scaleTarget}
