@@ -37,6 +37,18 @@ func (a busPublisherAdapter) Publish(eventType string, data any) {
 	a.bus.Publish(events.Type(eventType), data)
 }
 
+// dsnEnforcesTLS reports whether a Postgres DSN includes an sslmode setting
+// that requires TLS. Acceptable values: `require`, `verify-ca`, `verify-full`.
+// Anything else (sslmode=disable, sslmode=allow, sslmode=prefer, or no
+// sslmode at all — Postgres treats omission as `prefer` which silently
+// downgrades to plaintext if the server allows it) returns false.
+func dsnEnforcesTLS(dsn string) bool {
+	d := strings.ToLower(dsn)
+	return strings.Contains(d, "sslmode=require") ||
+		strings.Contains(d, "sslmode=verify-ca") ||
+		strings.Contains(d, "sslmode=verify-full")
+}
+
 // resolveCallbackBaseURL builds the API base URL used when registering SSO
 // providers. The auth package appends `/auth/callback/{provider}` itself, so
 // this function must stop at `/api/v1` rather than `/api/v1/auth`.
@@ -101,6 +113,21 @@ func New(cfg *config.Config, logger *slog.Logger) *Server {
 
 // NewApp creates a fully wired production server with database-backed handlers.
 func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Server, error) {
+	// Production posture guard: warn loudly when the DB DSN doesn't enforce
+	// TLS but config.env=production. The chart-level preflight already
+	// catches this for the helm-managed install path; this covers operators
+	// who bypass the chart and run the binary directly against a hand-rolled
+	// DATABASE_URL. Not fail-closed at the binary level — same reason the
+	// encryptor isn't — to keep dev/local stacks working unchanged.
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_ENV")), "production") &&
+		!dsnEnforcesTLS(cfg.DatabaseURL) {
+		logger.Warn(
+			"DATABASE_URL does not enforce TLS but ASTRONOMER_ENV=production "+
+				"— production must use sslmode=require/verify-ca/verify-full",
+			"event", "production_dsn_tls_warning",
+		)
+	}
+
 	database, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, err

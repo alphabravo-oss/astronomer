@@ -285,6 +285,16 @@ rendered manifest.
     {{- if not (or .Values.postgres.external.dsn .Values.postgres.external.dsnSecretRef.name) }}
       {{- $errs = append $errs "  - postgres.external.dsn or postgres.external.dsnSecretRef.name must be set when config.env=production (bundled Postgres is not a production posture)" }}
     {{- end }}
+    {{- /* If the DSN is inline, require sslmode=require|verify-ca|verify-full.
+           When the DSN comes from a Secret we can't inspect it at render
+           time — the preflight Job adds a runtime check (see preflight-job.yaml)
+           that fails the release with the same severity. */ -}}
+    {{- if .Values.postgres.external.dsn }}
+      {{- $dsn := .Values.postgres.external.dsn }}
+      {{- if not (or (regexMatch "sslmode=require" $dsn) (regexMatch "sslmode=verify-ca" $dsn) (regexMatch "sslmode=verify-full" $dsn)) }}
+        {{- $errs = append $errs "  - postgres.external.dsn must include sslmode=require, verify-ca, or verify-full when config.env=production (saw sslmode=disable or unset; production must encrypt DB traffic)" }}
+      {{- end }}
+    {{- end }}
     {{- if .Values.postgres.bundled.enabled }}
       {{- $errs = append $errs "  - postgres.bundled.enabled must be false when config.env=production" }}
     {{- end }}

@@ -87,6 +87,32 @@ spec:
               echo "additionalTrustedCAs Secret found."
               {{- end }}
 
+              # Production Postgres DSN must use TLS. The inline-DSN case is
+              # caught at helm-render time by requireProductionInputs; this
+              # block covers the Secret-ref case where helm couldn't inspect
+              # the value (FEATURES-051126 T01).
+              {{- if and (eq (default "" .Values.config.env) "production") .Values.postgres.external.dsnSecretRef.name }}
+              dsn_secret="{{ .Values.postgres.external.dsnSecretRef.name }}"
+              dsn_key="{{ .Values.postgres.external.dsnSecretRef.key }}"
+              dsn_val=$(kubectl get secret "$dsn_secret" -n "{{ .Release.Namespace }}" -o jsonpath="{.data.${dsn_key}}" 2>/dev/null | base64 -d 2>/dev/null || true)
+              if [ -z "$dsn_val" ]; then
+                echo "Refusing release: could not read postgres DSN from secret/${dsn_secret} key=${dsn_key} in namespace {{ .Release.Namespace }}."
+                exit 1
+              fi
+              # Match any of require / verify-ca / verify-full. Anything else
+              # (including sslmode=disable, sslmode=allow, sslmode=prefer, or
+              # no sslmode parameter at all — which Postgres treats as prefer
+              # and silently downgrades to plaintext if the server allows) is
+              # a production-posture violation.
+              if ! echo "$dsn_val" | grep -qE 'sslmode=(require|verify-ca|verify-full)'; then
+                echo "Refusing release: postgres DSN in secret/${dsn_secret} does not enforce TLS."
+                echo "Production must use sslmode=require, verify-ca, or verify-full."
+                echo "Edit the secret to include one of those modes and re-apply, then retry."
+                exit 1
+              fi
+              echo "Production Postgres DSN TLS check passed."
+              {{- end }}
+
               if [ "{{ include "astronomer.postgresBundledEnabled" . }}" = "true" ]; then
                 echo "Bundled Postgres remains enabled; preflight passes."
                 exit 0
