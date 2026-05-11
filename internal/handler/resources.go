@@ -230,7 +230,7 @@ func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Req
 	// API audit happens on the cluster side — this row tracks "user X asked
 	// Astronomer to create resource Y", which is the forensic signal we
 	// want regardless of whether the proxy call ultimately succeeds.
-	recordAudit(r, h.queries, "k8s.resource.create", resourceType, "", "", map[string]any{
+	recordAudit(r, h.queries, "cluster.resource.create", resourceType, "", "", map[string]any{
 		"cluster_id": clusterID,
 		"namespace":  namespace,
 	})
@@ -247,7 +247,7 @@ func (h *ResourceHandler) DeleteNamedResource(w http.ResponseWriter, r *http.Req
 		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
-	recordAudit(r, h.queries, "k8s.resource.delete", resourceType, "", name, map[string]any{
+	recordAudit(r, h.queries, "cluster.resource.delete", resourceType, "", name, map[string]any{
 		"cluster_id": clusterID,
 		"namespace":  namespace,
 	})
@@ -876,11 +876,11 @@ func (h *ResourceHandler) namedResourceRequest(w http.ResponseWriter, r *http.Re
 	// Audit only the mutating verbs — GET is just a read.
 	switch method {
 	case http.MethodPut:
-		recordAudit(r, h.queries, "k8s.resource.update", resourceType, "", name, map[string]any{
+		recordAudit(r, h.queries, "cluster.resource.update", resourceType, "", name, map[string]any{
 			"cluster_id": clusterID, "namespace": namespace,
 		})
 	case http.MethodDelete:
-		recordAudit(r, h.queries, "k8s.resource.delete", resourceType, "", name, map[string]any{
+		recordAudit(r, h.queries, "cluster.resource.delete", resourceType, "", name, map[string]any{
 			"cluster_id": clusterID, "namespace": namespace,
 		})
 	}
