@@ -302,6 +302,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
 	// manager + token querier the rest of the API uses.
 	deps.EventStream.SetAuth(jwtManager, queries)
+	// Browser WebSocket clients can't set Authorization either; wire the
+	// same query-param auth fallback into the pod exec consumer.
+	deps.Exec.SetAuth(jwtManager, queries)
 
 	// ArgoCD UI reverse proxy. Defaults to the in-cluster service URL but
 	// is overridable via the `ARGOCD_UI_UPSTREAM` env var. If construction

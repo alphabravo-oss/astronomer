@@ -66,8 +66,13 @@ export function PodTerminal({
   const connectWebSocket = useCallback((term: import('@xterm/xterm').Terminal) => {
     const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = process.env.NEXT_PUBLIC_WS_URL || `${wsProtocol}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`;
-    const wsUrl = `${wsHost}/exec/${clusterId}/${namespace}/${pod}/${selectedContainer}/`;
     const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
+    // Browser WebSocket clients can't set custom Authorization headers, so we
+    // carry the JWT in the `?token=` query param. The backend exec consumer
+    // (internal/tunnel/exec_consumer.go) accepts either Authorization or
+    // ?token=.
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${wsHost}/exec/${clusterId}/${namespace}/${pod}/${selectedContainer}/${tokenQuery}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -75,11 +80,8 @@ export function PodTerminal({
 
     ws.onopen = () => {
       setStatus('connected');
-      // Authenticate
-      if (token) {
-        ws.send(JSON.stringify({ type: 'auth', token }));
-      }
-      // Send initial terminal size
+      // Send initial terminal size so the agent can issue an ioctl(TIOCSWINSZ)
+      // before the user's first keystroke.
       ws.send(
         JSON.stringify({
           type: 'resize',
@@ -92,15 +94,37 @@ export function PodTerminal({
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'output' || data.type === 'stdout') {
-          term.write(data.data);
-        } else if (data.type === 'error') {
-          term.write(`\r\n\x1b[31mError: ${data.message}\x1b[0m\r\n`);
-        } else if (typeof data === 'string') {
+        // Wire protocol from backend (internal/tunnel/exec_consumer.go):
+        //   {type:"output", data, stream?}    — stdout/stderr chunk
+        //   {type:"error",  message}          — agent / k8s failure
+        //   {type:"end",    reason}           — session terminated
+        if (data && typeof data === 'object') {
+          if (data.type === 'output' || data.type === 'stdout' || data.type === 'stderr') {
+            term.write(data.data ?? '');
+            return;
+          }
+          if (data.type === 'error') {
+            term.write(`\r\n\x1b[31mError: ${data.message ?? 'unknown error'}\x1b[0m\r\n`);
+            return;
+          }
+          if (data.type === 'end') {
+            term.write(`\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ''}\x1b[0m\r\n`);
+            return;
+          }
+          // Backwards-compat: older backends sent the raw agent payload
+          // ({stream, data}) without a top-level `type`. Render the inner
+          // `data` field if present so users aren't stuck on a blank screen
+          // during a partial-deploy of the new envelope.
+          if (typeof data.data === 'string') {
+            term.write(data.data);
+            return;
+          }
+        }
+        if (typeof data === 'string') {
           term.write(data);
         }
       } catch {
-        // Raw text data
+        // Raw text data (non-JSON frame).
         term.write(event.data);
       }
     };
@@ -112,7 +136,8 @@ export function PodTerminal({
 
     ws.onclose = (event) => {
       setStatus('disconnected');
-      term.write(`\r\n\x1b[33mConnection closed${event.reason ? `: ${event.reason}` : ''}\x1b[0m\r\n`);
+      const reason = event.reason || (event.code === 1006 ? 'connection lost' : '');
+      term.write(`\r\n\x1b[33mConnection closed${reason ? `: ${reason}` : ''}\x1b[0m\r\n`);
       term.write('\x1b[33mPress the reconnect button to try again\x1b[0m\r\n');
     };
 
