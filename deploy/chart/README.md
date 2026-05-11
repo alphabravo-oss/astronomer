@@ -27,7 +27,8 @@ helm upgrade --install astronomer ./deploy/chart \
   --set config.serverURL=https://astronomer.example.com \
   --set config.corsAllowedOrigins=https://astronomer.example.com \
   --set 'gateway.hosts={astronomer.example.com}' \
-  --set gateway.tls.secretName=astronomer-tls \
+  --set tls.source=letsEncrypt \
+  --set tls.letsEncrypt.email=ops@example.com \
   --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
   --set postgres.external.dsnSecretRef.key=dsn \
   --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
@@ -44,7 +45,8 @@ needs:
 - `redis.external.address` (and `passwordSecretRef.name` if your Redis is
   password-gated)
 - `gateway.hosts` (at least one hostname)
-- `gateway.tls.secretName` **or** `gateway.tls.certManager.{enabled,issuerName}`
+- `tls.source` — must be `selfSigned`, `letsEncrypt`, or `secret` (not `none`)
+- `tls.letsEncrypt.email` — required when `tls.source=letsEncrypt`
 - `secrets.encryptionKey` — must be a real Fernet key; generate with
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 - `secrets.secretKey` — JWT signing material
@@ -204,27 +206,75 @@ metrics:
       release: kube-prometheus-stack
 ```
 
-## cert-manager TLS automation
+## TLS
 
-The chart already supports manual TLS by pointing the Gateway listener at an
-existing Secret via `gateway.tls.secretName`. To let cert-manager provision and
-renew that Secret automatically, annotate the Gateway and keep the same Secret
-name in `certificateRefs`:
+TLS is configured through a single top-level `tls:` block that drives both the
+Gateway listener (`httproute.yaml`) and the optional Ingress (`ingress.yaml`).
+There are four modes, selected by `tls.source`:
 
-```yaml
-gateway:
-  enabled: true
-  hosts:
-    - astronomer.example.com
-  tls:
-    enabled: true
-    secretName: astronomer-gateway-tls
-    certManager:
-      enabled: true
-      issuerKind: ClusterIssuer
-      issuerName: letsencrypt-prod
+| `tls.source`   | Behavior                                                                                                                | Auto-rotates | cert-manager |
+|----------------|-------------------------------------------------------------------------------------------------------------------------|--------------|--------------|
+| `none`         | HTTP only. Local dev / k3d default.                                                                                     | –            | no           |
+| `selfSigned`   | Chart renders a cert-manager `Issuer{selfSigned}` + `Certificate` writing to `tls.secretName`. Browsers warn on the CA. | yes          | **required** |
+| `letsEncrypt`  | Chart renders a cert-manager ACME `Issuer` (HTTP-01) + `Certificate`. Requires public DNS + Let's Encrypt reachability. | yes          | **required** |
+| `secret`       | BYO. Operator pre-creates the named Secret out of band with keys `tls.crt` + `tls.key`. No cert-manager involvement.    | no (manual)  | no           |
+
+### cert-manager is the operator's responsibility
+
+This chart **does not install cert-manager** and does not bundle it as a Helm
+dependency, mirroring Rancher's posture. When `tls.source` is `selfSigned` or
+`letsEncrypt`, the preflight Job aborts the release with a clear error if the
+`issuers.cert-manager.io` CRD isn't present:
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
 ```
 
-This emits `cert-manager.io/cluster-issuer: letsencrypt-prod` on the Gateway.
-For namespaced issuers, set `issuerKind: Issuer`. For external issuer types,
-set `issuerKind` and `issuerGroup` explicitly.
+If you're installing cert-manager via Argo CD sync waves immediately before this
+chart, set `tls.requireCertManager=false` to skip the preflight check and let
+the apply order resolve normally.
+
+### Examples
+
+Self-signed (internal-only installs):
+
+```yaml
+tls:
+  source: selfSigned
+```
+
+Let's Encrypt production (publicly reachable hostnames):
+
+```yaml
+tls:
+  source: letsEncrypt
+  letsEncrypt:
+    email: ops@example.com
+    environment: production   # or "staging" while testing
+```
+
+Bring your own certificate Secret:
+
+```yaml
+tls:
+  source: secret
+  secretName: astronomer-tls   # operator pre-creates this Secret
+```
+
+### Additional trusted CAs
+
+When the **server pod** needs to make outbound TLS calls to upstreams signed by
+a private CA (private container registries, internal SAML / OIDC IdPs), supply
+the CA bundle through `tls.additionalTrustedCAs`:
+
+```yaml
+tls:
+  additionalTrustedCAs:
+    enabled: true
+    existingSecret: my-internal-ca   # Secret with key tls.crt holding a PEM bundle
+```
+
+The Secret is mounted at `/astronomer/trust/extra/ca-additional.pem` and Go's
+`SSL_CERT_DIR` is set so `crypto/x509` reads it alongside the system pool. This
+is independent of the Gateway/Ingress TLS — it only affects the server's
+outbound trust store.

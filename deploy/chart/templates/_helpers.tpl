@@ -251,6 +251,26 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 {{- end }}
 
 {{/*
+astronomer.validateInputs runs on every render (any env), catching misconfig
+that produces silent-noop rather than fail-fast. Currently checks:
+  - additionalTrustedCAs.enabled=true requires existingSecret (otherwise the
+    server volume mount template silently skips and the CA bundle never lands
+    in the pod, leaving private-CA-signed upstream calls broken).
+Returns "" so callers can drop the result without it appearing in the
+rendered manifest.
+*/}}
+{{- define "astronomer.validateInputs" -}}
+  {{- $errs := list }}
+  {{- if and .Values.tls.additionalTrustedCAs.enabled (not .Values.tls.additionalTrustedCAs.existingSecret) }}
+    {{- $errs = append $errs "  - tls.additionalTrustedCAs.enabled=true requires tls.additionalTrustedCAs.existingSecret (a Secret with key tls.crt)" }}
+  {{- end }}
+  {{- if gt (len $errs) 0 }}
+    {{- $msg := printf "\n\nAstronomer chart input validation failed:\n%s" (join "\n" $errs) }}
+    {{- fail $msg }}
+  {{- end }}
+{{- end }}
+
+{{/*
 astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
 render when env=production but mandatory production knobs are missing. Helm's
 `fail` builtin aborts the whole release with a single human-readable message
