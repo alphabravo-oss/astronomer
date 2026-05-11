@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -221,8 +222,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Wire metrics: tunnel requester for remote clusters, in-cluster clients
 	// for the local cluster. Both are nil-safe; missing deps fall back to zero.
 	clusterHandler.SetMetricsRequester(requester)
+	// localK8s and localNamespace are reused below to construct the support
+	// bundle handler; SetMetricsLocalClient / SetKubernetesClient consume
+	// localK8s too.
+	var localK8s kubernetes.Interface
 	if restCfg, err := rest.InClusterConfig(); err == nil {
 		if cs, err := kubernetes.NewForConfig(restCfg); err == nil {
+			localK8s = cs
 			argocdHandler.SetKubernetesClient(cs)
 			if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 				clusterHandler.SetMetricsLocalClient(cs, mc)
@@ -231,6 +237,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 		}
 	}
+	localNamespace := detectReleaseNamespace()
 
 	// Share the same metrics provider with the workload handler so per-node
 	// CPU/memory usage on the node-detail page comes from the same fetch (and
@@ -283,6 +290,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		RemoteServer:  remoteServer,
 		RemoteQueries: queries,
 		EventStream:   handler.NewEventStreamHandler(bus),
+		SupportBundle: handler.NewSupportBundleHandler(queries, localK8s, localNamespace),
 	}
 	// EventSource cannot send Authorization headers, so the stream handler
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
@@ -503,4 +511,21 @@ func (s *localClusterArgoCDTokenSource) UpstreamSessionToken(ctx context.Context
 		return "", err
 	}
 	return plain, nil
+}
+
+// detectReleaseNamespace returns the namespace this server pod is running
+// in. Tries the POD_NAMESPACE env var first (set by the chart via the
+// Downward API when configured) then falls back to the standard
+// serviceaccount mount. Returns "astronomer" if both fail, since that's
+// the chart's default namespace.
+func detectReleaseNamespace() string {
+	if v := strings.TrimSpace(os.Getenv("POD_NAMESPACE")); v != "" {
+		return v
+	}
+	if b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	return "astronomer"
 }

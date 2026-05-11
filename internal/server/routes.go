@@ -76,6 +76,9 @@ type RouterDependencies struct {
 	// argocd-server, gated by Astronomer's JWT (header) or
 	// astronomer_session cookie. Mounted at top-level `/argocd/*`.
 	ArgoCDUIProxy *handler.ArgoCDUIProxy
+	// SupportBundle generates a downloadable zip of platform diagnostics.
+	// Superuser-gated inside the handler itself.
+	SupportBundle *handler.SupportBundleHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -211,6 +214,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/settings/tokens/", deps.Auth.ListTokens)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/settings/tokens/", deps.Auth.CreateToken)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/settings/tokens/{id}/", deps.Auth.RevokeToken)
+		}
+
+		if deps.SupportBundle != nil {
+			// Authenticated; the handler enforces superuser gating itself so
+			// non-admins get a clean 403 rather than a generic permission
+			// middleware rejection.
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/support-bundle/", deps.SupportBundle.Download)
 		}
 
 		authenticated := r
