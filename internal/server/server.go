@@ -225,6 +225,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
+	// Wire the asynq client into the DELETE handler so the cluster
+	// decommission reconciler fires immediately on remove-cluster click.
+	// The periodic sweep is the safety net when redis is briefly down.
+	clusterHandler.SetDecommissionQueue(queue)
 	// Wire metrics: tunnel requester for remote clusters, in-cluster clients
 	// for the local cluster. Both are nil-safe; missing deps fall back to zero.
 	clusterHandler.SetMetricsRequester(requester)
@@ -260,6 +264,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 
 	deps := RouterDependencies{
 		JWT:          jwtManager,
+		Encryptor:    encryptor,
 		AuthQueries:  queries,
 		Auth:         authHandler,
 		SSO:          ssoHandler,
@@ -383,6 +388,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		PlatformName:   "Astronomer",
 		Leader:         leader.New(database.Pool(), logger),
 		K8s:            requester,
+	})
+	// Cluster decommission reconciler: needs DB + the tunnel hub for both
+	// MsgDecommission RPC and forced Disconnect after token revoke. When the
+	// hub is unavailable (worker-only process), pass nil — the reconciler
+	// falls back to "agent unreachable, skip with warning" semantics.
+	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
+		Queries: queries,
+		Tunnel:  hub,
 	})
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
 	// DB lease handles multiple worker pods racing on the same row).

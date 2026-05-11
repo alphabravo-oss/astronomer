@@ -51,6 +51,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// per-namespace reconcile on AddNamespace; this sweep covers drift
 		// and missed-delivery cases.
 		{"@every 5m", TypeProjectReconcileAll, "project enforcement sweep"},
+		// Cluster decommission sweep. The DELETE handler enqueues a single
+		// reconciler invocation immediately; the periodic sweep here picks
+		// up rows whose worker process crashed mid-phase (status=running)
+		// and rows that failed and need a retry (status=failed→running).
+		{"@every 1m", TypeClusterDecommissionAll, "cluster decommission sweep"},
 	}
 
 	for _, e := range entries {

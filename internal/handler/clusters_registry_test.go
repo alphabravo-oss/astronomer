@@ -79,6 +79,17 @@ func (q *clusterRegistryTestQuerier) ListClusterConditions(context.Context, uuid
 	return nil, nil
 }
 
+// Cluster-decommission stubs — added by the cluster.deletion reconciler.
+// These tests don't exercise the decommission flow, so nil/zero values are
+// fine and keep the interface satisfied.
+func (q *clusterRegistryTestQuerier) CreateClusterDecommission(context.Context, sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error) {
+	return sqlc.ClusterDecommission{}, nil
+}
+
+func (q *clusterRegistryTestQuerier) GetLatestClusterDecommissionByCluster(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
+	return sqlc.ClusterDecommission{}, nil
+}
+
 func TestDeleteRegistryConfig(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}

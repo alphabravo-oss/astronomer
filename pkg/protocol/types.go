@@ -86,7 +86,63 @@ const (
 	// never carry resource bodies — only enough metadata for the UI to know
 	// what to refetch.
 	MsgStateUpdate MessageType = "STATE_UPDATE"
+
+	// Cluster decommission. Sent by the server to instruct the agent to
+	// uninstall its managed-side resources (Fluent Bit / log forwarders,
+	// Velero schedules/backups it owns, the agent's own Deployment) before
+	// the server revokes the agent's registration token and severs the WS
+	// tunnel. The agent replies with MsgDecommissionAck carrying a summary
+	// of what it deleted (or a per-step error). Old agents without the
+	// handler simply log "no handler for message type" and ignore — the
+	// server logs a warning and falls back to manual-cleanup messaging in
+	// the decommission row.
+	MsgDecommission    MessageType = "DECOMMISSION"
+	MsgDecommissionAck MessageType = "DECOMMISSION_ACK"
 )
+
+// DecommissionPayload tells the agent which managed-side resources to remove.
+// Fields are intentionally explicit (rather than an opaque "do everything"
+// flag) so the server retains future flexibility — e.g. partial decommission
+// where only logging is uninstalled. ManagedLabel narrows label-selector deletes
+// (Velero Backup/Schedule CRs are filtered by this label so we don't wipe out
+// resources the cluster operator owns).
+type DecommissionPayload struct {
+	ClusterID            string `json:"cluster_id"`
+	RemoveLoggingStack   bool   `json:"remove_logging_stack"`
+	RemoveVeleroManaged  bool   `json:"remove_velero_managed"`
+	RemoveAgentDeployment bool  `json:"remove_agent_deployment"`
+	ManagedLabel         string `json:"managed_label,omitempty"`
+	// DryRun, if true, the agent reports what it WOULD delete without
+	// touching the cluster. Used by the integration test path.
+	DryRun bool `json:"dry_run,omitempty"`
+	// AgentNamespace and AgentDeployment let the server name the resources
+	// explicitly so the agent doesn't have to guess. Empty values fall back
+	// to the agent's defaults ("astronomer-system" + "astronomer-agent").
+	AgentNamespace  string `json:"agent_namespace,omitempty"`
+	AgentDeployment string `json:"agent_deployment,omitempty"`
+}
+
+// DecommissionAckPayload is the agent's response to a Decommission message.
+// Each step is reported individually so the server can compose its own
+// per-phase status — the agent doesn't make policy decisions about overall
+// success/failure beyond "did the K8s API accept my delete?".
+type DecommissionAckPayload struct {
+	ClusterID string                  `json:"cluster_id"`
+	Steps     []DecommissionStepResult `json:"steps"`
+	DryRun    bool                    `json:"dry_run,omitempty"`
+}
+
+// DecommissionStepResult is one row of the agent's per-resource cleanup
+// outcome. Name is "remove_logging_stack" / "remove_velero_managed" /
+// "remove_agent_deployment". Removed is the count of objects actually
+// deleted (or that would be deleted in dry-run mode).
+type DecommissionStepResult struct {
+	Name    string `json:"name"`
+	Success bool   `json:"success"`
+	Removed int    `json:"removed"`
+	Error   string `json:"error,omitempty"`
+	Skipped bool   `json:"skipped,omitempty"`
+}
 
 // Message is the envelope for all tunnel communication.
 type Message struct {

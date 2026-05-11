@@ -57,6 +57,12 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 	case protocol.MsgRBACSyncResult:
 		h.routeToStream(conn, msg)
 
+	case protocol.MsgDecommissionAck:
+		// Cluster decommission ACK: response to a server-initiated
+		// MsgDecommission. Routed back to the per-call stream the
+		// decommission reconciler set up before sending the request.
+		h.routeToStream(conn, msg)
+
 	case protocol.MsgStateUpdate:
 		h.handleStateUpdate(conn, msg)
 

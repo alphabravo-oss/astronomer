@@ -409,6 +409,92 @@ func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
 	}
 }
 
+// Disconnect forcibly tears down the WS tunnel for a cluster. Used by the
+// cluster decommission reconciler after MsgDecommission has been delivered
+// and ACKed — once the server revokes the agent's registration token, any
+// new dial attempt fails and any in-flight K8s proxy calls would block
+// indefinitely on the now-uncredentialed agent. Calling Disconnect cancels
+// the per-agent context, which cascades into both readPump and writePump
+// exiting and the WebSocket being closed cleanly.
+//
+// No-op (returns false) when no agent is currently registered for that
+// cluster ID; callers may want to log a warning in that case so operators
+// know the cleanup-by-RPC path was unavailable. Idempotent — multiple
+// Disconnect calls are safe; the second one just observes the entry gone
+// from the map.
+func (h *Hub) Disconnect(clusterID string) bool {
+	h.mu.Lock()
+	agent, ok := h.agents[clusterID]
+	if ok {
+		// Remove first so HandleWebSocket's removeAgent() at the bottom of
+		// the read/write loop doesn't have to race with us.
+		delete(h.agents, clusterID)
+	}
+	h.mu.Unlock()
+	if !ok {
+		return false
+	}
+	observability.WithEvent(h.log, "agent_forced_disconnect").Info("forcibly disconnecting agent",
+		slog.String("cluster_id", clusterID),
+		slog.String("session_id", agent.SessionID),
+	)
+	agent.cancel()
+	agent.Streams.CloseAll()
+	return true
+}
+
+// SendDecommission sends a MsgDecommission to the agent and waits for
+// MsgDecommissionAck. The returned `connected` flag is true if an agent was
+// registered for the cluster at the moment of send — the cluster decommission
+// reconciler uses this to distinguish "agent unreachable, skip with warning"
+// from "agent reachable but bombed". `wait` bounds how long we wait for the
+// ACK; on timeout we return the connected flag but a nil ack and a
+// context.DeadlineExceeded error.
+func (h *Hub) SendDecommission(ctx context.Context, clusterID string, payload protocol.DecommissionPayload, wait time.Duration) (*protocol.DecommissionAckPayload, bool, error) {
+	h.mu.RLock()
+	agent, ok := h.agents[clusterID]
+	h.mu.RUnlock()
+	if !ok {
+		return nil, false, nil
+	}
+	streamID := uuid.NewString()
+	stream, err := agent.Streams.CreateStream(streamID)
+	if err != nil {
+		return nil, true, fmt.Errorf("create decommission stream: %w", err)
+	}
+	defer agent.Streams.CloseStream(streamID)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, true, fmt.Errorf("marshal decommission payload: %w", err)
+	}
+	msg := &protocol.Message{
+		Type:      protocol.MsgDecommission,
+		StreamID:  streamID,
+		ClusterID: clusterID,
+		Timestamp: time.Now().UTC(),
+		Payload:   body,
+	}
+	if err := h.SendToAgent(clusterID, msg); err != nil {
+		return nil, true, fmt.Errorf("send decommission: %w", err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	select {
+	case data := <-stream.DataCh:
+		var ack protocol.DecommissionAckPayload
+		if err := json.Unmarshal(data, &ack); err != nil {
+			return nil, true, fmt.Errorf("decode decommission ack: %w", err)
+		}
+		return &ack, true, nil
+	case <-stream.DoneCh:
+		return nil, true, fmt.Errorf("decommission stream closed before ack")
+	case <-waitCtx.Done():
+		return nil, true, waitCtx.Err()
+	}
+}
+
 // BroadcastToAll sends a message to all connected agents.
 func (h *Hub) BroadcastToAll(msg *protocol.Message) {
 	h.mu.RLock()

@@ -28,7 +28,7 @@ func (q *Queries) CountClusters(ctx context.Context) (int64, error) {
 const createCluster = `-- name: CreateCluster :one
 INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local
+RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at
 `
 
 type CreateClusterParams struct {
@@ -76,6 +76,7 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsLocal,
+		&i.DecommissionedAt,
 	)
 	return i, err
 }
@@ -175,11 +176,11 @@ WITH inserted AS (
         'other'
     WHERE NOT EXISTS (SELECT 1 FROM clusters WHERE is_local = true)
     ON CONFLICT DO NOTHING
-    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local
+    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at
 )
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM inserted
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM inserted
 UNION ALL
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
 LIMIT 1
 `
 
@@ -216,6 +217,7 @@ type EnsureLocalClusterRow struct {
 	CreatedAt         time.Time          `json:"created_at"`
 	UpdatedAt         time.Time          `json:"updated_at"`
 	IsLocal           bool               `json:"is_local"`
+	DecommissionedAt  pgtype.Timestamptz `json:"decommissioned_at"`
 }
 
 // Idempotently create-or-return the singleton "local" cluster row that
@@ -258,6 +260,7 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsLocal,
+		&i.DecommissionedAt,
 	)
 	return i, err
 }
@@ -299,7 +302,7 @@ func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, token string)
 }
 
 const getClusterByID = `-- name: GetClusterByID :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM clusters WHERE id = $1
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE id = $1
 `
 
 func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error) {
@@ -327,12 +330,13 @@ func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsLocal,
+		&i.DecommissionedAt,
 	)
 	return i, err
 }
 
 const getClusterByName = `-- name: GetClusterByName :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM clusters WHERE name = $1
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE name = $1
 `
 
 func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, error) {
@@ -360,6 +364,7 @@ func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsLocal,
+		&i.DecommissionedAt,
 	)
 	return i, err
 }
@@ -466,7 +471,7 @@ func (q *Queries) ListClusterConditions(ctx context.Context, clusterID uuid.UUID
 }
 
 const listClusters = `-- name: ListClusters :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM clusters ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClustersParams struct {
@@ -505,6 +510,7 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.IsLocal,
+			&i.DecommissionedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -517,7 +523,7 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 }
 
 const listClustersByStatus = `-- name: ListClustersByStatus :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM clusters WHERE status = $1 ORDER BY created_at DESC LIMIT $3 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE status = $1 ORDER BY created_at DESC LIMIT $3 OFFSET $2
 `
 
 type ListClustersByStatusParams struct {
@@ -557,6 +563,7 @@ func (q *Queries) ListClustersByStatus(ctx context.Context, arg ListClustersBySt
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.IsLocal,
+			&i.DecommissionedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -595,7 +602,7 @@ UPDATE clusters SET
     labels = $6,
     annotations = $7
 WHERE id = $1
-RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local
+RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at
 `
 
 type UpdateClusterParams struct {
@@ -641,6 +648,7 @@ func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsLocal,
+		&i.DecommissionedAt,
 	)
 	return i, err
 }

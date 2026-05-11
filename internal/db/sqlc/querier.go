@@ -20,6 +20,11 @@ type Querier interface {
 	// Pipeline <-> Output M2M
 	AddPipelineOutput(ctx context.Context, arg AddPipelineOutputParams) error
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
+	// Cluster Decommission: archives every audit_log row tied to the cluster
+	// (either as resource_id when resource_type='cluster' or via the
+	// detail->>'cluster_id' tag) into audit_archive. ON CONFLICT DO NOTHING
+	// so re-running the phase is safe.
+	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
@@ -88,6 +93,7 @@ type Querier interface {
 	CreateCatalogOperation(ctx context.Context, arg CreateCatalogOperationParams) (CatalogOperation, error)
 	CreateCatalogOperationEvent(ctx context.Context, arg CreateCatalogOperationEventParams) (CatalogOperationEvent, error)
 	CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error)
+	CreateClusterDecommission(ctx context.Context, arg CreateClusterDecommissionParams) (ClusterDecommission, error)
 	CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error)
 	CreateClusterRole(ctx context.Context, arg CreateClusterRoleParams) (ClusterRole, error)
 	CreateClusterRoleBinding(ctx context.Context, arg CreateClusterRoleBindingParams) (ClusterRoleBinding, error)
@@ -134,8 +140,22 @@ type Querier interface {
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
+	DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteAlertRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error)
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
+	DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterConditionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterConditionsForCluster(ctx context.Context, clusterID uuid.UUID) error
+	DeleteClusterHealthStatusByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterRegistrationTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterRegistryConfigsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterToolsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
 	DeleteClusterRole(ctx context.Context, id uuid.UUID) error
 	DeleteClusterRoleBinding(ctx context.Context, id uuid.UUID) error
@@ -204,6 +224,8 @@ type Querier interface {
 	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error)
 	GetClusterAgentTokenByToken(ctx context.Context, token string) (ClusterAgentToken, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
+	GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
+	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterDecommission, error)
 	GetClusterByName(ctx context.Context, name string) (Cluster, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
 	GetClusterMonitoringConfig(ctx context.Context, clusterID uuid.UUID) (ClusterMonitoringConfig, error)
@@ -368,6 +390,7 @@ type Querier interface {
 	ListOutputsForPipeline(ctx context.Context, loggingPipelineID uuid.UUID) ([]LoggingOutput, error)
 	ListPendingArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	ListPendingCatalogOperations(ctx context.Context, limit int32) ([]CatalogOperation, error)
+	ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]ClusterDecommission, error)
 	ListPendingLoggingOperations(ctx context.Context, limit int32) ([]LoggingOperation, error)
 	ListPendingMonitoringOperations(ctx context.Context, limit int32) ([]MonitoringOperation, error)
 	ListPendingToolOperations(ctx context.Context, limit int32) ([]ToolOperation, error)
@@ -405,6 +428,9 @@ type Querier interface {
 	MarkCatalogOperationFailed(ctx context.Context, arg MarkCatalogOperationFailedParams) (CatalogOperation, error)
 	MarkCatalogOperationRunning(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	MarkCatalogOperationSuperseded(ctx context.Context, arg MarkCatalogOperationSupersededParams) (CatalogOperation, error)
+	MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error)
+	MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
+	MarkClusterDecommissionSucceeded(ctx context.Context, arg MarkClusterDecommissionSucceededParams) (ClusterDecommission, error)
 	MarkLoggingOperationCompleted(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	MarkLoggingOperationFailed(ctx context.Context, arg MarkLoggingOperationFailedParams) (LoggingOperation, error)
 	MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
@@ -433,6 +459,7 @@ type Querier interface {
 	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
+	TombstoneCluster(ctx context.Context, id uuid.UUID) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
@@ -455,6 +482,7 @@ type Querier interface {
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
 	UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error)
+	UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error)
 	UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error
 	UpdateClusterRole(ctx context.Context, arg UpdateClusterRoleParams) (ClusterRole, error)
 	UpdateClusterSecurityPolicy(ctx context.Context, arg UpdateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error)

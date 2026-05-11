@@ -317,6 +317,24 @@ type Cluster struct {
 	CreatedAt         time.Time          `json:"created_at"`
 	UpdatedAt         time.Time          `json:"updated_at"`
 	IsLocal           bool               `json:"is_local"`
+	DecommissionedAt  pgtype.Timestamptz `json:"decommissioned_at"`
+}
+
+// ClusterDecommission tracks the per-cluster decommission reconciler run.
+// See migration 038_cluster_decommission for column semantics.
+type ClusterDecommission struct {
+	ID            uuid.UUID          `json:"id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Status        string             `json:"status"`
+	Phases        json.RawMessage    `json:"phases"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+	LastError     string             `json:"last_error"`
+	Attempts      int32              `json:"attempts"`
+	RequestedByID pgtype.UUID        `json:"requested_by_id"`
+	ClusterName   string             `json:"cluster_name"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
 }
 
 type ClusterAgentToken struct {

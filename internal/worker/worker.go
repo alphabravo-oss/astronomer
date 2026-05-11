@@ -34,6 +34,11 @@ const (
 	// cooperative DB lease so multiple worker pods don't fight.
 	TypeProjectReconcile    = tasks.ProjectReconcileType
 	TypeProjectReconcileAll = tasks.ProjectReconcileAllType
+	// Cluster decommission controller. ClusterDecommission runs a single
+	// reconciliation (enqueued by the DELETE handler); ClusterDecommissionAll
+	// is the periodic sweep that picks up rows whose worker crashed.
+	TypeClusterDecommission    = tasks.ClusterDecommissionType
+	TypeClusterDecommissionAll = tasks.ClusterDecommissionAllType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -88,6 +93,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeRunRestore, instrumentTask(TypeRunRestore, tasks.HandleRunRestore))
 	w.mux.HandleFunc(TypeProjectReconcile, instrumentTask(TypeProjectReconcile, tasks.HandleProjectReconcile))
 	w.mux.HandleFunc(TypeProjectReconcileAll, instrumentTask(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll))
+	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
+	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
 
 	w.log.Info("registered all task handlers")
 }

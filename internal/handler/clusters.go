@@ -14,8 +14,11 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	"k8s.io/client-go/kubernetes"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/yaml"
@@ -40,6 +43,11 @@ type ClusterQuerier interface {
 	UpdateCluster(ctx context.Context, arg sqlc.UpdateClusterParams) (sqlc.Cluster, error)
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
 	CountClusters(ctx context.Context) (int64, error)
+	// Cluster decommission. The DELETE handler no longer hard-deletes the
+	// row; it inserts a cluster_decommissions row and enqueues the worker
+	// reconciler. GetLatest backs the GET /decommission status endpoint.
+	CreateClusterDecommission(ctx context.Context, arg sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error)
+	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterDecommission, error)
 	// Health
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterHealthStatus, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
@@ -62,6 +70,15 @@ type EventPublisher interface {
 	Publish(eventType string, data any)
 }
 
+// ClusterDecommissionEnqueuer abstracts the asynq client surface the Delete
+// handler needs. *asynq.Client satisfies this interface natively; tests can
+// supply a stub. Nil-safe: when not wired, the handler still creates the
+// cluster_decommissions row but the worker reconciler only fires via the
+// periodic sweep instead of the immediate enqueue.
+type ClusterDecommissionEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
 // ClusterHandler handles cluster endpoints.
 type ClusterHandler struct {
 	queries ClusterQuerier
@@ -75,8 +92,13 @@ type ClusterHandler struct {
 	// publisher fans out cluster.created / cluster.updated / cluster.deleted
 	// events. Optional and nil-safe: when not wired the CRUD path simply
 	// doesn't notify SSE subscribers.
-	publisher  EventPublisher
-	agentImage string
+	publisher EventPublisher
+	// decommissionQueue is the asynq client used to enqueue
+	// cluster_decommission tasks from the DELETE handler. Optional —
+	// when nil, the row is still inserted but the worker doesn't pick it up
+	// until the periodic sweep runs (slower path).
+	decommissionQueue ClusterDecommissionEnqueuer
+	agentImage        string
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -146,6 +168,17 @@ func (h *ClusterHandler) SetEventPublisher(p EventPublisher) {
 		return
 	}
 	h.publisher = p
+}
+
+// SetDecommissionQueue wires the asynq client used by the DELETE handler to
+// schedule the cluster_decommission reconciler. Optional: nil means the
+// handler still records the cluster_decommissions row, but the worker only
+// picks it up via the periodic sweep.
+func (h *ClusterHandler) SetDecommissionQueue(q ClusterDecommissionEnqueuer) {
+	if h == nil {
+		return
+	}
+	h.decommissionQueue = q
 }
 
 // publishEvent is a nil-safe wrapper around the optional publisher.
@@ -390,7 +423,120 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, cluster)
 }
 
+// DecommissionPhaseStatus is one entry in the decommission status response.
+// Mirrors the worker.tasks.phaseRecord shape so the frontend can render a
+// per-phase progress indicator (when it eventually picks up the API).
+type DecommissionPhaseStatus struct {
+	Name        string         `json:"name"`
+	Status      string         `json:"status"`
+	StartedAt   string         `json:"started_at,omitempty"`
+	CompletedAt string         `json:"completed_at,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	Detail      map[string]any `json:"detail,omitempty"`
+}
+
+// DecommissionStatusResponse is the JSON body returned from
+// GET /api/v1/clusters/{id}/decommission/ and POST .../decommission/ (the
+// 202-Accepted enqueue path).
+type DecommissionStatusResponse struct {
+	DecommissionID string                    `json:"decommission_id"`
+	ClusterID      string                    `json:"cluster_id"`
+	ClusterName    string                    `json:"cluster_name"`
+	Status         string                    `json:"status"`
+	Attempts       int32                     `json:"attempts"`
+	StartedAt      string                    `json:"started_at,omitempty"`
+	CompletedAt    string                    `json:"completed_at,omitempty"`
+	LastError      string                    `json:"last_error,omitempty"`
+	Phases         []DecommissionPhaseStatus `json:"phases"`
+	StatusURL      string                    `json:"status_url"`
+}
+
+// phaseOrder is the canonical order phases are rendered in the API response.
+// We keep this in lockstep with the reconciler's execution order so the UI
+// can render a left-to-right progress bar.
+var phaseOrder = []string{
+	tasks.PhaseCleanupManagedSide,
+	tasks.PhaseRevokeAgentToken,
+	tasks.PhaseArchiveAudit,
+	tasks.PhaseDeleteDependents,
+	tasks.PhaseTombstoneCluster,
+}
+
+func formatPhases(raw json.RawMessage) []DecommissionPhaseStatus {
+	if len(raw) == 0 {
+		return formatEmptyPhases()
+	}
+	type phaseRecord struct {
+		Status      string         `json:"status"`
+		StartedAt   time.Time      `json:"started_at,omitempty"`
+		CompletedAt time.Time      `json:"completed_at,omitempty"`
+		Error       string         `json:"error,omitempty"`
+		Detail      map[string]any `json:"detail,omitempty"`
+	}
+	parsed := map[string]phaseRecord{}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return formatEmptyPhases()
+	}
+	out := make([]DecommissionPhaseStatus, 0, len(phaseOrder))
+	for _, name := range phaseOrder {
+		rec, ok := parsed[name]
+		entry := DecommissionPhaseStatus{Name: name, Status: "pending"}
+		if ok {
+			entry.Status = rec.Status
+			if !rec.StartedAt.IsZero() {
+				entry.StartedAt = rec.StartedAt.UTC().Format(time.RFC3339)
+			}
+			if !rec.CompletedAt.IsZero() {
+				entry.CompletedAt = rec.CompletedAt.UTC().Format(time.RFC3339)
+			}
+			entry.Error = rec.Error
+			entry.Detail = rec.Detail
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func formatEmptyPhases() []DecommissionPhaseStatus {
+	out := make([]DecommissionPhaseStatus, 0, len(phaseOrder))
+	for _, name := range phaseOrder {
+		out = append(out, DecommissionPhaseStatus{Name: name, Status: "pending"})
+	}
+	return out
+}
+
+func renderDecommission(row sqlc.ClusterDecommission, statusURL string) DecommissionStatusResponse {
+	out := DecommissionStatusResponse{
+		DecommissionID: row.ID.String(),
+		ClusterID:      row.ClusterID.String(),
+		ClusterName:    row.ClusterName,
+		Status:         row.Status,
+		Attempts:       row.Attempts,
+		LastError:      row.LastError,
+		Phases:         formatPhases(row.Phases),
+		StatusURL:      statusURL,
+	}
+	if row.StartedAt.Valid {
+		out.StartedAt = row.StartedAt.Time.UTC().Format(time.RFC3339)
+	}
+	if row.CompletedAt.Valid {
+		out.CompletedAt = row.CompletedAt.Time.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
 // Delete handles DELETE /api/v1/clusters/{id}/.
+//
+// Previously this hard-deleted the cluster row, leaving residue (agent WS
+// tunnel still connected until timeout, managed-side resources still
+// running, audit_log rows orphaned, registration tokens not revoked).
+// Now the handler inserts a cluster_decommissions row and enqueues the
+// reconciler — the worker walks the cleanup phases and tombstones the
+// cluster row at the end. The endpoint returns 202 Accepted with the
+// decommission ID + a poll URL.
+//
+// Idempotent: re-DELETE on a cluster with an in-flight decommission returns
+// the existing row's status (202 again) rather than creating a duplicate.
 func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -398,26 +544,84 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture the row's friendly name BEFORE the delete so the audit row has
-	// something humans can recognise; it's allowed to fail (e.g. id is bogus,
-	// row already gone) — DeleteCluster will surface the canonical error.
-	clusterName := ""
-	if existing, lookupErr := h.queries.GetClusterByID(r.Context(), id); lookupErr == nil {
-		clusterName = existing.Name
-	}
-
-	if err := h.queries.DeleteCluster(r.Context(), id); err != nil {
+	cluster, err := h.queries.GetClusterByID(r.Context(), id)
+	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
+	if cluster.IsLocal {
+		// The local cluster represents the host this server itself runs in;
+		// decommissioning it would tear down the management plane. Refuse.
+		RespondError(w, http.StatusForbidden, "forbidden", "Cannot decommission the local cluster")
+		return
+	}
 
-	h.publishEvent("cluster.deleted", map[string]any{
-		"cluster_id": id.String(),
+	// Idempotency: if there's already an in-flight or succeeded decommission
+	// for this cluster, return its status rather than creating a duplicate.
+	if existing, lookupErr := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id); lookupErr == nil {
+		if existing.Status == "pending" || existing.Status == "running" || existing.Status == "succeeded" {
+			statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
+			RespondJSON(w, http.StatusAccepted, renderDecommission(existing, statusURL))
+			return
+		}
+		// `failed` → fall through and create a fresh decommission row; the
+		// previous attempt remains in the DB for forensics.
+	}
+
+	requestedBy := pgtype.UUID{}
+	if userID := currentUserUUID(r); userID.Valid {
+		requestedBy = userID
+	}
+
+	row, err := h.queries.CreateClusterDecommission(r.Context(), sqlc.CreateClusterDecommissionParams{
+		ClusterID:     id,
+		RequestedByID: requestedBy,
+		ClusterName:   cluster.Name,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "create_decommission_failed", "Failed to enqueue cluster decommission")
+		return
+	}
+
+	if h.decommissionQueue != nil {
+		task, terr := tasks.NewClusterDecommissionTask(row.ID)
+		if terr == nil {
+			// Best-effort enqueue. Errors are logged on the asynq side but
+			// the periodic sweep will pick the row up regardless, so we
+			// don't fail the request when redis is briefly unavailable.
+			_, _ = h.decommissionQueue.Enqueue(task)
+		}
+	}
+
+	h.publishEvent("cluster.decommission_enqueued", map[string]any{
+		"cluster_id":      id.String(),
+		"decommission_id": row.ID.String(),
 	})
 
-	recordAudit(r, h.queries, "cluster.delete", "cluster", id.String(), clusterName, nil)
+	recordAudit(r, h.queries, "cluster.decommission.requested", "cluster", id.String(), cluster.Name, map[string]any{
+		"decommission_id": row.ID.String(),
+	})
 
-	w.WriteHeader(http.StatusNoContent)
+	statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
+	RespondJSON(w, http.StatusAccepted, renderDecommission(row, statusURL))
+}
+
+// GetDecommission handles GET /api/v1/clusters/{id}/decommission/.
+// Returns the latest decommission row's status (idempotent — callers can
+// poll). 404 when no decommission has ever been enqueued for the cluster.
+func (h *ClusterHandler) GetDecommission(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	row, err := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "No decommission for cluster")
+		return
+	}
+	statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
+	RespondJSON(w, http.StatusOK, renderDecommission(row, statusURL))
 }
 
 // GetHealth handles GET /api/v1/clusters/{id}/health/.

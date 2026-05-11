@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -27,6 +28,7 @@ import (
 // RouterDependencies contains the optional dependencies used to register API routes.
 type RouterDependencies struct {
 	JWT          *iauth.JWTManager
+	Encryptor    *iauth.Encryptor
 	AuthQueries  appmiddleware.TokenUserQuerier
 	Auth         *handler.AuthHandler
 	SSO          *handler.SSOHandler
@@ -223,6 +225,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/support-bundle/", deps.SupportBundle.Download)
 		}
 
+		// Key-rotation status — surfaces how many encryption / JWT signing
+		// keys are loaded. KeyCount > 1 means a rotation is mid-flight (see
+		// docs/secret-rotation-runbook.md). Authenticated; the handler
+		// gates on superuser internally rather than via middleware so the
+		// failure mode is a clean 403.
+		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/key-status/", keyStatusHandler(deps))
+
 		authenticated := r
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
@@ -296,6 +305,11 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/", deps.Clusters.Update)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Patch("/{id}/", deps.Clusters.Update)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbDelete)).Delete("/{id}/", deps.Clusters.Delete)
+			// Cluster decommission status — poll endpoint paired with the
+			// DELETE handler's 202 Accepted response. Returns the latest
+			// cluster_decommissions row's phase progress so the operator can
+			// follow the reconciler.
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/decommission/", deps.Clusters.GetDecommission)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/health/", deps.Clusters.GetHealth)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/conditions/", deps.Clusters.ListConditions)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/register/", deps.Clusters.GenerateRegistrationToken)
@@ -788,6 +802,58 @@ func remoteV2PodsHandler(deps RouterDependencies) http.HandlerFunc {
 			"namespace":  namespace,
 			"count":      len(out),
 			"pods":       out,
+		})
+	}
+}
+
+// keyStatusHandler returns the number of loaded encryption + JWT signing
+// keys. The runbook (docs/secret-rotation-runbook.md) tells operators to
+// poll this during a rotation to confirm the new key is in fact loaded and
+// that the old key has been dropped at the end of the procedure.
+//
+// Auth: superuser only — the count itself is harmless, but the diagnostic
+// is intended for the operator running the rotation, not the general user
+// population.
+func keyStatusHandler(deps RouterDependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		caller, ok := appmiddleware.GetAuthenticatedUser(r.Context())
+		if !ok {
+			handler.RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+			return
+		}
+		callerID, err := uuid.Parse(caller.ID)
+		if err != nil {
+			handler.RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+			return
+		}
+		if deps.AuthQueries == nil {
+			handler.RespondError(w, http.StatusInternalServerError, "internal_error", "User store not configured")
+			return
+		}
+		dbUser, err := deps.AuthQueries.GetUserByID(r.Context(), callerID)
+		if err != nil {
+			handler.RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
+			return
+		}
+		if !dbUser.IsSuperuser {
+			handler.RespondError(w, http.StatusForbidden, "forbidden",
+				"Key status requires superuser privileges")
+			return
+		}
+
+		encKeys := 0
+		if deps.Encryptor != nil {
+			encKeys = deps.Encryptor.KeyCount()
+		}
+		jwtKeys := 0
+		if deps.JWT != nil {
+			jwtKeys = deps.JWT.KeyCount()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"encryption_keys": encKeys,
+			"jwt_keys":        jwtKeys,
+			"as_of":           time.Now().UTC().Format(time.RFC3339),
 		})
 	}
 }
