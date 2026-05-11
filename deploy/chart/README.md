@@ -50,6 +50,27 @@ needs:
 - `secrets.secretKey` — JWT signing material
 - `config.serverURL` — external URL; seeds the Argo self-management hostname
 
+### Management-plane disaster recovery
+
+`values-production.yaml` enables `managementBackup` by default — a nightly
+`pg_dump --format=custom` of Astronomer's own Postgres, pushed to S3 with
+daily / weekly / monthly retention tiers. The operator still has to supply
+the bucket and an AWS credentials Secret:
+
+```bash
+--set managementBackup.s3.bucket=my-astronomer-backups \
+--set managementBackup.s3.region=us-east-1 \
+--set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws
+```
+
+The matching restore procedure — including the Secrets that must survive a
+restore for SSO and agent decryption to keep working — lives in
+[`docs/management-plane-dr-runbook.md`](../../docs/management-plane-dr-runbook.md).
+
+This is for the **management plane's own DB only**. Velero-driven backups of
+managed workload clusters are unrelated and live in the `Backup` /
+`BackupRestore` CRs handled by the server (`internal/handler/backups.go`).
+
 ## High Availability Defaults
 
 The base `values.yaml` is tuned for a minimal HA posture out of the box:

@@ -318,3 +318,74 @@ metrics:
     scrapeTimeout: 10s
     namespace: ""
     labels: {}
+
+# =============================================================================
+# Management-plane DR (pg_dump -> S3)
+# =============================================================================
+# Nightly logical backup of Astronomer's own Postgres database to S3-compatible
+# object storage. The companion restore runbook lives at
+# docs/management-plane-dr-runbook.md.
+#
+# Scope: backs up the management plane's source-of-truth DB (clusters, projects,
+# RBAC, audit, monitoring config, ArgoCD instance records). Does NOT back up
+# Redis — Redis is ephemeral asynq queue state that periodic re-evaluators
+# rebuild after restore.
+#
+# Off by default because it requires an operator-supplied S3 bucket and an AWS
+# credentials secret. values-production.yaml turns this on with sensible
+# defaults; the operator still has to wire up bucket + credentials.
+managementBackup:
+  enabled: false
+  # Daily at 03:00 UTC. Cron is interpreted in the kube-controller-manager's
+  # local timezone (almost always UTC in cluster).
+  schedule: "0 3 * * *"
+  # How many succeeded / failed Jobs the CronJob retains before GC.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # Cap the time the controller is willing to wait to start a missed run.
+  startingDeadlineSeconds: 600
+  # Job-level knobs.
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  # Local scratch space for the dump file. Tune up for large DBs.
+  scratchSizeLimit: 8Gi
+  # Retention per tier. Daily is the rolling window; on Sundays the dump is
+  # also copied into weekly/, on the 1st of the month into monthly/.
+  retention:
+    daily: 30
+    weekly: 12
+    monthly: 6
+  s3:
+    # Required when enabled=true.
+    bucket: ""
+    region: "us-east-1"
+    # Key layout: <prefix>/<release>/{daily,weekly,monthly}/<ISO timestamp>.pgcustom
+    prefix: "astronomer-pg"
+    # Optional: non-AWS S3 (MinIO, Hetzner Object Storage, Wasabi, etc).
+    # Example: https://fsn1.your-objectstorage.com
+    endpoint: ""
+    # AWS-CLI-style credentials file mounted into the Job. The Secret should
+    # contain a key (default "credentials") whose value is:
+    #
+    #   [default]
+    #   aws_access_key_id = AKIA...
+    #   aws_secret_access_key = ...
+    credentialsSecretRef:
+      name: ""
+      key: "credentials"
+  # Image bundling postgresql-client + aws-cli. The default is the bitnami
+  # postgresql image with awscli layered on; override to an internally mirrored
+  # image when air-gapped.
+  image:
+    repository: ghcr.io/alphabravocompany/pgdump-s3
+    tag: "16-awscli"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []

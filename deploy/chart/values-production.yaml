@@ -193,3 +193,46 @@ metrics:
     enabled: true
     interval: 30s
     scrapeTimeout: 10s
+
+# ── Management-plane DR ───────────────────────────────────────────────────
+# Nightly pg_dump of Astronomer's own Postgres pushed to S3. The companion
+# restore runbook lives at docs/management-plane-dr-runbook.md.
+#
+# Operator MUST fill in the bucket and credentials secret on install:
+#
+#   --set managementBackup.s3.bucket=my-astronomer-backups \
+#   --set managementBackup.s3.region=us-east-1 \
+#   --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
+#   --set managementBackup.s3.credentialsSecretRef.key=credentials
+#
+# The credentials Secret should contain an aws-cli-style ini file under the
+# named key. Example:
+#
+#   apiVersion: v1
+#   kind: Secret
+#   metadata:
+#     name: astronomer-backup-aws
+#   type: Opaque
+#   stringData:
+#     credentials: |
+#       [default]
+#       aws_access_key_id = AKIA...
+#       aws_secret_access_key = ...
+#
+# For non-AWS S3 (MinIO, Hetzner, Wasabi), also set:
+#   --set managementBackup.s3.endpoint=https://fsn1.your-objectstorage.com
+managementBackup:
+  enabled: true
+  schedule: "0 3 * * *"
+  retention:
+    daily: 30
+    weekly: 12
+    monthly: 6
+  s3:
+    bucket: ""    # REQUIRED — operator supplies via --set
+    region: "us-east-1"
+    prefix: "astronomer-pg"
+    endpoint: ""
+    credentialsSecretRef:
+      name: ""   # REQUIRED — operator supplies via --set
+      key: "credentials"

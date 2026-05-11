@@ -1,0 +1,194 @@
+{{- if .Values.managementBackup.enabled }}
+{{- /*
+  Management-plane DR: nightly pg_dump of Astronomer's own Postgres pushed to
+  S3-compatible object storage.
+
+  Scope: this CronJob backs up the management plane's source-of-truth DB only
+  (clusters, projects, RBAC, audit, monitoring config, ArgoCD instance records,
+  etc.). It deliberately does NOT back up Redis — Redis is ephemeral asynq
+  queue state and is rebuilt by periodic re-evaluators on restore.
+
+  The companion runbook lives at docs/management-plane-dr-runbook.md and
+  documents the human side of the restore procedure.
+*/ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "astronomer.fullname" . }}-management-backup
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup") | nindent 4 }}
+spec:
+  schedule: {{ .Values.managementBackup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.managementBackup.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.managementBackup.failedJobsHistoryLimit | default 3 }}
+  startingDeadlineSeconds: {{ .Values.managementBackup.startingDeadlineSeconds | default 600 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.managementBackup.backoffLimit | default 2 }}
+      ttlSecondsAfterFinished: {{ .Values.managementBackup.ttlSecondsAfterFinished | default 86400 }}
+      template:
+        metadata:
+          labels:
+            {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup") | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          {{- with .Values.image.pullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.managementBackup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.managementBackup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: pgdump-s3
+              image: "{{ .Values.managementBackup.image.repository }}:{{ .Values.managementBackup.image.tag }}"
+              imagePullPolicy: {{ .Values.managementBackup.image.pullPolicy | default "IfNotPresent" }}
+              command: ["/bin/sh", "-eu", "-c"]
+              args:
+                - |
+                  set -eu
+
+                  # --- Resolve dump file naming ---------------------------------
+                  STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+                  DOW="$(date -u +%u)"   # 1=Mon..7=Sun
+                  DOM="$(date -u +%d)"   # 01..31
+
+                  BUCKET="${MANAGEMENT_BACKUP_BUCKET}"
+                  PREFIX="${MANAGEMENT_BACKUP_PREFIX:-astronomer-pg}"
+                  RELEASE="${MANAGEMENT_BACKUP_RELEASE}"
+
+                  DAILY_KEY="${PREFIX}/${RELEASE}/daily/${STAMP}.pgcustom"
+                  WEEKLY_KEY="${PREFIX}/${RELEASE}/weekly/${STAMP}.pgcustom"
+                  MONTHLY_KEY="${PREFIX}/${RELEASE}/monthly/${STAMP}.pgcustom"
+
+                  DUMP_PATH="/tmp/${STAMP}.pgcustom"
+
+                  # --- Configure aws cli ----------------------------------------
+                  export AWS_SHARED_CREDENTIALS_FILE="/var/run/aws/credentials"
+                  export AWS_DEFAULT_REGION="${MANAGEMENT_BACKUP_REGION}"
+                  AWS_S3_FLAGS=""
+                  if [ -n "${MANAGEMENT_BACKUP_ENDPOINT:-}" ]; then
+                    AWS_S3_FLAGS="--endpoint-url ${MANAGEMENT_BACKUP_ENDPOINT}"
+                  fi
+
+                  # --- pg_dump --------------------------------------------------
+                  echo "Starting pg_dump at ${STAMP} (release=${RELEASE})"
+                  pg_dump \
+                    --dbname="${DATABASE_URL}" \
+                    --format=custom \
+                    --no-owner \
+                    --no-acl \
+                    --file="${DUMP_PATH}"
+
+                  DUMP_SIZE="$(wc -c < "${DUMP_PATH}")"
+                  echo "pg_dump complete: ${DUMP_SIZE} bytes -> ${DUMP_PATH}"
+
+                  # --- Upload daily ---------------------------------------------
+                  echo "Uploading daily: s3://${BUCKET}/${DAILY_KEY}"
+                  aws s3 cp ${AWS_S3_FLAGS} "${DUMP_PATH}" "s3://${BUCKET}/${DAILY_KEY}"
+
+                  # --- Promote to weekly on Sundays -----------------------------
+                  if [ "${DOW}" = "7" ]; then
+                    echo "Promoting to weekly: s3://${BUCKET}/${WEEKLY_KEY}"
+                    aws s3 cp ${AWS_S3_FLAGS} "${DUMP_PATH}" "s3://${BUCKET}/${WEEKLY_KEY}"
+                  fi
+
+                  # --- Promote to monthly on the 1st ----------------------------
+                  if [ "${DOM}" = "01" ]; then
+                    echo "Promoting to monthly: s3://${BUCKET}/${MONTHLY_KEY}"
+                    aws s3 cp ${AWS_S3_FLAGS} "${DUMP_PATH}" "s3://${BUCKET}/${MONTHLY_KEY}"
+                  fi
+
+                  rm -f "${DUMP_PATH}"
+
+                  # --- Retention -----------------------------------------------
+                  # List + prune objects older than the configured retention per
+                  # tier. We sort by key (which embeds an ISO-8601 timestamp), so
+                  # lexical order == chronological order.
+                  prune_tier() {
+                    TIER="$1"
+                    KEEP="$2"
+                    PFX="${PREFIX}/${RELEASE}/${TIER}/"
+                    echo "Pruning ${TIER} retention (keep ${KEEP})"
+                    KEYS="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
+                              --bucket "${BUCKET}" \
+                              --prefix "${PFX}" \
+                              --query 'Contents[].Key' \
+                              --output text 2>/dev/null || echo '')"
+                    if [ -z "${KEYS}" ] || [ "${KEYS}" = "None" ]; then
+                      echo "  (no objects under ${PFX})"
+                      return 0
+                    fi
+                    # tr tabs/spaces -> newlines, sort desc, drop the top KEEP, delete the rest
+                    echo "${KEYS}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' \
+                      | sort -r | tail -n +"$((KEEP + 1))" \
+                      | while read -r OLD; do
+                          [ -z "${OLD}" ] && continue
+                          echo "  rm s3://${BUCKET}/${OLD}"
+                          aws s3 rm ${AWS_S3_FLAGS} "s3://${BUCKET}/${OLD}" || true
+                        done
+                  }
+
+                  prune_tier "daily"   "${MANAGEMENT_BACKUP_KEEP_DAILY}"
+                  prune_tier "weekly"  "${MANAGEMENT_BACKUP_KEEP_WEEKLY}"
+                  prune_tier "monthly" "${MANAGEMENT_BACKUP_KEEP_MONTHLY}"
+
+                  echo "Backup OK."
+              env:
+                - name: MANAGEMENT_BACKUP_RELEASE
+                  value: {{ .Release.Name | quote }}
+                - name: MANAGEMENT_BACKUP_BUCKET
+                  value: {{ .Values.managementBackup.s3.bucket | quote }}
+                - name: MANAGEMENT_BACKUP_REGION
+                  value: {{ .Values.managementBackup.s3.region | quote }}
+                - name: MANAGEMENT_BACKUP_PREFIX
+                  value: {{ .Values.managementBackup.s3.prefix | default "astronomer-pg" | quote }}
+                {{- with .Values.managementBackup.s3.endpoint }}
+                - name: MANAGEMENT_BACKUP_ENDPOINT
+                  value: {{ . | quote }}
+                {{- end }}
+                - name: MANAGEMENT_BACKUP_KEEP_DAILY
+                  value: {{ .Values.managementBackup.retention.daily | default 30 | quote }}
+                - name: MANAGEMENT_BACKUP_KEEP_WEEKLY
+                  value: {{ .Values.managementBackup.retention.weekly | default 12 | quote }}
+                - name: MANAGEMENT_BACKUP_KEEP_MONTHLY
+                  value: {{ .Values.managementBackup.retention.monthly | default 6 | quote }}
+                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
+                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                {{- else }}
+                - name: DATABASE_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: {{ include "astronomer.fullname" . }}-config
+                      key: DATABASE_URL
+                {{- end }}
+              volumeMounts:
+                - name: aws-credentials
+                  mountPath: /var/run/aws
+                  readOnly: true
+                - name: scratch
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.managementBackup.resources | nindent 16 }}
+          volumes:
+            - name: aws-credentials
+              secret:
+                secretName: {{ required "managementBackup.s3.credentialsSecretRef.name is required when managementBackup.enabled=true" .Values.managementBackup.s3.credentialsSecretRef.name | quote }}
+                items:
+                  - key: {{ .Values.managementBackup.s3.credentialsSecretRef.key | default "credentials" | quote }}
+                    path: credentials
+            - name: scratch
+              emptyDir:
+                sizeLimit: {{ .Values.managementBackup.scratchSizeLimit | default "8Gi" | quote }}
+{{- end }}
