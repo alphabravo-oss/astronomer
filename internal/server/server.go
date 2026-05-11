@@ -393,6 +393,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		startLocalArgoSelfManagement(reconcileCtx, logger, cfg, queries, toolHandler, encryptor, localCluster)
 	}
 
+	// Probe-based cluster conditions (AgentReachable, GatewayAPISupported).
+	// Heartbeat-derived conditions are handled by the worker's
+	// cluster:health_check task; these probes need the tunnel-backed
+	// K8sRequester which only the server process has.
+	startClusterProbeReconciler(reconcileCtx, logger, queries, requester)
+
 	return s, nil
 }
 

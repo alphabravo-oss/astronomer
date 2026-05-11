@@ -78,6 +78,20 @@ export interface Cluster {
   directAccessEnabled?: boolean;
 }
 
+// metav1.Condition-shaped row written by the health-check worker
+// (internal/worker/tasks/health_check.go). Types currently emitted:
+//   Connected           — agent heartbeat freshness
+//   AgentReachable      — GET /version round-trip through the tunnel
+//   GatewayAPISupported — gateway.networking.k8s.io/v1 discovery probe
+export interface ClusterCondition {
+  type: string;
+  status: 'True' | 'False' | 'Unknown';
+  reason: string;
+  message: string;
+  last_transition_time: string;
+  last_probe_time: string;
+}
+
 export interface ClusterNode {
   name: string;
   status: 'Ready' | 'NotReady' | 'SchedulingDisabled';

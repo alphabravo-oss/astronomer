@@ -270,6 +270,11 @@ export async function deleteCluster(id: string) {
   await api.delete(`/clusters/${id}`);
 }
 
+export async function getClusterConditions(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').ClusterCondition[]>>(`/clusters/${clusterId}/conditions`);
+  return res.data.data;
+}
+
 export async function getClusterNodes(clusterId: string) {
   const res = await api.get<APIResponse<import('@/types').ClusterNode[]>>(`/clusters/${clusterId}/nodes`);
   return res.data.data;

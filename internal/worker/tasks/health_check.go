@@ -14,6 +14,20 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
+// Condition types written by the worker's health check. Probe-based
+// conditions are owned by the server reconciler in
+// internal/server/cluster_probes.go.
+const (
+	ConditionConnected = "Connected"
+)
+
+// Tri-state matching metav1.ConditionStatus.
+const (
+	conditionTrue    = "True"
+	conditionFalse   = "False"
+	conditionUnknown = "Unknown"
+)
+
 // HealthCheckPayload contains parameters for a health check task.
 type HealthCheckPayload struct {
 	ClusterID string `json:"cluster_id,omitempty"` // empty = check all clusters
@@ -107,5 +121,51 @@ func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
 		NodeCount:          cluster.NodeCount,
 		Conditions:         conditions,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Refresh per-cluster Kubernetes-style conditions. We compute these from
+	// heartbeat freshness + a low-cost probe through the tunnel rather than
+	// from the JSON blob above so the UI can render pills like kubectl does.
+	updateClusterConditions(ctx, cluster, connected)
+	return nil
+}
+
+// updateClusterConditions upserts the heartbeat-derived Connected
+// condition. Probe-based conditions (AgentReachable, GatewayAPISupported)
+// are owned by the server process — see internal/server/cluster_probes.go
+// — because they require the tunnel-backed K8sRequester which only the
+// server has access to.
+func updateClusterConditions(ctx context.Context, cluster sqlc.Cluster, heartbeatFresh bool) {
+	upsert := func(condType, status, reason, message string) {
+		_, err := runtimeDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+			ClusterID: cluster.ID,
+			Type:      condType,
+			Status:    status,
+			Reason:    reason,
+			Message:   message,
+		})
+		if err != nil && runtimeDeps.Log != nil {
+			runtimeDeps.Log.Warn("failed to upsert cluster condition",
+				"cluster_id", cluster.ID.String(), "type", condType, "error", err)
+		}
+	}
+
+	// Connected: derived purely from the heartbeat freshness window. True
+	// when the agent's last heartbeat is within 2m, False when it isn't,
+	// Unknown when no heartbeat has ever arrived.
+	switch {
+	case !cluster.LastHeartbeat.Valid:
+		upsert(ConditionConnected, conditionUnknown, "NoHeartbeat",
+			"No heartbeat has been received from the agent yet.")
+	case heartbeatFresh:
+		upsert(ConditionConnected, conditionTrue, "AgentHeartbeatRecent",
+			fmt.Sprintf("Agent heartbeat received at %s.",
+				cluster.LastHeartbeat.Time.UTC().Format(time.RFC3339)))
+	default:
+		upsert(ConditionConnected, conditionFalse, "AgentHeartbeatStale",
+			fmt.Sprintf("Last heartbeat %s ago (threshold 2m).",
+				time.Since(cluster.LastHeartbeat.Time).Round(time.Second)))
+	}
 }

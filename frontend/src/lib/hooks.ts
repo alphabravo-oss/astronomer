@@ -190,6 +190,18 @@ export function useClusterNodes(clusterId: string) {
   });
 }
 
+// The health-check worker reconciles conditions every 60s; polling at the
+// same cadence keeps the UI fresh without piling on. Cluster page also
+// gets invalidated on cluster.heartbeat events via useLiveQueryInvalidation.
+export function useClusterConditions(clusterId: string) {
+  return useQuery({
+    queryKey: ['clusters', clusterId, 'conditions'] as const,
+    queryFn: () => apiClient.getClusterConditions(clusterId),
+    enabled: !!clusterId,
+    refetchInterval: 60000,
+  });
+}
+
 export function useNodeDetail(clusterId: string, nodeName: string) {
   return useQuery({
     queryKey: queryKeys.clusters.nodeDetail(clusterId, nodeName),
