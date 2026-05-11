@@ -1,0 +1,195 @@
+# =============================================================================
+# Astronomer Go — production override
+# =============================================================================
+# Layer this file on top of values.yaml at install/upgrade time:
+#
+#   helm upgrade --install astronomer deploy/chart \
+#     -f deploy/chart/values.yaml \
+#     -f deploy/chart/values-production.yaml \
+#     --set image.server.tag=<git-sha> \
+#     --set image.worker.tag=<git-sha> \
+#     --set image.agent.tag=<git-sha> \
+#     --set image.migrate.tag=<git-sha> \
+#     --set frontend.image.tag=<git-sha> \
+#     --set config.serverURL=https://astronomer.example.com \
+#     --set 'gateway.hosts={astronomer.example.com}' \
+#     --set gateway.tls.secretName=astronomer-tls \
+#     --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
+#     --set postgres.external.dsnSecretRef.key=dsn \
+#     --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
+#     --set-file secrets.encryptionKey=./prod-fernet-key
+#
+# What this file DOES change vs values.yaml:
+#   1. Disables bundled Postgres + Redis. You MUST point to an external
+#      managed Postgres (RDS/Aurora/CloudSQL/Hetzner-Cloud) and external
+#      Redis (ElastiCache/MemoryDB/Hetzner-Cloud). Bundled defaults are
+#      single-replica StatefulSets that are NOT a production posture.
+#   2. Lifts replica counts to 3 / 3 / 3 for server/worker/frontend so a
+#      single-node loss doesn't take the management plane down. PDB
+#      minAvailable bumps to 2 in lockstep.
+#   3. Turns on TLS at the Gateway. You must either (a) provide a
+#      pre-existing `tls.secretName` containing tls.crt + tls.key, or
+#      (b) flip gateway.tls.certManager.enabled=true and point it at a
+#      ClusterIssuer (Let's Encrypt / internal CA / etc).
+#   4. Disables the legacy Ingress block. The Gateway API path is the
+#      only supported production surface; the Ingress was a transitional
+#      compatibility layer.
+#   5. Tightens CORS and forces env=production / debug=false / log=info.
+#   6. Raises per-pod CPU/mem limits to numbers more in line with
+#      "production density 50–200 managed clusters per shard".
+#   7. Enables Prometheus ServiceMonitor so a kube-prometheus-stack /
+#      Thanos receiver scrapes the dedicated :9090 metrics ports.
+#
+# What this file does NOT cover (intentional — operator decision):
+#   - The actual Postgres DSN secret + Redis address. Set those via
+#     `helm install --set ...` so secret material doesn't live in git.
+#   - Image registry / pullSecrets if you're not pulling from your own
+#     registry. Override image.registry + image.pullSecrets on the CLI.
+#   - cert-manager Issuer choice. Some clusters use cluster-scoped
+#     issuers (`ClusterIssuer`), some use namespaced (`Issuer`).
+#   - Backup storage location. Velero credentials live in the backup
+#     storage CR, not the Helm chart.
+
+# Force preflight on so the gateway-class / external-DB checks run.
+preflight:
+  enabled: true
+
+# ── Resource topology ─────────────────────────────────────────────────────
+server:
+  replicaCount: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+worker:
+  replicaCount: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+frontend:
+  enabled: true
+  replicaCount: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ── External datastores ───────────────────────────────────────────────────
+# Bundled Postgres + Redis are explicitly off. A non-empty
+# dsnSecretRef/address is the contract this profile relies on; the chart's
+# secret templates pull from these, and the server's DSN-builder skips the
+# in-chart Service hostnames when bundled.enabled=false.
+postgres:
+  bundled:
+    enabled: false
+  # Configure via --set on install:
+  #   --set postgres.external.dsnSecretRef.name=<secret>
+  #   --set postgres.external.dsnSecretRef.key=<key>
+  external:
+    dsn: ""
+    dsnSecretRef:
+      name: ""
+      key: dsn
+
+redis:
+  bundled:
+    enabled: false
+  # Configure via --set on install:
+  #   --set redis.external.address=<host:port>
+  #   --set redis.external.passwordSecretRef.name=<secret>
+  #   --set redis.external.passwordSecretRef.key=<key>
+  external:
+    address: ""
+    tls: true
+    database: 0
+    passwordSecretRef:
+      name: ""
+      key: password
+
+# ── Routing / TLS ─────────────────────────────────────────────────────────
+ingress:
+  # Use Gateway API exclusively. The Ingress block is only kept around in
+  # the chart for clusters that haven't migrated to Gateway API yet.
+  enabled: false
+
+gateway:
+  enabled: true
+  className: nginx
+  hosts: []   # Operator MUST set: --set 'gateway.hosts={astronomer.example.com}'
+  tls:
+    enabled: true
+    # Pin a pre-existing TLS Secret OR let cert-manager mint one. Only one
+    # path should be active in a given install.
+    secretName: ""
+    certManager:
+      enabled: false
+      issuerName: ""
+      issuerKind: ClusterIssuer
+      issuerGroup: cert-manager.io
+
+# ── Config hardening ──────────────────────────────────────────────────────
+config:
+  env: production
+  debug: "false"
+  logLevel: info
+  # Wide-open CORS is a security smell in production. Set this explicitly
+  # via --set config.corsAllowedOrigins=https://astronomer.example.com
+  corsAllowedOrigins: ""
+  # Operator MUST set: --set config.serverURL=https://astronomer.example.com
+  # Used by the Argo self-management loop to render the right hostname.
+  serverURL: ""
+
+# ── Secrets ───────────────────────────────────────────────────────────────
+# The chart's bundled `secrets.encryptionKey` is a known DEV key shipped
+# with the chart for local testing — it MUST be replaced. Generate with
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# and pass via:
+#   --set-file secrets.encryptionKey=./prod-fernet-key
+# (Same for secrets.secretKey — JWT signing material.)
+secrets:
+  secretKey: ""        # required — JWT signing
+  encryptionKey: ""    # required — wraps SSO/agent secrets
+
+# Production deploys should pin the bootstrap password rather than relying
+# on the chart's random generator: the value lives in a Secret with
+# resource-policy=keep so rotation is annoying, and operators usually
+# want to control the initial credential anyway. Pass via
+#   --set bootstrap.password=<initial-admin-password>
+# or use --set-file to read from a file outside git.
+bootstrap:
+  password: ""
+
+# ── ServiceAccount + RBAC ─────────────────────────────────────────────────
+serviceAccount:
+  create: true
+
+# ── Metrics ───────────────────────────────────────────────────────────────
+# Production stacks running kube-prometheus / Thanos / VictoriaMetrics
+# expect the chart to publish ServiceMonitors so the :9090 listeners
+# inside server/worker pods get scraped automatically.
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s

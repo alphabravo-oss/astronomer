@@ -166,3 +166,58 @@ available and fall back to scheduler best-effort semantics.
       {{- include "astronomer.componentSelectorLabels" (dict "context" .context "component" .component) | nindent 6 }}
 {{- end }}
 {{- end }}
+
+{{/*
+astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
+render when env=production but mandatory production knobs are missing. Helm's
+`fail` builtin aborts the whole release with a single human-readable message
+rather than letting the user discover three minutes later that the server
+pod is CrashLooping because of an empty Fernet key.
+Returns "" so callers can drop the result without it appearing in the
+rendered manifest.
+*/}}
+{{- define "astronomer.requireProductionInputs" -}}
+  {{- if eq (default "" .Values.config.env) "production" }}
+    {{- $errs := list }}
+    {{- if not (or .Values.postgres.external.dsn .Values.postgres.external.dsnSecretRef.name) }}
+      {{- $errs = append $errs "  - postgres.external.dsn or postgres.external.dsnSecretRef.name must be set when config.env=production (bundled Postgres is not a production posture)" }}
+    {{- end }}
+    {{- if .Values.postgres.bundled.enabled }}
+      {{- $errs = append $errs "  - postgres.bundled.enabled must be false when config.env=production" }}
+    {{- end }}
+    {{- if .Values.redis.bundled.enabled }}
+      {{- $errs = append $errs "  - redis.bundled.enabled must be false when config.env=production" }}
+    {{- end }}
+    {{- if not .Values.redis.external.address }}
+      {{- $errs = append $errs "  - redis.external.address must be set when config.env=production" }}
+    {{- end }}
+    {{- if not .Values.config.serverURL }}
+      {{- $errs = append $errs "  - config.serverURL must be set to the external https URL of this install" }}
+    {{- end }}
+    {{- if not (and .Values.gateway.enabled (gt (len .Values.gateway.hosts) 0)) }}
+      {{- $errs = append $errs "  - gateway.enabled=true with at least one gateway.hosts entry is required" }}
+    {{- end }}
+    {{- if and .Values.gateway.enabled (not .Values.gateway.tls.enabled) }}
+      {{- $errs = append $errs "  - gateway.tls.enabled must be true (set gateway.tls.secretName or gateway.tls.certManager.enabled)" }}
+    {{- end }}
+    {{- if and .Values.gateway.tls.enabled (not .Values.gateway.tls.secretName) (not .Values.gateway.tls.certManager.enabled) }}
+      {{- $errs = append $errs "  - either gateway.tls.secretName or gateway.tls.certManager.enabled must be set" }}
+    {{- end }}
+    {{- if eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production" }}
+      {{- $errs = append $errs "  - secrets.secretKey is still the chart's known dev value — replace it (JWT signing key)" }}
+    {{- end }}
+    {{- if eq (default "" .Values.secrets.encryptionKey) "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }}
+      {{- $errs = append $errs "  - secrets.encryptionKey is still the chart's known dev Fernet key — replace it" }}
+    {{- end }}
+    {{- if not .Values.secrets.secretKey }}
+      {{- $errs = append $errs "  - secrets.secretKey is empty (required)" }}
+    {{- end }}
+    {{- if not .Values.secrets.encryptionKey }}
+      {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
+    {{- end }}
+    {{- if gt (len $errs) 0 }}
+      {{- $msg := printf "\n\nAstronomer production preflight failed:\n%s\n\nSee deploy/chart/README.md and deploy/chart/values-production.yaml for the expected wiring." (join "\n" $errs) }}
+      {{- fail $msg }}
+    {{- end }}
+  {{- end }}
+{{- end }}
