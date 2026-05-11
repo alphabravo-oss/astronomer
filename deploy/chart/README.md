@@ -1,15 +1,67 @@
 # Astronomer Helm Chart
 
+## Dev vs. Production Posture
+
+The base `values.yaml` is tuned for **first-touch development** — it boots a
+working management plane on a single laptop/k3d cluster with bundled Postgres
++ Redis StatefulSets, TLS disabled, and a known-dev Fernet key. **Do not run
+this profile in production.** Three value files ship with the chart:
+
+| File | Use case | Notable settings |
+|------|----------|------------------|
+| `values.yaml`            | dev / first install / CI | bundled Postgres + Redis, TLS off, replicas=2, debug=true |
+| `values-k3d.yaml`        | k3d laptop testing | replicas=1, scheduling helpers off, dev Fernet key |
+| `values-production.yaml` | real installs | bundled DBs **off**, TLS required, replicas=3, env=production, debug=false |
+
+For a production install, layer the production override on top of the base:
+
+```bash
+helm upgrade --install astronomer ./deploy/chart \
+  -f deploy/chart/values.yaml \
+  -f deploy/chart/values-production.yaml \
+  --set image.server.tag=<git-sha> \
+  --set image.worker.tag=<git-sha> \
+  --set image.agent.tag=<git-sha> \
+  --set image.migrate.tag=<git-sha> \
+  --set frontend.image.tag=<git-sha> \
+  --set config.serverURL=https://astronomer.example.com \
+  --set config.corsAllowedOrigins=https://astronomer.example.com \
+  --set 'gateway.hosts={astronomer.example.com}' \
+  --set gateway.tls.secretName=astronomer-tls \
+  --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
+  --set postgres.external.dsnSecretRef.key=dsn \
+  --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
+  --set-file secrets.encryptionKey=./prod-fernet-key \
+  --set-file secrets.secretKey=./prod-jwt-key \
+  --set-file bootstrap.password=./prod-bootstrap-password
+```
+
+`values-production.yaml` will **fail to render** sensibly if any of the
+following are still unset — they're the bare minimum a production install
+needs:
+
+- `postgres.external.dsnSecretRef.name` or `postgres.external.dsn`
+- `redis.external.address` (and `passwordSecretRef.name` if your Redis is
+  password-gated)
+- `gateway.hosts` (at least one hostname)
+- `gateway.tls.secretName` **or** `gateway.tls.certManager.{enabled,issuerName}`
+- `secrets.encryptionKey` — must be a real Fernet key; generate with
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- `secrets.secretKey` — JWT signing material
+- `config.serverURL` — external URL; seeds the Argo self-management hostname
+
 ## High Availability Defaults
 
-The base `values.yaml` is now tuned for a minimal HA posture for the control
-plane:
+The base `values.yaml` is tuned for a minimal HA posture out of the box:
 
 - `server.replicaCount=2`
 - `worker.replicaCount=2`
 - `frontend.replicaCount=2` when the frontend is enabled
 - PodDisruptionBudgets, anti-affinity, and topology spread are enabled for all
   three components
+
+`values-production.yaml` lifts these to `replicaCount=3` with PDB
+`minAvailable=2` so a single node loss never drops capacity below quorum.
 
 The local `values-k3d.yaml` override intentionally scales these back down to
 single replicas and disables the frontend HA scheduling helpers to keep smoke
