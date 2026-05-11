@@ -23,6 +23,74 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # initContainers run sequentially before the main `preflight` kubectl
+      # container. The DB-connect check runs here because it has different
+      # tool requirements (the migrate binary) than the CRD/Secret checks.
+      # Failure here fails the whole pod, which fails the helm hook, which
+      # fails the install — exactly the gate we want (FEATURES-051126 T13).
+      initContainers:
+        - name: db-preflight
+          image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
+                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+            {{- else }}
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "astronomer.fullname" . }}-config
+                  key: DATABASE_URL
+            {{- end }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              # Check connectivity + the schema_migrations dirty flag. The
+              # migrate binary's `version` subcommand prints either
+              # "<n>" (clean) or "<n> (dirty)" — the latter means a previous
+              # migration crashed midway and the schema is in an indeterminate
+              # state. Refusing the install here surfaces the problem early,
+              # before the migrate Job retries and CrashLoops.
+              if ! out=$(migrate -database "$DATABASE_URL" -path /migrations version 2>&1); then
+                # Special case: "no migration" is fine — empty DB, fresh install.
+                if echo "$out" | grep -q 'error: no migration'; then
+                  echo "schema_migrations table empty — fresh install, OK."
+                  exit 0
+                fi
+                echo "Refusing release: cannot connect to Postgres or read schema_migrations."
+                echo "Error from migrate: $out"
+                echo ""
+                echo "Common causes:"
+                echo "  - DATABASE_URL is wrong or the Postgres pod isn't ready yet"
+                echo "  - sslmode mismatch between client and server"
+                echo "  - The astronomer user lacks SELECT on schema_migrations"
+                exit 1
+              fi
+              echo "Schema state: $out"
+              if echo "$out" | grep -q 'dirty'; then
+                echo ""
+                echo "Refusing release: schema_migrations is marked dirty."
+                echo "A previous migration crashed midway and the schema is in an"
+                echo "indeterminate state. Recover by:"
+                echo "  1. Inspect: kubectl -n {{ .Release.Namespace }} run psql --rm -it --image=postgres:16-alpine -- psql \"\$DATABASE_URL\" -c 'SELECT * FROM schema_migrations;'"
+                echo "  2. Decide whether to roll forward or roll back the dirty version"
+                echo "  3. migrate -database \"\$DATABASE_URL\" -path /migrations force <version>"
+                echo "See docs/upgrade-runbook.md (FEATURES-051126 T06 once landed)."
+                exit 1
+              fi
+              echo "Postgres preflight OK."
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
       containers:
         - name: preflight
           image: "{{ .Values.preflight.image.repository }}:{{ .Values.preflight.image.tag }}"
