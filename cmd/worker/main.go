@@ -69,11 +69,21 @@ func main() {
 		Queries: sqlc.New(database.Pool()),
 	})
 
-	// Create worker and scheduler.
-	w := worker.NewWorker(cfg.RedisURL, log)
+	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —
+	// the old silent-fallback behavior was a production footgun in
+	// air-gapped / split-network deployments (FEATURES-051126 T02).
+	w, werr := worker.NewWorker(cfg.RedisURL, log)
+	if werr != nil {
+		log.Error("failed to start worker", "error", werr)
+		os.Exit(1)
+	}
 	w.RegisterHandlers()
 
-	s := worker.NewScheduler(cfg.RedisURL, log)
+	s, serr := worker.NewScheduler(cfg.RedisURL, log)
+	if serr != nil {
+		log.Error("failed to start scheduler", "error", serr)
+		os.Exit(1)
+	}
 	if err := s.RegisterPeriodicTasks(); err != nil {
 		log.Error("failed to register periodic tasks", "error", err)
 		os.Exit(1)
@@ -85,7 +95,10 @@ func main() {
 	db.StartMetricsReporter(ctx, database.Pool(), log)
 	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
 	if redisErr != nil {
-		redisOpt = asynq.RedisClientOpt{Addr: "localhost:6379"}
+		// Already validated by NewWorker/NewScheduler above; if we get
+		// here REDIS_URL was somehow mutated between then and now.
+		log.Error("failed to parse REDIS_URL for inspector", "error", redisErr)
+		os.Exit(1)
 	}
 	inspector := asynq.NewInspector(redisOpt)
 	defer inspector.Close()

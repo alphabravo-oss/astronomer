@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -49,11 +50,16 @@ type Worker struct {
 }
 
 // NewWorker creates a new Asynq-based background worker.
-func NewWorker(redisURL string, log *slog.Logger) *Worker {
+//
+// An invalid REDIS_URL is fail-fast: returns a non-nil error rather than
+// silently falling back to localhost:6379. The previous fallback was a
+// footgun in air-gapped or split-network production clusters — the worker
+// would come up, fail every redis op invisibly, and take hours to
+// diagnose. Now a bad URL surfaces at process start.
+func NewWorker(redisURL string, log *slog.Logger) (*Worker, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
-		log.Error("failed to parse redis URL, falling back to default", "error", err)
-		redisOpt = asynq.RedisClientOpt{Addr: "localhost:6379"}
+		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
 	}
 
 	srv := asynq.NewServer(redisOpt, asynq.Config{
@@ -69,7 +75,7 @@ func NewWorker(redisURL string, log *slog.Logger) *Worker {
 		server: srv,
 		mux:    asynq.NewServeMux(),
 		log:    log,
-	}
+	}, nil
 }
 
 // RegisterHandlers sets up all task handlers on the mux.

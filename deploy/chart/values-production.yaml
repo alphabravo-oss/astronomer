@@ -115,6 +115,29 @@ postgres:
 redis:
   bundled:
     enabled: false
+  # Redis is a hard dependency of the asynq job queue. Both the server and
+  # worker will fail to start if REDIS_URL is unparseable — silent fallback
+  # was removed in FEATURES-051126 T02 because it masked misconfig in
+  # air-gapped / split-network production deployments.
+  #
+  # Supported HA topologies:
+  #
+  #   Single-node managed Redis (cloud-provider):
+  #     --set redis.external.address=cache.internal.example.com:6379
+  #
+  #   Redis Sentinel (failover-managed primary):
+  #     The address syntax depends on the client; this chart uses
+  #     `redis://...?sentinel=...` form via the underlying asynq parser.
+  #     Example:
+  #       --set redis.external.address='redis-sentinel://sentinel-0:26379,sentinel-1:26379,sentinel-2:26379/mymaster/0'
+  #
+  #   Redis Cluster (sharded):
+  #     --set redis.external.address='redis-cluster://r0:6379,r1:6379,r2:6379'
+  #
+  # When Redis is down, /readyz on the server returns 503 (the pod is
+  # removed from Service endpoints until Redis recovers), and the worker
+  # exits non-zero. Wire your alerting accordingly.
+  #
   # Configure via --set on install:
   #   --set redis.external.address=<host:port>
   #   --set redis.external.passwordSecretRef.name=<secret>

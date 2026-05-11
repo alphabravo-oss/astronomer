@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/hibiken/asynq"
@@ -13,11 +14,13 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new periodic task scheduler.
-func NewScheduler(redisURL string, log *slog.Logger) *Scheduler {
+//
+// As with NewWorker, an invalid REDIS_URL is fail-fast — silent localhost
+// fallback was a production footgun.
+func NewScheduler(redisURL string, log *slog.Logger) (*Scheduler, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
-		log.Error("failed to parse redis URL, falling back to default", "error", err)
-		redisOpt = asynq.RedisClientOpt{Addr: "localhost:6379"}
+		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
 	}
 
 	s := asynq.NewScheduler(redisOpt, nil)
@@ -25,7 +28,7 @@ func NewScheduler(redisURL string, log *slog.Logger) *Scheduler {
 	return &Scheduler{
 		scheduler: s,
 		log:       log,
-	}
+	}, nil
 }
 
 // RegisterPeriodicTasks sets up all cron-based tasks matching the Python Celery Beat schedule.

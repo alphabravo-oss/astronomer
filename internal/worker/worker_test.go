@@ -16,7 +16,10 @@ func testLogger() *slog.Logger {
 }
 
 func TestNewWorker(t *testing.T) {
-	w := NewWorker("redis://localhost:6379/0", testLogger())
+	w, err := NewWorker("redis://localhost:6379/0", testLogger())
+	if err != nil {
+		t.Fatalf("NewWorker: %v", err)
+	}
 	if w == nil {
 		t.Fatal("expected non-nil Worker")
 	}
@@ -28,27 +31,49 @@ func TestNewWorker(t *testing.T) {
 	}
 }
 
+// FEATURES-051126 T02: invalid REDIS_URL must be fail-fast (error returned,
+// nil Worker), NOT silently fall back to localhost. The previous behavior
+// was a production footgun.
 func TestNewWorkerInvalidRedis(t *testing.T) {
-	// Should not panic; falls back to default.
-	w := NewWorker("not-a-valid-url", testLogger())
-	if w == nil {
-		t.Fatal("expected non-nil Worker even with invalid redis URL")
+	w, err := NewWorker("not-a-valid-url", testLogger())
+	if err == nil {
+		t.Fatal("expected error for invalid REDIS_URL, got nil")
+	}
+	if w != nil {
+		t.Fatal("expected nil Worker on parse error")
 	}
 }
 
 func TestRegisterHandlers(t *testing.T) {
-	w := NewWorker("redis://localhost:6379/0", testLogger())
+	w, err := NewWorker("redis://localhost:6379/0", testLogger())
+	if err != nil {
+		t.Fatalf("NewWorker: %v", err)
+	}
 	// Should not panic.
 	w.RegisterHandlers()
 }
 
 func TestNewScheduler(t *testing.T) {
-	s := NewScheduler("redis://localhost:6379/0", testLogger())
+	s, err := NewScheduler("redis://localhost:6379/0", testLogger())
+	if err != nil {
+		t.Fatalf("NewScheduler: %v", err)
+	}
 	if s == nil {
 		t.Fatal("expected non-nil Scheduler")
 	}
 	if s.scheduler == nil {
 		t.Fatal("expected non-nil asynq.Scheduler")
+	}
+}
+
+// FEATURES-051126 T02: same fail-fast contract for the scheduler.
+func TestNewSchedulerInvalidRedis(t *testing.T) {
+	s, err := NewScheduler("not-a-valid-url", testLogger())
+	if err == nil {
+		t.Fatal("expected error for invalid REDIS_URL, got nil")
+	}
+	if s != nil {
+		t.Fatal("expected nil Scheduler on parse error")
 	}
 }
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -205,9 +206,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	// Fail-fast on a bad REDIS_URL — the old silent localhost fallback was
+	// a production footgun (FEATURES-051126 T02). Returning an error
+	// surfaces the misconfig at process start instead of letting every
+	// asynq enqueue silently fail downstream.
 	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
 	if redisErr != nil {
-		redisOpt = asynq.RedisClientOpt{Addr: "localhost:6379"}
+		return nil, fmt.Errorf("parse REDIS_URL %q: %w", cfg.RedisURL, redisErr)
 	}
 	queue := asynq.NewClient(redisOpt)
 	// Phase B5 — give the security handler the asynq queue. The handler's
