@@ -18,9 +18,19 @@ func TestTranslateFromFrontend_Stdin(t *testing.T) {
 	if msg.Type != protocol.MsgExecInput {
 		t.Errorf("type = %q, want %q", msg.Type, protocol.MsgExecInput)
 	}
-	// Payload must be raw bytes, not the JSON envelope.
-	if string(msg.Payload) != "ls -l\n" {
-		t.Errorf("payload = %q, want %q", string(msg.Payload), "ls -l\n")
+	// Payload must be a JSON-encoded string so the parent protocol.Message
+	// stays valid JSON when re-marshaled over the tunnel. The agent's
+	// HandleExecInput unmarshals it before writing to stdin. Raw-byte
+	// payloads (the previous behavior) produced invalid wire JSON for any
+	// non-numeric keystroke and got dropped on the agent side, which is
+	// what made "type into the terminal and nothing happens" fail in
+	// production.
+	var data string
+	if err := json.Unmarshal(msg.Payload, &data); err != nil {
+		t.Fatalf("payload %q is not valid JSON: %v", string(msg.Payload), err)
+	}
+	if data != "ls -l\n" {
+		t.Errorf("decoded payload = %q, want %q", data, "ls -l\n")
 	}
 }
 
@@ -52,7 +62,9 @@ func TestTranslateFromFrontend_AuthSkipped(t *testing.T) {
 }
 
 func TestTranslateFromFrontend_RawFallback(t *testing.T) {
-	// Non-JSON frames are forwarded as raw stdin so non-browser clients work.
+	// Non-JSON frames are forwarded as raw stdin so non-browser clients
+	// work. As with the typed-envelope path, the bytes are JSON-encoded
+	// here so the message envelope stays valid JSON over the wire.
 	msg, skip := translateFromFrontend([]byte(`hello`), "s", "c")
 	if skip {
 		t.Fatal("raw frame should not be skipped")
@@ -60,8 +72,12 @@ func TestTranslateFromFrontend_RawFallback(t *testing.T) {
 	if msg.Type != protocol.MsgExecInput {
 		t.Errorf("type = %q, want %q", msg.Type, protocol.MsgExecInput)
 	}
-	if string(msg.Payload) != "hello" {
-		t.Errorf("payload = %q, want %q", string(msg.Payload), "hello")
+	var data string
+	if err := json.Unmarshal(msg.Payload, &data); err != nil {
+		t.Fatalf("payload %q is not valid JSON: %v", string(msg.Payload), err)
+	}
+	if data != "hello" {
+		t.Errorf("decoded payload = %q, want %q", data, "hello")
 	}
 }
 

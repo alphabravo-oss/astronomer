@@ -149,6 +149,13 @@ func (h *ExecHandler) HandleExecStart(ctx context.Context, msg *protocol.Message
 }
 
 // HandleExecInput delivers stdin data to an active exec session.
+//
+// Wire shape: server-side exec_consumer JSON-encodes the data string
+// (json.Marshal(env.Data)) so the parent protocol.Message stays valid
+// JSON on the wire. We unmarshal it back here before writing. A
+// backwards-compat path falls back to treating Payload as raw bytes if
+// the unmarshal fails so a pre-fix agent paired with a pre-fix server
+// still chugs along.
 func (h *ExecHandler) HandleExecInput(msg *protocol.Message) error {
 	h.mu.Lock()
 	sess, ok := h.sessions[msg.StreamID]
@@ -157,7 +164,16 @@ func (h *ExecHandler) HandleExecInput(msg *protocol.Message) error {
 		return fmt.Errorf("no active exec session for stream %s", msg.StreamID)
 	}
 
-	_, err := sess.stdinW.Write(msg.Payload)
+	var data string
+	if err := json.Unmarshal(msg.Payload, &data); err != nil {
+		// Older server speakers (or hand-rolled clients) may put raw bytes
+		// directly in Payload. json.Unmarshal will fail for anything that
+		// isn't a JSON literal, so fall back to writing the bytes
+		// verbatim. Both paths preserve correctness for ASCII stdin.
+		_, werr := sess.stdinW.Write(msg.Payload)
+		return werr
+	}
+	_, err := sess.stdinW.Write([]byte(data))
 	return err
 }
 

@@ -300,14 +300,26 @@ func translateFromFrontend(data []byte, streamID, clusterID string) (*protocol.M
 	if err := json.Unmarshal(data, &env); err == nil && env.Type != "" {
 		switch env.Type {
 		case "stdin", "input":
-			// Send raw keystrokes as the payload — the agent writes payload
-			// bytes verbatim to the SPDY stdin pipe.
+			// IMPORTANT: protocol.Message.Payload is json.RawMessage, which
+			// MUST contain valid JSON — the whole envelope is re-marshaled
+			// to the agent over the tunnel. Putting raw bytes in here
+			// produces invalid JSON for any non-numeric input (e.g. a
+			// keystroke "i" → "payload":i) and json.Unmarshal on the agent
+			// side drops the frame, so stdin never reaches the shell.
+			//
+			// We JSON-encode the data string here; the agent's
+			// HandleExecInput unmarshals it back into a string before
+			// writing to the SPDY stdin pipe.
+			encoded, err := json.Marshal(env.Data)
+			if err != nil {
+				return nil, true
+			}
 			return &protocol.Message{
 				Type:      protocol.MsgExecInput,
 				StreamID:  streamID,
 				ClusterID: clusterID,
 				Timestamp: time.Now().UTC(),
-				Payload:   json.RawMessage([]byte(env.Data)),
+				Payload:   encoded,
 			}, false
 		case "resize":
 			resize := protocol.ExecResizePayload{
@@ -336,13 +348,19 @@ func translateFromFrontend(data []byte, streamID, clusterID string) (*protocol.M
 			}, false
 		}
 	}
-	// Fallback: treat as raw stdin so non-JSON clients keep working.
+	// Fallback: treat the whole frame as raw stdin bytes so a hand-rolled
+	// debugging client (websocat piping shell commands) still works. Wrap
+	// the bytes as a JSON string so the marshaled message stays valid.
+	encoded, err := json.Marshal(string(data))
+	if err != nil {
+		return nil, true
+	}
 	return &protocol.Message{
 		Type:      protocol.MsgExecInput,
 		StreamID:  streamID,
 		ClusterID: clusterID,
 		Timestamp: time.Now().UTC(),
-		Payload:   json.RawMessage(data),
+		Payload:   encoded,
 	}, false
 }
 

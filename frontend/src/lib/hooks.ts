@@ -471,9 +471,14 @@ export function usePodLogs(
     };
   }, [clusterId, namespace, pod, params?.container, params?.follow, params?.tailLines]);
 
-  const allLogs = params?.follow
-    ? [...(query.data || []), ...streamLogs]
-    : query.data || [];
+  // Always surface the streamed tail in `allLogs`, even after the caller
+  // turned follow off. The previous behavior dropped streamLogs entirely
+  // when follow=false, which made the live tail vanish the instant the
+  // user clicked Pause — they thought the button had failed. "Pause"
+  // should stop *accumulating* new lines (the streaming useEffect tears
+  // down when follow is false) without losing what was already on
+  // screen.
+  const allLogs = [...(query.data || []), ...streamLogs];
 
   const stopStreaming = useCallback(() => {
     cleanupRef.current?.();

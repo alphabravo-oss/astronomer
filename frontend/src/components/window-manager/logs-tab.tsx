@@ -70,17 +70,22 @@ export function LogsTab({
     }
   }, [logs, follow]);
 
+  // Scroll listener: pause follow when the user scrolls away from the
+  // bottom. We deliberately do NOT auto-resume follow when the user
+  // scrolls back to the bottom — the previous "smart resume" logic
+  // fought the explicit Pause button, since pausing collapses the
+  // log list which scrolls to bottom which re-armed follow. Resume is
+  // now an explicit click (the Following button or the "Scroll to
+  // bottom and follow" bar).
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     function onScroll() {
       if (isAutoScrolling.current || !el) return;
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 16;
-      setFollow((prev) => {
-        if (prev && !atBottom) return false;
-        if (!prev && atBottom) return true;
-        return prev;
-      });
+      if (!atBottom) {
+        setFollow((prev) => (prev ? false : prev));
+      }
     }
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
@@ -133,17 +138,7 @@ export function LogsTab({
           {container && (
             <span className="font-mono text-foreground/80">· {container}</span>
           )}
-          <select
-            value={tailLines}
-            onChange={(e) => setTailLines(Number(e.target.value))}
-            className="h-6 px-1.5 rounded border border-border bg-background text-2xs
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value={100}>100</option>
-            <option value={500}>500</option>
-            <option value={1000}>1000</option>
-            <option value={5000}>5000</option>
-          </select>
+          <TailLinesSelect value={tailLines} onChange={setTailLines} />
         </div>
 
         <div className="flex items-center gap-1">
@@ -294,6 +289,80 @@ export function LogsTab({
           <ArrowDown className="h-3 w-3" />
           Scroll to bottom and follow
         </button>
+      )}
+    </div>
+  );
+}
+
+// TailLinesSelect — a styled dropdown for the "show last N lines" knob.
+// Native <select> elements were rendering with browser-default chrome that
+// clashed with the dark/muted toolbar style; this dropdown matches the rest
+// of the toolbar (h-6, 2xs text, border, hover state).
+function TailLinesSelect({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const options = [100, 500, 1000, 5000];
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 h-6 px-2 rounded border border-border bg-background
+          text-2xs text-foreground hover:bg-accent transition-colors
+          focus:outline-none focus:ring-1 focus:ring-ring"
+        title="Tail lines"
+      >
+        <span className="tabular-nums">{value}</span>
+        <span className="text-muted-foreground">lines</span>
+        <svg
+          className={cn(
+            'h-3 w-3 text-muted-foreground transition-transform',
+            open && 'rotate-180'
+          )}
+          viewBox="0 0 12 12"
+          fill="none"
+        >
+          <path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-24 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
+          {options.map((n) => (
+            <button
+              key={n}
+              onClick={() => {
+                onChange(n);
+                setOpen(false);
+              }}
+              className={cn(
+                'w-full flex items-center justify-between px-2 py-1 rounded text-2xs transition-colors',
+                n === value
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+              )}
+            >
+              <span className="tabular-nums">{n}</span>
+              <span className="text-muted-foreground/70">lines</span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
