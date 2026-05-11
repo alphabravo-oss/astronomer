@@ -38,6 +38,8 @@ IMG_SERVER="astronomer-go-server:${IMG_TAG}"
 IMG_AGENT="astronomer-go-agent:${IMG_TAG}"
 IMG_WORKER="astronomer-go-worker:${IMG_TAG}"
 IMG_MIGRATE="astronomer-go-migrate:${IMG_TAG}"
+# Frontend image name kept as astronomer-frontend to match deploy/chart/values.yaml.
+IMG_FRONTEND="astronomer-frontend:${IMG_TAG}"
 
 # ── 1. Create cluster (if missing) ───────────────────────────────────────────
 step "Ensuring k3d cluster '${CLUSTER}' exists"
@@ -62,7 +64,7 @@ fi
 # ── 3. Import images into k3d ────────────────────────────────────────────────
 step "Importing images into k3d cluster"
 k3d image import \
-  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" \
+  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" \
   -c "${CLUSTER}"
 
 # ── 4. Deploy ────────────────────────────────────────────────────────────────
@@ -75,7 +77,8 @@ case "${DEPLOY_MODE}" in
       --set image.server.tag="${IMG_TAG}" \
       --set image.worker.tag="${IMG_TAG}" \
       --set image.agent.tag="${IMG_TAG}" \
-      --set image.migrate.tag="${IMG_TAG}"
+      --set image.migrate.tag="${IMG_TAG}" \
+      --set frontend.image.tag="${IMG_TAG}"
     SERVER_DEPLOY="$(kubectl -n "${NAMESPACE}" get deploy -l app.kubernetes.io/component=server -o name | head -n1)"
     ;;
   kubectl)

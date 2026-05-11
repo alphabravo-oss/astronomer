@@ -110,6 +110,22 @@ services:
     networks:
       - astronomer-go
 
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: astronomer-frontend:dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://server:8000
+      NEXT_PUBLIC_WS_URL: ws://server:8000/api/v1/ws
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - server
+    networks:
+      - astronomer-go
+
   # Optional reverse proxy (enable with --profile nginx).
   nginx:
     profiles: ["nginx"]

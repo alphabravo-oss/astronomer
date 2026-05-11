@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+.env
+.env.*
+.git
+.gitignore
+*.md
+coverage
+.jest
+.eslintcache
+tsconfig.tsbuildinfo
+jest.config.cjs
+jest.setup.ts
+**/*.test.ts
+**/*.test.tsx

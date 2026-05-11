@@ -1,0 +1,1983 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { useParams } from 'next/navigation';
+import {
+  useCluster,
+  useClusterNodes,
+  useClusterNamespaces,
+  useClusterEvents,
+  useClusterPods,
+  useWorkloads,
+  useDeletePod,
+  useScaleWorkload,
+  useRestartWorkload,
+  useServices,
+  useIngresses,
+  useNetworkPolicies,
+  usePersistentVolumes,
+  usePersistentVolumeClaims,
+  useStorageClasses,
+  useGenericResources,
+  useDeleteService,
+  useDeleteIngress,
+  useDeleteNetworkPolicy,
+  useDeletePV,
+  useDeletePVC,
+  useK8sDelete,
+  useK8sPatch,
+  queryKeys,
+} from '@/lib/hooks';
+import { useLiveQueryInvalidation } from '@/lib/live-events';
+import * as apiClient from '@/lib/api';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
+import { BottomPanel } from '@/components/ui/bottom-panel';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ScaleDialog } from '@/components/workloads/scale-dialog';
+import { PodTerminal } from '@/components/workloads/pod-terminal';
+import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
+import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
+import { ConfigMapDialog } from '@/components/resources/configmap-dialog';
+import { SecretDialog } from '@/components/resources/secret-dialog';
+import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
+import { k8sResourcePath, k8sListPath } from '@/lib/k8s-paths';
+import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
+import type {
+  ClusterNode,
+  Namespace,
+  ClusterEvent,
+  Pod,
+  Workload,
+  K8sService,
+  Ingress,
+  NetworkPolicy,
+  PersistentVolume,
+  PersistentVolumeClaim,
+  StorageClass,
+  GenericK8sResource,
+} from '@/types';
+import { useRouter } from 'next/navigation';
+import {
+  Loader2, Server, Terminal, FileText, Trash2, RotateCw, Scaling,
+  Code, Pencil, ShieldBan, ShieldCheck, Unplug, Plus,
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+// ── Column Definitions ──
+
+const nodeColumns: Column<ClusterNode>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <StatusBadge status={row.status} />,
+  },
+  {
+    key: 'roles',
+    header: 'Roles',
+    accessor: (row) => (
+      <div className="flex gap-1">
+        {row.roles.map((role) => (
+          <span key={role} className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">{role}</span>
+        ))}
+      </div>
+    ),
+  },
+  {
+    key: 'cpu',
+    header: 'CPU',
+    accessor: (row) => {
+      const pct = row.cpuCapacity > 0 ? (row.cpuUsage / row.cpuCapacity) * 100 : 0;
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-16 gauge-bar">
+            <div
+              className={cn('gauge-bar-fill', pct >= 90 ? 'bg-status-error' : pct >= 75 ? 'bg-status-warning' : 'bg-status-success')}
+              style={{ width: `${Math.min(pct, 100)}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {formatCPU(row.cpuUsage)} / {formatCPU(row.cpuCapacity)}
+          </span>
+        </div>
+      );
+    },
+    sortAccessor: (row) => row.cpuUsage,
+  },
+  {
+    key: 'memory',
+    header: 'Memory',
+    accessor: (row) => {
+      const pct = row.memoryCapacity > 0 ? (row.memoryUsage / row.memoryCapacity) * 100 : 0;
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-16 gauge-bar">
+            <div
+              className={cn('gauge-bar-fill', pct >= 90 ? 'bg-status-error' : pct >= 75 ? 'bg-status-warning' : 'bg-status-success')}
+              style={{ width: `${Math.min(pct, 100)}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {formatBytes(row.memoryUsage)} / {formatBytes(row.memoryCapacity)}
+          </span>
+        </div>
+      );
+    },
+    sortAccessor: (row) => row.memoryUsage,
+  },
+  {
+    key: 'pods',
+    header: 'Pods',
+    accessor: (row) => (
+      <span className="text-muted-foreground tabular-nums text-xs">{row.podCount}/{row.podCapacity}</span>
+    ),
+    sortAccessor: (row) => row.podCount,
+    align: 'center',
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const nsColumns: Column<Namespace>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <StatusBadge status={row.status} />,
+  },
+  {
+    key: 'pods',
+    header: 'Pods',
+    accessor: (row) => <span className="tabular-nums">{row.podCount}</span>,
+    sortAccessor: (row) => row.podCount,
+    align: 'center',
+  },
+  {
+    key: 'cpu',
+    header: 'CPU Usage',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {formatCPU(row.cpuUsage)}{row.cpuLimit > 0 ? ` / ${formatCPU(row.cpuLimit)}` : ''}
+      </span>
+    ),
+    sortAccessor: (row) => row.cpuUsage,
+  },
+  {
+    key: 'memory',
+    header: 'Memory Usage',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {formatBytes(row.memoryUsage)}{row.memoryLimit > 0 ? ` / ${formatBytes(row.memoryLimit)}` : ''}
+      </span>
+    ),
+    sortAccessor: (row) => row.memoryUsage,
+  },
+  {
+    key: 'created',
+    header: 'Created',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const eventColumns: Column<ClusterEvent>[] = [
+  {
+    key: 'type',
+    header: 'Type',
+    accessor: (row) => (
+      <span className={cn('text-xs font-medium', row.type === 'Warning' ? 'text-status-warning' : 'text-status-info')}>
+        {row.type}
+      </span>
+    ),
+  },
+  {
+    key: 'reason',
+    header: 'Reason',
+    accessor: (row) => <span className="font-medium text-foreground text-xs">{row.reason}</span>,
+  },
+  {
+    key: 'object',
+    header: 'Object',
+    accessor: (row) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {row.involvedObject.kind}/{row.involvedObject.name}
+      </span>
+    ),
+  },
+  {
+    key: 'message',
+    header: 'Message',
+    accessor: (row) => <span className="text-xs text-muted-foreground line-clamp-2">{row.message}</span>,
+    sortable: false,
+  },
+  {
+    key: 'count',
+    header: 'Count',
+    accessor: (row) => <span className="tabular-nums text-xs">{row.count}</span>,
+    sortAccessor: (row) => row.count,
+    align: 'center',
+  },
+  {
+    key: 'lastSeen',
+    header: 'Last Seen',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.lastTimestamp)}</span>,
+  },
+];
+
+const podColumns: Column<Pod>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <StatusBadge status={row.status} />,
+  },
+  {
+    key: 'ready',
+    header: 'Ready',
+    accessor: (row) => <span className="tabular-nums text-xs">{row.ready}</span>,
+    align: 'center',
+  },
+  {
+    key: 'restarts',
+    header: 'Restarts',
+    accessor: (row) => (
+      <span className={cn('tabular-nums text-xs', row.restarts > 0 ? 'text-status-warning' : 'text-muted-foreground')}>
+        {row.restarts}
+      </span>
+    ),
+    sortAccessor: (row) => row.restarts,
+    align: 'center',
+  },
+  {
+    key: 'node',
+    header: 'Node',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.node}</span>,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.age}</span>,
+  },
+];
+
+const workloadColumns: Column<Workload>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'ready',
+    header: 'Ready',
+    accessor: (row) => <span className="tabular-nums text-xs">{row.ready}</span>,
+    align: 'center',
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <StatusBadge status={row.status} />,
+  },
+  {
+    key: 'images',
+    header: 'Image',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+        {row.images?.[0] || '-'}
+      </span>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.age}</span>,
+  },
+];
+
+const serviceColumns: Column<K8sService>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'type',
+    header: 'Type',
+    accessor: (row) => (
+      <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">{row.type}</span>
+    ),
+  },
+  {
+    key: 'clusterIP',
+    header: 'Cluster IP',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.clusterIP}</span>,
+  },
+  {
+    key: 'ports',
+    header: 'Ports',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {row.ports?.map((p) => `${p.port}/${p.protocol}`).join(', ') || '-'}
+      </span>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const ingressColumns: Column<Ingress>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'class',
+    header: 'Class',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.ingressClass || '-'}</span>,
+  },
+  {
+    key: 'hosts',
+    header: 'Hosts',
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+        {row.hosts?.join(', ') || '*'}
+      </span>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'tls',
+    header: 'TLS',
+    accessor: (row) => (
+      <span className={cn('text-xs', row.tls ? 'text-status-success' : 'text-muted-foreground')}>
+        {row.tls ? 'Yes' : 'No'}
+      </span>
+    ),
+    align: 'center',
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const networkPolicyColumns: Column<NetworkPolicy>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'policyTypes',
+    header: 'Policy Types',
+    accessor: (row) => (
+      <div className="flex gap-1">
+        {row.policyTypes?.map((t) => (
+          <span key={t} className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">{t}</span>
+        ))}
+      </div>
+    ),
+    sortable: false,
+  },
+  {
+    key: 'ingress',
+    header: 'Ingress Rules',
+    accessor: (row) => <span className="tabular-nums text-xs">{row.ingressRules}</span>,
+    align: 'center',
+  },
+  {
+    key: 'egress',
+    header: 'Egress Rules',
+    accessor: (row) => <span className="tabular-nums text-xs">{row.egressRules}</span>,
+    align: 'center',
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const pvColumns: Column<PersistentVolume>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <StatusBadge status={row.status} />,
+  },
+  {
+    key: 'capacity',
+    header: 'Capacity',
+    accessor: (row) => <span className="text-xs text-muted-foreground tabular-nums">{row.capacity}</span>,
+  },
+  {
+    key: 'accessModes',
+    header: 'Access Modes',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.accessModes?.join(', ')}</span>,
+    sortable: false,
+  },
+  {
+    key: 'storageClass',
+    header: 'Storage Class',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.storageClass || '-'}</span>,
+  },
+  {
+    key: 'claimRef',
+    header: 'Claim',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.claimRef || '-'}</span>,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const pvcColumns: Column<PersistentVolumeClaim>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>,
+  },
+  {
+    key: 'namespace',
+    header: 'Namespace',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span>,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    accessor: (row) => <StatusBadge status={row.status} />,
+  },
+  {
+    key: 'capacity',
+    header: 'Capacity',
+    accessor: (row) => <span className="text-xs text-muted-foreground tabular-nums">{row.capacity}</span>,
+  },
+  {
+    key: 'storageClass',
+    header: 'Storage Class',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.storageClass || '-'}</span>,
+  },
+  {
+    key: 'volumeName',
+    header: 'Volume',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.volumeName || '-'}</span>,
+  },
+  {
+    key: 'age',
+    header: 'Age',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+  },
+];
+
+const storageClassColumns: Column<StorageClass>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => (
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-foreground font-mono text-xs">{row.name}</span>
+        {row.isDefault && (
+          <span className="px-1.5 py-0.5 rounded text-2xs bg-status-info/10 text-status-info">default</span>
+        )}
+      </div>
+    ),
+  },
+  {
+    key: 'provisioner',
+    header: 'Provisioner',
+    accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.provisioner}</span>,
+  },
+  {
+    key: 'reclaimPolicy',
+    header: 'Reclaim Policy',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.reclaimPolicy}</span>,
+  },
+  {
+    key: 'volumeBindingMode',
+    header: 'Binding Mode',
+    accessor: (row) => <span className="text-xs text-muted-foreground">{row.volumeBindingMode}</span>,
+  },
+  {
+    key: 'expansion',
+    header: 'Expansion',
+    accessor: (row) => (
+      <span className={cn('text-xs', row.allowVolumeExpansion ? 'text-status-success' : 'text-muted-foreground')}>
+        {row.allowVolumeExpansion ? 'Allowed' : 'No'}
+      </span>
+    ),
+    align: 'center',
+  },
+];
+
+// ── Generic resource column definitions ──
+
+const jobColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'status', header: 'Status', accessor: (row) => <StatusBadge status={row.status || 'Pending'} /> },
+  { key: 'completions', header: 'Completions', accessor: (row) => <span className="tabular-nums text-xs">{row.succeeded ?? 0}/{row.completions ?? 1}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const cronJobColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'schedule', header: 'Schedule', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.schedule}</span> },
+  { key: 'status', header: 'Status', accessor: (row) => <StatusBadge status={row.status || 'Active'} /> },
+  { key: 'lastSchedule', header: 'Last Schedule', accessor: (row) => <span className="text-xs text-muted-foreground">{row.lastSchedule ? formatRelativeTime(row.lastSchedule) : '-'}</span> },
+  { key: 'active', header: 'Active', accessor: (row) => <span className="tabular-nums text-xs">{row.activeCount ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const configMapColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'data', header: 'Data', accessor: (row) => <span className="tabular-nums text-xs">{row.dataCount ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const secretColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'type', header: 'Type', accessor: (row) => <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">{row.type || 'Opaque'}</span> },
+  { key: 'data', header: 'Data', accessor: (row) => <span className="tabular-nums text-xs">{row.dataCount ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const hpaColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'target', header: 'Target', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.targetKind}/{row.targetName}</span> },
+  { key: 'minmax', header: 'Min/Max', accessor: (row) => <span className="tabular-nums text-xs">{row.minReplicas ?? 0}/{row.maxReplicas ?? 0}</span>, align: 'center' },
+  { key: 'replicas', header: 'Replicas', accessor: (row) => <span className="tabular-nums text-xs">{row.currentReplicas ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const resourceQuotaColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const limitRangeColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const pdbColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'minAvailable', header: 'Min Available', accessor: (row) => <span className="tabular-nums text-xs">{row.minAvailable || '-'}</span>, align: 'center' },
+  { key: 'maxUnavailable', header: 'Max Unavailable', accessor: (row) => <span className="tabular-nums text-xs">{row.maxUnavailable || '-'}</span>, align: 'center' },
+  { key: 'currentHealthy', header: 'Healthy', accessor: (row) => <span className="tabular-nums text-xs">{row.currentHealthy ?? 0}/{row.desiredHealthy ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const crdColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs truncate max-w-[300px] block">{row.name}</span> },
+  { key: 'group', header: 'Group', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.group}</span> },
+  { key: 'kind', header: 'Kind', accessor: (row) => <span className="text-xs text-muted-foreground">{row.kind}</span> },
+  { key: 'version', header: 'Version', accessor: (row) => <span className="text-xs text-muted-foreground">{row.version}</span> },
+  { key: 'scope', header: 'Scope', accessor: (row) => <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">{row.scope}</span> },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const serviceAccountColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'secrets', header: 'Secrets', accessor: (row) => <span className="tabular-nums text-xs">{row.secretsCount ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const k8sRoleColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace || '-'}</span> },
+  { key: 'rules', header: 'Rules', accessor: (row) => <span className="tabular-nums text-xs">{row.rulesCount ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const k8sRoleBindingColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace || '-'}</span> },
+  { key: 'role', header: 'Role', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.roleKind}/{row.roleName}</span> },
+  { key: 'subjects', header: 'Subjects', accessor: (row) => <span className="tabular-nums text-xs">{row.subjectsCount ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const endpointColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'endpoints', header: 'Endpoints', accessor: (row) => <span className="tabular-nums text-xs">{row.addressesCount ?? 0}</span>, align: 'center' },
+  { key: 'ports', header: 'Ports', accessor: (row) => <span className="text-xs text-muted-foreground tabular-nums">{row.ports || '-'}</span>, sortable: false },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+const replicaSetColumns: Column<GenericK8sResource>[] = [
+  { key: 'name', header: 'Name', accessor: (row) => <span className="font-medium text-foreground font-mono text-xs">{row.name}</span> },
+  { key: 'namespace', header: 'Namespace', accessor: (row) => <span className="text-xs text-muted-foreground font-mono">{row.namespace}</span> },
+  { key: 'desired', header: 'Desired', accessor: (row) => <span className="tabular-nums text-xs">{row.desired ?? 0}</span>, align: 'center' },
+  { key: 'ready', header: 'Ready', accessor: (row) => <span className="tabular-nums text-xs">{row.ready ?? 0}</span>, align: 'center' },
+  { key: 'available', header: 'Available', accessor: (row) => <span className="tabular-nums text-xs">{row.available ?? 0}</span>, align: 'center' },
+  { key: 'age', header: 'Age', accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span> },
+];
+
+// Map of generic resource type → columns
+const genericColumnMap: Record<string, Column<GenericK8sResource>[]> = {
+  jobs: jobColumns,
+  cronjobs: cronJobColumns,
+  configmaps: configMapColumns,
+  secrets: secretColumns,
+  hpa: hpaColumns,
+  resourcequotas: resourceQuotaColumns,
+  limitranges: limitRangeColumns,
+  poddisruptionbudgets: pdbColumns,
+  crds: crdColumns,
+  serviceaccounts: serviceAccountColumns,
+  'k8s-clusterroles': k8sRoleColumns,
+  'k8s-clusterrolebindings': k8sRoleBindingColumns,
+  'k8s-roles': k8sRoleColumns,
+  'k8s-rolebindings': k8sRoleBindingColumns,
+  endpoints: endpointColumns,
+  replicasets: replicaSetColumns,
+};
+
+// ── Per-resource components (each calls only its own hook) ──
+
+function NodesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useClusterNodes(clusterId);
+  const router = useRouter();
+  const k8sPatch = useK8sPatch();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [drainTarget, setDrainTarget] = useState<ClusterNode | null>(null);
+
+  const handleCordon = (node: ClusterNode) => {
+    k8sPatch.mutate({
+      clusterId,
+      path: k8sResourcePath('nodes', node.name),
+      body: { spec: { unschedulable: true } },
+      patchType: 'strategic-merge',
+    });
+  };
+
+  const handleUncordon = (node: ClusterNode) => {
+    k8sPatch.mutate({
+      clusterId,
+      path: k8sResourcePath('nodes', node.name),
+      body: { spec: { unschedulable: false } },
+      patchType: 'strategic-merge',
+    });
+  };
+
+  const handleDrain = async (node: ClusterNode) => {
+    try {
+      // First cordon
+      await apiClient.k8sPatch(clusterId, k8sResourcePath('nodes', node.name), { spec: { unschedulable: true } }, 'strategic-merge');
+      // Get pods on the node
+      const podsResult = await apiClient.k8sGet(clusterId, `api/v1/pods?fieldSelector=spec.nodeName=${node.name}`);
+      const pods = podsResult?.items || [];
+      // Evict each non-DaemonSet pod
+      for (const pod of pods) {
+        const ownerRefs = pod.metadata?.ownerReferences || [];
+        const isDaemonSet = ownerRefs.some((ref: { kind: string }) => ref.kind === 'DaemonSet');
+        if (isDaemonSet) continue;
+        try {
+          await apiClient.k8sCreate(
+            clusterId,
+            `api/v1/namespaces/${pod.metadata.namespace}/pods/${pod.metadata.name}/eviction`,
+            { apiVersion: 'policy/v1', kind: 'Eviction', metadata: { name: pod.metadata.name, namespace: pod.metadata.namespace } }
+          );
+        } catch {
+          // Some pods may fail eviction (e.g., PDB), continue
+        }
+      }
+      toast.success(`Node ${node.name} drained`);
+      setDrainTarget(null);
+    } catch (error) {
+      toast.error(`Failed to drain node: ${(error as Error).message}`);
+    }
+  };
+
+  const columns = useMemo<Column<ClusterNode>[]>(() => [
+    ...nodeColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => {
+        const isCordonable = row.status !== 'SchedulingDisabled';
+        return (
+          <ActionMenu
+            items={[
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('nodes', row.name), title: `Node: ${row.name}` }),
+              },
+              {
+                label: isCordonable ? 'Cordon' : 'Uncordon',
+                icon: isCordonable ? <ShieldBan className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />,
+                onClick: () => isCordonable ? handleCordon(row) : handleUncordon(row),
+                separator: true,
+              },
+              {
+                label: 'Drain',
+                icon: <Unplug className="h-3.5 w-3.5" />,
+                onClick: () => setDrainTarget(row),
+                variant: 'destructive',
+              },
+            ]}
+          />
+        );
+      },
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], [clusterId]);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        searchPlaceholder="Search nodes..." loading={isLoading} emptyMessage="No nodes found"
+        onRowClick={(row) => router.push(`/dashboard/clusters/${clusterId}/nodes/${row.name}`)} />
+
+      {yamlTarget && (
+        <YamlViewDialog
+          open={!!yamlTarget}
+          onClose={() => setYamlTarget(null)}
+          clusterId={clusterId}
+          k8sPath={yamlTarget.path}
+          title={yamlTarget.title}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!drainTarget}
+        onClose={() => setDrainTarget(null)}
+        onConfirm={() => { if (drainTarget) handleDrain(drainTarget); }}
+        title="Drain Node"
+        description={`This will cordon the node and evict all non-DaemonSet pods. Workloads will be rescheduled to other nodes.`}
+        confirmValue={drainTarget?.name}
+        confirmText="Drain"
+        variant="destructive"
+      />
+    </>
+  );
+}
+
+function NamespacesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useClusterNamespaces(clusterId);
+  const k8sDeleteMut = useK8sDelete();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Namespace | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newNsName, setNewNsName] = useState('');
+  const k8sCreate = apiClient.k8sCreate;
+
+  const handleCreateNamespace = async () => {
+    if (!newNsName.trim()) return;
+    try {
+      await k8sCreate(clusterId, 'api/v1/namespaces', {
+        apiVersion: 'v1',
+        kind: 'Namespace',
+        metadata: { name: newNsName.trim() },
+      });
+      toast.success(`Namespace ${newNsName} created`);
+      setShowCreate(false);
+      setNewNsName('');
+    } catch (error) {
+      toast.error(`Failed to create namespace: ${(error as Error).message}`);
+    }
+  };
+
+  const columns = useMemo<Column<Namespace>[]>(() => [
+    ...nsColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('namespaces', row.name), title: `Namespace: ${row.name}` }),
+            },
+            {
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('namespaces', row.name), title: `Namespace: ${row.name}` }),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <div />
+        <button
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" /> Create Namespace
+        </button>
+      </div>
+
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        searchPlaceholder="Search namespaces..." loading={isLoading} emptyMessage="No namespaces found" />
+
+      {yamlTarget && (
+        <YamlViewDialog
+          open={!!yamlTarget}
+          onClose={() => setYamlTarget(null)}
+          clusterId={clusterId}
+          k8sPath={yamlTarget.path}
+          title={yamlTarget.title}
+          allowEdit
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            k8sDeleteMut.mutate(
+              { clusterId, path: k8sResourcePath('namespaces', deleteTarget.name) },
+              { onSuccess: () => setDeleteTarget(null) }
+            );
+          }
+        }}
+        title="Delete Namespace"
+        description="This will delete the namespace and ALL resources within it. This action cannot be undone."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={k8sDeleteMut.isPending}
+      />
+
+      {/* Create Namespace Dialog */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
+          <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
+            <h3 className="text-base font-semibold text-foreground mb-4">Create Namespace</h3>
+            <label className="block text-xs text-muted-foreground mb-1.5">Name</label>
+            <input
+              type="text"
+              value={newNsName}
+              onChange={(e) => setNewNsName(e.target.value)}
+              placeholder="my-namespace"
+              className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono
+                focus:outline-none focus:ring-1 focus:ring-ring"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateNamespace(); }}
+            />
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setShowCreate(false)}
+                className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleCreateNamespace} disabled={!newNsName.trim()}
+                className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function EventsTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useClusterEvents(clusterId, { limit: 200 });
+  return (
+    <DataTable data={data || []} columns={eventColumns} keyExtractor={(r) => r.id}
+      searchPlaceholder="Search events..." loading={isLoading} emptyMessage="No events found" />
+  );
+}
+
+function PodsTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useClusterPods(clusterId);
+  const deletePod = useDeletePod();
+
+  const [panelState, setPanelState] = useState<{
+    open: boolean;
+    mode: 'terminal' | 'logs';
+    pod: Pod | null;
+  }>({ open: false, mode: 'terminal', pod: null });
+  const [deleteTarget, setDeleteTarget] = useState<Pod | null>(null);
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+
+  const openPanel = (pod: Pod, mode: 'terminal' | 'logs') => {
+    setPanelState({ open: true, mode, pod });
+  };
+  const closePanel = () => setPanelState({ open: false, mode: 'terminal', pod: null });
+
+  const columns = useMemo<Column<Pod>[]>(() => [
+    ...podColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'Execute Shell',
+              icon: <Terminal className="h-3.5 w-3.5" />,
+              onClick: () => openPanel(row, 'terminal'),
+              disabled: row.phase !== 'Running',
+            },
+            {
+              label: 'View Logs',
+              icon: <FileText className="h-3.5 w-3.5" />,
+              onClick: () => openPanel(row, 'logs'),
+            },
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({
+                path: k8sResourcePath('pods', row.name, row.namespace),
+                title: `Pod: ${row.namespace}/${row.name}`,
+              }),
+              separator: true,
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center',
+    },
+  ], []);
+
+  const handlePodChange = (podName: string) => {
+    const pod = data?.find((p) => p.name === podName);
+    if (pod) setPanelState((s) => ({ ...s, pod }));
+  };
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search pods..." loading={isLoading} emptyMessage="No pods found" />
+
+      <BottomPanel
+        open={panelState.open}
+        onClose={closePanel}
+        title={panelState.pod?.name || ''}
+        subtitle={panelState.pod?.namespace}
+        tabs={[
+          { key: 'terminal', label: 'Terminal', icon: <Terminal className="h-3.5 w-3.5" /> },
+          { key: 'logs', label: 'Logs', icon: <FileText className="h-3.5 w-3.5" /> },
+        ]}
+        activeTab={panelState.mode}
+        onTabChange={(key) => setPanelState((s) => ({ ...s, mode: key as 'terminal' | 'logs' }))}
+      >
+        {panelState.pod && panelState.mode === 'terminal' && (
+          <PodTerminal
+            clusterId={clusterId}
+            namespace={panelState.pod.namespace}
+            pod={panelState.pod.name}
+            container={panelState.pod.containers[0]?.name || ''}
+            containers={panelState.pod.containers.map((c) => c.name)}
+            onClose={closePanel}
+          />
+        )}
+        {panelState.pod && panelState.mode === 'logs' && (
+          <PodLogsViewer
+            clusterId={clusterId}
+            namespace={panelState.pod.namespace}
+            pods={data?.filter((p) => p.namespace === panelState.pod!.namespace) || []}
+            selectedPod={panelState.pod.name}
+            onPodChange={handlePodChange}
+            className="h-full"
+          />
+        )}
+      </BottomPanel>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deletePod.mutate(
+              { clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name },
+              { onSuccess: () => setDeleteTarget(null) }
+            );
+          }
+        }}
+        title="Delete Pod"
+        description={`This will permanently delete the pod. The owning controller may recreate it.`}
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={deletePod.isPending}
+      />
+
+      {yamlTarget && (
+        <YamlViewDialog
+          open={!!yamlTarget}
+          onClose={() => setYamlTarget(null)}
+          clusterId={clusterId}
+          k8sPath={yamlTarget.path}
+          title={yamlTarget.title}
+        />
+      )}
+    </>
+  );
+}
+
+function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: string; title: string }) {
+  const { data, isLoading } = useWorkloads(clusterId);
+  const filtered = (data?.data || []).filter((w) => w.kind === kind);
+  const scaleWorkload = useScaleWorkload();
+  const restartWorkload = useRestartWorkload();
+  const k8sDeleteMut = useK8sDelete();
+
+  const scalableKinds = ['Deployment', 'StatefulSet'];
+
+  const kindToResourceType: Record<string, string> = {
+    Deployment: 'deployments',
+    StatefulSet: 'statefulsets',
+    DaemonSet: 'daemonsets',
+  };
+
+  const [panelState, setPanelState] = useState<{
+    open: boolean;
+    mode: 'terminal' | 'logs';
+    workload: Workload | null;
+    pods: Pod[];
+    activePod: Pod | null;
+  }>({ open: false, mode: 'terminal', workload: null, pods: [], activePod: null });
+  const [scaleTarget, setScaleTarget] = useState<Workload | null>(null);
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Workload | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const kindToTemplate: Record<string, string> = {
+    Deployment: 'deployment',
+    StatefulSet: 'statefulset',
+    DaemonSet: 'daemonset',
+  };
+
+  const openWorkloadPanel = async (workload: Workload, mode: 'terminal' | 'logs') => {
+    try {
+      const pods = await apiClient.getWorkloadPods(clusterId, workload.kind, workload.namespace, workload.name);
+      const runningPod = pods.find((p) => p.phase === 'Running') || pods[0];
+      if (!runningPod) {
+        toast.error('No pods available for this workload');
+        return;
+      }
+      setPanelState({ open: true, mode, workload, pods, activePod: runningPod });
+    } catch {
+      toast.error('Failed to fetch workload pods');
+    }
+  };
+  const closePanel = () => setPanelState({ open: false, mode: 'terminal', workload: null, pods: [], activePod: null });
+
+  const columns = useMemo<Column<Workload>[]>(() => [
+    ...workloadColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => {
+        const resType = kindToResourceType[row.kind] || 'deployments';
+        const items: ActionMenuItem[] = [
+          {
+            label: 'Execute Shell',
+            icon: <Terminal className="h-3.5 w-3.5" />,
+            onClick: () => openWorkloadPanel(row, 'terminal'),
+          },
+          {
+            label: 'View Logs',
+            icon: <FileText className="h-3.5 w-3.5" />,
+            onClick: () => openWorkloadPanel(row, 'logs'),
+          },
+          {
+            label: 'View YAML',
+            icon: <Code className="h-3.5 w-3.5" />,
+            onClick: () => setYamlTarget({
+              path: k8sResourcePath(resType, row.name, row.namespace),
+              title: `${row.kind}: ${row.namespace}/${row.name}`,
+            }),
+            separator: true,
+          },
+          {
+            label: 'Edit YAML',
+            icon: <Pencil className="h-3.5 w-3.5" />,
+            onClick: () => setYamlTarget({
+              path: k8sResourcePath(resType, row.name, row.namespace),
+              title: `${row.kind}: ${row.namespace}/${row.name}`,
+            }),
+          },
+        ];
+        if (scalableKinds.includes(row.kind)) {
+          items.push({
+            label: 'Scale',
+            icon: <Scaling className="h-3.5 w-3.5" />,
+            onClick: () => setScaleTarget(row),
+            separator: true,
+          });
+        }
+        items.push({
+          label: 'Restart',
+          icon: <RotateCw className="h-3.5 w-3.5" />,
+          onClick: () => {
+            restartWorkload.mutate({
+              clusterId,
+              kind: row.kind,
+              namespace: row.namespace,
+              name: row.name,
+            });
+          },
+          separator: !scalableKinds.includes(row.kind),
+        });
+        items.push({
+          label: 'Delete',
+          icon: <Trash2 className="h-3.5 w-3.5" />,
+          onClick: () => setDeleteTarget(row),
+          variant: 'destructive',
+          separator: true,
+        });
+        return <ActionMenu items={items} />;
+      },
+      sortable: false,
+      align: 'center',
+    },
+  ], [clusterId]);
+
+  const handlePodChange = (podName: string) => {
+    const pod = panelState.pods.find((p) => p.name === podName);
+    if (pod) setPanelState((s) => ({ ...s, activePod: pod }));
+  };
+
+  return (
+    <>
+      <div className="flex justify-end mb-4">
+        <button onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+          <Plus className="h-3.5 w-3.5" /> Create {kind}
+        </button>
+      </div>
+      <DataTable data={filtered} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
+
+      <BottomPanel
+        open={panelState.open}
+        onClose={closePanel}
+        title={panelState.workload?.name || ''}
+        subtitle={panelState.workload ? `${panelState.workload.kind} · ${panelState.workload.namespace}` : undefined}
+        tabs={[
+          { key: 'terminal', label: 'Terminal', icon: <Terminal className="h-3.5 w-3.5" /> },
+          { key: 'logs', label: 'Logs', icon: <FileText className="h-3.5 w-3.5" /> },
+        ]}
+        activeTab={panelState.mode}
+        onTabChange={(key) => setPanelState((s) => ({ ...s, mode: key as 'terminal' | 'logs' }))}
+      >
+        {panelState.activePod && panelState.mode === 'terminal' && (
+          <PodTerminal
+            clusterId={clusterId}
+            namespace={panelState.activePod.namespace}
+            pod={panelState.activePod.name}
+            container={panelState.activePod.containers[0]?.name || ''}
+            containers={panelState.activePod.containers.map((c) => c.name)}
+            onClose={closePanel}
+          />
+        )}
+        {panelState.activePod && panelState.mode === 'logs' && (
+          <PodLogsViewer
+            clusterId={clusterId}
+            namespace={panelState.activePod.namespace}
+            pods={panelState.pods}
+            selectedPod={panelState.activePod.name}
+            onPodChange={handlePodChange}
+            className="h-full"
+          />
+        )}
+      </BottomPanel>
+
+      <ScaleDialog
+        open={!!scaleTarget}
+        onClose={() => setScaleTarget(null)}
+        onScale={(replicas) => {
+          if (scaleTarget) {
+            scaleWorkload.mutate(
+              {
+                clusterId,
+                kind: scaleTarget.kind,
+                namespace: scaleTarget.namespace,
+                name: scaleTarget.name,
+                replicas,
+              },
+              { onSuccess: () => setScaleTarget(null) }
+            );
+          }
+        }}
+        workloadName={scaleTarget?.name || ''}
+        currentReplicas={scaleTarget?.replicas || 0}
+        loading={scaleWorkload.isPending}
+      />
+
+      {yamlTarget && (
+        <YamlViewDialog
+          open={!!yamlTarget}
+          onClose={() => setYamlTarget(null)}
+          clusterId={clusterId}
+          k8sPath={yamlTarget.path}
+          title={yamlTarget.title}
+          allowEdit
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            const resType = kindToResourceType[deleteTarget.kind] || 'deployments';
+            k8sDeleteMut.mutate(
+              { clusterId, path: k8sResourcePath(resType, deleteTarget.name, deleteTarget.namespace) },
+              { onSuccess: () => setDeleteTarget(null) }
+            );
+          }
+        }}
+        title={`Delete ${deleteTarget?.kind || 'Workload'}`}
+        description={`This will permanently delete ${deleteTarget?.name}. Managed pods will also be terminated.`}
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={k8sDeleteMut.isPending}
+      />
+
+      {kindToTemplate[kind] && (
+        <CreateResourceDialog
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          clusterId={clusterId}
+          templateKey={kindToTemplate[kind]}
+          title={`Create ${kind}`}
+        />
+      )}
+    </>
+  );
+}
+
+function ServicesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useServices(clusterId);
+  const deleteService = useDeleteService();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<K8sService | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const columns = useMemo<Column<K8sService>[]>(() => [
+    ...serviceColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('services', row.name, row.namespace), title: `Service: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('services', row.name, row.namespace), title: `Service: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <div className="flex justify-end mb-4">
+        <button onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+          <Plus className="h-3.5 w-3.5" /> Create Service
+        </button>
+      </div>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search services..." loading={isLoading} emptyMessage="No services found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteService.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
+        }}
+        title="Delete Service" description={`This will permanently delete the service ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={deleteService.isPending}
+      />
+      <CreateResourceDialog open={showCreate} onClose={() => setShowCreate(false)} clusterId={clusterId}
+        templateKey="service" title="Create Service" />
+    </>
+  );
+}
+
+function IngressesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useIngresses(clusterId);
+  const deleteIngress = useDeleteIngress();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Ingress | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const columns = useMemo<Column<Ingress>[]>(() => [
+    ...ingressColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('ingresses', row.name, row.namespace), title: `Ingress: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('ingresses', row.name, row.namespace), title: `Ingress: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <div className="flex justify-end mb-4">
+        <button onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+          <Plus className="h-3.5 w-3.5" /> Create Ingress
+        </button>
+      </div>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search ingresses..." loading={isLoading} emptyMessage="No ingresses found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteIngress.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
+        }}
+        title="Delete Ingress" description={`This will permanently delete the ingress ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={deleteIngress.isPending}
+      />
+      <CreateResourceDialog open={showCreate} onClose={() => setShowCreate(false)} clusterId={clusterId}
+        templateKey="ingress" title="Create Ingress" />
+    </>
+  );
+}
+
+function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useNetworkPolicies(clusterId);
+  const deleteNp = useDeleteNetworkPolicy();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<NetworkPolicy | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const columns = useMemo<Column<NetworkPolicy>[]>(() => [
+    ...networkPolicyColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('networkpolicies', row.name, row.namespace), title: `NetworkPolicy: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('networkpolicies', row.name, row.namespace), title: `NetworkPolicy: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <div className="flex justify-end mb-4">
+        <button onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+          <Plus className="h-3.5 w-3.5" /> Create Network Policy
+        </button>
+      </div>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search network policies..." loading={isLoading} emptyMessage="No network policies found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteNp.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
+        }}
+        title="Delete Network Policy" description={`This will permanently delete the network policy ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={deleteNp.isPending}
+      />
+      <CreateResourceDialog open={showCreate} onClose={() => setShowCreate(false)} clusterId={clusterId}
+        templateKey="networkpolicy" title="Create Network Policy" />
+    </>
+  );
+}
+
+function PVsTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = usePersistentVolumes(clusterId);
+  const deletePv = useDeletePV();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PersistentVolume | null>(null);
+
+  const columns = useMemo<Column<PersistentVolume>[]>(() => [
+    ...pvColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumes', row.name), title: `PV: ${row.name}` }),
+            },
+            {
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumes', row.name), title: `PV: ${row.name}` }),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        searchPlaceholder="Search persistent volumes..." loading={isLoading} emptyMessage="No persistent volumes found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deletePv.mutate({ clusterId, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
+        }}
+        title="Delete Persistent Volume" description={`This will permanently delete the PV ${deleteTarget?.name}. Bound data may be lost.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={deletePv.isPending}
+      />
+    </>
+  );
+}
+
+function PVCsTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = usePersistentVolumeClaims(clusterId);
+  const deletePvc = useDeletePVC();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PersistentVolumeClaim | null>(null);
+
+  const columns = useMemo<Column<PersistentVolumeClaim>[]>(() => [
+    ...pvcColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumeclaims', row.name, row.namespace), title: `PVC: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumeclaims', row.name, row.namespace), title: `PVC: ${row.namespace}/${row.name}` }),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        searchPlaceholder="Search PVCs..." loading={isLoading} emptyMessage="No persistent volume claims found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deletePvc.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
+        }}
+        title="Delete PVC" description={`This will permanently delete the PVC ${deleteTarget?.name}. Bound data may be lost.`}
+        confirmValue={deleteTarget?.name} variant="destructive" loading={deletePvc.isPending}
+      />
+    </>
+  );
+}
+
+function StorageClassesTable({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useStorageClasses(clusterId);
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+
+  const columns = useMemo<Column<StorageClass>[]>(() => [
+    ...storageClassColumns,
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => setYamlTarget({ path: k8sResourcePath('storageclasses', row.name), title: `StorageClass: ${row.name}` }),
+            },
+          ]}
+        />
+      ),
+      sortable: false,
+      align: 'center' as const,
+    },
+  ], []);
+
+  return (
+    <>
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        searchPlaceholder="Search storage classes..." loading={isLoading} emptyMessage="No storage classes found" />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} />
+      )}
+    </>
+  );
+}
+
+/**
+ * Map from our resource page slugs to the k8s-paths resource type keys
+ * for generic resources that need YAML view support.
+ */
+const genericResourceToK8sType: Record<string, string> = {
+  jobs: 'jobs',
+  cronjobs: 'cronjobs',
+  configmaps: 'configmaps',
+  secrets: 'secrets',
+  hpa: 'hpa',
+  resourcequotas: 'resourcequotas',
+  limitranges: 'limitranges',
+  poddisruptionbudgets: 'poddisruptionbudgets',
+  crds: 'crds',
+  serviceaccounts: 'serviceaccounts',
+  'k8s-clusterroles': 'k8s-clusterroles',
+  'k8s-clusterrolebindings': 'k8s-clusterrolebindings',
+  'k8s-roles': 'k8s-roles',
+  'k8s-rolebindings': 'k8s-rolebindings',
+  endpoints: 'endpoints',
+  replicasets: 'replicasets',
+};
+
+/** Resource types that have a Create button via YAML templates */
+const creatableGenericTypes: Record<string, { templateKey: string; label: string }> = {
+  configmaps: { templateKey: 'configmap', label: 'Create ConfigMap' },
+  secrets: { templateKey: 'secret', label: 'Create Secret' },
+  jobs: { templateKey: 'job', label: 'Create Job' },
+  cronjobs: { templateKey: 'cronjob', label: 'Create CronJob' },
+};
+
+/** Resource types where delete is supported */
+const deletableGenericTypes = new Set([
+  'jobs', 'cronjobs', 'configmaps', 'secrets', 'hpa',
+  'resourcequotas', 'limitranges', 'poddisruptionbudgets',
+  'serviceaccounts', 'k8s-roles', 'k8s-rolebindings',
+  'endpoints', 'replicasets',
+]);
+
+/** Resource types where edit YAML is supported */
+const editableGenericTypes = new Set([
+  'configmaps', 'secrets', 'jobs', 'cronjobs', 'hpa',
+  'resourcequotas', 'limitranges', 'poddisruptionbudgets',
+  'serviceaccounts', 'k8s-roles', 'k8s-rolebindings',
+  'replicasets',
+]);
+
+function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: string; resourceType: string; title: string }) {
+  const { data, isLoading } = useGenericResources(clusterId, resourceType);
+  const k8sDeleteMut = useK8sDelete();
+  const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GenericK8sResource | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const creatableConfig = creatableGenericTypes[resourceType];
+
+  const baseColumns = genericColumnMap[resourceType] || configMapColumns;
+  const k8sType = genericResourceToK8sType[resourceType];
+  const isDeletable = deletableGenericTypes.has(resourceType);
+  const isEditable = editableGenericTypes.has(resourceType);
+
+  const columns = useMemo<Column<GenericK8sResource>[]>(() => {
+    if (!k8sType) return baseColumns;
+    return [
+      ...baseColumns,
+      {
+        key: 'actions',
+        header: '',
+        accessor: (row) => {
+          const items: ActionMenuItem[] = [
+            {
+              label: 'View YAML',
+              icon: <Code className="h-3.5 w-3.5" />,
+              onClick: () => {
+                try {
+                  const path = row.namespace
+                    ? k8sResourcePath(k8sType, row.name, row.namespace)
+                    : k8sResourcePath(k8sType, row.name);
+                  setYamlTarget({ path, title: `${title}: ${row.namespace ? row.namespace + '/' : ''}${row.name}` });
+                } catch {
+                  toast.error('YAML view not available for this resource type');
+                }
+              },
+            },
+          ];
+          if (isEditable) {
+            items.push({
+              label: 'Edit YAML',
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onClick: () => {
+                try {
+                  const path = row.namespace
+                    ? k8sResourcePath(k8sType, row.name, row.namespace)
+                    : k8sResourcePath(k8sType, row.name);
+                  setYamlTarget({ path, title: `${title}: ${row.namespace ? row.namespace + '/' : ''}${row.name}` });
+                } catch {
+                  toast.error('Edit not available for this resource type');
+                }
+              },
+            });
+          }
+          if (isDeletable) {
+            items.push({
+              label: 'Delete',
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              onClick: () => setDeleteTarget(row),
+              variant: 'destructive',
+              separator: true,
+            });
+          }
+          return <ActionMenu items={items} />;
+        },
+        sortable: false,
+        align: 'center' as const,
+      },
+    ];
+  }, [baseColumns, k8sType, isDeletable, isEditable, title]);
+
+  return (
+    <>
+      {creatableConfig && (
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+            <Plus className="h-3.5 w-3.5" /> {creatableConfig.label}
+          </button>
+        </div>
+      )}
+      <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.namespace ? `${r.namespace}/${r.name}` : r.name}
+        searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
+      {yamlTarget && (
+        <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={isEditable} />
+      )}
+      <ConfirmDialog
+        open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget && k8sType) {
+            const path = deleteTarget.namespace
+              ? k8sResourcePath(k8sType, deleteTarget.name, deleteTarget.namespace)
+              : k8sResourcePath(k8sType, deleteTarget.name);
+            k8sDeleteMut.mutate({ clusterId, path }, { onSuccess: () => setDeleteTarget(null) });
+          }
+        }}
+        title={`Delete ${title.replace(/s$/, '')}`}
+        description={`This will permanently delete ${deleteTarget?.name}.`}
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={k8sDeleteMut.isPending}
+      />
+      {creatableConfig && (
+        <CreateResourceDialog open={showCreate} onClose={() => setShowCreate(false)} clusterId={clusterId}
+          templateKey={creatableConfig.templateKey} title={creatableConfig.label} />
+      )}
+    </>
+  );
+}
+
+// ── Resource config ──
+
+const resourceTitles: Record<string, string> = {
+  nodes: 'Nodes',
+  namespaces: 'Namespaces',
+  events: 'Events',
+  deployments: 'Deployments',
+  daemonsets: 'DaemonSets',
+  statefulsets: 'StatefulSets',
+  jobs: 'Jobs',
+  cronjobs: 'CronJobs',
+  pods: 'Pods',
+  services: 'Services',
+  ingresses: 'Ingresses',
+  networkpolicies: 'Network Policies',
+  hpa: 'Horizontal Pod Autoscalers',
+  persistentvolumes: 'Persistent Volumes',
+  persistentvolumeclaims: 'Persistent Volume Claims',
+  storageclasses: 'Storage Classes',
+  configmaps: 'ConfigMaps',
+  secrets: 'Secrets',
+  resourcequotas: 'Resource Quotas',
+  limitranges: 'Limit Ranges',
+  poddisruptionbudgets: 'Pod Disruption Budgets',
+  crds: 'Custom Resource Definitions',
+  serviceaccounts: 'Service Accounts',
+  'k8s-clusterroles': 'ClusterRoles',
+  'k8s-clusterrolebindings': 'ClusterRoleBindings',
+  'k8s-roles': 'Roles',
+  'k8s-rolebindings': 'RoleBindings',
+  endpoints: 'Endpoints',
+  replicasets: 'ReplicaSets',
+};
+
+const workloadKinds: Record<string, string> = {
+  deployments: 'Deployment',
+  daemonsets: 'DaemonSet',
+  statefulsets: 'StatefulSet',
+  jobs: 'Job',
+  cronjobs: 'CronJob',
+};
+
+// Resource types that use the generic endpoint
+const genericResourceTypes = new Set([
+  'jobs', 'cronjobs', 'configmaps', 'secrets', 'hpa',
+  'resourcequotas', 'limitranges', 'poddisruptionbudgets',
+  'crds', 'serviceaccounts',
+  'k8s-clusterroles', 'k8s-clusterrolebindings',
+  'k8s-roles', 'k8s-rolebindings',
+  'endpoints', 'replicasets',
+]);
+
+// ── Main Page Component ──
+
+export default function ClusterResourcePage() {
+  const params = useParams();
+  const clusterId = params.id as string;
+  const resource = params.resource as string;
+
+  const title = resourceTitles[resource];
+  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+
+  // The agent doesn't yet emit per-kind change events (full informer fan-
+  // out is a follow-up). Until then we listen for the coarse
+  // `cluster.k8s_changed` signal plus cluster-lifecycle events and refetch
+  // the resource list whose query keys live under this cluster id.
+  useLiveQueryInvalidation(
+    [
+      'cluster.k8s_changed',
+      'cluster.connected',
+      'cluster.disconnected',
+      'cluster.heartbeat',
+      'cluster.status_changed',
+    ],
+    [
+      // Prefix matches every per-resource list under this cluster
+      // (workloads, pods, namespaces, events, services, ingresses, etc.).
+      ['clusters', clusterId],
+      ['workloads', clusterId],
+      ['storage', clusterId],
+      ['networking', clusterId],
+      ['generic', clusterId],
+      queryKeys.clusters.detail(clusterId),
+    ],
+  );
+
+  if (clusterLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!cluster || !title) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+        <Server className="h-8 w-8 mb-3" />
+        <p>{!title ? 'Unknown resource type' : 'Cluster not found'}</p>
+      </div>
+    );
+  }
+
+  const renderTable = () => {
+    // Generic resources use the generic endpoint
+    if (genericResourceTypes.has(resource)) {
+      return <GenericResourceTable clusterId={clusterId} resourceType={resource} title={title} />;
+    }
+    switch (resource) {
+      case 'nodes': return <NodesTable clusterId={clusterId} />;
+      case 'namespaces': return <NamespacesTable clusterId={clusterId} />;
+      case 'events': return <EventsTable clusterId={clusterId} />;
+      case 'pods': return <PodsTable clusterId={clusterId} />;
+      case 'deployments':
+      case 'daemonsets':
+      case 'statefulsets':
+        return <WorkloadsTable clusterId={clusterId} kind={workloadKinds[resource]} title={title} />;
+      case 'services': return <ServicesTable clusterId={clusterId} />;
+      case 'ingresses': return <IngressesTable clusterId={clusterId} />;
+      case 'networkpolicies': return <NetworkPoliciesTable clusterId={clusterId} />;
+      case 'persistentvolumes': return <PVsTable clusterId={clusterId} />;
+      case 'persistentvolumeclaims': return <PVCsTable clusterId={clusterId} />;
+      case 'storageclasses': return <StorageClassesTable clusterId={clusterId} />;
+      default: return <div className="py-16 text-center text-muted-foreground">Unknown resource type</div>;
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold text-foreground tracking-tight">{title}</h1>
+      {renderTable()}
+    </div>
+  );
+}

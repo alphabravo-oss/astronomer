@@ -1,0 +1,93 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+/**
+ * GlobalSearch is the topbar input that opens the cross-cluster search
+ * page. It is intentionally light-weight: typing alone does NOT issue a
+ * search request — the user must press Enter (or Cmd+K to focus) to
+ * navigate to /dashboard/search?name=<query>. This keeps every keystroke
+ * cheap and avoids competing with the search page's own debounce.
+ *
+ * Keyboard shortcut: Cmd+K (macOS) / Ctrl+K (other) focuses the input.
+ * The global command palette uses the same chord, so we only intercept
+ * when the input itself is mountable (the listener is owned here, not
+ * by a router-level handler).
+ */
+export function GlobalSearch() {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState('');
+  const [mac, setMac] = useState(false);
+
+  // Detect macOS once on the client so the placeholder hint matches the
+  // chord the user would actually press.
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      setMac(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
+    }
+  }, []);
+
+  // Cmd+K / Ctrl+K — focus the input. We only call preventDefault when
+  // the input isn't already focused so other handlers (a focused
+  // textarea, etc.) keep their normal behaviour.
+  useEffect(() => {
+    function onKeydown(e: KeyboardEvent) {
+      const isCmd = e.metaKey || e.ctrlKey;
+      if (isCmd && e.key.toLowerCase() === 'k') {
+        if (document.activeElement === inputRef.current) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    }
+    document.addEventListener('keydown', onKeydown);
+    return () => document.removeEventListener('keydown', onKeydown);
+  }, []);
+
+  const submit = () => {
+    const q = value.trim();
+    const target = q
+      ? `/dashboard/search?name=${encodeURIComponent(q)}`
+      : '/dashboard/search';
+    router.push(target);
+  };
+
+  return (
+    <div className="relative w-full max-w-xs">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+          }
+          if (e.key === 'Escape') {
+            inputRef.current?.blur();
+          }
+        }}
+        placeholder="Search resources..."
+        aria-label="Global resource search"
+        className={cn(
+          'w-full h-8 pl-8 pr-12 rounded-md border border-border bg-background text-sm',
+          'text-foreground placeholder:text-muted-foreground',
+          'focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring',
+          'transition-colors'
+        )}
+      />
+      <kbd
+        className="absolute right-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5
+          px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground font-mono pointer-events-none"
+      >
+        {mac ? '⌘' : 'Ctrl'}K
+      </kbd>
+    </div>
+  );
+}

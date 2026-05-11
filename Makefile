@@ -1,5 +1,5 @@
 .PHONY: help build test lint fmt vet run sqlc sqlc-generate \
-        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-all \
+        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
         validate-live-b6 validate-live-argocd validate-live-argocd-register-appset validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects
@@ -22,6 +22,10 @@ IMG_SERVER   = astronomer-go-server:$(IMG_TAG)
 IMG_AGENT    = astronomer-go-agent:$(IMG_TAG)
 IMG_WORKER   = astronomer-go-worker:$(IMG_TAG)
 IMG_MIGRATE  = astronomer-go-migrate:$(IMG_TAG)
+# Frontend image name stays `astronomer-frontend` to match the Helm chart's default
+# (deploy/chart/values.yaml -> frontend.image.repository). Build context is
+# astronomer-go's own frontend/ directory.
+IMG_FRONTEND = astronomer-frontend:$(IMG_TAG)
 
 # k3d cluster name (override on the command line: `make k3d-bootstrap CLUSTER=foo`).
 CLUSTER     ?= astronomer-mgmt
@@ -87,7 +91,10 @@ docker-build-worker: ## Build worker image
 docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image
 	docker build -f deploy/docker/Dockerfile.migrate -t $(IMG_MIGRATE) .
 
-docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate ## Build all images
+docker-build-frontend: ## Build frontend (Next.js dashboard) image from frontend/
+	docker build -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
+
+docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend ## Build all images
 
 # Backward-compat alias: `make docker-build` still builds the server image.
 docker-build: docker-build-server ## (alias) build server image
@@ -99,7 +106,7 @@ k3d-load: ## Import a Docker image into the k3d cluster (IMG=<image:tag> CLUSTER
 	k3d image import $(IMG) -c $(CLUSTER)
 
 k3d-import-all: docker-build-all ## Build & import all images into k3d
-	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) -c $(CLUSTER)
+	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) -c $(CLUSTER)
 
 k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLUSTER))
 	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) ./scripts/k3d-bootstrap.sh
@@ -143,7 +150,8 @@ helm-install: ## Install/upgrade the Helm chart (CLUSTER=$(CLUSTER) NAMESPACE=as
 		--set image.server.tag=$(IMG_TAG) \
 		--set image.worker.tag=$(IMG_TAG) \
 		--set image.agent.tag=$(IMG_TAG) \
-		--set image.migrate.tag=$(IMG_TAG)
+		--set image.migrate.tag=$(IMG_TAG) \
+		--set frontend.image.tag=$(IMG_TAG)
 
 helm-uninstall: ## Uninstall the Helm release
 	helm uninstall astronomer --namespace $${NAMESPACE:-astronomer}
