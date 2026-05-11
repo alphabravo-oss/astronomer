@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -30,7 +32,9 @@ func TestLoginRateLimiterAllowAndReset(t *testing.T) {
 
 func TestLoginRateLimitMiddlewareReturnsJSON429(t *testing.T) {
 	now := time.Unix(0, 0)
-	mw := newLoginRateLimitMiddleware(1, time.Minute, func() time.Time { return now })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mw := newLoginRateLimitMiddleware(ctx, 1, time.Minute, func() time.Time { return now })
 	nextCalls := 0
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		nextCalls++
@@ -74,5 +78,40 @@ func TestClientKeyUsesHostPart(t *testing.T) {
 	req.RemoteAddr = "203.0.113.5:4321"
 	if got := clientKey(req); got != "203.0.113.5" {
 		t.Fatalf("clientKey=%q, want 203.0.113.5", got)
+	}
+}
+
+// Bucket-map leak guard: after a flood of distinct keys, expired buckets
+// must be evicted by the janitor. Without this, the map grows unboundedly
+// over the process lifetime — every distinct client IP that ever hit
+// /auth/login leaves a row. The bug was caught by the 2026-05-11
+// enterprise audit (FEATURES-051126 T09).
+func TestLoginRateLimiterEvictsExpiredBuckets(t *testing.T) {
+	now := time.Unix(0, 0)
+	limiter := newLoginRateLimiter(5, time.Minute, func() time.Time { return now })
+
+	// Populate 1000 buckets — simulating a churning fleet of distinct
+	// client IPs.
+	for i := 0; i < 1000; i++ {
+		limiter.allow(strconv.Itoa(i))
+	}
+	limiter.mu.Lock()
+	before := len(limiter.buckets)
+	limiter.mu.Unlock()
+	if before != 1000 {
+		t.Fatalf("setup: expected 1000 buckets, got %d", before)
+	}
+
+	// Jump past the window so every bucket is expired.
+	now = now.Add(2 * time.Minute)
+
+	if evicted := limiter.evictExpired(); evicted != 1000 {
+		t.Errorf("evictExpired returned %d, want 1000", evicted)
+	}
+	limiter.mu.Lock()
+	after := len(limiter.buckets)
+	limiter.mu.Unlock()
+	if after != 0 {
+		t.Errorf("after eviction: %d buckets remain, want 0", after)
 	}
 }

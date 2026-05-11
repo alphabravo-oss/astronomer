@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -64,14 +65,69 @@ func (l *loginRateLimiter) allow(key string) (allowed bool, retryAfter time.Dura
 	return true, 0
 }
 
-// LoginRateLimit applies a small per-client cap to login attempts to slow
-// brute-force attacks against the password endpoint.
-func LoginRateLimit(limit int, window time.Duration) func(http.Handler) http.Handler {
-	return newLoginRateLimitMiddleware(limit, window, time.Now)
+// evictExpired removes buckets whose reset window has already passed.
+// Without this the buckets map grows unboundedly: every distinct client IP
+// that ever hits /auth/login leaves a row behind. At scale (and especially
+// behind shared egress NAT where one "client" looks like many IPs over
+// time) the map becomes a slow memory leak and a steadily-growing mutex
+// hot spot. Returning the eviction count is useful for tests; production
+// callers ignore it.
+func (l *loginRateLimiter) evictExpired() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	evicted := 0
+	for key, bucket := range l.buckets {
+		if !now.Before(bucket.resetAt) {
+			delete(l.buckets, key)
+			evicted++
+		}
+	}
+	return evicted
 }
 
-func newLoginRateLimitMiddleware(limit int, window time.Duration, now func() time.Time) func(http.Handler) http.Handler {
+// startJanitor runs evictExpired on a ticker for the lifetime of ctx. The
+// interval is the bucket window times 2 — sweeping more often is wasted
+// work; sweeping less often defeats the purpose. Exits cleanly when ctx
+// is cancelled (e.g. during server shutdown).
+func (l *loginRateLimiter) startJanitor(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 2 * l.window
+	}
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				l.evictExpired()
+			}
+		}
+	}()
+}
+
+// LoginRateLimit applies a small per-client cap to login attempts to slow
+// brute-force attacks against the password endpoint. The returned middleware
+// also starts a background goroutine that evicts expired buckets so the
+// internal map doesn't grow indefinitely. The janitor runs for the lifetime
+// of the process — callers that need scoped lifetime should use
+// LoginRateLimitWithContext instead.
+func LoginRateLimit(limit int, window time.Duration) func(http.Handler) http.Handler {
+	return LoginRateLimitWithContext(context.Background(), limit, window)
+}
+
+// LoginRateLimitWithContext is the same as LoginRateLimit but ties the
+// janitor goroutine to the supplied context. Useful in tests so the
+// goroutine doesn't leak between runs.
+func LoginRateLimitWithContext(ctx context.Context, limit int, window time.Duration) func(http.Handler) http.Handler {
+	return newLoginRateLimitMiddleware(ctx, limit, window, time.Now)
+}
+
+func newLoginRateLimitMiddleware(ctx context.Context, limit int, window time.Duration, now func() time.Time) func(http.Handler) http.Handler {
 	limiter := newLoginRateLimiter(limit, window, now)
+	limiter.startJanitor(ctx, 0)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
