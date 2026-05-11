@@ -563,6 +563,9 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	if deps.Logging != nil {
 		r.Route("/logging", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Logging.ControllerStatus)
+			r.Get("/operations/", deps.Logging.ListOperations)
+			r.Get("/operations/{id}/", deps.Logging.GetOperation)
+			r.Post("/operations/{id}/retry/", deps.Logging.RetryOperation)
 			r.Get("/outputs/", deps.Logging.ListOutputs)
 			r.Post("/outputs/", deps.Logging.CreateOutput)
 			r.Put("/outputs/{id}/", deps.Logging.UpdateOutput)
