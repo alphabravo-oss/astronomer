@@ -133,6 +133,7 @@ type Querier interface {
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
+	DeleteClusterConditionsForCluster(ctx context.Context, clusterID uuid.UUID) error
 	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
 	DeleteClusterRole(ctx context.Context, id uuid.UUID) error
 	DeleteClusterRoleBinding(ctx context.Context, id uuid.UUID) error
@@ -325,6 +326,7 @@ type Querier interface {
 	ListChartVersions(ctx context.Context, arg ListChartVersionsParams) ([]HelmChartVersion, error)
 	ListChartsByCategory(ctx context.Context, arg ListChartsByCategoryParams) ([]HelmChart, error)
 	ListChartsByRepository(ctx context.Context, arg ListChartsByRepositoryParams) ([]HelmChart, error)
+	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]ClusterCondition, error)
 	ListClusterRoleBindings(ctx context.Context, arg ListClusterRoleBindingsParams) ([]ClusterRoleBinding, error)
 	ListClusterRoleBindingsByCluster(ctx context.Context, arg ListClusterRoleBindingsByClusterParams) ([]ClusterRoleBinding, error)
 	ListClusterRoles(ctx context.Context, arg ListClusterRolesParams) ([]ClusterRole, error)
@@ -484,6 +486,10 @@ type Querier interface {
 	// PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error)
+	// Match metav1.Condition semantics: when status flips, bump
+	// last_transition_time; on every probe, bump last_probe_time and
+	// updated_at. reason/message are always refreshed.
+	UpsertClusterCondition(ctx context.Context, arg UpsertClusterConditionParams) (ClusterCondition, error)
 	UpsertClusterHealthStatus(ctx context.Context, arg UpsertClusterHealthStatusParams) (ClusterHealthStatus, error)
 	UpsertClusterMonitoringConfig(ctx context.Context, arg UpsertClusterMonitoringConfigParams) (ClusterMonitoringConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error)

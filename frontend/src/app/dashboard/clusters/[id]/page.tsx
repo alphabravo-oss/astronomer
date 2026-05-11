@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   useCluster,
+  useClusterConditions,
   useClusterMetricsSummary,
   useClusterEvents,
   useGenerateKubeconfig,
@@ -39,7 +40,11 @@ import {
   Pencil,
   Trash2,
   ChevronDown,
+  CheckCircle2,
+  XCircle,
+  CircleHelp,
 } from 'lucide-react';
+import type { ClusterCondition } from '@/types';
 
 export default function ClusterDetailPage() {
   const params = useParams();
@@ -47,6 +52,7 @@ export default function ClusterDetailPage() {
   const clusterId = params.id as string;
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+  const { data: conditions } = useClusterConditions(clusterId);
   const { data: metricsSummary } = useClusterMetricsSummary(clusterId);
   const { data: events } = useClusterEvents(clusterId, { limit: 10 });
   const generateKubeconfig = useGenerateKubeconfig();
@@ -72,6 +78,10 @@ export default function ClusterDetailPage() {
       queryKeys.clusters.detail(clusterId),
       queryKeys.clusters.metricsSummary(clusterId),
       queryKeys.clusters.events(clusterId),
+      // cluster_conditions uses its own key shape (['clusters', id,
+      // 'conditions']) so a heartbeat invalidation refreshes the pills
+      // without waiting for the 60s poll interval.
+      ['clusters', clusterId, 'conditions'],
     ],
   );
 
@@ -178,6 +188,9 @@ export default function ClusterDetailPage() {
             <span className="text-border">|</span>
             <span className="capitalize">{cluster.environment}</span>
           </div>
+          {conditions && conditions.length > 0 && (
+            <ClusterConditionsBar conditions={conditions} />
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div ref={kubeconfigMenuRef} className="relative inline-flex">
@@ -367,6 +380,70 @@ export default function ClusterDetailPage() {
         confirmText="Enable & Download"
         loading={updateMutation.isPending || generateKubeconfig.isPending}
       />
+    </div>
+  );
+}
+
+// ── Cluster conditions ──────────────────────────────────────────────────────
+//
+// Renders the kubectl-style condition pills under the cluster header. Each
+// chip shows the condition type + a coloured indicator; hover reveals the
+// reason, message, and how long the condition has been in its current state.
+
+const CONDITION_LABELS: Record<string, string> = {
+  Connected: 'Connected',
+  AgentReachable: 'Agent Reachable',
+  GatewayAPISupported: 'Gateway API',
+};
+
+function relativeAge(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  const diff = Math.max(0, Date.now() - t);
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+function ClusterConditionsBar({ conditions }: { conditions: ClusterCondition[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+      {conditions.map((c) => {
+        const label = CONDITION_LABELS[c.type] || c.type;
+        let tone = '';
+        let Icon = CircleHelp;
+        switch (c.status) {
+          case 'True':
+            tone = 'bg-status-success/10 text-status-success border-status-success/20';
+            Icon = CheckCircle2;
+            break;
+          case 'False':
+            tone = 'bg-status-danger/10 text-status-danger border-status-danger/20';
+            Icon = XCircle;
+            break;
+          default:
+            tone = 'bg-muted text-muted-foreground border-border';
+            Icon = CircleHelp;
+        }
+        const tooltip = [
+          `${c.reason || c.status}`,
+          c.message,
+          `For ${relativeAge(c.last_transition_time)}`,
+        ].filter(Boolean).join(' — ');
+        return (
+          <span
+            key={c.type}
+            title={tooltip}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border ${tone}`}
+          >
+            <Icon className="h-3 w-3" />
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 }

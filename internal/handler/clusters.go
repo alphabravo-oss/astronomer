@@ -42,6 +42,7 @@ type ClusterQuerier interface {
 	CountClusters(ctx context.Context) (int64, error)
 	// Health
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterHealthStatus, error)
+	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
 	// Registration
 	CreateClusterRegistrationToken(ctx context.Context, arg sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error)
 	GetRegistrationTokenByToken(ctx context.Context, token string) (sqlc.ClusterRegistrationToken, error)
@@ -434,6 +435,48 @@ func (h *ClusterHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, health)
+}
+
+// ClusterConditionResponse is the JSON shape returned from
+// GET /api/v1/clusters/{id}/conditions/. Names mirror metav1.Condition so
+// the frontend can render Kubernetes-style pills without translation.
+type ClusterConditionResponse struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason"`
+	Message            string `json:"message"`
+	LastTransitionTime string `json:"last_transition_time"`
+	LastProbeTime      string `json:"last_probe_time"`
+}
+
+// ListConditions handles GET /api/v1/clusters/{id}/conditions/. Returns
+// one entry per condition type that the health-check worker has written
+// (Connected, AgentReachable, GatewayAPISupported, ...). Returns an empty
+// list (not 404) for a cluster that hasn't had a health-check tick yet —
+// the UI then shows neutral pills rather than an error toast.
+func (h *ClusterHandler) ListConditions(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	rows, err := h.queries.ListClusterConditions(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "db_error", "Failed to list conditions")
+		return
+	}
+	out := make([]ClusterConditionResponse, 0, len(rows))
+	for _, c := range rows {
+		out = append(out, ClusterConditionResponse{
+			Type:               c.Type,
+			Status:             c.Status,
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: c.LastTransitionTime.UTC().Format(time.RFC3339),
+			LastProbeTime:      c.LastProbeTime.UTC().Format(time.RFC3339),
+		})
+	}
+	RespondJSON(w, http.StatusOK, out)
 }
 
 // GenerateRegistrationToken handles POST /api/v1/clusters/{id}/register/.

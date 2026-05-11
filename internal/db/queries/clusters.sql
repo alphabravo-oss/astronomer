@@ -152,3 +152,32 @@ RETURNING *;
 
 -- name: DeleteClusterRegistryConfig :exec
 DELETE FROM cluster_registry_configs WHERE cluster_id = $1;
+
+-- name: ListClusterConditions :many
+SELECT * FROM cluster_conditions WHERE cluster_id = $1 ORDER BY type;
+
+-- name: UpsertClusterCondition :one
+-- Match metav1.Condition semantics: when status flips, bump
+-- last_transition_time; on every probe, bump last_probe_time and
+-- updated_at. reason/message are always refreshed.
+INSERT INTO cluster_conditions (
+    cluster_id, type, status, reason, message,
+    last_transition_time, last_probe_time
+) VALUES (
+    $1, $2, $3, $4, $5, now(), now()
+)
+ON CONFLICT (cluster_id, type) DO UPDATE SET
+    status               = EXCLUDED.status,
+    reason               = EXCLUDED.reason,
+    message              = EXCLUDED.message,
+    last_probe_time      = now(),
+    last_transition_time = CASE
+        WHEN cluster_conditions.status = EXCLUDED.status
+            THEN cluster_conditions.last_transition_time
+            ELSE now()
+        END,
+    updated_at           = now()
+RETURNING *;
+
+-- name: DeleteClusterConditionsForCluster :exec
+DELETE FROM cluster_conditions WHERE cluster_id = $1;

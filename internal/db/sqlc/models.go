@@ -328,6 +328,19 @@ type ClusterAgentToken struct {
 	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
+type ClusterCondition struct {
+	ID                 uuid.UUID `json:"id"`
+	ClusterID          uuid.UUID `json:"cluster_id"`
+	Type               string    `json:"type"`
+	Status             string    `json:"status"`
+	Reason             string    `json:"reason"`
+	Message            string    `json:"message"`
+	LastTransitionTime time.Time `json:"last_transition_time"`
+	LastProbeTime      time.Time `json:"last_probe_time"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
 type ClusterHealthStatus struct {
 	ID                 uuid.UUID       `json:"id"`
 	ClusterID          uuid.UUID       `json:"cluster_id"`

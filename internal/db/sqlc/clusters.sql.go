@@ -116,6 +116,15 @@ func (q *Queries) DeleteCluster(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteClusterConditionsForCluster = `-- name: DeleteClusterConditionsForCluster :exec
+DELETE FROM cluster_conditions WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterConditionsForCluster(ctx context.Context, clusterID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteClusterConditionsForCluster, clusterID)
+	return err
+}
+
 const deleteClusterRegistryConfig = `-- name: DeleteClusterRegistryConfig :exec
 DELETE FROM cluster_registry_configs WHERE cluster_id = $1
 `
@@ -421,6 +430,41 @@ func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, token string)
 	return i, err
 }
 
+const listClusterConditions = `-- name: ListClusterConditions :many
+SELECT id, cluster_id, type, status, reason, message, last_transition_time, last_probe_time, created_at, updated_at FROM cluster_conditions WHERE cluster_id = $1 ORDER BY type
+`
+
+func (q *Queries) ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]ClusterCondition, error) {
+	rows, err := q.db.Query(ctx, listClusterConditions, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterCondition{}
+	for rows.Next() {
+		var i ClusterCondition
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.Type,
+			&i.Status,
+			&i.Reason,
+			&i.Message,
+			&i.LastTransitionTime,
+			&i.LastProbeTime,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusters = `-- name: ListClusters :many
 SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local FROM clusters ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
@@ -666,6 +710,62 @@ func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertCluster
 		&i.ClusterID,
 		&i.Token,
 		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertClusterCondition = `-- name: UpsertClusterCondition :one
+INSERT INTO cluster_conditions (
+    cluster_id, type, status, reason, message,
+    last_transition_time, last_probe_time
+) VALUES (
+    $1, $2, $3, $4, $5, now(), now()
+)
+ON CONFLICT (cluster_id, type) DO UPDATE SET
+    status               = EXCLUDED.status,
+    reason               = EXCLUDED.reason,
+    message              = EXCLUDED.message,
+    last_probe_time      = now(),
+    last_transition_time = CASE
+        WHEN cluster_conditions.status = EXCLUDED.status
+            THEN cluster_conditions.last_transition_time
+            ELSE now()
+        END,
+    updated_at           = now()
+RETURNING id, cluster_id, type, status, reason, message, last_transition_time, last_probe_time, created_at, updated_at
+`
+
+type UpsertClusterConditionParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Type      string    `json:"type"`
+	Status    string    `json:"status"`
+	Reason    string    `json:"reason"`
+	Message   string    `json:"message"`
+}
+
+// Match metav1.Condition semantics: when status flips, bump
+// last_transition_time; on every probe, bump last_probe_time and
+// updated_at. reason/message are always refreshed.
+func (q *Queries) UpsertClusterCondition(ctx context.Context, arg UpsertClusterConditionParams) (ClusterCondition, error) {
+	row := q.db.QueryRow(ctx, upsertClusterCondition,
+		arg.ClusterID,
+		arg.Type,
+		arg.Status,
+		arg.Reason,
+		arg.Message,
+	)
+	var i ClusterCondition
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Type,
+		&i.Status,
+		&i.Reason,
+		&i.Message,
+		&i.LastTransitionTime,
+		&i.LastProbeTime,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
