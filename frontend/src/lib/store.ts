@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { User, Cluster } from '@/types';
+import type { User } from '@/types';
 
 // ============================================================
 // Auth Store
@@ -54,51 +54,6 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
-      }),
-    }
-  )
-);
-
-// ============================================================
-// Cluster Store
-// ============================================================
-
-interface ClusterState {
-  selectedCluster: Cluster | null;
-  selectedClusterId: string | null;
-  recentClusters: Array<{ id: string; name: string; displayName: string }>;
-  setSelectedCluster: (cluster: Cluster | null) => void;
-  setSelectedClusterId: (id: string | null) => void;
-  addRecentCluster: (cluster: { id: string; name: string; displayName: string }) => void;
-}
-
-export const useClusterStore = create<ClusterState>()(
-  persist(
-    (set) => ({
-      selectedCluster: null,
-      selectedClusterId: null,
-      recentClusters: [],
-      setSelectedCluster: (cluster) =>
-        set({
-          selectedCluster: cluster,
-          selectedClusterId: cluster?.id || null,
-        }),
-      setSelectedClusterId: (id) =>
-        set({ selectedClusterId: id }),
-      addRecentCluster: (cluster) =>
-        set((state) => {
-          const filtered = state.recentClusters.filter((c) => c.id !== cluster.id);
-          return {
-            recentClusters: [cluster, ...filtered].slice(0, 5),
-          };
-        }),
-    }),
-    {
-      name: 'astronomer-cluster',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        selectedClusterId: state.selectedClusterId,
-        recentClusters: state.recentClusters,
       }),
     }
   )

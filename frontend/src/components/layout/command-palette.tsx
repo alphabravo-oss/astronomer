@@ -13,7 +13,7 @@ import {
   Search,
   ArrowRight,
 } from 'lucide-react';
-import { useUIStore, useClusterStore } from '@/lib/store';
+import { useUIStore } from '@/lib/store';
 import { useClusters } from '@/lib/hooks';
 
 const pages = [
@@ -28,7 +28,6 @@ const pages = [
 export function CommandPalette() {
   const router = useRouter();
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
-  const { setSelectedCluster } = useClusterStore();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const [search, setSearch] = useState('');
 
@@ -58,12 +57,13 @@ export function CommandPalette() {
 
   const selectCluster = useCallback(
     (cluster: import('@/types').Cluster) => {
-      setSelectedCluster(cluster);
+      // The cluster context is encoded in the URL slug, not in any global
+      // store — navigating is sufficient.
       router.push(`/dashboard/clusters/${cluster.id}`);
       setCommandPaletteOpen(false);
       setSearch('');
     },
-    [router, setCommandPaletteOpen, setSelectedCluster]
+    [router, setCommandPaletteOpen]
   );
 
   if (!commandPaletteOpen) return null;

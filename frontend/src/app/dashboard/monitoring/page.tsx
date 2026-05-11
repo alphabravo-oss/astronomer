@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useClusterStore } from '@/lib/store';
-import { useClusterMetrics, useClusterMetricsSummary, useClusterNodes, useClusterNamespaces } from '@/lib/hooks';
+import { useEffect, useState } from 'react';
+import { useClusters, useClusterMetrics, useClusterMetricsSummary, useClusterNodes, useClusterNamespaces } from '@/lib/hooks';
 import { MetricCard } from '@/components/ui/metric-card';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { formatBytes, formatCPU, formatPercentage, cn } from '@/lib/utils';
 import type { ClusterNode, Namespace } from '@/types';
+import { ChevronDown } from 'lucide-react';
 import {
   Cpu,
   MemoryStick,
@@ -19,8 +19,27 @@ import {
 } from 'lucide-react';
 
 export default function MonitoringPage() {
-  const { selectedClusterId } = useClusterStore();
+  // The global "monitoring" route works against a single cluster, so it
+  // carries its own in-page picker. Cluster context lives in the URL for
+  // every other view, but this page is reachable from a top-level sidebar
+  // link that isn't scoped to a cluster yet — so we default to whichever
+  // cluster the API returns first and let the user switch from here.
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [timeRange, setTimeRange] = useState('1h');
+
+  const { data: clustersData } = useClusters({ pageSize: 100 });
+  const clusters = clustersData?.data || [];
+
+  // Auto-select first cluster once data arrives so the page is useful on first
+  // navigation without forcing the user to open the picker.
+  useEffect(() => {
+    if (!selectedClusterId && clusters.length > 0) {
+      setSelectedClusterId(clusters[0].id);
+    }
+  }, [selectedClusterId, clusters]);
+
+  const selectedCluster = clusters.find((c) => c.id === selectedClusterId) || null;
 
   const { data: summary } = useClusterMetricsSummary(selectedClusterId || '');
   const { data: metrics, isLoading: metricsLoading } = useClusterMetrics(selectedClusterId || '', timeRange);
@@ -128,7 +147,9 @@ export default function MonitoringPage() {
         <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card">
           <Server className="h-5 w-5 text-muted-foreground flex-shrink-0" />
           <p className="text-sm text-muted-foreground">
-            Select a cluster from the top bar to view monitoring data.
+            {clusters.length === 0
+              ? 'No clusters registered yet. Register a cluster to view monitoring data.'
+              : 'Loading clusters...'}
           </p>
         </div>
       </div>
@@ -145,21 +166,64 @@ export default function MonitoringPage() {
             Real-time resource metrics and utilization
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-          {timeRanges.map((range) => (
+        <div className="flex items-center gap-2">
+          {/* Cluster picker (in-page; this is the only route that isn't already
+              cluster-scoped via the URL slug). */}
+          <div className="relative">
             <button
-              key={range.value}
-              onClick={() => setTimeRange(range.value)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                timeRange === range.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
+              onClick={() => setPickerOpen((o) => !o)}
+              onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+              className="inline-flex items-center gap-2 h-8 px-3 rounded-md border border-border text-sm
+                text-foreground hover:bg-accent transition-colors"
             >
-              {range.label}
+              <Server className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="max-w-[160px] truncate">
+                {selectedCluster?.displayName || 'Select cluster'}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
-          ))}
+            {pickerOpen && clusters.length > 0 && (
+              <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-border bg-popover shadow-xl z-20 overflow-hidden">
+                <div className="max-h-72 overflow-y-auto p-1">
+                  {clusters.map((c) => (
+                    <button
+                      key={c.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSelectedClusterId(c.id);
+                        setPickerOpen(false);
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-colors',
+                        selectedClusterId === c.id
+                          ? 'bg-accent text-foreground'
+                          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      )}
+                    >
+                      <Server className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="truncate">{c.displayName}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+            {timeRanges.map((range) => (
+              <button
+                key={range.value}
+                onClick={() => setTimeRange(range.value)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  timeRange === range.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

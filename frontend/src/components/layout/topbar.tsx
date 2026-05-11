@@ -4,7 +4,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTheme } from 'next-themes';
 import {
-  Search,
   Bell,
   ChevronDown,
   ChevronRight,
@@ -12,7 +11,6 @@ import {
   Settings,
   User,
   Command,
-  Server,
   Sun,
   Moon,
   Monitor,
@@ -20,8 +18,8 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react';
-import { cn, distributionDisplayName } from '@/lib/utils';
-import { useUIStore, useAuthStore, useClusterStore } from '@/lib/store';
+import { cn } from '@/lib/utils';
+import { useUIStore, useAuthStore } from '@/lib/store';
 import { useClusters, useAlertEvents } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime } from '@/lib/utils';
@@ -114,13 +112,12 @@ export function Topbar() {
   const router = useRouter();
   const { setCommandPaletteOpen } = useUIStore();
   const { user, logout } = useAuthStore();
-  const { selectedCluster, setSelectedCluster, addRecentCluster } = useClusterStore();
-  const [clusterDropdownOpen, setClusterDropdownOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const clusterRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  // Clusters are still fetched here so breadcrumbs can resolve the
+  // /dashboard/clusters/{id}/... slug into the human-readable cluster name.
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: alertEvents } = useAlertEvents({ status: 'firing' });
 
@@ -150,9 +147,6 @@ export function Topbar() {
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (clusterRef.current && !clusterRef.current.contains(e.target as Node)) {
-        setClusterDropdownOpen(false);
-      }
       if (userRef.current && !userRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
       }
@@ -200,84 +194,6 @@ export function Topbar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {/* Cluster Selector */}
-        <div ref={clusterRef} className="relative">
-          <button
-            onClick={() => setClusterDropdownOpen(!clusterDropdownOpen)}
-            className="inline-flex items-center gap-2 h-8 px-3 rounded-md border border-border text-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <Server className="h-3.5 w-3.5" />
-            <span className="max-w-[140px] truncate">
-              {selectedCluster?.displayName || 'All Clusters'}
-            </span>
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
-
-          {clusterDropdownOpen && (
-            <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
-              <div className="p-2 border-b border-border">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search clusters..."
-                    className="w-full h-8 pl-8 pr-3 rounded-md border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <div className="max-h-64 overflow-y-auto p-1">
-                <button
-                  onClick={() => {
-                    setSelectedCluster(null);
-                    setClusterDropdownOpen(false);
-                  }}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-left transition-colors',
-                    !selectedCluster ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  )}
-                >
-                  <Server className="h-4 w-4 flex-shrink-0" />
-                  <span>All Clusters</span>
-                </button>
-
-                {clustersData?.data?.map((cluster) => (
-                  <button
-                    key={cluster.id}
-                    onClick={() => {
-                      setSelectedCluster(cluster);
-                      addRecentCluster({
-                        id: cluster.id,
-                        name: cluster.name,
-                        displayName: cluster.displayName,
-                      });
-                      setClusterDropdownOpen(false);
-                    }}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-left transition-colors',
-                      selectedCluster?.id === cluster.id
-                        ? 'bg-accent text-foreground'
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                    )}
-                  >
-                    <Server className="h-4 w-4 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium">{cluster.displayName}</p>
-                      <p className="text-2xs text-muted-foreground truncate">
-                        {distributionDisplayName(cluster.distribution)}
-                      </p>
-                    </div>
-                    <StatusBadge status={cluster.status} size="sm" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* Command Palette Trigger */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
