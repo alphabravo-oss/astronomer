@@ -143,6 +143,13 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	go h.evaluate(context.Background())
+	recordAudit(r, h.queries, "controlplane.policy.update", "control_plane_policy", policy.ID.String(), "", map[string]any{
+		"monitoring_queue_depth_threshold":     policy.MonitoringQueueDepthThreshold,
+		"argocd_queue_depth_threshold":         policy.ArgocdQueueDepthThreshold,
+		"tools_queue_depth_threshold":          policy.ToolsQueueDepthThreshold,
+		"catalog_queue_depth_threshold":        policy.CatalogQueueDepthThreshold,
+		"recent_failure_window_minutes":        policy.RecentFailureWindowMinutes,
+	})
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
 }
 
@@ -183,6 +190,10 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 		RespondError(w, http.StatusNotFound, "not_found", "Control plane alert not found")
 		return
 	}
+	recordAudit(r, h.queries, "controlplane.alert.acknowledge", "control_plane_alert", id.String(), alert.Controller, map[string]any{
+		"condition_type": alert.ConditionType,
+		"status":         alert.Status,
+	})
 	RespondJSON(w, http.StatusOK, controlPlaneAlertResponse(alert))
 }
 
@@ -230,6 +241,11 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusInternalServerError, "silence_error", "Failed to create control plane silence")
 		return
 	}
+	recordAudit(r, h.queries, "controlplane.silence.create", "control_plane_silence", item.ID.String(), req.Reason, map[string]any{
+		"controller":     req.Controller,
+		"condition_type": req.ConditionType,
+		"duration":       duration.String(),
+	})
 	RespondJSON(w, http.StatusCreated, controlPlaneSilenceResponse(item))
 }
 
@@ -243,6 +259,7 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusNotFound, "not_found", "Control plane silence not found")
 		return
 	}
+	recordAudit(r, h.queries, "controlplane.silence.delete", "control_plane_silence", id.String(), "", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

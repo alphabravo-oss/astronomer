@@ -460,6 +460,13 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update logging output")
 		return
 	}
+	action := "logging.output.enable"
+	if !enabled {
+		action = "logging.output.disable"
+	}
+	recordAudit(r, h.queries, action, "logging_output", output.ID.String(), output.Name, map[string]any{
+		"enabled": enabled,
+	})
 	RespondJSON(w, http.StatusOK, output)
 }
 
@@ -513,6 +520,13 @@ func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update logging pipeline")
 		return
 	}
+	action := "logging.pipeline.enable"
+	if !enabled {
+		action = "logging.pipeline.disable"
+	}
+	recordAudit(r, h.queries, action, "logging_pipeline", pipeline.ID.String(), pipeline.Name, map[string]any{
+		"enabled": enabled,
+	})
 	RespondJSON(w, http.StatusOK, pipeline)
 }
 
