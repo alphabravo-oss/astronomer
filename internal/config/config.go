@@ -91,6 +91,7 @@ func Load() (*Config, error) {
 	v.BindEnv("database_url")
 	v.BindEnv("redis_url")
 	v.BindEnv("secret_key")
+	v.BindEnv("server_url")
 	v.BindEnv("audit_log_retention_months")
 	v.BindEnv("server_metrics_addr")
 	v.BindEnv("worker_metrics_addr")

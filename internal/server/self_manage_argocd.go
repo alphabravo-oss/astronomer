@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -277,19 +278,28 @@ func createLocalArgoApplicationControllerToken(ctx context.Context, k8s kubernet
 }
 
 func applySecret(ctx context.Context, k8s kubernetes.Interface, secret *corev1.Secret) error {
-	current, err := k8s.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = k8s.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+	// Argo's own cluster controller also writes to astronomer-local-cluster
+	// (status fields, last-seen timestamps) on its own cadence, so a naive
+	// Get→Update on every 30s reconcile tick lost roughly every other write
+	// to a stale resourceVersion. retry.RetryOnConflict re-fetches the row
+	// and reapplies the patch on Conflict, which is the standard k8s
+	// pattern for this. Other failure modes (network, NotFound on the
+	// initial Create path) bubble up unchanged.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := k8s.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			_, err = k8s.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		current.Labels = secret.Labels
+		current.Type = secret.Type
+		current.Data = secret.Data
+		_, err = k8s.CoreV1().Secrets(secret.Namespace).Update(ctx, current, metav1.UpdateOptions{})
 		return err
-	}
-	if err != nil {
-		return err
-	}
-	current.Labels = secret.Labels
-	current.Type = secret.Type
-	current.Data = secret.Data
-	_, err = k8s.CoreV1().Secrets(secret.Namespace).Update(ctx, current, metav1.UpdateOptions{})
-	return err
+	})
 }
 
 func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string) (string, error) {
