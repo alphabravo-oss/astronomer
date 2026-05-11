@@ -168,6 +168,89 @@ available and fall back to scheduler best-effort semantics.
 {{- end }}
 
 {{/*
+TLS helpers — single source of truth that gateway.* and ingress.* templates
+read from. The mode selector is `tls.source` with values:
+  none | selfSigned | letsEncrypt | secret
+*/}}
+
+{{- define "astronomer.tls.source" -}}
+{{- default "none" .Values.tls.source -}}
+{{- end }}
+
+{{- define "astronomer.tls.enabled" -}}
+{{- if ne (include "astronomer.tls.source" .) "none" -}}true{{- end -}}
+{{- end }}
+
+{{- define "astronomer.tls.secretName" -}}
+{{- if .Values.tls.secretName -}}
+{{- .Values.tls.secretName -}}
+{{- else -}}
+{{- printf "%s-tls" (include "astronomer.fullname" .) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+True when the chart should template a cert-manager Issuer + Certificate.
+Both selfSigned and letsEncrypt modes go through cert-manager; secret mode
+is BYO and creates nothing; none mode disables TLS entirely.
+*/}}
+{{- define "astronomer.tls.usesCertManager" -}}
+{{- $src := include "astronomer.tls.source" . -}}
+{{- if or (eq $src "selfSigned") (eq $src "letsEncrypt") -}}true{{- end -}}
+{{- end }}
+
+{{- define "astronomer.tls.issuerName" -}}
+{{- printf "%s-tls" (include "astronomer.fullname" .) -}}
+{{- end }}
+
+{{/*
+Solver ingress class for the letsEncrypt HTTP-01 path. Explicit override wins;
+otherwise we use whatever class the public listener (gateway or ingress) is on.
+*/}}
+{{- define "astronomer.tls.solverIngressClass" -}}
+{{- if .Values.tls.letsEncrypt.ingressClassName -}}
+{{- .Values.tls.letsEncrypt.ingressClassName -}}
+{{- else if .Values.gateway.enabled -}}
+{{- .Values.gateway.className -}}
+{{- else -}}
+{{- .Values.ingress.className -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Primary hostname for the Certificate's commonName when commonName isn't set
+explicitly. Prefers gateway.hosts[0], falls back to ingress.host.
+*/}}
+{{- define "astronomer.tls.primaryHost" -}}
+{{- if and .Values.gateway.enabled (gt (len .Values.gateway.hosts) 0) -}}
+{{- index .Values.gateway.hosts 0 -}}
+{{- else -}}
+{{- .Values.ingress.host -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+DNS names list for the Certificate. Unions gateway.hosts and ingress.host
+(deduplicated) so a single Cert covers both code paths if both are enabled.
+*/}}
+{{- define "astronomer.tls.dnsNames" -}}
+{{- $names := list -}}
+{{- if .Values.gateway.enabled -}}
+{{- range .Values.gateway.hosts -}}
+{{- $names = append $names . -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.ingress.enabled .Values.ingress.host -}}
+{{- if not (has .Values.ingress.host $names) -}}
+{{- $names = append $names .Values.ingress.host -}}
+{{- end -}}
+{{- end -}}
+{{- range ($names | uniq) }}
+- {{ . | quote }}
+{{- end -}}
+{{- end }}
+
+{{/*
 astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
 render when env=production but mandatory production knobs are missing. Helm's
 `fail` builtin aborts the whole release with a single human-readable message
@@ -197,11 +280,14 @@ rendered manifest.
     {{- if not (and .Values.gateway.enabled (gt (len .Values.gateway.hosts) 0)) }}
       {{- $errs = append $errs "  - gateway.enabled=true with at least one gateway.hosts entry is required" }}
     {{- end }}
-    {{- if and .Values.gateway.enabled (not .Values.gateway.tls.enabled) }}
-      {{- $errs = append $errs "  - gateway.tls.enabled must be true (set gateway.tls.secretName or gateway.tls.certManager.enabled)" }}
+    {{- $tlsSrc := include "astronomer.tls.source" . }}
+    {{- if eq $tlsSrc "none" }}
+      {{- $errs = append $errs "  - tls.source must be one of: selfSigned, letsEncrypt, secret (got 'none')" }}
     {{- end }}
-    {{- if and .Values.gateway.tls.enabled (not .Values.gateway.tls.secretName) (not .Values.gateway.tls.certManager.enabled) }}
-      {{- $errs = append $errs "  - either gateway.tls.secretName or gateway.tls.certManager.enabled must be set" }}
+    {{- if eq $tlsSrc "letsEncrypt" }}
+      {{- if not .Values.tls.letsEncrypt.email }}
+        {{- $errs = append $errs "  - tls.letsEncrypt.email must be set when tls.source=letsEncrypt" }}
+      {{- end }}
     {{- end }}
     {{- if eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production" }}
       {{- $errs = append $errs "  - secrets.secretKey is still the chart's known dev value — replace it (JWT signing key)" }}

@@ -1,0 +1,33 @@
+{{- /*
+cert-manager Certificate for the selfSigned and letsEncrypt TLS modes.
+
+Writes the resulting tls.crt/tls.key into the Secret named by
+tls.secretName (default: <fullname>-tls). Both the Gateway listener
+(httproute.yaml) and the Ingress (ingress.yaml) reference that same
+Secret name, so flipping between source modes never requires touching
+the consumer manifests.
+
+In source=secret mode this template is skipped; the operator pre-creates
+the Secret out of band.
+*/ -}}
+{{- if include "astronomer.tls.usesCertManager" . }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "astronomer.tls.secretName" . }}
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "astronomer.tls.secretName" . }}
+  {{- if eq (include "astronomer.tls.source" .) "selfSigned" }}
+  duration: {{ default "2160h" .Values.tls.selfSigned.duration | quote }}
+  renewBefore: {{ default "360h" .Values.tls.selfSigned.renewBefore | quote }}
+  {{- end }}
+  commonName: {{ default (include "astronomer.tls.primaryHost" .) .Values.tls.selfSigned.commonName | quote }}
+  dnsNames:
+    {{- include "astronomer.tls.dnsNames" . | nindent 4 }}
+  issuerRef:
+    name: {{ include "astronomer.tls.issuerName" . }}
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}

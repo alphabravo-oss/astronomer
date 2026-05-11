@@ -106,6 +106,20 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             {{- end }}
+            {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
+            # Go's crypto/x509 scans SSL_CERT_DIR in addition to the system
+            # cert pool, so putting the operator-supplied CA bundle on this
+            # path is enough for outbound TLS (registries, OIDC/SAML IdPs,
+            # private chart repos) to trust private CAs.
+            - name: SSL_CERT_DIR
+              value: /etc/ssl/certs:/astronomer/trust/extra
+            {{- end }}
+          {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
+          volumeMounts:
+            - name: tls-ca-additional
+              mountPath: /astronomer/trust/extra
+              readOnly: true
+          {{- end }}
           {{- if .Values.server.probes.enabled }}
           livenessProbe:
             httpGet:
@@ -126,6 +140,15 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
+      {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
+      volumes:
+        - name: tls-ca-additional
+          secret:
+            secretName: {{ .Values.tls.additionalTrustedCAs.existingSecret | quote }}
+            items:
+              - key: tls.crt
+                path: ca-additional.pem
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

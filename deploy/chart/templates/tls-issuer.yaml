@@ -1,0 +1,36 @@
+{{- /*
+cert-manager Issuer for the selfSigned and letsEncrypt TLS modes.
+
+Soft-required dependency: cert-manager (CRDs cert-manager.io/v1). The
+preflight Job checks for the CRD when tls.requireCertManager=true and
+fails the release with a friendly message if it's missing. The template
+itself uses .Capabilities.APIVersions.Has so a `helm template` run
+without a live cluster still renders successfully against a fixture
+that *does* have cert-manager installed.
+*/ -}}
+{{- if include "astronomer.tls.usesCertManager" . }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "astronomer.tls.issuerName" . }}
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+spec:
+  {{- if eq (include "astronomer.tls.source" .) "selfSigned" }}
+  selfSigned: {}
+  {{- else if eq (include "astronomer.tls.source" .) "letsEncrypt" }}
+  acme:
+    email: {{ required "tls.letsEncrypt.email is required when tls.source=letsEncrypt" .Values.tls.letsEncrypt.email | quote }}
+    server: {{ if eq (default "production" .Values.tls.letsEncrypt.environment) "staging" -}}
+      "https://acme-staging-v02.api.letsencrypt.org/directory"
+    {{- else -}}
+      "https://acme-v02.api.letsencrypt.org/directory"
+    {{- end }}
+    privateKeySecretRef:
+      name: {{ printf "%s-acme-account" (include "astronomer.tls.issuerName" .) | quote }}
+    solvers:
+      - http01:
+          ingress:
+            class: {{ include "astronomer.tls.solverIngressClass" . | quote }}
+  {{- end }}
+{{- end }}

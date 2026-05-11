@@ -17,28 +17,9 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: {{ include "astronomer.fullname" . }}
-  {{- $gatewayAnnotations := dict -}}
   {{- with .Values.gateway.annotations }}
-  {{- range $k, $v := . }}
-  {{- $_ := set $gatewayAnnotations $k $v }}
-  {{- end }}
-  {{- end }}
-  {{- if and .Values.gateway.tls.enabled .Values.gateway.tls.certManager.enabled .Values.gateway.tls.certManager.issuerName }}
-  {{- if eq .Values.gateway.tls.certManager.issuerKind "ClusterIssuer" }}
-  {{- $_ := set $gatewayAnnotations "cert-manager.io/cluster-issuer" .Values.gateway.tls.certManager.issuerName }}
-  {{- else }}
-  {{- $_ := set $gatewayAnnotations "cert-manager.io/issuer" .Values.gateway.tls.certManager.issuerName }}
-  {{- end }}
-  {{- if and .Values.gateway.tls.certManager.issuerKind (ne .Values.gateway.tls.certManager.issuerKind "Issuer") (ne .Values.gateway.tls.certManager.issuerKind "ClusterIssuer") }}
-  {{- $_ := set $gatewayAnnotations "cert-manager.io/issuer-kind" .Values.gateway.tls.certManager.issuerKind }}
-  {{- end }}
-  {{- if and .Values.gateway.tls.certManager.issuerGroup (ne .Values.gateway.tls.certManager.issuerGroup "cert-manager.io") }}
-  {{- $_ := set $gatewayAnnotations "cert-manager.io/issuer-group" .Values.gateway.tls.certManager.issuerGroup }}
-  {{- end }}
-  {{- end }}
-  {{- if gt (len $gatewayAnnotations) 0 }}
   annotations:
-    {{- toYaml $gatewayAnnotations | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
     {{- include "astronomer.labels" . | nindent 4 }}
@@ -51,7 +32,7 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
-    {{- if .Values.gateway.tls.enabled }}
+    {{- if include "astronomer.tls.enabled" . }}
     - name: https
       port: 443
       protocol: HTTPS
@@ -59,7 +40,7 @@ spec:
         mode: Terminate
         certificateRefs:
           - kind: Secret
-            name: {{ .Values.gateway.tls.secretName | quote }}
+            name: {{ include "astronomer.tls.secretName" . | quote }}
       allowedRoutes:
         namespaces:
           from: Same

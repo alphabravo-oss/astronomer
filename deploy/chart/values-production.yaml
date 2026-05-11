@@ -137,16 +137,29 @@ gateway:
   enabled: true
   className: nginx
   hosts: []   # Operator MUST set: --set 'gateway.hosts={astronomer.example.com}'
-  tls:
-    enabled: true
-    # Pin a pre-existing TLS Secret OR let cert-manager mint one. Only one
-    # path should be active in a given install.
-    secretName: ""
-    certManager:
-      enabled: false
-      issuerName: ""
-      issuerKind: ClusterIssuer
-      issuerGroup: cert-manager.io
+
+# TLS — pick ONE source and configure it. See values.yaml for the full
+# explanation of each mode.
+#
+# Production examples:
+#
+#   # Let's Encrypt (recommended for internet-reachable installs):
+#   --set tls.source=letsEncrypt \
+#   --set tls.letsEncrypt.email=ops@example.com
+#
+#   # cert-manager self-signed (internal-only installs):
+#   --set tls.source=selfSigned
+#
+#   # BYO certificate (you manage rotation):
+#   --set tls.source=secret \
+#   --set tls.secretName=astronomer-tls   # pre-created with tls.crt + tls.key
+tls:
+  source: secret           # operator MUST override to selfSigned/letsEncrypt or pre-create the Secret
+  secretName: ""
+  requireCertManager: true
+  additionalTrustedCAs:
+    enabled: false
+    existingSecret: ""
 
 # ── Config hardening ──────────────────────────────────────────────────────
 config:

@@ -25,13 +25,15 @@ gateway:
     - host.k3d.internal
     - astronomer.178.156.239.231.nip.io
     - 178.156.239.231.nip.io
-  tls:
-    enabled: false
-    secretName: ""
 
 # Legacy Ingress block kept gated-off for compatibility — chart now uses Gateway API.
 ingress:
   enabled: false
+
+# TLS off for local dev — http://...nip.io:8080. Flip to selfSigned (and install
+# cert-manager) to test the cert-manager path end-to-end.
+tls:
+  source: none
 
 frontend:
   enabled: true

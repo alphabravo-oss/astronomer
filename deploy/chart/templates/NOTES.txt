@@ -10,20 +10,49 @@ Migrate image: {{ include "astronomer.image" (dict "context" . "component" "migr
 
 Migrations were applied via a pre-install/pre-upgrade Helm hook Job.
 
-{{- if .Values.ingress.enabled }}
+TLS
+---
+{{- $tlsSrc := include "astronomer.tls.source" . }}
+{{- if eq $tlsSrc "none" }}
+Mode    : none (HTTP only — not for production)
+{{- else if eq $tlsSrc "selfSigned" }}
+Mode    : selfSigned (cert-manager Issuer + Certificate)
+Secret  : {{ include "astronomer.tls.secretName" . }}
+Issuer  : {{ include "astronomer.tls.issuerName" . }}
+Note    : Browsers will warn on the self-signed CA. Suitable for internal-only installs.
+{{- else if eq $tlsSrc "letsEncrypt" }}
+Mode    : letsEncrypt ({{ default "production" .Values.tls.letsEncrypt.environment }})
+Secret  : {{ include "astronomer.tls.secretName" . }}
+Issuer  : {{ include "astronomer.tls.issuerName" . }}
+Email   : {{ .Values.tls.letsEncrypt.email }}
+Note    : HTTP-01 solver — make sure your hostnames resolve to this cluster's
+          load balancer before cert-manager attempts issuance.
+{{- else if eq $tlsSrc "secret" }}
+Mode    : secret (BYO)
+Secret  : {{ include "astronomer.tls.secretName" . }}
+Note    : Pre-create this Secret with keys tls.crt + tls.key in namespace {{ .Release.Namespace }}.
+{{- end }}
+
+{{- if .Values.gateway.enabled }}
 
 Access the platform at:
-  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+{{- range .Values.gateway.hosts }}
+  http{{ if include "astronomer.tls.enabled" $ }}s{{ end }}://{{ . }}
+{{- end }}
 
 For local k3d clusters, ensure your loadbalancer maps :80/:443:
   k3d cluster create astronomer-mgmt \
     --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
 
-Then point a hosts entry (or rely on *.localtest.me which always resolves to 127.0.0.1):
-  curl -H "Host: {{ .Values.ingress.host }}" http://localhost:8080/readyz
+Smoke test (replace the host below with one of the entries above):
+  curl http{{ if include "astronomer.tls.enabled" . }}s{{ end }}://{{ index .Values.gateway.hosts 0 }}/readyz
+{{- else if .Values.ingress.enabled }}
+
+Access the platform at:
+  http{{ if include "astronomer.tls.enabled" . }}s{{ end }}://{{ .Values.ingress.host }}
 {{- else }}
 
-Ingress is disabled. Port-forward the server Service:
+Neither Gateway nor Ingress is enabled. Port-forward the server Service:
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "astronomer.fullname" . }}-server 8000:{{ .Values.server.service.port }}
   curl http://127.0.0.1:8000/readyz
 

@@ -262,18 +262,66 @@ bootstrap:
   password: ""
 
 # =============================================================================
-# Ingress
+# TLS — single source of truth, consumed by both gateway.* and ingress.*.
+# Mirrors Rancher's ingress.tls.source model.
+# =============================================================================
+tls:
+  # Mode selector:
+  #   none        — no TLS (HTTP only). Fine for local dev.
+  #   selfSigned  — cert-manager Issuer (SelfSigned) + Certificate. Auto-rotates.
+  #                 Soft-requires cert-manager (see tls.requireCertManager).
+  #                 Browsers will warn on the self-signed CA; OK for internal use.
+  #   letsEncrypt — cert-manager ACME Issuer (HTTP-01) + Certificate.
+  #                 Requires cert-manager + public DNS pointing at this install.
+  #                 Set tls.letsEncrypt.email.
+  #   secret      — BYO existing Secret named tls.secretName, with tls.crt + tls.key.
+  source: none
+
+  # Output Secret name. When source=secret, this is the EXISTING secret you
+  # pre-created; otherwise cert-manager writes to this name. Defaults to
+  # <fullname>-tls.
+  secretName: ""
+
+  # Tunables for the selfSigned path.
+  selfSigned:
+    duration: 2160h         # 90 days (cert-manager default)
+    renewBefore: 360h       # 15 days
+    commonName: ""          # default: first gateway/ingress host
+
+  # Tunables for the letsEncrypt path.
+  letsEncrypt:
+    email: ""                  # required when source=letsEncrypt
+    environment: production    # production | staging
+    # Solver ingress class. Defaults to gateway.className when gateway is on,
+    # otherwise ingress.className. Set explicitly when the ACME HTTP-01
+    # solver should use a different class than the public listener.
+    ingressClassName: ""
+
+  # When true, fail helm install/upgrade if cert-manager CRDs are missing
+  # and the selected mode needs them. Default true. Set to false if you
+  # install cert-manager via Argo CD sync waves immediately before this chart.
+  requireCertManager: true
+
+  # Mount an additional CA bundle into the SERVER pod's trust store so the
+  # server can talk to private-CA-signed upstreams (private registries,
+  # internal IdPs, etc.). NOT used by the Gateway/Ingress listener.
+  #
+  # Create the Secret yourself with a single key `tls.crt` (PEM bundle —
+  # may concatenate multiple CAs) and reference it here.
+  additionalTrustedCAs:
+    enabled: false
+    existingSecret: ""
+
+# =============================================================================
+# Ingress (legacy networking.k8s.io path; prefer gateway: below)
 # =============================================================================
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   host: astronomer.localtest.me
   path: /
   pathType: Prefix
   annotations: {}
-  tls:
-    enabled: false
-    secretName: ""
 
 # =============================================================================
 # Service Account
@@ -291,7 +339,7 @@ tolerations: []
 affinity: {}
 
 # =============================================================================
-# Gateway API (replaces deprecated Ingress)
+# Gateway API (preferred — replaces the deprecated Ingress controller pattern)
 # =============================================================================
 gateway:
   enabled: true
@@ -299,14 +347,6 @@ gateway:
   annotations: {}
   hosts:
     - astronomer.localtest.me
-  tls:
-    enabled: false
-    secretName: ""
-    certManager:
-      enabled: false
-      issuerName: ""
-      issuerKind: ClusterIssuer
-      issuerGroup: cert-manager.io
 
 # =============================================================================
 # Metrics scraping

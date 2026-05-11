@@ -53,6 +53,40 @@ spec:
                 echo "Gateway API prerequisites found."
               fi
 
+              # cert-manager preflight — only fires when the selected TLS mode
+              # actually needs the CRDs (selfSigned or letsEncrypt). source=secret
+              # is BYO and source=none is HTTP-only, so neither requires cert-manager.
+              {{- $tlsSrc := include "astronomer.tls.source" . }}
+              {{- if and (or (eq $tlsSrc "selfSigned") (eq $tlsSrc "letsEncrypt")) (default true .Values.tls.requireCertManager) }}
+              if ! kubectl get crd issuers.cert-manager.io >/dev/null 2>&1; then
+                echo "Refusing release: tls.source={{ $tlsSrc }} requires cert-manager but the CRD"
+                echo "issuers.cert-manager.io was not found in the cluster."
+                echo ""
+                echo "Install cert-manager:"
+                echo "  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml"
+                echo ""
+                echo "Or set tls.requireCertManager=false if cert-manager will be installed"
+                echo "after this release applies (e.g. via Argo CD sync waves)."
+                exit 1
+              fi
+              if ! kubectl get crd certificates.cert-manager.io >/dev/null 2>&1; then
+                echo "Refusing release: cert-manager CRD certificates.cert-manager.io is missing."
+                echo "Reinstall cert-manager (the issuers.cert-manager.io CRD was found but certificates.cert-manager.io was not)."
+                exit 1
+              fi
+              echo "cert-manager prerequisites found."
+              {{- end }}
+
+              # Validate additional-trusted-CAs Secret exists when referenced.
+              {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
+              if ! kubectl get secret "{{ .Values.tls.additionalTrustedCAs.existingSecret }}" -n "{{ .Release.Namespace }}" >/dev/null 2>&1; then
+                echo "Refusing release: tls.additionalTrustedCAs.existingSecret={{ .Values.tls.additionalTrustedCAs.existingSecret }} not found in namespace {{ .Release.Namespace }}."
+                echo "Create the Secret with key tls.crt (PEM bundle) first."
+                exit 1
+              fi
+              echo "additionalTrustedCAs Secret found."
+              {{- end }}
+
               if [ "{{ include "astronomer.postgresBundledEnabled" . }}" = "true" ]; then
                 echo "Bundled Postgres remains enabled; preflight passes."
                 exit 0

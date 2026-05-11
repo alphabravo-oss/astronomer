@@ -1,0 +1,75 @@
+{{- /*
+networking.k8s.io/v1 Ingress for clusters that don't run a Gateway API
+controller. Disabled by default — Gateway API (httproute.yaml) is the
+preferred path. Both paths read TLS config from the shared top-level
+`tls:` block, so flipping between them requires no TLS edits.
+
+Path layout mirrors the Gateway HTTPRoutes: /api/* + /health + /readyz
++ /argocd go to the server; everything else routes to the frontend
+when frontend.enabled, otherwise the server.
+*/ -}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "astronomer.fullname" . }}
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+  {{- if .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if include "astronomer.tls.enabled" . }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ include "astronomer.tls.secretName" . | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "astronomer.fullname" . }}-server
+                port:
+                  number: {{ .Values.server.service.port }}
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "astronomer.fullname" . }}-server
+                port:
+                  number: {{ .Values.server.service.port }}
+          - path: /readyz
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "astronomer.fullname" . }}-server
+                port:
+                  number: {{ .Values.server.service.port }}
+          - path: /argocd
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "astronomer.fullname" . }}-server
+                port:
+                  number: {{ .Values.server.service.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                {{- if .Values.frontend.enabled }}
+                name: {{ include "astronomer.fullname" . }}-frontend
+                port:
+                  number: 3000
+                {{- else }}
+                name: {{ include "astronomer.fullname" . }}-server
+                port:
+                  number: {{ .Values.server.service.port }}
+                {{- end }}
+{{- end }}
