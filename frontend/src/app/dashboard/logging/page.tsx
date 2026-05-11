@@ -7,6 +7,8 @@ import {
   useTestLoggingOutput,
   useLoggingPipelines,
   useCreateLoggingPipeline,
+  useLoggingOperations,
+  useRetryLoggingOperation,
   useClusters,
   useClusterNamespaces,
 } from '@/lib/hooks';
@@ -19,7 +21,7 @@ import {
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
-import type { LoggingOutput, LoggingPipeline, LoggingOutputType } from '@/types';
+import type { LoggingOutput, LoggingPipeline, LoggingOutputType, LoggingOperation } from '@/types';
 import {
   FileText,
   Plus,
@@ -32,16 +34,48 @@ import {
   Cloud,
   HardDrive,
   Server,
+  Activity,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
-type TabKey = 'outputs' | 'pipelines';
+type TabKey = 'outputs' | 'pipelines' | 'operations';
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'outputs', label: 'Outputs', icon: Database },
   { key: 'pipelines', label: 'Pipelines', icon: GitBranch },
+  { key: 'operations', label: 'Operations', icon: Activity },
 ];
+
+// Map reconciler statuses to the values understood by StatusBadge /
+// statusBgColor in lib/utils.ts. `completed` → success (green),
+// `failed`/`superseded` → error (red), `running` → progressing (blue with
+// pulsing dot), `pending` → info.
+function mapLoggingOperationStatus(s: string): string {
+  switch (s) {
+    case 'completed':
+      return 'healthy';
+    case 'running':
+      return 'progressing';
+    case 'pending':
+      return 'pending';
+    case 'failed':
+    case 'superseded':
+      return 'error';
+    default:
+      return 'unknown';
+  }
+}
+
+function titleCaseStatus(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + '…';
+}
 
 const outputTypeIcons: Record<string, React.ElementType> = {
   elasticsearch: Database,
@@ -127,10 +161,20 @@ export default function LoggingPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('outputs');
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
+  const [opsStatusFilter, setOpsStatusFilter] = useState<string>('');
+  const [opsTargetFilter, setOpsTargetFilter] = useState<string>('');
 
   const { data: outputs, isLoading: outputsLoading } = useLoggingOutputs();
   const { data: pipelines, isLoading: pipelinesLoading } = useLoggingPipelines();
+  // Server-side params kept narrow so the list query key changes drive the
+  // refetch — client-side filtering of the bigger fields happens in DataTable.
+  const { data: operations, isLoading: operationsLoading } = useLoggingOperations({
+    status: opsStatusFilter || undefined,
+    target_type: opsTargetFilter || undefined,
+    limit: 100,
+  });
   const testOutput = useTestLoggingOutput();
+  const retryOperation = useRetryLoggingOperation();
 
   const handleDeleteOutput = async (id: string) => {
     if (!confirm('Delete this logging output?')) return;
@@ -266,6 +310,101 @@ export default function LoggingPage() {
           </button>
         </div>
       ),
+      sortable: false,
+    },
+  ];
+
+  const operationColumns: Column<LoggingOperation>[] = [
+    {
+      key: 'targetType',
+      header: 'Target Type',
+      accessor: (row) => (
+        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+          {row.targetType}
+        </span>
+      ),
+      sortAccessor: (row) => row.targetType,
+    },
+    {
+      key: 'operation',
+      header: 'Operation',
+      accessor: (row) => (
+        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+          {row.operation}
+        </span>
+      ),
+      sortAccessor: (row) => row.operation,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (row) => (
+        <StatusBadge
+          status={mapLoggingOperationStatus(row.status)}
+          label={titleCaseStatus(row.status)}
+          pulse={row.status === 'running'}
+        />
+      ),
+      sortAccessor: (row) => row.status,
+    },
+    {
+      key: 'created',
+      header: 'Created',
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground" title={row.createdAt}>
+          {formatRelativeTime(row.createdAt)}
+        </span>
+      ),
+      sortAccessor: (row) => row.createdAt,
+    },
+    {
+      key: 'updated',
+      header: 'Age / Updated',
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground" title={row.updatedAt}>
+          {formatRelativeTime(row.updatedAt)}
+        </span>
+      ),
+      sortAccessor: (row) => row.updatedAt,
+    },
+    {
+      key: 'error',
+      header: 'Error',
+      accessor: (row) =>
+        row.errorMessage ? (
+          <span
+            className="text-xs text-status-error/80 line-clamp-1 max-w-[260px] block"
+            title={row.errorMessage}
+          >
+            {truncate(row.errorMessage, 80)}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => {
+        const retryable = row.status === 'failed' || row.status === 'superseded';
+        if (!retryable) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => retryOperation.mutate(row.id)}
+              disabled={retryOperation.isPending}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground
+                hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              title="Retry operation"
+            >
+              <RotateCcw className={cn('h-3 w-3', retryOperation.isPending && 'animate-spin')} />
+              Retry
+            </button>
+          </div>
+        );
+      },
       sortable: false,
     },
   ];
@@ -451,6 +590,59 @@ export default function LoggingPage() {
             loading={pipelinesLoading}
             emptyMessage="No logging pipelines configured"
           />
+        )}
+
+        {activeTab === 'operations' && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                value={opsStatusFilter}
+                onChange={(e) => setOpsStatusFilter(e.target.value)}
+                className="h-8 px-2 rounded-md border border-border bg-background text-xs
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="running">Running</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="superseded">Superseded</option>
+              </select>
+              <label className="text-xs text-muted-foreground ml-2">Target</label>
+              <select
+                value={opsTargetFilter}
+                onChange={(e) => setOpsTargetFilter(e.target.value)}
+                className="h-8 px-2 rounded-md border border-border bg-background text-xs
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">All</option>
+                <option value="output">Output</option>
+                <option value="pipeline">Pipeline</option>
+              </select>
+              {(opsStatusFilter || opsTargetFilter) && (
+                <button
+                  onClick={() => {
+                    setOpsStatusFilter('');
+                    setOpsTargetFilter('');
+                  }}
+                  className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-xs text-muted-foreground
+                    hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <X className="h-3 w-3" /> Clear
+                </button>
+              )}
+            </div>
+            <DataTable
+              data={operations || []}
+              columns={operationColumns}
+              keyExtractor={(row) => row.id}
+              searchPlaceholder="Search operations..."
+              loading={operationsLoading}
+              emptyMessage="No reconciler activity yet."
+              pageSize={20}
+            />
+          </div>
         )}
       </div>
 
