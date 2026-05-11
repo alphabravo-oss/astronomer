@@ -144,7 +144,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		lc.log.Warn("no agent connected for cluster", slog.String("cluster_id", clusterID))
 		// Send a structured error frame to the client before closing so the UI
 		// can surface "agent not connected" instead of a silent hang.
-		_ = writeFrontendError(r.Context(), conn, "agent_not_connected", "Cluster agent is not connected")
+		_ = logsWriteFrontendError(r.Context(), conn, "agent_not_connected", "Cluster agent is not connected")
 		conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
 		return
 	}
@@ -157,7 +157,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
-		_ = writeFrontendError(r.Context(), conn, "stream_create_failed", err.Error())
+		_ = logsWriteFrontendError(r.Context(), conn, "stream_create_failed", err.Error())
 		conn.Close(websocket.StatusInternalError, "failed to create stream")
 		return
 	}
@@ -203,7 +203,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
-		_ = writeFrontendError(r.Context(), conn, "log_start_failed", err.Error())
+		_ = logsWriteFrontendError(r.Context(), conn, "log_start_failed", err.Error())
 		conn.Close(websocket.StatusInternalError, "failed to start log stream")
 		return
 	}
@@ -266,7 +266,7 @@ func translateLogLine(raw []byte, container string) []byte {
 
 // writeFrontendError sends a structured error frame to the frontend WS so the
 // UI can surface a clear error rather than a silent close.
-func writeFrontendError(ctx context.Context, conn *websocket.Conn, code, message string) error {
+func logsWriteFrontendError(ctx context.Context, conn *websocket.Conn, code, message string) error {
 	out, _ := json.Marshal(map[string]string{
 		"type":    "error",
 		"code":    code,
