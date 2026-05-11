@@ -371,7 +371,19 @@ export async function getPodLogs(
 }
 
 /**
- * Create a streaming connection for pod logs via WebSocket
+ * Create a streaming connection for pod logs via WebSocket.
+ *
+ * Auth: browser `new WebSocket(...)` cannot set custom headers, so the JWT is
+ * appended as `?token=<jwt>`. The backend (`internal/tunnel/logs_consumer.go`)
+ * validates the same JWT it accepts in `Authorization: Bearer` everywhere
+ * else. The token is intentionally NOT logged or stored in URL history beyond
+ * the WS connect path.
+ *
+ * Options:
+ *   - `follow` / `tailLines` are forwarded as query params and used to
+ *     drive `kubectl logs --follow` on the agent side.
+ *   - `onError` is fired on connect failures (e.g. agent disconnected) and on
+ *     structured `{"type":"error", ...}` frames returned by the backend.
  */
 export function streamPodLogs(
   clusterId: string,
@@ -379,36 +391,66 @@ export function streamPodLogs(
   pod: string,
   container: string,
   onMessage: (log: import('@/types').PodLog) => void,
-  onError?: (error: Event) => void
+  onError?: (error: { code?: string; message: string }) => void,
+  opts?: { follow?: boolean; tailLines?: number }
 ): () => void {
-  const wsUrl =
-    (process.env.NEXT_PUBLIC_WS_URL || `${typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`) +
-    `/logs/${clusterId}/${namespace}/${pod}/${container}/`;
+  const base =
+    process.env.NEXT_PUBLIC_WS_URL ||
+    `${typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`;
 
-  const ws = new WebSocket(wsUrl);
+  const params = new URLSearchParams();
+  if (opts?.follow) params.set('follow', 'true');
+  if (opts?.tailLines && opts.tailLines > 0) params.set('tail_lines', String(opts.tailLines));
   const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
+  if (token) params.set('token', token);
 
-  ws.onopen = () => {
-    if (token) {
-      ws.send(JSON.stringify({ type: 'auth', token }));
-    }
-  };
+  const wsUrl =
+    `${base}/logs/${clusterId}/${namespace}/${encodeURIComponent(pod)}/${encodeURIComponent(container)}/` +
+    (params.toString() ? `?${params.toString()}` : '');
+
+  let closed = false;
+  const ws = new WebSocket(wsUrl);
 
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      // Backend sends a structured error frame for non-fatal problems
+      // (e.g. agent disconnected) so the UI can surface them without
+      // dropping the connection.
+      if (data && data.type === 'error') {
+        onError?.({ code: data.code, message: data.message || 'log stream error' });
+        return;
+      }
       onMessage(data);
     } catch {
       onMessage({ timestamp: new Date().toISOString(), message: event.data, container });
     }
   };
 
-  ws.onerror = (event) => {
-    onError?.(event);
+  ws.onerror = () => {
+    if (!closed) {
+      onError?.({ message: 'WebSocket connection error' });
+    }
+  };
+
+  ws.onclose = (event) => {
+    // Surface unexpected closes (server-side errors / agent gone). 1000 =
+    // normal closure (cleanup on unmount), so don't toast on those.
+    if (!closed && event.code !== 1000 && event.code !== 1005) {
+      onError?.({
+        code: String(event.code),
+        message: event.reason || `log stream closed (code ${event.code})`,
+      });
+    }
   };
 
   return () => {
-    ws.close();
+    closed = true;
+    try {
+      ws.close(1000, 'client unmount');
+    } catch {
+      /* ignore */
+    }
   };
 }
 

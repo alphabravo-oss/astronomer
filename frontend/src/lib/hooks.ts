@@ -398,6 +398,10 @@ export function usePodLogs(
 ) {
   const [streamLogs, setStreamLogs] = useState<PodLog[]>([]);
   const cleanupRef = useRef<(() => void) | null>(null);
+  // De-duplicate toasts: if the WS errors mid-stream we only want one toast
+  // per (pod, container) selection rather than one per reconnect/dropped
+  // frame.
+  const errorShownRef = useRef(false);
 
   // Initial fetch
   const query = useQuery({
@@ -409,6 +413,15 @@ export function usePodLogs(
       }),
     enabled: !!clusterId && !!namespace && !!pod,
   });
+
+  // Reset the streaming buffer when the pod or container changes. Without
+  // this, switching pods would show the old pod's tail of stream lines
+  // prepended to the new pod's REST fetch — a real correctness bug that
+  // also leaked memory across switches.
+  useEffect(() => {
+    setStreamLogs([]);
+    errorShownRef.current = false;
+  }, [clusterId, namespace, pod, params?.container]);
 
   // Streaming
   useEffect(() => {
@@ -422,9 +435,16 @@ export function usePodLogs(
       (log) => {
         setStreamLogs((prev) => [...prev.slice(-2000), log]);
       },
-      () => {
-        // Silently handle WebSocket stream errors — REST-based log fetch still works
-      }
+      (err) => {
+        // Surface the first error per stream so the user knows the live
+        // tail dropped — but suppress duplicates so a flapping agent
+        // doesn't spam the corner of the screen.
+        if (!errorShownRef.current) {
+          errorShownRef.current = true;
+          toast.error(`Log stream: ${err.message}`);
+        }
+      },
+      { follow: true, tailLines: params?.tailLines }
     );
 
     cleanupRef.current = cleanup;
@@ -433,7 +453,7 @@ export function usePodLogs(
       cleanup();
       cleanupRef.current = null;
     };
-  }, [clusterId, namespace, pod, params?.container, params?.follow]);
+  }, [clusterId, namespace, pod, params?.container, params?.follow, params?.tailLines]);
 
   const allLogs = params?.follow
     ? [...(query.data || []), ...streamLogs]

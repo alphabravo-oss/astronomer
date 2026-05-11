@@ -705,6 +705,9 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 	if f := r.URL.Query().Get("follow"); f != "" {
 		q.Set("follow", f)
 	}
+	// Ask kubelet for timestamps so we can show real per-line times in the
+	// UI instead of stamping every line with the response time.
+	q.Set("timestamps", "true")
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/log", namespace, pod)
 	if enc := q.Encode(); enc != "" {
 		path += "?" + enc
@@ -720,15 +723,27 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 	body, _ := decodeResponseBody(resp)
 	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
 	items := make([]map[string]any, 0, len(lines))
-	now := time.Now().UTC().Format(time.RFC3339)
+	fallback := time.Now().UTC().Format(time.RFC3339Nano)
 	container := r.URL.Query().Get("container")
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
+		ts := fallback
+		msg := line
+		// Kubelet emits "<RFC3339Nano> <message>" when timestamps=true. Split
+		// the prefix off so the frontend can show real log times; fall back
+		// to the response time if the line doesn't carry a parseable prefix
+		// (e.g. older clusters, multi-line scanner artifacts).
+		if sp := strings.IndexByte(line, ' '); sp > 0 {
+			if _, err := time.Parse(time.RFC3339Nano, line[:sp]); err == nil {
+				ts = line[:sp]
+				msg = line[sp+1:]
+			}
+		}
 		items = append(items, map[string]any{
-			"timestamp": now,
-			"message":   line,
+			"timestamp": ts,
+			"message":   msg,
 			"container": container,
 		})
 	}

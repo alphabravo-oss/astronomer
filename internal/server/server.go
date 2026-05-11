@@ -306,6 +306,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// same query-param auth fallback into the pod exec consumer.
 	deps.Exec.SetAuth(jwtManager, queries)
 
+	// Browser `new WebSocket(...)` cannot set Authorization either — the pod
+	// logs WS handler accepts the same `?token=` fallback. Without this
+	// hook the route would accept unauthenticated connections, which would
+	// leak pod log contents to anyone who can reach the API.
+	if deps.Logs != nil {
+		deps.Logs.SetAuth(jwtManager, queries)
+	}
+
 	// ArgoCD UI reverse proxy. Defaults to the in-cluster service URL but
 	// is overridable via the `ARGOCD_UI_UPSTREAM` env var. If construction
 	// fails (e.g. the URL is malformed), the proxy stays nil and the route
