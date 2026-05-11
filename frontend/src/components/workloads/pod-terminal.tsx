@@ -8,6 +8,16 @@ import '@xterm/xterm/css/xterm.css';
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
+// PodTerminalActions is a tiny imperative API the host can call after the
+// xterm instance is ready. Used by the window-manager exec tab to focus the
+// terminal when its tab becomes active (so keystrokes go straight to the
+// shell without a manual click) and to wire a toolbar Clear button.
+export interface PodTerminalActions {
+  focus: () => void;
+  clear: () => void;
+  fit: () => void;
+}
+
 interface PodTerminalProps {
   clusterId: string;
   namespace: string;
@@ -22,6 +32,9 @@ interface PodTerminalProps {
   // Render in "embedded" mode (no header/close button) when the host is
   // already providing tab chrome.
   embedded?: boolean;
+  // Optional ref the host can populate to drive the terminal imperatively
+  // (focus / clear). Populated once the xterm instance is mounted.
+  actionsRef?: React.MutableRefObject<PodTerminalActions | null>;
 }
 
 type ConnectionStatus = TerminalConnectionStatus;
@@ -35,6 +48,7 @@ export function PodTerminal({
   onClose,
   onStatusChange,
   embedded = false,
+  actionsRef,
 }: PodTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const termInstanceRef = useRef<import('@xterm/xterm').Terminal | null>(null);
@@ -199,6 +213,21 @@ export function PodTerminal({
       termInstanceRef.current = term;
       fitAddonRef.current = fitAddon;
 
+      if (actionsRef) {
+        actionsRef.current = {
+          focus: () => term.focus(),
+          clear: () => term.clear(),
+          fit: () => fitAddon.fit(),
+        };
+      }
+
+      // When embedded inside the WindowManager, the parent tab strip
+      // grabbed focus on click — hand it to xterm so the user can type
+      // immediately without an extra click on the terminal pane.
+      if (embedded) {
+        term.focus();
+      }
+
       term.write(`Connecting to \x1b[36m${pod}\x1b[0m / \x1b[33m${selectedContainer}\x1b[0m ...\r\n`);
 
       // Handle stdin
@@ -255,6 +284,9 @@ export function PodTerminal({
         termInstanceRef.current.dispose();
         termInstanceRef.current = null;
       }
+      if (actionsRef) {
+        actionsRef.current = null;
+      }
     };
   }, [selectedContainer, connectWebSocket, getThemeColors, pod]);
 
@@ -265,6 +297,7 @@ export function PodTerminal({
       termInstanceRef.current.options.theme = colors;
     }
   }, [theme, getThemeColors]);
+
 
   // Close container dropdown on outside click
   useEffect(() => {

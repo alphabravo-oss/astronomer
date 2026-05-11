@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { PodTerminal, type TerminalConnectionStatus } from '@/components/workloads/pod-terminal';
-import { RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { PodTerminal, type PodTerminalActions, type TerminalConnectionStatus } from '@/components/workloads/pod-terminal';
+import { Eraser, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ExecTabProps {
@@ -29,10 +29,23 @@ export function ExecTab({
   // Bumping this remounts PodTerminal, which reliably reopens its WS — far
   // simpler than imperatively exposing reconnect() through a ref.
   const [reconnectNonce, setReconnectNonce] = useState(0);
+  const termActionsRef = useRef<PodTerminalActions | null>(null);
 
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
+
+  // Focus the xterm whenever this tab becomes the active one — so the user
+  // can start typing immediately without an extra click. Also re-fit so the
+  // hidden→visible transition picks up the real container dimensions.
+  useEffect(() => {
+    if (!visible) return;
+    const id = requestAnimationFrame(() => {
+      termActionsRef.current?.fit();
+      termActionsRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [visible, reconnectNonce]);
 
   return (
     <div
@@ -55,6 +68,23 @@ export function ExecTab({
         </div>
 
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              termActionsRef.current?.clear();
+              // Hand focus back to xterm so the user can keep typing — the
+              // button itself stole focus on click and a stray keystroke
+              // would otherwise miss the shell.
+              termActionsRef.current?.focus();
+            }}
+            disabled={status !== 'connected'}
+            className="inline-flex items-center gap-1 h-6 px-2 rounded text-2xs
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
+              disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Clear terminal"
+          >
+            <Eraser className="h-3 w-3" />
+            <span className="hidden sm:inline">Clear</span>
+          </button>
           {(status === 'disconnected' || status === 'error') && (
             <button
               onClick={() => setReconnectNonce((n) => n + 1)}
@@ -79,6 +109,7 @@ export function ExecTab({
           container={container || ''}
           embedded
           onStatusChange={setStatus}
+          actionsRef={termActionsRef}
         />
       </div>
     </div>
