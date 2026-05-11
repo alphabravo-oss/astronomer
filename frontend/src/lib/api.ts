@@ -714,6 +714,36 @@ export async function deleteLoggingPipeline(id: string) {
   await api.delete(`/logging/pipelines/${id}`);
 }
 
+// --- Logging Operations (controller-backed reconciler) ---
+//
+// These mirror the argocd /operations endpoints. The list handler returns the
+// same double-wrapped envelope (`{data: {data: [...], limit, offset}}`) so we
+// unwrap with the same helper as `listArgoOperations`.
+
+export async function getLoggingOperations(params?: {
+  status?: string;
+  target_type?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const res = await api.get<APIResponse<{ data: import('@/types').LoggingOperation[]; limit?: number; offset?: number }>>(
+    '/logging/operations',
+    { params },
+  );
+  const inner = unwrapEnvelope<{ data?: import('@/types').LoggingOperation[] }>(res.data);
+  return inner?.data ?? [];
+}
+
+export async function getLoggingOperation(id: string) {
+  const res = await api.get<APIResponse<import('@/types').LoggingOperation>>(`/logging/operations/${id}`);
+  return res.data.data;
+}
+
+export async function retryLoggingOperation(id: string) {
+  const res = await api.post<APIResponse<import('@/types').LoggingOperation>>(`/logging/operations/${id}/retry`);
+  return res.data.data;
+}
+
 // --- Storage ---
 
 export async function getPersistentVolumes(clusterId: string) {

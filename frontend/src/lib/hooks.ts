@@ -31,6 +31,7 @@ import type {
   AlertSilence,
   LoggingOutput,
   LoggingPipeline,
+  LoggingOperation,
   PersistentVolume,
   PersistentVolumeClaim,
   StorageClass,
@@ -101,6 +102,8 @@ export const queryKeys = {
   logging: {
     outputs: ['logging', 'outputs'] as const,
     pipelines: ['logging', 'pipelines'] as const,
+    operations: (params?: Record<string, unknown>) => ['logging', 'operations', params] as const,
+    operation: (id: string) => ['logging', 'operations', 'detail', id] as const,
   },
   storage: {
     pvs: (clusterId: string) => ['storage', clusterId, 'pvs'] as const,
@@ -941,6 +944,47 @@ export function useCreateLoggingPipeline() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to create logging pipeline: ${error.message}`);
+    },
+  });
+}
+
+// --- Logging Operations (controller-backed reconciler) ---
+
+export function useLoggingOperations(params?: {
+  status?: string;
+  target_type?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return useQuery<LoggingOperation[]>({
+    queryKey: queryKeys.logging.operations(params),
+    queryFn: () => apiClient.getLoggingOperations(params),
+    // Poll so pending -> running -> completed transitions appear without a
+    // manual refresh. Matches the argocd Operations tab cadence.
+    refetchInterval: 5000,
+  });
+}
+
+export function useLoggingOperation(id: string) {
+  return useQuery<LoggingOperation>({
+    queryKey: queryKeys.logging.operation(id),
+    queryFn: () => apiClient.getLoggingOperation(id),
+    enabled: !!id,
+    refetchInterval: 5000,
+  });
+}
+
+export function useRetryLoggingOperation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.retryLoggingOperation(id),
+    onSuccess: () => {
+      // Invalidate every cached list (parameterized keys) and the detail rows.
+      queryClient.invalidateQueries({ queryKey: ['logging', 'operations'] });
+      toast.success('Operation retry queued');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to retry operation: ${error.message}`);
     },
   });
 }

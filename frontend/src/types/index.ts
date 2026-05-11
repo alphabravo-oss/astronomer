@@ -679,6 +679,37 @@ export interface LoggingFilter {
   pattern: string;
 }
 
+/**
+ * A row from `GET /api/v1/logging/operations/`. The Go reconciler emits
+ * snake_case keys; the axios response interceptor camelizes them before they
+ * reach the type system, so this interface mirrors the post-camelize shape
+ * (same pattern as `ArgoOperation`).
+ */
+export interface LoggingOperation {
+  id: string;
+  targetType: 'output' | 'pipeline' | string;
+  targetKey: string;
+  operation: 'apply' | 'delete' | string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'superseded' | string;
+  payload?: Record<string, unknown>;
+  errorMessage?: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Returned only on the detail endpoint.
+  events?: LoggingOperationEvent[];
+}
+
+export interface LoggingOperationEvent {
+  id: string;
+  level: string;
+  stage: string;
+  message: string;
+  detail?: Record<string, unknown>;
+  createdAt: string;
+}
+
 // --- Storage Types ---
 
 export interface PersistentVolume {
