@@ -61,6 +61,14 @@ type ClusterQuerier interface {
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
 	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
+	// Sprint 074 — auto-attach the platform-default cluster_template on
+	// Create. All three calls are best-effort: a failure in any one MUST
+	// NOT fail the cluster create. The apply worker / drift sweep is the
+	// durable retry path. GetPlatformConfig is read-only; the second two
+	// are the writes the auto-attach makes on success.
+	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
+	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error)
+	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
 }
 
 // EventPublisher is the minimal contract ClusterHandler depends on for
@@ -115,6 +123,12 @@ type ClusterHandler struct {
 	// window. Optional; nil-safe — when unwired, every Delete
 	// falls through the gate as if no windows existed.
 	maintenanceGate *MaintenanceGate
+	// templateApplyQueue is the asynq client used by Create's
+	// auto-attach (sprint 074) to enqueue a cluster_template:apply task
+	// the moment the cluster row + the auto-attached
+	// cluster_template_applications row land. Nil-safe — when not
+	// wired, the periodic drift_check sweep is the slower fallback.
+	templateApplyQueue ClusterDecommissionEnqueuer
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -216,6 +230,18 @@ func (h *ClusterHandler) SetDecommissionQueue(q ClusterDecommissionEnqueuer) {
 		return
 	}
 	h.decommissionQueue = q
+}
+
+// SetTemplateApplyQueue wires the asynq client used by Create's
+// auto-attach (sprint 074) to schedule the cluster_template:apply task
+// immediately after the auto-attached application row is written.
+// Optional and nil-safe; without it, the drift_check sweep picks up the
+// 'pending' row on its next pass.
+func (h *ClusterHandler) SetTemplateApplyQueue(q ClusterDecommissionEnqueuer) {
+	if h == nil {
+		return
+	}
+	h.templateApplyQueue = q
 }
 
 // SetArgoCDRefreshQueue wires the asynq client used by the Update handler to
@@ -445,7 +471,89 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"distribution": req.Distribution,
 	})
 
+	// Sprint 074 — auto-attach the platform-default cluster template
+	// (typically the seeded "Platform baseline" — trivy-operator,
+	// kube-state-metrics, node-exporter, fluent-bit, cert-manager).
+	// Best-effort: a failure here MUST NOT fail the cluster create.
+	// The apply worker (sprint 049) is the durable retry path; the
+	// drift_check sweep picks up any 'pending' row left behind.
+	h.autoAttachDefaultTemplate(r, cluster.ID)
+
 	RespondJSON(w, http.StatusCreated, clusterToResponse(cluster))
+}
+
+// autoAttachDefaultTemplate records a cluster_template_applications row
+// pointing at the platform's configured default template (sprint 074).
+// All steps are best-effort — every error path is a warn log + return,
+// never a failed cluster create.
+//
+// Why three separate query calls instead of a single transaction? The
+// auto-attach is logically optional and the existing sqlc Queries
+// surface doesn't expose a tx-bound batch. A partial state
+// (cluster exists, application row missing) is exactly the case the
+// reapply endpoint (this same sprint) handles — the operator can opt
+// the cluster in later without re-registering it.
+func (h *ClusterHandler) autoAttachDefaultTemplate(r *http.Request, clusterID uuid.UUID) {
+	if h == nil || h.queries == nil {
+		return
+	}
+	ctx := r.Context()
+	cfg, err := h.queries.GetPlatformConfig(ctx)
+	if err != nil {
+		// Singleton row missing or DB blip — fall through; the
+		// drift_check sweep won't help here (there's nothing to drift
+		// from yet) but the operator can still hit the reapply
+		// endpoint after the platform_configuration row materializes.
+		return
+	}
+	if !cfg.DefaultClusterTemplateID.Valid {
+		// Operator hasn't enabled the auto-attach default. Legacy
+		// behavior: clusters come up bare and the operator wires
+		// tools click-ops.
+		return
+	}
+	templateID := uuid.UUID(cfg.DefaultClusterTemplateID.Bytes)
+	tmpl, err := h.queries.GetClusterTemplateByID(ctx, templateID)
+	if err != nil {
+		// Stale default — the operator deleted the template after
+		// pointing platform_configuration at it (and the FK's
+		// ON DELETE SET NULL hasn't run yet because the row hasn't
+		// been deleted, or the FK trigger races with this read).
+		// Either way, log and move on.
+		return
+	}
+	if _, err := h.queries.UpsertClusterTemplateApplication(ctx, sqlc.UpsertClusterTemplateApplicationParams{
+		ClusterID:    clusterID,
+		TemplateID:   tmpl.ID,
+		SpecSnapshot: tmpl.Spec,
+	}); err != nil {
+		return
+	}
+	recordAudit(r, h.queries, "cluster.template.auto_attached", "cluster", clusterID.String(), "", map[string]any{
+		"template_id":   tmpl.ID.String(),
+		"template_name": tmpl.Name,
+		"source":        "platform_default",
+	})
+	h.enqueueTemplateApply(r, clusterID)
+}
+
+// enqueueTemplateApply schedules a cluster_template:apply task for the
+// freshly auto-attached row. Mirrors the pattern in
+// ClusterTemplateHandler.enqueueApply but lives here so the cluster
+// Create path doesn't need a circular dependency on the template
+// handler. Nil-safe: when templateApplyQueue is unwired, the periodic
+// sweep is the fallback.
+func (h *ClusterHandler) enqueueTemplateApply(r *http.Request, clusterID uuid.UUID) {
+	if h == nil || h.templateApplyQueue == nil {
+		return
+	}
+	task, err := tasks.NewClusterTemplateApplyTask(clusterID)
+	if err != nil {
+		return
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+	_, _ = h.templateApplyQueue.Enqueue(task)
 }
 
 // Get handles GET /api/v1/clusters/{id}/.

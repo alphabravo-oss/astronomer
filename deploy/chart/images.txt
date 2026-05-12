@@ -17,7 +17,7 @@ astronomer-go-agent:dev
 astronomer-go-migrate:dev
 astronomer-go-server:dev
 astronomer-go-worker:dev
-bitnami/kubectl:latest
+bitnami/kubectl:1.31.4
 busybox:1.36
 dexidp/dex:v2.41.1
 postgres:16-alpine

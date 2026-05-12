@@ -11,3 +11,16 @@ ON CONFLICT (id) DO UPDATE SET
     bootstrapped_at = EXCLUDED.bootstrapped_at,
     instance_id = EXCLUDED.instance_id
 RETURNING *;
+
+-- name: SetPlatformDefaultClusterTemplate :one
+-- Sprint 074. UPDATE-only (NOT upsert) — the singleton row is seeded by
+-- migration 001 and must always exist. Pass pgtype.UUID{} (Valid:false)
+-- to clear the auto-attach default; pass a valid UUID to set it. The
+-- handler validates that the UUID points to an existing template row
+-- before calling this — we don't re-validate here because pg's FK does
+-- the second-line check (a stale UUID raises foreign_key_violation,
+-- which the handler translates into a 400).
+UPDATE platform_configuration
+SET default_cluster_template_id = $1
+WHERE id = 1
+RETURNING *;

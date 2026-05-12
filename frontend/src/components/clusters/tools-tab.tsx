@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useTools, useClusterToolsStatus, useInstallTool, useUninstallTool, useAdoptTool } from '@/lib/hooks';
 import { ToolCard } from '@/components/clusters/tool-card';
 import { ToolPreviewModal } from '@/components/clusters/tool-preview-modal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Loader2, Wrench } from 'lucide-react';
+import { Loader2, Wrench, Sparkles } from 'lucide-react';
 
 interface ToolsTabProps {
   clusterId: string;
@@ -91,8 +92,41 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
 
   const uninstallTool = tools.find((t) => t.slug === uninstallSlug);
 
+  // Sprint 074 — empty-state CTA. When NO tool is yet installed on this
+  // cluster, surface a prominent "Apply Platform Baseline template"
+  // pointer at the cluster's template-attach page. The baseline (sprint
+  // 074 seed) wires trivy-operator + kube-state-metrics + node-exporter
+  // + fluent-bit + cert-manager in one click. Operators registered
+  // BEFORE sprint 074 don't have the auto-attach for free — this banner
+  // bridges them.
+  const noToolsInstalled =
+    !statuses ||
+    statuses.length === 0 ||
+    statuses.every((s) => !['installed', 'installing'].includes(String(s.status || '').toLowerCase()));
+
   return (
     <>
+      {noToolsInstalled && !isDisconnected && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <Sparkles className="h-5 w-5 mt-0.5 text-primary flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">No tools installed yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Apply the <strong>Platform Baseline</strong> template to install Astronomer&apos;s
+              recommended operators in one step: image-scanning (trivy-operator), metrics
+              (kube-state-metrics, node-exporter), log forwarding (fluent-bit), and TLS
+              (cert-manager). New clusters get this automatically.
+            </p>
+            <Link
+              href={`/dashboard/clusters/${clusterId}/template`}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Apply Platform Baseline →
+            </Link>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {tools.map((tool) => (
           <ToolCard

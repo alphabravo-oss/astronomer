@@ -237,7 +237,12 @@ preflight:
   enabled: true
   image:
     repository: bitnami/kubectl
-    tag: latest
+    # Pinned (sprint 074) so the air-gapped chart bundle ships a
+    # specific kubectl version. `latest` made `make images.txt` produce
+    # a non-reproducible manifest and caused ImagePullBackOff on the
+    # kubectl-shell debug pods in clusters with no egress. The 1.31
+    # series matches the supported Kubernetes server-version skew.
+    tag: 1.31.4
     registry: ""    # T23 air-gapped override; falls back to image.registry
 
 # =============================================================================

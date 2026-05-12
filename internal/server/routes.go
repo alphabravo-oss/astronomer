@@ -152,6 +152,12 @@ type RouterDependencies struct {
 	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
 	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
 	PlatformSettings *handler.PlatformSettingsHandler
+	// PlatformDefaultTemplate owns
+	// /api/v1/admin/platform-settings/default-cluster-template/* (sprint
+	// 074). Manages the operator-configured default cluster_template
+	// the cluster Create handler auto-attaches to every newly-registered
+	// cluster. Nil-safe.
+	PlatformDefaultTemplate *handler.PlatformDefaultTemplateHandler
 	// SettingsCache is the shared process-local cache for platform
 	// settings, consumed by the FeatureGate middleware below. Optional
 	// — when nil, every feature-gated route falls through as enabled.
@@ -593,6 +599,21 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// namespace allowlist (`branding`, `banner`).
 			r.Get("/settings/branding/", deps.PlatformSettings.PublicBranding)
 			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
+		}
+
+		// Sprint 074 — platform-default cluster template. The
+		// /admin/platform-settings/default-cluster-template/* surface
+		// manages the auto-attach baseline (typically the seeded
+		// "Platform baseline" — trivy-operator, kube-state-metrics,
+		// node-exporter, fluent-bit, cert-manager) that the cluster
+		// Create handler binds to every newly-registered cluster.
+		// Superuser-gated inside the handler. Reapply takes a
+		// {cluster_id} path param so an operator can back-fill an
+		// existing cluster after changing the baseline.
+		if deps.PlatformDefaultTemplate != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/platform-settings/default-cluster-template/", deps.PlatformDefaultTemplate.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/platform-settings/default-cluster-template/", deps.PlatformDefaultTemplate.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/platform-settings/default-cluster-template/reapply/{cluster_id}/", deps.PlatformDefaultTemplate.Reapply)
 		}
 
 		// Per-tenant resource quotas (migration 051). Plan CRUD +
