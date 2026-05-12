@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -75,6 +76,18 @@ func main() {
 	}
 	log = observability.Logger(log)
 	slog.SetDefault(log)
+
+	// Async batched audit writer — shared design with cmd/server. The
+	// worker only records audit rows from the cluster-decommission
+	// reconciler today, but the cost reduction is the same: no DB
+	// round-trip on the task path. Bounded by the same Shutdown
+	// deadline as the worker process below.
+	auditQueries := sqlc.New(database.Pool())
+	auditWriter := audit.NewWriter(auditQueries, log)
+	auditWriter.Start(context.Background())
+	audit.SetWriter(auditWriter)
+	defer audit.SetWriter(nil)
+
 	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
 		Queries:                 sqlc.New(database.Pool()),
 		Log:                     log,
@@ -162,5 +175,17 @@ func main() {
 
 	w.Shutdown()
 	s.Shutdown()
+
+	// Drain pending audit events. Use a fresh timeout because the
+	// signal-context (ctx) was already cancelled at this point.
+	auditShutdownCtx, auditCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := auditWriter.Shutdown(auditShutdownCtx); err != nil {
+		observability.WithEvent(log, "worker_audit_shutdown_error").Warn("audit writer shutdown error",
+			"dropped_total", auditWriter.DropCount(),
+			"error", err,
+		)
+	}
+	auditCancel()
+
 	observability.WithEvent(log, "worker_stopped").Info("astronomer-worker stopped")
 }

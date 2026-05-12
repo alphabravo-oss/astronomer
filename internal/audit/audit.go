@@ -13,10 +13,27 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
-type Writer interface {
+// Querier is the database surface needed for the synchronous fallback path
+// inside Record. Implemented by *sqlc.Queries and by hand-rolled fakes in
+// tests. The async batched Writer (see writer.go) uses BatchQuerier
+// directly; Record only falls back to a Querier when the package-level
+// async writer has not been installed.
+//
+// Historically named "Writer" — kept as a deprecated alias below for the
+// one external consumer (worker/tasks/cluster_decommission.go).
+type Querier interface {
 	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
+// Note: callers outside the audit package previously referenced
+// audit.Writer as an interface. The async writer struct (writer.go) now
+// owns the name Writer; the interface lives on as Querier. The one
+// external consumer (worker/tasks/cluster_decommission.go) has been
+// migrated accordingly.
+
+// Event is the call-site payload for Record. Each field is copied into the
+// sqlc.CreateAuditLogV1Params struct; the Detail map is JSON-encoded into
+// the JSONB column with known secret keys redacted.
 type Event struct {
 	Source          string
 	CorrelationID   string
@@ -90,11 +107,60 @@ func sanitizeValue(v any) any {
 	}
 }
 
-func Record(ctx context.Context, writer Writer, event Event) {
-	if writer == nil {
+// Record persists an audit event. The call site passes a Querier as the
+// synchronous-fallback path: when the package-level async Writer is
+// installed (see SetWriter in writer.go), the event is enqueued into the
+// async writer's channel and Record returns without a DB round-trip; when
+// no Writer is installed (tests, bootstrap), Record falls back to a direct
+// CreateAuditLogV1 call on the querier — preserving the original
+// pre-async behavior so test fakes that satisfy Querier keep working.
+//
+// The wire contract (function signature) is unchanged from the
+// pre-async version. Every existing call site continues to work
+// without edits.
+func Record(ctx context.Context, q Querier, event Event) {
+	row, ok := buildRow(event)
+	if !ok {
+		// buildRow always succeeds today; the bool is for future
+		// validation extensions.
 		return
 	}
 
+	if w := getDefaultWriter(); w != nil {
+		w.Enqueue(row)
+		// Logging the "audit_recorded" event remains synchronous and is
+		// independent of DB persistence — operators rely on this log
+		// line in non-DB observability paths (Loki, journald) so we
+		// emit it whether the row was enqueued or dropped. The dropped
+		// case is separately visible via the dropped_total counter and
+		// a throttled warn log inside Enqueue.
+		emitRecordedLog(row)
+		return
+	}
+
+	// Sync fallback: callers that initialize the audit package without a
+	// Writer get the original per-request insert. Keeps tests and the
+	// k3d-bootstrap-time path working unchanged.
+	if q == nil {
+		return
+	}
+	if err := q.CreateAuditLogV1(ctx, row); err != nil {
+		slog.Default().Warn("audit v1 log insert failed",
+			"source", row.Source,
+			"action", row.Action,
+			"resource_type", row.ResourceType,
+			"resource_id", row.ResourceID,
+			"error", err,
+		)
+		return
+	}
+	emitRecordedLog(row)
+}
+
+// buildRow turns an Event into the sqlc params struct. Detail sanitization,
+// before/after stamping, and default Source/CorrelationID live here so the
+// async and sync paths produce byte-identical rows.
+func buildRow(event Event) (sqlc.CreateAuditLogV1Params, bool) {
 	raw := json.RawMessage(`{}`)
 	payload := map[string]any{}
 	for k, v := range SanitizeDetail(event.Detail) {
@@ -123,7 +189,7 @@ func Record(ctx context.Context, writer Writer, event Event) {
 		event.CorrelationID = event.RequestID
 	}
 
-	if err := writer.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+	return sqlc.CreateAuditLogV1Params{
 		Source:          event.Source,
 		CorrelationID:   event.CorrelationID,
 		UserID:          event.UserID,
@@ -140,24 +206,17 @@ func Record(ctx context.Context, writer Writer, event Event) {
 		IpAddress:       event.IPAddress,
 		UserAgent:       event.UserAgent,
 		Detail:          raw,
-	}); err != nil {
-		slog.Default().Warn("audit v1 log insert failed",
-			"source", event.Source,
-			"action", event.Action,
-			"resource_type", event.ResourceType,
-			"resource_id", event.ResourceID,
-			"error", err,
-		)
-		return
-	}
+	}, true
+}
 
+func emitRecordedLog(row sqlc.CreateAuditLogV1Params) {
 	observability.WithCorrelationID(
 		observability.WithEvent(slog.Default(), "audit_recorded"),
-		event.CorrelationID,
+		row.CorrelationID,
 	).Info("audit event recorded",
-		"source", event.Source,
-		"action", event.Action,
-		"resource_type", event.ResourceType,
-		"resource_id", event.ResourceID,
+		"source", row.Source,
+		"action", row.Action,
+		"resource_type", row.ResourceType,
+		"resource_id", row.ResourceID,
 	)
 }
