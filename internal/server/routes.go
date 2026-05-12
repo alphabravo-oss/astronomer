@@ -97,6 +97,13 @@ type RouterDependencies struct {
 	// Compliance generates the SOC 2 / ISO 27001 audit-prep bundle
 	// for any date range. Superuser-gated inside the handler.
 	Compliance *handler.ComplianceHandler
+	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
+	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
+	PlatformSettings *handler.PlatformSettingsHandler
+	// SettingsCache is the shared process-local cache for platform
+	// settings, consumed by the FeatureGate middleware below. Optional
+	// — when nil, every feature-gated route falls through as enabled.
+	SettingsCache *handler.SettingsCache
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -327,6 +334,28 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/resync-groups/", deps.GroupMappings.ResyncUser)
 		}
 
+		// Rancher-style global settings hub (migration 046).
+		//
+		// /admin/settings/* — superuser-gated inside the handler. The
+		// branding + banner /settings/{namespace}/ readers are PUBLIC
+		// because the login page renders the branding/banner BEFORE
+		// the user has a session; the handler's PublicSubset method
+		// gates the allowed namespace through an explicit allowlist so
+		// telemetry.endpoint and feature.* never leak pre-auth.
+		if deps.PlatformSettings != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/settings/", deps.PlatformSettings.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/settings/{key}/", deps.PlatformSettings.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/settings/{key}/", deps.PlatformSettings.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/settings/{key}/", deps.PlatformSettings.Delete)
+			// Pre-auth readers. Must be registered on `r` (NOT on the
+			// `authenticated` subrouter mounted below) so the chi
+			// dispatch hits these before falling through to the auth
+			// middleware. The handler's PublicSubset enforces the
+			// namespace allowlist (`branding`, `banner`).
+			r.Get("/settings/branding/", deps.PlatformSettings.PublicBranding)
+			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
+		}
+
 		authenticated := r
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
@@ -400,6 +429,18 @@ func requireScope(scope string) func(http.Handler) http.Handler {
 	return appmiddleware.APITokenScopeEnforce(scope)
 }
 
+// featureGate wraps the migration-046 FeatureGate middleware so it
+// degrades cleanly when the SettingsCache is unwired (test fakes,
+// pre-bootstrap). A nil cache returns a pass-through middleware —
+// every feature is treated as enabled, matching the behaviour
+// operators expect on a fresh install before any setting is changed.
+func featureGate(key string, cache *handler.SettingsCache) func(http.Handler) http.Handler {
+	if cache == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return appmiddleware.FeatureGate(key, cache)
+}
+
 func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
 		return func(next http.Handler) http.Handler {
@@ -459,7 +500,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.Projects != nil {
-		r.Route("/projects", func(r chi.Router) {
+		r.With(featureGate("feature.projects", deps.SettingsCache)).Route("/projects", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/", deps.Projects.List)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbCreate)).Post("/", deps.Projects.Create)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/", deps.Projects.Get)
@@ -593,7 +634,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.ArgoCD != nil {
-		r.Route("/argocd", func(r chi.Router) {
+		r.With(featureGate("feature.argocd", deps.SettingsCache)).Route("/argocd", func(r chi.Router) {
 			r.Get("/controller/status/", deps.ArgoCD.ControllerStatus)
 			r.Get("/operations/", deps.ArgoCD.ListOperations)
 			r.Get("/operations/{id}/", deps.ArgoCD.GetOperation)
@@ -640,7 +681,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.Backups != nil {
-		r.Route("/backups", func(r chi.Router) {
+		r.With(featureGate("feature.backups", deps.SettingsCache)).Route("/backups", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Backups.ControllerStatus)
 			r.Get("/", deps.Backups.ListBackups)
 			r.Post("/", deps.Backups.CreateBackup)
@@ -676,7 +717,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.Catalog != nil {
-		r.Route("/catalog", func(r chi.Router) {
+		r.With(featureGate("feature.catalog", deps.SettingsCache)).Route("/catalog", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Catalog.ControllerStatus)
 			r.Get("/operations/", deps.Catalog.ListOperations)
 			r.Get("/operations/{id}/", deps.Catalog.GetOperation)
@@ -732,7 +773,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/clusters/{cluster_id}/metrics/summary/", deps.Monitoring.ListMetrics)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/metrics/", deps.Monitoring.PrometheusQueryRange)
 		// /api/v1/monitoring/endpoints/ ViewSet (CRUD on monitoring backends).
-		r.Route("/monitoring", func(r chi.Router) {
+		r.With(featureGate("feature.monitoring", deps.SettingsCache)).Route("/monitoring", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbList)).Get("/endpoints/", deps.Monitoring.ListEndpoints)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbCreate)).Post("/endpoints/", deps.Monitoring.CreateEndpoint)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/endpoints/{id}/", deps.Monitoring.GetEndpoint)
@@ -783,7 +824,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.Security != nil {
-		r.Route("/security", func(r chi.Router) {
+		r.With(featureGate("feature.security", deps.SettingsCache)).Route("/security", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Security.ControllerStatus)
 			r.Get("/templates/", deps.Security.ListTemplates)
 			r.Post("/templates/", deps.Security.CreateTemplate)
@@ -871,9 +912,10 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 				deps.Security.SetIngestQueue(asynq.NewClient(redisOpt))
 			}
 		}
-		r.Get("/security/profiles/", deps.Security.ListProfiles)
-		r.Get("/security/scans/{id}/", deps.Security.GetScanFull)
-		r.Get("/security/scans/{id}/report.csv", deps.Security.ExportScanCSV)
+		secGate := featureGate("feature.security", deps.SettingsCache)
+		r.With(secGate).Get("/security/profiles/", deps.Security.ListProfiles)
+		r.With(secGate).Get("/security/scans/{id}/", deps.Security.GetScanFull)
+		r.With(secGate).Get("/security/scans/{id}/report.csv", deps.Security.ExportScanCSV)
 	}
 
 	// Phase B4 — Dex routes
