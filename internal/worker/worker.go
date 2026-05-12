@@ -63,6 +63,12 @@ const (
 	// ClusterRegistryDriftReconcile sweep is the every-30m fallback.
 	TypeClusterApplyRegistrySecret    = tasks.ClusterApplyRegistrySecretType
 	TypeClusterRegistryDriftReconcile = tasks.ClusterRegistryDriftReconcileType
+	// Migration 052: per-cluster Velero snapshot lifecycle. Three task
+	// types share one querier + driver wiring; see
+	// tasks.ConfigureClusterSnapshotTasks.
+	TypeClusterSnapshotPoll              = tasks.ClusterSnapshotPollType
+	TypeClusterSnapshotDispatchScheduled = tasks.ClusterSnapshotDispatchScheduledType
+	TypeClusterSnapshotCleanupExpired    = tasks.ClusterSnapshotCleanupExpiredType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -135,6 +141,9 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
 	w.mux.HandleFunc(TypeClusterApplyRegistrySecret, instrumentTask(TypeClusterApplyRegistrySecret, tasks.HandleClusterApplyRegistrySecret))
 	w.mux.HandleFunc(TypeClusterRegistryDriftReconcile, instrumentTask(TypeClusterRegistryDriftReconcile, tasks.HandleClusterRegistryDriftReconcile))
+	w.mux.HandleFunc(TypeClusterSnapshotPoll, instrumentTask(TypeClusterSnapshotPoll, tasks.HandleClusterSnapshotPoll))
+	w.mux.HandleFunc(TypeClusterSnapshotDispatchScheduled, instrumentTask(TypeClusterSnapshotDispatchScheduled, tasks.HandleClusterSnapshotDispatchScheduled))
+	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 
 	w.log.Info("registered all task handlers")
 }

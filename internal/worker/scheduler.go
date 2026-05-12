@@ -91,6 +91,13 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// worker restart mid-apply self-heals. The SSA on the Secret
 		// is a no-op when state already matches, so this is cheap.
 		{"@every 30m", tasks.ClusterRegistryDriftReconcileType, "cluster registry drift reconcile"},
+		// Migration 052: per-cluster Velero snapshot lifecycle.
+		//   - Poll: every 30s, mirror Velero status into the snapshot/restore rows.
+		//   - Dispatch: every 1m, fire any scheduled snapshot whose cron has elapsed.
+		//   - Cleanup: daily, drop expired terminal rows (Velero owns object-store TTL).
+		{"@every 30s", tasks.ClusterSnapshotPollType, "cluster snapshot poll"},
+		{"@every 1m", tasks.ClusterSnapshotDispatchScheduledType, "cluster snapshot scheduled dispatcher"},
+		{"15 4 * * *", tasks.ClusterSnapshotCleanupExpiredType, "cluster snapshot expired cleanup (daily 04:15)"},
 	}
 
 	for _, e := range entries {

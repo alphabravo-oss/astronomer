@@ -303,6 +303,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterSnapshotsHandler := handler.NewClusterSnapshotsHandler(queries)
 	clusterSnapshotsHandler.SetRequester(requester)
 	handler.RegisterClusterSnapshotsMetrics()
+	handler.WireSnapshotWorkerMetrics()
+	tasks.ConfigureClusterSnapshotTasks(tasks.ClusterSnapshotDeps{
+		Queries: queries,
+		Driver:  handler.NewVeleroDriverAdapter(requester),
+		Log:     logger,
+	})
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
