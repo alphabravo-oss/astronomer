@@ -103,6 +103,12 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Migration 060: GitOps cluster registration sync. 60s cadence
+		// matches the schema default sync_interval_seconds; per-source
+		// last_synced_at gates whether each row actually executes on
+		// this tick. The same handler runs the tombstone reaper at the
+		// end of every successful tick.
+		{"@every 60s", tasks.GitOpsSyncType, "gitops cluster registration sync"},
 	}
 
 	for _, e := range entries {
