@@ -31,15 +31,21 @@ type TunnelClient struct {
 
 	mu        sync.RWMutex
 	connected bool
+
+	// failCloseOnce ensures the buffer-full eager close (T33) only
+	// fires once per connection — repeated congestion shouldn't
+	// hammer tc.conn.Close. Reset by dial() on each new connection.
+	failCloseOnce *sync.Once
 }
 
 // NewTunnelClient creates a new tunnel client with the given configuration.
 func NewTunnelClient(cfg *AgentConfig, log *slog.Logger) *TunnelClient {
 	return &TunnelClient{
-		config:   cfg,
-		log:      log,
-		handlers: make(map[protocol.MessageType]MessageHandler),
-		sendCh:   make(chan *protocol.Message, 256),
+		config:        cfg,
+		log:           log,
+		handlers:      make(map[protocol.MessageType]MessageHandler),
+		sendCh:        make(chan *protocol.Message, 256),
+		failCloseOnce: &sync.Once{},
 	}
 }
 
@@ -150,7 +156,13 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 		}
 	}
 
+	tc.mu.Lock()
 	tc.conn = conn
+	// T33: reset the buffer-full eager-close gate for the new
+	// connection so congestion on a previous session doesn't suppress
+	// the safety mechanism on this one.
+	tc.failCloseOnce = &sync.Once{}
+	tc.mu.Unlock()
 	tc.setConnected(true)
 	tc.log.Info("connected to server", "cluster_id", tc.config.ClusterID)
 	return nil
@@ -367,8 +379,36 @@ func (tc *TunnelClient) Send(msg *protocol.Message) error {
 		return nil
 	default:
 		observability.RecordDroppedEvent("agent_tunnel_send", "channel_full")
-		return fmt.Errorf("send channel full, dropping message type=%s", msg.Type)
+		// T33 FEATURES-051126: dropping the message leaves the
+		// server-side originator waiting on stream.DataCh until ctx
+		// timeout (10 minutes for helm). Force an async WS close so
+		// the server's CloseAll (server.go:305) wakes every in-flight
+		// stream immediately and the agent re-dials on the reconnect
+		// loop. failCloseOnce dedupes repeated congestion within the
+		// same connection; dial() resets it on the next attempt.
+		go tc.failClose("send buffer full")
+		return fmt.Errorf("send channel full, closing tunnel; type=%s", msg.Type)
 	}
+}
+
+// failClose force-closes the WebSocket once per connection. Used by
+// Send() when sendCh is saturated so the server detects the failure
+// immediately instead of waiting out the originator's context.
+func (tc *TunnelClient) failClose(reason string) {
+	tc.mu.RLock()
+	once := tc.failCloseOnce
+	conn := tc.conn
+	tc.mu.RUnlock()
+	if once == nil {
+		return
+	}
+	once.Do(func() {
+		tc.log.Warn("force-closing tunnel due to congestion", "reason", reason)
+		tc.setConnected(false)
+		if conn != nil {
+			_ = conn.Close(websocket.StatusInternalError, reason)
+		}
+	})
 }
 
 // Close gracefully closes the tunnel connection.

@@ -78,3 +78,34 @@ func TestReadinessHandlerDependencyFailure(t *testing.T) {
 		t.Fatalf("expected redis error, got %v", redisCheck)
 	}
 }
+
+// FEATURES-051126 T31: when the hub is nil (misconfigured wiring), the
+// readiness probe must report 503 instead of silently returning OK.
+// Otherwise a pod that can never serve tunnel traffic stays in Service
+// rotation indefinitely.
+func TestReadinessHandlerNilHubFailsClosed(t *testing.T) {
+	h := newReadinessHandler(fakeDBHealth{}, fakeQueuePing{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 with nil hub, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	checks := body["checks"].(map[string]any)
+	tunnelHub, ok := checks["tunnel_hub"].(map[string]any)
+	if !ok {
+		t.Fatal("tunnel_hub check missing from body")
+	}
+	if tunnelHub["ok"] != false {
+		t.Fatalf("tunnel_hub.ok = %v, want false", tunnelHub["ok"])
+	}
+	if tunnelHub["error"] != "tunnel hub not initialized" {
+		t.Fatalf("tunnel_hub.error = %v, want 'tunnel hub not initialized'", tunnelHub["error"])
+	}
+}

@@ -53,6 +53,9 @@ test: ## Run tests with race detector
 lint: ## Run golangci-lint
 	golangci-lint run ./...
 
+check-migrations: ## Lint *.up.sql migrations for unsafe ADD COLUMN NOT NULL patterns (T30)
+	./scripts/check-migrations.sh
+
 fmt: ## Format Go source files
 	go fmt ./...
 

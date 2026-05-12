@@ -92,7 +92,18 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.hub != nil {
+	// T31 FEATURES-051126: fail closed if the hub is missing entirely.
+	// A nil hub means readiness was wired without the tunnel hub — the
+	// pod should not be in Service rotation in that state. Previously
+	// this case was silently skipped, so a misconfigured pod looked
+	// healthy.
+	if h.hub == nil {
+		checks["tunnel_hub"] = readinessCheck{
+			OK:    false,
+			Error: "tunnel hub not initialized",
+		}
+		statusCode = http.StatusServiceUnavailable
+	} else {
 		checks["tunnel_hub"] = readinessCheck{
 			OK:                true,
 			ConnectedClusters: len(h.hub.ConnectedClusters()),

@@ -241,6 +241,39 @@ func TestSendChannelFull(t *testing.T) {
 	}
 }
 
+// FEATURES-051126 T33: when sendCh is saturated, Send() must force a
+// connection close so server-side originators stop waiting on the
+// missing reply. We verify by setting connected=true, filling the
+// channel, calling Send, then waiting for the async failClose
+// goroutine to flip IsConnected back to false.
+func TestSendChannelFull_TriggersFailClose(t *testing.T) {
+	tc := NewTunnelClient(testConfig(), testLogger())
+	tc.setConnected(true)
+
+	for i := 0; i < 256; i++ {
+		_ = tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
+	}
+	if !tc.IsConnected() {
+		t.Fatal("setup precondition: tc should be connected before the saturating send")
+	}
+
+	err := tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
+	if err == nil {
+		t.Fatal("expected error when channel is full")
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if !tc.IsConnected() {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if tc.IsConnected() {
+		t.Fatal("failClose did not flip IsConnected to false; server-side originators would still block")
+	}
+}
+
 func droppedEventsCounterValue(t *testing.T, wantLabels map[string]string) float64 {
 	t.Helper()
 
