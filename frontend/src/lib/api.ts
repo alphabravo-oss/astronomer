@@ -728,6 +728,18 @@ export async function deleteAlertSilence(id: string) {
   await api.delete(`/alerting/silences/${id}`);
 }
 
+// --- Anomaly baselines (sprint 072, read-only) ---
+
+export async function getAnomalyBaselines(params?: { clusterId?: string; limit?: number; offset?: number }) {
+  const res = await api.get<APIResponse<import('@/types').AnomalyBaseline[]>>('/anomaly-baselines', { params });
+  return res.data.data;
+}
+
+export async function getAnomalyBaseline(id: string) {
+  const res = await api.get<APIResponse<import('@/types').AnomalyBaseline>>(`/anomaly-baselines/${id}`);
+  return res.data.data;
+}
+
 // --- Logging ---
 
 export async function getLoggingOutputs() {

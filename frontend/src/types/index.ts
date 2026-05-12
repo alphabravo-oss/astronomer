@@ -576,6 +576,17 @@ export type AlertSeverity = 'critical' | 'warning' | 'info';
 
 export type AlertRuleType = 'threshold' | 'anomaly' | 'absence' | 'change';
 
+// Sprint 072 — rule_kind switches the evaluator path.
+// "threshold" is the existing static-threshold logic; "anomaly"
+// uses the rolling-baseline + stddev check from anomaly_baselines.
+export type AlertRuleKind = 'threshold' | 'anomaly';
+
+// Direction the anomaly rule fires on:
+//  - above:  current > mean + N*stddev
+//  - below:  current < mean - N*stddev
+//  - either: |current - mean| > N*stddev
+export type AnomalyDirection = 'above' | 'below' | 'either';
+
 export interface AlertRule {
   id: string;
   name: string;
@@ -593,7 +604,36 @@ export interface AlertRule {
   labels: Record<string, string>;
   annotations: Record<string, string>;
   notificationChannelIds: string[];
+  // Sprint 072 anomaly fields. ruleKind defaults to 'threshold'
+  // server-side so reading an old rule never returns undefined.
+  ruleKind?: AlertRuleKind;
+  metric?: string;
+  anomalyStddev?: number;
+  anomalyWindowSeconds?: number;
+  anomalyMinSamples?: number;
+  anomalyDirection?: AnomalyDirection;
   createdAt: string;
+  updatedAt: string;
+}
+
+// AnomalyBaseline mirrors the read-only /api/v1/anomaly-baselines/
+// surface. The recompute worker is the sole writer; the UI just
+// renders these for tuning purposes.
+export interface AnomalyBaseline {
+  id: string;
+  clusterId: string;
+  metric: string;
+  windowSeconds: number;
+  sampleCount: number;
+  mean: number;
+  stddev: number;
+  min: number;
+  max: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  lastValue: number;
+  lastValueAt: string | null;
   updatedAt: string;
 }
 
