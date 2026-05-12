@@ -91,6 +91,9 @@ const (
 	TypeFleetOrchestrate = tasks.FleetOrchestrateType
 	// Migration 057: maintenance window deferred-op dispatcher.
 	TypeDispatchDeferred = tasks.DispatchDeferredType
+	// Migration 065 / sprint 17: in-browser kubectl shell reaper.
+	// 60s cadence — see internal/worker/tasks/kubectl_session_reap.go.
+	TypeKubectlSessionReap = tasks.KubectlSessionReapType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -174,6 +177,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
 	// Migration 060: GitOps cluster registration sync.
 	w.mux.HandleFunc(tasks.GitOpsSyncType, instrumentTask(tasks.GitOpsSyncType, tasks.HandleGitOpsSync))
+	w.mux.HandleFunc(TypeKubectlSessionReap, instrumentTask(TypeKubectlSessionReap, tasks.HandleKubectlSessionReap))
 
 	w.log.Info("registered all task handlers")
 }

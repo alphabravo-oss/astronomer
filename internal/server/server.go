@@ -20,6 +20,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
@@ -779,6 +780,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// sqlc.New(tx) factory keeps the engine pool-agnostic for
 		// unit tests.
 		ComplianceBaselines: handler.NewComplianceBaselinesHandlerFromPool(database.Pool(), logger),
+		// In-browser kubectl shell (migration 065 / sprint 17). The
+		// chart value kubectlShell.enabled=false default keeps this
+		// off in fresh installs; operators flip it on once their
+		// audit-log retention is sized for the per-command rows.
+		KubectlShell: kubectlShellHandler(queries, rbacQuerier, rbacEngine, requester, cfg, logger),
 	}
 	// Migration 063 — read-side audit. The PolicyEvaluator is shared
 	// between the middleware and the admin handler so policy writes
@@ -1173,6 +1179,46 @@ func (s *localClusterArgoCDTokenSource) UpstreamSessionToken(ctx context.Context
 		return "", err
 	}
 	return plain, nil
+}
+
+// kubectlShellHandler builds the in-browser kubectl shell handler when
+// the feature is enabled in chart values. Returns nil when disabled so
+// the router skips the route block and the worker reaper exits early.
+//
+// The handler bundles its own kubectl.Deps so the reaper task can be
+// configured from the same struct (server starts both; the worker
+// process gets the same deps via the shared queue wiring).
+func kubectlShellHandler(
+	queries *sqlc.Queries,
+	rbacQuerier appmiddleware.RBACQuerier,
+	rbacEngine *rbac.Engine,
+	requester handler.K8sRequester,
+	cfg *config.Config,
+	logger *slog.Logger,
+) *handler.KubectlShellHandler {
+	if cfg == nil || !cfg.KubectlShellEnabled {
+		return nil
+	}
+	idle := time.Duration(cfg.KubectlShellIdleTimeoutMinutes) * time.Minute
+	if idle <= 0 {
+		idle = 30 * time.Minute
+	}
+	hard := time.Duration(cfg.KubectlShellSessionHardCapHours) * time.Hour
+	if hard <= 0 {
+		hard = 4 * time.Hour
+	}
+	deps := kubectl.Deps{
+		Queries:     queries,
+		Requester:   handler.KubectlK8sRequesterFromHandlerRequester(requester),
+		Image:       cfg.KubectlShellImage,
+		IdleTimeout: idle,
+		HardCap:     hard,
+		Log:         logger,
+	}
+	// Wire the reaper task once at the same time the handler is built;
+	// the asynq scheduler entry is registered in worker/runtime.go.
+	tasks.ConfigureKubectlSessionReap(tasks.KubectlSessionReapDeps{Deps: deps})
+	return handler.NewKubectlShellHandler(queries, rbacQuerier, rbacEngine, deps)
 }
 
 // detectReleaseNamespace returns the namespace this server pod is running

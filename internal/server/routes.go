@@ -208,6 +208,12 @@ type RouterDependencies struct {
 	// transaction; the handler is nil-safe and routes are omitted when
 	// the handler isn't wired.
 	ComplianceBaselines *handler.ComplianceBaselinesHandler
+	// KubectlShell owns /api/v1/clusters/{cluster_id}/shell/* and the
+	// /api/v1/admin/shell-sessions/* superuser views (migration 065 /
+	// sprint 17). Nil-safe: when unwired the routes are omitted and
+	// the frontend Shell tab hides itself based on the missing
+	// feature flag in /me.
+	KubectlShell *handler.KubectlShellHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -695,6 +701,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", deps.Logs.HandleLogs)
 	}
 
+	// Kubectl shell WS handshake — session-aware redirect onto the
+	// existing /api/v1/ws/exec/{cluster_id}/{ns}/{pod}/{container}/ relay.
+	// The redirect target is what actually serves the WS handshake; this
+	// just translates a session_id (which the frontend has) into the
+	// pod+container coords the relay needs (which it does NOT have).
+	if deps.KubectlShell != nil {
+		r.With(rateLimit(appmiddleware.ClassExecLogs)).
+			Get("/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/", deps.KubectlShell.HandleWS)
+	}
+
 	return r
 }
 
@@ -921,6 +937,25 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/{catalog_id}/subscribe/", deps.ProjectCatalogs.Subscribe)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/catalogs/{catalog_id}/", deps.ProjectCatalogs.Delete)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/{catalog_id}/charts/", deps.ProjectCatalogs.ListCharts)
+	}
+
+	// In-browser kubectl shell (migration 065 / sprint 17). Every
+	// cluster-scoped route is gated on clusters:update — opening a
+	// privileged shell is a write action. The WS endpoint is mounted
+	// on the same protected sub-router but skips the per-handler
+	// rate limiter (it's a single long-lived connection, not a burst
+	// vector — the underlying /api/v1/ws/exec/ ratelimiter still
+	// applies on the redirect target). Admin views are superuser-only
+	// inside the handler itself (matches admin_drill.go).
+	if deps.KubectlShell != nil {
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/shell/sessions/", deps.KubectlShell.Open)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/clusters/{cluster_id}/shell/sessions/", deps.KubectlShell.List)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/clusters/{cluster_id}/shell/sessions/{id}/", deps.KubectlShell.Get)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/shell/sessions/{id}/close/", deps.KubectlShell.Close)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/clusters/{cluster_id}/shell/sessions/{id}/commands/", deps.KubectlShell.Commands)
+		// Admin views — gated by superuser-check inside the handler.
+		r.Get("/admin/shell-sessions/", deps.KubectlShell.AdminListAll)
+		r.Get("/admin/shell-sessions/{id}/commands/", deps.KubectlShell.AdminCommands)
 	}
 
 	if deps.Tools != nil {

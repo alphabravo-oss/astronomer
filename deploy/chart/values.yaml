@@ -790,3 +790,29 @@ crds:
   # The namespace itself is NOT created by the chart — operators install
   # the CRD into an existing namespace they own.
   watchNamespace: astronomer-mgmt
+
+# =============================================================================
+# In-browser kubectl shell (migration 065 / sprint 17)
+# =============================================================================
+# When `kubectlShell.enabled=true`, operators with clusters:update on a
+# managed cluster see an "Open Shell" affordance on the cluster-detail
+# page. Clicking it spins up an ephemeral debug pod in kube-system,
+# binds it to a short-lived ServiceAccount whose RBAC mirrors the
+# operator's effective verbs, and streams kubectl exec stdin/stdout into
+# an xterm.js terminal. See docs/kubectl-shell.md for the full story.
+#
+# Disabled by default — the feature creates one row per opened session
+# plus one row per recorded command line, so operators flip it on once
+# their audit-log retention is sized for the additional volume.
+kubectlShell:
+  enabled: false
+  # Image the debug pod runs. Bitnami's kubectl image ships kubectl +
+  # kubelogin + curl + common debug tools; operators on a private
+  # mirror should override.
+  image: "bitnami/kubectl:1.31"
+  # Idle expiry — if no input bytes hit the WS for this long, the
+  # reaper closes the session and deletes the pod.
+  idleTimeoutMinutes: 30
+  # Hard cap — the session unconditionally closes at this many hours
+  # since open, even if the operator is still actively typing.
+  sessionHardCapHours: 4

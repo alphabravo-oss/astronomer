@@ -128,6 +128,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// this tick. The same handler runs the tombstone reaper at the
 		// end of every successful tick.
 		{"@every 60s", tasks.GitOpsSyncType, "gitops cluster registration sync"},
+		// Migration 065 / sprint 17: in-browser kubectl shell reaper.
+		// 60s cadence — idle (30m), hard cap (4h), and orphan-pod sweep
+		// in one tick. Handler exits early when the feature is disabled
+		// so the cron entry is cheap to leave registered always.
+		{"@every 60s", tasks.KubectlSessionReapType, "kubectl shell session reaper"},
 	}
 
 	for _, e := range entries {

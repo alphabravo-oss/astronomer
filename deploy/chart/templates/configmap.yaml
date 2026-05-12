@@ -57,6 +57,21 @@ data:
   {{- end }}
   {{- end }}
   {{- end }}
+  # In-browser kubectl shell (migration 065 / sprint 17). Disabled by
+  # default; flip on once audit-log retention is sized for the
+  # per-command rows. See docs/kubectl-shell.md.
+  {{- with .Values.kubectlShell }}
+  KUBECTL_SHELL_ENABLED: {{ .enabled | quote }}
+  {{- if .image }}
+  KUBECTL_SHELL_IMAGE: {{ .image | quote }}
+  {{- end }}
+  {{- if .idleTimeoutMinutes }}
+  KUBECTL_SHELL_IDLE_TIMEOUT_MINUTES: {{ .idleTimeoutMinutes | quote }}
+  {{- end }}
+  {{- if .sessionHardCapHours }}
+  KUBECTL_SHELL_SESSION_HARD_CAP_HOURS: {{ .sessionHardCapHours | quote }}
+  {{- end }}
+  {{- end }}
   # pgxpool tunables (FEATURES-051126 T21). Empty == binary default.
   {{- with .Values.postgres.pool }}
   {{- if .maxConns }}
