@@ -35,6 +35,12 @@ type RouterDependencies struct {
 	PlatformHealth *handler.PlatformHealthHandler
 	AdminQueues    *handler.AdminQueuesHandler
 	AdminDrill     *handler.AdminDrillHandler
+	// ManagementLogs is the read-side complement of the chart-side
+	// Fluent Bit DaemonSet — GET /api/v1/admin/management-logs/.
+	// Superuser-gated inside the handler. Nil-safe: omitted from the
+	// router when the in-cluster k8s client / namespace pair isn't
+	// wired (laptop dev, test fakes).
+	ManagementLogs *handler.ManagementLogsHandler
 	// GroupMappings is the migration-042 admin CRUD over
 	// identity_group_mappings plus the per-user re-sync endpoint.
 	GroupMappings *handler.GroupMappingsHandler
@@ -350,6 +356,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.AdminDrill != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/", deps.AdminDrill.GetLatest)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/history/", deps.AdminDrill.ListHistory)
+		}
+
+		// Management-plane log tail (FEATURES-051226 T03) — the
+		// dashboard's "show me what's happening right now" view.
+		// The durable long-term path is the chart-side Fluent Bit
+		// DaemonSet (deploy/chart/templates/management-logging-*.yaml).
+		// Superuser-gated inside the handler.
+		if deps.ManagementLogs != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/management-logs/", deps.ManagementLogs.Tail)
 		}
 
 		// Identity-group sync admin endpoints (migration 042). CRUD

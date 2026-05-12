@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -536,6 +537,22 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// management-plane-restore-drill CronJob writes to
 		// backup_drill_results. Superuser-gated inside the handler.
 		AdminDrill: handler.NewAdminDrillHandler(queries),
+		// Management-plane log tail (T03 FEATURES-051226). Only wired
+		// when the in-cluster k8s client is available — laptop dev /
+		// test fakes get a nil-safe omission instead of a panicking
+		// list call. Caps are read from MANAGEMENT_LOGS_* env vars set
+		// by the chart's ConfigMap; defaults (1000 lines / 1 MiB)
+		// apply when those are empty.
+		ManagementLogs: func() *handler.ManagementLogsHandler {
+			if localK8s == nil || localNamespace == "" {
+				return nil
+			}
+			h := handler.NewManagementLogsHandler(queries, localK8s, localNamespace, os.Getenv("RELEASE_NAME"))
+			maxLines, _ := strconv.Atoi(os.Getenv("MANAGEMENT_LOGS_MAX_LINES"))
+			maxBytes, _ := strconv.Atoi(os.Getenv("MANAGEMENT_LOGS_MAX_BYTES"))
+			h.SetCaps(maxLines, maxBytes)
+			return h
+		}(),
 		// SMTP admin + email enqueuer (migration 047). Both are nil
 		// when the encryptor isn't configured; the router wiring is
 		// nil-safe.
