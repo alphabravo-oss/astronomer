@@ -112,6 +112,33 @@ type AuthHandler struct {
 	// global enforcement bit.
 	totpGate        TOTPEnrollmentGate
 	totpRequireAll  bool
+
+	// emails is the optional email-enqueue hook used by the
+	// lockout + token-created hot paths. Optional and best-effort:
+	// a missing SMTP relay must not fail a user-facing action.
+	emails EmailNotifier
+	// passwordResets is the optional password-reset token store. When
+	// nil, the /auth/password-reset/* endpoints respond 503. Decoupled
+	// from emails so a test fake can wire one without the other.
+	passwordResets PasswordResetStore
+}
+
+// EmailNotifier is the surface AuthHandler (and the other hook-site
+// handlers) need to fire-and-forget enqueue an email. Wraps the
+// concrete *email.Enqueuer so tests can substitute a tiny counter.
+type EmailNotifier interface {
+	EnqueueAndLog(ctx context.Context, req EmailNotifierRequest)
+}
+
+// EmailNotifierRequest is the package-local shape that maps onto
+// email.Request. Declared here so the handler package doesn't have to
+// re-export email.Request constructors from every call site.
+type EmailNotifierRequest struct {
+	To       string
+	Template string
+	Subject  string
+	Data     any
+	UserID   uuid.UUID
 }
 
 // TOTPEnrollmentGate is the surface AuthHandler needs to decide whether
@@ -197,6 +224,26 @@ func (h *AuthHandler) SetLockoutPolicy(threshold int, duration time.Duration) {
 // session-issue path. Passing nil keeps the legacy password-only flow.
 func (h *AuthHandler) SetTOTPGate(g TOTPEnrollmentGate) {
 	h.totpGate = g
+}
+
+// SetEmailNotifier attaches the email-enqueue hook used by the
+// lockout + create-token paths. Optional; when nil, the audit row is
+// still written but no email is enqueued.
+func (h *AuthHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
+
+// SetPasswordResetStore attaches the password-reset token store used
+// by /auth/password-reset/request|complete. Optional; when nil, those
+// endpoints respond 503.
+func (h *AuthHandler) SetPasswordResetStore(s PasswordResetStore) { h.passwordResets = s }
+
+// PasswordResetStore is the database surface needed by the password
+// reset flow. Implemented by *sqlc.Queries.
+type PasswordResetStore interface {
+	CreatePasswordResetToken(ctx context.Context, arg sqlc.CreatePasswordResetTokenParams) (sqlc.PasswordResetToken, error)
+	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (sqlc.PasswordResetToken, error)
+	ConsumePasswordResetToken(ctx context.Context, arg sqlc.ConsumePasswordResetTokenParams) (int64, error)
+	DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error
+	UpdateUserPassword(ctx context.Context, arg sqlc.UpdateUserPasswordParams) error
 }
 
 // SetTOTPRequireAll flips the chart-tuned auth.totp.require knob. When
@@ -520,6 +567,20 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 				auth.AccountLockoutsTotal.WithLabelValues(observability.MetricValues(auth.LockoutReasonTooManyFailedAttempts)...).Inc()
 				auditDetail["locked"] = true
 				auditDetail["locked_until"] = lockedUntil.UTC().Format(time.RFC3339)
+				// Best-effort: fire the account_locked email. The
+				// audit row carries the lock either way; this just
+				// tells the user their account is locked.
+				if h.emails != nil && user.Email != "" {
+					h.emails.EnqueueAndLog(ctx, EmailNotifierRequest{
+						To:       user.Email,
+						Template: "account_locked",
+						Data: map[string]any{
+							"Username": user.Username,
+							"UnlockAt": lockedUntil.UTC().Format(time.RFC3339),
+						},
+						UserID: user.ID,
+					})
+				}
 				recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 					"auth.login_locked", "user", user.ID.String(), user.Username, auditDetail)
 				return
@@ -988,6 +1049,26 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		"scopes":             req.Scopes,
 		"allowed_cidr_count": cidrCount,
 	})
+
+	// Security-FYI email — "a new token was issued; if this wasn't
+	// you...". Best-effort, never blocks the response.
+	if h.emails != nil {
+		// Look up the user row for the email; the middleware-supplied
+		// `user` shape only carries ID/username/email summaries.
+		if u, err := h.queries.GetUserByID(r.Context(), userID); err == nil && u.Email != "" {
+			h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+				To:       u.Email,
+				Template: "api_token_created",
+				Data: map[string]any{
+					"Username":    u.Username,
+					"TokenName":   token.Name,
+					"TokenPrefix": token.Prefix,
+					"CreatedAt":   token.CreatedAt.UTC().Format(time.RFC3339),
+				},
+				UserID: userID,
+			})
+		}
+	}
 
 	var expiresAtStr *string
 	if token.ExpiresAt.Valid {

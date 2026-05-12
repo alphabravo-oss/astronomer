@@ -17,6 +17,7 @@ import (
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/remoteproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -37,6 +38,15 @@ type RouterDependencies struct {
 	// GroupMappings is the migration-042 admin CRUD over
 	// identity_group_mappings plus the per-user re-sync endpoint.
 	GroupMappings *handler.GroupMappingsHandler
+	// SMTP owns /api/v1/admin/smtp/* and /api/v1/admin/emails/.
+	// Wired by NewApp once the encryptor is available; routes are
+	// omitted (cleanly) when SMTP is unwired (test fakes, pre-
+	// encryption-key bootstrap).
+	SMTP *handler.SMTPHandler
+	// EmailEnqueuer is the application-wide handle for every hook
+	// site (lockout, totp enroll/disable, recovery regenerate, api
+	// token created, alert fired). Wired in NewApp.
+	EmailEnqueuer *email.Enqueuer
 	Auth           *handler.AuthHandler
 	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
 	// + Queries by cmd/server before NewRouter runs. When nil (test
@@ -319,6 +329,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// Superuser-gated inside the handler — same pattern as the
 		// other /admin/* routes — so the failure mode is a clean
 		// 403 instead of a generic permission rejection.
+		// SMTP admin endpoints (migration 047). Superuser-gated
+		// inside the handler — same pattern as the other /admin/*
+		// routes so the failure mode is a clean 403.
+		if deps.SMTP != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/smtp/", deps.SMTP.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Put("/admin/smtp/", deps.SMTP.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/smtp/test/", deps.SMTP.Test)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/emails/", deps.SMTP.List)
+		}
+
 		if deps.GroupMappings != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/group-mappings/", deps.GroupMappings.List)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/group-mappings/", deps.GroupMappings.Create)

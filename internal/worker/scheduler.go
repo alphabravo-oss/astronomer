@@ -64,6 +64,14 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
+		// Migration 047: drain the email_messages queued/failed rows
+		// into real SMTP sends. 30s cadence gives operators a tight
+		// "I clicked the button, did the email arrive?" feedback
+		// loop without hammering the relay.
+		{"@every 30s", tasks.EmailDispatchType, "email dispatch (smtp drain)"},
+		// Email retention sweep — runs daily at 03:30 (offset from
+		// the 03:00 backup-retention task to spread DB load).
+		{"30 3 * * *", tasks.EmailCleanupOldType, "email retention sweep (90d)"},
 	}
 
 	for _, e := range entries {

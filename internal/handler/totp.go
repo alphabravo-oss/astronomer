@@ -61,7 +61,13 @@ type TOTPHandler struct {
 	log        *slog.Logger
 	issuer     string
 	requireAll bool
+	emails     EmailNotifier
 }
+
+// SetEmailNotifier attaches the email-enqueue hook used by the
+// enroll-confirm / disable / regenerate paths to fire security-
+// relevant FYI emails.
+func (h *TOTPHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 // NewTOTPHandler wires the TOTP handler. queries / users / encryptor /
 // jwt are required at construction; the optional dependencies (audit,
@@ -368,6 +374,20 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 			"recovery_codes_issued": len(codes),
 		})
 
+	if h.emails != nil {
+		if u, err := h.users.GetUserByID(r.Context(), userID); err == nil && u.Email != "" {
+			h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+				To:       u.Email,
+				Template: "totp_enabled",
+				Data: map[string]any{
+					"Username":          u.Username,
+					"RecoveryCodeCount": len(codes),
+				},
+				UserID: userID,
+			})
+		}
+	}
+
 	RespondJSON(w, http.StatusOK, enrollConfirmResponse{RecoveryCodes: codes, Enrolled: true})
 }
 
@@ -447,6 +467,15 @@ func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 
 	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
 		"auth.totp.disabled", "user", userID.String(), authUser.Username, nil)
+
+	if h.emails != nil && dbUser.Email != "" {
+		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+			To:       dbUser.Email,
+			Template: "totp_disabled",
+			Data:     map[string]any{"Username": dbUser.Username},
+			UserID:   userID,
+		})
+	}
 
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]string{"detail": "TOTP disabled"})
 }
@@ -563,6 +592,17 @@ func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Req
 		"auth.totp.recovery_codes_regenerated", "user", userID.String(), authUser.Username, map[string]any{
 			"recovery_codes_issued": len(codes),
 		})
+
+	if h.emails != nil {
+		if u, err := h.users.GetUserByID(r.Context(), userID); err == nil && u.Email != "" {
+			h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+				To:       u.Email,
+				Template: "recovery_codes_regenerated",
+				Data:     map[string]any{"Username": u.Username},
+				UserID:   userID,
+			})
+		}
+	}
 
 	RespondJSON(w, http.StatusOK, regenerateResponse{RecoveryCodes: codes})
 }

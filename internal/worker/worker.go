@@ -45,6 +45,9 @@ const (
 	// keys on every upstream ArgoCD cluster Secret this cluster is registered
 	// into. Idempotent — skips the PATCH when the desired labels already match.
 	TypeArgoCDRefreshManagedClusterLabels = tasks.ArgoCDRefreshManagedClusterLabelsType
+	// Migration 047: SMTP email dispatch + retention.
+	TypeEmailDispatch    = tasks.EmailDispatchType
+	TypeEmailCleanupOld  = tasks.EmailCleanupOldType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -108,6 +111,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
 	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
 	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))
+	w.mux.HandleFunc(TypeEmailDispatch, instrumentTask(TypeEmailDispatch, tasks.HandleEmailDispatch))
+	w.mux.HandleFunc(TypeEmailCleanupOld, instrumentTask(TypeEmailCleanupOld, tasks.HandleEmailCleanupOld))
 
 	w.log.Info("registered all task handlers")
 }

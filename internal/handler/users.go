@@ -313,6 +313,14 @@ func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 		"previous_locked_reason": existing.LockedReason,
 		"previous_failed_count":  existing.FailedLoginCount,
 	})
+	if h.emails != nil && existing.Email != "" {
+		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+			To:       existing.Email,
+			Template: "account_unlocked",
+			Data:     map[string]any{"Username": existing.Username},
+			UserID:   existing.ID,
+		})
+	}
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"success": true, "message": "User unlocked"})
 }
 
