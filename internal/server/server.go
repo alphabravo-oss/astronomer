@@ -20,6 +20,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
+	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -538,6 +539,26 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		audit.SetBusPublisher(busPublisherAdapter{bus: bus})
 	}
 
+	// External SIEM forwarders (migration 055). Same gate as webhooks
+	// (the auth blob is Fernet-encrypted) and parallel wiring: the bus
+	// tap subscribes to the same events.Bus the SSE stream consumes,
+	// and the dispatcher task drains the per-forwarder queue every 2s.
+	// We start the tap further below once reconcileCtx is defined.
+	var (
+		siemHandler *handler.SIEMHandler
+		siemTap     *siem.BusTap
+	)
+	if encryptor != nil {
+		siemHandler = handler.NewSIEMHandler(queries, encryptor, logger)
+		siemHandler.SetAuditWriter(queries)
+		tasks.ConfigureSIEM(tasks.SIEMDeps{
+			Queries:   queries,
+			Encryptor: encryptor,
+		})
+		siemTap = siem.NewBusTap(queries, bus, webhook.MatchFilters, logger)
+		siemHandler.SetTap(siemTap)
+	}
+
 	deps := RouterDependencies{
 		JWT:          jwtManager,
 		Encryptor:    encryptor,
@@ -615,6 +636,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		SMTP:          smtpHandler,
 		EmailEnqueuer: emailEnqueuer,
 		Webhooks:      webhookHandler,
+		SIEMForwarders: siemHandler,
 		// Identity-group sync admin endpoints (migration 042). CRUD
 		// over identity_group_mappings + per-user re-sync. The RBAC
 		// cache invalidator is wired below once rbacQuerier is known
@@ -756,6 +778,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// queued webhook_deliveries rows.
 	if webhookTap != nil {
 		webhookTap.Start(reconcileCtx)
+	}
+	// Migration 055: kick off the SIEM bus tap. Same bus, different
+	// destination — events fan out into siem_forward_queue for the
+	// dispatcher to drain. Operators using both webhooks AND SIEM see
+	// each event in both pipelines simultaneously.
+	if siemTap != nil {
+		siemTap.Start(reconcileCtx)
 	}
 	// Phase B3 — configure the worker-task runtime in this process too, so the
 	// in-process project reconciler (and other server-side cron sweeps that

@@ -722,6 +722,24 @@ type Querier interface {
 	CountTotalActiveUsers(ctx context.Context) (int64, error)
 	ListProjectQuotaSnapshots(ctx context.Context, arg ListProjectQuotaSnapshotsParams) ([]ProjectQuotaSnapshotRow, error)
 	ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]UserQuotaSnapshotRow, error)
+	// SIEM forwarders + queue + status (migration 055).
+	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
+	CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForwarderParams) (SiemForwarder, error)
+	DeleteSIEMForwarder(ctx context.Context, id uuid.UUID) error
+	DeleteSIEMQueueByIDs(ctx context.Context, ids []int64) error
+	DeleteSIEMQueueOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	EnqueueSIEMEvent(ctx context.Context, arg EnqueueSIEMEventParams) (SiemForwardQueue, error)
+	GetSIEMForwarder(ctx context.Context, id uuid.UUID) (SiemForwarder, error)
+	GetSIEMForwarderByName(ctx context.Context, name string) (SiemForwarder, error)
+	GetSIEMForwarderStatus(ctx context.Context, forwarderID uuid.UUID) (SiemForwarderStatus, error)
+	IncrementSIEMQueueAttempts(ctx context.Context, ids []int64) error
+	ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
+	ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQueueParams) ([]int64, error)
+	ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
+	ListSIEMQueueBatch(ctx context.Context, arg ListSIEMQueueBatchParams) ([]SiemForwardQueue, error)
+	ListSIEMQueueExhausted(ctx context.Context, arg ListSIEMQueueExhaustedParams) ([]SiemForwardQueue, error)
+	UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error)
+	UpsertSIEMForwarderStatus(ctx context.Context, arg UpsertSIEMForwarderStatusParams) error
 }
 
 var _ Querier = (*Queries)(nil)

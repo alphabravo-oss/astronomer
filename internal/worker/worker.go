@@ -75,6 +75,12 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
+	// Migration 055: SIEM forwarder dispatch + retention sweep. The
+	// dispatcher drains every enabled forwarder's queue every 2s; the
+	// cleanup task prunes queue rows older than 7 days regardless of
+	// forwarder status.
+	TypeSIEMDispatch   = tasks.SIEMDispatchType
+	TypeSIEMCleanupOld = tasks.SIEMCleanupOldType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -152,6 +158,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
+	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
+	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
 
 	w.log.Info("registered all task handlers")
 }

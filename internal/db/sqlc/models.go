@@ -1209,3 +1209,54 @@ type WebhookDelivery struct {
 	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
 	CreatedAt      time.Time          `json:"created_at"`
 }
+
+// SiemForwarder is migration-055's operator-managed external SIEM sink.
+// auth_encrypted is the Fernet ciphertext of the JSON auth blob ({token,
+// username, password}) under auth.Encryptor — same key set as
+// webhook_subscriptions.secret_encrypted.
+type SiemForwarder struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Transport       string          `json:"transport"`
+	Endpoint        string          `json:"endpoint"`
+	AuthEncrypted   string          `json:"auth_encrypted"`
+	EventFilters    json.RawMessage `json:"event_filters"`
+	Format          string          `json:"format"`
+	TlsSkipVerify   bool            `json:"tls_skip_verify"`
+	CaCertPem       string          `json:"ca_cert_pem"`
+	BatchSize       int32           `json:"batch_size"`
+	FlushIntervalMs int32           `json:"flush_interval_ms"`
+	TimeoutSeconds  int32           `json:"timeout_seconds"`
+	Enabled         bool            `json:"enabled"`
+	CreatedBy       pgtype.UUID     `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// SiemForwardQueue is one queued event row destined for a forwarder.
+// Migration 055. The dispatcher batches up to forwarder.batch_size of
+// these per tick and DELETEs them on a successful send. attempts is
+// bumped on every failure; rows that cross the retry cap (100) are
+// dropped and the forwarder's dropped_total counter is incremented.
+type SiemForwardQueue struct {
+	ID          int64           `json:"id"`
+	ForwarderID uuid.UUID       `json:"forwarder_id"`
+	EventName   string          `json:"event_name"`
+	Payload     json.RawMessage `json:"payload"`
+	Severity    string          `json:"severity"`
+	Attempts    int32           `json:"attempts"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
+// SiemForwarderStatus is the per-forwarder health + lag row updated by
+// the dispatcher on every tick. The admin status endpoint reads it
+// without scanning the queue table.
+type SiemForwarderStatus struct {
+	ForwarderID     uuid.UUID          `json:"forwarder_id"`
+	LastSentAt      pgtype.Timestamptz `json:"last_sent_at"`
+	LastError       string             `json:"last_error"`
+	QueueDepth      int32              `json:"queue_depth"`
+	DroppedTotal    int64              `json:"dropped_total"`
+	DispatchedTotal int64              `json:"dispatched_total"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
