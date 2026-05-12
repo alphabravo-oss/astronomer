@@ -301,6 +301,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	resourceHandler := handler.NewResourceHandlerWithQueries(queries, requester)
 	resourceHandler.SetEncryptor(encryptor)
 	resourceHandler.SetSSOManager(ssoManager)
+	// User delete cascades through *_role_bindings; signal the RBAC cache to
+	// drop the per-user entry instead of waiting out the TTL.
+	if cache := rbacQuerier.Cache(); cache != nil {
+		resourceHandler.SetRBACCacheInvalidator(cache)
+	}
 	platformCharts, chartRepoErr := handler.NewPlatformChartRepoHandler()
 	if chartRepoErr != nil {
 		return nil, chartRepoErr
@@ -459,6 +464,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
 		Queries: queries,
 		Tunnel:  hub,
+		// Bulk-deleting cluster_role_bindings during decommission strands
+		// stale per-user entries in the middleware RBAC cache; flush them.
+		RBACCache: rbacQuerier.Cache(),
 	})
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
 	// DB lease handles multiple worker pods racing on the same row).

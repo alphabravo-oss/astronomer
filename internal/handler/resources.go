@@ -18,12 +18,21 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
+// rbacCacheInvalidator mirrors middleware.RBACCacheInvalidator but is
+// duplicated here to avoid an import cycle (server/middleware -> handler is
+// already a dependency direction for the cache wiring).
+type rbacCacheInvalidator interface {
+	Invalidate(userID string)
+	InvalidateAll()
+}
+
 type ResourceHandler struct {
 	requester K8sRequester
 	queries   ResourceQuerier
 	sso       SSOSettingsQuerier
 	encryptor *auth.Encryptor
 	ssoMgr    SSOProviderRegistrar
+	rbacCache rbacCacheInvalidator
 }
 
 type ResourceQuerier interface {
@@ -129,6 +138,16 @@ func (h *ResourceHandler) SetSSOManager(mgr SSOProviderRegistrar) {
 func (h *ResourceHandler) SetEncryptor(enc *auth.Encryptor) {
 	if h != nil {
 		h.encryptor = enc
+	}
+}
+
+// SetRBACCacheInvalidator wires the middleware-side RBAC cache so user-delete
+// (which CASCADEs through *_role_bindings) can invalidate the per-user entry
+// immediately. Optional; without it the cache TTL expires the stale entry
+// within 15s, which is acceptable for a deleted-user race window.
+func (h *ResourceHandler) SetRBACCacheInvalidator(inv rbacCacheInvalidator) {
+	if h != nil {
+		h.rbacCache = inv
 	}
 }
 

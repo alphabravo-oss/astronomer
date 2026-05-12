@@ -65,6 +65,69 @@ func (h *RBACHandler) SetAuthorization(engine *rbac.Engine, bindings middleware.
 	h.bindings = bindings
 }
 
+// invalidateUser drops the per-user RBAC cache entry, if the configured
+// bindings querier supports it. Mutation handlers call this after a binding
+// create/delete so the next authenticated request sees the change instead of
+// waiting up to the cache TTL. No-op when caching isn't wired (tests).
+func (h *RBACHandler) invalidateUser(userID string) {
+	if h == nil || h.bindings == nil || userID == "" {
+		return
+	}
+	if inv, ok := h.bindings.(middleware.RBACCacheInvalidator); ok {
+		inv.Invalidate(userID)
+	}
+}
+
+// invalidateAll dumps the whole RBAC cache. Used after a role mutation: the
+// role's rules are denormalised into every cached binding for every user
+// holding it, so a targeted invalidation isn't tractable. Cheaper to refill.
+func (h *RBACHandler) invalidateAll() {
+	if h == nil || h.bindings == nil {
+		return
+	}
+	if inv, ok := h.bindings.(middleware.RBACCacheInvalidator); ok {
+		inv.InvalidateAll()
+	}
+}
+
+// lookupBindingUserIDs is a tiny helper for delete paths where the request
+// body doesn't carry user_id — we read the binding by ID first to learn whom
+// it affects, then invalidate. Returns empty when the binding doesn't exist
+// (already deleted) or when the queries surface lacks the lookup. We do this
+// BEFORE issuing the delete so we still have the row to read.
+func (h *RBACHandler) lookupGlobalBindingUserID(ctx context.Context, id uuid.UUID) string {
+	if h == nil || h.queries == nil {
+		return ""
+	}
+	b, err := h.queries.GetGlobalRoleBindingByID(ctx, id)
+	if err != nil || !b.UserID.Valid {
+		return ""
+	}
+	return uuid.UUID(b.UserID.Bytes).String()
+}
+
+func (h *RBACHandler) lookupClusterBindingUserID(ctx context.Context, id uuid.UUID) string {
+	if h == nil || h.queries == nil {
+		return ""
+	}
+	b, err := h.queries.GetClusterRoleBindingByID(ctx, id)
+	if err != nil || !b.UserID.Valid {
+		return ""
+	}
+	return uuid.UUID(b.UserID.Bytes).String()
+}
+
+func (h *RBACHandler) lookupProjectBindingUserID(ctx context.Context, id uuid.UUID) string {
+	if h == nil || h.queries == nil {
+		return ""
+	}
+	b, err := h.queries.GetProjectRoleBindingByID(ctx, id)
+	if err != nil || !b.UserID.Valid {
+		return ""
+	}
+	return uuid.UUID(b.UserID.Bytes).String()
+}
+
 type roleRequest struct {
 	Name            string          `json:"name"`
 	DisplayName     string          `json:"display_name"`
@@ -167,6 +230,10 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update global role")
 		return
 	}
+	// Role rules are denormalised into every cached binding for every user
+	// bound to this role. Without a reverse index we can't target the affected
+	// users, so dump the whole cache; refill cost is one query per active user.
+	h.invalidateAll()
 	recordAudit(r, h.queries, "role.update", "global_role", role.ID.String(), role.Name, map[string]any{"scope": "global"})
 	RespondJSON(w, http.StatusOK, role)
 }
@@ -184,6 +251,9 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "not_found", "Global role not found")
 		return
 	}
+	// ON DELETE CASCADE on global_role_bindings means every binding for this
+	// role just vanished too — invalidate broadly.
+	h.invalidateAll()
 	recordAudit(r, h.queries, "role.delete", "global_role", id.String(), roleName, map[string]any{"scope": "global"})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -268,6 +338,7 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update cluster role")
 		return
 	}
+	h.invalidateAll()
 	recordAudit(r, h.queries, "role.update", "cluster_role", role.ID.String(), role.Name, map[string]any{"scope": "cluster"})
 	RespondJSON(w, http.StatusOK, role)
 }
@@ -285,6 +356,7 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster role not found")
 		return
 	}
+	h.invalidateAll()
 	recordAudit(r, h.queries, "role.delete", "cluster_role", id.String(), roleName, map[string]any{"scope": "cluster"})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -369,6 +441,7 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update project role")
 		return
 	}
+	h.invalidateAll()
 	recordAudit(r, h.queries, "role.update", "project_role", role.ID.String(), role.Name, map[string]any{"scope": "project"})
 	RespondJSON(w, http.StatusOK, role)
 }
@@ -386,6 +459,7 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusNotFound, "not_found", "Project role not found")
 		return
 	}
+	h.invalidateAll()
 	recordAudit(r, h.queries, "role.delete", "project_role", id.String(), roleName, map[string]any{"scope": "project"})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -420,6 +494,13 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create global role binding")
 		return
 	}
+	// Targeted invalidation when this is a user-scoped binding. Group-scoped
+	// bindings (UserID empty) aren't keyed by user_id in the cache today —
+	// group membership isn't expanded in GetUserBindings — so they don't
+	// surface in the cache and need no invalidation.
+	// TODO(rbac-invalidation): expand on group→users membership when groups
+	// become first-class.
+	h.invalidateUser(req.UserID)
 	recordAudit(r, h.queries, "binding.create", "global_role_binding", binding.ID.String(), "", map[string]any{
 		"scope":   "global",
 		"role_id": roleID.String(),
@@ -434,10 +515,13 @@ func (h *RBACHandler) DeleteGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	// Look up the affected user before deleting so we can invalidate after.
+	affectedUserID := h.lookupGlobalBindingUserID(r.Context(), id)
 	if err := h.queries.DeleteGlobalRoleBinding(r.Context(), id); err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Global role binding not found")
 		return
 	}
+	h.invalidateUser(affectedUserID)
 	recordAudit(r, h.queries, "binding.delete", "global_role_binding", id.String(), "", map[string]any{"scope": "global"})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -496,6 +580,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create cluster role binding")
 		return
 	}
+	h.invalidateUser(req.UserID)
 	recordAudit(r, h.queries, "binding.create", "cluster_role_binding", binding.ID.String(), "", map[string]any{
 		"scope":      "cluster",
 		"role_id":    roleID.String(),
@@ -511,10 +596,12 @@ func (h *RBACHandler) DeleteClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
+	affectedUserID := h.lookupClusterBindingUserID(r.Context(), id)
 	if err := h.queries.DeleteClusterRoleBinding(r.Context(), id); err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster role binding not found")
 		return
 	}
+	h.invalidateUser(affectedUserID)
 	recordAudit(r, h.queries, "binding.delete", "cluster_role_binding", id.String(), "", map[string]any{"scope": "cluster"})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -573,6 +660,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create project role binding")
 		return
 	}
+	h.invalidateUser(req.UserID)
 	recordAudit(r, h.queries, "binding.create", "project_role_binding", binding.ID.String(), "", map[string]any{
 		"scope":      "project",
 		"role_id":    roleID.String(),
@@ -588,10 +676,12 @@ func (h *RBACHandler) DeleteProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
+	affectedUserID := h.lookupProjectBindingUserID(r.Context(), id)
 	if err := h.queries.DeleteProjectRoleBinding(r.Context(), id); err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Project role binding not found")
 		return
 	}
+	h.invalidateUser(affectedUserID)
 	recordAudit(r, h.queries, "binding.delete", "project_role_binding", id.String(), "", map[string]any{"scope": "project"})
 	w.WriteHeader(http.StatusNoContent)
 }

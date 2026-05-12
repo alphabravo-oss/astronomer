@@ -151,6 +151,14 @@ type DecommissionTunnel interface {
 	Disconnect(clusterID string) bool
 }
 
+// RBACCacheInvalidator is implemented by the RBAC middleware's binding
+// cache. The decommission phase that bulk-deletes cluster_role_bindings
+// signals via InvalidateAll so stale entries don't linger up to the TTL on
+// hot paths immediately after a cluster removal.
+type RBACCacheInvalidator interface {
+	InvalidateAll()
+}
+
 // ClusterDecommissionDeps wires the reconciler. Set once at server startup
 // via ConfigureClusterDecommission; tests can swap a fake DecommissionTunnel.
 type ClusterDecommissionDeps struct {
@@ -159,6 +167,10 @@ type ClusterDecommissionDeps struct {
 	// TunnelWait is the per-call wait for MsgDecommissionAck. Defaults to
 	// decommissionTunnelWaitDefault when zero.
 	TunnelWait time.Duration
+	// RBACCache is the per-user binding cache that must be flushed after the
+	// bulk cluster_role_bindings delete in phaseDeleteDependents. Optional;
+	// nil-safe.
+	RBACCache RBACCacheInvalidator
 }
 
 var clusterDecommissionDeps ClusterDecommissionDeps
@@ -595,6 +607,12 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 			firstErr = fmt.Errorf("delete %s: %w", o.name, err)
 		}
 		counts[o.name] = n
+	}
+	// Flush the per-user binding cache: every user who had any cluster role
+	// on this cluster just had it removed and would otherwise see the stale
+	// binding for up to one cache TTL on the hot path.
+	if deps.RBACCache != nil {
+		deps.RBACCache.InvalidateAll()
 	}
 	return counts, firstErr
 }

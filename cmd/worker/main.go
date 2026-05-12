@@ -95,6 +95,12 @@ func main() {
 	// hub, so the full flow including tunnel ops works there.
 	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
 		Queries: sqlc.New(database.Pool()),
+		// TODO(rbac-invalidation): the standalone worker process has no
+		// in-process RBAC cache to flush, but when it runs the decommission
+		// phase from here, the server pod's cache still holds stale per-user
+		// cluster bindings until the 15s TTL elapses. Cross-process
+		// invalidation (pub/sub or a notify channel) would close this gap.
+		RBACCache: nil,
 	})
 
 	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —

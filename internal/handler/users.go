@@ -194,6 +194,12 @@ func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete user")
 		return
 	}
+	// ON DELETE CASCADE on the role-binding tables means every binding for
+	// this user just vanished. Invalidate so the cache doesn't keep handing
+	// out the old set for up to one TTL.
+	if h.rbacCache != nil {
+		h.rbacCache.Invalidate(existing.ID.String())
+	}
 	recordAudit(r, h.queries, "user.delete", "user", existing.ID.String(), existing.Username, map[string]any{
 		"email": existing.Email,
 	})

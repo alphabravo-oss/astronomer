@@ -180,3 +180,47 @@ RETURNING *;
 
 -- name: DeleteProjectRoleBinding :exec
 DELETE FROM project_role_bindings WHERE id = $1;
+
+-- name: ListUserBindingsWithRoles :many
+-- One round-trip alternative to the per-scope ListBindings + per-binding
+-- GetRoleByID fan-out used by the RBAC middleware. The scope discriminator
+-- ('global' | 'cluster' | 'project') tells the Go side which scope columns
+-- are meaningful for each row; unused columns are returned as NULL.
+SELECT
+    'global'::text                       AS scope,
+    gb.id                                AS binding_id,
+    gb."group"                           AS "group",
+    gb.role_id                           AS role_id,
+    NULL::uuid                           AS cluster_id,
+    NULL::uuid                           AS project_id,
+    gr.name                              AS role_name,
+    gr.rules                             AS role_rules
+FROM global_role_bindings gb
+JOIN global_roles gr ON gr.id = gb.role_id
+WHERE gb.user_id = $1
+UNION ALL
+SELECT
+    'cluster'::text                      AS scope,
+    cb.id                                AS binding_id,
+    cb."group"                           AS "group",
+    cb.role_id                           AS role_id,
+    cb.cluster_id                        AS cluster_id,
+    NULL::uuid                           AS project_id,
+    cr.name                              AS role_name,
+    cr.rules                             AS role_rules
+FROM cluster_role_bindings cb
+JOIN cluster_roles cr ON cr.id = cb.role_id
+WHERE cb.user_id = $1
+UNION ALL
+SELECT
+    'project'::text                      AS scope,
+    pb.id                                AS binding_id,
+    pb."group"                           AS "group",
+    pb.role_id                           AS role_id,
+    NULL::uuid                           AS cluster_id,
+    pb.project_id                        AS project_id,
+    pr.name                              AS role_name,
+    pr.rules                             AS role_rules
+FROM project_role_bindings pb
+JOIN project_roles pr ON pr.id = pb.role_id
+WHERE pb.user_id = $1;

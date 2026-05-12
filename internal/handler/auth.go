@@ -51,13 +51,13 @@ type PasswordRehasher interface {
 
 // RoleBindingsQuerier supplies the aggregated role bindings rendered into
 // /api/v1/auth/me/. It is implemented by the generated sqlc Queries type.
+//
+// Was 6 methods (3 ListBindings + 3 GetRoleByID) feeding an N+1 fan-out in
+// collectRoles. Collapsed to a single UNION-ALL query that returns one row
+// per binding with the role pre-joined; the frontend polls /auth/me on every
+// page nav so any extra round-trip here hurts.
 type RoleBindingsQuerier interface {
-	GetGlobalRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]sqlc.GlobalRoleBinding, error)
-	GetClusterRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]sqlc.ClusterRoleBinding, error)
-	GetProjectRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]sqlc.ProjectRoleBinding, error)
-	GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (sqlc.GlobalRole, error)
-	GetClusterRoleByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterRole, error)
-	GetProjectRoleByID(ctx context.Context, id uuid.UUID) (sqlc.ProjectRole, error)
+	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]sqlc.ListUserBindingsWithRolesRow, error)
 }
 
 // TokenQuerier abstracts the API token database queries needed by AuthHandler.
@@ -498,6 +498,10 @@ func (h *AuthHandler) CurrentUser(w http.ResponseWriter, r *http.Request) {
 // collectRoles returns the user's aggregated global/cluster/project role
 // bindings in the same shape as the Python /auth/me/ response. The map is
 // always populated with empty slices when the role querier is unconfigured.
+//
+// Was a 1-2-3-fan-out (3 ListBindings + N GetRoleByID) which the frontend
+// triggered on every page navigation via /auth/me polling. Now a single
+// UNION-ALL query that returns scope+role rules per row.
 func (h *AuthHandler) collectRoles(ctx context.Context, userID uuid.UUID) map[string]any {
 	out := map[string]any{
 		"global":  []any{},
@@ -509,59 +513,48 @@ func (h *AuthHandler) collectRoles(ctx context.Context, userID uuid.UUID) map[st
 	}
 	pgID := pgtype.UUID{Bytes: userID, Valid: true}
 
-	if globals, err := h.roles.GetGlobalRoleBindingsByUserID(ctx, pgID); err == nil {
-		items := make([]map[string]any, 0, len(globals))
-		for _, b := range globals {
-			role, _ := h.roles.GetGlobalRoleByID(ctx, b.RoleID)
-			items = append(items, map[string]any{
-				"id":         b.ID.String(),
-				"role_id":    b.RoleID.String(),
-				"role_name":  role.Name,
-				"role_rules": json.RawMessage(role.Rules),
-				"group":      b.Group,
-			})
+	rows, err := h.roles.ListUserBindingsWithRoles(ctx, pgID)
+	if err != nil {
+		if h.log != nil {
+			h.log.Warn("failed to load user role bindings", "error", err)
 		}
-		out["global"] = items
-	} else if h.log != nil {
-		h.log.Warn("failed to load global role bindings", "error", err)
+		return out
 	}
 
-	if clusters, err := h.roles.GetClusterRoleBindingsByUserID(ctx, pgID); err == nil {
-		items := make([]map[string]any, 0, len(clusters))
-		for _, b := range clusters {
-			role, _ := h.roles.GetClusterRoleByID(ctx, b.RoleID)
-			items = append(items, map[string]any{
-				"id":         b.ID.String(),
-				"role_id":    b.RoleID.String(),
-				"role_name":  role.Name,
-				"role_rules": json.RawMessage(role.Rules),
-				"cluster_id": b.ClusterID.String(),
-				"group":      b.Group,
-			})
+	globals := make([]map[string]any, 0)
+	clusters := make([]map[string]any, 0)
+	projects := make([]map[string]any, 0)
+	for _, row := range rows {
+		base := map[string]any{
+			"id":         row.BindingID.String(),
+			"role_id":    row.RoleID.String(),
+			"role_name":  row.RoleName,
+			"role_rules": json.RawMessage(row.RoleRules),
+			"group":      row.Group,
 		}
-		out["cluster"] = items
-	} else if h.log != nil {
-		h.log.Warn("failed to load cluster role bindings", "error", err)
+		switch row.Scope {
+		case "global":
+			globals = append(globals, base)
+		case "cluster":
+			if row.ClusterID.Valid {
+				base["cluster_id"] = uuid.UUID(row.ClusterID.Bytes).String()
+			} else {
+				base["cluster_id"] = ""
+			}
+			clusters = append(clusters, base)
+		case "project":
+			if row.ProjectID.Valid {
+				base["project_id"] = uuid.UUID(row.ProjectID.Bytes).String()
+			} else {
+				base["project_id"] = ""
+			}
+			projects = append(projects, base)
+		}
 	}
 
-	if projects, err := h.roles.GetProjectRoleBindingsByUserID(ctx, pgID); err == nil {
-		items := make([]map[string]any, 0, len(projects))
-		for _, b := range projects {
-			role, _ := h.roles.GetProjectRoleByID(ctx, b.RoleID)
-			items = append(items, map[string]any{
-				"id":         b.ID.String(),
-				"role_id":    b.RoleID.String(),
-				"role_name":  role.Name,
-				"role_rules": json.RawMessage(role.Rules),
-				"project_id": b.ProjectID.String(),
-				"group":      b.Group,
-			})
-		}
-		out["project"] = items
-	} else if h.log != nil {
-		h.log.Warn("failed to load project role bindings", "error", err)
-	}
-
+	out["global"] = globals
+	out["cluster"] = clusters
+	out["project"] = projects
 	return out
 }
 

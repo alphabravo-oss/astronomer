@@ -416,6 +416,11 @@ type Querier interface {
 	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ToolOperationEvent, error)
 	ListToolOperations(ctx context.Context, arg ListToolOperationsParams) ([]ToolOperation, error)
 	ListToolsByCategory(ctx context.Context, category string) ([]ClusterTool, error)
+	// One round-trip alternative to the per-scope ListBindings + per-binding
+	// GetRoleByID fan-out used by the RBAC middleware. The scope discriminator
+	// ('global' | 'cluster' | 'project') tells the Go side which scope columns
+	// are meaningful for each row; unused columns are returned as NULL.
+	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]ListUserBindingsWithRolesRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
 	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)

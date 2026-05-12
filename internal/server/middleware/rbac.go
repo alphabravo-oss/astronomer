@@ -16,6 +16,18 @@ type RBACQuerier interface {
 	GetUserBindings(ctx context.Context, userID string) ([]rbac.RoleBinding, error)
 }
 
+// RBACCacheInvalidator is implemented by RBACQuerier implementations that
+// front their lookups with a cache. Mutation handlers (CreateBinding /
+// DeleteBinding / UpdateRole / DeleteRole) call Invalidate after a successful
+// DB write so the next authenticated request sees the change immediately
+// instead of waiting for the cache TTL. InvalidateAll is used when a role
+// definition changes — its rules are denormalised into every cached binding
+// holding that role, and we don't keep a reverse index from role → users.
+type RBACCacheInvalidator interface {
+	Invalidate(userID string)
+	InvalidateAll()
+}
+
 // RequirePermission creates middleware that checks if the authenticated user
 // has the required permission (resource + verb) at the appropriate scope.
 // Scope is determined from URL params: {cluster_id} and {project_id}.
