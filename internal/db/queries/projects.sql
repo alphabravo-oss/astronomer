@@ -11,19 +11,41 @@ SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 SELECT * FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateProject :one
-INSERT INTO projects (name, display_name, description, cluster_id, namespaces, resource_quota, limit_range, network_policy_mode, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO projects (
+    name, display_name, description, cluster_id, namespaces, resource_quota,
+    limit_range, network_policy_mode, created_by_id,
+    pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *;
 
 -- name: UpdateProject :one
 UPDATE projects SET
-    display_name        = $2,
-    description         = $3,
-    namespaces          = $4,
-    resource_quota      = $5,
-    limit_range         = $6,
-    network_policy_mode = $7,
-    updated_at          = now()
+    display_name                  = $2,
+    description                   = $3,
+    namespaces                    = $4,
+    resource_quota                = $5,
+    limit_range                   = $6,
+    network_policy_mode           = $7,
+    pod_security_profile          = $8,
+    resource_quota_cpu_limit      = $9,
+    resource_quota_memory_limit   = $10,
+    resource_quota_pod_count      = $11,
+    updated_at                    = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateProjectPolicy :one
+-- Updates only the per-project policy fields without touching membership /
+-- namespaces / description metadata. Used by the policy PATCH endpoint so an
+-- admin can retune PSS / quota without re-asserting the project's namespace
+-- list (which would cause an unnecessary reconcile cascade).
+UPDATE projects SET
+    pod_security_profile          = $2,
+    resource_quota_cpu_limit      = $3,
+    resource_quota_memory_limit   = $4,
+    resource_quota_pod_count      = $5,
+    updated_at                    = now()
 WHERE id = $1
 RETURNING *;
 

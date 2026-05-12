@@ -76,21 +76,29 @@ func (q *Queries) CountProjectsByCluster(ctx context.Context, clusterID uuid.UUI
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, display_name, description, cluster_id, namespaces, resource_quota, limit_range, network_policy_mode, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode
+INSERT INTO projects (
+    name, display_name, description, cluster_id, namespaces, resource_quota,
+    limit_range, network_policy_mode, created_by_id,
+    pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count
 `
 
 type CreateProjectParams struct {
-	Name              string          `json:"name"`
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	ClusterID         uuid.UUID       `json:"cluster_id"`
-	Namespaces        json.RawMessage `json:"namespaces"`
-	ResourceQuota     json.RawMessage `json:"resource_quota"`
-	LimitRange        json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode string          `json:"network_policy_mode"`
-	CreatedByID       pgtype.UUID     `json:"created_by_id"`
+	Name                     string          `json:"name"`
+	DisplayName              string          `json:"display_name"`
+	Description              string          `json:"description"`
+	ClusterID                uuid.UUID       `json:"cluster_id"`
+	Namespaces               json.RawMessage `json:"namespaces"`
+	ResourceQuota            json.RawMessage `json:"resource_quota"`
+	LimitRange               json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode        string          `json:"network_policy_mode"`
+	CreatedByID              pgtype.UUID     `json:"created_by_id"`
+	PodSecurityProfile       string          `json:"pod_security_profile"`
+	ResourceQuotaCpuLimit    string          `json:"resource_quota_cpu_limit"`
+	ResourceQuotaMemoryLimit string          `json:"resource_quota_memory_limit"`
+	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -104,6 +112,10 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.LimitRange,
 		arg.NetworkPolicyMode,
 		arg.CreatedByID,
+		arg.PodSecurityProfile,
+		arg.ResourceQuotaCpuLimit,
+		arg.ResourceQuotaMemoryLimit,
+		arg.ResourceQuotaPodCount,
 	)
 	var i Project
 	err := row.Scan(
@@ -119,6 +131,10 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.UpdatedAt,
 		&i.LimitRange,
 		&i.NetworkPolicyMode,
+		&i.PodSecurityProfile,
+		&i.ResourceQuotaCpuLimit,
+		&i.ResourceQuotaMemoryLimit,
+		&i.ResourceQuotaPodCount,
 	)
 	return i, err
 }
@@ -149,7 +165,7 @@ func (q *Queries) DeleteProjectNamespace(ctx context.Context, arg DeleteProjectN
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects WHERE id = $1
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -168,12 +184,16 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.UpdatedAt,
 		&i.LimitRange,
 		&i.NetworkPolicyMode,
+		&i.PodSecurityProfile,
+		&i.ResourceQuotaCpuLimit,
+		&i.ResourceQuotaMemoryLimit,
+		&i.ResourceQuotaPodCount,
 	)
 	return i, err
 }
 
 const getProjectByNameAndCluster = `-- name: GetProjectByNameAndCluster :one
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects WHERE name = $1 AND cluster_id = $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count FROM projects WHERE name = $1 AND cluster_id = $2
 `
 
 type GetProjectByNameAndClusterParams struct {
@@ -197,6 +217,10 @@ func (q *Queries) GetProjectByNameAndCluster(ctx context.Context, arg GetProject
 		&i.UpdatedAt,
 		&i.LimitRange,
 		&i.NetworkPolicyMode,
+		&i.PodSecurityProfile,
+		&i.ResourceQuotaCpuLimit,
+		&i.ResourceQuotaMemoryLimit,
+		&i.ResourceQuotaPodCount,
 	)
 	return i, err
 }
@@ -271,7 +295,7 @@ func (q *Queries) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectsParams struct {
@@ -301,6 +325,10 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 			&i.UpdatedAt,
 			&i.LimitRange,
 			&i.NetworkPolicyMode,
+			&i.PodSecurityProfile,
+			&i.ResourceQuotaCpuLimit,
+			&i.ResourceQuotaMemoryLimit,
+			&i.ResourceQuotaPodCount,
 		); err != nil {
 			return nil, err
 		}
@@ -313,7 +341,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 }
 
 const listProjectsByCluster = `-- name: ListProjectsByCluster :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListProjectsByClusterParams struct {
@@ -344,6 +372,10 @@ func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByC
 			&i.UpdatedAt,
 			&i.LimitRange,
 			&i.NetworkPolicyMode,
+			&i.PodSecurityProfile,
+			&i.ResourceQuotaCpuLimit,
+			&i.ResourceQuotaMemoryLimit,
+			&i.ResourceQuotaPodCount,
 		); err != nil {
 			return nil, err
 		}
@@ -385,25 +417,33 @@ func (q *Queries) MarkProjectNamespaceReconciled(ctx context.Context, arg MarkPr
 
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET
-    display_name        = $2,
-    description         = $3,
-    namespaces          = $4,
-    resource_quota      = $5,
-    limit_range         = $6,
-    network_policy_mode = $7,
-    updated_at          = now()
+    display_name                  = $2,
+    description                   = $3,
+    namespaces                    = $4,
+    resource_quota                = $5,
+    limit_range                   = $6,
+    network_policy_mode           = $7,
+    pod_security_profile          = $8,
+    resource_quota_cpu_limit      = $9,
+    resource_quota_memory_limit   = $10,
+    resource_quota_pod_count      = $11,
+    updated_at                    = now()
 WHERE id = $1
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count
 `
 
 type UpdateProjectParams struct {
-	ID                uuid.UUID       `json:"id"`
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	Namespaces        json.RawMessage `json:"namespaces"`
-	ResourceQuota     json.RawMessage `json:"resource_quota"`
-	LimitRange        json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode string          `json:"network_policy_mode"`
+	ID                       uuid.UUID       `json:"id"`
+	DisplayName              string          `json:"display_name"`
+	Description              string          `json:"description"`
+	Namespaces               json.RawMessage `json:"namespaces"`
+	ResourceQuota            json.RawMessage `json:"resource_quota"`
+	LimitRange               json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode        string          `json:"network_policy_mode"`
+	PodSecurityProfile       string          `json:"pod_security_profile"`
+	ResourceQuotaCpuLimit    string          `json:"resource_quota_cpu_limit"`
+	ResourceQuotaMemoryLimit string          `json:"resource_quota_memory_limit"`
+	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -415,6 +455,10 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.ResourceQuota,
 		arg.LimitRange,
 		arg.NetworkPolicyMode,
+		arg.PodSecurityProfile,
+		arg.ResourceQuotaCpuLimit,
+		arg.ResourceQuotaMemoryLimit,
+		arg.ResourceQuotaPodCount,
 	)
 	var i Project
 	err := row.Scan(
@@ -430,6 +474,63 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.UpdatedAt,
 		&i.LimitRange,
 		&i.NetworkPolicyMode,
+		&i.PodSecurityProfile,
+		&i.ResourceQuotaCpuLimit,
+		&i.ResourceQuotaMemoryLimit,
+		&i.ResourceQuotaPodCount,
+	)
+	return i, err
+}
+
+const updateProjectPolicy = `-- name: UpdateProjectPolicy :one
+UPDATE projects SET
+    pod_security_profile          = $2,
+    resource_quota_cpu_limit      = $3,
+    resource_quota_memory_limit   = $4,
+    resource_quota_pod_count      = $5,
+    updated_at                    = now()
+WHERE id = $1
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count
+`
+
+type UpdateProjectPolicyParams struct {
+	ID                       uuid.UUID `json:"id"`
+	PodSecurityProfile       string    `json:"pod_security_profile"`
+	ResourceQuotaCpuLimit    string    `json:"resource_quota_cpu_limit"`
+	ResourceQuotaMemoryLimit string    `json:"resource_quota_memory_limit"`
+	ResourceQuotaPodCount    int32     `json:"resource_quota_pod_count"`
+}
+
+// Updates only the per-project policy fields without touching membership /
+// namespaces / description metadata. Used by the policy PATCH endpoint so an
+// admin can retune PSS / quota without re-asserting the project's namespace
+// list (which would cause an unnecessary reconcile cascade).
+func (q *Queries) UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPolicyParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProjectPolicy,
+		arg.ID,
+		arg.PodSecurityProfile,
+		arg.ResourceQuotaCpuLimit,
+		arg.ResourceQuotaMemoryLimit,
+		arg.ResourceQuotaPodCount,
+	)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Description,
+		&i.ClusterID,
+		&i.Namespaces,
+		&i.ResourceQuota,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LimitRange,
+		&i.NetworkPolicyMode,
+		&i.PodSecurityProfile,
+		&i.ResourceQuotaCpuLimit,
+		&i.ResourceQuotaMemoryLimit,
+		&i.ResourceQuotaPodCount,
 	)
 	return i, err
 }

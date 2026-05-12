@@ -773,18 +773,22 @@ type PodSecurityTemplate struct {
 }
 
 type Project struct {
-	ID                uuid.UUID       `json:"id"`
-	Name              string          `json:"name"`
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	ClusterID         uuid.UUID       `json:"cluster_id"`
-	Namespaces        json.RawMessage `json:"namespaces"`
-	ResourceQuota     json.RawMessage `json:"resource_quota"`
-	CreatedByID       pgtype.UUID     `json:"created_by_id"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	LimitRange        json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode string          `json:"network_policy_mode"`
+	ID                       uuid.UUID       `json:"id"`
+	Name                     string          `json:"name"`
+	DisplayName              string          `json:"display_name"`
+	Description              string          `json:"description"`
+	ClusterID                uuid.UUID       `json:"cluster_id"`
+	Namespaces               json.RawMessage `json:"namespaces"`
+	ResourceQuota            json.RawMessage `json:"resource_quota"`
+	CreatedByID              pgtype.UUID     `json:"created_by_id"`
+	CreatedAt                time.Time       `json:"created_at"`
+	UpdatedAt                time.Time       `json:"updated_at"`
+	LimitRange               json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode        string          `json:"network_policy_mode"`
+	PodSecurityProfile       string          `json:"pod_security_profile"`
+	ResourceQuotaCpuLimit    string          `json:"resource_quota_cpu_limit"`
+	ResourceQuotaMemoryLimit string          `json:"resource_quota_memory_limit"`
+	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
 }
 
 type ProjectNamespace struct {

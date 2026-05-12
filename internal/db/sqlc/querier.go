@@ -506,6 +506,11 @@ type Querier interface {
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdatePodSecurityTemplate(ctx context.Context, arg UpdatePodSecurityTemplateParams) (PodSecurityTemplate, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
+	// Updates only the per-project policy fields without touching membership /
+	// namespaces / description metadata. Used by the policy PATCH endpoint so an
+	// admin can retune PSS / quota without re-asserting the project's namespace
+	// list (which would cause an unnecessary reconcile cascade).
+	UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPolicyParams) (Project, error)
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (ProjectRole, error)
 	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
 	UpdateRestoreOperationFailed(ctx context.Context, arg UpdateRestoreOperationFailedParams) error
