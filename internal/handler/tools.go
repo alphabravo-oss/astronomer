@@ -21,6 +21,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -66,6 +67,19 @@ type ToolHandler struct {
 	// maintenanceGate is the migration-057 hook on tool.{install,
 	// upgrade,uninstall}. Optional + nil-safe; see clusters.SetMaintenanceGate.
 	maintenanceGate *MaintenanceGate
+	// vaultResolver substitutes ${vault://...} markers in the values
+	// YAML right before the tool install / upgrade task is enqueued.
+	// Migration 067. Nil-safe — see vaultResolveBlob in vault_hook.go.
+	vaultResolver *avault.Resolver
+}
+
+// SetVaultResolver wires the Vault resolver used to substitute
+// ${vault://...} markers in tool preset values at install time.
+func (h *ToolHandler) SetVaultResolver(r *avault.Resolver) {
+	if h == nil {
+		return
+	}
+	h.vaultResolver = r
 }
 
 func NewToolHandler(queries ToolQuerier) *ToolHandler {
@@ -380,13 +394,24 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadRequest, "wrong_cluster_scope", msg)
 		return
 	}
+	// Migration 067 — resolve ${vault://...} markers in the values
+	// blob in-memory before enqueueing the install task. The
+	// installed_charts row (written by the worker) keeps the original
+	// blob from the preset, so a rotated secret takes effect on next
+	// upgrade. Tools install at cluster scope; unqualified vault refs
+	// require the explicit "${vault://<connection>/...}" form.
+	resolvedYAML, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, valuesYAML)
+	if vaultErr != nil {
+		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		return
+	}
 	op, err := h.enqueueOperation(r.Context(), "tool_installation", operationTargetKey(clusterID, tool.Slug), "install", toolOperationEnvelope{
 		ClusterID:   req.ClusterID,
 		ToolSlug:    tool.Slug,
 		ReleaseName: releaseName,
 		Namespace:   chartNamespace(tool, chart),
 		Preset:      req.Preset,
-		ValuesYAML:  valuesYAML,
+		ValuesYAML:  resolvedYAML,
 		ChartName:   chart.ChartName,
 		RepoURL:     chart.RepoURL,
 		Version:     tool.VersionConstraint,
@@ -439,13 +464,20 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	}
 	releaseName := existing.ReleaseName
 	chartID := existing.ID
+	// Migration 067 — resolve vault refs before enqueue. Same rules
+	// as the Install path: original blob persists, resolved blob ships.
+	resolvedYAML, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, valuesYAML)
+	if vaultErr != nil {
+		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		return
+	}
 	op, err := h.enqueueOperation(r.Context(), "tool_installation", operationTargetKey(clusterID, tool.Slug), "upgrade", toolOperationEnvelope{
 		ClusterID:      req.ClusterID,
 		ToolSlug:       tool.Slug,
 		ReleaseName:    releaseName,
 		Namespace:      existing.Namespace,
 		Preset:         req.Preset,
-		ValuesYAML:     valuesYAML,
+		ValuesYAML:     resolvedYAML,
 		ChartName:      chart.ChartName,
 		RepoURL:        chart.RepoURL,
 		Version:        tool.VersionConstraint,

@@ -26,6 +26,7 @@ import {
   FileSearch,
   Network,
   FolderTree,
+  KeyRound,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -101,6 +102,12 @@ const CARDS: SettingsCard[] = [
     title: 'Dashboard widgets',
     description: 'Prometheus sparklines, Grafana panels, and URL iframes pinned to dashboards.',
     icon: LayoutDashboard,
+  },
+  {
+    href: '/dashboard/settings/vault',
+    title: 'Vault connections',
+    description: 'HashiCorp Vault sources for ${vault://...} install-time secret refs.',
+    icon: KeyRound,
   },
   {
     href: '/dashboard/settings/general',

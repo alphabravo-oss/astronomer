@@ -222,6 +222,10 @@ type RouterDependencies struct {
 	// hierarchy over clusters (migration 066). Tree depth capped at 3
 	// (root + 2 levels). Nil-safe: omitted from the router when not wired.
 	ClusterGroups *handler.ClusterGroupHandler
+	// Vault owns /api/v1/admin/vault-connections/* (superuser) +
+	// /api/v1/projects/{id}/default-vault-connection/ (project RBAC).
+	// Migration 067. Nil-safe: when not wired the routes are omitted.
+	Vault *handler.VaultHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -1002,6 +1006,20 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/{id}/clusters/", deps.ClusterGroups.ListClusters)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/move/", deps.ClusterGroups.MoveClusters)
 		})
+	}
+
+	// Vault integration (migration 067).
+	if deps.Vault != nil {
+		r.Get("/admin/vault-connections/", deps.Vault.List)
+		r.Post("/admin/vault-connections/", deps.Vault.Create)
+		r.Get("/admin/vault-connections/{id}/", deps.Vault.Get)
+		r.Put("/admin/vault-connections/{id}/", deps.Vault.Update)
+		r.Delete("/admin/vault-connections/{id}/", deps.Vault.Delete)
+		r.Post("/admin/vault-connections/{id}/test/", deps.Vault.Test)
+		r.Post("/admin/vault-connections/{id}/health/", deps.Vault.Health)
+
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{id}/default-vault-connection/", deps.Vault.GetProjectDefault)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{id}/default-vault-connection/", deps.Vault.PutProjectDefault)
 	}
 
 	if deps.Tools != nil {
