@@ -510,7 +510,11 @@ func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, backups, total)
+	items := make([]BackupResponse, 0, len(backups))
+	for _, b := range backups {
+		items = append(items, backupToResponse(b))
+	}
+	RespondPaginated(w, r, items, total)
 }
 
 // CreateBackupRequest represents the request body for creating a backup.
@@ -592,7 +596,7 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		"on_demand":   true,
 	})
 
-	RespondJSON(w, http.StatusCreated, backup)
+	RespondJSON(w, http.StatusCreated, backupToResponse(backup))
 }
 
 // GetBackup handles GET /api/v1/backups/{id}/.
@@ -609,7 +613,7 @@ func (h *BackupHandler) GetBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, backup)
+	RespondJSON(w, http.StatusOK, backupToResponse(backup))
 }
 
 // DeleteBackup handles DELETE /api/v1/backups/{id}/.
@@ -653,7 +657,11 @@ func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, schedules, total)
+	items := make([]BackupScheduleResponse, 0, len(schedules))
+	for _, s := range schedules {
+		items = append(items, backupScheduleToResponse(s))
+	}
+	RespondPaginated(w, r, items, total)
 }
 
 // CreateScheduleRequest represents the request body for creating a backup schedule.
@@ -752,7 +760,7 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		"retention_count": schedule.RetentionCount,
 	})
 
-	RespondJSON(w, http.StatusCreated, schedule)
+	RespondJSON(w, http.StatusCreated, backupScheduleToResponse(schedule))
 }
 
 // GetSchedule handles GET /api/v1/backups/schedules/{id}/.
@@ -767,7 +775,7 @@ func (h *BackupHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "not_found", "Schedule not found")
 		return
 	}
-	RespondJSON(w, http.StatusOK, schedule)
+	RespondJSON(w, http.StatusOK, backupScheduleToResponse(schedule))
 }
 
 // DeleteSchedule handles DELETE /api/v1/backups/schedules/{id}/.
@@ -877,7 +885,7 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		"enabled":         schedule.Enabled,
 	})
 
-	RespondJSON(w, http.StatusOK, schedule)
+	RespondJSON(w, http.StatusOK, backupScheduleToResponse(schedule))
 }
 
 // TriggerSchedule handles POST /api/v1/backups/schedules/{id}/trigger-now/.
@@ -942,7 +950,7 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 		"backup_name": backup.Name,
 	})
 
-	RespondJSON(w, http.StatusCreated, backup)
+	RespondJSON(w, http.StatusCreated, backupToResponse(backup))
 }
 
 // --- Restore ---
@@ -1010,7 +1018,7 @@ func (h *BackupHandler) CreateRestore(w http.ResponseWriter, r *http.Request) {
 		"included_namespaces": req.IncludedNamespaces,
 	})
 
-	RespondJSON(w, http.StatusCreated, restore)
+	RespondJSON(w, http.StatusCreated, restoreOperationToResponse(restore))
 }
 
 // CreateRestoreByBackup is a compatibility alias for CreateRestore.
@@ -1038,7 +1046,11 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, restores, total)
+	items := make([]RestoreOperationResponse, 0, len(restores))
+	for _, row := range restores {
+		items = append(items, restoreOperationToResponse(row))
+	}
+	RespondPaginated(w, r, items, total)
 }
 
 // --- helpers ---
