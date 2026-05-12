@@ -35,6 +35,15 @@ type SSOQuerier interface {
 	auth.GroupSyncQuerier
 }
 
+// SSOSessionWriter is the narrow surface the SSO callback uses to persist
+// the upstream id_token + end_session_endpoint for the single sign-out
+// flow (migration 054). Optional: when nil (e.g. tests / pre-DB
+// bootstrap), the callback skips the persistence and Logout degrades to
+// "local JWT revoked, no upstream redirect".
+type SSOSessionWriter interface {
+	InsertSSOSession(ctx context.Context, arg sqlc.InsertSSOSessionParams) error
+}
+
 // SSORBACInvalidator narrows the RBAC cache hook the SSO callback uses to
 // dump a user's cached bindings after a group-sync run mutated them.
 // Optional: tests + degenerate installs pass nil and the call is a no-op.
@@ -57,6 +66,18 @@ type SSOHandler struct {
 	// after 10 minutes; callbacks must arrive in that window.
 	mu     sync.Mutex
 	states map[string]ssoState
+
+	// sessionWriter persists the upstream id_token + end_session_endpoint
+	// to the sso_sessions table so the Logout endpoint can drive
+	// RP-initiated logout against the IdP (migration 054). Optional —
+	// when nil, SLO is unavailable and Logout falls back to "local JWT
+	// revoked only".
+	sessionWriter SSOSessionWriter
+
+	// encryptor wraps the upstream id_token at rest. Required by the
+	// session writer path; the writer is silently skipped when this is
+	// nil so dev / test stacks without an encryption key still boot.
+	encryptor *auth.Encryptor
 }
 
 type ssoState struct {
@@ -95,6 +116,29 @@ func (h *SSOHandler) SetRBACCacheInvalidator(inv SSORBACInvalidator) {
 		return
 	}
 	h.rbacCache = inv
+}
+
+// SetSSOSessionWriter wires the sso_sessions writer used by Callback to
+// persist the upstream id_token + end_session_endpoint for the SLO
+// flow. Idempotent; passing nil disables SLO and the Logout endpoint
+// falls back to "JWT revoked locally only".
+func (h *SSOHandler) SetSSOSessionWriter(w SSOSessionWriter) {
+	if h == nil {
+		return
+	}
+	h.sessionWriter = w
+}
+
+// SetEncryptor wires the Fernet encryptor used to wrap the upstream
+// id_token before it lands in sso_sessions. Idempotent; passing nil
+// disables SLO persistence (the upstream id_token would otherwise be
+// stored plaintext, which is bearer-equivalent — strictly worse than
+// just degrading to local-only logout).
+func (h *SSOHandler) SetEncryptor(e *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = e
 }
 
 // Login redirects the user to the provider's authorization URL after stashing
@@ -207,6 +251,14 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		_ = h.queries.UpdateUserLastLogin(r.Context(), user.ID)
 	}
 
+	// Persist the upstream SSO session so Logout can drive RP-initiated
+	// logout against the IdP (migration 054 / NIST 800-53 AC-12). Best-
+	// effort: any persistence failure logs through the audit row but
+	// must NOT block the login response — the user is already
+	// authenticated. The Logout fallback ("JWT revoked locally only")
+	// covers the degraded path.
+	h.persistSSOSession(r, user.ID, provider, access, info)
+
 	if provisioned {
 		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: user.ID, Valid: true},
 			"sso.user_provisioned", "user", user.ID.String(), user.Username, map[string]any{
@@ -238,6 +290,87 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	q.Set("provider", provider)
 	target.RawQuery = q.Encode()
 	http.Redirect(w, r, target.String(), http.StatusFound)
+}
+
+// persistSSOSession stores the upstream id_token + cached end_session
+// endpoint into sso_sessions, keyed by the access JWT's JTI. Best-
+// effort: every failure short-circuits to an audit row + no-op so the
+// login response is unaffected. SLO is degraded ("JWT revoked locally
+// only") whenever:
+//
+//   - sessionWriter or encryptor isn't wired (dev / pre-DB bootstrap);
+//   - the upstream id_token is empty (non-OIDC providers — GitHub /
+//     Google's userinfo path);
+//   - Fernet encryption fails (cipher misconfigured);
+//   - the access token can't be re-parsed for its JTI (this should be
+//     impossible because we just minted it, but we never trust
+//     "shouldn't happen" — we fall through to local-only logout).
+//
+// Encrypted at rest because the id_token is bearer-equivalent while
+// it's valid. Never logged.
+func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provider, accessToken string, info *auth.SSOUserInfo) {
+	if h == nil {
+		return
+	}
+	if h.sessionWriter == nil || h.encryptor == nil {
+		return
+	}
+	if info == nil || info.UpstreamIDToken == "" {
+		// Non-OIDC provider (GitHub orgs / Google userinfo): no
+		// id_token to hint with, so SLO is structurally unavailable.
+		// Surface it once so an operator wondering why "logout doesn't
+		// kick me out of GitHub" can find the answer in the audit
+		// stream.
+		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
+			"sso.session_skipped", "user", userID.String(), "", map[string]any{
+				"provider": provider,
+				"reason":   "no_upstream_id_token",
+			})
+		return
+	}
+	// Re-parse the access JWT to recover its JTI + exp. The token is
+	// freshly minted by us and just round-tripped through string
+	// formatting, so this is guaranteed to validate — but we still
+	// degrade gracefully because the alternative is panicking on an
+	// "impossible" condition that mutates if the JWT layer ever
+	// changes.
+	claims, err := h.jwt.ValidateToken(accessToken)
+	if err != nil {
+		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
+			"sso.session_skipped", "user", userID.String(), "", map[string]any{
+				"provider": provider,
+				"reason":   "jwt_parse_failed",
+			})
+		return
+	}
+	if claims.ID == "" || claims.ExpiresAt == nil {
+		return
+	}
+	cipher, err := h.encryptor.Encrypt(info.UpstreamIDToken)
+	if err != nil {
+		// Same audit + degrade. The user has a valid JWT; SLO just
+		// won't be available for this session.
+		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
+			"sso.session_skipped", "user", userID.String(), "", map[string]any{
+				"provider": provider,
+				"reason":   "encrypt_failed",
+			})
+		return
+	}
+	if err := h.sessionWriter.InsertSSOSession(r.Context(), sqlc.InsertSSOSessionParams{
+		Jti:                      claims.ID,
+		UserID:                   userID,
+		ProviderName:             provider,
+		UpstreamIdTokenEncrypted: cipher,
+		EndSessionEndpoint:       info.EndSessionEndpoint,
+		ExpiresAt:                claims.ExpiresAt.Time,
+	}); err != nil {
+		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
+			"sso.session_skipped", "user", userID.String(), "", map[string]any{
+				"provider": provider,
+				"reason":   "db_write_failed",
+			})
+	}
 }
 
 // syncGroupsFromClaims fires the migration-042 reconciliation against

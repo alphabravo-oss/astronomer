@@ -69,6 +69,29 @@ var (
 			Help:      "Number of users with a confirmed TOTP enrollment row.",
 		},
 	)
+
+	// SSOLogoutsTotal partitions single sign-out outcomes by provider so
+	// the SOC 2 dashboard can show "% of logouts that successfully
+	// terminated the upstream session". `outcome` is one of
+	// {"redirected", "no_endpoint", "no_session", "encrypt_error",
+	// "backchannel_ok", "backchannel_failed"}.
+	//
+	//   redirected         — RP-initiated logout URL returned to client
+	//   no_endpoint        — IdP didn't advertise end_session_endpoint
+	//   no_session         — caller's JTI had no sso_sessions row
+	//                        (local-password login, or already cleaned up)
+	//   encrypt_error      — id_token decrypt failed; falling back to
+	//                        local-only revocation
+	//   backchannel_ok     — admin force-logout fired upstream POST OK
+	//   backchannel_failed — admin force-logout upstream POST failed
+	SSOLogoutsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Name:      "auth_sso_logouts_total",
+			Help:      "Total number of single sign-out attempts, by provider + outcome.",
+		},
+		observability.MetricLabels("provider", "outcome"),
+	)
 )
 
 // RegisterAuthMetrics is idempotent; tests that spin up multiple
@@ -82,6 +105,7 @@ func RegisterAuthMetrics() {
 			APITokenDeniedTotal,
 			TOTPVerifiesTotal,
 			TOTPEnrollmentsGauge,
+			SSOLogoutsTotal,
 		} {
 			if err := prometheus.Register(c); err != nil {
 				if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {

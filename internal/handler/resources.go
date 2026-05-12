@@ -39,6 +39,55 @@ type ResourceHandler struct {
 	// emails is the optional email-enqueue hook used by the admin
 	// UnlockUser path to FYI the user. Optional; best-effort.
 	emails EmailNotifier
+	// ssoSessions surfaces the sso_sessions reader/deleter used by
+	// admin force-logout (migration 054) to fire upstream back-channel
+	// logout against every device the target user is signed in from.
+	// Optional; nil keeps the legacy behaviour where force-logout
+	// only stamps tokens_invalidated_at.
+	ssoSessions ResourceSSOSessionStore
+	// ssoBackchannel posts the upstream end_session POST when the
+	// admin path is run. Optional; nil disables back-channel logout
+	// and force-logout falls back to "local invalidation + delete
+	// rows" (the user's existing browsers redirect-loop on next
+	// request because the JWT cutoff was stamped).
+	ssoBackchannel SSOBackchannelClient
+}
+
+// ResourceSSOSessionStore is the narrow sso_sessions surface the
+// admin force-logout handler uses to enumerate + clear a target
+// user's upstream sessions.
+type ResourceSSOSessionStore interface {
+	ListSSOSessionsByUser(ctx context.Context, userID uuid.UUID) ([]sqlc.SsoSession, error)
+	DeleteSSOSessionsByUser(ctx context.Context, userID uuid.UUID) error
+}
+
+// SSOBackchannelClient fires the upstream RP-initiated logout POST.
+// Implemented in production by a tiny http.Client wrapper; tests
+// substitute a recorder. The method intentionally returns nothing
+// useful — the caller emits a metric + audit but never blocks on
+// upstream success, because some IdPs don't implement back-channel
+// logout at all.
+type SSOBackchannelClient interface {
+	PostEndSession(ctx context.Context, endpoint, idTokenHint string) error
+}
+
+// SetSSOSessionStore wires the sso_sessions reader/deleter into the
+// admin handler. Optional; nil keeps the pre-054 force-logout shape.
+func (h *ResourceHandler) SetSSOSessionStore(s ResourceSSOSessionStore) {
+	if h == nil {
+		return
+	}
+	h.ssoSessions = s
+}
+
+// SetSSOBackchannelClient wires the back-channel logout POSTer.
+// Optional; nil disables the upstream POST and force-logout falls
+// back to "stamp cutoff + delete rows".
+func (h *ResourceHandler) SetSSOBackchannelClient(c SSOBackchannelClient) {
+	if h == nil {
+		return
+	}
+	h.ssoBackchannel = c
 }
 
 // SetEmailNotifier wires the email-enqueue hook.

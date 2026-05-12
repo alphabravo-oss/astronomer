@@ -65,6 +65,25 @@ type SSOUserInfo struct {
 	Organizations []string `json:"organizations,omitempty"` // GitHub orgs
 	Domain        string   `json:"domain,omitempty"`        // Google hosted domain
 	Groups        []string `json:"groups,omitempty"`        // OIDC groups claim
+
+	// UpstreamIDToken is the raw upstream id_token returned by the OIDC
+	// IdP. The SSO handler persists this (Fernet-encrypted) into the
+	// sso_sessions row so the Logout endpoint can drive RP-initiated
+	// logout — `id_token_hint=<this>` is a required parameter of the
+	// OIDC end_session redirect (RFC 1.0 RP-initiated logout).
+	// Empty for non-OIDC providers (GitHub / Google's userinfo path) —
+	// those providers don't support RP-initiated logout and the Logout
+	// handler degrades to "JWT revoked locally, no upstream redirect".
+	// Never logged. Never serialised over the wire to the browser.
+	UpstreamIDToken string `json:"-"`
+
+	// EndSessionEndpoint is the upstream OIDC end_session_endpoint URL,
+	// pulled from the IdP's discovery document at callback time. Stored
+	// onto the sso_sessions row so Logout doesn't have to re-fetch
+	// /.well-known/openid-configuration. Empty when the IdP doesn't
+	// advertise an end_session_endpoint (Logout then degrades to
+	// "JWT revoked locally").
+	EndSessionEndpoint string `json:"-"`
 }
 
 // SSOManager manages OAuth2/SSO flows.
@@ -413,8 +432,17 @@ func (m *SSOManager) fetchGenericOIDCUserInfo(ctx context.Context, p *SSOProvide
 
 	if p.IssuerURL == "" {
 		// Legacy path: parse-without-verify. Used by the original "oidc"
-		// alias before discovery was wired up.
-		return m.fetchOIDCUserInfo(token)
+		// alias before discovery was wired up. SLO is not supported on
+		// this path because we don't have a verified end_session
+		// endpoint — the unverified id_token still flows through so the
+		// degraded "local revoke only" Logout still has the
+		// id_token_hint available if discovery is added later.
+		info, err := m.fetchOIDCUserInfo(token)
+		if err != nil {
+			return nil, err
+		}
+		info.UpstreamIDToken = rawIDToken
+		return info, nil
 	}
 
 	claims, err := m.discoveryClient().ValidateIDToken(ctx, rawIDToken, p.IssuerURL, p.ClientID)
@@ -434,15 +462,28 @@ func (m *SSOManager) fetchGenericOIDCUserInfo(ctx context.Context, p *SSOProvide
 		firstName, lastName = splitName(claims.Name)
 	}
 
+	// Look up the cached discovery doc so we can stamp the
+	// end_session_endpoint onto the sso_sessions row at issuance time.
+	// FetchDiscovery is cached + cheap; on a miss it does one HTTP
+	// round-trip which the callback can afford. An IdP that doesn't
+	// advertise end_session_endpoint just yields an empty string and
+	// SLO degrades to local-only revocation.
+	endSession := ""
+	if doc, derr := m.discoveryClient().FetchDiscovery(ctx, p.IssuerURL); derr == nil && doc != nil {
+		endSession = doc.EndSessionEndpoint
+	}
+
 	return &SSOUserInfo{
-		Email:     claims.Email,
-		Username:  username,
-		FirstName: firstName,
-		LastName:  lastName,
-		AvatarURL: claims.Picture,
-		Provider:  strings.ToLower(p.Name),
-		Groups:    claims.Groups,
-		Domain:    claims.HostedDomain,
+		Email:              claims.Email,
+		Username:           username,
+		FirstName:          firstName,
+		LastName:           lastName,
+		AvatarURL:          claims.Picture,
+		Provider:           strings.ToLower(p.Name),
+		Groups:             claims.Groups,
+		Domain:             claims.HostedDomain,
+		UpstreamIDToken:    rawIDToken,
+		EndSessionEndpoint: endSession,
 	}, nil
 }
 

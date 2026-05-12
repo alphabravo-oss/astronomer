@@ -365,13 +365,77 @@ func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request
 		// confirmed valid doesn't stick around for one more TTL.
 		h.jwt.InvalidateCache()
 	}
+
+	// Single sign-out clean-up (migration 054). When sso_sessions is
+	// wired we additionally:
+	//   1. Enumerate every active upstream session for the target
+	//      user. Best-effort — DB errors here don't block force-
+	//      logout because the JWT cutoff stamped above already
+	//      neutralises every in-flight session at the next request.
+	//   2. Fire a back-channel end-session POST against each one. Some
+	//      IdPs (mostly Dex with native OIDC connectors + Okta/Auth0
+	//      with back-channel-logout enabled) honour this and tear
+	//      down the upstream session immediately. Many don't —
+	//      including Dex's SAML connectors — but the per-attempt
+	//      metric tells the operator which providers worked.
+	//   3. Delete every sso_sessions row so the encrypted id_tokens
+	//      don't sit at rest after the user has been forced out.
+	sessionsCleared := 0
+	backchannelOK := 0
+	backchannelFailed := 0
+	if h.ssoSessions != nil {
+		sessions, err := h.ssoSessions.ListSSOSessionsByUser(r.Context(), id)
+		if err == nil {
+			sessionsCleared = len(sessions)
+			// Only fire upstream POSTs when both the back-channel
+			// client AND the encryptor are wired (we need the
+			// plaintext id_token to put in the body). Both are
+			// optional at startup — without the encryptor the row's
+			// id_token is unreadable.
+			if h.ssoBackchannel != nil && h.encryptor != nil {
+				for _, s := range sessions {
+					if s.EndSessionEndpoint == "" {
+						continue
+					}
+					idToken, derr := h.encryptor.Decrypt(s.UpstreamIdTokenEncrypted)
+					if derr != nil {
+						backchannelFailed++
+						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "encrypt_error")...).Inc()
+						continue
+					}
+					if perr := h.ssoBackchannel.PostEndSession(r.Context(), s.EndSessionEndpoint, idToken); perr != nil {
+						backchannelFailed++
+						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "backchannel_failed")...).Inc()
+					} else {
+						backchannelOK++
+						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "backchannel_ok")...).Inc()
+					}
+				}
+			}
+			// Drop the rows regardless — the JWT cutoff makes them
+			// unusable for SLO and they only expose encrypted
+			// id_tokens at rest after this point.
+			if derr := h.ssoSessions.DeleteSSOSessionsByUser(r.Context(), id); derr != nil {
+				// Best-effort: log + audit but don't 5xx the admin
+				// path. The retention cron will sweep these later.
+				_ = derr
+			}
+		}
+	}
+
 	recordAudit(r, h.queries, "admin.user.force_logged_out", "user", existing.ID.String(), existing.Username, map[string]any{
-		"tokens_invalidated_at": now.UTC().Format(time.RFC3339),
+		"tokens_invalidated_at":  now.UTC().Format(time.RFC3339),
+		"sso_sessions_cleared":   sessionsCleared,
+		"sso_backchannel_ok":     backchannelOK,
+		"sso_backchannel_failed": backchannelFailed,
 	})
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
 		"success":                true,
 		"message":                "All active sessions invalidated",
 		"tokens_invalidated_at":  now.UTC().Format(time.RFC3339),
+		"sso_sessions_cleared":   sessionsCleared,
+		"sso_backchannel_ok":     backchannelOK,
+		"sso_backchannel_failed": backchannelFailed,
 	})
 }
 
