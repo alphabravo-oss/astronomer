@@ -1,8 +1,7 @@
 'use client';
 
-import { useClusters, useActivityFeed, queryKeys } from '@/lib/hooks';
+import { useClusters, useActivityFeed, useAlertEvents, useTools, queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
-import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
@@ -14,17 +13,22 @@ import {
   WifiOff,
   Loader2,
   ArrowRight,
+  PackagePlus,
+  TerminalSquare,
+  Bell,
+  Boxes,
+  ShieldCheck,
+  Package,
+  Layers,
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
-  const { data: activityData, isLoading: activityLoading } = useActivityFeed(15);
+  const { data: activityData, isLoading: activityLoading } = useActivityFeed(10);
+  const { data: alertEventsData } = useAlertEvents({ status: 'firing' });
+  const { data: toolsData } = useTools();
 
-  // Refresh activity + cluster summaries on any cluster lifecycle event.
-  // The metrics merger in the layout already patches CPU/mem/pod-count in
-  // place, so we don't invalidate on `cluster.metrics` here — just on the
-  // coarser shape changes.
   useLiveQueryInvalidation(
     [
       'cluster.connected',
@@ -41,15 +45,20 @@ export default function DashboardPage() {
 
   const clusters = clustersData?.data || [];
   const activity = activityData || [];
+  const alertEvents = (alertEventsData as { data?: Array<{ severity?: string }> } | undefined)?.data || [];
+  const tools = toolsData || [];
 
   const activeClusters = clusters.filter((c) => c.status === 'active').length;
   const warningClusters = clusters.filter((c) => c.status === 'warning').length;
   const errorClusters = clusters.filter((c) => c.status === 'error' || c.status === 'disconnected').length;
   const totalNodes = clusters.reduce((acc, c) => acc + c.nodeCount, 0);
   const totalPods = clusters.reduce((acc, c) => acc + c.podCount, 0);
+  const criticalAlerts = alertEvents.filter((e) => e.severity === 'critical' || e.severity === 'error').length;
+  const warningAlerts = alertEvents.filter((e) => e.severity === 'warning').length;
+  const totalTools = Array.isArray(tools) ? tools.length : 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">
@@ -60,46 +69,84 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Custom dashboard widgets (migration 058). Hidden when no
-          widgets are configured to keep the platform overview clean
-          on a fresh install. */}
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Widgets</h2>
-        <WidgetGrid fetcher={renderGlobal} emptyHint="" />
-      </section>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <MetricCard
-          title="Total Clusters"
+      {/* At-a-glance metric strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <MetricTile
+          href="/dashboard/clusters"
+          label="Clusters"
           value={clusters.length}
+          sublabel={`${activeClusters} active`}
           icon={<Server className="h-4 w-4" />}
+          tone="default"
         />
-        <MetricCard
-          title="Active"
-          value={activeClusters}
-          subtitle={`${clusters.length > 0 ? ((activeClusters / clusters.length) * 100).toFixed(0) : 0}% healthy`}
-          icon={<Activity className="h-4 w-4" />}
-        />
-        <MetricCard
-          title="Warnings"
+        <MetricTile
+          href="/dashboard/clusters?status=warning"
+          label="Warnings"
           value={warningClusters}
+          sublabel="needs attention"
           icon={<AlertTriangle className="h-4 w-4" />}
+          tone={warningClusters > 0 ? 'warning' : 'default'}
         />
-        <MetricCard
-          title="Disconnected"
+        <MetricTile
+          href="/dashboard/clusters?status=disconnected"
+          label="Disconnected"
           value={errorClusters}
+          sublabel="agent offline"
           icon={<WifiOff className="h-4 w-4" />}
+          tone={errorClusters > 0 ? 'error' : 'default'}
         />
-        <MetricCard
-          title="Total Pods"
+        <MetricTile
+          href="/dashboard/alerting"
+          label="Open Alerts"
+          value={alertEvents.length}
+          sublabel={
+            criticalAlerts > 0 ? `${criticalAlerts} critical`
+            : warningAlerts > 0 ? `${warningAlerts} warning`
+            : 'all clear'
+          }
+          icon={<Bell className="h-4 w-4" />}
+          tone={criticalAlerts > 0 ? 'error' : warningAlerts > 0 ? 'warning' : 'default'}
+        />
+        <MetricTile
+          href="/dashboard/clusters"
+          label="Pods"
           value={totalPods.toLocaleString()}
-          subtitle={`across ${totalNodes} nodes`}
+          sublabel={`across ${totalNodes} nodes`}
+          icon={<Boxes className="h-4 w-4" />}
+          tone="default"
         />
       </div>
 
-      {/* Clusters table — full width */}
-      <section className="space-y-4">
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <ActionCard
+          href="/dashboard/clusters?register=true"
+          icon={<Server className="h-4 w-4" />}
+          title="Register cluster"
+          description="Generate an install command for a new cluster"
+        />
+        <ActionCard
+          href="/dashboard/catalog"
+          icon={<PackagePlus className="h-4 w-4" />}
+          title="Browse catalog"
+          description="Install Helm charts across your fleet"
+        />
+        <ActionCard
+          href="/dashboard/alerting"
+          icon={<Bell className="h-4 w-4" />}
+          title="Review alerts"
+          description="Acknowledge firing alerts and tune rules"
+        />
+        <ActionCard
+          href="/dashboard/projects"
+          icon={<Layers className="h-4 w-4" />}
+          title="Manage projects"
+          description="Quotas, members, and project-scoped resources"
+        />
+      </div>
+
+      {/* Clusters table */}
+      <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium text-foreground">Clusters</h2>
           <Link
@@ -112,7 +159,7 @@ export default function DashboardPage() {
         </div>
 
         {clustersLoading ? (
-          <div className="flex items-center justify-center h-48 rounded-lg border border-border">
+          <div className="flex items-center justify-center h-40 rounded-lg border border-border">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : clusters.length === 0 ? (
@@ -177,58 +224,227 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Recent Activity — below clusters, full width */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-medium text-foreground">Recent Activity</h2>
-
-        <div className="rounded-lg border border-border overflow-hidden">
-          {activityLoading ? (
-            <div className="flex items-center justify-center h-48">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : activity.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-              <Activity className="h-6 w-6 mb-2" />
-              <p className="text-sm">No recent activity</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
-              {activity.map((event) => (
-                <div key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
-                        event.type === 'cluster'
-                          ? 'bg-blue-400'
-                          : event.type === 'workload'
-                            ? 'bg-green-400'
-                            : event.type === 'deployment'
-                              ? 'bg-violet-400'
-                              : event.type === 'rbac'
-                                ? 'bg-yellow-400'
-                                : 'bg-zinc-400'
-                      }`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground leading-snug">
-                        {event.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {event.user && (
-                          <span className="text-xs text-muted-foreground">{event.user}</span>
-                        )}
-                        <span className="text-xs text-muted-foreground/60">
-                          {formatRelativeTime(event.timestamp)}
-                        </span>
+      {/* Two-column: Recent Activity (wider) + Platform health (signals) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section className="lg:col-span-2 space-y-3">
+          <h2 className="text-lg font-medium text-foreground">Recent Activity</h2>
+          <div className="rounded-lg border border-border overflow-hidden">
+            {activityLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : activity.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+                <Activity className="h-6 w-6 mb-2" />
+                <p className="text-sm">No recent activity</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+                {activity.map((event) => (
+                  <div key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
+                          event.type === 'cluster'
+                            ? 'bg-blue-400'
+                            : event.type === 'workload'
+                              ? 'bg-green-400'
+                              : event.type === 'deployment'
+                                ? 'bg-violet-400'
+                                : event.type === 'rbac'
+                                  ? 'bg-yellow-400'
+                                  : 'bg-zinc-400'
+                        }`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground leading-snug">{event.message}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {event.user && (
+                            <span className="text-xs text-muted-foreground">{event.user}</span>
+                          )}
+                          <span className="text-xs text-muted-foreground/60">
+                            {formatRelativeTime(event.timestamp)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Platform health — at-a-glance signals + drill-down links */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-medium text-foreground">Platform Health</h2>
+          <div className="rounded-lg border border-border bg-card divide-y divide-border">
+            <HealthRow
+              href="/dashboard/alerting"
+              icon={<Bell className="h-4 w-4" />}
+              label="Firing alerts"
+              value={alertEvents.length}
+              tone={criticalAlerts > 0 ? 'error' : warningAlerts > 0 ? 'warning' : 'success'}
+              hint={criticalAlerts > 0 ? `${criticalAlerts} critical` : warningAlerts > 0 ? `${warningAlerts} warning` : 'All clear'}
+            />
+            <HealthRow
+              href="/dashboard/clusters?status=disconnected"
+              icon={<WifiOff className="h-4 w-4" />}
+              label="Agent offline"
+              value={errorClusters}
+              tone={errorClusters > 0 ? 'error' : 'success'}
+              hint={errorClusters > 0 ? 'reconnect needed' : 'all reachable'}
+            />
+            <HealthRow
+              href="/dashboard/tools"
+              icon={<Package className="h-4 w-4" />}
+              label="Tools installed"
+              value={totalTools}
+              tone="default"
+              hint="across all clusters"
+            />
+            <HealthRow
+              href="/dashboard/security"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              label="Security posture"
+              value="—"
+              tone="default"
+              hint="run a scan"
+            />
+            <HealthRow
+              href="/dashboard/settings/compliance/baselines"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              label="Compliance baseline"
+              value="—"
+              tone="default"
+              hint="not applied"
+            />
+          </div>
+          <Link
+            href="/dashboard/clusters"
+            className="block text-center text-xs text-muted-foreground hover:text-foreground py-1"
+          >
+            <TerminalSquare className="inline h-3 w-3 mr-1" />
+            Open kubectl shell on any cluster
+          </Link>
+        </section>
+      </div>
+
+      {/* Custom widgets — only renders when operators have configured them.
+          Hidden via hideWhenEmpty so the dashboard stays clean on fresh
+          installs. */}
+      <section className="space-y-3">
+        <WidgetGrid fetcher={renderGlobal} hideWhenEmpty />
       </section>
     </div>
+  );
+}
+
+function MetricTile({
+  href,
+  label,
+  value,
+  sublabel,
+  icon,
+  tone,
+}: {
+  href: string;
+  label: string;
+  value: string | number;
+  sublabel?: string;
+  icon: React.ReactNode;
+  tone: 'default' | 'warning' | 'error';
+}) {
+  const toneRing =
+    tone === 'error' ? 'ring-red-500/20 hover:ring-red-500/40' :
+    tone === 'warning' ? 'ring-yellow-500/20 hover:ring-yellow-500/40' :
+    'ring-transparent';
+  const toneValue =
+    tone === 'error' ? 'text-red-500' :
+    tone === 'warning' ? 'text-yellow-500' :
+    'text-foreground';
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'block rounded-lg border border-border bg-card p-3 hover:bg-card/80 transition-all ring-2 ring-inset',
+        toneRing,
+      )}
+    >
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className={cn('mt-1 text-2xl font-semibold tabular-nums', toneValue)}>{value}</div>
+      {sublabel && <div className="text-xs text-muted-foreground mt-0.5">{sublabel}</div>}
+    </Link>
+  );
+}
+
+function ActionCard({
+  href,
+  icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-start gap-3 rounded-lg border border-border bg-card p-3 hover:bg-card/80 hover:border-foreground/20 transition-colors"
+    >
+      <div className="flex-shrink-0 w-8 h-8 rounded-md bg-muted flex items-center justify-center text-muted-foreground group-hover:text-foreground transition-colors">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-foreground">{title}</p>
+          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{description}</p>
+      </div>
+    </Link>
+  );
+}
+
+function HealthRow({
+  href,
+  icon,
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  tone: 'default' | 'warning' | 'error' | 'success';
+  hint?: string;
+}) {
+  const dot =
+    tone === 'error' ? 'bg-red-500' :
+    tone === 'warning' ? 'bg-yellow-500' :
+    tone === 'success' ? 'bg-green-500' :
+    'bg-zinc-400';
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={cn('h-2 w-2 rounded-full flex-shrink-0', dot)} />
+        <span className="text-muted-foreground flex-shrink-0">{icon}</span>
+        <span className="text-sm text-foreground truncate">{label}</span>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+        <span className="text-sm font-medium tabular-nums text-foreground">{value}</span>
+      </div>
+    </Link>
   );
 }

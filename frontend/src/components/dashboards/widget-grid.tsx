@@ -27,7 +27,7 @@ import type { RenderedWidget } from '@/lib/api/dashboards';
 
 export type WidgetFetcher = () => Promise<RenderedWidget[]>;
 
-export function WidgetGrid({ fetcher, emptyHint }: { fetcher: WidgetFetcher; emptyHint?: string }) {
+export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty }: { fetcher: WidgetFetcher; emptyHint?: string; hideWhenEmpty?: boolean }) {
   const [widgets, setWidgets] = useState<RenderedWidget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +90,7 @@ export function WidgetGrid({ fetcher, emptyHint }: { fetcher: WidgetFetcher; emp
     );
   }
   if (!widgets || widgets.length === 0) {
+    if (hideWhenEmpty) return null;
     return (
       <div className="text-sm text-muted-foreground py-4">
         {emptyHint ?? 'No widgets configured. Add one in Settings → Widgets.'}
