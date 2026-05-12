@@ -88,6 +88,9 @@ type RouterDependencies struct {
 	// SupportBundle generates a downloadable zip of platform diagnostics.
 	// Superuser-gated inside the handler itself.
 	SupportBundle *handler.SupportBundleHandler
+	// Compliance generates the SOC 2 / ISO 27001 audit-prep bundle
+	// for any date range. Superuser-gated inside the handler.
+	Compliance *handler.ComplianceHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -246,6 +249,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// non-admins get a clean 403 rather than a generic permission
 			// middleware rejection.
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/support-bundle/", deps.SupportBundle.Download)
+		}
+
+		// Compliance export bundle. Same auth pattern as
+		// /support-bundle/ — gated on superuser inside the handler.
+		// The /export/ endpoint picks streaming vs async based on
+		// the audit-row count; /exports/{id}/ polls the async job.
+		if deps.Compliance != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance/export/", deps.Compliance.Export)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance/exports/{id}/", deps.Compliance.GetExportStatus)
 		}
 
 		// Key-rotation status — surfaces how many encryption / JWT signing

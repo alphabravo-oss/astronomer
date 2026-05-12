@@ -415,6 +415,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetDBPool(database.Pool())
 			return h
 		}(),
+		// SOC 2 / ISO 27001 audit-prep bundle. Streams inline for
+		// small ranges; enqueues onto the asynq `compliance:export`
+		// queue for ranges over ~100K audit rows. Superuser-gated
+		// inside the handler.
+		Compliance: handler.NewComplianceHandler(queries, queue),
 	}
 	// EventSource cannot send Authorization headers, so the stream handler
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
