@@ -94,6 +94,13 @@ const (
 	// Migration 065 / sprint 17: in-browser kubectl shell reaper.
 	// 60s cadence — see internal/worker/tasks/kubectl_session_reap.go.
 	TypeKubectlSessionReap = tasks.KubectlSessionReapType
+	// Migration 068 / sprint 18: NetworkPolicy template reconciler.
+	//  - Apply: every 5m (+ on-demand from the handler) — drains pending/
+	//    failed/drifting rows, server-side-applies the rendered manifest.
+	//  - DriftCheck: every 30m — GET the live NetworkPolicy and mark
+	//    drifting when labels diverge from the managed-by marker.
+	TypeNetworkPolicyApply      = tasks.NetworkPolicyApplyType
+	TypeNetworkPolicyDriftCheck = tasks.NetworkPolicyDriftCheckType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -178,6 +185,9 @@ func (w *Worker) RegisterHandlers() {
 	// Migration 060: GitOps cluster registration sync.
 	w.mux.HandleFunc(tasks.GitOpsSyncType, instrumentTask(tasks.GitOpsSyncType, tasks.HandleGitOpsSync))
 	w.mux.HandleFunc(TypeKubectlSessionReap, instrumentTask(TypeKubectlSessionReap, tasks.HandleKubectlSessionReap))
+	// Migration 068: NetworkPolicy template reconciler + drift sweep.
+	w.mux.HandleFunc(TypeNetworkPolicyApply, instrumentTask(TypeNetworkPolicyApply, tasks.HandleNetworkPolicyApply))
+	w.mux.HandleFunc(TypeNetworkPolicyDriftCheck, instrumentTask(TypeNetworkPolicyDriftCheck, tasks.HandleNetworkPolicyDriftCheck))
 
 	w.log.Info("registered all task handlers")
 }

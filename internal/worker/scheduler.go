@@ -133,6 +133,15 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// in one tick. Handler exits early when the feature is disabled
 		// so the cron entry is cheap to leave registered always.
 		{"@every 60s", tasks.KubectlSessionReapType, "kubectl shell session reaper"},
+		// Migration 068 / sprint 18: NetworkPolicy template reconciler.
+		// 5m apply cadence — drains pending/failed/drifting rows via
+		// the existing tunnel K8sRequester. SSA is idempotent so
+		// converged rows fast-fail through the apply path.
+		{"@every 5m", tasks.NetworkPolicyApplyType, "network policy apply reconciler"},
+		// 30m drift sweep — GETs the live NetworkPolicy and marks
+		// 'drifting' when the managed-by label is missing or mismatched.
+		// The next apply tick re-stamps the object.
+		{"@every 30m", tasks.NetworkPolicyDriftCheckType, "network policy drift sweep"},
 	}
 
 	for _, e := range entries {
