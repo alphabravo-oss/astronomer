@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   useHelmRepositories,
   useCreateHelmRepository,
@@ -682,8 +683,15 @@ function InstallChartModal({
     [version.valuesSchema]
   );
 
+  // Sprint 23: when arriving from an empty-state CTA on a cluster
+  // detail page (e.g. "Install trivy-operator from Image Scans"), the
+  // URL carries ?cluster_id=<uuid>. Pre-populate the target dropdown so
+  // the operator doesn't have to pick again. Empty when absent.
+  const searchParams = useSearchParams();
+  const presetClusterId = searchParams?.get('cluster_id') ?? '';
+
   const [form, setForm] = useState({
-    clusterId: '',
+    clusterId: presetClusterId,
     releaseName: chart.name,
     namespace: 'default',
     valuesOverride: version.defaultValues || '',

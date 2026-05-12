@@ -18,6 +18,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { getServiceMeshDetection, type ServiceMeshKind } from '@/lib/api/cluster-detail';
+import { getRegistrationStatus, type RegistrationStatus } from '@/lib/api';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 // RegisterClusterModal removed in sprint 22 — the "show install command"
@@ -195,6 +196,7 @@ export default function ClusterDetailPage() {
               {cluster.displayName}
             </h1>
             <StatusBadge status={cluster.status} size="lg" />
+            <RegistrationPhaseHeaderBadge clusterId={clusterId} />
             {meshDetection && <MeshHeaderBadge clusterId={clusterId} mesh={meshDetection.detectedMesh} />}
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -497,6 +499,49 @@ function MeshHeaderBadge({ clusterId, mesh }: { clusterId: string; mesh: Service
       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
     >
       mesh: {label}
+    </Link>
+  );
+}
+
+// Sprint 23: compact pill showing the cluster's registration phase
+// next to its status badge. Yellow spinner on awaiting_agent +
+// provisioning, green check on ready, red X on failed. Links to the
+// Provisioning tab so one click drills into the full timeline. Hidden
+// when the cluster has no registration record (pre-sprint-22 rows).
+function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
+  const { data } = useQuery<RegistrationStatus | null>({
+    queryKey: ['cluster-registration-status', clusterId],
+    queryFn: async () => {
+      try {
+        return await getRegistrationStatus(clusterId);
+      } catch {
+        return null;
+      }
+    },
+    refetchInterval: 5000,
+  });
+  const phase = data?.phase;
+  if (!phase || phase === 'ready') return null; // collapse when done
+  const tone =
+    phase === 'failed'
+      ? 'border-red-500/30 text-red-500 bg-red-500/10'
+      : phase === 'provisioning' || phase === 'awaiting_agent' || phase === 'connected'
+        ? 'border-yellow-500/30 text-yellow-500 bg-yellow-500/10'
+        : 'border-border text-muted-foreground bg-muted/30';
+  const label =
+    phase === 'awaiting_agent' ? 'waiting for agent' :
+    phase === 'provisioning' ? 'provisioning' :
+    phase === 'connected' ? 'connected' :
+    phase === 'failed' ? 'failed' :
+    phase;
+  return (
+    <Link
+      href={`/dashboard/clusters/${clusterId}/provisioning`}
+      title="Registration phase — click for step timeline"
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+      {label}
     </Link>
   );
 }

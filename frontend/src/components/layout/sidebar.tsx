@@ -151,6 +151,7 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
       defaultOpen: true,
       items: [
         { label: 'Overview', href: base, icon: LayoutDashboard, exact: true },
+        { label: 'Provisioning', href: `${base}/provisioning`, icon: Activity },
         { label: 'Nodes', href: `${base}/nodes`, icon: Server, countKey: 'nodes' },
         { label: 'Namespaces', href: `${base}/namespaces`, icon: Layers, countKey: 'namespaces' },
         { label: 'Events', href: `${base}/events`, icon: Activity, countKey: 'events' },
