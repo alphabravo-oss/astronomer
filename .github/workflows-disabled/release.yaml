@@ -1,0 +1,133 @@
+name: release
+
+# FEATURES-051126 T12: signed images + SBOMs.
+#
+# Fires on tag push (e.g. `v0.2.0`). Builds the four chart-published
+# images, pushes them to GHCR, generates an SPDX SBOM per image with
+# syft, and signs both the image and the attestation with keyless
+# cosign (GitHub OIDC → Sigstore Fulcio).
+#
+# Verification runbook: docs/verify-images.md.
+#
+# Triggering manually (e.g. for a hotfix from a non-tag commit) is also
+# allowed via workflow_dispatch — the resulting tag in the registry is
+# the short SHA.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Override image tag (default: short SHA on dispatch, ref name on tag)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write   # push to GHCR
+  id-token: write   # cosign keyless via OIDC
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-sign:
+    name: build · sign · attest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - { name: server,  dockerfile: deploy/docker/Dockerfile.server,  imageName: astronomer-go-server }
+          - { name: worker,  dockerfile: deploy/docker/Dockerfile.worker,  imageName: astronomer-go-worker }
+          - { name: agent,   dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
+          - { name: migrate, dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.component.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}:latest
+          # The digest output is what we'll sign — signing by mutable
+          # tag is a forgery risk (the tag could change between push
+          # and sign).
+          provenance: false
+          # We attach our own SBOM below; the build-push-action's
+          # default SBOM would duplicate it.
+          sbom: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.4.1"
+
+      - name: Sign image (keyless via OIDC)
+        env:
+          # COSIGN_EXPERIMENTAL is no longer required with cosign v2 but
+          # the env var is harmless and makes the intent explicit.
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: "v1.16.0"
+
+      - name: Generate SBOM (SPDX JSON)
+        run: |
+          syft \
+            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}" \
+            -o spdx-json \
+            > sbom-${{ matrix.component.name }}.spdx.json
+          # Sanity: the file is non-empty and valid JSON
+          test -s sbom-${{ matrix.component.name }}.spdx.json
+          python3 -c "import json,sys; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
+
+      - name: Attest SBOM with cosign
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign attest --yes \
+            --predicate sbom-${{ matrix.component.name }}.spdx.json \
+            --type spdxjson \
+            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+
+      - name: Upload SBOM as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component.name }}-${{ steps.tag.outputs.tag }}
+          path: sbom-${{ matrix.component.name }}.spdx.json
+          retention-days: 90
