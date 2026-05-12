@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 
+import { useCluster } from '@/lib/hooks';
 import {
   getImageVulnReport,
   getImageVulnSummary,
@@ -73,10 +74,27 @@ export default function ClusterImageScansPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const queryClient = useQueryClient();
+  const { data: cluster } = useCluster(clusterId);
 
   const [namespace, setNamespace] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<CVESeverity | ''>('');
   const [openReport, setOpenReport] = useState<ImageVulnReport | null>(null);
+
+  if (cluster?.isLocal) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center p-4">
+        <ShieldAlert className="h-8 w-8 mb-2" />
+        <p className="text-sm font-medium text-foreground">
+          Image scans aren&apos;t available on the management plane&apos;s own cluster.
+        </p>
+        <p className="text-xs">
+          Image scanning depends on trivy-operator running in a remote cluster
+          and reachable over the agent tunnel. Register a managed cluster, install
+          trivy-operator from the Catalog, and scans will appear here.
+        </p>
+      </div>
+    );
+  }
 
   const summary = useQuery({
     queryKey: qk.summary(clusterId),

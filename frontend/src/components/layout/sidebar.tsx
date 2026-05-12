@@ -134,8 +134,17 @@ const globalNavGroups: NavGroup[] = [
 ];
 
 // Cluster-context navigation - Rancher-style resource browser
-function getClusterNavGroups(clusterId: string): NavGroup[] {
+function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}): NavGroup[] {
   const base = `/dashboard/clusters/${clusterId}`;
+  // Tabs that need a real outbound tunnel to a remote cluster agent.
+  // Hidden for the management plane's own cluster (is_local=true) where
+  // the in-cluster local-agent doesn't reliably support these flows.
+  const agentRequiredItems = opts.isLocal
+    ? []
+    : [
+        { label: 'Image Scans', href: `${base}/image-scans`, icon: ShieldAlert },
+        { label: 'Shell', href: `${base}/shell`, icon: TerminalSquare },
+      ];
   return [
     {
       label: 'Cluster',
@@ -146,13 +155,7 @@ function getClusterNavGroups(clusterId: string): NavGroup[] {
         { label: 'Namespaces', href: `${base}/namespaces`, icon: Layers, countKey: 'namespaces' },
         { label: 'Events', href: `${base}/events`, icon: Activity, countKey: 'events' },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
-        { label: 'Image Scans', href: `${base}/image-scans`, icon: ShieldAlert },
-        // Sprint 17 / migration 065: in-browser kubectl shell. The
-        // backend gates the routes on clusters:update; the link is
-        // always rendered (the page itself shows a polite 403/disabled
-        // state when the feature is off or the operator lacks the
-        // permission).
-        { label: 'Shell', href: `${base}/shell`, icon: TerminalSquare },
+        ...agentRequiredItems,
       ],
     },
     {
@@ -485,7 +488,7 @@ export function Sidebar() {
   const counts = useResourceCounts(isClusterContext ? clusterId! : '');
 
   const navGroups = isClusterContext
-    ? getClusterNavGroups(clusterId!)
+    ? getClusterNavGroups(clusterId!, { isLocal: cluster?.isLocal })
     : globalNavGroups;
 
   // Accordion state: only one group open at a time

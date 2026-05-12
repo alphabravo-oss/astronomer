@@ -76,6 +76,11 @@ export interface Cluster {
   createdAt: string;
   updatedAt: string;
   directAccessEnabled?: boolean;
+  // True for the management plane's own cluster (set by bootstrap
+  // self-registration). Features requiring a remote tunnel — kubectl
+  // shell, image-scan rescan, etc. — are hidden / disabled for is_local
+  // clusters because the in-cluster local-agent path is best-effort.
+  isLocal?: boolean;
 }
 
 // metav1.Condition-shaped row written by the health-check worker

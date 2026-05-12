@@ -9,7 +9,7 @@
 import { useParams } from 'next/navigation';
 import { useCluster } from '@/lib/hooks';
 import { ClusterShell } from '@/components/clusters/cluster-shell';
-import { Loader2, Server } from 'lucide-react';
+import { Loader2, Server, TerminalSquare } from 'lucide-react';
 
 export default function ClusterShellPage() {
   const params = useParams();
@@ -29,6 +29,23 @@ export default function ClusterShellPage() {
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <Server className="h-8 w-8 mb-3" />
         <p>Cluster not found</p>
+      </div>
+    );
+  }
+
+  if (cluster.isLocal) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center">
+        <TerminalSquare className="h-8 w-8 mb-2" />
+        <p className="text-sm font-medium text-foreground">
+          Shell isn&apos;t available on the management plane&apos;s own cluster.
+        </p>
+        <p className="text-xs">
+          The kubectl shell flow needs a real remote agent and tunnel. Use
+          <code className="mx-1 px-1.5 py-0.5 rounded bg-muted font-mono">kubectl exec</code>
+          directly against this cluster, or register a managed cluster and open
+          a shell there.
+        </p>
       </div>
     );
   }
