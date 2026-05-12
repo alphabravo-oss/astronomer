@@ -117,6 +117,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// one screen refresh. Per-tick budget is 30s — overflow rolls
 		// into the next tick (no lease held across ticks).
 		{"@every 10s", tasks.FleetOrchestrateType, "fleet operations orchestrator"},
+		// Migration 057: maintenance-window deferred-op dispatcher.
+		// 60s cadence — the dispatcher pulls rows whose deferred_until
+		// has elapsed and re-fires the queued operation through the
+		// per-op-type replayer registered at server start.
+		{"@every 60s", tasks.DispatchDeferredType, "maintenance dispatch deferred operations"},
 	}
 
 	for _, e := range entries {

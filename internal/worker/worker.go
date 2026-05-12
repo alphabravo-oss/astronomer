@@ -89,6 +89,8 @@ const (
 	// on the same operation won't re-fire sub-operations that already
 	// completed.
 	TypeFleetOrchestrate = tasks.FleetOrchestrateType
+	// Migration 057: maintenance window deferred-op dispatcher.
+	TypeDispatchDeferred = tasks.DispatchDeferredType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -169,6 +171,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
 	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
 	w.mux.HandleFunc(TypeFleetOrchestrate, instrumentTask(TypeFleetOrchestrate, tasks.HandleFleetOrchestrate))
+	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
 
 	w.log.Info("registered all task handlers")
 }

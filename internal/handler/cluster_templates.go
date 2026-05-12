@@ -35,6 +35,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -85,6 +86,9 @@ type ClusterTemplateHandler struct {
 	// asynq.Client. When nil, the handler still upserts the application
 	// row but the worker only picks it up via the periodic sweep.
 	queue ClusterTemplateEnqueuer
+	// maintenanceGate is the migration-057 hook on cluster_template.apply.
+	// Optional + nil-safe.
+	maintenanceGate *MaintenanceGate
 }
 
 // NewClusterTemplateHandler constructs the handler.
@@ -100,6 +104,15 @@ func (h *ClusterTemplateHandler) SetQueue(q ClusterTemplateEnqueuer) {
 		return
 	}
 	h.queue = q
+}
+
+// SetMaintenanceGate wires the migration-057 gate that refuses or
+// defers cluster_template.apply during an active maintenance window.
+func (h *ClusterTemplateHandler) SetMaintenanceGate(g *MaintenanceGate) {
+	if h == nil {
+		return
+	}
+	h.maintenanceGate = g
 }
 
 // Status constants for cluster_template_applications.status. Kept in
@@ -468,6 +481,12 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		return
+	}
+	// Migration 057: maintenance window gate on cluster_template.apply.
+	if EnforceMaintenanceWindow(w, r, h.maintenanceGate, "cluster_template.apply",
+		MaintenanceGateClusterLabels(cluster),
+		pgtype.UUID{Bytes: clusterID, Valid: true}, pgtype.UUID{}) {
 		return
 	}
 	var req ApplyClusterTemplateRequest

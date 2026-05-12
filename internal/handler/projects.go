@@ -72,6 +72,10 @@ type ProjectHandler struct {
 
 	reconcileOnce sync.Once
 	runTask       func(context.Context, *asynq.Task) error
+
+	// maintenanceGate is the migration-057 hook on project.delete.
+	// Optional + nil-safe; see clusters.SetMaintenanceGate.
+	maintenanceGate *MaintenanceGate
 }
 
 // NewProjectHandler creates a new project handler. Phase B3 introduces extra
@@ -107,6 +111,15 @@ func (h *ProjectHandler) SetK8sRequester(requester K8sRequester) {
 
 // SetLogger replaces the handler's logger. Optional; defaults to slog.Default.
 func (h *ProjectHandler) SetLogger(log *slog.Logger) { h.log = log }
+
+// SetMaintenanceGate wires the migration-057 maintenance-window gate
+// applied to project.delete. Optional + nil-safe.
+func (h *ProjectHandler) SetMaintenanceGate(g *MaintenanceGate) {
+	if h == nil {
+		return
+	}
+	h.maintenanceGate = g
+}
 
 // StartReconciler runs an in-process periodic sweep that re-applies every
 // project_namespaces row's enforcement objects. The cooperative DB lease in
@@ -758,6 +771,21 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+
+	// Migration 057: refuse / defer project.delete during an active
+	// maintenance window. The cluster-scope check uses the parent
+	// cluster's labels so a tier=prod cluster's projects inherit that
+	// scope without an extra label set on the project itself.
+	labels := map[string]string{}
+	if cluster, cerr := h.queries.GetClusterByID(r.Context(), project.ClusterID); cerr == nil {
+		labels = MaintenanceGateClusterLabels(cluster)
+	}
+	if EnforceMaintenanceWindow(w, r, h.maintenanceGate, "project.delete",
+		labels,
+		pgtype.UUID{Bytes: project.ClusterID, Valid: true},
+		pgtype.UUID{Bytes: id, Valid: true}) {
 		return
 	}
 
