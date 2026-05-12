@@ -76,6 +76,10 @@ type RouterDependencies struct {
 	// legacy single-row /registry/ endpoints on the cluster handler are
 	// left in place for back-compat. Nil-safe.
 	ClusterRegistries *handler.ClusterRegistriesHandler
+	// ClusterSnapshots owns /api/v1/clusters/{cluster_id}/snapshots/*,
+	// /snapshot-schedules/* and /velero-status/ — the per-cluster
+	// Velero self-service surface from migration 052. Nil-safe.
+	ClusterSnapshots *handler.ClusterSnapshotsHandler
 	Projects         *handler.ProjectHandler
 	Tools            *handler.ToolHandler
 	Audit        *handler.AuditHandler
@@ -237,6 +241,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/login/", deps.Auth.Login)
 			r.Post("/auth/refresh/", deps.Auth.Refresh)
 			r.Post("/auth/logout/", deps.Auth.Logout)
+			// SLO landing endpoint (migration 054). PUBLIC by design —
+			// the IdP bounces here after tearing down its session and
+			// the JWT was already revoked before the redirect was
+			// issued. Sets a one-shot "logged_out" cookie + 303s to
+			// /dashboard/login so the SPA renders the confirmation
+			// page.
+			r.Get("/auth/logout-done/", deps.Auth.LogoutDone)
+			r.Get("/auth/logout-done", deps.Auth.LogoutDone)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/change-password/", deps.Auth.ChangePassword)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/me/", deps.Auth.CurrentUser)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/tokens/", deps.Auth.ListTokens)
@@ -630,6 +642,26 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/registries/{id}/", deps.ClusterRegistries.Update)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/registries/{id}/", deps.ClusterRegistries.Delete)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/registries/{id}/test/", deps.ClusterRegistries.Test)
+	}
+
+	// Cluster snapshots (migration 052) — per-cluster Velero
+	// self-service. List/get are clusters:read; mutating ops are
+	// clusters:update because the operator who can edit a cluster is
+	// the same one who can snapshot it. The velero-status pre-flight
+	// is clusters:read so the install-Velero CTA renders for any
+	// reader.
+	if deps.ClusterSnapshots != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshots/", deps.ClusterSnapshots.ListSnapshots)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/snapshots/", deps.ClusterSnapshots.CreateSnapshot)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshots/{id}/", deps.ClusterSnapshots.GetSnapshot)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshots/{id}/", deps.ClusterSnapshots.DeleteSnapshot)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/snapshots/{id}/restore/", deps.ClusterSnapshots.CreateRestore)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshot-schedules/", deps.ClusterSnapshots.ListSchedules)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/snapshot-schedules/", deps.ClusterSnapshots.CreateSchedule)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.GetSchedule)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.UpdateSchedule)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.DeleteSchedule)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
 	}
 
 	if deps.Projects != nil {

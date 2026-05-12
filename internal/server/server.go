@@ -296,6 +296,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
 	clusterRegistriesHandler.SetApplyEnqueue(queue)
 	clusterRegistriesHandler.SetRequester(requester)
+	// Cluster snapshots (migration 052). Velero CRDs are driven over
+	// the existing tunnel K8sRequester so the same circuit-breaker /
+	// retry behaviour as every other tunnel-mediated K8s op applies.
+	// Metric registration is idempotent — see RegisterClusterSnapshotsMetrics.
+	clusterSnapshotsHandler := handler.NewClusterSnapshotsHandler(queries)
+	clusterSnapshotsHandler.SetRequester(requester)
+	handler.RegisterClusterSnapshotsMetrics()
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
@@ -494,6 +501,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Clusters:          clusterHandler,
 		ClusterTemplates:  clusterTemplateHandler,
 		ClusterRegistries: clusterRegistriesHandler,
+		ClusterSnapshots:  clusterSnapshotsHandler,
 		Projects:         projectHandler,
 		Tools:            toolHandler,
 		Audit:        handler.NewAuditHandler(queries),
