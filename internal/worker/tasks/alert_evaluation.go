@@ -186,6 +186,15 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 		return false, "", nil, pgtype.UUID{}, nil
 	}
 	config := decodeWorkerJSONMap(rule.Configuration)
+	// Sprint 072 — anomaly-kind rules use the rolling baseline
+	// pre-aggregated by the anomaly_baseline_recompute worker, not
+	// the existing static-threshold path. Branch here before the
+	// cluster/global fan-out so the anomaly branch can short-circuit
+	// to no-fire when no baseline row exists yet (identical to
+	// "not enough samples").
+	if stringFromWorkerMap(config, "rule_kind") == "anomaly" {
+		return evaluateAnomalyRule(ctx, rule, config)
+	}
 	if rule.ClusterID.Valid {
 		details := baseRuleDetails(rule, config)
 		cluster, err := runtimeDeps.Queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes))
