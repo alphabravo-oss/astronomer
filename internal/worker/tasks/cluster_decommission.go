@@ -658,10 +658,13 @@ var errNoRows = errors.New("no rows in result set")
 
 // ---- audit helper conformance --------------------------------------------
 
-// Ensure ClusterDecommissionQuerier satisfies audit.Writer for recordPhaseAudit
-// indirection: audit.Writer requires CreateAuditLogV1; our interface declares
-// the same. Static check at compile time.
-var _ audit.Writer = (ClusterDecommissionQuerier)(nil)
+// Ensure ClusterDecommissionQuerier satisfies audit.Querier for
+// recordPhaseAudit indirection: audit.Querier requires CreateAuditLogV1;
+// our interface declares the same. Static check at compile time.
+// (Renamed from audit.Writer when the async batched writer was introduced —
+// the new audit.Writer is a struct; the original interface is now
+// audit.Querier.)
+var _ audit.Querier = (ClusterDecommissionQuerier)(nil)
 
 // pgtypeUUIDFromUUID is a small convenience helper kept here so tests can
 // reuse it for fixture construction.

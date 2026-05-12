@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -64,6 +65,10 @@ func main() {
 		logger.Error("failed to initialize server", "error", err)
 		os.Exit(1)
 	}
+	// auditWriter is started below once the DB pool is verified; the
+	// declaration here keeps Shutdown reachable from the single defer in
+	// case of an early exit.
+	var auditWriter *audit.Writer
 	if srv.DB() != nil {
 		queries := sqlc.New(srv.DB().Pool())
 		if _, err := observability.EnsureInstanceID(context.Background(), queries); err != nil {
@@ -72,6 +77,17 @@ func main() {
 		}
 		logger = observability.Logger(logger)
 		slog.SetDefault(logger)
+		// Async batched audit writer. The per-request synchronous
+		// INSERT INTO audit_log used to add one DB round-trip to every
+		// mutating handler's critical path; the writer drains a
+		// bounded channel into multi-row INSERTs in a single
+		// background goroutine. Crash window: ~250 ms or 50 events
+		// (see writer.go for the trade-off discussion). When the
+		// writer is nil — e.g. a test main — audit.Record falls back
+		// to the sync insert through the supplied Querier.
+		auditWriter = audit.NewWriter(queries, logger)
+		auditWriter.Start(context.Background())
+		audit.SetWriter(auditWriter)
 		// Rancher-style: if no users exist, create the admin with either
 		// $ASTRONOMER_BOOTSTRAP_PASSWORD or a random password (logged once)
 		// and flag must_change_password so the dashboard forces a rotation
@@ -119,6 +135,21 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
 		os.Exit(1)
+	}
+
+	// Drain the audit writer's pending events before we let the DB
+	// pool close. The writer's Shutdown blocks until either the final
+	// batch flushes or the shared 10s shutdownCtx deadline fires —
+	// anything still buffered after the deadline is the same kind of
+	// loss as a hard crash and is counted in the dropped metric.
+	if auditWriter != nil {
+		if err := auditWriter.Shutdown(shutdownCtx); err != nil {
+			observability.WithEvent(logger, "server_audit_shutdown_error").Warn("audit writer shutdown error",
+				"dropped_total", auditWriter.DropCount(),
+				"error", err,
+			)
+		}
+		audit.SetWriter(nil)
 	}
 
 	// Flush + close the OTel pipeline before exit so the last batch of

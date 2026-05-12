@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/netip"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -101,6 +103,111 @@ func (q *Queries) CreateAuditLogV1(ctx context.Context, arg CreateAuditLogV1Para
 		arg.UserAgent,
 		arg.Detail,
 	)
+	return err
+}
+
+// auditLogColumnsPerRow is the number of parameters per row in the
+// BatchInsertAuditLog VALUES list. Must stay in sync with the column list
+// in batchInsertAuditLogPrefix below.
+const auditLogColumnsPerRow = 16
+
+const batchInsertAuditLogPrefix = `
+INSERT INTO audit_log (
+    source,
+    correlation_id,
+    user_id,
+    actor_auth_method,
+    action,
+    resource_type,
+    resource_id,
+    resource_name,
+    http_method,
+    path,
+    status_code,
+    duration_ms,
+    request_id,
+    ip_address,
+    user_agent,
+    detail
+) VALUES `
+
+// BatchInsertAuditLog issues a single multi-row INSERT for the given rows.
+// PostgreSQL caps a single statement at ~65 535 bind parameters; at 16
+// columns per row that's ~4 095 rows in a single Exec — we expect batch
+// sizes of 50-250 in production, so the limit is academic but the
+// implementation chunks defensively just in case.
+//
+// We hand-build the VALUES list because sqlc's :copyfrom path uses
+// PostgreSQL COPY, which doesn't go through the same parameter-substitution
+// pipeline our other queries do, and the unnest()-based form would need
+// a function for each column type combination (jsonb / inet / uuid are
+// awkward). A literal "VALUES ($1,$2,...),($17,$18,...)" Exec keeps the
+// types identical to CreateAuditLogV1Params and works through pgx's
+// existing pgtype encoders.
+func (q *Queries) BatchInsertAuditLog(ctx context.Context, rows []CreateAuditLogV1Params) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// PostgreSQL bind-parameter limit. Stay conservative — 4000 rows per
+	// statement leaves headroom for any wrapper that adds its own params.
+	const maxRowsPerExec = 4000
+	for start := 0; start < len(rows); start += maxRowsPerExec {
+		end := start + maxRowsPerExec
+		if end > len(rows) {
+			end = len(rows)
+		}
+		if err := q.execBatchInsertAuditLog(ctx, rows[start:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (q *Queries) execBatchInsertAuditLog(ctx context.Context, rows []CreateAuditLogV1Params) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(batchInsertAuditLogPrefix) + len(rows)*auditLogColumnsPerRow*5)
+	sb.WriteString(batchInsertAuditLogPrefix)
+
+	args := make([]any, 0, len(rows)*auditLogColumnsPerRow)
+	for i, r := range rows {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString("(")
+		for j := 0; j < auditLogColumnsPerRow; j++ {
+			if j > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString("$")
+			sb.WriteString(strconv.Itoa(i*auditLogColumnsPerRow + j + 1))
+		}
+		sb.WriteString(")")
+		args = append(args,
+			r.Source,
+			r.CorrelationID,
+			r.UserID,
+			r.ActorAuthMethod,
+			r.Action,
+			r.ResourceType,
+			r.ResourceID,
+			r.ResourceName,
+			r.HTTPMethod,
+			r.Path,
+			r.StatusCode,
+			r.DurationMs,
+			r.RequestID,
+			r.IpAddress,
+			r.UserAgent,
+			r.Detail,
+		)
+	}
+
+	_, err := q.db.Exec(ctx, sb.String(), args...)
 	return err
 }
 
