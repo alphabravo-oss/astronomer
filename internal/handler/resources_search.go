@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -263,8 +262,16 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	}
 	_ = g.Wait() // we never return errors from the goroutines
 
-	// Step 3: merge + apply optional name filter + tag with cluster info.
-	merged := make([]map[string]any, 0)
+	// Step 3: stream-merge with a bounded top-K max-heap (T32
+	// FEATURES-051126). Holding every cluster's full list in memory
+	// then sort-truncating to `limit` is O(N) memory and O(N log N)
+	// time. Using a max-heap of size `limit` keeps only the K smallest
+	// items in (cluster_name, namespace, name) order — O(limit) memory
+	// and O(N log limit) time. Fairness invariant from the previous
+	// design is preserved: every item from every cluster is still
+	// considered, so a popular cluster cannot starve the tail (which
+	// would be the failure mode of pushing `limit=N` per cluster).
+	topK := newSearchTopKHeap(limit)
 	errs := make([]searchClusterError, 0)
 	failed := 0
 	for i, c := range clusters {
@@ -290,30 +297,10 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 					continue
 				}
 			}
-			merged = append(merged, item)
+			topK.push(item)
 		}
 	}
-
-	// Stable ordering: cluster name, then namespace, then resource name.
-	sort.SliceStable(merged, func(i, j int) bool {
-		ci, _ := merged[i]["cluster_name"].(string)
-		cj, _ := merged[j]["cluster_name"].(string)
-		if ci != cj {
-			return ci < cj
-		}
-		ni, _ := merged[i]["namespace"].(string)
-		nj, _ := merged[j]["namespace"].(string)
-		if ni != nj {
-			return ni < nj
-		}
-		mi, _ := merged[i]["name"].(string)
-		mj, _ := merged[j]["name"].(string)
-		return mi < mj
-	})
-
-	if len(merged) > limit {
-		merged = merged[:limit]
-	}
+	merged := topK.sorted()
 
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"results":          merged,
