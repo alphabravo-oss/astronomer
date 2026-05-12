@@ -194,26 +194,96 @@ type Rendered struct {
 // composeMessage; the SMTP encoding step is its own function so tests
 // can intercept the rendered output without going through net/smtp.
 func Render(name string, branding Branding, subjectFrag string, data any) (Rendered, error) {
+	return RenderWithOverrides(name, branding, subjectFrag, data, Overrides{})
+}
+
+// Overrides is the optional override pair the dispatcher hands to
+// RenderWithOverrides when the operator has installed a custom
+// template via the notify package (migration 059). Empty fields fall
+// back to the embedded defaults — so a row with no override is
+// byte-identical to the pre-migration render path.
+type Overrides struct {
+	// Subject replaces the .subject template when non-empty. Parsed
+	// as text/template against the same renderInput shape the
+	// default subject sees.
+	Subject string
+	// BodyText replaces both the text and html bodies when non-empty.
+	// Markdown-to-HTML conversion happens in the SMTP compose layer
+	// (preserves the current behaviour where the .txt + .html embeds
+	// pre-render the formatted versions). The override is parsed as
+	// text/template and rendered against renderInput.
+	BodyText string
+}
+
+// RenderWithOverrides renders the named template, substituting in the
+// operator override's subject/body when supplied. The default path
+// (Overrides{}) is byte-identical to Render — see the email-dispatch
+// integration test in TestEmailDispatch_UsesOverride.
+func RenderWithOverrides(name string, branding Branding, subjectFrag string, data any, ov Overrides) (Rendered, error) {
 	set, ok := compiledTemplates[name]
 	if !ok {
 		return Rendered{}, fmt.Errorf("unknown email template %q", name)
 	}
 	input := renderInput{Branding: branding, Subject: subjectFrag, Data: data}
-	var subj, txt, html bytes.Buffer
-	if err := set.subject.Execute(&subj, input); err != nil {
+
+	subjTpl := set.subject
+	if ov.Subject != "" {
+		t, err := texttemplate.New(name + ".subject.override").Parse(ov.Subject)
+		if err != nil {
+			return Rendered{}, fmt.Errorf("parse override subject %s: %w", name, err)
+		}
+		subjTpl = t
+	}
+	var subj bytes.Buffer
+	if err := subjTpl.Execute(&subj, input); err != nil {
 		return Rendered{}, fmt.Errorf("render subject %s: %w", name, err)
 	}
-	if err := set.text.Execute(&txt, input); err != nil {
-		return Rendered{}, fmt.Errorf("render text %s: %w", name, err)
-	}
-	if err := set.html.Execute(&html, input); err != nil {
-		return Rendered{}, fmt.Errorf("render html %s: %w", name, err)
+
+	var txt, html bytes.Buffer
+	if ov.BodyText != "" {
+		t, err := texttemplate.New(name + ".body.override").Parse(ov.BodyText)
+		if err != nil {
+			return Rendered{}, fmt.Errorf("parse override body %s: %w", name, err)
+		}
+		if err := t.Execute(&txt, input); err != nil {
+			return Rendered{}, fmt.Errorf("render override body %s: %w", name, err)
+		}
+		// HTML fallback: when only a text override is supplied we
+		// wrap the rendered text in a minimal <pre> block so MUA
+		// clients honoring the multipart/alternative HTML side still
+		// get something readable. Pre-tag preserves line breaks.
+		html.WriteString("<pre>")
+		html.WriteString(htmlEscape(txt.String()))
+		html.WriteString("</pre>")
+	} else {
+		if err := set.text.Execute(&txt, input); err != nil {
+			return Rendered{}, fmt.Errorf("render text %s: %w", name, err)
+		}
+		if err := set.html.Execute(&html, input); err != nil {
+			return Rendered{}, fmt.Errorf("render html %s: %w", name, err)
+		}
 	}
 	return Rendered{
 		Subject:  asciiSafeSubject(strings.TrimSpace(subj.String())),
 		BodyText: toCRLF(txt.String()),
 		BodyHTML: toCRLF(html.String()),
 	}, nil
+}
+
+// htmlEscape is a deliberately-minimal escape used only by the
+// override-body fallback above. We escape the five HTML metacharacters
+// (vs. pulling in html.EscapeString) so the wrapper stays tiny and
+// doesn't accidentally double-encode something html/template would
+// have left alone.
+func htmlEscape(s string) string {
+	r := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"\"", "&#34;",
+		"'", "&#39;",
+	)
+	return r.Replace(s)
 }
 
 // toCRLF converts \n to \r\n for the MIME body. Already-\r\n input

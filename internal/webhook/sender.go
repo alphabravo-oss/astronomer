@@ -82,6 +82,16 @@ type Subscription struct {
 	MaxRetries int
 }
 
+// OverrideLookup is the bridge from the Sender to the notify package
+// (migration 059). When set, the Sender consults it after the
+// per-subscription template and before the JSON-marshal default. A
+// miss (ok=false) means "no operator override for this event family
+// — fall through to the next layer".
+//
+// Keys are of the form "webhook.<family>"; see
+// internal/notify/templates_webhook.go for the canonical list.
+type OverrideLookup func(ctx context.Context, key string) (body string, ok bool)
+
 // Event is the JSON-shaped payload the bus delivers + the dispatcher
 // hands to Send. Field names match the JSON keys that go to receivers
 // when no template is configured.
@@ -133,8 +143,9 @@ type HTTPDoer interface {
 
 // Sender is the per-delivery HTTP machinery. Safe for concurrent use.
 type Sender struct {
-	client HTTPDoer
-	now    func() time.Time
+	client    HTTPDoer
+	now       func() time.Time
+	overrides OverrideLookup
 }
 
 // NewSender wires the default *http.Client. The dispatcher constructs
@@ -144,6 +155,15 @@ func NewSender(client HTTPDoer) *Sender {
 		client = &http.Client{}
 	}
 	return &Sender{client: client, now: time.Now}
+}
+
+// SetOverrideLookup wires the notify.Resolve bridge. Optional —
+// when nil the Sender falls back to the pre-migration behaviour
+// (subscription template, else JSON-marshal). The dispatcher sets
+// this once at startup; safe to read concurrently because the
+// closure body itself does the DB lookup.
+func (s *Sender) SetOverrideLookup(o OverrideLookup) {
+	s.overrides = o
 }
 
 // SetNow is the test seam for stamping a predictable Date / Timestamp.
@@ -158,7 +178,7 @@ func (s *Sender) SetNow(now func() time.Time) {
 // returned payloadSize is the size of the bytes actually shipped — the
 // dispatcher uses it to stamp payload_size on the delivery row.
 func (s *Sender) Send(ctx context.Context, sub Subscription, event Event) (Outcome, int, error) {
-	body, err := s.buildBody(sub, event)
+	body, err := s.buildBody(ctx, sub, event)
 	if err != nil {
 		return Outcome{Err: err}, 0, err
 	}
@@ -226,10 +246,36 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, event Event) (Outco
 }
 
 // buildBody applies the template (if any) and returns the bytes that
-// will be hashed + shipped.
-func (s *Sender) buildBody(sub Subscription, event Event) ([]byte, error) {
+// will be hashed + shipped. Resolution precedence (highest first):
+//
+//   1. sub.PayloadTemplate — per-subscription override set by the
+//      operator at subscription create/update time.
+//   2. notify override on key webhook.<family> — operator-tunable
+//      default-per-event-family (migration 059).
+//   3. json.Marshal(event) — the pre-migration default; byte-
+//      identical when neither 1 nor 2 is present.
+func (s *Sender) buildBody(ctx context.Context, sub Subscription, event Event) ([]byte, error) {
 	if strings.TrimSpace(sub.PayloadTemplate) == "" {
-		// No template — ship the event verbatim as JSON.
+		// Level 2: notify override.
+		if s.overrides != nil {
+			key := overrideKeyForEvent(event.EventName)
+			if key != "" {
+				if body, ok := s.overrides(ctx, key); ok && strings.TrimSpace(body) != "" {
+					data, err := eventToTemplateData(event)
+					if err != nil {
+						return nil, err
+					}
+					rendered, err := Render(body, data)
+					if err != nil {
+						return nil, err
+					}
+					if rendered != nil {
+						return rendered, nil
+					}
+				}
+			}
+		}
+		// Level 3: ship the event verbatim as JSON.
 		return json.Marshal(event)
 	}
 	data, err := eventToTemplateData(event)
@@ -248,6 +294,38 @@ func (s *Sender) buildBody(sub Subscription, event Event) ([]byte, error) {
 		return json.Marshal(event)
 	}
 	return rendered, nil
+}
+
+// overrideKeyForEvent maps an event_name (e.g. "audit.user.login")
+// to the notify-registry key family ("webhook.audit.event"). The
+// mapping is intentionally coarse: every audit.* event shares the
+// same override, every cluster.* event family has its own. Returns
+// "" when no override key applies (in which case the dispatcher
+// falls through to the JSON-marshal default).
+func overrideKeyForEvent(eventName string) string {
+	switch {
+	case strings.HasPrefix(eventName, "audit."):
+		return "webhook.audit.event"
+	case eventName == "alert.fired" || strings.HasSuffix(eventName, ".alert.fired"):
+		return "webhook.alert.fired"
+	case eventName == "alert.resolved" || strings.HasSuffix(eventName, ".alert.resolved"):
+		return "webhook.alert.resolved"
+	case strings.HasPrefix(eventName, "cluster.decommission"):
+		return "webhook.cluster.decommissioned"
+	case eventName == "cluster.connected":
+		return "webhook.cluster.connected"
+	case eventName == "cluster.disconnected":
+		return "webhook.cluster.disconnected"
+	case eventName == "cluster.status_changed":
+		return "webhook.cluster.status_changed"
+	case eventName == "cluster.created":
+		return "webhook.cluster.created"
+	case eventName == "cluster.updated":
+		return "webhook.cluster.updated"
+	case eventName == "cluster.deleted":
+		return "webhook.cluster.deleted"
+	}
+	return ""
 }
 
 // eventToTemplateData converts an Event into the map the template
