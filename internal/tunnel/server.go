@@ -68,9 +68,15 @@ type AgentConnection struct {
 }
 
 // Hub manages all connected agent tunnels.
+//
+// The agent map is sharded (FEATURES-051126 T18); only the hub's other
+// mutable state (publisher, stateLim init) is guarded by Hub.mu. Most
+// hot paths — SendToAgent, GetAgent, register/unregister — hit only
+// the agent shard's lock, so SendToAgent("A") and SendToAgent("B")
+// contend only if their clusterIDs hash to the same shard (1/16).
 type Hub struct {
-	mu        sync.RWMutex
-	agents    map[string]*AgentConnection // keyed by clusterID
+	mu        sync.RWMutex // protects publisher + stateLim only
+	agents    *shardedAgents
 	log       *slog.Logger
 	validator AgentTokenValidator
 	// publisher receives connect/disconnect/heartbeat lifecycle events for
@@ -135,7 +141,7 @@ func NewHubWithValidator(log *slog.Logger, validator AgentTokenValidator) *Hub {
 		log = slog.Default()
 	}
 	return &Hub{
-		agents:    make(map[string]*AgentConnection),
+		agents:    newShardedAgents(),
 		log:       log,
 		validator: validator,
 	}
@@ -250,9 +256,8 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// surface that as an agent.reconnecting hint so subscribers can show the
 	// transition explicitly (the cluster.connected fan-out below covers the
 	// happy path; this distinguishes "first connect" from "reconnect").
-	h.mu.Lock()
 	wasReconnect := false
-	if existing, ok := h.agents[payload.ClusterID]; ok {
+	if existing := h.agents.Set(payload.ClusterID, agent); existing != nil {
 		observability.WithEvent(h.log, "agent_reconnecting").Info("replacing existing agent connection",
 			slog.String("cluster_id", payload.ClusterID),
 			slog.String("old_session", existing.SessionID),
@@ -261,8 +266,6 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		existing.Streams.CloseAll()
 		wasReconnect = true
 	}
-	h.agents[payload.ClusterID] = agent
-	h.mu.Unlock()
 	// Always count the register — first-connect and reconnect alike — so
 	// the rate over a window captures "is this cluster flapping?" rather
 	// than just "is anything ever happening at all". FEATURES-051126 T16.
@@ -378,30 +381,19 @@ func (h *Hub) writePump(ctx context.Context, agent *AgentConnection) {
 
 // removeAgent removes an agent from the hub if it matches the current registration.
 func (h *Hub) removeAgent(agent *AgentConnection) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	// Only remove if the registered agent is the same instance (avoids removing a replacement).
-	if current, ok := h.agents[agent.ClusterID]; ok && current == agent {
-		delete(h.agents, agent.ClusterID)
-	}
+	h.agents.DeleteIfSame(agent.ClusterID, agent)
 }
 
 // GetAgent returns the connection for a cluster, or nil if not connected.
 func (h *Hub) GetAgent(clusterID string) *AgentConnection {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.agents[clusterID]
+	return h.agents.Get(clusterID)
 }
 
 // SendToAgent sends a message to a specific agent.
 // Returns an error if the agent is not connected or the send buffer is full.
 func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
-	h.mu.RLock()
-	agent, ok := h.agents[clusterID]
-	h.mu.RUnlock()
-
-	if !ok {
+	agent := h.agents.Get(clusterID)
+	if agent == nil {
 		return fmt.Errorf("agent for cluster %q not connected", clusterID)
 	}
 
@@ -442,18 +434,10 @@ func (h *Hub) Disconnect(clusterID string) bool { return h.disconnectImpl(cluste
 //
 // Returns the number of agents that were drained. FEATURES-051126 T14.
 func (h *Hub) Drain() int {
-	h.mu.Lock()
-	if len(h.agents) == 0 {
-		h.mu.Unlock()
+	snapshot := h.agents.DrainAll()
+	if len(snapshot) == 0 {
 		return 0
 	}
-	snapshot := make([]*AgentConnection, 0, len(h.agents))
-	for clusterID, agent := range h.agents {
-		snapshot = append(snapshot, agent)
-		delete(h.agents, clusterID)
-	}
-	h.mu.Unlock()
-
 	observability.WithEvent(h.log, "hub_drain_started").Info("draining all agent connections",
 		slog.Int("count", len(snapshot)),
 	)
@@ -469,15 +453,10 @@ func (h *Hub) Drain() int {
 // disconnectImpl is the unexported worker for the public Disconnect.
 // Kept separate so Drain doesn't recurse into a re-lock.
 func (h *Hub) disconnectImpl(clusterID string) bool {
-	h.mu.Lock()
-	agent, ok := h.agents[clusterID]
-	if ok {
-		// Remove first so HandleWebSocket's removeAgent() at the bottom of
-		// the read/write loop doesn't have to race with us.
-		delete(h.agents, clusterID)
-	}
-	h.mu.Unlock()
-	if !ok {
+	// Remove first so HandleWebSocket's removeAgent() at the bottom of
+	// the read/write loop doesn't have to race with us.
+	agent := h.agents.Delete(clusterID)
+	if agent == nil {
 		return false
 	}
 	observability.WithEvent(h.log, "agent_forced_disconnect").Info("forcibly disconnecting agent",
@@ -497,10 +476,8 @@ func (h *Hub) disconnectImpl(clusterID string) bool {
 // ACK; on timeout we return the connected flag but a nil ack and a
 // context.DeadlineExceeded error.
 func (h *Hub) SendDecommission(ctx context.Context, clusterID string, payload protocol.DecommissionPayload, wait time.Duration) (*protocol.DecommissionAckPayload, bool, error) {
-	h.mu.RLock()
-	agent, ok := h.agents[clusterID]
-	h.mu.RUnlock()
-	if !ok {
+	agent := h.agents.Get(clusterID)
+	if agent == nil {
 		return nil, false, nil
 	}
 	streamID := uuid.NewString()
@@ -541,15 +518,13 @@ func (h *Hub) SendDecommission(ctx context.Context, clusterID string, payload pr
 	}
 }
 
-// BroadcastToAll sends a message to all connected agents.
+// BroadcastToAll sends a message to all connected agents. Snapshots
+// the agent set across all shards (briefly locking each in turn) then
+// sends OUTSIDE the locks — at 500 agents the previous serial-under-
+// lock implementation made BroadcastToAll latency O(N * send-latency)
+// and held the hub mutex the whole time. FEATURES-051126 T18.
 func (h *Hub) BroadcastToAll(msg *protocol.Message) {
-	h.mu.RLock()
-	agents := make([]*AgentConnection, 0, len(h.agents))
-	for _, a := range h.agents {
-		agents = append(agents, a)
-	}
-	h.mu.RUnlock()
-
+	agents := h.agents.Snapshot()
 	for _, agent := range agents {
 		select {
 		case agent.sendCh <- msg:
@@ -563,14 +538,7 @@ func (h *Hub) BroadcastToAll(msg *protocol.Message) {
 
 // ConnectedClusters returns a list of connected cluster IDs.
 func (h *Hub) ConnectedClusters() []string {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	ids := make([]string, 0, len(h.agents))
-	for id := range h.agents {
-		ids = append(ids, id)
-	}
-	return ids
+	return h.agents.ConnectedIDs()
 }
 
 func (h *Hub) persistConnect(ctx context.Context, agent *AgentConnection) {

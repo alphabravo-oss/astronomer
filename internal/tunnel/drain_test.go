@@ -28,9 +28,7 @@ func TestHub_Drain_ClosesAllAgents(t *testing.T) {
 			Streams:   NewStreamManager(8),
 			cancel:    cancel,
 		}
-		h.mu.Lock()
-		h.agents[agent.ClusterID] = agent
-		h.mu.Unlock()
+		h.agents.Set(agent.ClusterID, agent)
 	}
 
 	drained := h.Drain()
@@ -39,10 +37,7 @@ func TestHub_Drain_ClosesAllAgents(t *testing.T) {
 	}
 
 	// Map must be empty.
-	h.mu.RLock()
-	remaining := len(h.agents)
-	h.mu.RUnlock()
-	if remaining != 0 {
+	if remaining := h.agents.Len(); remaining != 0 {
 		t.Errorf("post-Drain agents map has %d entries, want 0", remaining)
 	}
 

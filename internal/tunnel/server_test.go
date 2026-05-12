@@ -26,8 +26,8 @@ func TestNewHub(t *testing.T) {
 	if h == nil {
 		t.Fatal("NewHub returned nil")
 	}
-	if len(h.agents) != 0 {
-		t.Fatalf("expected 0 agents, got %d", len(h.agents))
+	if n := h.agents.Len(); n != 0 {
+		t.Fatalf("expected 0 agents, got %d", n)
 	}
 }
 

@@ -121,9 +121,9 @@ func TestHandleK8sProxy_Timeout(t *testing.T) {
 		sendCh:    make(chan *protocol.Message, sendChannelSize),
 		cancel:    func() {},
 	}
-	hub.mu.Lock()
-	hub.agents["cluster-timeout"] = agent
-	hub.mu.Unlock()
+	
+	hub.agents.Set("cluster-timeout", agent)
+	
 
 	proxy := NewProxyHandler(hub, slog.Default())
 
@@ -157,9 +157,9 @@ func TestHandleK8sProxy_SuccessfulResponse(t *testing.T) {
 		sendCh:    make(chan *protocol.Message, sendChannelSize),
 		cancel:    func() {},
 	}
-	hub.mu.Lock()
-	hub.agents["cluster-ok"] = agent
-	hub.mu.Unlock()
+	
+	hub.agents.Set("cluster-ok", agent)
+	
 
 	proxy := NewProxyHandler(hub, slog.Default())
 
@@ -284,9 +284,7 @@ func TestHandleK8sProxy_StreamingWatch(t *testing.T) {
 		sendCh:    make(chan *protocol.Message, sendChannelSize),
 		cancel:    func() {},
 	}
-	hub.mu.Lock()
-	hub.agents["cluster-watch"] = agent
-	hub.mu.Unlock()
+	hub.agents.Set("cluster-watch", agent)
 
 	proxy := NewProxyHandler(hub, slog.Default())
 	router := chi.NewRouter()
