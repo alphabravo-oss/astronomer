@@ -454,6 +454,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// queue for ranges over ~100K audit rows. Superuser-gated
 		// inside the handler.
 		Compliance: handler.NewComplianceHandler(queries, queue),
+		// Rancher-style global settings hub (migration 046). The
+		// SettingsCache is shared between the settings handler (PUT /
+		// DELETE invalidate) and the FeatureGate middleware (reads).
+		// 30s TTL — settings change rarely; the cache makes the
+		// per-request feature check effectively free.
+		PlatformSettings: handler.NewPlatformSettingsHandler(queries),
+		SettingsCache:    handler.NewSettingsCache(queries, 30*time.Second),
+	}
+	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
+		deps.PlatformSettings.SetCache(deps.SettingsCache)
 	}
 	// EventSource cannot send Authorization headers, so the stream handler
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT

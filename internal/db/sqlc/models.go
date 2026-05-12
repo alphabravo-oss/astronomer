@@ -798,6 +798,15 @@ type PlatformConfiguration struct {
 	InstanceID       uuid.UUID          `json:"instance_id"`
 }
 
+type PlatformSetting struct {
+	Key         string          `json:"key"`
+	Value       json.RawMessage `json:"value"`
+	Description string          `json:"description"`
+	UpdatedBy   pgtype.UUID     `json:"updated_by"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
 type PodSecurityTemplate struct {
 	ID                   uuid.UUID       `json:"id"`
 	Name                 string          `json:"name"`

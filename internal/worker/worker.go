@@ -45,6 +45,9 @@ const (
 	// keys on every upstream ArgoCD cluster Secret this cluster is registered
 	// into. Idempotent — skips the PATCH when the desired labels already match.
 	TypeArgoCDRefreshManagedClusterLabels = tasks.ArgoCDRefreshManagedClusterLabelsType
+	// Telemetry sender — opt-in nightly POST of aggregated instance
+	// counts. Migration 046. No-ops when telemetry.enabled = false.
+	TypeTelemetrySend = tasks.TelemetrySendType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -108,6 +111,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
 	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
 	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))
+	w.mux.HandleFunc(TypeTelemetrySend, instrumentTask(TypeTelemetrySend, tasks.HandleTelemetrySend))
 
 	w.log.Info("registered all task handlers")
 }
