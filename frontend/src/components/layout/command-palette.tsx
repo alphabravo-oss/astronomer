@@ -160,7 +160,7 @@ export function CommandPalette() {
             <Command.Group heading="Actions" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
               <Command.Item
                 value="Register new cluster"
-                onSelect={() => navigate('/dashboard/clusters?register=true')}
+                onSelect={() => navigate('/dashboard/clusters/register')}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground
                   cursor-pointer data-[selected=true]:bg-accent data-[selected=true]:text-foreground"
               >

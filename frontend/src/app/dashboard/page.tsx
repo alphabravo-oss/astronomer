@@ -120,7 +120,7 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ActionCard
-          href="/dashboard/clusters?register=true"
+          href="/dashboard/clusters/register"
           icon={<Server className="h-4 w-4" />}
           title="Register cluster"
           description="Generate an install command for a new cluster"
@@ -167,7 +167,7 @@ export default function DashboardPage() {
             <Server className="h-8 w-8 text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground mb-3">No clusters registered yet</p>
             <Link
-              href="/dashboard/clusters?register=true"
+              href="/dashboard/clusters/register"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
             >
               Register Cluster

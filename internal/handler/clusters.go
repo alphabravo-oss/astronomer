@@ -15,6 +15,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
+	"github.com/alphabravocompany/astronomer-go/internal/registration"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
@@ -118,17 +119,15 @@ type ClusterHandler struct {
 	// configured by the 'global' quota plan (migration 051).
 	// Optional; nil disables the check (test fakes, pre-migration).
 	enforcer *quota.Enforcer
-	// maintenanceGate is the migration-057 hook that refuses /
-	// defers destructive mutations during an active maintenance
-	// window. Optional; nil-safe — when unwired, every Delete
-	// falls through the gate as if no windows existed.
+	// maintenanceGate (sprint 057) gates destructive mutations.
 	maintenanceGate *MaintenanceGate
-	// templateApplyQueue is the asynq client used by Create's
-	// auto-attach (sprint 074) to enqueue a cluster_template:apply task
-	// the moment the cluster row + the auto-attached
-	// cluster_template_applications row land. Nil-safe — when not
-	// wired, the periodic drift_check sweep is the slower fallback.
+	// templateApplyQueue (sprint 074) enqueues cluster_template:apply
+	// after auto-attach inserts the application row.
 	templateApplyQueue ClusterDecommissionEnqueuer
+	// registration (sprint 078) is the shared phase-machine service.
+	// Create writes the initial cluster_registration_steps rows so the
+	// wizard page-3 timeline has something to render. nil-safe.
+	registration *registration.Service
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -198,6 +197,16 @@ func (h *ClusterHandler) SetEventPublisher(p EventPublisher) {
 		return
 	}
 	h.publisher = p
+}
+
+// SetRegistrationService wires the wizard-phase service so cluster
+// Create can stamp the first two cluster_registration_steps rows
+// (cluster_created + manifest_generated). nil-safe.
+func (h *ClusterHandler) SetRegistrationService(s *registration.Service) {
+	if h == nil {
+		return
+	}
+	h.registration = s
 }
 
 // SetQuotaEnforcer wires the per-tenant quota enforcer that gates Create
@@ -463,6 +472,24 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"display_name": cluster.DisplayName,
 		"status":       cluster.Status,
 	})
+
+	// Wizard step rows. Best-effort: when the registration service
+	// isn't wired (legacy test harness), we just skip the timeline
+	// rows — the API still returns the cluster body.
+	if h.registration != nil {
+		_, _ = h.registration.WriteStep(r.Context(), cluster.ID, registration.StepInput{
+			StepName: "cluster_created",
+			Status:   "success",
+			Detail: map[string]any{
+				"name":         cluster.Name,
+				"display_name": cluster.DisplayName,
+			},
+		})
+		_, _ = h.registration.WriteStep(r.Context(), cluster.ID, registration.StepInput{
+			StepName: "manifest_generated",
+			Status:   "success",
+		})
+	}
 
 	recordAudit(r, h.queries, "cluster.create", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
 		"environment":  req.Environment,

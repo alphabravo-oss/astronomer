@@ -261,6 +261,79 @@ export async function registerCluster(clusterId: string) {
   return res.data;
 }
 
+// ─── Cluster-registration wizard (sprint 22 / migration 078) ──────────
+// Mirror of the backend's registration.Status / Step shapes.
+
+export interface RegistrationStep {
+  id: string;
+  step_name: string;
+  label: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+  progress_pct: number;
+  detail?: Record<string, unknown>;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error_message?: string;
+  step_order: number;
+  created_at: string;
+}
+
+export type RegistrationPhase =
+  | 'created'
+  | 'awaiting_agent'
+  | 'connected'
+  | 'provisioning'
+  | 'ready'
+  | 'failed';
+
+export interface RegistrationStatus {
+  cluster_id: string;
+  phase: RegistrationPhase;
+  install_baseline?: boolean | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  steps: RegistrationStep[];
+}
+
+export async function getRegistrationStatus(clusterId: string): Promise<RegistrationStatus> {
+  const res = await api.get<APIResponse<RegistrationStatus>>(`/clusters/${clusterId}/registration/status`);
+  return res.data.data;
+}
+
+export async function setRegistrationOptions(clusterId: string, installBaseline: boolean): Promise<RegistrationStatus> {
+  const res = await api.put<APIResponse<RegistrationStatus>>(
+    `/clusters/${clusterId}/registration/options`,
+    { install_baseline: installBaseline },
+  );
+  return res.data.data;
+}
+
+export async function confirmRegistration(clusterId: string): Promise<RegistrationStatus> {
+  const res = await api.post<APIResponse<RegistrationStatus>>(`/clusters/${clusterId}/registration/confirm`);
+  return res.data.data;
+}
+
+export async function retryRegistrationStep(clusterId: string, stepId: string): Promise<RegistrationStatus> {
+  const res = await api.post<APIResponse<RegistrationStatus>>(
+    `/clusters/${clusterId}/registration/retry/${stepId}`,
+  );
+  return res.data.data;
+}
+
+export async function cancelRegistration(clusterId: string): Promise<RegistrationStatus> {
+  const res = await api.post<APIResponse<RegistrationStatus>>(`/clusters/${clusterId}/registration/cancel`);
+  return res.data.data;
+}
+
+// Returns the agent install manifest as raw YAML text.
+export async function getClusterManifest(clusterId: string): Promise<string> {
+  const res = await api.get<string>(`/clusters/${clusterId}/manifest`, {
+    responseType: 'text',
+    transformResponse: (data: string) => data,
+  });
+  return typeof res.data === 'string' ? res.data : String(res.data);
+}
+
 export async function updateCluster(id: string, data: Partial<import('@/types').ClusterRegistration>) {
   const res = await api.patch<APIResponse<import('@/types').Cluster>>(`/clusters/${id}`, data);
   return res.data.data;

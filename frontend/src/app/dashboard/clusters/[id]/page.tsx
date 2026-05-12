@@ -20,7 +20,8 @@ import Link from 'next/link';
 import { getServiceMeshDetection, type ServiceMeshKind } from '@/lib/api/cluster-detail';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { RegisterClusterModal } from '@/components/clusters/register-cluster-modal';
+// RegisterClusterModal removed in sprint 22 — the "show install command"
+// action now opens wizard step 2 for this cluster.
 import { EditClusterModal } from '@/components/clusters/edit-cluster-modal';
 import {
   formatBytes,
@@ -101,7 +102,6 @@ export default function ClusterDetailPage() {
   );
 
   // Action menu state
-  const [showRegister, setShowRegister] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
@@ -262,7 +262,7 @@ export default function ClusterDetailPage() {
               {
                 label: 'Registration Command',
                 icon: <Terminal className="h-3.5 w-3.5" />,
-                onClick: () => setShowRegister(true),
+                onClick: () => router.push(`/dashboard/clusters/register/${cluster.id}/connect`),
               },
               {
                 label: 'Edit',
@@ -365,14 +365,9 @@ export default function ClusterDetailPage() {
         </div>
       </div>
 
-      {/* Registration Command Modal */}
-      {showRegister && (
-        <RegisterClusterModal
-          onClose={() => setShowRegister(false)}
-          clusterId={cluster.id}
-          clusterName={cluster.name}
-        />
-      )}
+      {/* Registration Command — opens the wizard step 2 for this
+          cluster, which renders the same install command + YAML
+          tabs the legacy modal used to. */}
 
       {/* Edit Modal */}
       {showEdit && (

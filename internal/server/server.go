@@ -23,6 +23,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
@@ -461,6 +462,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
+	// Wizard handler (migration 078 / sprint 22). The handler owns the
+	// phase-machine service; we hand a reference to the cluster handler
+	// (so Create writes the first two step rows), to the tunnel hub (so
+	// the first heartbeat advances awaiting_agent → connected), and to
+	// the cluster_template:apply task wiring below.
+	clusterRegistrationHandler := handler.NewClusterRegistrationHandler(queries, bus)
+	clusterRegistrationHandler.SetApplyQueue(queue)
+	clusterRegistrationHandler.Service().SetMetricsHook(observability.NewRegistrationMetricsHook())
+	clusterHandler.SetRegistrationService(clusterRegistrationHandler.Service())
+	if hub != nil {
+		hub.SetRegistrationAdvancer(clusterRegistrationHandler.Service())
+	}
 	// Wire the asynq client into the DELETE handler so the cluster
 	// decommission reconciler fires immediately on remove-cluster click.
 	// The periodic sweep is the safety net when redis is briefly down.
@@ -672,8 +685,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Auth:         authHandler,
 		TOTP:         totpHandler,
 		SSO:          ssoHandler,
-		Clusters:          clusterHandler,
-		ClusterTemplates:  clusterTemplateHandler,
+		Clusters:            clusterHandler,
+		ClusterTemplates:    clusterTemplateHandler,
+		ClusterRegistration: clusterRegistrationHandler,
 		ClusterRegistries: clusterRegistriesHandler,
 		NetworkPolicies:   networkPoliciesHandler,
 		ClusterSnapshots:  clusterSnapshotsHandler,
@@ -1051,8 +1065,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// reuses the existing ToolHandler.EnsureInstalled — see the comment on
 	// tasks.ToolInstaller for why we narrow the surface.
 	tasks.ConfigureClusterTemplateApply(tasks.ClusterTemplateApplyDeps{
-		Queries:   queries,
-		Installer: toolHandler,
+		Queries:      queries,
+		Installer:    toolHandler,
+		Registration: clusterRegistrationHandler.Service(),
 	})
 	// Cluster-registry apply worker (migration 050). Shares the
 	// ProjectK8sRequester adapter that the project reconciler already
