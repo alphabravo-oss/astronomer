@@ -121,6 +121,22 @@ k3d image import \
   "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" \
   -c "${CLUSTER}"
 
+# Sprint 074 — preload the kubectl image used by the kubectl-shell debug
+# pods + preflight checks. k3d nodes have no egress by default on
+# air-gapped dev laptops, and pulling at debug-pod-start-time causes a
+# 60s ImagePullBackOff that masks every real cluster bug under
+# investigation. The pull is best-effort: if Docker Hub is unreachable
+# we warn and continue (the operator can `docker pull` + `k3d image
+# import` manually).
+KUBECTL_IMG="bitnami/kubectl:1.31.4"
+step "Preloading kubectl image (${KUBECTL_IMG}) into k3d for debug pods"
+if docker image inspect "${KUBECTL_IMG}" >/dev/null 2>&1 \
+  || docker pull "${KUBECTL_IMG}" >/dev/null 2>&1; then
+  k3d image import "${KUBECTL_IMG}" -c "${CLUSTER}" || warn "k3d image import of ${KUBECTL_IMG} failed; debug pods may ImagePullBackOff"
+else
+  warn "could not pull ${KUBECTL_IMG}; debug pods will hit ImagePullBackOff until you 'docker pull' + 'k3d image import' it manually"
+fi
+
 # ── 5. Deploy astronomer ─────────────────────────────────────────────────────
 step "Installing Helm chart into namespace '${NAMESPACE}'"
 helm upgrade --install astronomer deploy/chart \
