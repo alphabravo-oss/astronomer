@@ -103,6 +103,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Sprint 072: anomaly baseline recompute. Every 5m — same
+		// cadence as the existing cluster-metrics aggregation so the
+		// recompute sees a fresh datapoint per tick. Leader-elected
+		// internally so multiple worker pods don't double-compute.
+		{"@every 5m", tasks.AnomalyBaselineRecomputeType, "anomaly baseline recompute"},
 	}
 
 	for _, e := range entries {

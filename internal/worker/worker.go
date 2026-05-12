@@ -75,6 +75,9 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
+	// Sprint 072: anomaly-detection rolling baseline recompute. Runs
+	// every 5m; the alert evaluator reads the pre-aggregated row.
+	TypeAnomalyBaselineRecompute = tasks.AnomalyBaselineRecomputeType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -152,6 +155,9 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
+	// Sprint 072: anomaly baseline recompute. Periodic scheduler
+	// enqueues this every 5m; leader-elected internally.
+	w.mux.HandleFunc(TypeAnomalyBaselineRecompute, instrumentTask(TypeAnomalyBaselineRecompute, tasks.HandleAnomalyBaselineRecompute))
 
 	w.log.Info("registered all task handlers")
 }
