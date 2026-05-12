@@ -39,6 +39,7 @@ type Querier interface {
 	CountAppsByInstance(ctx context.Context, argocdInstanceID uuid.UUID) (int64, error)
 	CountArgoCDApplications(ctx context.Context) (int64, error)
 	CountArgoCDInstances(ctx context.Context) (int64, error)
+	CountBackupDrillResults(ctx context.Context) (int64, error)
 	CountBackupSchedules(ctx context.Context) (int64, error)
 	CountBackupStorageConfigs(ctx context.Context) (int64, error)
 	CountBackups(ctx context.Context) (int64, error)
@@ -215,6 +216,14 @@ type Querier interface {
 	GetArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	// Backups
 	GetBackupByID(ctx context.Context, id uuid.UUID) (Backup, error)
+	// The summary endpoint shows ONLY the most recent drill — that's enough
+	// for the "are we current?" question. History uses ListBackupDrillResults.
+	GetLatestBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
+	// Surfaces "when did we last *prove* the backups work?". Distinct from
+	// the latest row because the most recent drill may have failed; the
+	// staleness alert fires on the gap from the latest *success*, not the
+	// latest attempt.
+	GetLatestSuccessfulBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
 	// Backup Schedules
 	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
 	// Backup Storage Configs
@@ -326,6 +335,7 @@ type Querier interface {
 	// on a successful auth. Auto-unlock is implicit: a locked_until in the
 	// past behaves like "not locked".
 	IncrementFailedLoginCount(ctx context.Context, arg IncrementFailedLoginCountParams) error
+	InsertBackupDrillResult(ctx context.Context, arg InsertBackupDrillResultParams) (BackupDrillResult, error)
 	InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
 	ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error)
@@ -348,6 +358,7 @@ type Querier interface {
 	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error)
 	ListArgoCDOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ArgocdOperationEvent, error)
 	ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperationsParams) ([]ArgocdOperation, error)
+	ListBackupDrillResults(ctx context.Context, arg ListBackupDrillResultsParams) ([]BackupDrillResult, error)
 	ListBackupSchedules(ctx context.Context, arg ListBackupSchedulesParams) ([]BackupSchedule, error)
 	ListBackupStorageConfigs(ctx context.Context, arg ListBackupStorageConfigsParams) ([]BackupStorageConfig, error)
 	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)

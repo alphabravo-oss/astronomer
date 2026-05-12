@@ -253,6 +253,17 @@ type Backup struct {
 	LastPolledAt       pgtype.Timestamptz `json:"last_polled_at"`
 }
 
+type BackupDrillResult struct {
+	ID            uuid.UUID          `json:"id"`
+	StartedAt     time.Time          `json:"started_at"`
+	FinishedAt    pgtype.Timestamptz `json:"finished_at"`
+	Status        string             `json:"status"`
+	BackupKey     string             `json:"backup_key"`
+	SchemaVersion pgtype.Int4        `json:"schema_version"`
+	ErrorMessage  string             `json:"error_message"`
+	CreatedAt     time.Time          `json:"created_at"`
+}
+
 type BackupSchedule struct {
 	ID                 uuid.UUID       `json:"id"`
 	Name               string          `json:"name"`

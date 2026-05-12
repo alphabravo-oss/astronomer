@@ -33,6 +33,7 @@ type RouterDependencies struct {
 	AuthQueries    appmiddleware.TokenUserQuerier
 	PlatformHealth *handler.PlatformHealthHandler
 	AdminQueues    *handler.AdminQueuesHandler
+	AdminDrill     *handler.AdminDrillHandler
 	Auth           *handler.AuthHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
@@ -264,6 +265,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.AdminQueues != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/", deps.AdminQueues.List)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/{queue}/dlq/", deps.AdminQueues.DLQ)
+		}
+
+		// Backup-restore drill viewer — surfaces rows that the weekly
+		// management-plane-restore-drill CronJob writes to
+		// backup_drill_results. Gates on superuser inside the handler.
+		// Used by the Operations tab + the
+		// AstronomerBackupRestoreDrillStale alert's runbook.
+		if deps.AdminDrill != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/", deps.AdminDrill.GetLatest)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/history/", deps.AdminDrill.ListHistory)
 		}
 
 		authenticated := r

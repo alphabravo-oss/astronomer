@@ -29,3 +29,4 @@ bin/
 coverage.out
 *.test
 /keyrotate
+.claude/

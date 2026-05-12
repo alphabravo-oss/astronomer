@@ -1,0 +1,303 @@
+{{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.credentialsSecretRef.name }}
+{{- /*
+  Management-plane DR: weekly automated proof that the nightly pg_dump
+  is actually restorable.
+
+  Two containers in the Job pod:
+    - postgres (sidecar, native sidecar pattern):
+        an ephemeral Postgres on emptyDir. Restart-Always so it stays
+        alive for the duration of the restore-runner; the Job
+        completes when the restore-runner exits regardless of the
+        sidecar's lifecycle, because the sidecar runs as an init
+        container with restartPolicy=Always (K8s 1.28+ stable).
+    - restore-runner (main container):
+        pulls the most recent backup from S3, pg_restore's it into the
+        sidecar, runs schema + row-count sanity checks, and writes the
+        outcome into the production backup_drill_results table.
+
+  The drill NEVER touches the production database except for that one
+  audit row write. The actual restore goes into the sidecar Postgres.
+
+  Gate: requires managementBackup to be enabled AND credentials wired,
+  because both prerequisites are needed for the drill to even resolve a
+  backup to restore.
+
+  Companion bits:
+    - internal/db/migrations/041_backup_drill.up.sql  (status table)
+    - internal/handler/admin_drill.go                 (read-side endpoint)
+    - deploy/chart/templates/prometheus-rules.yaml    (staleness alert)
+    - docs/runbooks/backup-restore-drill-failed.md    (when this fails)
+*/ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "astronomer.fullname" . }}-restore-drill
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "restore-drill") | nindent 4 }}
+spec:
+  schedule: {{ .Values.managementRestoreDrill.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.managementRestoreDrill.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.managementRestoreDrill.failedJobsHistoryLimit | default 3 }}
+  startingDeadlineSeconds: {{ .Values.managementRestoreDrill.startingDeadlineSeconds | default 600 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.managementRestoreDrill.backoffLimit | default 2 }}
+      ttlSecondsAfterFinished: {{ .Values.managementRestoreDrill.ttlSecondsAfterFinished | default 86400 }}
+      template:
+        metadata:
+          labels:
+            {{- include "astronomer.componentLabels" (dict "context" . "component" "restore-drill") | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          {{- with .Values.image.pullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.managementRestoreDrill.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.managementRestoreDrill.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # The sidecar Postgres uses the K8s native sidecar containers
+          # pattern (1.28+): an initContainer with restartPolicy=Always
+          # runs alongside the main container for the Job's lifetime and
+          # the Job completes when the main container exits regardless of
+          # the sidecar's state.
+          initContainers:
+            - name: postgres
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.sidecar.image.repository "tag" .Values.managementRestoreDrill.sidecar.image.tag "registry" .Values.managementRestoreDrill.sidecar.image.registry "fallback" .Values.image.registry) | quote }}
+              imagePullPolicy: {{ .Values.managementRestoreDrill.sidecar.image.pullPolicy | default "IfNotPresent" }}
+              restartPolicy: Always
+              env:
+                - name: POSTGRES_USER
+                  value: "drill"
+                - name: POSTGRES_DB
+                  value: "drill"
+                - name: POSTGRES_PASSWORD
+                  value: {{ .Values.managementRestoreDrill.sidecar.password | quote }}
+                # Bind only to localhost — the sidecar should never be
+                # reachable from outside the Job pod.
+                - name: PGHOST
+                  value: "127.0.0.1"
+                # postgres image looks at PGDATA when initializing. Keep
+                # it inside the emptyDir mount so the whole DB is
+                # ephemeral with the pod.
+                - name: PGDATA
+                  value: "/var/lib/postgresql/data/pgdata"
+              volumeMounts:
+                - name: pgdata
+                  mountPath: /var/lib/postgresql/data
+              readinessProbe:
+                exec:
+                  command: ["pg_isready", "-U", "drill", "-d", "drill", "-h", "127.0.0.1"]
+                periodSeconds: 2
+                failureThreshold: 30
+              resources:
+                {{- toYaml .Values.managementRestoreDrill.sidecar.resources | nindent 16 }}
+          containers:
+            - name: restore-runner
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.image.repository "tag" .Values.managementRestoreDrill.image.tag "registry" .Values.managementRestoreDrill.image.registry "fallback" .Values.image.registry) | quote }}
+              imagePullPolicy: {{ .Values.managementRestoreDrill.image.pullPolicy | default "IfNotPresent" }}
+              command: ["/bin/sh", "-eu", "-c"]
+              args:
+                - |
+                  set -eu
+
+                  # --- Capture start of work for the audit row ---------------
+                  STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+                  # The trap is the failure path: any unexpected exit
+                  # writes a 'failure' row before tearing down. We unset
+                  # the trap at the end on the happy path and write a
+                  # 'success' row explicitly.
+                  fail_and_exit() {
+                    ERR_MSG="$1"
+                    echo "DRILL FAILURE: ${ERR_MSG}" >&2
+                    FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                    # Escape single quotes in the error so the SQL
+                    # literal stays valid; psql is happy with E'' or
+                    # doubled-up quotes.
+                    SAFE_ERR="$(printf '%s' "${ERR_MSG}" | sed "s/'/''/g")"
+                    psql "${PROD_DATABASE_URL}" -v ON_ERROR_STOP=1 -c "
+                      INSERT INTO backup_drill_results
+                        (started_at, finished_at, status, backup_key, schema_version, error_message)
+                      VALUES
+                        ('${STARTED_AT}', '${FINISHED_AT}', 'failure', '${BACKUP_KEY:-}',
+                         ${SCHEMA_VERSION:-NULL}, '${SAFE_ERR}');
+                    " || echo "WARN: failed to record drill failure row" >&2
+                    exit 1
+                  }
+                  trap 'fail_and_exit "drill aborted unexpectedly (trap)"' EXIT
+
+                  # --- Configure aws cli -------------------------------------
+                  export AWS_SHARED_CREDENTIALS_FILE="/var/run/aws/credentials"
+                  export AWS_DEFAULT_REGION="${MANAGEMENT_BACKUP_REGION}"
+                  AWS_S3_FLAGS=""
+                  if [ -n "${MANAGEMENT_BACKUP_ENDPOINT:-}" ]; then
+                    AWS_S3_FLAGS="--endpoint-url ${MANAGEMENT_BACKUP_ENDPOINT}"
+                  fi
+
+                  BUCKET="${MANAGEMENT_BACKUP_BUCKET}"
+                  PREFIX="${MANAGEMENT_BACKUP_PREFIX:-astronomer-pg}"
+                  RELEASE="${MANAGEMENT_BACKUP_RELEASE}"
+                  DAILY_PFX="${PREFIX}/${RELEASE}/daily/"
+
+                  # --- Discover most recent backup ---------------------------
+                  echo "Listing s3://${BUCKET}/${DAILY_PFX}"
+                  LATEST_KEY="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
+                                    --bucket "${BUCKET}" \
+                                    --prefix "${DAILY_PFX}" \
+                                    --query 'Contents[].Key' \
+                                    --output text 2>/dev/null || echo '')"
+                  if [ -z "${LATEST_KEY}" ] || [ "${LATEST_KEY}" = "None" ]; then
+                    fail_and_exit "no backups found under s3://${BUCKET}/${DAILY_PFX}"
+                  fi
+                  # tr tabs/spaces -> newlines, sort, take the last
+                  # (lexical sort works because keys embed ISO-8601
+                  # timestamps — identical to the prune logic in the
+                  # backup CronJob).
+                  BACKUP_KEY="$(echo "${LATEST_KEY}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' | sort | tail -n1)"
+                  echo "Selected backup: s3://${BUCKET}/${BACKUP_KEY}"
+
+                  # --- Download to scratch -----------------------------------
+                  DUMP_PATH="/tmp/restore.pgcustom"
+                  aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${BACKUP_KEY}" "${DUMP_PATH}"
+                  echo "Downloaded $(wc -c < "${DUMP_PATH}") bytes."
+
+                  # --- Wait for sidecar Postgres -----------------------------
+                  # The readinessProbe gates the initContainer's "ready"
+                  # state; once the main container starts the sidecar is
+                  # already up, but defensively retry a few times.
+                  export PGPASSWORD="${DRILL_PASSWORD}"
+                  SIDECAR_URL="postgresql://drill:${DRILL_PASSWORD}@127.0.0.1:5432/drill?sslmode=disable"
+                  i=0
+                  until pg_isready -h 127.0.0.1 -U drill -d drill -q; do
+                    i=$((i + 1))
+                    if [ "${i}" -gt 60 ]; then
+                      fail_and_exit "sidecar postgres did not become ready in 60s"
+                    fi
+                    sleep 1
+                  done
+                  echo "Sidecar Postgres ready."
+
+                  # --- Restore -----------------------------------------------
+                  # --no-owner / --no-acl: the production DB's role
+                  # doesn't exist in the sidecar; without these the
+                  # restore would error on every GRANT. --exit-on-error
+                  # surfaces the first failure instead of grinding to
+                  # the end with a corrupt schema.
+                  pg_restore --dbname="${SIDECAR_URL}" \
+                             --no-owner --no-acl \
+                             --exit-on-error \
+                             "${DUMP_PATH}" \
+                    || fail_and_exit "pg_restore failed"
+
+                  # --- Schema-sanity check -----------------------------------
+                  ROW="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
+                    "SELECT version || '|' || dirty FROM schema_migrations ORDER BY version DESC LIMIT 1;" \
+                    2>/dev/null || true)"
+                  if [ -z "${ROW}" ]; then
+                    fail_and_exit "schema_migrations is empty in restored DB"
+                  fi
+                  SCHEMA_VERSION="${ROW%%|*}"
+                  DIRTY="${ROW##*|}"
+                  echo "schema_migrations latest: version=${SCHEMA_VERSION} dirty=${DIRTY}"
+                  if [ "${DIRTY}" = "t" ] || [ "${DIRTY}" = "true" ]; then
+                    fail_and_exit "schema_migrations.dirty=true (version=${SCHEMA_VERSION})"
+                  fi
+                  if [ "${SCHEMA_VERSION}" -lt "${EXPECTED_MIN_SCHEMA_VERSION}" ]; then
+                    fail_and_exit "schema_version ${SCHEMA_VERSION} < expected min ${EXPECTED_MIN_SCHEMA_VERSION}"
+                  fi
+
+                  # --- Row-count sanity check --------------------------------
+                  # Iterate the comma-separated expected table list and
+                  # bail if any has zero rows. The single SELECT count(*)
+                  # per table keeps this cheap.
+                  IFS=','
+                  for TBL in ${EXPECTED_TABLES}; do
+                    COUNT="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
+                      "SELECT count(*) FROM ${TBL};" 2>/dev/null || echo 'err')"
+                    if [ "${COUNT}" = "err" ]; then
+                      fail_and_exit "table ${TBL} missing from restored DB"
+                    fi
+                    if [ "${COUNT}" = "0" ]; then
+                      fail_and_exit "table ${TBL} has zero rows in restored DB"
+                    fi
+                    echo "  ${TBL}: ${COUNT} rows"
+                  done
+                  unset IFS
+
+                  # --- Success: write status row -----------------------------
+                  trap - EXIT
+                  FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  psql "${PROD_DATABASE_URL}" -v ON_ERROR_STOP=1 -c "
+                    INSERT INTO backup_drill_results
+                      (started_at, finished_at, status, backup_key, schema_version, error_message)
+                    VALUES
+                      ('${STARTED_AT}', '${FINISHED_AT}', 'success', '${BACKUP_KEY}',
+                       ${SCHEMA_VERSION}, '');
+                  "
+                  echo "Drill OK."
+              env:
+                - name: MANAGEMENT_BACKUP_RELEASE
+                  value: {{ .Release.Name | quote }}
+                - name: MANAGEMENT_BACKUP_BUCKET
+                  value: {{ .Values.managementBackup.s3.bucket | quote }}
+                - name: MANAGEMENT_BACKUP_REGION
+                  value: {{ .Values.managementBackup.s3.region | quote }}
+                - name: MANAGEMENT_BACKUP_PREFIX
+                  value: {{ .Values.managementBackup.s3.prefix | default "astronomer-pg" | quote }}
+                {{- with .Values.managementBackup.s3.endpoint }}
+                - name: MANAGEMENT_BACKUP_ENDPOINT
+                  value: {{ . | quote }}
+                {{- end }}
+                - name: EXPECTED_MIN_SCHEMA_VERSION
+                  value: {{ .Values.managementRestoreDrill.expectedMinSchemaVersion | quote }}
+                - name: EXPECTED_TABLES
+                  value: {{ join "," .Values.managementRestoreDrill.expectedTables | quote }}
+                - name: DRILL_PASSWORD
+                  value: {{ .Values.managementRestoreDrill.sidecar.password | quote }}
+                # The PRODUCTION DB DSN — used ONLY for the audit row
+                # write at the end. Pulled from the same secret /
+                # configmap the rest of the chart uses so air-gapped
+                # installs don't need a separate wire-up.
+                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                - name: PROD_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
+                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                {{- else }}
+                - name: PROD_DATABASE_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: {{ include "astronomer.fullname" . }}-config
+                      key: DATABASE_URL
+                {{- end }}
+              volumeMounts:
+                - name: aws-credentials
+                  mountPath: /var/run/aws
+                  readOnly: true
+                - name: scratch
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.managementRestoreDrill.resources | nindent 16 }}
+          volumes:
+            - name: aws-credentials
+              secret:
+                secretName: {{ .Values.managementBackup.s3.credentialsSecretRef.name | quote }}
+                items:
+                  - key: {{ .Values.managementBackup.s3.credentialsSecretRef.key | default "credentials" | quote }}
+                    path: credentials
+            - name: scratch
+              emptyDir:
+                sizeLimit: {{ .Values.managementRestoreDrill.scratchSizeLimit | default "8Gi" | quote }}
+            - name: pgdata
+              emptyDir:
+                sizeLimit: {{ .Values.managementRestoreDrill.scratchSizeLimit | default "8Gi" | quote }}
+{{- end }}
