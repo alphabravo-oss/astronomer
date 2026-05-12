@@ -579,3 +579,111 @@ export async function listBackupDrillHistory(params?: {
   );
   return res.data;
 }
+
+// ============================================================
+// Notification Templates (migration 059)
+// ============================================================
+
+export interface NotificationTemplateVariable {
+  name: string;
+  description: string;
+  required: boolean;
+  example: string;
+}
+
+export interface NotificationTemplateListItem {
+  key: string;
+  channel: 'email' | 'webhook';
+  description: string;
+  bodyFormat: string;
+  hasOverride: boolean;
+  enabled: boolean;
+  updatedAt?: string;
+}
+
+export interface NotificationTemplateDetail {
+  key: string;
+  channel: 'email' | 'webhook';
+  description: string;
+  bodyFormat: string;
+  defaultSubject: string;
+  defaultBody: string;
+  subject: string;
+  body: string;
+  hasOverride: boolean;
+  enabled: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+  variables: NotificationTemplateVariable[];
+}
+
+export interface NotificationTemplateUpsertBody {
+  subject?: string;
+  body: string;
+  body_format?: string;
+  enabled?: boolean;
+}
+
+export interface NotificationTemplatePreviewBody {
+  subject?: string;
+  body?: string;
+  body_format?: string;
+  variables: Record<string, unknown>;
+}
+
+export interface NotificationTemplatePreviewResult {
+  subject: string;
+  body: string;
+}
+
+export async function listNotificationTemplates(): Promise<NotificationTemplateListItem[]> {
+  const res = await api.get<APIResponse<{ items: NotificationTemplateListItem[]; total: number }>>(
+    '/admin/notification-templates/',
+  );
+  const data = res.data.data ?? (res.data as unknown as { items: NotificationTemplateListItem[] });
+  return data.items ?? [];
+}
+
+export async function getNotificationTemplate(key: string): Promise<NotificationTemplateDetail> {
+  const res = await api.get<APIResponse<NotificationTemplateDetail>>(
+    `/admin/notification-templates/${encodeURIComponent(key)}/`,
+  );
+  return res.data.data ?? (res.data as unknown as NotificationTemplateDetail);
+}
+
+export async function updateNotificationTemplate(
+  key: string,
+  body: NotificationTemplateUpsertBody,
+): Promise<NotificationTemplateDetail> {
+  const res = await api.put<APIResponse<NotificationTemplateDetail>>(
+    `/admin/notification-templates/${encodeURIComponent(key)}/`,
+    body,
+  );
+  return res.data.data ?? (res.data as unknown as NotificationTemplateDetail);
+}
+
+export async function resetNotificationTemplate(key: string): Promise<void> {
+  await api.delete(`/admin/notification-templates/${encodeURIComponent(key)}/`);
+}
+
+export async function previewNotificationTemplate(
+  key: string,
+  body: NotificationTemplatePreviewBody,
+): Promise<NotificationTemplatePreviewResult> {
+  const res = await api.post<APIResponse<NotificationTemplatePreviewResult>>(
+    `/admin/notification-templates/${encodeURIComponent(key)}/preview/`,
+    body,
+  );
+  return res.data.data ?? (res.data as unknown as NotificationTemplatePreviewResult);
+}
+
+export async function getNotificationTemplateVariables(
+  key: string,
+): Promise<NotificationTemplateVariable[]> {
+  const res = await api.get<APIResponse<{ variables: NotificationTemplateVariable[] }>>(
+    `/admin/notification-templates/${encodeURIComponent(key)}/variables/`,
+  );
+  const data =
+    res.data.data ?? (res.data as unknown as { variables: NotificationTemplateVariable[] });
+  return data.variables ?? [];
+}

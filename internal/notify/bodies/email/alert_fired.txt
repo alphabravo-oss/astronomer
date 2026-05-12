@@ -1,0 +1,13 @@
+{{.Branding.ProductName}} alert: {{.Data.AlertName}}
+
+Severity:  {{.Data.Severity}}
+Fired at:  {{.Data.FiredAt}}
+Resource:  {{.Data.Resource}}
+
+{{.Data.Message}}
+
+Open the dashboard for details: {{.Data.DashboardURL}}
+
+--
+{{.Branding.ProductName}}
+{{.Branding.SupportURL}}

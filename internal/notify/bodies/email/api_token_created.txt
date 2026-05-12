@@ -1,0 +1,13 @@
+Hello {{.Data.Username}},
+
+A new API token has been created on your {{.Branding.ProductName}} account.
+
+  Name:   {{.Data.TokenName}}
+  Prefix: {{.Data.TokenPrefix}}
+  When:   {{.Data.CreatedAt}}
+
+If this wasn't you, revoke the token from the dashboard's Tokens page and rotate your password.
+
+--
+{{.Branding.ProductName}} security
+{{.Branding.SupportURL}}

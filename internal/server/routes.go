@@ -61,6 +61,11 @@ type RouterDependencies struct {
 	// CRUD + test + status for the external SIEM pipeline
 	// (migration 055). Nil when the encryptor isn't wired.
 	SIEMForwarders *handler.SIEMHandler
+	// NotificationTemplates owns /api/v1/admin/notification-templates/*
+	// (migration 059). The handler reads/writes overrides on top of the
+	// built-in registry in internal/notify; the email + webhook
+	// dispatchers consume the overrides via SetOverrideLookup.
+	NotificationTemplates *handler.NotificationTemplateHandler
 	Auth           *handler.AuthHandler
 	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
 	// + Queries by cmd/server before NewRouter runs. When nil (test
@@ -455,6 +460,21 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/siem-forwarders/{id}/", deps.SIEMForwarders.Delete)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/siem-forwarders/{id}/test/", deps.SIEMForwarders.Test)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/siem-forwarders/{id}/status/", deps.SIEMForwarders.Status)
+		}
+
+		// Notification-template overrides (migration 059). Superuser-
+		// gated inside the handler. Same nil-safe wiring pattern as
+		// the SMTP routes above — the handler is non-nil whenever the
+		// notification_templates table exists (every prod boot post-
+		// migration). The dispatchers consume overrides via the
+		// OverrideLookup closures wired in cmd/server/main.go.
+		if deps.NotificationTemplates != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/notification-templates/", deps.NotificationTemplates.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/notification-templates/{key}/", deps.NotificationTemplates.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/notification-templates/{key}/", deps.NotificationTemplates.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/notification-templates/{key}/", deps.NotificationTemplates.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/notification-templates/{key}/preview/", deps.NotificationTemplates.Preview)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/notification-templates/{key}/variables/", deps.NotificationTemplates.Variables)
 		}
 
 		if deps.GroupMappings != nil {

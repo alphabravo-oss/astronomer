@@ -1,0 +1,9 @@
+Hello {{.Data.Username}},
+
+An administrator has unlocked your {{.Branding.ProductName}} account. You can sign in again now.
+
+If you didn't request this, contact your administrator immediately.
+
+--
+{{.Branding.ProductName}} security
+{{.Branding.SupportURL}}

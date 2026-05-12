@@ -22,6 +22,7 @@ import {
   Settings as SettingsIcon,
   ShieldAlert,
   LayoutDashboard,
+  FileText,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -49,6 +50,12 @@ const CARDS: SettingsCard[] = [
     title: 'Webhooks',
     description: 'Slack / PagerDuty / generic event subscribers + deliveries.',
     icon: Webhook,
+  },
+  {
+    href: '/dashboard/settings/templates',
+    title: 'Notification templates',
+    description: 'Customize subject + body of every transactional email + webhook.',
+    icon: FileText,
   },
   {
     href: '/dashboard/settings/quotas',

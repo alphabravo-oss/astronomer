@@ -1,0 +1,9 @@
+Hello {{.Data.Username}},
+
+Two-factor authentication has been disabled on your {{.Branding.ProductName}} account. Future sign-ins will only require your password.
+
+If you did not disable 2FA yourself, change your password right away and contact your administrator. Without 2FA your account is only protected by the password.
+
+--
+{{.Branding.ProductName}} security
+{{.Branding.SupportURL}}

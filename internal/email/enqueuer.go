@@ -20,6 +20,16 @@ type EnqueueQuerier interface {
 	GetSMTPSettings(ctx context.Context, id uuid.UUID) (sqlc.SmtpSettings, error)
 }
 
+// OverrideLookup is the bridge from the Enqueuer to the notify
+// package's registry/Resolve path. The wiring in cmd/server/main.go
+// supplies a closure that calls notify.Resolve(ctx, queries, key).
+// Empty Subject/Body means "no override — use the embedded default".
+//
+// Why a closure here vs. importing notify directly: keeps the email
+// package free of a notify dependency so the dependency graph is
+// still email → sqlc (notify also lives at the sqlc seam).
+type OverrideLookup func(ctx context.Context, key string) (Overrides, bool)
+
 // Enqueuer is the user-facing API every hook site (auth lockout, totp
 // enroll, alert fire, ...) writes to. It:
 //
@@ -33,10 +43,11 @@ type EnqueueQuerier interface {
 // task. Decoupling enqueue from send is the constraint above ("DON'T
 // fail user-facing actions when an email send fails").
 type Enqueuer struct {
-	q        EnqueueQuerier
-	branding BrandingProvider
-	log      *slog.Logger
-	now      func() time.Time
+	q         EnqueueQuerier
+	branding  BrandingProvider
+	log       *slog.Logger
+	now       func() time.Time
+	overrides OverrideLookup
 }
 
 func NewEnqueuer(q EnqueueQuerier, branding BrandingProvider, log *slog.Logger) *Enqueuer {
@@ -52,6 +63,13 @@ func (e *Enqueuer) SetNow(now func() time.Time) {
 	if now != nil {
 		e.now = now
 	}
+}
+
+// SetOverrideLookup wires the notify.Resolve bridge. Optional — when
+// nil (the default) the Enqueuer renders only the embedded defaults,
+// preserving the pre-migration-059 behaviour.
+func (e *Enqueuer) SetOverrideLookup(o OverrideLookup) {
+	e.overrides = o
 }
 
 // Request is the user-supplied portion of the enqueue. Callers fill
@@ -95,7 +113,19 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) (uuid.UUID, error) 
 			branding.SupportURL = DefaultBranding.SupportURL
 		}
 	}
-	rendered, err := Render(req.Template, branding, req.Subject, req.Data)
+	// Look up an operator override (migration 059). A miss returns
+	// the zero Overrides — RenderWithOverrides then falls back to the
+	// embedded defaults, byte-identical to the pre-migration path.
+	var ov Overrides
+	if e.overrides != nil {
+		// The override registry is keyed by "email.<template_name>"
+		// (see internal/notify/templates_email.go). req.Template is
+		// the bare template name (no prefix), so we prepend.
+		if got, ok := e.overrides(ctx, "email."+req.Template); ok {
+			ov = got
+		}
+	}
+	rendered, err := RenderWithOverrides(req.Template, branding, req.Subject, req.Data, ov)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("render %s: %w", req.Template, err)
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
+	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
@@ -515,6 +516,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		smtpHandler.SetBrandingProvider(brandingProvider)
 		smtpHandler.SetAuditWriter(queries)
 		emailEnqueuer = email.NewEnqueuer(queries, brandingProvider, logger)
+		// Bridge to the notification_templates override layer
+		// (migration 059). Without this the Enqueuer renders only the
+		// embedded defaults; with it the operator's per-key override
+		// (if present + enabled) takes effect at enqueue time.
+		emailEnqueuer.SetOverrideLookup(func(ctx context.Context, key string) (email.Overrides, bool) {
+			res, err := notify.Resolve(ctx, queries, key)
+			if err != nil || !res.HasOverride {
+				return email.Overrides{}, false
+			}
+			return email.Overrides{Subject: res.Subject, BodyText: res.Body}, true
+		})
 		notifier := &emailNotifierAdapter{e: emailEnqueuer}
 		authHandler.SetEmailNotifier(notifier)
 		if totpHandler != nil {
@@ -546,6 +558,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		webhookHandler = handler.NewWebhookHandler(queries, encryptor, logger)
 		webhookHandler.SetAuditWriter(queries)
 		webhookSender := webhook.NewSender(nil) // default http.Client
+		// Bridge to the notification_templates override layer
+		// (migration 059). The webhook precedence order becomes
+		// subscription template → operator override → JSON marshal;
+		// see internal/webhook/sender.go buildBody for details.
+		webhookSender.SetOverrideLookup(func(ctx context.Context, key string) (string, bool) {
+			res, err := notify.Resolve(ctx, queries, key)
+			if err != nil || !res.HasOverride {
+				return "", false
+			}
+			return res.Body, true
+		})
 		tasks.ConfigureWebhook(tasks.WebhookDeps{
 			Queries:   queries,
 			Sender:    webhookSender,
@@ -672,6 +695,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		EmailEnqueuer: emailEnqueuer,
 		Webhooks:      webhookHandler,
 		SIEMForwarders: siemHandler,
+		// Notification-template overrides (migration 059). Always
+		// non-nil — the table is unconditional. The wiring below
+		// also attaches OverrideLookup closures to the email
+		// Enqueuer and the webhook Sender so dispatchers consult
+		// overrides at delivery time.
+		NotificationTemplates: func() *handler.NotificationTemplateHandler {
+			h := handler.NewNotificationTemplateHandler(queries, logger)
+			h.SetAuditWriter(queries)
+			return h
+		}(),
 		// Identity-group sync admin endpoints (migration 042). CRUD
 		// over identity_group_mappings + per-user re-sync. The RBAC
 		// cache invalidator is wired below once rbacQuerier is known
