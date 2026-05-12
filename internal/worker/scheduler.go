@@ -144,6 +144,8 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30m", tasks.NetworkPolicyDriftCheckType, "network policy drift sweep"},
 		// Sprint 069: CRD-mirror v2 stale-row prune.
 		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
+		// Sprint 072: anomaly baseline recompute every 5m.
+		{"@every 5m", tasks.AnomalyBaselineRecomputeType, "anomaly baseline recompute"},
 		// Migration 070: apiserver allow-list reconciler. Every 15m
 		// the sweep walks every active (mode != 'disabled') row and
 		// drives per-cluster reconcile (GetEffective → diff → optional

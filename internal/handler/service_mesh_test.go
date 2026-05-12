@@ -162,8 +162,8 @@ func smReq(t *testing.T, method, target string, clusterID uuid.UUID) *http.Reque
 	return req
 }
 
-// unwrapData pops the {"data": ...} wrapper our response helper adds.
-func unwrapData(t *testing.T, rr *httptest.ResponseRecorder, out any) {
+// unwrapDataResp pops the {"data": ...} wrapper our response helper adds.
+func unwrapDataResp(t *testing.T, rr *httptest.ResponseRecorder, out any) {
 	t.Helper()
 	var wrapped struct {
 		Data json.RawMessage `json:"data"`
@@ -196,7 +196,7 @@ func TestServiceMeshHandler_GetReturnsDetection(t *testing.T) {
 		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
 	}
 	var resp ServiceMeshDetectionResponse
-	unwrapData(t, rr, &resp)
+	unwrapDataResp(t, rr, &resp)
 	if resp.DetectedMesh != "istio" {
 		t.Errorf("detected_mesh = %q", resp.DetectedMesh)
 	}
@@ -217,7 +217,7 @@ func TestServiceMeshHandler_GetReturnsEmptyWhenNoRow(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	var resp ServiceMeshDetectionResponse
-	unwrapData(t, rr, &resp)
+	unwrapDataResp(t, rr, &resp)
 	if resp.DetectedMesh != "unknown" {
 		t.Errorf("detected_mesh = %q, want unknown", resp.DetectedMesh)
 	}
@@ -244,7 +244,7 @@ func TestServiceMeshHandler_DetectFiresWorkerInline(t *testing.T) {
 		t.Errorf("detector called for %s, want %s", d.calls[0], clusterID)
 	}
 	var resp ServiceMeshDetectionResponse
-	unwrapData(t, rr, &resp)
+	unwrapDataResp(t, rr, &resp)
 	if resp.DetectedMesh != "istio" {
 		t.Errorf("post-detect mesh = %q", resp.DetectedMesh)
 	}
@@ -279,7 +279,7 @@ func TestServiceMeshHandler_MTLSAggregateOnlyWhenRequesterMissing(t *testing.T) 
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	var resp MTLSBreakdownResponse
-	unwrapData(t, rr, &resp)
+	unwrapDataResp(t, rr, &resp)
 	if resp.Notice == "" {
 		t.Errorf("expected notice describing scaffolding-only fallback, got empty")
 	}
@@ -307,7 +307,7 @@ func TestServiceMeshHandler_MTLSPullsPerNamespaceWhenRequesterAvailable(t *testi
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	var resp MTLSBreakdownResponse
-	unwrapData(t, rr, &resp)
+	unwrapDataResp(t, rr, &resp)
 	if len(resp.Rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(resp.Rows))
 	}

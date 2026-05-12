@@ -113,6 +113,8 @@ const (
 	TypeApiserverAllowlistReconcile        = tasks.ApiserverAllowlistReconcileType
 	TypeApiserverAllowlistReconcileAll     = tasks.ApiserverAllowlistReconcileAllType
 	TypeApiserverAllowlistCleanupSnapshots = tasks.ApiserverAllowlistCleanupSnapshotsType
+	// Sprint 072: anomaly-detection rolling baseline recompute.
+	TypeAnomalyBaselineRecompute = tasks.AnomalyBaselineRecomputeType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -205,6 +207,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcile, instrumentTask(TypeApiserverAllowlistReconcile, tasks.HandleApiserverAllowlistReconcile))
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcileAll, instrumentTask(TypeApiserverAllowlistReconcileAll, tasks.HandleApiserverAllowlistReconcileAll))
 	w.mux.HandleFunc(TypeApiserverAllowlistCleanupSnapshots, instrumentTask(TypeApiserverAllowlistCleanupSnapshots, tasks.HandleApiserverAllowlistCleanupSnapshots))
+	w.mux.HandleFunc(TypeAnomalyBaselineRecompute, instrumentTask(TypeAnomalyBaselineRecompute, tasks.HandleAnomalyBaselineRecompute))
 
 	w.log.Info("registered all task handlers")
 }

@@ -99,6 +99,11 @@ export const queryKeys = {
     channels: ['alerting', 'channels'] as const,
     silences: ['alerting', 'silences'] as const,
   },
+  // Sprint 072 — read-only anomaly baselines for tuning.
+  anomalyBaselines: {
+    list: (params?: Record<string, unknown>) => ['anomaly-baselines', 'list', params] as const,
+    detail: (id: string) => ['anomaly-baselines', 'detail', id] as const,
+  },
   logging: {
     outputs: ['logging', 'outputs'] as const,
     pipelines: ['logging', 'pipelines'] as const,
@@ -980,6 +985,29 @@ export function useCreateAlertSilence() {
     onError: (error: Error) => {
       toast.error(`Failed to create silence: ${error.message}`);
     },
+  });
+}
+
+// ============================================================
+// Anomaly Baseline Hooks (sprint 072, read-only)
+// ============================================================
+
+export function useAnomalyBaselines(params?: { clusterId?: string; limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: queryKeys.anomalyBaselines.list(params),
+    queryFn: () => apiClient.getAnomalyBaselines(params),
+    // The recompute worker runs every 5m; the UI refresh cadence
+    // doesn't need to be tighter than that. 30s keeps the page
+    // responsive without hammering the API.
+    refetchInterval: 30000,
+  });
+}
+
+export function useAnomalyBaseline(id: string) {
+  return useQuery({
+    queryKey: queryKeys.anomalyBaselines.detail(id),
+    queryFn: () => apiClient.getAnomalyBaseline(id),
+    enabled: Boolean(id),
   });
 }
 

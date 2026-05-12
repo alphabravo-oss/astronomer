@@ -81,6 +81,11 @@ type CreateChannelRequest struct {
 }
 
 // CreateAlertRuleRequest represents the request body for creating an alert rule.
+//
+// Sprint 072 added the RuleKind / Anomaly* fields. Submitting a body
+// with RuleKind="anomaly" requires the operator to supply Metric +
+// AnomalyStddev + AnomalyWindowSeconds; the other anomaly fields
+// default sensibly (stddev=3, direction=above, min_samples=50).
 type CreateAlertRuleRequest struct {
 	Name                   string            `json:"name"`
 	Description            string            `json:"description"`
@@ -97,6 +102,16 @@ type CreateAlertRuleRequest struct {
 	Severity               string            `json:"severity"`
 	Enabled                bool              `json:"enabled"`
 	CooldownMinutes        int32             `json:"cooldown_minutes"`
+	// Sprint 072 anomaly-rule fields. RuleKind="anomaly" engages the
+	// rolling-baseline evaluator path; everything else (including the
+	// default RuleKind="threshold") uses the existing static-threshold
+	// path unchanged.
+	RuleKind             string   `json:"rule_kind"`
+	Metric               string   `json:"metric"`
+	AnomalyStddev        *float64 `json:"anomaly_stddev"`
+	AnomalyWindowSeconds *int32   `json:"anomaly_window_seconds"`
+	AnomalyMinSamples    *int32   `json:"anomaly_min_samples"`
+	AnomalyDirection     string   `json:"anomaly_direction"`
 }
 
 // CreateSilenceRequest represents the request body for creating an alert silence.
@@ -322,6 +337,10 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" {
 		RespondError(w, http.StatusBadRequest, "validation_error", "Rule name is required")
+		return
+	}
+	if msg := validateAnomalyRuleRequest(req); msg != "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", msg)
 		return
 	}
 
@@ -1253,8 +1272,17 @@ func (h *AlertingHandler) alertRuleResponse(ctx context.Context, rule sqlc.Alert
 		"labels":                 mapStringMap(cfg["labels"]),
 		"annotations":            mapStringMap(cfg["annotations"]),
 		"notificationChannelIds": channelIDs,
-		"createdAt":              rule.CreatedAt.UTC().Format(time.RFC3339),
-		"updatedAt":              rule.UpdatedAt.UTC().Format(time.RFC3339),
+		// Sprint 072 anomaly-rule surface. ruleKind defaults to
+		// "threshold" so the frontend can branch its rule-edit
+		// form without a follow-up GET.
+		"ruleKind":             defaultString(stringFromMap(cfg, "rule_kind"), "threshold"),
+		"metric":               stringFromMap(cfg, "metric"),
+		"anomalyStddev":        numberOrNil(cfg["anomaly_stddev"]),
+		"anomalyWindowSeconds": numberOrNil(cfg["anomaly_window_seconds"]),
+		"anomalyMinSamples":    numberOrNil(cfg["anomaly_min_samples"]),
+		"anomalyDirection":     defaultString(stringFromMap(cfg, "anomaly_direction"), ""),
+		"createdAt":            rule.CreatedAt.UTC().Format(time.RFC3339),
+		"updatedAt":            rule.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -1349,6 +1377,7 @@ func alertRuleConfiguration(req CreateAlertRuleRequest) json.RawMessage {
 	if req.Threshold != nil {
 		cfg["threshold"] = *req.Threshold
 	}
+	applyAnomalyFieldsToConfig(cfg, req)
 	data, _ := json.Marshal(cfg)
 	return data
 }
@@ -1376,8 +1405,80 @@ func alertRuleConfigurationWithFallback(req CreateAlertRuleRequest, current json
 	if req.Annotations != nil {
 		cfg["annotations"] = req.Annotations
 	}
+	applyAnomalyFieldsToConfig(cfg, req)
 	data, _ := json.Marshal(cfg)
 	return data
+}
+
+// applyAnomalyFieldsToConfig stamps the sprint 072 anomaly-rule
+// fields into the rule's configuration JSONB.
+//
+// We store these in the configuration blob (rather than only in the
+// dedicated alert_rules columns) so the alert evaluator can read them
+// without an additional query — the existing AlertRule sqlc struct
+// is unmodified and the evaluator already decodes the configuration
+// on every tick.
+//
+// Defaults: anomaly_stddev=3, anomaly_direction=above,
+// anomaly_min_samples=50, anomaly_window_seconds=86400 (24h). These
+// match the migration column defaults so the two stay in sync.
+func applyAnomalyFieldsToConfig(cfg map[string]any, req CreateAlertRuleRequest) {
+	if req.RuleKind != "" {
+		cfg["rule_kind"] = req.RuleKind
+	}
+	if req.Metric != "" {
+		cfg["metric"] = req.Metric
+	}
+	if req.AnomalyStddev != nil {
+		cfg["anomaly_stddev"] = *req.AnomalyStddev
+	}
+	if req.AnomalyWindowSeconds != nil {
+		cfg["anomaly_window_seconds"] = *req.AnomalyWindowSeconds
+	}
+	if req.AnomalyMinSamples != nil {
+		cfg["anomaly_min_samples"] = *req.AnomalyMinSamples
+	}
+	if req.AnomalyDirection != "" {
+		cfg["anomaly_direction"] = req.AnomalyDirection
+	}
+	// On a rule-kind switch from anomaly→threshold via UpdateRule,
+	// the operator clears the anomaly metadata explicitly via an
+	// empty kind. We DON'T do that automatically — leaving the old
+	// anomaly fields in place is harmless because the threshold
+	// evaluator never reads them.
+}
+
+// validateAnomalyRuleRequest reports a validation error string if
+// req declares an anomaly rule but is missing required anomaly
+// fields. Returns "" when the request is valid (anomaly or not).
+// Called by CreateRule before persistence; UpdateRule does not
+// re-validate so a rule that loses its metric mid-update silently
+// short-circuits to no-fire (preferred over a hard 400 — the rule
+// stays editable).
+func validateAnomalyRuleRequest(req CreateAlertRuleRequest) string {
+	if req.RuleKind != "anomaly" {
+		return ""
+	}
+	if req.Metric == "" {
+		return "anomaly rule requires a metric name"
+	}
+	if req.AnomalyStddev != nil && *req.AnomalyStddev <= 0 {
+		return "anomaly_stddev must be > 0"
+	}
+	if req.AnomalyWindowSeconds != nil && *req.AnomalyWindowSeconds <= 0 {
+		return "anomaly_window_seconds must be > 0"
+	}
+	if req.AnomalyMinSamples != nil && *req.AnomalyMinSamples < 0 {
+		return "anomaly_min_samples must be >= 0"
+	}
+	if req.AnomalyDirection != "" {
+		switch req.AnomalyDirection {
+		case "above", "below", "either":
+		default:
+			return "anomaly_direction must be one of above|below|either"
+		}
+	}
+	return ""
 }
 
 func (h *AlertingHandler) syncRuleChannels(ctx context.Context, ruleID uuid.UUID, channelIDs []string) error {

@@ -362,6 +362,12 @@ export default function AlertingPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/dashboard/alerting/baselines"
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-background text-sm hover:bg-muted"
+          >
+            Anomaly Baselines
+          </a>
           {activeTab === 'rules' && (
             <button
               onClick={() => { setEditingRule(null); setShowRuleModal(true); }}
@@ -503,10 +509,25 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
     threshold: rule?.threshold?.toString() || '',
     duration: rule?.duration || '5m',
     enabled: rule?.enabled ?? true,
+    // Sprint 072 — rule_kind toggle + anomaly knobs. The kind defaults
+    // to 'threshold' so old rules edit unchanged.
+    ruleKind: (rule?.ruleKind || 'threshold') as 'threshold' | 'anomaly',
+    metric: rule?.metric || 'cluster_cpu_percent',
+    anomalyStddev: rule?.anomalyStddev?.toString() || '3',
+    anomalyWindowSeconds: rule?.anomalyWindowSeconds?.toString() || '86400',
+    anomalyMinSamples: rule?.anomalyMinSamples?.toString() || '50',
+    anomalyDirection: (rule?.anomalyDirection || 'above') as 'above' | 'below' | 'either',
   });
 
   const handleSave = async () => {
-    const data: Partial<AlertRule> = {
+    const isAnomaly = form.ruleKind === 'anomaly';
+    const data: Partial<AlertRule> & {
+      rule_kind?: string;
+      anomaly_stddev?: number;
+      anomaly_window_seconds?: number;
+      anomaly_min_samples?: number;
+      anomaly_direction?: string;
+    } = {
       name: form.name,
       description: form.description || undefined,
       type: form.type,
@@ -515,6 +536,16 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
       threshold: form.threshold ? parseFloat(form.threshold) : undefined,
       duration: form.duration,
       enabled: form.enabled,
+      // Send the new fields with the snake_case names the backend
+      // CreateAlertRuleRequest expects. The handler also reads camelCase
+      // via Type/RuleType aliases, but the snake_case path is
+      // canonical.
+      rule_kind: form.ruleKind,
+      metric: isAnomaly ? form.metric : undefined,
+      anomaly_stddev: isAnomaly ? parseFloat(form.anomalyStddev) : undefined,
+      anomaly_window_seconds: isAnomaly ? parseInt(form.anomalyWindowSeconds, 10) : undefined,
+      anomaly_min_samples: isAnomaly ? parseInt(form.anomalyMinSamples, 10) : undefined,
+      anomaly_direction: isAnomaly ? form.anomalyDirection : undefined,
     };
 
     try {
@@ -605,6 +636,29 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
             </div>
           </div>
 
+          {/* Sprint 072 — Rule Kind toggle. Threshold uses the existing
+              static-threshold path; Anomaly uses the rolling-baseline
+              evaluator. Only Anomaly shows the per-metric knobs below. */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Rule kind</label>
+            <div className="flex gap-1.5">
+              {(['threshold', 'anomaly'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  onClick={() => setForm((f) => ({ ...f, ruleKind: kind }))}
+                  className={cn(
+                    'flex-1 px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors',
+                    form.ruleKind === kind
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {kind}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">PromQL Query</label>
             <textarea
@@ -616,6 +670,95 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
                 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
             />
           </div>
+
+          {form.ruleKind === 'anomaly' && (
+            <div className="space-y-3 p-3 rounded-md border border-border bg-muted/30">
+              <div className="text-xs text-muted-foreground">
+                Anomaly rules fire when the current value of <b>metric</b> deviates from the
+                rolling baseline by more than <b>stddev</b> standard deviations in the chosen
+                <b> direction</b>. Newly-created rules short-circuit to no-fire until
+                <b> min samples</b> datapoints accumulate.
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Metric</label>
+                <select
+                  value={form.metric}
+                  onChange={(e) => setForm((f) => ({ ...f, metric: e.target.value }))}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="cluster_cpu_percent">cluster_cpu_percent</option>
+                  <option value="cluster_memory_percent">cluster_memory_percent</option>
+                  <option value="pod_count">pod_count</option>
+                  <option value="node_count">node_count</option>
+                  <option value="pod_restart_rate">pod_restart_rate</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Stddev (σ)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.anomalyStddev}
+                    onChange={(e) => setForm((f) => ({ ...f, anomalyStddev: e.target.value }))}
+                    placeholder="3"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Window</label>
+                  <select
+                    value={form.anomalyWindowSeconds}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, anomalyWindowSeconds: e.target.value }))
+                    }
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="3600">1h</option>
+                    <option value="21600">6h</option>
+                    <option value="86400">24h</option>
+                    <option value="604800">7d</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Direction</label>
+                  <select
+                    value={form.anomalyDirection}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        anomalyDirection: e.target.value as 'above' | 'below' | 'either',
+                      }))
+                    }
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="above">Above baseline</option>
+                    <option value="below">Below baseline</option>
+                    <option value="either">Either direction</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Min samples</label>
+                  <input
+                    type="number"
+                    value={form.anomalyMinSamples}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, anomalyMinSamples: e.target.value }))
+                    }
+                    placeholder="50"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">

@@ -102,6 +102,7 @@ type RouterDependencies struct {
 	Tools            *handler.ToolHandler
 	Audit        *handler.AuditHandler
 	Alerting     *handler.AlertingHandler
+	Anomaly      *handler.AnomalyHandler
 	ArgoCD       *handler.ArgoCDHandler
 	Backups      *handler.BackupHandler
 	Catalog      *handler.CatalogHandler
@@ -1186,6 +1187,14 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
 			r.Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
 			r.Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
+		})
+	}
+
+	// Sprint 072 — read-only anomaly baseline inspection.
+	if deps.Anomaly != nil {
+		r.Route("/anomaly-baselines", func(r chi.Router) {
+			r.Get("/", deps.Anomaly.List)
+			r.Get("/{id}/", deps.Anomaly.Get)
 		})
 	}
 
