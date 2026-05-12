@@ -210,6 +210,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/tokens/", deps.Auth.ListTokens)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/tokens/", deps.Auth.CreateToken)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/auth/tokens/{id}/", deps.Auth.RevokeToken)
+			// Password reset (migration 047). Both endpoints are
+			// PUBLIC — the request path is rate-limited under the
+			// same /auth bucket as login (brute force on the email
+			// enumeration vector → rate-limit), and the complete
+			// path is gated by the emailed token.
+			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/password-reset/request/", deps.Auth.PasswordResetRequest)
+			r.With(appmiddleware.LoginRateLimit(10, time.Minute)).Post("/auth/password-reset/complete/", deps.Auth.PasswordResetComplete)
 		}
 
 		// 2FA / TOTP routes (migration 043). Verify is PUBLIC — its proof
