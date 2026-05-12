@@ -441,3 +441,135 @@ export async function triggerImageVulnRescan(
   );
   return res.data.data;
 }
+// CRD-mirror v2 (sprint 069) — "what's installed" read-only views
+// ============================================================
+//
+// Backed by the mirrored_* tables; the per-cluster agent streams
+// observe events into Postgres so these reads never round-trip
+// through kubectl. The is_default / is_managed / accepted_status
+// fields are pre-resolved server-side so the UI doesn't have to
+// re-parse annotations or condition arrays per render.
+
+export interface MirroredIngressClass {
+  name: string;
+  controller: string;
+  parameters: unknown;
+  isDefault: boolean;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MirroredGatewayClass {
+  name: string;
+  controllerName: string;
+  description: string;
+  parameters: unknown;
+  // "True" | "False" | "Unknown" | "" (when the Accepted condition is unset).
+  acceptedStatus: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MirroredNetworkPolicy {
+  namespace: string;
+  name: string;
+  podSelector: unknown;
+  policyTypes: string[];
+  ingressRules: unknown[];
+  egressRules: unknown[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  // True when app.kubernetes.io/managed-by=astronomer on the policy's
+  // labels at ingest time. The UI surfaces this as a "managed by
+  // astronomer" badge so operators can tell at a glance which
+  // policies are owned by sprint-068's NetworkPolicy writer.
+  isManaged: boolean;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MirroredResourceQuota {
+  namespace: string;
+  name: string;
+  // Free-form maps so future-proofed for whatever quota keys
+  // upstream Kubernetes carries. Typed as `unknown` so the dashboard
+  // can render any shape (`cpu`, `requests.memory`,
+  // `count/configmaps`, …) without a per-key DTO bump.
+  hard: Record<string, string> | null;
+  used: Record<string, string> | null;
+  scopes: string[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MirroredLimitRange {
+  namespace: string;
+  name: string;
+  limits: unknown[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listMirroredIngressClasses(
+  clusterId: string,
+): Promise<MirroredIngressClass[]> {
+  const res = await api.get<APIResponse<MirroredIngressClass[]>>(
+    `/clusters/${clusterId}/ingress-classes`,
+  );
+  return res.data.data ?? [];
+}
+
+export async function listMirroredGatewayClasses(
+  clusterId: string,
+): Promise<MirroredGatewayClass[]> {
+  const res = await api.get<APIResponse<MirroredGatewayClass[]>>(
+    `/clusters/${clusterId}/gateway-classes`,
+  );
+  return res.data.data ?? [];
+}
+
+export async function listMirroredNetworkPolicies(
+  clusterId: string,
+  namespace?: string,
+): Promise<MirroredNetworkPolicy[]> {
+  const url = namespace
+    ? `/clusters/${clusterId}/network-policies?namespace=${encodeURIComponent(namespace)}`
+    : `/clusters/${clusterId}/network-policies`;
+  const res = await api.get<APIResponse<MirroredNetworkPolicy[]>>(url);
+  return res.data.data ?? [];
+}
+
+export async function listMirroredResourceQuotas(
+  clusterId: string,
+  namespace?: string,
+): Promise<MirroredResourceQuota[]> {
+  const url = namespace
+    ? `/clusters/${clusterId}/resource-quotas?namespace=${encodeURIComponent(namespace)}`
+    : `/clusters/${clusterId}/resource-quotas`;
+  const res = await api.get<APIResponse<MirroredResourceQuota[]>>(url);
+  return res.data.data ?? [];
+}
+
+export async function listMirroredLimitRanges(
+  clusterId: string,
+  namespace?: string,
+): Promise<MirroredLimitRange[]> {
+  const url = namespace
+    ? `/clusters/${clusterId}/limit-ranges?namespace=${encodeURIComponent(namespace)}`
+    : `/clusters/${clusterId}/limit-ranges`;
+  const res = await api.get<APIResponse<MirroredLimitRange[]>>(url);
+  return res.data.data ?? [];
+}
