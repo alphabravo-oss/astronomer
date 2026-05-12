@@ -230,6 +230,10 @@ type RouterDependencies struct {
 	// surface: /clusters/{cluster_id}/{ingress-classes,gateway-classes,
 	// network-policies,resource-quotas,limit-ranges}/. Nil-safe.
 	ClusterResources *handler.ClusterResourcesHandler
+	// ApiserverAllowlist owns /api/v1/clusters/{cluster_id}/apiserver-allowlist/*
+	// (migration 070). The reconciler worker is the auto-correct path;
+	// this handler is the CRUD + on-demand reconcile surface. Nil-safe.
+	ApiserverAllowlist *handler.ApiserverAllowlistHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -893,6 +897,21 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.UpdateSchedule)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.DeleteSchedule)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
+	}
+
+	// Apiserver allow-list (migration 070). Per-cluster lockbox for the
+	// cluster's apiserver. Reads (GET / preview / snapshots) gate on
+	// clusters:read; writes (PUT / reconcile) gate on clusters:update
+	// — same rule the snapshot + registry routes use, since the
+	// operator who can edit a cluster also owns its access posture.
+	// Nil-safe: when the handler isn't wired the routes are omitted and
+	// the periodic reconciler still walks whatever rows exist in the DB.
+	if deps.ApiserverAllowlist != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/", deps.ApiserverAllowlist.Get)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/apiserver-allowlist/", deps.ApiserverAllowlist.Update)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/apiserver-allowlist/reconcile/", deps.ApiserverAllowlist.Reconcile)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/snapshots/", deps.ApiserverAllowlist.Snapshots)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/preview/", deps.ApiserverAllowlist.Preview)
 	}
 
 	// Fleet operations (migration 056). Coordinated multi-cluster
