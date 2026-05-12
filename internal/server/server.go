@@ -14,6 +14,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
@@ -377,6 +378,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Driver:  handler.NewVeleroDriverAdapter(requester),
 		Log:     logger,
 	})
+	// Sprint 069: CRD-mirror v2 cluster-detail read surface + tunnel
+	// ingest router. The Hub routes MIRROR_EVENT frames into
+	// MirrorRouter, which upserts into the mirrored_* tables; the REST
+	// handler reads them back out for the cluster-detail page. Periodic
+	// prune (every 30m) is wired via worker/scheduler.go.
+	clusterResourcesHandler := handler.NewClusterResourcesHandler(queries)
+	mirrorRouter := crd.NewMirrorRouter(queries)
+	hub.SetMirrorIngester(mirrorRouter)
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
@@ -821,6 +830,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// Vault integration (migration 067). Admin CRUD over
 		// vault_connections + project default pointer.
 		Vault: vaultHandler,
+		// Sprint 069: CRD-mirror v2 read endpoints (ingress-classes,
+		// gateway-classes, network-policies, resource-quotas, limit-ranges).
+		ClusterResources: clusterResourcesHandler,
 	}
 	// Migration 063 — read-side audit. The PolicyEvaluator is shared
 	// between the middleware and the admin handler so policy writes

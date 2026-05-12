@@ -142,6 +142,8 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// 'drifting' when the managed-by label is missing or mismatched.
 		// The next apply tick re-stamps the object.
 		{"@every 30m", tasks.NetworkPolicyDriftCheckType, "network policy drift sweep"},
+		// Sprint 069: CRD-mirror v2 stale-row prune.
+		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
 	}
 
 	for _, e := range entries {

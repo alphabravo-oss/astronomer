@@ -101,6 +101,8 @@ const (
 	//    drifting when labels diverge from the managed-by marker.
 	TypeNetworkPolicyApply      = tasks.NetworkPolicyApplyType
 	TypeNetworkPolicyDriftCheck = tasks.NetworkPolicyDriftCheckType
+	// Sprint 069: CRD-mirror v2 stale-row prune.
+	TypeCrdMirrorPruneStale = tasks.CrdMirrorPruneStaleType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -188,6 +190,7 @@ func (w *Worker) RegisterHandlers() {
 	// Migration 068: NetworkPolicy template reconciler + drift sweep.
 	w.mux.HandleFunc(TypeNetworkPolicyApply, instrumentTask(TypeNetworkPolicyApply, tasks.HandleNetworkPolicyApply))
 	w.mux.HandleFunc(TypeNetworkPolicyDriftCheck, instrumentTask(TypeNetworkPolicyDriftCheck, tasks.HandleNetworkPolicyDriftCheck))
+	w.mux.HandleFunc(TypeCrdMirrorPruneStale, instrumentTask(TypeCrdMirrorPruneStale, tasks.HandleCrdMirrorPruneStale))
 
 	w.log.Info("registered all task handlers")
 }

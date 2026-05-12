@@ -98,6 +98,25 @@ const (
 	// the decommission row.
 	MsgDecommission    MessageType = "DECOMMISSION"
 	MsgDecommissionAck MessageType = "DECOMMISSION_ACK"
+
+	// MsgMirrorEvent is the sprint-069 CRD-mirror v2 wire format. Unlike
+	// MsgStateUpdate (which is a coarse invalidation hint), a MirrorEvent
+	// carries the full resource body for one of the five mirrored GVKs so
+	// the management plane can refresh its mirrored_* row without a
+	// follow-up kubectl call. The agent emits one MirrorEvent per
+	// Informer Add/Update/Delete callback for the five GVKs it watches:
+	//
+	//   - networking.k8s.io/v1 IngressClass
+	//   - gateway.networking.k8s.io/v1 GatewayClass
+	//   - networking.k8s.io/v1 NetworkPolicy
+	//   - v1 ResourceQuota
+	//   - v1 LimitRange
+	//
+	// There is no Result/Ack — the server is the authoritative writer of
+	// the mirrored_* table and the agent doesn't need to know whether the
+	// upsert succeeded; periodic prune (every 30m) covers any missed
+	// deliveries.
+	MsgMirrorEvent MessageType = "MIRROR_EVENT"
 )
 
 // DecommissionPayload tells the agent which managed-side resources to remove.
@@ -406,4 +425,40 @@ type MetricsPayload struct {
 	ClusterNodeCount   int                `json:"cluster_node_count"`
 	Nodes              []NodeMetrics      `json:"nodes,omitempty"`
 	Namespaces         []NamespaceMetrics `json:"namespaces,omitempty"`
+}
+
+// MirrorEventOp is the kind of mutation observed by an agent-side
+// informer, mirrored verbatim from StateUpdateOp. We keep a sibling
+// type rather than reusing StateUpdateOp so a future change to one
+// flow (e.g. adding a "resync" op only to MirrorEvent) doesn't have
+// to ripple through both.
+type MirrorEventOp string
+
+const (
+	MirrorOpAdded    MirrorEventOp = "added"
+	MirrorOpModified MirrorEventOp = "modified"
+	MirrorOpDeleted  MirrorEventOp = "deleted"
+)
+
+// MirrorEventPayload carries one Add/Update/Delete event for one of the
+// sprint-069 mirrored GVKs (IngressClass / GatewayClass / NetworkPolicy
+// / ResourceQuota / LimitRange). Kind is the bare Kubernetes Kind name
+// — matches the crd.Kind* constants on the server side. Object is the
+// full unstructured.Unstructured JSON marshalled body; on a delete
+// event, the server only consults Name + Namespace + Kind and the
+// Object may be omitted.
+//
+// The server is the authoritative writer; there is no Ack. Periodic
+// prune (every 30m) handles missed deliveries — agents re-send every
+// object on reconnect, so a row that hasn't been touched in >1h is
+// unambiguously gone.
+type MirrorEventPayload struct {
+	Op        MirrorEventOp   `json:"op"`
+	Kind      string          `json:"kind"`
+	Namespace string          `json:"namespace,omitempty"`
+	Name      string          `json:"name"`
+	// Object is the raw unstructured JSON body of the resource. Empty on
+	// delete events. The server passes this through to
+	// internal/crd.Ingest{Kind} via unstructured.Unstructured{Object: …}.
+	Object json.RawMessage `json:"object,omitempty"`
 }

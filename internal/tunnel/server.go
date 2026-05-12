@@ -75,7 +75,7 @@ type AgentConnection struct {
 // the agent shard's lock, so SendToAgent("A") and SendToAgent("B")
 // contend only if their clusterIDs hash to the same shard (1/16).
 type Hub struct {
-	mu        sync.RWMutex // protects publisher + stateLim only
+	mu        sync.RWMutex // protects publisher + stateLim + mirror only
 	agents    *shardedAgents
 	log       *slog.Logger
 	validator AgentTokenValidator
@@ -86,6 +86,28 @@ type Hub struct {
 	// kind, namespace) granularity. Lazily constructed on first use so the
 	// hub remains zero-value-safe.
 	stateLim *stateUpdateLimiter
+	// mirror routes sprint-069 MsgMirrorEvent frames into the
+	// mirrored_* DB tables. Optional; nil-safe so existing tests that
+	// don't wire CRD-mirror v2 stay green.
+	mirror MirrorIngester
+}
+
+// MirrorIngester is the narrow handler-side interface the Hub calls
+// when an agent emits a MIRROR_EVENT frame. The implementation lives in
+// internal/crd (RouteMirrorEvent) and depends on *sqlc.Queries; we keep
+// the surface as an interface so the tunnel package doesn't import
+// internal/crd directly (which would drag controller-runtime into the
+// tunnel build path).
+type MirrorIngester interface {
+	RouteMirrorEvent(ctx context.Context, clusterID uuid.UUID, payload protocol.MirrorEventPayload) error
+}
+
+// SetMirrorIngester attaches the sprint-069 mirror router (set once at
+// startup). Nil-safe.
+func (h *Hub) SetMirrorIngester(m MirrorIngester) {
+	h.mu.Lock()
+	h.mirror = m
+	h.mu.Unlock()
 }
 
 // LifecyclePublisher is the interface the events bus implements; the tunnel

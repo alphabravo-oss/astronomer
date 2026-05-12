@@ -226,6 +226,10 @@ type RouterDependencies struct {
 	// /api/v1/projects/{id}/default-vault-connection/ (project RBAC).
 	// Migration 067. Nil-safe: when not wired the routes are omitted.
 	Vault *handler.VaultHandler
+	// ClusterResources owns the sprint-069 read-only "what's installed"
+	// surface: /clusters/{cluster_id}/{ingress-classes,gateway-classes,
+	// network-policies,resource-quotas,limit-ranges}/. Nil-safe.
+	ClusterResources *handler.ClusterResourcesHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -1006,6 +1010,19 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/{id}/clusters/", deps.ClusterGroups.ListClusters)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/move/", deps.ClusterGroups.MoveClusters)
 		})
+	}
+
+	// Sprint 069 — CRD-mirror v2 cluster-detail read surface. The full
+	// /network-policies/ path returns every mirrored NetworkPolicy
+	// (managed + operator-created); the parallel sprint-068
+	// /network-policies/applications/ path owns the astronomer-managed
+	// subset.
+	if deps.ClusterResources != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/ingress-classes/", deps.ClusterResources.ListIngressClasses)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/gateway-classes/", deps.ClusterResources.ListGatewayClasses)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/network-policies/", deps.ClusterResources.ListNetworkPolicies)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/resource-quotas/", deps.ClusterResources.ListResourceQuotas)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/limit-ranges/", deps.ClusterResources.ListLimitRanges)
 	}
 
 	// Vault integration (migration 067).

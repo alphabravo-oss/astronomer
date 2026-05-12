@@ -132,46 +132,46 @@ export interface DatasourceWriteBody {
 // ============================================================
 
 export async function listWidgets(): Promise<Widget[]> {
-  const res = await api.get<APIResponse<Widget[]>>('/api/v1/admin/dashboard-widgets/');
+  const res = await api.get<APIResponse<Widget[]>>('/admin/dashboard-widgets/');
   return res.data.data ?? [];
 }
 
 export async function getWidget(id: string): Promise<Widget> {
-  const res = await api.get<APIResponse<Widget>>(`/api/v1/admin/dashboard-widgets/${id}/`);
+  const res = await api.get<APIResponse<Widget>>(`/admin/dashboard-widgets/${id}/`);
   return res.data.data;
 }
 
 export async function createWidget(body: WidgetWriteBody): Promise<Widget> {
-  const res = await api.post<APIResponse<Widget>>('/api/v1/admin/dashboard-widgets/', body);
+  const res = await api.post<APIResponse<Widget>>('/admin/dashboard-widgets/', body);
   return res.data.data;
 }
 
 export async function updateWidget(id: string, body: WidgetWriteBody): Promise<Widget> {
-  const res = await api.put<APIResponse<Widget>>(`/api/v1/admin/dashboard-widgets/${id}/`, body);
+  const res = await api.put<APIResponse<Widget>>(`/admin/dashboard-widgets/${id}/`, body);
   return res.data.data;
 }
 
 export async function deleteWidget(id: string): Promise<void> {
-  await api.delete(`/api/v1/admin/dashboard-widgets/${id}/`);
+  await api.delete(`/admin/dashboard-widgets/${id}/`);
 }
 
 export async function listDatasources(): Promise<PrometheusDatasource[]> {
-  const res = await api.get<APIResponse<PrometheusDatasource[]>>('/api/v1/admin/prometheus-datasources/');
+  const res = await api.get<APIResponse<PrometheusDatasource[]>>('/admin/prometheus-datasources/');
   return res.data.data ?? [];
 }
 
 export async function createDatasource(body: DatasourceWriteBody): Promise<PrometheusDatasource> {
-  const res = await api.post<APIResponse<PrometheusDatasource>>('/api/v1/admin/prometheus-datasources/', body);
+  const res = await api.post<APIResponse<PrometheusDatasource>>('/admin/prometheus-datasources/', body);
   return res.data.data;
 }
 
 export async function updateDatasource(id: string, body: DatasourceWriteBody): Promise<PrometheusDatasource> {
-  const res = await api.put<APIResponse<PrometheusDatasource>>(`/api/v1/admin/prometheus-datasources/${id}/`, body);
+  const res = await api.put<APIResponse<PrometheusDatasource>>(`/admin/prometheus-datasources/${id}/`, body);
   return res.data.data;
 }
 
 export async function deleteDatasource(id: string): Promise<void> {
-  await api.delete(`/api/v1/admin/prometheus-datasources/${id}/`);
+  await api.delete(`/admin/prometheus-datasources/${id}/`);
 }
 
 export interface DatasourceTestResult {
@@ -180,7 +180,7 @@ export interface DatasourceTestResult {
 }
 
 export async function testDatasource(id: string): Promise<DatasourceTestResult> {
-  const res = await api.post<APIResponse<DatasourceTestResult>>(`/api/v1/admin/prometheus-datasources/${id}/test/`);
+  const res = await api.post<APIResponse<DatasourceTestResult>>(`/admin/prometheus-datasources/${id}/test/`);
   return res.data.data;
 }
 
@@ -189,16 +189,16 @@ export async function testDatasource(id: string): Promise<DatasourceTestResult> 
 // ============================================================
 
 export async function renderGlobal(): Promise<RenderedWidget[]> {
-  const res = await api.get<APIResponse<RenderedWidget[]>>('/api/v1/dashboards/global/');
+  const res = await api.get<APIResponse<RenderedWidget[]>>('/dashboards/global/');
   return res.data.data ?? [];
 }
 
 export async function renderForCluster(clusterId: string): Promise<RenderedWidget[]> {
-  const res = await api.get<APIResponse<RenderedWidget[]>>(`/api/v1/dashboards/clusters/${clusterId}/`);
+  const res = await api.get<APIResponse<RenderedWidget[]>>(`/dashboards/clusters/${clusterId}/`);
   return res.data.data ?? [];
 }
 
 export async function renderForProject(projectId: string): Promise<RenderedWidget[]> {
-  const res = await api.get<APIResponse<RenderedWidget[]>>(`/api/v1/dashboards/projects/${projectId}/`);
+  const res = await api.get<APIResponse<RenderedWidget[]>>(`/dashboards/projects/${projectId}/`);
   return res.data.data ?? [];
 }
