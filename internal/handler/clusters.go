@@ -190,16 +190,10 @@ func (h *ClusterHandler) publishEvent(eventType string, data any) {
 	h.publisher.Publish(eventType, data)
 }
 
-// clusterWithMetrics is the JSON shape returned to the frontend dashboard
-// card. It embeds sqlc.Cluster so every existing field (id, name, status,
-// node_count, ...) is preserved verbatim, and tacks on three computed
-// scalars the UI consumes.
-type clusterWithMetrics struct {
-	sqlc.Cluster
-	CPUPercentage    float64 `json:"cpu_percentage"`
-	MemoryPercentage float64 `json:"memory_percentage"`
-	PodCount         int     `json:"pod_count"`
-}
+// The previous clusterWithMetrics struct (anonymous-embed sqlc.Cluster +
+// CPU/Memory/Pod scalars) was replaced by the explicit ClusterResponse DTO
+// in clusters_response.go. See TestClusterResponse_WireCompat for the
+// byte-for-byte wire compat guarantee.
 
 // metricsRequesterAdapter bridges the handler-level K8sRequester (which
 // returns *protocol.K8sResponsePayload with a base64-encoded body) into the
@@ -229,8 +223,8 @@ func (a metricsRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 // for up to 5s × N clusters (FEATURES-051126 T07). The background metrics
 // publisher (internal/metrics/publisher.go) keeps the cache warm; stale
 // or missing entries return zero values rather than blocking.
-func (h *ClusterHandler) enrichClusterFromCache(c sqlc.Cluster) clusterWithMetrics {
-	out := clusterWithMetrics{Cluster: c}
+func (h *ClusterHandler) enrichClusterFromCache(c sqlc.Cluster) ClusterResponse {
+	out := clusterToResponse(c)
 	if h.metrics == nil {
 		return out
 	}
@@ -245,8 +239,8 @@ func (h *ClusterHandler) enrichClusterFromCache(c sqlc.Cluster) clusterWithMetri
 // Called from single-cluster endpoints (Get) where the caller is willing to
 // wait for an up-to-date snapshot. Bounded by a 5s per-cluster timeout to
 // keep a hung agent from holding the HTTP handler indefinitely.
-func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster) clusterWithMetrics {
-	out := clusterWithMetrics{Cluster: c}
+func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster) ClusterResponse {
+	out := clusterToResponse(c)
 	if h.metrics == nil {
 		return out
 	}
@@ -313,7 +307,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	enriched := make([]clusterWithMetrics, 0, len(clusters))
+	enriched := make([]ClusterResponse, 0, len(clusters))
 	for _, c := range clusters {
 		enriched = append(enriched, h.enrichClusterFromCache(c))
 	}
@@ -367,7 +361,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"distribution": req.Distribution,
 	})
 
-	RespondJSON(w, http.StatusCreated, cluster)
+	RespondJSON(w, http.StatusCreated, clusterToResponse(cluster))
 }
 
 // Get handles GET /api/v1/clusters/{id}/.
@@ -438,7 +432,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"region":       req.Region,
 	})
 
-	RespondJSON(w, http.StatusOK, cluster)
+	RespondJSON(w, http.StatusOK, clusterToResponse(cluster))
 }
 
 // DecommissionPhaseStatus is one entry in the decommission status response.

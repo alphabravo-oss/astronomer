@@ -563,12 +563,12 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 	pendingOps, _ := h.queries.ListToolOperations(r.Context(), sqlc.ListToolOperationsParams{
 		Limit:  200,
 		Offset: 0,
-		Status: pgtype.Text{String: "pending", Valid: true},
+		Status: pgtype.Text{String: OpStatusPending, Valid: true},
 	})
 	runningOps, _ := h.queries.ListToolOperations(r.Context(), sqlc.ListToolOperationsParams{
 		Limit:  200,
 		Offset: 0,
-		Status: pgtype.Text{String: "running", Valid: true},
+		Status: pgtype.Text{String: OpStatusRunning, Valid: true},
 	})
 	opBySlug := map[string]sqlc.ToolOperation{}
 	for _, op := range append(pendingOps, runningOps...) {
@@ -692,7 +692,7 @@ func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "not_found", "Tool operation not found")
 		return
 	}
-	if op.Status != "failed" && op.Status != "superseded" {
+	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
 		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
 		return
 	}
@@ -756,16 +756,16 @@ func (h *ToolHandler) controllerSummary(ctx context.Context) (map[string]any, er
 			}
 		}
 		counts[op.Status]++
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
 			staleRunning++
 		}
 		if len(recent) < 5 {
 			recent = append(recent, h.operationPreview(ctx, op))
 		}
-		if (op.Status == "failed" || op.Status == "superseded") && time.Since(op.CreatedAt) <= 30*time.Minute {
+		if (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) && time.Since(op.CreatedAt) <= 30*time.Minute {
 			recentFailureCount++
 		}
-		if latestFailure == nil && (op.Status == "failed" || op.Status == "superseded") {
+		if latestFailure == nil && (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) {
 			latestFailure = h.operationPreview(ctx, op)
 		}
 	}
@@ -774,7 +774,7 @@ func (h *ToolHandler) controllerSummary(ctx context.Context) (map[string]any, er
 	return map[string]any{
 		"reconciler": map[string]any{
 			"enabled":              true,
-			"queueDepth":           counts["pending"] + counts["running"],
+			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
 			"staleRunningCount":    staleRunning,
 			"staleThresholdSecond": 60,
 		},
@@ -968,7 +968,7 @@ func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKe
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -1089,7 +1089,7 @@ func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []sqlc.Too
 			})
 			continue
 		}
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
 			continue
 		}
 		running, err := h.queries.MarkToolOperationRunning(ctx, op.ID)

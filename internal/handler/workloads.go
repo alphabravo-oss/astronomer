@@ -504,7 +504,7 @@ func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request)
 		RespondError(w, http.StatusNotFound, "not_found", "Workload operation not found")
 		return
 	}
-	if op.Status != "failed" && op.Status != "superseded" {
+	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
 		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
 		return
 	}
@@ -546,14 +546,14 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		counts[op.Status]++
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
 			staleRunning++
 		}
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"reconciler": map[string]any{
 			"enabled":              true,
-			"queueDepth":           counts["pending"] + counts["running"],
+			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
 			"staleRunningCount":    staleRunning,
 			"staleThresholdSecond": 60,
 		},
@@ -1086,7 +1086,7 @@ func (h *WorkloadHandler) enqueueOperation(ctx context.Context, targetType, targ
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -1177,7 +1177,7 @@ func (h *WorkloadHandler) claimPendingWorkloadOperations(ctx context.Context) []
 			_, _ = h.queries.MarkWorkloadOperationSuperseded(ctx, sqlc.MarkWorkloadOperationSupersededParams{ID: op.ID, ErrorMessage: "superseded by newer operation for target"})
 			continue
 		}
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
 			continue
 		}
 		running, err := h.queries.MarkWorkloadOperationRunning(ctx, op.ID)

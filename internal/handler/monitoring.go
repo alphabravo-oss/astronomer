@@ -365,7 +365,7 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 		RespondError(w, http.StatusInternalServerError, "monitoring_error", "Failed to load monitoring operation")
 		return
 	}
-	if op.Status != "failed" && op.Status != "superseded" {
+	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
 		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
 		return
 	}
@@ -2715,7 +2715,7 @@ func (h *MonitoringHandler) enqueueSharedThanosOperation(ctx context.Context, us
 		TargetKey:     "shared",
 		OperationType: opType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -2748,7 +2748,7 @@ func (h *MonitoringHandler) enqueueSharedAlertmanagerOperation(ctx context.Conte
 		TargetKey:     "shared",
 		OperationType: opType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -2781,7 +2781,7 @@ func (h *MonitoringHandler) enqueueClusterStackOperation(ctx context.Context, us
 		TargetKey:     clusterID,
 		OperationType: opType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -2863,23 +2863,23 @@ func (h *MonitoringHandler) controllerSummary(ctx context.Context) (map[string]a
 			}
 		}
 		counts[op.Status]++
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > 2*time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > 2*time.Minute {
 			staleRunning++
 		}
 		if len(recent) < 5 {
 			recent = append(recent, h.monitoringOperationPreview(ctx, op))
 		}
-		if (op.Status == "failed" || op.Status == "superseded") && time.Since(op.CreatedAt) <= 30*time.Minute {
+		if (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) && time.Since(op.CreatedAt) <= 30*time.Minute {
 			recentFailureCount++
 		}
-		if latestFailure == nil && (op.Status == "failed" || op.Status == "superseded") {
+		if latestFailure == nil && (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) {
 			latestFailure = h.monitoringOperationPreview(ctx, op)
 		}
 	}
 	summary := map[string]any{
 		"reconciler": map[string]any{
 			"enabled":              true,
-			"queueDepth":           counts["pending"] + counts["running"],
+			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
 			"staleRunningCount":    staleRunning,
 			"staleThresholdSecond": 120,
 		},
@@ -3024,7 +3024,7 @@ func (h *MonitoringHandler) claimPendingMonitoringOperations(ctx context.Context
 	for _, op := range ops {
 		targetKey := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[targetKey]; ok && latestID != op.ID {
-			if op.Status == "pending" || (op.Status == "running" && (!op.StartedAt.Valid || time.Since(op.StartedAt.Time) >= 2*time.Minute)) {
+			if op.Status == OpStatusPending || (op.Status == OpStatusRunning && (!op.StartedAt.Valid || time.Since(op.StartedAt.Time) >= 2*time.Minute)) {
 				h.recordMonitoringOperationEvent(ctx, op.ID, "info", "queue", "operation superseded by newer desired state", map[string]any{
 					"targetType": op.TargetType,
 					"targetKey":  op.TargetKey,
@@ -3036,7 +3036,7 @@ func (h *MonitoringHandler) claimPendingMonitoringOperations(ctx context.Context
 			}
 			continue
 		}
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < 2*time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < 2*time.Minute {
 			continue
 		}
 		running, err := h.queries.MarkMonitoringOperationRunning(ctx, op.ID)

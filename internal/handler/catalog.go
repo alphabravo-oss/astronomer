@@ -1185,7 +1185,7 @@ func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusNotFound, "not_found", "Catalog operation not found")
 		return
 	}
-	if op.Status != "failed" && op.Status != "superseded" {
+	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
 		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
 		return
 	}
@@ -1249,16 +1249,16 @@ func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any,
 			}
 		}
 		counts[op.Status]++
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
 			staleRunning++
 		}
 		if len(recent) < 5 {
 			recent = append(recent, h.operationPreview(ctx, op))
 		}
-		if (op.Status == "failed" || op.Status == "superseded") && time.Since(op.CreatedAt) <= 30*time.Minute {
+		if (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) && time.Since(op.CreatedAt) <= 30*time.Minute {
 			recentFailureCount++
 		}
-		if latestFailure == nil && (op.Status == "failed" || op.Status == "superseded") {
+		if latestFailure == nil && (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) {
 			latestFailure = h.operationPreview(ctx, op)
 		}
 	}
@@ -1267,7 +1267,7 @@ func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any,
 	return map[string]any{
 		"reconciler": map[string]any{
 			"enabled":              true,
-			"queueDepth":           counts["pending"] + counts["running"],
+			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
 			"staleRunningCount":    staleRunning,
 			"staleThresholdSecond": 60,
 		},
@@ -1297,7 +1297,7 @@ func (h *CatalogHandler) enqueueOperation(ctx context.Context, targetType, targe
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -1418,7 +1418,7 @@ func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []sq
 			})
 			continue
 		}
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
 			continue
 		}
 		running, err := h.queries.MarkCatalogOperationRunning(ctx, op.ID)
