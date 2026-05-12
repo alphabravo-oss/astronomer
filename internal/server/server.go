@@ -173,6 +173,23 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		logger.Warn("ASTRONOMER_ENCRYPTION_KEY is not set; encrypted columns will be returned as ciphertext and SSO is disabled")
 	}
 
+	// Migration 045 — Dex consolidation.
+	//
+	// When the chart deploys the in-cluster Dex (dex.enabled=true), the
+	// configmap template sets DEX_BUNDLED_ENABLED + DEX_BUNDLED_* describing
+	// the templated objects. The bootstrap below auto-wires the singleton
+	// dex_settings row so the operator's first connector + Apply works
+	// without a manual settings step. No-op when dex.enabled=false (legacy
+	// operator-managed Dex flow stays in effect).
+	if _, err := SeedBundledDexSettings(ctx, queries, logger); err != nil {
+		logger.Warn("dex bootstrap: seed failed", "error", err)
+	}
+	// Surface drift between legacy sso_configurations and the new
+	// dex_connectors path. Best-effort: log + continue on error.
+	if err := WarnIfLegacySSORowsActive(ctx, queries, logger); err != nil {
+		logger.Debug("dex bootstrap: legacy SSO check failed", "error", err)
+	}
+
 	bus := events.NewBus()
 	hub := tunnel.NewHubWithValidator(logger, queries)
 	hub.SetPublisher(busPublisherAdapter{bus: bus})
