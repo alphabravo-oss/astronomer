@@ -57,6 +57,10 @@ type RouterDependencies struct {
 	// sub-routes (migration 048). Nil when the encryptor isn't wired
 	// (the secret is Fernet-encrypted, so we degrade off cleanly).
 	Webhooks *handler.WebhookHandler
+	// SIEMForwarders owns /api/v1/admin/siem-forwarders/* — admin
+	// CRUD + test + status for the external SIEM pipeline
+	// (migration 055). Nil when the encryptor isn't wired.
+	SIEMForwarders *handler.SIEMHandler
 	Auth           *handler.AuthHandler
 	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
 	// + Queries by cmd/server before NewRouter runs. When nil (test
@@ -418,6 +422,20 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/webhooks/{id}/test/", deps.Webhooks.Test)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/webhooks/{id}/deliveries/", deps.Webhooks.Deliveries)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/webhooks/{id}/deliveries/{delivery_id}/retry/", deps.Webhooks.RetryDelivery)
+		}
+
+		// External SIEM forwarders (migration 055). Superuser-gated
+		// inside each handler; the dispatcher worker is the actual
+		// sender and these endpoints only manage the config + read
+		// status.
+		if deps.SIEMForwarders != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/siem-forwarders/", deps.SIEMForwarders.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/siem-forwarders/", deps.SIEMForwarders.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/siem-forwarders/{id}/", deps.SIEMForwarders.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/siem-forwarders/{id}/", deps.SIEMForwarders.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/siem-forwarders/{id}/", deps.SIEMForwarders.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/siem-forwarders/{id}/test/", deps.SIEMForwarders.Test)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/siem-forwarders/{id}/status/", deps.SIEMForwarders.Status)
 		}
 
 		if deps.GroupMappings != nil {
