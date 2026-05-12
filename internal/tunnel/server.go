@@ -69,7 +69,7 @@ type AgentConnection struct {
 
 // Hub manages all connected agent tunnels.
 //
-// The agent map is sharded (FEATURES-051126 T18); only the hub's other
+// The agent map is sharded; only the hub's other
 // mutable state (publisher, stateLim init) is guarded by Hub.mu. Most
 // hot paths — SendToAgent, GetAgent, register/unregister — hit only
 // the agent shard's lock, so SendToAgent("A") and SendToAgent("B")
@@ -268,7 +268,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	// Always count the register — first-connect and reconnect alike — so
 	// the rate over a window captures "is this cluster flapping?" rather
-	// than just "is anything ever happening at all". FEATURES-051126 T16.
+	// than just "is anything ever happening at all".
 	recordAgentReconnect(payload.ClusterID)
 	if wasReconnect {
 		h.publish("agent.reconnecting", payload.ClusterID, sessionID, payload.AgentVersion)
@@ -432,7 +432,7 @@ func (h *Hub) Disconnect(clusterID string) bool { return h.disconnectImpl(cluste
 // immediately and re-dials, hitting the Service load balancer which
 // routes to a healthy sibling pod.
 //
-// Returns the number of agents that were drained. FEATURES-051126 T14.
+// Returns the number of agents that were drained.
 func (h *Hub) Drain() int {
 	snapshot := h.agents.DrainAll()
 	if len(snapshot) == 0 {
@@ -522,7 +522,7 @@ func (h *Hub) SendDecommission(ctx context.Context, clusterID string, payload pr
 // the agent set across all shards (briefly locking each in turn) then
 // sends OUTSIDE the locks — at 500 agents the previous serial-under-
 // lock implementation made BroadcastToAll latency O(N * send-latency)
-// and held the hub mutex the whole time. FEATURES-051126 T18.
+// and held the hub mutex the whole time.
 func (h *Hub) BroadcastToAll(msg *protocol.Message) {
 	agents := h.agents.Snapshot()
 	for _, agent := range agents {

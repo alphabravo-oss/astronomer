@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// FEATURES-051126 T15 — traceparent must round-trip through an asynq
+// Traceparent must round-trip through an asynq
 // task payload so the worker handler can rejoin the original trace.
 //
 // Strategy: install a real TracerProvider locally (no exporter — spans
@@ -74,7 +74,7 @@ func TestWithTracingPayload_NoActiveSpan_PassThrough(t *testing.T) {
 }
 
 // Extract must no-op when the field is absent (older tasks enqueued
-// before T15 land).
+// before tracing landed).
 func TestContextWithAsynqTracing_AbsentFields(t *testing.T) {
 	body := []byte(`{"foo":1}`)
 	ctx := ContextWithAsynqTracing(context.Background(), body)

@@ -19,7 +19,6 @@ import (
 )
 
 // k8sRequesterTracer is the OTel tracer for tunnel k8s requests.
-// T15 FEATURES-051126.
 var k8sRequesterTracer = otel.Tracer("astronomer/k8s-requester")
 
 type K8sRequester interface {
@@ -34,7 +33,7 @@ type TunnelK8sRequester struct {
 func NewTunnelK8sRequester(hub *tunnel.Hub) *TunnelK8sRequester {
 	// 5 consecutive failures opens the circuit; 30s cooldown before
 	// the half-open trial. Tunable in NewTunnelK8sRequesterWithBreaker
-	// for tests + future operator config (FEATURES-051126 T19).
+	// for tests + future operator config.
 	return NewTunnelK8sRequesterWithBreaker(hub, 5, 30*time.Second)
 }
 
@@ -53,7 +52,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		return nil, fmt.Errorf("tunnel requester not configured")
 	}
 
-	// T15: span around the full k8s tunnel round-trip. Attributes
+	// Span around the full k8s tunnel round-trip. Attributes
 	// carry the routed cluster + HTTP method so traces filter on
 	// either dimension. retErr is finalized via the named return.
 	ctx, span := k8sRequesterTracer.Start(ctx, "tunnel.k8s "+method)
@@ -72,7 +71,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		span.End()
 	}()
 
-	// FEATURES-051126 T19: short-circuit calls to a known-failing
+	// Short-circuit calls to a known-failing
 	// cluster instead of burning the ctx timeout. The breaker is
 	// per-cluster so this only fast-fails the offender; other
 	// clusters keep flowing normally. The named-return retErr is
@@ -122,7 +121,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		return nil, err
 	}
 
-	// FEATURES-051126 T20: the agent may respond either with one
+	// The agent may respond either with one
 	// K8sResponse (small bodies) or with chunked K8sStreamFrame
 	// (header + N data + end) for large bodies. Probe the first
 	// frame to discriminate; both shapes assemble into a single

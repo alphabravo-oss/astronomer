@@ -80,7 +80,7 @@ type CatalogHandler struct {
 	trigger chan struct{}
 	// helmConcurrency caps the number of executeOperation goroutines
 	// dispatched per reconciler tick. Zero falls back to the package
-	// default (see effectiveHelmConcurrency). T17 FEATURES-051126.
+	// default (see effectiveHelmConcurrency).
 	helmConcurrency int
 }
 
@@ -1353,7 +1353,7 @@ func lastCatalogEvents(events []sqlc.CatalogOperationEvent, n int) []sqlc.Catalo
 }
 
 func (h *CatalogHandler) processPendingOperations(ctx context.Context) {
-	// T17 FEATURES-051126: claim under the lock, then release before
+	// Claim under the lock, then release before
 	// the (potentially 10-minute) helm dispatch so other clusters'
 	// operations are not stalled behind one stuck install.
 	claimed := h.claimPendingCatalogOperations(ctx)

@@ -48,7 +48,6 @@ func registerJobMetrics() {
 // correlation ID into the task payload as `_correlation_id`. Pulled out
 // to one helper so all 5 enqueue sites in the codebase use the same
 // convention; the matching dequeue extraction lives in instrumentTask.
-// FEATURES-051126 T22.
 func EnqueueWithCorrelation(client *asynq.Client, task *asynq.Task, correlationID string, opts ...asynq.Option) (*asynq.TaskInfo, error) {
 	if task == nil || client == nil {
 		return nil, asynqEnqueueNilErr
@@ -70,7 +69,7 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 	tracer := otel.Tracer("astronomer/worker")
 	return func(ctx context.Context, task *asynq.Task) error {
 		start := time.Now()
-		// FEATURES-051126 T22: pull `_correlation_id` (if any) out of
+		// Pull `_correlation_id` (if any) out of
 		// the task payload and stamp it on the per-job logger. This
 		// stitches worker logs back to the HTTP request that enqueued
 		// the task — previously the worker side was a dead-end for
@@ -79,7 +78,7 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		if cid := observability.ExtractAsynqCorrelationID(task.Payload()); cid != "" {
 			logger = observability.WithCorrelationID(logger, cid)
 		}
-		// T15: rejoin the originating trace if traceparent rode the
+		// Rejoin the originating trace if traceparent rode the
 		// payload, then open a child span for the worker execution.
 		// When tracing is disabled at the SDK level, Start returns a
 		// no-op span and the ctx is unchanged in any meaningful way.

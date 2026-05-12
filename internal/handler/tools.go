@@ -61,7 +61,7 @@ type ToolHandler struct {
 	mu      sync.Mutex
 	trigger chan struct{}
 	// helmConcurrency caps the number of executeOperation goroutines
-	// dispatched per reconciler tick. T17 FEATURES-051126.
+	// dispatched per reconciler tick.
 	helmConcurrency int
 }
 
@@ -1024,7 +1024,7 @@ func lastToolEvents(events []sqlc.ToolOperationEvent, n int) []sqlc.ToolOperatio
 }
 
 func (h *ToolHandler) processPendingOperations(ctx context.Context) {
-	// T17 FEATURES-051126: claim under the lock, then release before
+	// Claim under the lock, then release before
 	// helm dispatch so unrelated clusters' operations are not stalled
 	// behind a stuck install (helmTimeout = 10 minutes).
 	claimed := h.claimPendingToolOperations(ctx)

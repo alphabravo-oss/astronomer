@@ -16,7 +16,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-// FEATURES-051126 T15 — distributed tracing foundation.
+// Distributed tracing foundation.
 //
 // Astronomer ships zero OTel instrumentation today. The audit's
 // acceptance bar is one trace that spans HTTP → asynq → DB → tunnel.

@@ -16,7 +16,7 @@ type DB struct {
 
 // PoolConfig holds the operator-tunable knobs for Connect. Zero values
 // fall back to the defaults below — operators tune them via the chart's
-// database.* values (FEATURES-051126 T21).
+// database.* values.
 type PoolConfig struct {
 	MaxConns          int32         // 0 → 25
 	MinConns          int32         // 0 → 5
@@ -113,7 +113,7 @@ func (d *DB) Health(ctx context.Context) error {
 
 // PoolWaitingForConn reports whether callers are currently queueing on
 // an empty pool. Implements the dbPoolSaturationReporter contract the
-// readiness handler uses (FEATURES-051126 T21). True when:
+// readiness handler uses. True when:
 //
 //   - The pool has zero available (idle) conns right now AND
 //   - At least one acquire has been waiting (the monotonic

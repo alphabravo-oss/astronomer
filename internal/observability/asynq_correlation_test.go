@@ -6,7 +6,7 @@ import (
 )
 
 // Round-trip: wrap a payload with a correlation ID, extract it back,
-// must match. FEATURES-051126 T22.
+// must match.
 func TestAsynqCorrelationRoundtrip(t *testing.T) {
 	payload := []byte(`{"cluster_id":"abc","op":"reconcile"}`)
 	wrapped := WithCorrelationPayload(payload, "req-12345")

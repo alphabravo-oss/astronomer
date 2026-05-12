@@ -77,8 +77,7 @@ type Server struct {
 	cancel     context.CancelFunc
 	queue      *asynq.Client
 	// hub is the tunnel hub; nil in lightweight test servers. Held here
-	// so Shutdown can drain WS connections before tearing down HTTP
-	// (FEATURES-051126 T14).
+	// so Shutdown can drain WS connections before tearing down HTTP.
 	hub *tunnel.Hub
 	// Encryptor is the Fernet encryptor wired into handlers that surface
 	// encrypted columns (argocd auth tokens, sso client secrets, etc.).
@@ -104,7 +103,7 @@ func New(cfg *config.Config, logger *slog.Logger) *Server {
 	}
 
 	s.httpServer = &http.Server{
-		// T15: wrap with otelhttp so every request emits a server span
+		// Wrap with otelhttp so every request emits a server span
 		// when the global TracerProvider has an exporter; no-op when it
 		// doesn't.
 		Handler: wrapWithTracing(router),
@@ -220,7 +219,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Fail-fast on a bad REDIS_URL — the old silent localhost fallback was
-	// a production footgun (FEATURES-051126 T02). Returning an error
+	// a production footgun. Returning an error
 	// surfaces the misconfig at process start instead of letting every
 	// asynq enqueue silently fail downstream.
 	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
@@ -346,17 +345,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		RemoteServer:  remoteServer,
 		RemoteQueries: queries,
 		EventStream: handler.NewEventStreamHandler(bus),
-		// FEATURES-051126 T05 — top-of-dashboard health rollup
+		// Top-of-dashboard health rollup.
 		PlatformHealth: func() *handler.PlatformHealthHandler {
 			h := handler.NewPlatformHealthHandler(database.Pool())
 			h.SetAsynqInspector(asynq.NewInspector(redisOpt))
 			return h
 		}(),
-		// FEATURES-051126 T28 — admin queue inspector
+		// Admin queue inspector.
 		AdminQueues: handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
-			// FEATURES-051126 T11 — enable the asynq-queues + schema-
+			// Enable the asynq-queues + schema-
 			// migrations sections by wiring the inspector and the DB pool.
 			h.SetAsynqInspector(asynq.NewInspector(redisOpt))
 			h.SetDBPool(database.Pool())
@@ -417,7 +416,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		SSO:       ssoManager,
 	}
 	s.httpServer = &http.Server{
-		// T15: wrap with otelhttp so every request emits a server span
+		// Wrap with otelhttp so every request emits a server span
 		// when the global TracerProvider has an exporter; no-op when it
 		// doesn't.
 		Handler: wrapWithTracing(router),
@@ -538,7 +537,7 @@ func (s *Server) Start(addr string) error {
 // Order matters:
 //  1. Drain the tunnel hub. Agents see a clean WS close and reconnect
 //     to a sibling replica in ~1s instead of waiting ~20s for the next
-//     ping to fail (FEATURES-051126 T14). The preStop hook in the
+//     ping to fail. The preStop hook in the
 //     chart's server-deployment runs `sleep 10` BEFORE SIGTERM lands
 //     so the Service load balancer has already removed this pod from
 //     endpoints — the drained agents reconnect through the LB to a

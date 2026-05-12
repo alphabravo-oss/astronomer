@@ -262,8 +262,8 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	}
 	_ = g.Wait() // we never return errors from the goroutines
 
-	// Step 3: stream-merge with a bounded top-K max-heap (T32
-	// FEATURES-051126). Holding every cluster's full list in memory
+	// Step 3: stream-merge with a bounded top-K max-heap.
+	// Holding every cluster's full list in memory
 	// then sort-truncating to `limit` is O(N) memory and O(N log N)
 	// time. Using a max-heap of size `limit` keeps only the K smallest
 	// items in (cluster_name, namespace, name) order — O(limit) memory

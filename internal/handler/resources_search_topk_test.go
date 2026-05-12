@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// FEATURES-051126 T32 — parity test. The bounded top-K heap must produce
+// Parity test. The bounded top-K heap must produce
 // the *same* trimmed output (modulo the now-irrelevant stable ordering of
 // equal-key items) as the prior sort.SliceStable + truncate approach, so
 // the API contract is unchanged for clients.

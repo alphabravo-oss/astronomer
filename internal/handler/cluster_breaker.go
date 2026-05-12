@@ -1,6 +1,6 @@
 // Package handler — per-cluster circuit breaker.
 //
-// FEATURES-051126 T19: when one cluster's tunnel is wedged, every
+// When one cluster's tunnel is wedged, every
 // k8s-passthrough request to it burns its full ctx timeout (typically
 // 5-30s) and holds a goroutine + WS stream for the duration. With N
 // callers and one stuck cluster, the request-side throughput collapses

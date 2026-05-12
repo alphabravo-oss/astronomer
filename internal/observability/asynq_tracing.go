@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
-// FEATURES-051126 T15 — asynq traceparent propagation.
+// Asynq traceparent propagation.
 //
 // asynq.Task has no headers — payloads are raw bytes — so we ride the
 // same JSON-payload-injection convention as asynq_correlation.go. The
@@ -77,7 +77,7 @@ func tracingFieldsFromContext(ctx context.Context) map[string]string {
 // task payload and returns a context with the parent span context
 // installed so the worker's own spans become children of the original
 // trace. Safe to call on every dequeue; no-op when the payload doesn't
-// carry the fields (e.g. tasks enqueued before T15 landed).
+// carry the fields (e.g. tasks enqueued before tracing landed).
 func ContextWithAsynqTracing(ctx context.Context, payload []byte) context.Context {
 	if len(payload) == 0 {
 		return ctx

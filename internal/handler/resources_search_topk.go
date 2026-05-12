@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// FEATURES-051126 T32 — bounded top-K heap merge for cross-cluster search.
+// Bounded top-K heap merge for cross-cluster search.
 //
 // Cross-cluster search fans out to up to 16 clusters in parallel, each of
 // which can return thousands of items (pods, services, etc.). Holding

@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// FEATURES-051126 T18: sharded agent map.
+// Sharded agent map.
 //
 // Before: a single Hub.mu RWMutex guarded both the agents map and the
 // publisher field. Every SendToAgent grabbed mu.RLock per call; every

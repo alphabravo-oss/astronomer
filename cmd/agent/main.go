@@ -99,7 +99,7 @@ func runConnect(logger *slog.Logger) error {
 	if err != nil {
 		logger.Warn("k8s proxy unavailable (not running in cluster?)", "error", err)
 	} else {
-		// FEATURES-051126 T20: streaming variant chunks large response
+		// Streaming variant chunks large response
 		// bodies through K8sStreamFrame instead of one giant
 		// K8sResponse that hits the 16 MiB WS frame cap. Small
 		// responses still travel as a single K8sResponse — the

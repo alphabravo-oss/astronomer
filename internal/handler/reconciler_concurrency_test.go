@@ -14,9 +14,9 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// FEATURES-051126 T17: catalog/tools/monitoring reconcilers used to hold a
+// Catalog/tools/monitoring reconcilers used to hold a
 // per-handler mutex around the whole batch loop, so a single 10-minute
-// helm op could stall every other cluster's pending work. After T17 the
+// helm op could stall every other cluster's pending work. After the fix the
 // mutex is released after the claim phase and executeOperation is fanned
 // out via a bounded semaphore. This test confirms the fan-out actually
 // runs in parallel by setting helm.Do to sleep and measuring wall-time.

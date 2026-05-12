@@ -79,7 +79,7 @@ func TestReadinessHandlerDependencyFailure(t *testing.T) {
 	}
 }
 
-// FEATURES-051126 T31: when the hub is nil (misconfigured wiring), the
+// When the hub is nil (misconfigured wiring), the
 // readiness probe must report 503 instead of silently returning OK.
 // Otherwise a pod that can never serve tunnel traffic stays in Service
 // rotation indefinitely.

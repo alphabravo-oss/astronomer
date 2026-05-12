@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// FEATURES-051126 T14: Hub.Drain must close every connected agent and
+// Hub.Drain must close every connected agent and
 // clear the agents map so subsequent Disconnect calls observe them
 // already gone. The close path runs in goroutines so we give it a
 // short window to land.

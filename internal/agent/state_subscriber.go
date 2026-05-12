@@ -26,7 +26,7 @@ import (
 // them without racing against the Run goroutine's reads. Use the
 // matching get/set helpers below; never read or write the variables
 // directly. Pre-existing test infrastructure race documented in
-// FEATURES-051126 cleanup (sprint 8).
+// a cleanup pass.
 var (
 	// stateSubscriberResyncPeriod is the SharedInformerFactory resync
 	// interval. Long resyncs avoid hammering the apiserver while still

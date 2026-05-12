@@ -36,7 +36,7 @@ type MonitoringHandler struct {
 	mu        sync.Mutex
 	triggerCh chan struct{}
 	// helmConcurrency caps the number of executeMonitoringOperation
-	// goroutines dispatched per reconciler tick. T17 FEATURES-051126.
+	// goroutines dispatched per reconciler tick.
 	helmConcurrency int
 }
 
@@ -2960,7 +2960,7 @@ type claimedMonitoringOp struct {
 }
 
 func (h *MonitoringHandler) processPendingMonitoringOperations(ctx context.Context) {
-	// T17 FEATURES-051126: claim under the lock, dispatch outside it.
+	// Claim under the lock, dispatch outside it.
 	// Same-target double-dispatch is still prevented by the supersession
 	// pass below + DB row "running" state.
 	claimed := h.claimPendingMonitoringOperations(ctx)

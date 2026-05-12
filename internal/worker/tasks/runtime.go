@@ -153,7 +153,7 @@ func runtimeLogger() *slog.Logger {
 }
 
 func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() error) error {
-	// FEATURES-051126 T16: every periodic task emits reconciler_runs_total
+	// Every periodic task emits reconciler_runs_total
 	// + last_success_timestamp_seconds + duration_seconds. The start time
 	// is captured up front so duration includes the leader-lease acquire
 	// plus fn() — that's the full wall-clock time the reconciler "owns"

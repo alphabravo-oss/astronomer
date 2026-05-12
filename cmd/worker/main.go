@@ -36,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// T15: distributed tracing — same InitTracing/Shutdown contract as
+	// Distributed tracing — same InitTracing/Shutdown contract as
 	// the server. The worker's asynq handlers extract traceparent from
 	// incoming task payloads (planned follow-up in this same sprint),
 	// so when both processes point at the same OTLP endpoint a single
@@ -99,7 +99,7 @@ func main() {
 
 	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —
 	// the old silent-fallback behavior was a production footgun in
-	// air-gapped / split-network deployments (FEATURES-051126 T02).
+	// air-gapped / split-network deployments.
 	w, werr := worker.NewWorker(cfg.RedisURL, log)
 	if werr != nil {
 		log.Error("failed to start worker", "error", werr)

@@ -1,6 +1,6 @@
 // Package observability — asynq correlation ID propagation.
 //
-// FEATURES-051126 T22: the request-side audit + log pipelines already
+// The request-side audit + log pipelines already
 // propagate X-Correlation-ID through the handler chain; the worker
 // side didn't see it. A user clicking "decommission cluster" produced
 // an HTTP log line with correlation_id=abc-123 and then a worker log

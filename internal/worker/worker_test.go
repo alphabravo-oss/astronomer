@@ -31,7 +31,7 @@ func TestNewWorker(t *testing.T) {
 	}
 }
 
-// FEATURES-051126 T02: invalid REDIS_URL must be fail-fast (error returned,
+// Invalid REDIS_URL must be fail-fast (error returned,
 // nil Worker), NOT silently fall back to localhost. The previous behavior
 // was a production footgun.
 func TestNewWorkerInvalidRedis(t *testing.T) {
@@ -66,7 +66,7 @@ func TestNewScheduler(t *testing.T) {
 	}
 }
 
-// FEATURES-051126 T02: same fail-fast contract for the scheduler.
+// Same fail-fast contract for the scheduler.
 func TestNewSchedulerInvalidRedis(t *testing.T) {
 	s, err := NewScheduler("not-a-valid-url", testLogger())
 	if err == nil {

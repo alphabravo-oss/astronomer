@@ -13,7 +13,7 @@ type Config struct {
 	CeleryBrokerURL string `mapstructure:"celery_broker_url"`
 
 	// pgxpool sizing — operator-tunable via the chart's `database.*`
-	// values (FEATURES-051126 T21). Zero values fall through to the
+	// values. Zero values fall through to the
 	// defaults in internal/db/db.go so existing installs see no change.
 	DBMaxConns        int32 `mapstructure:"db_max_conns"`
 	DBMinConns        int32 `mapstructure:"db_min_conns"`

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// FEATURES-051126 T19: closed → open after N consecutive failures.
+// Closed → open after N consecutive failures.
 func TestClusterBreaker_OpensAfterThreshold(t *testing.T) {
 	b := newClusterBreaker(3, time.Second)
 

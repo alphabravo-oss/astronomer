@@ -209,7 +209,7 @@ const (
 // Two distinct uses share this frame shape:
 //   - Watch (the original): the agent sends a continuous stream as the
 //     upstream k8s API emits events. Triggered by MsgK8sStreamRequest.
-//   - Large unary response (FEATURES-051126 T20): the agent splits a
+//   - Large unary response: the agent splits a
 //     large response body into ≤K8sChunkSizeBytes data frames in
 //     response to a normal MsgK8sRequest. The server's k8s_requester
 //     auto-detects this shape and reassembles the body before

@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// FEATURES-051126 T15 — chi-aware HTTP tracing wrapper.
+// Chi-aware HTTP tracing wrapper.
 //
 // otelhttp.NewHandler creates one span per incoming request before chi
 // routes it, so the span name defaults to the HTTP method alone (the

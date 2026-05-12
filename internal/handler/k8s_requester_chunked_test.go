@@ -11,7 +11,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// FEATURES-051126 T20 — assembleChunkedResponse must reconstruct a body
+// AssembleChunkedResponse must reconstruct a body
 // from header + N data + end frames in agent-emit order.
 func TestAssembleChunkedResponse_RoundTrip(t *testing.T) {
 	// Simulate the agent emitting a 700KB body in three 256KB-ish chunks.

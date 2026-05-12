@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// FEATURES-051126 T08: the per-class limiter must reject calls past the
+// The per-class limiter must reject calls past the
 // burst, return 429 + Retry-After, and let calls through once the bucket
 // refills.
 func TestAPIRateLimitMiddleware_BurstThenBlock(t *testing.T) {
@@ -94,7 +94,7 @@ func TestAPIRateLimitMiddleware_PerCallerBuckets(t *testing.T) {
 }
 
 // Bucket eviction must clear idle entries — same memory-leak fix as the
-// login limiter (T09).
+// login limiter.
 func TestAPIRateLimiter_EvictExpired(t *testing.T) {
 	now := time.Unix(0, 0)
 	cfgs := map[APIRateLimitClass]APIRateLimitConfig{

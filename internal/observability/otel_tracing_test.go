@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-// FEATURES-051126 T15: when the OTLP endpoint is unset, InitTracing
+// When the OTLP endpoint is unset, InitTracing
 // must be a clean no-op — no background goroutines, no global side
 // effects beyond installing the W3C propagator, and a Shutdown that
 // returns nil immediately.
