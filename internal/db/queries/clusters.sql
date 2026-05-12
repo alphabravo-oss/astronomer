@@ -153,6 +153,67 @@ RETURNING *;
 -- name: DeleteClusterRegistryConfig :exec
 DELETE FROM cluster_registry_configs WHERE cluster_id = $1;
 
+-- Migration 050: multi-registry-per-cluster CRUD. The legacy
+-- Get/Upsert/Delete by cluster_id above is kept for back-compat with the old
+-- single-registry route; the queries below operate on the row id so multiple
+-- registry configs can co-exist under one cluster.
+
+-- name: ListClusterRegistryConfigs :many
+SELECT * FROM cluster_registry_configs
+WHERE cluster_id = $1
+ORDER BY created_at ASC;
+
+-- name: ListAllClusterRegistryConfigs :many
+-- Used by the drift-reconcile sweep — walks every row across every cluster.
+SELECT * FROM cluster_registry_configs
+ORDER BY cluster_id, created_at ASC;
+
+-- name: GetClusterRegistryConfigByID :one
+SELECT * FROM cluster_registry_configs WHERE id = $1;
+
+-- name: CreateClusterRegistryConfig :one
+INSERT INTO cluster_registry_configs (
+    cluster_id,
+    private_registry_url,
+    registry_username,
+    registry_password,
+    insecure,
+    ca_bundle,
+    namespaces,
+    inject_default_sa,
+    secret_name
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *;
+
+-- name: UpdateClusterRegistryConfig :one
+UPDATE cluster_registry_configs SET
+    private_registry_url = $2,
+    registry_username    = $3,
+    registry_password    = $4,
+    insecure             = $5,
+    ca_bundle            = $6,
+    namespaces           = $7,
+    inject_default_sa    = $8,
+    secret_name          = $9,
+    updated_at           = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteClusterRegistryConfigByID :exec
+DELETE FROM cluster_registry_configs WHERE id = $1;
+
+-- name: MarkClusterRegistryApplied :exec
+UPDATE cluster_registry_configs SET
+    last_applied_at  = now(),
+    last_apply_error = ''
+WHERE id = $1;
+
+-- name: MarkClusterRegistryApplyError :exec
+UPDATE cluster_registry_configs SET
+    last_apply_error = $2
+WHERE id = $1;
+
 -- name: ListClusterConditions :many
 SELECT * FROM cluster_conditions WHERE cluster_id = $1 ORDER BY type;
 
