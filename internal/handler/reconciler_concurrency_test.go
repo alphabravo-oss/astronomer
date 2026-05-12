@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +24,12 @@ import (
 type parallelToolQueries struct {
 	*toolQueryRecorder
 	pending []sqlc.ToolOperation
+
+	// mu serializes access to the recorder's append-style fields so the
+	// race detector is happy when processPendingOperations dispatches in
+	// parallel. Production code uses pgxpool which is already
+	// concurrent-safe; the fixture just needs to follow suit for tests.
+	mu sync.Mutex
 }
 
 func (q *parallelToolQueries) ListPendingToolOperations(context.Context, int32) ([]sqlc.ToolOperation, error) {
@@ -37,6 +44,24 @@ func (q *parallelToolQueries) MarkToolOperationRunning(_ context.Context, id uui
 		}
 	}
 	return sqlc.ToolOperation{}, nil
+}
+
+// CreateToolOperationEvent overrides the recorder method so concurrent
+// dispatchers don't race on the events slice. Same goes for the other
+// append-style methods executeOperation can reach (CreateInstalledChart,
+// DeleteInstalledChart). DeleteInstalledChart on the recorder is a
+// no-op; CreateInstalledChart appends to `created`, so it gets the same
+// treatment.
+func (q *parallelToolQueries) CreateToolOperationEvent(ctx context.Context, arg sqlc.CreateToolOperationEventParams) (sqlc.ToolOperationEvent, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.toolQueryRecorder.CreateToolOperationEvent(ctx, arg)
+}
+
+func (q *parallelToolQueries) CreateInstalledChart(ctx context.Context, arg sqlc.CreateInstalledChartParams) (sqlc.InstalledChart, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.toolQueryRecorder.CreateInstalledChart(ctx, arg)
 }
 
 type sleepyHelmStub struct {
