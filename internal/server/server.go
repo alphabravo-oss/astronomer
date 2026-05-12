@@ -282,6 +282,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// decommission reconciler fires immediately on remove-cluster click.
 	// The periodic sweep is the safety net when redis is briefly down.
 	clusterHandler.SetDecommissionQueue(queue)
+	// Same client wires the Update handler -> argocd refresh task so a
+	// labels mutation lands on every upstream ArgoCD cluster Secret without
+	// the operator re-registering.
+	clusterHandler.SetArgoCDRefreshQueue(queue)
 	// Wire metrics: tunnel requester for remote clusters, in-cluster clients
 	// for the local cluster. Both are nil-safe; missing deps fall back to zero.
 	clusterHandler.SetMetricsRequester(requester)
@@ -293,12 +297,31 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		if cs, err := kubernetes.NewForConfig(restCfg); err == nil {
 			localK8s = cs
 			argocdHandler.SetKubernetesClient(cs)
+			// The argocd:refresh_managed_cluster_labels task patches Secrets
+			// in the control-plane's argocd namespace, so it shares the same
+			// in-cluster k8s client. When in-cluster config is unavailable
+			// (e.g. laptop dev) the task degrades to a logged warning and the
+			// PATCH is skipped — the operator can re-register manually.
+			tasks.ConfigureArgoCDRefresh(tasks.ArgoCDRefreshDeps{
+				Queries: queries,
+				K8s:     cs,
+			})
 			if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 				clusterHandler.SetMetricsLocalClient(cs, mc)
 			} else {
 				clusterHandler.SetMetricsLocalClient(cs, nil)
 			}
 		}
+	}
+	// Even when in-cluster config fails, configure the refresh task with the
+	// DB querier so the worker can at least report the no-k8s degradation
+	// path cleanly. The K8s field stays nil → refreshSingleManagedClusterSecret
+	// returns a clear "kubernetes client not configured" error.
+	if localK8s == nil {
+		tasks.ConfigureArgoCDRefresh(tasks.ArgoCDRefreshDeps{
+			Queries: queries,
+			K8s:     nil,
+		})
 	}
 	localNamespace := detectReleaseNamespace()
 
@@ -315,6 +338,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// drop the per-user entry instead of waiting out the TTL.
 	if cache := rbacQuerier.Cache(); cache != nil {
 		resourceHandler.SetRBACCacheInvalidator(cache)
+		// Group-sync (migration 042) mutates *_role_bindings under the
+		// hood on every SSO login + every admin re-sync; the same
+		// per-user cache invalidator handles both paths so the next
+		// authenticated request reflects the post-sync state.
+		if ssoHandler != nil {
+			ssoHandler.SetRBACCacheInvalidator(cache)
+		}
 	}
 	platformCharts, chartRepoErr := handler.NewPlatformChartRepoHandler()
 	if chartRepoErr != nil {
@@ -372,6 +402,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// management-plane-restore-drill CronJob writes to
 		// backup_drill_results. Superuser-gated inside the handler.
 		AdminDrill: handler.NewAdminDrillHandler(queries),
+		// Identity-group sync admin endpoints (migration 042). CRUD
+		// over identity_group_mappings + per-user re-sync. The RBAC
+		// cache invalidator is wired below once rbacQuerier is known
+		// to support it (it's a *SQLCRBACQuerier in prod).
+		GroupMappings: handler.NewGroupMappingsHandler(queries),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
 			// Enable the asynq-queues + schema-
@@ -385,6 +420,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
 	// manager + token querier the rest of the API uses.
 	deps.EventStream.SetAuth(jwtManager, queries)
+	// Group-sync admin re-sync mutates the user's bindings; share the
+	// same RBAC cache invalidator the SSO + user handlers use so the
+	// effect is immediate on the next authenticated request.
+	if cache := rbacQuerier.Cache(); cache != nil && deps.GroupMappings != nil {
+		deps.GroupMappings.SetRBACCacheInvalidator(cache)
+	}
 	// Browser WebSocket clients can't set Authorization either; wire the
 	// same query-param auth fallback into the pod exec consumer.
 	deps.Exec.SetAuth(jwtManager, queries)

@@ -23,23 +23,34 @@ import (
 )
 
 // SSOQuerier abstracts the database queries the SSO handler needs in order
-// to provision/lookup users after a successful OAuth handshake.
+// to provision/lookup users after a successful OAuth handshake. It also
+// embeds auth.GroupSyncQuerier so the callback can drive group-sync
+// reconciliation (migration 042) without an extra dependency.
 type SSOQuerier interface {
 	GetUserByEmail(ctx context.Context, email string) (sqlc.User, error)
 	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
 	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
+	auth.GroupSyncQuerier
+}
+
+// SSORBACInvalidator narrows the RBAC cache hook the SSO callback uses to
+// dump a user's cached bindings after a group-sync run mutated them.
+// Optional: tests + degenerate installs pass nil and the call is a no-op.
+type SSORBACInvalidator interface {
+	Invalidate(userID string)
 }
 
 // SSOHandler exposes /api/v1/auth/login/{provider}/ and
 // /api/v1/auth/callback/{provider}/ endpoints. Provider configuration is
 // loaded into the SSOManager at boot from sso_configurations.
 type SSOHandler struct {
-	manager  *auth.SSOManager
-	queries  SSOQuerier
-	jwt      *auth.JWTManager
-	frontend string
-	now      func() time.Time
+	manager   *auth.SSOManager
+	queries   SSOQuerier
+	jwt       *auth.JWTManager
+	frontend  string
+	rbacCache SSORBACInvalidator
+	now       func() time.Time
 
 	// stateStore is a small in-memory CSRF state store. The token expires
 	// after 10 minutes; callbacks must arrive in that window.
@@ -72,6 +83,17 @@ func NewSSOHandler(manager *auth.SSOManager, queries SSOQuerier, jwt *auth.JWTMa
 		now:      time.Now,
 		states:   make(map[string]ssoState),
 	}
+}
+
+// SetRBACCacheInvalidator wires the user-scoped RBAC cache hook so a
+// group-sync run that adds or removes bindings is observable on the
+// very next authenticated request, instead of after the cache TTL.
+// Idempotent; passing nil disables invalidation.
+func (h *SSOHandler) SetRBACCacheInvalidator(inv SSORBACInvalidator) {
+	if h == nil {
+		return
+	}
+	h.rbacCache = inv
 }
 
 // Login redirects the user to the provider's authorization URL after stashing
@@ -198,6 +220,13 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
+	// Group-claim sync (migration 042). Runs unconditionally on every
+	// SSO callback so a re-login picks up freshly-revoked claims.
+	// "info" came from a successful OIDC/SAML/LDAP handshake, so
+	// claims are available even when the slice is empty (zero groups
+	// is a valid signal, not "we didn't ask").
+	h.syncGroupsFromClaims(r, user.ID, info)
+
 	target, err := url.Parse(h.frontend)
 	if err != nil || target.String() == "" {
 		target = &url.URL{Path: "/"}
@@ -208,6 +237,81 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	q.Set("provider", provider)
 	target.RawQuery = q.Encode()
 	http.Redirect(w, r, target.String(), http.StatusFound)
+}
+
+// syncGroupsFromClaims fires the migration-042 reconciliation against
+// the operator-configured identity_group_mappings table. It MUST NOT
+// fail the HTTP response — every error path logs an audit row and
+// returns; the user is still authenticated and lands on the frontend.
+//
+// connector_id is left Invalid (NULL) here because the SSOManager
+// indexes providers by name (e.g. "google", "okta") rather than by
+// the dex_connectors PK; wildcard mappings still apply. A future
+// patch can extend SSOUserInfo with a resolved connector_id once Dex
+// is fully replacing direct OIDC providers.
+func (h *SSOHandler) syncGroupsFromClaims(r *http.Request, userID uuid.UUID, info *auth.SSOUserInfo) {
+	if h == nil || h.queries == nil || info == nil {
+		return
+	}
+	result, err := auth.SyncUserGroups(
+		r.Context(),
+		h.queries,
+		userID,
+		pgtype.UUID{}, // no connector_id resolution today; wildcard mappings still match
+		info.Groups,
+		true, // claims are fresh on every SSO callback
+	)
+	if err != nil {
+		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
+			"auth.group_sync.error", "user", userID.String(), "", map[string]any{
+				"provider": info.Provider,
+				"error":    err.Error(),
+			},
+		)
+		return
+	}
+	if result.Skipped {
+		return
+	}
+	for _, added := range result.Added {
+		recordAuditAs(r, h.queries, pgtype.UUID{}, // system actor
+			"auth.group_sync.binding_added", "role_binding", added.BindingID.String(), "",
+			map[string]any{
+				"user_id":    userID.String(),
+				"group_name": added.GroupName,
+				"role_id":    added.RoleID.String(),
+				"scope":      added.Scope,
+				"cluster_id": uuidOrEmpty(added.ClusterID),
+				"project_id": uuidOrEmpty(added.ProjectID),
+			},
+		)
+	}
+	for _, removed := range result.Removed {
+		recordAuditAs(r, h.queries, pgtype.UUID{}, // system actor
+			"auth.group_sync.binding_removed", "role_binding", removed.BindingID.String(), "",
+			map[string]any{
+				"user_id":    userID.String(),
+				"role_id":    removed.RoleID.String(),
+				"scope":      removed.Scope,
+				"cluster_id": uuidOrEmpty(removed.ClusterID),
+				"project_id": uuidOrEmpty(removed.ProjectID),
+			},
+		)
+	}
+	// Invalidate any cached binding set for this user so the very
+	// next authenticated request reflects the post-sync state.
+	if (len(result.Added) > 0 || len(result.Removed) > 0) && h.rbacCache != nil {
+		h.rbacCache.Invalidate(userID.String())
+	}
+}
+
+// uuidOrEmpty stringifies a uuid for audit JSON, rendering the zero
+// value as "" so the column doesn't show "00000000-..." noise.
+func uuidOrEmpty(id uuid.UUID) string {
+	if id == uuid.Nil {
+		return ""
+	}
+	return id.String()
 }
 
 // findOrCreateUser returns (user, provisioned, error). provisioned is true

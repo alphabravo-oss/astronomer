@@ -34,6 +34,9 @@ type RouterDependencies struct {
 	PlatformHealth *handler.PlatformHealthHandler
 	AdminQueues    *handler.AdminQueuesHandler
 	AdminDrill     *handler.AdminDrillHandler
+	// GroupMappings is the migration-042 admin CRUD over
+	// identity_group_mappings plus the per-user re-sync endpoint.
+	GroupMappings *handler.GroupMappingsHandler
 	Auth           *handler.AuthHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
@@ -275,6 +278,19 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.AdminDrill != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/", deps.AdminDrill.GetLatest)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/backup-drill/history/", deps.AdminDrill.ListHistory)
+		}
+
+		// Identity-group sync admin endpoints (migration 042). CRUD
+		// over identity_group_mappings + admin-triggered re-sync.
+		// Superuser-gated inside the handler — same pattern as the
+		// other /admin/* routes — so the failure mode is a clean
+		// 403 instead of a generic permission rejection.
+		if deps.GroupMappings != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/group-mappings/", deps.GroupMappings.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/group-mappings/", deps.GroupMappings.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/group-mappings/{id}/", deps.GroupMappings.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/group-mappings/{id}/", deps.GroupMappings.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/users/{id}/resync-groups/", deps.GroupMappings.ResyncUser)
 		}
 
 		authenticated := r
