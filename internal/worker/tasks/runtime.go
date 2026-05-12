@@ -153,25 +153,48 @@ func runtimeLogger() *slog.Logger {
 }
 
 func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() error) error {
+	// FEATURES-051126 T16: every periodic task emits reconciler_runs_total
+	// + last_success_timestamp_seconds + duration_seconds. The start time
+	// is captured up front so duration includes the leader-lease acquire
+	// plus fn() — that's the full wall-clock time the reconciler "owns"
+	// the lane, which is what the stalled-reconciler alert cares about.
+	start := time.Now()
+
 	if runtimeDeps.Leader == nil {
 		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(1)
 		defer workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
-		return fn()
+		err := fn()
+		observability.RecordReconcilerRun(jobName, reconcilerStatusFor(err), start)
+		return err
 	}
 	release, held, err := runtimeDeps.Leader.TryLeader(ctx, jobName)
 	if err != nil {
 		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
+		observability.RecordReconcilerRun(jobName, observability.ReconcilerStatusErrored, start)
 		return fmt.Errorf("acquire leader lock for %s: %w", jobName, err)
 	}
 	if !held {
 		workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
 		runtimeLogger().DebugContext(ctx, "periodic task skipped on non-leader replica", "job", jobName)
+		observability.RecordReconcilerRun(jobName, observability.ReconcilerStatusSkipped, start)
 		return nil
 	}
 	workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(1)
 	defer workerLeaderHeld.WithLabelValues(observability.MetricValues(jobName)...).Set(0)
 	defer release()
-	return fn()
+	taskErr := fn()
+	observability.RecordReconcilerRun(jobName, reconcilerStatusFor(taskErr), start)
+	return taskErr
+}
+
+// reconcilerStatusFor maps an fn() return to a metric label. nil error =
+// succeeded; non-nil = failed. The skipped + errored statuses are reserved
+// for the lease-acquisition outcomes and not produced from here.
+func reconcilerStatusFor(err error) string {
+	if err == nil {
+		return observability.ReconcilerStatusSucceeded
+	}
+	return observability.ReconcilerStatusFailed
 }
 
 func emptyUUID() pgtype.UUID {

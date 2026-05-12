@@ -39,6 +39,18 @@ var (
 		},
 		observability.MetricLabels("cluster_id", "direction"),
 	)
+
+	// FEATURES-051126 T16: counter of (re)connects keyed by cluster ID.
+	// Useful both for sizing the reconnect-storm fix (T10) and for
+	// alerting on a cluster that's flapping (rate > N over window).
+	agentReconnectsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Name:      "agent_reconnects_total",
+			Help:      "Total agent (re)connect events observed by the hub, by cluster ID.",
+		},
+		observability.MetricLabels("cluster_id"),
+	)
 )
 
 type activeConnectionLister interface {
@@ -51,8 +63,18 @@ func registerConnectionMetrics() {
 			agentConnectionsGauge,
 			agentLastSeenSecondsGauge,
 			agentMessagesTotal,
+			agentReconnectsTotal,
 		)
 	})
+}
+
+// recordAgentReconnect counts one (re)connect for the given cluster. Hub
+// callers fire this whenever a fresh handshake replaces an existing
+// agent entry — that's the signal you want for "is this cluster
+// flapping" alerts.
+func recordAgentReconnect(clusterID string) {
+	registerConnectionMetrics()
+	agentReconnectsTotal.WithLabelValues(observability.MetricValues(clusterID)...).Inc()
 }
 
 func updateConnectionMetrics(conns []sqlc.AgentConnection, now time.Time) {

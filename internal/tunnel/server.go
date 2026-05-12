@@ -263,6 +263,10 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	h.agents[payload.ClusterID] = agent
 	h.mu.Unlock()
+	// Always count the register — first-connect and reconnect alike — so
+	// the rate over a window captures "is this cluster flapping?" rather
+	// than just "is anything ever happening at all". FEATURES-051126 T16.
+	recordAgentReconnect(payload.ClusterID)
 	if wasReconnect {
 		h.publish("agent.reconnecting", payload.ClusterID, sessionID, payload.AgentVersion)
 	}
