@@ -358,6 +358,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		}(),
 		// Admin queue inspector.
 		AdminQueues: handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries),
+		// Admin backup-restore drill viewer — reads rows that the
+		// management-plane-restore-drill CronJob writes to
+		// backup_drill_results. Superuser-gated inside the handler.
+		AdminDrill: handler.NewAdminDrillHandler(queries),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
 			// Enable the asynq-queues + schema-
