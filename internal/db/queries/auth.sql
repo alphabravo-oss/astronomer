@@ -151,3 +151,12 @@ DELETE FROM sso_configurations WHERE id = $1;
 
 -- name: CountSSOConfigurations :one
 SELECT count(*) FROM sso_configurations;
+
+-- name: CountActiveUnmigratedSSORows :one
+-- Drives the startup-time deprecation warning (migration 045). Counts
+-- enabled sso_configurations rows that have NOT been stamped as migrated
+-- to dex_connectors — i.e. rows the operator added AFTER cutover. When > 0
+-- we log a warn-level line at boot so the drift is visible without burying
+-- the migration story.
+SELECT count(*) FROM sso_configurations
+WHERE is_enabled = true AND migrated_to_dex_at IS NULL;
