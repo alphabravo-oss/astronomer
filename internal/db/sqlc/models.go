@@ -474,6 +474,7 @@ type ClusterRoleBinding struct {
 	ClusterID uuid.UUID   `json:"cluster_id"`
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
+	Source    string      `json:"source"`
 }
 
 type ClusterSecurityPolicy struct {
@@ -600,6 +601,7 @@ type GlobalRoleBinding struct {
 	RoleID    uuid.UUID   `json:"role_id"`
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
+	Source    string      `json:"source"`
 }
 
 type HelmChart struct {
@@ -863,6 +865,32 @@ type ProjectRoleBinding struct {
 	ProjectID uuid.UUID   `json:"project_id"`
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
+	Source    string      `json:"source"`
+}
+
+// IdentityGroupMapping is the row shape for identity_group_mappings.
+// Mapping an external IdP group name to one or more RBAC role bindings;
+// resolved on every SSO login by internal/auth.SyncUserGroups.
+type IdentityGroupMapping struct {
+	ID          uuid.UUID   `json:"id"`
+	ConnectorID pgtype.UUID `json:"connector_id"`
+	GroupName   string      `json:"group_name"`
+	Scope       string      `json:"scope"`
+	RoleID      uuid.UUID   `json:"role_id"`
+	ClusterID   pgtype.UUID `json:"cluster_id"`
+	ProjectID   pgtype.UUID `json:"project_id"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+// UserIdpGroup is the row shape for user_idp_groups — the per-user
+// snapshot of the groups slice last claimed by the IdP. Persisted so
+// admin-triggered re-sync can run without fresh claims.
+type UserIdpGroup struct {
+	UserID      uuid.UUID       `json:"user_id"`
+	ConnectorID pgtype.UUID     `json:"connector_id"`
+	Groups      json.RawMessage `json:"groups"`
+	SyncedAt    time.Time       `json:"synced_at"`
 }
 
 type RestoreOperation struct {

@@ -356,6 +356,7 @@ type Querier interface {
 	ListArgoCDApplications(ctx context.Context, arg ListArgoCDApplicationsParams) ([]ArgocdApplication, error)
 	ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstancesParams) ([]ArgocdInstance, error)
 	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error)
+	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]ArgocdManagedCluster, error)
 	ListArgoCDOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ArgocdOperationEvent, error)
 	ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperationsParams) ([]ArgocdOperation, error)
 	ListBackupDrillResults(ctx context.Context, arg ListBackupDrillResultsParams) ([]BackupDrillResult, error)
@@ -574,6 +575,27 @@ type Querier interface {
 	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfiguration, error)
 	UpsertProjectNamespace(ctx context.Context, arg UpsertProjectNamespaceParams) (ProjectNamespace, error)
+	// Group-claim sync (migration 042).
+	CountGroupMappings(ctx context.Context) (int64, error)
+	CountGroupSyncClusterBindings(ctx context.Context) (int64, error)
+	CountGroupSyncGlobalBindings(ctx context.Context) (int64, error)
+	CountGroupSyncProjectBindings(ctx context.Context) (int64, error)
+	CreateGroupMapping(ctx context.Context, arg CreateGroupMappingParams) (IdentityGroupMapping, error)
+	CreateGroupSyncClusterBinding(ctx context.Context, arg CreateGroupSyncClusterBindingParams) (ClusterRoleBinding, error)
+	CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGroupSyncGlobalBindingParams) (GlobalRoleBinding, error)
+	CreateGroupSyncProjectBinding(ctx context.Context, arg CreateGroupSyncProjectBindingParams) (ProjectRoleBinding, error)
+	DeleteGroupMapping(ctx context.Context, id uuid.UUID) error
+	DeleteGroupSyncClusterBinding(ctx context.Context, id uuid.UUID) error
+	DeleteGroupSyncGlobalBinding(ctx context.Context, id uuid.UUID) error
+	DeleteGroupSyncProjectBinding(ctx context.Context, id uuid.UUID) error
+	GetGroupMappingByID(ctx context.Context, id uuid.UUID) (IdentityGroupMapping, error)
+	GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (UserIdpGroup, error)
+	ListGroupMappings(ctx context.Context, arg ListGroupMappingsParams) ([]IdentityGroupMapping, error)
+	ListGroupMappingsForConnector(ctx context.Context, connectorID pgtype.UUID) ([]IdentityGroupMapping, error)
+	ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error)
+	ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
+	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
+	UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error)
 }
 
 var _ Querier = (*Queries)(nil)
