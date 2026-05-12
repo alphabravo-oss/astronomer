@@ -1108,6 +1108,96 @@ export async function rollbackChart(id: string, revision: number) {
   return res.data.data;
 }
 
+// --- Catalog ratings + recommendations (migration 055) ---
+
+// Shape of one rating row as returned by the chart_ratings handler.
+// Kept inline (not in @/types) until the broader catalog typing pass
+// lands — the route surface is small and the consumer count is one.
+export interface ChartRating {
+  id: string;
+  chart_id: string;
+  installation_id?: string;
+  user_id: string;
+  stars: number;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChartRatingAggregate {
+  rating_count: number;
+  avg_stars: number;
+  bayesian_score: number;
+  histogram: [number, number, number, number, number];
+}
+
+// Server returns one row per (other) chart in both the popular and
+// similar surfaces. ChartScore mirrors the Go ChartScore struct on
+// the handler side; weight is omitted on the popular endpoint.
+export interface ChartScore {
+  chart_id: string;
+  rating_count: number;
+  avg_stars: number;
+  bayesian_score: number;
+  weight?: number;
+}
+
+export async function rateChart(chartId: string, payload: {
+  stars: number;
+  installation_id?: string;
+  note?: string;
+}) {
+  const res = await api.post<APIResponse<ChartRating>>(`/charts/${chartId}/ratings/`, payload);
+  return res.data.data;
+}
+
+export async function getChartRatings(chartId: string, params?: { limit?: number; offset?: number }) {
+  const res = await api.get<APIResponse<ChartRating[]>>(`/charts/${chartId}/ratings/`, { params });
+  return res.data.data;
+}
+
+export async function getChartRatingAggregate(chartId: string) {
+  const res = await api.get<APIResponse<ChartRatingAggregate>>(`/charts/${chartId}/ratings/aggregate/`);
+  return res.data.data;
+}
+
+export async function getMyChartRating(chartId: string) {
+  // Returns null on 404 (no rating yet) rather than throwing — the
+  // detail page treats "no rating" as a normal UI state, not an
+  // error.
+  try {
+    const res = await api.get<APIResponse<ChartRating>>(`/charts/${chartId}/ratings/mine/`);
+    return res.data.data;
+  } catch (e: any) {
+    if (e?.response?.status === 404) {
+      return null;
+    }
+    throw e;
+  }
+}
+
+export async function updateChartRating(chartId: string, ratingId: string, payload: {
+  stars: number;
+  note?: string;
+}) {
+  const res = await api.put<APIResponse<ChartRating>>(`/charts/${chartId}/ratings/${ratingId}/`, payload);
+  return res.data.data;
+}
+
+export async function deleteChartRating(chartId: string, ratingId: string) {
+  await api.delete(`/charts/${chartId}/ratings/${ratingId}/`);
+}
+
+export async function getPopularCharts(limit = 6) {
+  const res = await api.get<APIResponse<ChartScore[]>>('/catalog/recommendations/popular/', { params: { limit } });
+  return res.data.data;
+}
+
+export async function getSimilarCharts(chartId: string, limit = 5) {
+  const res = await api.get<APIResponse<ChartScore[]>>(`/catalog/recommendations/similar/${chartId}/`, { params: { limit } });
+  return res.data.data;
+}
+
 // --- Backups ---
 
 export async function getBackupStorageConfigs() {
