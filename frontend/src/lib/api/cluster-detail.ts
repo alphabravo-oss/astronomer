@@ -317,3 +317,127 @@ export async function reapplyClusterTemplate(
 export async function detachClusterTemplate(clusterId: string): Promise<void> {
   await api.delete(`/clusters/${clusterId}/template`);
 }
+
+// ============================================================
+// Image vulnerability scans (Sprint 062)
+// ============================================================
+
+/**
+ * Aggregate severity counts for a cluster's image scans.
+ * Mirrors the AggregateClusterVulnerabilitiesRow projection on the
+ * server; values are sums across every report row, not point-in-time
+ * scanner state.
+ */
+export interface ImageVulnSummary {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+  reportCount: number;
+  lastScannedAt: string | null;
+}
+
+export interface ImageVulnReport {
+  id: string;
+  clusterId: string;
+  reportName: string;
+  namespace: string;
+  workloadKind: string;
+  workloadName: string;
+  containerName: string;
+  imageRegistry: string;
+  imageRepo: string;
+  imageTag: string;
+  imageDigest: string;
+  scanner: string;
+  scannerVersion: string;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  unknownCount: number;
+  scannedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CVESeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN' | string;
+
+export interface CVERow {
+  id: string;
+  reportId: string;
+  vulnerabilityId: string;
+  severity: CVESeverity;
+  pkgName: string;
+  installedVersion: string;
+  fixedVersion: string;
+  primaryLink: string;
+  cvssScore: number | null;
+  title: string;
+  description: string;
+}
+
+export interface ImageVulnReportDetail {
+  report: ImageVulnReport;
+  vulnerabilities: CVERow[];
+  vulnerabilityTotal: number;
+  severityFilter: string;
+  limit: number;
+  offset: number;
+}
+
+export interface ImageVulnRescanResult {
+  triggered: boolean;
+  reason?: string;
+  error?: string;
+  clusterId: string;
+  requestedAt: string;
+}
+
+export async function getImageVulnSummary(clusterId: string): Promise<ImageVulnSummary> {
+  const res = await api.get<APIResponse<ImageVulnSummary>>(
+    `/clusters/${clusterId}/vulnerabilities/summary/`,
+  );
+  return res.data.data;
+}
+
+export async function listVulnerableImages(
+  clusterId: string,
+  opts: { namespace?: string; limit?: number; offset?: number } = {},
+): Promise<{ items: ImageVulnReport[]; total: number }> {
+  const q = new URLSearchParams();
+  if (opts.namespace) q.set('namespace', opts.namespace);
+  if (opts.limit != null) q.set('limit', String(opts.limit));
+  if (opts.offset != null) q.set('offset', String(opts.offset));
+  const suffix = q.toString() ? `?${q}` : '';
+  const res = await api.get<{ data: ImageVulnReport[]; count: number }>(
+    `/clusters/${clusterId}/vulnerabilities/images/${suffix}`,
+  );
+  return { items: res.data.data, total: res.data.count };
+}
+
+export async function getImageVulnReport(
+  clusterId: string,
+  reportId: string,
+  opts: { severity?: CVESeverity; limit?: number; offset?: number } = {},
+): Promise<ImageVulnReportDetail> {
+  const q = new URLSearchParams();
+  if (opts.severity) q.set('severity', opts.severity);
+  if (opts.limit != null) q.set('limit', String(opts.limit));
+  if (opts.offset != null) q.set('offset', String(opts.offset));
+  const suffix = q.toString() ? `?${q}` : '';
+  const res = await api.get<APIResponse<ImageVulnReportDetail>>(
+    `/clusters/${clusterId}/vulnerabilities/reports/${reportId}/${suffix}`,
+  );
+  return res.data.data;
+}
+
+export async function triggerImageVulnRescan(
+  clusterId: string,
+): Promise<ImageVulnRescanResult> {
+  const res = await api.post<APIResponse<ImageVulnRescanResult>>(
+    `/clusters/${clusterId}/vulnerabilities/rescan/`,
+  );
+  return res.data.data;
+}

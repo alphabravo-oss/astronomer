@@ -27,6 +27,20 @@ import (
 // GroupVersion identifies the API group + version for the management CRDs.
 var GroupVersion = schema.GroupVersion{Group: "management.astronomer.io", Version: "v1alpha1"}
 
+// TrivyGroupVersion identifies the upstream Trivy-operator CRD group.
+// Sprint 062: the CRD-mirror watcher subscribes to VulnerabilityReports
+// on this group/version and routes them into internal/scanner.Ingest.
+//
+// Kept as a top-level var (not a const) so callers can inspect the
+// Group / Version fields directly, the same way they read GroupVersion
+// for the management CRDs above.
+var TrivyGroupVersion = schema.GroupVersion{Group: "aquasecurity.github.io", Version: "v1alpha1"}
+
+// TrivyVulnerabilityReportKind is the upstream Kind name. Used by the
+// CRD-mirror watcher when subscribing to `kind: VulnerabilityReport`
+// events on TrivyGroupVersion.
+const TrivyVulnerabilityReportKind = "VulnerabilityReport"
+
 // SchemeBuilder collects the runtime registrations for both CRDs into a single
 // runtime.SchemeBuilder so callers (controller manager, fake client) can add
 // the types to a scheme in one call.

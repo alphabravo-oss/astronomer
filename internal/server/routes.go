@@ -197,6 +197,11 @@ type RouterDependencies struct {
 	// the middleware and the handler (so policy writes invalidate the
 	// 30s cache). Nil-safe.
 	ReadAuditEvaluator *appmiddleware.PolicyEvaluator
+	// ImageVulns owns the sprint-062 image-vulnerability surface:
+	// /api/v1/clusters/{cluster_id}/vulnerabilities/* + /api/v1/security
+	// /vulnerabilities/*. The handler is nil-safe — when unwired the
+	// routes are omitted and the rest of /security continues to work.
+	ImageVulns *handler.ImageVulnHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -1217,6 +1222,23 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.Get("/clusters/{cluster_id}/security/policy/", deps.Security.GetPolicy)
 		r.Get("/clusters/{cluster_id}/security/scans/", deps.Security.ListScans)
 		r.Get("/clusters/{cluster_id}/security/scans/{id}/", deps.Security.GetScan)
+	}
+
+	// --- Sprint 062: image vulnerability scanning -------------------------
+	// Cluster-scoped routes gate on cluster:read; the fleet rollup pair
+	// gates on security:read. Cluster routes live OUTSIDE the `/security`
+	// mount so the existing CIS-benchmark routes stay untouched. The fleet
+	// routes are nested under `/security/vulnerabilities/` so they pair
+	// naturally with the CIS surface in the dashboard.
+	if deps.ImageVulns != nil {
+		ivClusterRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
+		ivSecurityRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbRead)
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/summary/", deps.ImageVulns.ClusterSummary)
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/images/", deps.ImageVulns.ClusterTopImages)
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/reports/{id}/", deps.ImageVulns.ClusterReportDetail)
+		r.With(ivClusterRead).Post("/clusters/{cluster_id}/vulnerabilities/rescan/", deps.ImageVulns.ClusterRescan)
+		r.With(ivSecurityRead).Get("/security/vulnerabilities/summary/", deps.ImageVulns.FleetSummary)
+		r.With(ivSecurityRead).Get("/security/vulnerabilities/top-clusters/", deps.ImageVulns.FleetTopClusters)
 	}
 
 	if deps.Workloads != nil {

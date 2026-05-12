@@ -145,6 +145,7 @@ function getClusterNavGroups(clusterId: string): NavGroup[] {
         { label: 'Namespaces', href: `${base}/namespaces`, icon: Layers, countKey: 'namespaces' },
         { label: 'Events', href: `${base}/events`, icon: Activity, countKey: 'events' },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
+        { label: 'Image Scans', href: `${base}/image-scans`, icon: ShieldAlert },
       ],
     },
     {
