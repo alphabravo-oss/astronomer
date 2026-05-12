@@ -149,6 +149,11 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// ServiceMesh owns /api/v1/clusters/{cluster_id}/service-mesh/*
+	// (migration 071). Read-only detection + on-demand re-detect; nil-safe
+	// — when unwired the routes are omitted and the worker-only detection
+	// path still runs on its 5m cadence.
+	ServiceMesh *handler.ServiceMeshHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -668,6 +673,16 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.UpdateSchedule)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.DeleteSchedule)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
+	}
+
+	// Service mesh tile (migration 071). All three routes gated on
+	// clusters:read — read-side only; the "Install" button on the
+	// frontend deep-links to the catalog and goes through the existing
+	// catalog permission gates.
+	if deps.ServiceMesh != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/", deps.ServiceMesh.Get)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/clusters/{cluster_id}/service-mesh/detect/", deps.ServiceMesh.Detect)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/mtls/", deps.ServiceMesh.MTLS)
 	}
 
 	if deps.Projects != nil {
