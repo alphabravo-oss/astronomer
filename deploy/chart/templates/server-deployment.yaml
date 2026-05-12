@@ -113,6 +113,17 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.crds.enabled }}
+            # CRD-mirror controller toggle. The server reads CRD_ENABLED on
+            # boot and only launches the controller-runtime manager when set
+            # to a truthy value. CRD_WATCH_NAMESPACE scopes the informer cache
+            # so the controller doesn't list/watch CRs the operator never
+            # intended to expose to it.
+            - name: CRD_ENABLED
+              value: "true"
+            - name: CRD_WATCH_NAMESPACE
+              value: {{ .Values.crds.watchNamespace | quote }}
+            {{- end }}
             {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
             # Go's crypto/x509 scans SSL_CERT_DIR in addition to the system
             # cert pool, so putting the operator-supplied CA bundle on this

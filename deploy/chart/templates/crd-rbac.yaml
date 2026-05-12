@@ -1,0 +1,88 @@
+{{- if .Values.crds.enabled }}
+# RBAC for the CRD-mirror controller. Grants the existing server pod
+# ServiceAccount permission to watch+patch the two management CRDs and to
+# hold a leases coordination lock (defensive — leader election is currently
+# disabled by the controller config but the bindings are harmless to grant).
+#
+# The base ServiceAccount already has `* */*` on every other resource via
+# the legacy serviceaccount.yaml template (it doubles as the local-cluster
+# agent SA). This file is additive purely so the CRD path is self-contained:
+# turning crds.enabled=false leaves the role + binding out of the manifest,
+# making it easy to reason about the controller's blast radius.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "astronomer.fullname" . }}-crd-controller
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+rules:
+  # Management CRDs: full CRUD + watch.
+  - apiGroups:
+      - management.astronomer.io
+    resources:
+      - clusters
+      - projects
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  # Status subresource patches.
+  - apiGroups:
+      - management.astronomer.io
+    resources:
+      - clusters/status
+      - projects/status
+    verbs:
+      - get
+      - update
+      - patch
+  # Finalizer subresource patches.
+  - apiGroups:
+      - management.astronomer.io
+    resources:
+      - clusters/finalizers
+      - projects/finalizers
+    verbs:
+      - update
+  # CRD discovery for the informer factories.
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+  # Leases for future leader-election. Granted defensively today.
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "astronomer.fullname" . }}-crd-controller
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "astronomer.fullname" . }}-crd-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "astronomer.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

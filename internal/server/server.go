@@ -753,6 +753,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// K8sRequester which only the server process has.
 	startClusterProbeReconciler(reconcileCtx, logger, queries, requester)
 
+	// CRD-mirror controller (Rancher-style "kubectl get clusters.management
+	// .astronomer.io"). Off by default; the chart wires CRD_ENABLED=true
+	// when crds.enabled=true. Failures are warned but never fatal — the REST
+	// path keeps running so the dashboard stays available even if the
+	// controller can't dial the API server.
+	startCRDController(reconcileCtx, logger, queries, queue)
+
 	return s, nil
 }
 

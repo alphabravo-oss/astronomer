@@ -1,0 +1,113 @@
+{{- if .Values.crds.enabled }}
+# CRD-mirror API — Cluster.management.astronomer.io/v1alpha1.
+#
+# Mirrors the operator-tunable subset of the `clusters` table. When
+# crds.enabled=true, the server pod runs a controller-runtime manager that
+# upserts the DB row from the CR spec and reflects DB-side state back onto
+# .status. The REST API stays the source of truth for fields not surfaced
+# here (cluster_health_status, last_heartbeat, etc.). See docs/crd-api.md
+# for the operator UX.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusters.management.astronomer.io
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+  annotations:
+    # Helm uninstall would delete the CRD by default, taking every CR (and
+    # the operator-managed clusters they describe) with it. Keep it across
+    # uninstall so the operator can re-install without losing state. The
+    # field is namespaced, so re-install picks up existing CRs unchanged.
+    "helm.sh/resource-policy": keep
+spec:
+  group: management.astronomer.io
+  scope: Namespaced
+  names:
+    plural: clusters
+    singular: cluster
+    kind: Cluster
+    listKind: ClusterList
+    shortNames:
+      - astrocluster
+    categories:
+      - astronomer
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+                displayName:
+                  type: string
+                description:
+                  type: string
+                environment:
+                  type: string
+                  enum:
+                    - production
+                    - staging
+                    - development
+                region:
+                  type: string
+                provider:
+                  type: string
+                distribution:
+                  type: string
+                labels:
+                  type: object
+                  additionalProperties:
+                    type: string
+                annotations:
+                  type: object
+                  additionalProperties:
+                    type: string
+                projectRefs:
+                  type: array
+                  items:
+                    type: string
+            status:
+              type: object
+              properties:
+                clusterId:
+                  type: string
+                phase:
+                  type: string
+                lastReconciled:
+                  type: string
+                  format: date-time
+                agentVersion:
+                  type: string
+                observedProjectRefs:
+                  type: array
+                  items:
+                    type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+        - name: Environment
+          type: string
+          jsonPath: .spec.environment
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+{{- end }}
