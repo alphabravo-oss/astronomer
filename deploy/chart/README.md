@@ -86,6 +86,42 @@ The base `values.yaml` is tuned for a minimal HA posture out of the box:
 `values-production.yaml` lifts these to `replicaCount=3` with PDB
 `minAvailable=2` so a single node loss never drops capacity below quorum.
 
+### Quorum-safe drain math (T29)
+
+With `replicaCount=3` + `minAvailable=2`:
+
+- **Voluntary disruption** (cordon + drain, rolling update, cluster
+  autoscaler scale-down): Kubernetes will evict at most **1** pod at a
+  time per component. The PDB blocks any eviction that would leave fewer
+  than 2 pods Ready, so `kubectl drain` on the third node waits for
+  reschedule + readiness before completing. Operators get a predictable
+  serial drain instead of a stampede.
+- **Involuntary disruption** (node power-loss, kernel panic, hardware
+  failure): PDBs don't apply, but with 3 replicas spread across nodes
+  via the chart's anti-affinity rules, losing one node still leaves 2
+  Ready pods — same `minAvailable` floor by construction.
+- **What this guarantees end-to-end**: every API request, worker task,
+  and frontend page-load has at least 2 live pods accepting traffic
+  during any controlled maintenance window. Combined with the agent
+  tunnel's auto-reconnect (jittered exponential backoff, T10) and the
+  asynq queue's at-least-once delivery, in-flight work survives a single
+  pod restart without operator action.
+
+To verify the gate is active in a deployed environment:
+
+```bash
+kubectl -n astronomer get pdb
+# NAME                     MIN AVAILABLE   ALLOWED DISRUPTIONS
+# astronomer-server-pdb    2               1
+# astronomer-worker-pdb    2               1
+# astronomer-frontend-pdb  2               1
+```
+
+`ALLOWED DISRUPTIONS = 1` confirms the cluster currently has the headroom
+the PDB requires (3 ready − 2 minAvailable = 1). If it drops to 0, the
+next drain on a hosting node will block — that's a signal to investigate
+the missing replica before initiating any rolling change.
+
 The local `values-k3d.yaml` override intentionally scales these back down to
 single replicas and disables the frontend HA scheduling helpers to keep smoke
 tests lightweight.
