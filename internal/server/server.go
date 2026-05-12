@@ -773,6 +773,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			return h
 		}(),
 		ProjectCatalogs: projectCatalogsHandler,
+		// Compliance baselines (migration 064 — sprint 17). The
+		// handler needs the *pgxpool.Pool to begin transactions
+		// around Apply / Revert; passing the pool plus a
+		// sqlc.New(tx) factory keeps the engine pool-agnostic for
+		// unit tests.
+		ComplianceBaselines: handler.NewComplianceBaselinesHandlerFromPool(database.Pool(), logger),
 	}
 	// Migration 063 — read-side audit. The PolicyEvaluator is shared
 	// between the middleware and the admin handler so policy writes
