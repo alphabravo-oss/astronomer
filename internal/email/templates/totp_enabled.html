@@ -1,0 +1,9 @@
+<!doctype html>
+<html><body>
+<p>Hello {{.Data.Username}},</p>
+<p>Two-factor authentication has been enabled on your <strong>{{.Branding.ProductName}}</strong> account. Every future sign-in will require a code from your authenticator app.</p>
+<p>You were issued <strong>{{.Data.RecoveryCodeCount}}</strong> one-time recovery codes &mdash; keep them somewhere safe in case you lose your device. Regenerate them anytime from the security page.</p>
+<p>If you did not enable 2FA yourself, contact your administrator right away.</p>
+<hr/>
+<p style="color:#666;font-size:12px">{{.Branding.ProductName}} security &middot; <a href="{{.Branding.SupportURL}}">{{.Branding.SupportURL}}</a></p>
+</body></html>

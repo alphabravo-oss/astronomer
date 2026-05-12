@@ -64,11 +64,15 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
-		// Opt-in telemetry POST (migration 046). Daily at 02:30 UTC —
-		// off-peak across our typical fleet. Handler short-circuits
-		// when telemetry.enabled is false, so an opt-out install
-		// pays one DB read per night and nothing else.
+		// Opt-in telemetry POST (migration 046). Daily at 02:30 UTC.
+		// Handler short-circuits when telemetry.enabled is false.
 		{"30 2 * * *", tasks.TelemetrySendType, "telemetry send (daily 02:30)"},
+		// Migration 047: drain email_messages queued/failed rows into
+		// real SMTP sends. 30s cadence.
+		{"@every 30s", tasks.EmailDispatchType, "email dispatch (smtp drain)"},
+		// Email retention sweep — daily at 03:30 (offset from the
+		// 03:00 backup-retention task to spread DB load).
+		{"30 3 * * *", tasks.EmailCleanupOldType, "email retention sweep (90d)"},
 	}
 
 	for _, e := range entries {

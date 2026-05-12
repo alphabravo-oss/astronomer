@@ -1,0 +1,9 @@
+Hello {{.Data.Username}},
+
+A new set of recovery codes has been generated on your {{.Branding.ProductName}} account. Any previously-issued codes are now invalid.
+
+If you did not request this change, your account may be compromised. Disable 2FA, rotate your password, and contact your administrator.
+
+--
+{{.Branding.ProductName}} security
+{{.Branding.SupportURL}}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,8 +44,16 @@ type ControlPlaneHandler struct {
 	Logging    *LoggingHandler
 	Security   *SecurityHandler
 	queue      *asynq.Client
+	emails     EmailNotifier
 	mu         sync.Mutex
 }
+
+// SetEmailNotifier attaches the SMTP email enqueuer used by the
+// alert-fired dispatch path to render and persist email_messages
+// rows for every email-class notification channel that fires. The
+// existing webhook/slack dispatch (via asynq notification:send) is
+// unaffected.
+func (h *ControlPlaneHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 type UpdateControlPlanePolicyRequest struct {
 	MonitoringQueueDepthThreshold    int32 `json:"monitoringQueueDepthThreshold"`
@@ -445,6 +454,29 @@ func (h *ControlPlaneHandler) enqueueNotifications(ctx context.Context, alert sq
 	for _, channel := range channels {
 		recipients := controlPlaneChannelRecipients(channel)
 		if len(recipients) == 0 {
+			continue
+		}
+		// Email channels: enqueue through the SMTP path so the
+		// admin-email audit view sees them and the operator gets a
+		// real templated message. Falls back to the legacy
+		// notification:send asynq task when the email enqueuer
+		// isn't wired (test scaffolding, pre-encryption-key boot).
+		if strings.EqualFold(channel.ChannelType, "email") && h.emails != nil {
+			for _, recipient := range recipients {
+				h.emails.EnqueueAndLog(ctx, EmailNotifierRequest{
+					To:       recipient,
+					Template: "alert_fired",
+					Subject:  alert.Controller + " " + alert.ConditionType,
+					Data: map[string]any{
+						"AlertName":    alert.Controller + ":" + alert.ConditionType,
+						"Severity":     alert.Status,
+						"FiredAt":      alert.FiredAt.UTC().Format(time.RFC3339),
+						"Resource":     alert.Controller,
+						"Message":      alert.Message,
+						"DashboardURL": "",
+					},
+				})
+			}
 			continue
 		}
 		task, err := tasks.NewNotificationSendTask(tasks.NotificationSendPayload{

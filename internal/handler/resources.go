@@ -36,7 +36,13 @@ type ResourceHandler struct {
 	// jwt is the optional JWT manager used by the admin force-logout
 	// endpoint to flush its positive-validation cache. Nil-safe.
 	jwt *auth.JWTManager
+	// emails is the optional email-enqueue hook used by the admin
+	// UnlockUser path to FYI the user. Optional; best-effort.
+	emails EmailNotifier
 }
+
+// SetEmailNotifier wires the email-enqueue hook.
+func (h *ResourceHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 // SetJWTManager wires the JWT manager so admin endpoints that change
 // session state (force-logout) can invalidate the in-process validation

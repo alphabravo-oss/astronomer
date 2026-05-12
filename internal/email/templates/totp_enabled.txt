@@ -1,0 +1,11 @@
+Hello {{.Data.Username}},
+
+Two-factor authentication has been enabled on your {{.Branding.ProductName}} account. Every future sign-in will require a code from your authenticator app.
+
+You were issued {{.Data.RecoveryCodeCount}} one-time recovery codes — keep them somewhere safe in case you lose your device. Regenerate them anytime from the security page.
+
+If you did not enable 2FA yourself, contact your administrator right away.
+
+--
+{{.Branding.ProductName}} security
+{{.Branding.SupportURL}}

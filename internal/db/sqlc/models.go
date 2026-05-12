@@ -1056,3 +1056,57 @@ type WorkloadOperationEvent struct {
 	Detail      json.RawMessage `json:"detail"`
 	CreatedAt   time.Time       `json:"created_at"`
 }
+
+// SmtpSettings is the singleton row carrying SMTP host/port/from/auth
+// for the email delivery worker. Migration 047. password_encrypted is
+// Fernet-encrypted under auth.Encryptor.
+type SmtpSettings struct {
+	ID                uuid.UUID `json:"id"`
+	Enabled           bool      `json:"enabled"`
+	Host              string    `json:"host"`
+	Port              int32     `json:"port"`
+	Username          string    `json:"username"`
+	PasswordEncrypted string    `json:"password_encrypted"`
+	FromAddress       string    `json:"from_address"`
+	FromName          string    `json:"from_name"`
+	AuthMechanism     string    `json:"auth_mechanism"`
+	Encryption        string    `json:"encryption"`
+	RequireTls        bool      `json:"require_tls"`
+	TimeoutSeconds    int32     `json:"timeout_seconds"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+// EmailMessage records every email the platform has tried (or skipped
+// while SMTP was disabled). The dispatcher worker drains queued rows;
+// the admin audit view reads from here. Migration 047.
+type EmailMessage struct {
+	ID        uuid.UUID          `json:"id"`
+	ToAddress string             `json:"to_address"`
+	CcAddress string             `json:"cc_address"`
+	Subject   string             `json:"subject"`
+	Template  string             `json:"template"`
+	BodyText  string             `json:"body_text"`
+	BodyHtml  string             `json:"body_html"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Status    string             `json:"status"`
+	Attempts  int32              `json:"attempts"`
+	LastError string             `json:"last_error"`
+	SentAt    pgtype.Timestamptz `json:"sent_at"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt time.Time          `json:"updated_at"`
+}
+
+// PasswordResetToken backs the password-reset flow. The literal token
+// is sent in the email link only; we store hex(sha256(token)) and a
+// snapshot of the user's password hash so a successful password change
+// invalidates every outstanding link. Migration 047.
+type PasswordResetToken struct {
+	ID                  uuid.UUID          `json:"id"`
+	UserID              uuid.UUID          `json:"user_id"`
+	TokenHash           string             `json:"token_hash"`
+	PasswordHashAtIssue string             `json:"password_hash_at_issue"`
+	ExpiresAt           time.Time          `json:"expires_at"`
+	UsedAt              pgtype.Timestamptz `json:"used_at"`
+	CreatedAt           time.Time          `json:"created_at"`
+}

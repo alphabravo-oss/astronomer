@@ -619,6 +619,24 @@ type Querier interface {
 	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]UserTotpRecoveryCode, error)
 	TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLastUsedParams) error
 	UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error)
+	// SMTP + email-message + password-reset (migration 047).
+	ConsumePasswordResetToken(ctx context.Context, arg ConsumePasswordResetTokenParams) (int64, error)
+	CountEmailMessages(ctx context.Context) (int64, error)
+	CountEmailsByStatus(ctx context.Context, status string) (int64, error)
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
+	DeleteEmailsOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	DeleteExpiredPasswordResetTokens(ctx context.Context, cutoff time.Time) (int64, error)
+	DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error
+	GetEmailMessageByID(ctx context.Context, id uuid.UUID) (EmailMessage, error)
+	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
+	GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSettings, error)
+	InsertEmailMessage(ctx context.Context, arg InsertEmailMessageParams) (EmailMessage, error)
+	ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error)
+	ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMessage, error)
+	MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) error
+	MarkEmailSent(ctx context.Context, arg MarkEmailSentParams) error
+	MarkEmailSkipped(ctx context.Context, arg MarkEmailSkippedParams) error
+	UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSettings, error)
 }
 
 var _ Querier = (*Queries)(nil)

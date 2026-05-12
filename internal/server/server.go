@@ -14,6 +14,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
@@ -36,6 +37,26 @@ type busPublisherAdapter struct{ bus *events.Bus }
 
 func (a busPublisherAdapter) Publish(eventType string, data any) {
 	a.bus.Publish(events.Type(eventType), data)
+}
+
+// emailNotifierAdapter wraps *email.Enqueuer in the handler-local
+// EmailNotifier surface. The two-type indirection keeps the handler
+// package free of any email package imports (so the test fakes don't
+// have to drag templates along) while still letting NewApp wire the
+// concrete Enqueuer.
+type emailNotifierAdapter struct{ e *email.Enqueuer }
+
+func (a *emailNotifierAdapter) EnqueueAndLog(ctx context.Context, req handler.EmailNotifierRequest) {
+	if a == nil || a.e == nil {
+		return
+	}
+	a.e.EnqueueAndLog(ctx, email.Request{
+		To:       req.To,
+		Template: req.Template,
+		Subject:  req.Subject,
+		Data:     req.Data,
+		UserID:   req.UserID,
+	})
 }
 
 // dsnEnforcesTLS reports whether a Postgres DSN includes an sslmode setting
@@ -384,6 +405,41 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		return nil, chartRepoErr
 	}
 
+	// SMTP email (migration 047). Wired only when the encryptor is
+	// available — the password column is Fernet-encrypted and a
+	// missing key would mean we couldn't round-trip a saved password.
+	// The Enqueuer is best-effort across the codebase: every hook
+	// site calls EnqueueAndLog so a missing SMTP relay never breaks a
+	// user-facing action.
+	var (
+		smtpHandler   *handler.SMTPHandler
+		emailEnqueuer *email.Enqueuer
+	)
+	if encryptor != nil {
+		settingsProvider := email.NewSQLSettingsProvider(queries, encryptor, 5*time.Second)
+		brandingProvider := email.NewPlatformConfigBrandingProvider(queries, "")
+		smtpHandler = handler.NewSMTPHandler(queries, encryptor, logger)
+		smtpHandler.SetSettingsProvider(settingsProvider)
+		smtpHandler.SetBrandingProvider(brandingProvider)
+		smtpHandler.SetAuditWriter(queries)
+		emailEnqueuer = email.NewEnqueuer(queries, brandingProvider, logger)
+		notifier := &emailNotifierAdapter{e: emailEnqueuer}
+		authHandler.SetEmailNotifier(notifier)
+		if totpHandler != nil {
+			totpHandler.SetEmailNotifier(notifier)
+		}
+		resourceHandler.SetEmailNotifier(notifier)
+		controlPlaneHandler.SetEmailNotifier(notifier)
+		authHandler.SetPasswordResetStore(queries)
+		// Tell the worker-task runtime about the SMTP plumbing so
+		// the email:dispatch task can drain queued rows.
+		tasks.ConfigureEmail(tasks.EmailDeps{
+			Queries:  queries,
+			Sender:   email.NewSender(settingsProvider, encryptor, logger),
+			Provider: settingsProvider,
+		})
+	}
+
 	deps := RouterDependencies{
 		JWT:          jwtManager,
 		Encryptor:    encryptor,
@@ -436,6 +492,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// management-plane-restore-drill CronJob writes to
 		// backup_drill_results. Superuser-gated inside the handler.
 		AdminDrill: handler.NewAdminDrillHandler(queries),
+		// SMTP admin + email enqueuer (migration 047). Both are nil
+		// when the encryptor isn't configured; the router wiring is
+		// nil-safe.
+		SMTP:          smtpHandler,
+		EmailEnqueuer: emailEnqueuer,
 		// Identity-group sync admin endpoints (migration 042). CRUD
 		// over identity_group_mappings + per-user re-sync. The RBAC
 		// cache invalidator is wired below once rbacQuerier is known

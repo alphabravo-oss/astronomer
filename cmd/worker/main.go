@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -134,6 +136,30 @@ func main() {
 			Queries: sqlc.New(database.Pool()),
 			K8s:     refreshK8s,
 		})
+	}
+
+	// Email dispatch (migration 047). Wired only when the encryptor
+	// is available — the SMTP password is Fernet-encrypted and the
+	// dispatcher can't decrypt without a key. The runtime no-ops on
+	// a nil sender, so a misconfigured deployment degrades to a logged
+	// "email dispatcher not configured" line and queued rows pile up
+	// (the dispatcher's 1-hour ageRowsToSkipped guard catches them).
+	if cfg.EncryptionKey != "" {
+		if enc, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
+			q := sqlc.New(database.Pool())
+			provider := email.NewSQLSettingsProvider(q, enc, 5*time.Second)
+			sender := email.NewSender(provider, enc, log)
+			sender.SetBrandingProvider(email.NewPlatformConfigBrandingProvider(q, ""))
+			tasks.ConfigureEmail(tasks.EmailDeps{
+				Queries:  q,
+				Sender:   sender,
+				Provider: provider,
+			})
+		} else {
+			log.Warn("email dispatch disabled: encryptor init failed", "error", encErr)
+		}
+	} else {
+		log.Warn("email dispatch disabled: ASTRONOMER_ENCRYPTION_KEY is not set")
 	}
 
 	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —
