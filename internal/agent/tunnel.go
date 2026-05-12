@@ -225,10 +225,26 @@ func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *ra
 }
 
 // reconnectLoop attempts to reconnect with jittered exponential backoff.
+//
+// At attempt=0 the loop uses InitialReconnectSpread instead of the normal
+// exponential — a uniform random delay in [0, base) — so a synchronised
+// disconnect (e.g. every agent in the fleet observing a server pod restart
+// at the same wall-clock second) doesn't translate into a stampede against
+// the same DB + auth path on the surviving replicas. With base=1s and 500
+// agents, the previous code packed every reconnect into a 1.25s window
+// (the ±25% jitter only); the spread now smears them across a full 1s
+// before the exponential takes over.
+//
+// FEATURES-051126 T10.
 func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for attempt := 0; ; attempt++ {
-		wait := BackoffDurationWithJitter(attempt, tc.config.ReconnectBackoff, tc.config.MaxReconnect, rng)
+		var wait time.Duration
+		if attempt == 0 {
+			wait = InitialReconnectSpread(tc.config.ReconnectBackoff, rng)
+		} else {
+			wait = BackoffDurationWithJitter(attempt, tc.config.ReconnectBackoff, tc.config.MaxReconnect, rng)
+		}
 		tc.log.Info("reconnecting", "attempt", attempt+1, "backoff", wait)
 
 		select {
@@ -245,6 +261,30 @@ func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
 		tc.log.Info("reconnected successfully", "attempt", attempt+1)
 		return nil
 	}
+}
+
+// InitialReconnectSpread returns a uniform random delay in [0, baseSeconds)
+// seconds, used by the first reconnect attempt to spread synchronised
+// fleet-wide reconnects across the configured base window. The minimum
+// is clamped to 100ms so a misconfigured base=0 doesn't busy-loop.
+//
+// Exported so tests can exercise the distribution without reaching into
+// reconnectLoop's internals.
+func InitialReconnectSpread(baseSeconds int, rng *rand.Rand) time.Duration {
+	if baseSeconds <= 0 {
+		baseSeconds = 1
+	}
+	var f float64
+	if rng != nil {
+		f = rng.Float64()
+	} else {
+		f = rand.Float64()
+	}
+	d := time.Duration(f * float64(baseSeconds) * float64(time.Second))
+	if d < 100*time.Millisecond {
+		d = 100 * time.Millisecond
+	}
+	return d
 }
 
 // readLoop reads messages from the WebSocket and dispatches them to handlers.

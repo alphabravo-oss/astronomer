@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"log/slog"
+	"math/rand"
 	"os"
 	"testing"
 	"time"
@@ -52,6 +53,55 @@ func TestNewTunnelClient(t *testing.T) {
 	}
 	if tc.IsConnected() {
 		t.Error("new client should not be connected")
+	}
+}
+
+// FEATURES-051126 T10: at attempt=0 the reconnect loop must use a uniform
+// spread over [0, base) rather than the exponential's first step, to
+// avoid stampeding a fleet's worth of agents into the same 1.25s window
+// after a synchronised disconnect (e.g. all agents observing a hub
+// restart).
+func TestInitialReconnectSpread(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	const base = 5
+	const samples = 1000
+	var minD, maxD time.Duration = time.Hour, 0
+	for i := 0; i < samples; i++ {
+		d := InitialReconnectSpread(base, rng)
+		if d < 100*time.Millisecond {
+			t.Errorf("sample %d: returned %v < 100ms floor", i, d)
+		}
+		if d > time.Duration(base)*time.Second {
+			t.Errorf("sample %d: returned %v > base=%ds", i, d, base)
+		}
+		if d < minD {
+			minD = d
+		}
+		if d > maxD {
+			maxD = d
+		}
+	}
+	// Distribution sanity: across 1000 samples we expect to cover most
+	// of the range. min should be near the floor, max should be near
+	// the cap.
+	if minD > 500*time.Millisecond {
+		t.Errorf("min sample = %v; expected most distributions to dip below 500ms", minD)
+	}
+	if maxD < 4*time.Second {
+		t.Errorf("max sample = %v; expected most distributions to reach above 4s for base=5", maxD)
+	}
+}
+
+// InitialReconnectSpread must clamp a misconfigured base=0 to a usable
+// default rather than busy-looping at zero.
+func TestInitialReconnectSpread_BaseZero(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	d := InitialReconnectSpread(0, rng)
+	if d < 100*time.Millisecond {
+		t.Errorf("base=0 should clamp to ≥100ms, got %v", d)
+	}
+	if d > time.Second {
+		t.Errorf("base=0 should clamp to default base=1s, got %v", d)
 	}
 }
 
