@@ -261,6 +261,16 @@ config:
   serverURL: ""
   agentImageRepository: astronomer-go-agent
   agentImageTag: dev
+  # =============================================================================
+  # Auth hardening (migration 039 / NIST 800-53 AC-7 / SOC 2 CC6.1)
+  # =============================================================================
+  # Account-lockout policy. After this many consecutive failed login
+  # attempts the user row is locked for the configured duration.
+  # Auto-unlock is implicit (`locked_until` in the past behaves like
+  # "not locked"); an admin can also force-unlock via
+  # POST /api/v1/admin/users/{id}/unlock/.
+  loginFailureThreshold: 5
+  lockoutDurationMinutes: 15
 
 # =============================================================================
 # Secrets — set these from --set-file or external secret manager in real usage.

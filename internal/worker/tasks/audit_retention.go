@@ -13,6 +13,16 @@ type auditRetentionQuerier interface {
 	DropAuditLogPartition(ctx context.Context, name string) error
 }
 
+// jwtRevocationPurger is the optional sub-interface satisfied by
+// implementations that also need to GC expired JWT deny-list rows. The
+// production *sqlc.Queries satisfies both this and auditRetentionQuerier;
+// tests that exercise only the partition path can implement just the
+// outer interface. Wiring it under the same daily cron keeps the
+// retention story uniform without introducing a second scheduler entry.
+type jwtRevocationPurger interface {
+	PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
+}
+
 // EnforceAuditLogRetentionType is the periodic task identifier for pruning old
 // monthly audit_log partitions after they age out of the configured window.
 const EnforceAuditLogRetentionType = "audit_log:enforce_retention"
@@ -46,6 +56,21 @@ func enforceAuditLogRetention(ctx context.Context, q auditRetentionQuerier, now 
 		}
 	}
 	runtimeLogger().InfoContext(ctx, "enforced audit_log partition retention", "retention_months", normalizeAuditLogRetentionMonths(retentionMonths), "dropped_partitions", len(toDrop))
+
+	// JWT revocation GC piggy-backs on the same nightly cron. The deny
+	// list is bounded by the access-token lifetime (~1h to 7d) so
+	// rows naturally fall off; this just GCs them so the table doesn't
+	// keep accumulating tombstones from old logouts forever.
+	if purger, ok := q.(jwtRevocationPurger); ok {
+		if purged, err := purger.PurgeExpiredJWTRevocations(ctx); err != nil {
+			// Don't fail the whole task — partition retention
+			// already ran successfully, and the deny list will
+			// re-attempt tomorrow.
+			runtimeLogger().WarnContext(ctx, "purge expired jwt revocations failed", "error", err)
+		} else if purged > 0 {
+			runtimeLogger().InfoContext(ctx, "purged expired jwt revocations", "rows", purged)
+		}
+	}
 	return nil
 }
 

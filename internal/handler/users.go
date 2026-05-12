@@ -1,17 +1,23 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // generateTempPassword returns a 12-character password drawn from a URL-safe
@@ -267,4 +273,138 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 		resp["temporary_password"] = req.Password
 	}
 	RespondJSON(w, http.StatusOK, resp)
+}
+
+// UnlockUser handles POST /api/v1/admin/users/{id}/unlock/.
+//
+// Clears the per-account lockout fields (failed_login_count = 0,
+// locked_until = NULL, locked_reason = '') so the user can attempt to
+// log in again before the natural auto-unlock window expires. Audit
+// row carries the admin's user_id as actor (recordAudit pulls it from
+// the request context).
+//
+// Auth: superuser. Gated inside the handler so a non-superuser hitting
+// the route gets a clean 403 rather than a generic permission rejection.
+func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
+	if h.queries == nil {
+		RespondError(w, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		return
+	}
+	if err := requireSuperuserFromContext(r, h.queries); err != nil {
+		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		return
+	}
+	existing, err := h.queries.GetUserByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	if err := h.queries.UnlockUser(r.Context(), id); err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to unlock user")
+		return
+	}
+	recordAudit(r, h.queries, "admin.user.unlocked", "user", existing.ID.String(), existing.Username, map[string]any{
+		"previous_locked_until":  formatTimestamptz(existing.LockedUntil),
+		"previous_locked_reason": existing.LockedReason,
+		"previous_failed_count":  existing.FailedLoginCount,
+	})
+	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"success": true, "message": "User unlocked"})
+}
+
+// ForceLogoutUser handles POST /api/v1/admin/users/{id}/force-logout/.
+//
+// Stamps users.tokens_invalidated_at = now() so every JWT issued for
+// the user before that timestamp is rejected on its next validation.
+// New tokens (issued after this call) remain valid until their own
+// expiry. Use for stolen-device / terminated-employee scenarios.
+//
+// Auth: superuser. Same in-handler gating as UnlockUser.
+func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request) {
+	if h.queries == nil {
+		RespondError(w, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		return
+	}
+	if err := requireSuperuserFromContext(r, h.queries); err != nil {
+		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		return
+	}
+	existing, err := h.queries.GetUserByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
+	now := time.Now()
+	if err := h.queries.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
+		ID:                  id,
+		TokensInvalidatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+	}); err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to invalidate tokens")
+		return
+	}
+	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "admin_force_logout")...).Inc()
+	if h.jwt != nil {
+		// Drop the positive-validation cache so a JWT we'd JUST
+		// confirmed valid doesn't stick around for one more TTL.
+		h.jwt.InvalidateCache()
+	}
+	recordAudit(r, h.queries, "admin.user.force_logged_out", "user", existing.ID.String(), existing.Username, map[string]any{
+		"tokens_invalidated_at": now.UTC().Format(time.RFC3339),
+	})
+	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
+		"success":                true,
+		"message":                "All active sessions invalidated",
+		"tokens_invalidated_at":  now.UTC().Format(time.RFC3339),
+	})
+}
+
+// requireSuperuserFromContext is the in-handler superuser gate used by
+// the admin endpoints in this file. Mirrors the inline check in
+// keyStatusHandler so the route doesn't need an extra middleware tier.
+// Returns a non-nil error when the caller is unauthenticated or not a
+// superuser; the message is safe to render verbatim to the client.
+func requireSuperuserFromContext(r *http.Request, q interface {
+	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
+}) error {
+	caller, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !ok || caller == nil {
+		return errSuperuserRequired
+	}
+	callerID, err := uuid.Parse(caller.ID)
+	if err != nil {
+		return errSuperuserRequired
+	}
+	dbUser, err := q.GetUserByID(r.Context(), callerID)
+	if err != nil {
+		return errSuperuserRequired
+	}
+	if !dbUser.IsSuperuser {
+		return errSuperuserRequired
+	}
+	return nil
+}
+
+// errSuperuserRequired is the canonical error returned by the
+// in-handler superuser gate. Carried as a package-level value so
+// callers can render the same message without re-stringifying.
+var errSuperuserRequired = &authError{"Superuser privileges required"}
+
+type authError struct{ msg string }
+
+func (e *authError) Error() string { return e.msg }
+
+func formatTimestamptz(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+	return t.Time.UTC().Format(time.RFC3339)
 }

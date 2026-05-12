@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,6 +26,21 @@ type Claims struct {
 	TokenType TokenType `json:"token_type"`
 }
 
+// RevocationChecker is the optional dependency the JWTManager consults on
+// every ValidateToken call to enforce the session-revocation deny list
+// and the per-user invalidation cutoff. Both checks are skipped when the
+// dependency is nil (e.g. the unit tests for JWTManager itself).
+//
+// IsJWTRevoked returns true when a specific JTI is on the deny list (set
+// by Logout / force-logout). UserTokensInvalidatedAt returns the
+// per-user "invalidate everything before this timestamp" cutoff and a
+// boolean indicating whether the cutoff is set. When both the cutoff is
+// set AND the token's iat is before it, the token is rejected.
+type RevocationChecker interface {
+	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
+	UserTokensInvalidatedAt(ctx context.Context, userID uuid.UUID) (time.Time, bool, error)
+}
+
 // JWTManager handles JWT token generation and validation. It supports
 // multi-key rotation: the primary key signs new tokens; all configured
 // keys can validate existing tokens. The single-string form keeps
@@ -32,6 +49,33 @@ type JWTManager struct {
 	secretKeys           [][]byte // primary first
 	accessTokenLifetime  time.Duration
 	refreshTokenLifetime time.Duration
+
+	// revocations is the deny-list backend. Optional — when nil, only
+	// signature + expiry checks run. The HTTP layer attaches it via
+	// SetRevocationChecker after construction so the auth package
+	// doesn't need to depend on sqlc.
+	revMu       sync.RWMutex
+	revocations RevocationChecker
+
+	// Validation result cache. ValidateToken is on the hot path (every
+	// authenticated request) and would otherwise add a DB round-trip
+	// per request. The cache stores positive verdicts (token still
+	// valid) for a short TTL; negative verdicts are NEVER cached — a
+	// freshly-revoked token must be rejected on its next use.
+	cacheMu  sync.RWMutex
+	cacheTTL time.Duration
+	cache    map[string]validationCacheEntry
+}
+
+// JWTValidationCacheTTL is the default TTL for the "this JTI is still
+// valid" cache. Kept short so a revocation that happens AFTER a positive
+// cache hit becomes visible within seconds. The cache key is the JTI;
+// negative outcomes are never cached so a revoke takes effect on the
+// next request.
+const JWTValidationCacheTTL = 30 * time.Second
+
+type validationCacheEntry struct {
+	expiresAt time.Time
 }
 
 // NewJWTManager creates a new JWT manager. secretKey is a comma-separated
@@ -68,7 +112,35 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
 		secretKeys:           keys,
 		accessTokenLifetime:  time.Duration(accessLifetimeMinutes) * time.Minute,
 		refreshTokenLifetime: 7 * 24 * time.Hour, // 7 days
+		cacheTTL:             JWTValidationCacheTTL,
+		cache:                make(map[string]validationCacheEntry),
 	}
+}
+
+// SetRevocationChecker wires the JTI deny-list + per-user invalidation
+// cutoff backend. The manager calls it on every ValidateToken; nil
+// disables both checks (the default — useful for unit tests and the
+// pre-DB bootstrap path).
+func (m *JWTManager) SetRevocationChecker(c RevocationChecker) {
+	if m == nil {
+		return
+	}
+	m.revMu.Lock()
+	m.revocations = c
+	m.revMu.Unlock()
+}
+
+// SetValidationCacheTTL overrides the positive-result cache TTL. Pass 0
+// to disable caching. Useful for tests that want to assert revocation
+// is observed immediately without waiting out the default window.
+func (m *JWTManager) SetValidationCacheTTL(d time.Duration) {
+	if m == nil {
+		return
+	}
+	m.cacheMu.Lock()
+	m.cacheTTL = d
+	m.cache = make(map[string]validationCacheEntry) // drop stale entries
+	m.cacheMu.Unlock()
 }
 
 // SecretKey returns a defensive copy of the PRIMARY HMAC signing key so
@@ -123,7 +195,26 @@ func (m *JWTManager) GenerateRefreshToken(userID uuid.UUID) (string, error) {
 // ValidateToken parses and validates a JWT token, returning the claims.
 // When multiple keys are configured (rotation in flight), each is tried in
 // order; the first that yields a valid signature wins.
+//
+// When a RevocationChecker is attached, ValidateToken additionally
+// rejects:
+//
+//   - tokens whose JTI is on the deny list (logout / per-token revoke);
+//   - tokens whose iat predates the user's tokens_invalidated_at cutoff
+//     (admin force-logout).
+//
+// A short positive-result cache (default JWTValidationCacheTTL) covers
+// the DB round-trips on the hot path. Negative verdicts are never
+// cached so a fresh revocation takes effect on the next request.
 func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
+	return m.ValidateTokenContext(context.Background(), tokenString)
+}
+
+// ValidateTokenContext is the context-aware variant. The auth middleware
+// passes the request context so DB round-trips inherit deadlines and
+// cancellation. Existing callers of ValidateToken keep working —
+// background context just means no cancellation.
+func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString string) (*Claims, error) {
 	var lastErr error
 	for _, key := range m.secretKeys {
 		claims := &Claims{}
@@ -147,12 +238,111 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 		if claims.TokenType == "" {
 			return nil, fmt.Errorf("invalid token: missing token_type claim")
 		}
+		// Revocation checks — only run when a checker is attached AND
+		// the cache says we haven't recently validated this JTI.
+		if err := m.checkRevocations(ctx, claims); err != nil {
+			return nil, err
+		}
 		return claims, nil
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("invalid token")
 	}
 	return nil, fmt.Errorf("invalid token: %w", lastErr)
+}
+
+// checkRevocations enforces the JTI deny list + per-user invalidation
+// cutoff. Short-circuited by the positive-result cache so repeated
+// requests for the same JTI inside the TTL window only pay the DB
+// cost once.
+func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error {
+	m.revMu.RLock()
+	checker := m.revocations
+	m.revMu.RUnlock()
+	if checker == nil {
+		return nil
+	}
+	jti := claims.ID
+
+	// Positive-cache hit: we've recently confirmed this JTI is valid.
+	if jti != "" && m.cacheHit(jti) {
+		return nil
+	}
+
+	if jti != "" {
+		revoked, err := checker.IsJWTRevoked(ctx, jti)
+		if err != nil {
+			// Failing closed (rejecting) on a DB error would lock
+			// the entire fleet out the moment Postgres hiccups.
+			// Failing open is the conventional auth-middleware
+			// choice — the bcrypt/JWT signature gate already
+			// guarantees the token was issued by us; the revoke
+			// list is an additional layer that's acceptable to
+			// briefly bypass.
+			//
+			// We do NOT cache this outcome — the next request will
+			// retry.
+			return nil
+		}
+		if revoked {
+			return fmt.Errorf("invalid token: token revoked")
+		}
+	}
+
+	cutoff, set, err := checker.UserTokensInvalidatedAt(ctx, claims.UserID)
+	if err != nil {
+		// Same fail-open rationale as above.
+		return nil
+	}
+	if set && claims.IssuedAt != nil && !claims.IssuedAt.Time.IsZero() {
+		// iat predates the cutoff -> reject. Use !After so a token
+		// issued at exactly the cutoff timestamp is rejected.
+		if !claims.IssuedAt.Time.After(cutoff) {
+			return fmt.Errorf("invalid token: tokens invalidated for user")
+		}
+	}
+
+	if jti != "" {
+		m.cachePut(jti)
+	}
+	return nil
+}
+
+func (m *JWTManager) cacheHit(jti string) bool {
+	m.cacheMu.RLock()
+	entry, ok := m.cache[jti]
+	ttl := m.cacheTTL
+	m.cacheMu.RUnlock()
+	if !ok || ttl <= 0 {
+		return false
+	}
+	if time.Now().After(entry.expiresAt) {
+		// Lazy eviction; the next put or invalidate will replace it.
+		return false
+	}
+	return true
+}
+
+func (m *JWTManager) cachePut(jti string) {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	if m.cacheTTL <= 0 {
+		return
+	}
+	m.cache[jti] = validationCacheEntry{expiresAt: time.Now().Add(m.cacheTTL)}
+}
+
+// InvalidateCache drops every entry from the positive-result cache.
+// Called by the Logout / force-logout paths so an in-flight cached
+// validation doesn't survive the revocation. Cheap — the cache is
+// usually <1k entries.
+func (m *JWTManager) InvalidateCache() {
+	if m == nil {
+		return
+	}
+	m.cacheMu.Lock()
+	m.cache = make(map[string]validationCacheEntry)
+	m.cacheMu.Unlock()
 }
 
 // generateToken is the internal token generation helper

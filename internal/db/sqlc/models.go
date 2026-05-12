@@ -163,6 +163,30 @@ type ArgocdOperationEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
+type AuditArchive struct {
+	ID                uuid.UUID       `json:"id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	SchemaVersion     string          `json:"schema_version"`
+	UserID            pgtype.UUID     `json:"user_id"`
+	ActorAuthMethod   string          `json:"actor_auth_method"`
+	Action            string          `json:"action"`
+	ResourceType      string          `json:"resource_type"`
+	ResourceID        string          `json:"resource_id"`
+	ResourceName      string          `json:"resource_name"`
+	HttpMethod        string          `json:"http_method"`
+	Path              string          `json:"path"`
+	StatusCode        int32           `json:"status_code"`
+	DurationMs        int64           `json:"duration_ms"`
+	RequestID         string          `json:"request_id"`
+	IpAddress         *netip.Addr     `json:"ip_address"`
+	UserAgent         string          `json:"user_agent"`
+	Detail            json.RawMessage `json:"detail"`
+	Source            string          `json:"source"`
+	CorrelationID     string          `json:"correlation_id"`
+	ArchivedClusterID pgtype.UUID     `json:"archived_cluster_id"`
+	ArchivedAt        time.Time       `json:"archived_at"`
+}
+
 type AuditLog struct {
 	ID              uuid.UUID       `json:"id"`
 	CreatedAt       time.Time       `json:"created_at"`
@@ -320,23 +344,6 @@ type Cluster struct {
 	DecommissionedAt  pgtype.Timestamptz `json:"decommissioned_at"`
 }
 
-// ClusterDecommission tracks the per-cluster decommission reconciler run.
-// See migration 038_cluster_decommission for column semantics.
-type ClusterDecommission struct {
-	ID            uuid.UUID          `json:"id"`
-	ClusterID     uuid.UUID          `json:"cluster_id"`
-	Status        string             `json:"status"`
-	Phases        json.RawMessage    `json:"phases"`
-	StartedAt     pgtype.Timestamptz `json:"started_at"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	LastError     string             `json:"last_error"`
-	Attempts      int32              `json:"attempts"`
-	RequestedByID pgtype.UUID        `json:"requested_by_id"`
-	ClusterName   string             `json:"cluster_name"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
-}
-
 type ClusterAgentToken struct {
 	ID         uuid.UUID          `json:"id"`
 	ClusterID  uuid.UUID          `json:"cluster_id"`
@@ -357,6 +364,21 @@ type ClusterCondition struct {
 	LastProbeTime      time.Time `json:"last_probe_time"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+type ClusterDecommission struct {
+	ID            uuid.UUID          `json:"id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Status        string             `json:"status"`
+	Phases        json.RawMessage    `json:"phases"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+	LastError     string             `json:"last_error"`
+	Attempts      int32              `json:"attempts"`
+	RequestedByID pgtype.UUID        `json:"requested_by_id"`
+	ClusterName   string             `json:"cluster_name"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
 }
 
 type ClusterHealthStatus struct {
@@ -634,6 +656,40 @@ type InstalledChart struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
+type JwtRevocation struct {
+	Jti       string    `json:"jti"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	RevokedAt time.Time `json:"revoked_at"`
+	Reason    string    `json:"reason"`
+}
+
+type LoggingOperation struct {
+	ID            uuid.UUID          `json:"id"`
+	TargetType    string             `json:"target_type"`
+	TargetKey     string             `json:"target_key"`
+	OperationType string             `json:"operation_type"`
+	Payload       json.RawMessage    `json:"payload"`
+	Status        string             `json:"status"`
+	AttemptCount  int32              `json:"attempt_count"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+	ErrorMessage  string             `json:"error_message"`
+	CreatedByID   pgtype.UUID        `json:"created_by_id"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type LoggingOperationEvent struct {
+	ID          uuid.UUID       `json:"id"`
+	OperationID uuid.UUID       `json:"operation_id"`
+	Level       string          `json:"level"`
+	Stage       string          `json:"stage"`
+	Message     string          `json:"message"`
+	Detail      json.RawMessage `json:"detail"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
 type LoggingOutput struct {
 	ID            uuid.UUID       `json:"id"`
 	Name          string          `json:"name"`
@@ -662,32 +718,6 @@ type LoggingPipeline struct {
 type LoggingPipelineOutput struct {
 	LoggingPipelineID uuid.UUID `json:"logging_pipeline_id"`
 	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
-}
-
-type LoggingOperation struct {
-	ID            uuid.UUID          `json:"id"`
-	TargetType    string             `json:"target_type"`
-	TargetKey     string             `json:"target_key"`
-	OperationType string             `json:"operation_type"`
-	Payload       json.RawMessage    `json:"payload"`
-	Status        string             `json:"status"`
-	AttemptCount  int32              `json:"attempt_count"`
-	StartedAt     pgtype.Timestamptz `json:"started_at"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	ErrorMessage  string             `json:"error_message"`
-	CreatedByID   pgtype.UUID        `json:"created_by_id"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
-}
-
-type LoggingOperationEvent struct {
-	ID          uuid.UUID       `json:"id"`
-	OperationID uuid.UUID       `json:"operation_id"`
-	Level       string          `json:"level"`
-	Stage       string          `json:"stage"`
-	Message     string          `json:"message"`
-	Detail      json.RawMessage `json:"detail"`
-	CreatedAt   time.Time       `json:"created_at"`
 }
 
 type MonitoringBackend struct {
@@ -902,20 +932,25 @@ type ToolOperationEvent struct {
 }
 
 type User struct {
-	ID                 uuid.UUID          `json:"id"`
-	Email              string             `json:"email"`
-	Username           string             `json:"username"`
-	FirstName          string             `json:"first_name"`
-	LastName           string             `json:"last_name"`
-	Password           string             `json:"password"`
-	IsActive           bool               `json:"is_active"`
-	IsStaff            bool               `json:"is_staff"`
-	IsSuperuser        bool               `json:"is_superuser"`
-	LastLogin          pgtype.Timestamptz `json:"last_login"`
-	DateJoined         time.Time          `json:"date_joined"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
-	MustChangePassword bool               `json:"must_change_password"`
+	ID                  uuid.UUID          `json:"id"`
+	Email               string             `json:"email"`
+	Username            string             `json:"username"`
+	FirstName           string             `json:"first_name"`
+	LastName            string             `json:"last_name"`
+	Password            string             `json:"password"`
+	IsActive            bool               `json:"is_active"`
+	IsStaff             bool               `json:"is_staff"`
+	IsSuperuser         bool               `json:"is_superuser"`
+	LastLogin           pgtype.Timestamptz `json:"last_login"`
+	DateJoined          time.Time          `json:"date_joined"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	MustChangePassword  bool               `json:"must_change_password"`
+	FailedLoginCount    int32              `json:"failed_login_count"`
+	FailedLoginAt       pgtype.Timestamptz `json:"failed_login_at"`
+	LockedUntil         pgtype.Timestamptz `json:"locked_until"`
+	LockedReason        string             `json:"locked_reason"`
+	TokensInvalidatedAt pgtype.Timestamptz `json:"tokens_invalidated_at"`
 }
 
 type WorkloadOperation struct {

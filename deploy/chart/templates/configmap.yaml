@@ -26,6 +26,14 @@ data:
   SERVER_URL: {{ .Values.config.serverURL | default "" | quote }}
   AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | quote }}
   AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | quote }}
+  # Auth hardening (migration 039). Empty / unset == binary defaults
+  # (5 attempts / 15 minutes).
+  {{- if .Values.config.loginFailureThreshold }}
+  LOGIN_FAILURE_THRESHOLD: {{ .Values.config.loginFailureThreshold | quote }}
+  {{- end }}
+  {{- if .Values.config.lockoutDurationMinutes }}
+  LOCKOUT_DURATION_MINUTES: {{ .Values.config.lockoutDurationMinutes | quote }}
+  {{- end }}
   # pgxpool tunables (FEATURES-051126 T21). Empty == binary default.
   {{- with .Values.postgres.pool }}
   {{- if .maxConns }}
