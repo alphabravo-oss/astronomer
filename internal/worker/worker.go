@@ -40,6 +40,11 @@ const (
 	// is the periodic sweep that picks up rows whose worker crashed.
 	TypeClusterDecommission    = tasks.ClusterDecommissionType
 	TypeClusterDecommissionAll = tasks.ClusterDecommissionAllType
+	// ArgoCD managed-cluster label refresh. Enqueued by ClustersHandler.Update
+	// after a labels mutation; the worker re-stamps the astronomer.io/label-*
+	// keys on every upstream ArgoCD cluster Secret this cluster is registered
+	// into. Idempotent — skips the PATCH when the desired labels already match.
+	TypeArgoCDRefreshManagedClusterLabels = tasks.ArgoCDRefreshManagedClusterLabelsType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -101,6 +106,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeProjectReconcileAll, instrumentTask(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll))
 	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
 	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
+	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
 
 	w.log.Info("registered all task handlers")
 }

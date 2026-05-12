@@ -1664,14 +1664,133 @@ func (h *ArgoCDHandler) lookupArgoCDClusterSecret(ctx context.Context, secretNam
 	return findArgoCDClusterSecretByServer(ctx, h.k8s, server)
 }
 
+// astronomerManagedByLabelKey marks the Argo cluster Secret as having been
+// stamped by Astronomer. ApplicationSet `clusters` generators can use this
+// alone to target every managed cluster, regardless of per-cluster labels.
+const astronomerManagedByLabelKey = "astronomer.io/managed-by"
+
+// astronomerManagedByLabelValue is the constant value paired with
+// astronomerManagedByLabelKey. Kept short so it survives the 63-char Kubernetes
+// label-value cap with room to spare.
+const astronomerManagedByLabelValue = "astronomer"
+
+// astronomerLabelPrefix is the namespace under which we mirror the Astronomer
+// cluster row's user-managed labels onto the Argo cluster Secret. ApplicationSet
+// selectors target these to opt clusters into bundles by cluster-side labels
+// rather than by name.
+//
+// Example: a cluster row with labels={"tier":"prod"} ends up with
+// astronomer.io/label-tier=prod on the Secret.
+const astronomerLabelPrefix = "astronomer.io/label-"
+
+// maxLabelKeyLen is the Kubernetes-enforced maximum for the *name* portion
+// of a label key (the part after the optional prefix/). Sanitization
+// truncates user-supplied keys at this length to avoid the upstream Argo API
+// rejecting the registration outright.
+const maxLabelKeyLen = 63
+
+// sanitizeLabelKey converts an arbitrary user-supplied label key into a form
+// the Kubernetes label-key rules accept: lowercase alphanumerics, '.', '-',
+// max 63 chars, must start/end with an alphanumeric. Everything else is
+// replaced with '-' and runs collapsed. This is a one-way mapping — the
+// reverse is not computed (operators reading the Argo Secret label see the
+// sanitized form, not the original).
+func sanitizeLabelKey(in string) string {
+	if in == "" {
+		return ""
+	}
+	out := make([]byte, 0, len(in))
+	lastDash := false
+	for i := 0; i < len(in); i++ {
+		c := in[i]
+		switch {
+		case c >= 'A' && c <= 'Z':
+			out = append(out, c+('a'-'A'))
+			lastDash = false
+		case (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-':
+			out = append(out, c)
+			lastDash = c == '-'
+		default:
+			// Replace anything else with a single '-', collapsing runs.
+			if !lastDash && len(out) > 0 {
+				out = append(out, '-')
+				lastDash = true
+			}
+		}
+	}
+	// Trim leading/trailing non-alphanumeric so the label is valid.
+	start := 0
+	for start < len(out) && !isLabelAlnum(out[start]) {
+		start++
+	}
+	end := len(out)
+	for end > start && !isLabelAlnum(out[end-1]) {
+		end--
+	}
+	out = out[start:end]
+	if len(out) > maxLabelKeyLen {
+		out = out[:maxLabelKeyLen]
+		// After truncation we may have stranded a trailing non-alphanumeric.
+		for len(out) > 0 && !isLabelAlnum(out[len(out)-1]) {
+			out = out[:len(out)-1]
+		}
+	}
+	return string(out)
+}
+
+func isLabelAlnum(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+}
+
+// applyClusterLabelsToArgoLabels copies each (k, v) from the Astronomer cluster
+// row's `labels` JSONB onto the Argo cluster Secret's label map under the
+// astronomer.io/label-<k> prefix, sanitizing k first. Existing entries in dst
+// are NOT overwritten — caller controls precedence by ordering the calls.
+func applyClusterLabelsToArgoLabels(dst map[string]string, raw json.RawMessage) {
+	if len(raw) == 0 {
+		return
+	}
+	var clusterLabels map[string]string
+	if err := json.Unmarshal(raw, &clusterLabels); err != nil {
+		return
+	}
+	for k, v := range clusterLabels {
+		key := sanitizeLabelKey(k)
+		if key == "" {
+			continue
+		}
+		full := astronomerLabelPrefix + key
+		if _, exists := dst[full]; exists {
+			continue
+		}
+		dst[full] = v
+	}
+}
+
+// managedClusterLabels builds the Astronomer-owned label set stamped onto the
+// upstream Argo cluster Secret. ApplicationSet `clusters` generators use a
+// `selector.matchLabels` block over these to target by cluster-id / name /
+// environment / arbitrary cluster-row labels.
+//
+// Label conventions:
+//   - astronomer.io/managed-by: astronomer         (always)
+//   - astronomer.io/cluster-id: <uuid>             (always)
+//   - astronomer.io/cluster-name: <name>           (always)
+//   - astronomer.io/environment: <env>             (when set)
+//   - astronomer.io/label-<sanitized-k>: <v>       (one per cluster.Labels entry)
+//
+// Sanitization rules are documented on sanitizeLabelKey. This is a one-way
+// projection; the reverse is not computed.
 func managedClusterLabels(cluster sqlc.Cluster) map[string]string {
 	labels := map[string]string{
+		astronomerManagedByLabelKey:  astronomerManagedByLabelValue,
 		"astronomer.io/cluster-id":   cluster.ID.String(),
 		"astronomer.io/cluster-name": cluster.Name,
 	}
 	if cluster.Environment != "" {
 		labels["astronomer.io/environment"] = cluster.Environment
 	}
+	applyClusterLabelsToArgoLabels(labels, cluster.Labels)
 	return labels
 }
 

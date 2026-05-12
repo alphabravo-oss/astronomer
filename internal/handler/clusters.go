@@ -99,6 +99,11 @@ type ClusterHandler struct {
 	// when nil, the row is still inserted but the worker doesn't pick it up
 	// until the periodic sweep runs (slower path).
 	decommissionQueue ClusterDecommissionEnqueuer
+	// argoCDRefreshQueue is the asynq client used to enqueue
+	// argocd:refresh_managed_cluster_labels tasks after a cluster Update mutates
+	// `labels`. Same interface as decommissionQueue (Enqueue only), reused on
+	// purpose so wiring stays trivial. Optional and nil-safe.
+	argoCDRefreshQueue ClusterDecommissionEnqueuer
 	agentImage        string
 }
 
@@ -182,12 +187,46 @@ func (h *ClusterHandler) SetDecommissionQueue(q ClusterDecommissionEnqueuer) {
 	h.decommissionQueue = q
 }
 
+// SetArgoCDRefreshQueue wires the asynq client used by the Update handler to
+// schedule the argocd:refresh_managed_cluster_labels task after a labels
+// mutation. Optional: nil means changes to clusters.labels won't propagate to
+// the upstream ArgoCD cluster Secrets — operators would have to re-register
+// the cluster manually. In a normal deployment this is wired alongside
+// SetDecommissionQueue.
+func (h *ClusterHandler) SetArgoCDRefreshQueue(q ClusterDecommissionEnqueuer) {
+	if h == nil {
+		return
+	}
+	h.argoCDRefreshQueue = q
+}
+
 // publishEvent is a nil-safe wrapper around the optional publisher.
 func (h *ClusterHandler) publishEvent(eventType string, data any) {
 	if h == nil || h.publisher == nil {
 		return
 	}
 	h.publisher.Publish(eventType, data)
+}
+
+// enqueueArgoCDLabelRefresh schedules a refresh of the upstream ArgoCD cluster
+// Secret labels for this cluster across every ArgoCD instance it's registered
+// into. Best-effort: when the queue is unwired, when task construction fails,
+// or when redis is briefly unavailable we silently skip — operators can
+// re-issue the refresh by hitting PUT /api/v1/clusters/{id}/ again.
+func (h *ClusterHandler) enqueueArgoCDLabelRefresh(r *http.Request, clusterID uuid.UUID) {
+	if h == nil || h.argoCDRefreshQueue == nil {
+		return
+	}
+	task, err := tasks.NewArgoCDRefreshManagedClusterLabelsTask(clusterID)
+	if err != nil {
+		return
+	}
+	// Stamp correlation_id + W3C traceparent into the payload so worker logs
+	// tie back to the originating request. Mirrors the pattern in the
+	// decommission enqueue.
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+	_, _ = h.argoCDRefreshQueue.Enqueue(task)
 }
 
 // The previous clusterWithMetrics struct (anonymous-embed sqlc.Cluster +
@@ -424,6 +463,13 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"display_name": cluster.DisplayName,
 		"status":       cluster.Status,
 	})
+
+	// Propagate the (possibly mutated) cluster.labels onto every upstream
+	// ArgoCD cluster Secret this cluster is registered into. The task is
+	// idempotent — it diffs the current Secret labels against the desired set
+	// and skips the PATCH when they match — so we enqueue on every Update
+	// rather than diffing JSONB here.
+	h.enqueueArgoCDLabelRefresh(r, cluster.ID)
 
 	recordAudit(r, h.queries, "cluster.update", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
 		"display_name": req.DisplayName,

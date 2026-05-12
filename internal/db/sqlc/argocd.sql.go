@@ -558,6 +558,44 @@ func (q *Queries) ListArgoCDManagedClusters(ctx context.Context, argocdInstanceI
 	return items, nil
 }
 
+const listArgoCDManagedClustersByCluster = `-- name: ListArgoCDManagedClustersByCluster :many
+SELECT id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at FROM argocd_managed_clusters WHERE cluster_id = $1 ORDER BY created_at ASC
+`
+
+// Reverse index of ListArgoCDManagedClusters: every ArgoCD instance into which a given
+// Astronomer cluster is registered. Used by the
+// "argocd:refresh_managed_cluster_labels" worker task to re-stamp the
+// astronomer.io/label-* keys on every relevant cluster Secret after a
+// clusters.labels mutation.
+func (q *Queries) ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]ArgocdManagedCluster, error) {
+	rows, err := q.db.Query(ctx, listArgoCDManagedClustersByCluster, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArgocdManagedCluster{}
+	for rows.Next() {
+		var i ArgocdManagedCluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArgocdInstanceID,
+			&i.ClusterID,
+			&i.ClusterSecretName,
+			&i.ServerUrl,
+			&i.Labels,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstancesByCluster = `-- name: ListInstancesByCluster :many
 SELECT id, name, cluster_id, api_url, auth_token_encrypted, verify_ssl, is_healthy, last_sync, created_at, updated_at FROM argocd_instances WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `

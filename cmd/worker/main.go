@@ -19,6 +19,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/hibiken/asynq"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func main() {
@@ -115,6 +117,24 @@ func main() {
 		// invalidation (pub/sub or a notify channel) would close this gap.
 		RBACCache: nil,
 	})
+	// ArgoCD managed-cluster label refresh. The standalone worker pod runs
+	// in the same control-plane cluster as the server (both are Deployments
+	// in the astronomer namespace), so an in-cluster k8s client targets the
+	// same argocd namespace where the Argo cluster Secrets live. When
+	// in-cluster config isn't available (laptop dev) the task degrades to a
+	// logged warning and the operator re-registers manually.
+	{
+		var refreshK8s kubernetes.Interface
+		if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
+			if cs, kErr := kubernetes.NewForConfig(restCfg); kErr == nil {
+				refreshK8s = cs
+			}
+		}
+		tasks.ConfigureArgoCDRefresh(tasks.ArgoCDRefreshDeps{
+			Queries: sqlc.New(database.Pool()),
+			K8s:     refreshK8s,
+		})
+	}
 
 	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —
 	// the old silent-fallback behavior was a production footgun in

@@ -102,6 +102,14 @@ SELECT * FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_
 -- name: ListArgoCDManagedClusters :many
 SELECT * FROM argocd_managed_clusters WHERE argocd_instance_id = $1 ORDER BY created_at ASC;
 
+-- name: ListArgoCDManagedClustersByCluster :many
+-- Reverse index of the above: every ArgoCD instance into which a given
+-- Astronomer cluster is registered. Used by the
+-- "argocd:refresh_managed_cluster_labels" worker task to re-stamp the
+-- astronomer.io/label-* keys on every relevant cluster Secret after a
+-- clusters.labels mutation.
+SELECT * FROM argocd_managed_clusters WHERE cluster_id = $1 ORDER BY created_at ASC;
+
 -- name: DeleteArgoCDManagedCluster :exec
 DELETE FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2;
 
