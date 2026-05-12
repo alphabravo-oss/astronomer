@@ -125,6 +125,63 @@ spec:
               agent pod's logs and connectivity in that cluster.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/agent-disconnected.md
 
+        # ── Backup restore drill: staleness ─────────────────────────────
+        # NIST CP-9 / ISO 27001 A.12.3.1 require periodic proof that the
+        # nightly backup is restorable. The drill CronJob runs weekly
+        # (default 0 4 * * 1) and either succeeds (Job condition
+        # type=Complete) or fails (type=Failed). When the most recent
+        # successful Job is older than 14 days we've missed at least two
+        # consecutive Mondays — that's the on-call escalation threshold.
+        # Uses kube-state-metrics' `kube_job_status_completion_time` so
+        # no Go-side exporter is needed; the drill itself writes its
+        # outcome into the management DB (backup_drill_results) for the
+        # /api/v1/admin/backup-drill/ endpoint.
+        - alert: AstronomerBackupRestoreDrillStale
+          expr: |
+            time() - max(
+              kube_job_status_completion_time{job_name=~".*-restore-drill-.*"}
+              and on(job_name)
+              kube_job_status_succeeded{job_name=~".*-restore-drill-.*"} > 0
+            ) > 14 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Astronomer backup restore drill has not succeeded in >14 days"
+            description: |
+              The weekly restore-drill Job has not posted a successful
+              completion to kube-state-metrics in the last 14 days.
+              Either the CronJob is suspended, the latest backups are
+              not restorable, or the chart's managementRestoreDrill is
+              disabled while management backups are still being taken.
+              Confirm via GET /api/v1/admin/backup-drill/ and inspect
+              the most recent Job pod's logs.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
+
+        # ── Backup restore drill: explicit failure ──────────────────────
+        # Fires on any Job failure in the last 24h. Distinct from the
+        # staleness alert because failures point at a CONCRETE bad
+        # backup (corrupted dump, schema regression, missing critical
+        # table) versus the staleness case which can be just "nobody
+        # ran it".
+        - alert: AstronomerBackupRestoreDrillFailed
+          expr: |
+            sum(increase(kube_job_status_failed{job_name=~".*-restore-drill-.*"}[24h])) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            summary: "Astronomer backup restore drill failed in the last 24h"
+            description: |
+              A restore-drill Job completed with status=Failed. The
+              backup it tried to restore may be corrupted, missing a
+              critical table, or pre-dates the expected minimum schema
+              version. Pull the failed Job's pod logs and inspect
+              backup_drill_results.error_message for the last row.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
+
         # ── Argo CD self-manage drift ───────────────────────────────────
         # FEATURES-051126 T26 — fires when the astronomer-self-manage
         # Application drifts. argocd_app_info is published by Argo CD's
