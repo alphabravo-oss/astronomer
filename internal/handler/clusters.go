@@ -221,17 +221,34 @@ func (a metricsRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 	return &clustermetrics.RawResponse{StatusCode: resp.StatusCode, Body: decoded}, nil
 }
 
-// enrichCluster copies the sqlc.Cluster row plus the latest cached metrics
-// snapshot into the wire-format struct. A short request-scoped timeout
-// applies because List enriches every cluster sequentially — a slow agent
-// would otherwise stall the entire response.
-func (h *ClusterHandler) enrichCluster(ctx context.Context, c sqlc.Cluster) clusterWithMetrics {
+// enrichClusterFromCache copies the sqlc.Cluster row plus the most-recent
+// CACHED metrics snapshot into the wire-format struct. Cache-only on
+// purpose: this is called from List which iterates every cluster, and a
+// slow agent on a single cluster previously stalled the entire response
+// for up to 5s × N clusters (FEATURES-051126 T07). The background metrics
+// publisher (internal/metrics/publisher.go) keeps the cache warm; stale
+// or missing entries return zero values rather than blocking.
+func (h *ClusterHandler) enrichClusterFromCache(c sqlc.Cluster) clusterWithMetrics {
 	out := clusterWithMetrics{Cluster: c}
 	if h.metrics == nil {
 		return out
 	}
-	// 5s per cluster is generous for cache hits (~instant) and bounds the
-	// worst case when a cache miss must round-trip through the agent.
+	snap := h.metrics.Peek(c.ID.String())
+	out.CPUPercentage = snap.CPUPercentage
+	out.MemoryPercentage = snap.MemoryPercentage
+	out.PodCount = snap.PodCount
+	return out
+}
+
+// enrichClusterFresh is the slow-path counterpart to enrichClusterFromCache.
+// Called from single-cluster endpoints (Get) where the caller is willing to
+// wait for an up-to-date snapshot. Bounded by a 5s per-cluster timeout to
+// keep a hung agent from holding the HTTP handler indefinitely.
+func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster) clusterWithMetrics {
+	out := clusterWithMetrics{Cluster: c}
+	if h.metrics == nil {
+		return out
+	}
 	mctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	snap := h.metrics.Get(mctx, c.ID.String(), c.IsLocal)
@@ -297,7 +314,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	enriched := make([]clusterWithMetrics, 0, len(clusters))
 	for _, c := range clusters {
-		enriched = append(enriched, h.enrichCluster(r.Context(), c))
+		enriched = append(enriched, h.enrichClusterFromCache(c))
 	}
 	RespondPaginated(w, r, enriched, total)
 }
@@ -366,7 +383,7 @@ func (h *ClusterHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, h.enrichCluster(r.Context(), cluster))
+	RespondJSON(w, http.StatusOK, h.enrichClusterFresh(r.Context(), cluster))
 }
 
 // Update handles PUT /api/v1/clusters/{id}/.

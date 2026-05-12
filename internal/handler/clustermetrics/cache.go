@@ -227,6 +227,28 @@ func (p *Provider) PodsByNode(ctx context.Context, clusterID, nodeName string, p
 	return out
 }
 
+// Peek returns the cached snapshot (regardless of TTL) without ever making
+// a synchronous transport call. Stale or missing entries collapse to
+// Snapshot{}. Use this on hot fan-out paths (e.g. ClusterHandler.List
+// iterating every cluster row) where blocking the response on a single
+// slow agent would be a much worse failure mode than showing stale or
+// zero metrics. The background publisher keeps the cache warm.
+//
+// Use Get instead when the caller really does need a fresh snapshot
+// and is willing to wait — single-cluster detail views, the metrics
+// endpoint, etc.
+func (p *Provider) Peek(clusterID string) Snapshot {
+	if p == nil {
+		return Snapshot{}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if entry, ok := p.cache[clusterID]; ok {
+		return entry.snap
+	}
+	return Snapshot{}
+}
+
 // Get returns the cached snapshot if fresh, otherwise refreshes synchronously.
 // isLocal selects between the in-process fast path and the tunnel transport.
 //

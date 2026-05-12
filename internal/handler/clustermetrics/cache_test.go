@@ -168,6 +168,53 @@ func TestProvider_CacheHitSuppressesRequests(t *testing.T) {
 	}
 }
 
+// Peek is the cache-only accessor used by hot fan-out paths (the cluster
+// List endpoint). Must NEVER trigger a transport call — that was the
+// whole point of FEATURES-051126 T07. Two cases:
+//   - cold miss: returns Snapshot{} without calling fakeRequester
+//   - warm hit: returns the cached snapshot, also without calling
+//     fakeRequester again
+func TestProvider_PeekIsCacheOnly(t *testing.T) {
+	f := &fakeRequester{
+		nodes:   corev1.NodeList{Items: []corev1.Node{makeNode("n1", "1", "1Gi")}},
+		metrics: metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{makeNodeMetrics("n1", "100m", "100Mi")}},
+	}
+	p := NewProviderWithTTL(time.Hour)
+	p.SetRemoteRequester(f)
+
+	// Cold miss: zero result, zero calls.
+	snap := p.Peek("never-fetched")
+	if snap.CPUPercentage != 0 || snap.PodCount != 0 {
+		t.Errorf("cold peek should return zero snapshot, got cpu=%v pods=%d", snap.CPUPercentage, snap.PodCount)
+	}
+	if got := atomic.LoadInt32(&f.calls); got != 0 {
+		t.Errorf("Peek on cold cache should make 0 requests, got %d", got)
+	}
+
+	// Prime the cache with a single Get.
+	_ = p.Get(context.Background(), "cached", false)
+	calls := atomic.LoadInt32(&f.calls)
+
+	// Warm peek: cached snapshot returned, no new transport calls.
+	for i := 0; i < 5; i++ {
+		_ = p.Peek("cached")
+	}
+	if got := atomic.LoadInt32(&f.calls); got != calls {
+		t.Errorf("Peek on warm cache should make 0 new requests, got %d (was %d before)", got, calls)
+	}
+}
+
+// Peek on a nil receiver must return zero, not panic. The handler may
+// construct a Provider only when wiring permits, and the list path
+// reaches Peek before the nil-check on h.metrics — defense in depth.
+func TestProvider_PeekNilSafe(t *testing.T) {
+	var p *Provider
+	snap := p.Peek("anything")
+	if snap.CPUPercentage != 0 || snap.PodCount != 0 {
+		t.Errorf("nil Peek should return zero snapshot, got cpu=%v pods=%d", snap.CPUPercentage, snap.PodCount)
+	}
+}
+
 func TestProvider_CacheTTLExpires(t *testing.T) {
 	f := &fakeRequester{
 		nodes:   corev1.NodeList{Items: []corev1.Node{makeNode("n1", "1", "1Gi")}},
