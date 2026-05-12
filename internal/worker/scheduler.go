@@ -103,6 +103,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Migration 065 / sprint 17: in-browser kubectl shell reaper.
+		// 60s cadence — idle (30m), hard cap (4h), and orphan-pod sweep
+		// in one tick. Handler exits early when the feature is disabled
+		// so the cron entry is cheap to leave registered always.
+		{"@every 60s", tasks.KubectlSessionReapType, "kubectl shell session reaper"},
 	}
 
 	for _, e := range entries {

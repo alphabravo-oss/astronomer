@@ -75,6 +75,10 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
+
+	// Migration 065 / sprint 17: in-browser kubectl shell reaper.
+	// 60s cadence — see internal/worker/tasks/kubectl_session_reap.go.
+	TypeKubectlSessionReap = tasks.KubectlSessionReapType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -152,6 +156,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
+	w.mux.HandleFunc(TypeKubectlSessionReap, instrumentTask(TypeKubectlSessionReap, tasks.HandleKubectlSessionReap))
 
 	w.log.Info("registered all task handlers")
 }
