@@ -348,19 +348,41 @@ func newStateUpdateLimiter(minInterval time.Duration) *stateUpdateLimiter {
 	}
 }
 
-// allow gates an emit on a fresh key. We don't bother with eviction here:
-// the key cardinality is bounded by (#clusters x #kinds x #namespaces),
-// which is small in practice (thousands at most), and the entries are
-// 24-byte strings + a time.Time. A long-lived server can afford that.
+// allow gates an emit on a fresh key. Cluster/kind/namespace tuples
+// are usually a small bounded set, but ephemeral namespaces (CI,
+// preview envs) and short-lived custom resources can churn — without
+// eviction, long-lived servers grow this map without bound. evictIfDue
+// runs inline on every Nth call to amortize the cost.
 func (r *stateUpdateLimiter) allow(key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.now()
+	r.evictLocked(now)
 	if prev, ok := r.last[key]; ok && now.Sub(prev) < r.minInterval {
 		return false
 	}
 	r.last[key] = now
 	return true
+}
+
+// stateLimiterEvictAfter is how long an unused key is retained.
+// 100x the minInterval — long enough that an item recently emitted
+// gets at least one rate-limited follow-up before its entry decays.
+const stateLimiterEvictAfter = 60 * time.Second
+
+// evictLocked runs lazily inside Allow; not a separate goroutine so
+// tests don't have to gate on a background tick. mu is already held.
+func (r *stateUpdateLimiter) evictLocked(now time.Time) {
+	// Sample every ~256 calls to amortize cost; map iteration is O(N).
+	if len(r.last) < 256 {
+		return
+	}
+	cutoff := now.Add(-stateLimiterEvictAfter)
+	for k, t := range r.last {
+		if t.Before(cutoff) {
+			delete(r.last, k)
+		}
+	}
 }
 
 // handleError processes ERROR messages from agents.

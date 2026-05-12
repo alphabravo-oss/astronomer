@@ -31,42 +31,43 @@ import (
 // to signal "framework metadata, not part of the task contract".
 const asynqCorrelationField = "_correlation_id"
 
-// WithCorrelationPayload returns a copy of payload with the supplied
-// correlation ID merged in as `_correlation_id`. If payload isn't a
-// JSON object (or correlationID is empty) the original bytes are
-// returned unchanged — best-effort, never errors.
+// mergeReservedFields decodes payload as a JSON object, merges the
+// supplied string fields into it, and re-encodes. Used by both the
+// correlation-id and tracing helpers in this package; centralizes the
+// "payload isn't an object → return unchanged" contract that both
+// callers rely on.
 //
-// Callers pull the correlation ID from the request context using the
-// middleware-side helper (we avoid taking ctx here so this package
-// doesn't form an import cycle with internal/server/middleware):
-//
-//	body, _ := json.Marshal(MyTaskPayload{...})
-//	body = observability.WithCorrelationPayload(body, middleware.GetCorrelationID(r.Context()))
-//	task := asynq.NewTask("my:task", body)
-//	client.Enqueue(task)
-func WithCorrelationPayload(payload []byte, correlationID string) []byte {
-	if correlationID == "" {
+// Empty fields map returns the payload unchanged.
+func mergeReservedFields(payload []byte, fields map[string]string) []byte {
+	if len(fields) == 0 {
 		return payload
 	}
-	// Decode → set → re-encode. We do this manually rather than via
-	// json.Decoder + json.Encoder so the field order in the output is
-	// stable: correlation_id first, then the rest. Stable order helps
-	// when comparing payloads in tests and reading them in DLQ dumps.
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &obj); err != nil {
-		// Payload isn't a JSON object — give up gracefully.
 		return payload
 	}
 	if obj == nil {
 		obj = map[string]json.RawMessage{}
 	}
-	idJSON, _ := json.Marshal(correlationID)
-	obj[asynqCorrelationField] = idJSON
+	for k, v := range fields {
+		enc, _ := json.Marshal(v)
+		obj[k] = enc
+	}
 	out, err := json.Marshal(obj)
 	if err != nil {
 		return payload
 	}
 	return out
+}
+
+// WithCorrelationPayload returns a copy of payload with the supplied
+// correlation ID merged in as `_correlation_id`. Empty correlationID or
+// non-object payload returns the original bytes unchanged.
+func WithCorrelationPayload(payload []byte, correlationID string) []byte {
+	if correlationID == "" {
+		return payload
+	}
+	return mergeReservedFields(payload, map[string]string{asynqCorrelationField: correlationID})
 }
 
 // ExtractAsynqCorrelationID pulls `_correlation_id` from a task payload.

@@ -456,15 +456,7 @@ func (h *ControlPlaneHandler) enqueueNotifications(ctx context.Context, alert sq
 		if err != nil {
 			continue
 		}
-		// FEATURES-051126 T22: propagate correlation ID so the
-		// downstream notification.send worker logs trace back to the
-		// alert evaluation that triggered them.
-		payload := task.Payload()
-		if cid := middleware.GetCorrelationID(ctx); cid != "" {
-			payload = observability.WithCorrelationPayload(payload, cid)
-		}
-		// T15: inject traceparent so worker span links to this evaluation cycle.
-		payload = observability.WithTracingPayload(ctx, payload)
+		payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 		task = asynq.NewTask(task.Type(), payload)
 		_, _ = h.queue.Enqueue(task)
 	}

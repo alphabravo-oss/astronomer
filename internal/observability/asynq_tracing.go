@@ -29,58 +29,48 @@ const (
 	asynqTracestateField  = "_tracestate"
 )
 
-// asynqCarrier is a propagation.TextMapCarrier backed by a map. Only
-// the two W3C fields above are ever set/read.
-type asynqCarrier struct {
-	m map[string]string
-}
-
-func (c asynqCarrier) Get(key string) string  { return c.m[key] }
-func (c asynqCarrier) Set(key, value string)  { c.m[key] = value }
-func (c asynqCarrier) Keys() []string {
-	keys := make([]string, 0, len(c.m))
-	for k := range c.m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 // WithTracingPayload injects the current span's W3C trace headers into
 // the JSON payload so the worker dequeue can rejoin the trace. No-ops
 // when ctx carries no active span (the propagator skips the inject call
-// and the carrier map stays empty).
-//
-// Returns the original bytes unchanged when:
-//   - payload isn't a JSON object (rare; same shape contract as
-//     WithCorrelationPayload)
-//   - no span is active (nothing to propagate)
+// and the carrier map stays empty), and when payload isn't a JSON
+// object.
 func WithTracingPayload(ctx context.Context, payload []byte) []byte {
-	carrier := asynqCarrier{m: map[string]string{}}
-	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(carrier.m))
-	if len(carrier.m) == 0 {
-		return payload
-	}
+	return mergeReservedFields(payload, tracingFieldsFromContext(ctx))
+}
 
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &obj); err != nil {
-		return payload
+// EnrichTaskPayload returns a copy of payload with correlation ID +
+// W3C trace headers merged in via a single JSON round-trip. Preferred
+// over chained WithCorrelationPayload + WithTracingPayload calls
+// because the chained form would unmarshal + remarshal twice per
+// enqueue. Empty correlationID + no active span returns payload
+// unchanged.
+func EnrichTaskPayload(ctx context.Context, payload []byte, correlationID string) []byte {
+	fields := tracingFieldsFromContext(ctx)
+	if correlationID != "" {
+		if fields == nil {
+			fields = map[string]string{}
+		}
+		fields[asynqCorrelationField] = correlationID
 	}
-	if obj == nil {
-		obj = map[string]json.RawMessage{}
+	return mergeReservedFields(payload, fields)
+}
+
+// tracingFieldsFromContext returns the W3C traceparent/tracestate keys
+// that should be injected, or nil when no span is active.
+func tracingFieldsFromContext(ctx context.Context) map[string]string {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	if len(carrier) == 0 {
+		return nil
 	}
-	if tp, ok := carrier.m["traceparent"]; ok && tp != "" {
-		v, _ := json.Marshal(tp)
-		obj[asynqTraceparentField] = v
+	fields := map[string]string{}
+	if tp := carrier["traceparent"]; tp != "" {
+		fields[asynqTraceparentField] = tp
 	}
-	if ts, ok := carrier.m["tracestate"]; ok && ts != "" {
-		v, _ := json.Marshal(ts)
-		obj[asynqTracestateField] = v
+	if ts := carrier["tracestate"]; ts != "" {
+		fields[asynqTracestateField] = ts
 	}
-	out, err := json.Marshal(obj)
-	if err != nil {
-		return payload
-	}
-	return out
+	return fields
 }
 
 // ContextWithAsynqTracing extracts _traceparent / _tracestate from a

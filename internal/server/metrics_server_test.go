@@ -59,7 +59,9 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 				"astronomer_http_request_duration_seconds",
 				"astronomer_http_in_flight_requests",
 				`astronomer_instance_id="test-server-instance"`,
-				`route_template="/health/"`,
+				// chi normalizes the trailing slash; both `r.Get("/health", …)`
+				// and `r.Get("/health/", …)` land under the "/health" pattern.
+				`route_template="/health"`,
 				`status_class="2xx"`,
 			} {
 				if !strings.Contains(text, needle) {

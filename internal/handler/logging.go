@@ -81,6 +81,9 @@ type LoggingHandler struct {
 	authz     authorizationSupport
 	mu        sync.Mutex
 	trigger   chan struct{}
+	// helmConcurrency caps the parallel dispatch fan-out for
+	// executeOperation; zero falls back to the package default.
+	helmConcurrency int
 }
 
 // NewLoggingHandler creates a new logging handler.
@@ -984,6 +987,41 @@ func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targe
 // duplicate target operations and applying the latest one. Mirrors the
 // catalog handler's loop.
 func (h *LoggingHandler) processPendingOperations(ctx context.Context) {
+	// Claim under the lock, dispatch outside — same pattern as
+	// catalog/tools/monitoring. One slow cluster must not block other
+	// clusters' logging-config rollouts.
+	claimed := h.claimPendingLoggingOperations(ctx)
+	if len(claimed) == 0 {
+		return
+	}
+	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
+	var wg sync.WaitGroup
+	for _, op := range claimed {
+		wg.Add(1)
+		op := op
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := h.executeOperation(ctx, op); err != nil {
+				h.recordEvent(ctx, op.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+				_, _ = h.queries.MarkLoggingOperationFailed(ctx, sqlc.MarkLoggingOperationFailedParams{
+					ID:           op.ID,
+					ErrorMessage: err.Error(),
+				})
+				if h.log != nil {
+					h.log.Warn("logging operation failed", "id", op.ID.String(), "error", err)
+				}
+				return
+			}
+			h.recordEvent(ctx, op.ID, "info", "complete", "operation completed", map[string]any{})
+			_, _ = h.queries.MarkLoggingOperationCompleted(ctx, op.ID)
+		}()
+	}
+	wg.Wait()
+}
+
+func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []sqlc.LoggingOperation {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingLoggingOperations(ctx, 20)
@@ -991,7 +1029,7 @@ func (h *LoggingHandler) processPendingOperations(ctx context.Context) {
 		if h.log != nil {
 			h.log.Warn("logging reconciler: list pending failed", "error", err)
 		}
-		return
+		return nil
 	}
 	// For each (target_type, target_key) keep only the newest op; older
 	// pending ones get marked 'superseded' so the reconciler doesn't
@@ -1003,6 +1041,7 @@ func (h *LoggingHandler) processPendingOperations(ctx context.Context) {
 			latestByTarget[key] = ops[i].ID
 		}
 	}
+	claimed := make([]sqlc.LoggingOperation, 0, len(ops))
 	for _, op := range ops {
 		key := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
@@ -1031,20 +1070,9 @@ func (h *LoggingHandler) processPendingOperations(ctx context.Context) {
 			"targetKey":     running.TargetKey,
 			"attemptCount":  running.AttemptCount,
 		})
-		if err := h.executeOperation(ctx, running); err != nil {
-			h.recordEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-			_, _ = h.queries.MarkLoggingOperationFailed(ctx, sqlc.MarkLoggingOperationFailedParams{
-				ID:           running.ID,
-				ErrorMessage: err.Error(),
-			})
-			if h.log != nil {
-				h.log.Warn("logging operation failed", "id", running.ID.String(), "error", err)
-			}
-			continue
-		}
-		h.recordEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-		_, _ = h.queries.MarkLoggingOperationCompleted(ctx, running.ID)
+		claimed = append(claimed, running)
 	}
+	return claimed
 }
 
 // executeOperation renders the ConfigMap and applies (or deletes) it via the

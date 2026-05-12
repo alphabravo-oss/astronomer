@@ -607,16 +607,9 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			// Best-effort enqueue. Errors are logged on the asynq side but
 			// the periodic sweep will pick the row up regardless, so we
 			// don't fail the request when redis is briefly unavailable.
-			// Inline-wrap the payload with the request's correlation ID so
-			// worker logs for this decommission tie back to the originating
-			// DELETE request (FEATURES-051126 T22).
-			correlationID := middleware.GetCorrelationID(r.Context())
-			payload := task.Payload()
-			if correlationID != "" {
-				payload = observability.WithCorrelationPayload(payload, correlationID)
-			}
-			// T15: inject traceparent so worker span attaches to this HTTP request's trace.
-			payload = observability.WithTracingPayload(r.Context(), payload)
+			// Stamp correlation_id + W3C traceparent into the payload so
+			// worker logs and spans tie back to the originating request.
+			payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 			task = asynq.NewTask(task.Type(), payload)
 			_, _ = h.decommissionQueue.Enqueue(task)
 		}

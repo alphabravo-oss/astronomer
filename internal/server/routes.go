@@ -277,7 +277,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.Mount("/", authenticated)
 		}
 
-		registerProtectedRoutes(authenticated, cfg, deps)
+		registerProtectedRoutes(authenticated, cfg, deps, rateLimit)
 	})
 
 	if deps.Hub != nil {
@@ -341,17 +341,7 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 	return appmiddleware.RequirePermission(engine, querier, resource, verb)
 }
 
-func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies) {
-	// FEATURES-051126 T08 — duplicate of the NewRouter rateLimit factory.
-	// We deliberately make a second bucket store here rather than threading
-	// the limiter through deps: the protected-routes scope is well-defined
-	// and the eviction cost of a second small map is dwarfed by the cost
-	// of plumbing it through every signature.
-	rateLimitCtx := context.Background()
-	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
-		return appmiddleware.APIRateLimit(rateLimitCtx, class, nil)
-	}
-	_ = rateLimit // referenced below for /resources/search/ etc.
+func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies, rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler) {
 	if deps.Clusters != nil {
 		r.Route("/clusters", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/", deps.Clusters.List)

@@ -111,10 +111,10 @@ func routePattern(r *http.Request) string {
 			return pattern
 		}
 	}
-	if r.URL != nil && r.URL.Path != "" {
-		return r.URL.Path
-	}
-	return "unknown"
+	// Don't fall through to r.URL.Path — unmatched requests carry raw
+	// IDs / scanner probes that explode label cardinality in
+	// Prometheus. Group them under a single "unmatched" bucket.
+	return "unmatched"
 }
 
 type metricsResponseWriter struct {

@@ -55,16 +55,17 @@ func ConnectWithConfig(ctx context.Context, databaseURL string, pc PoolConfig) (
 	cfg.MaxConnLifetime = pickDuration(pc.MaxConnLifetime, defaultMaxConnLifetime)
 	cfg.MaxConnIdleTime = pickDuration(pc.MaxConnIdleTime, defaultMaxConnIdleTime)
 	cfg.HealthCheckPeriod = pickDuration(pc.HealthCheckPeriod, defaultHealthCheckPeriod)
-	// T15 FEATURES-051126: emit OTel db.* spans for every query alongside
-	// the existing Prometheus query metrics. The MultiTracer composes
-	// both — otelpgx fires before/after each query for spans, the
-	// historical queryTracer captures duration histograms. When the
-	// global TracerProvider has no exporter, otelpgx's calls are
-	// effectively free (no-op span).
+	// Emit OTel db.* spans for every query alongside the existing
+	// Prometheus query metrics. otelpgx fires before/after each query;
+	// the historical queryTracer captures duration histograms.
+	//
+	// Deliberately NOT calling otelpgx.WithIncludeQueryParameters():
+	// query args carry user IDs, encrypted token blobs, INSERT bodies,
+	// etc. — recording them on spans both leaks PII/secrets to the
+	// OTLP backend and explodes per-span attribute size. The SQL text
+	// alone is sufficient for trace-driven debugging.
 	cfg.ConnConfig.Tracer = newCompositeQueryTracer(
-		otelpgx.NewTracer(
-			otelpgx.WithIncludeQueryParameters(),
-		),
+		otelpgx.NewTracer(),
 		NewQueryTracer(),
 	)
 

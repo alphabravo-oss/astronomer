@@ -103,6 +103,9 @@ type ArgoCDHandler struct {
 	clusterProxyBaseURL string
 	mu        sync.Mutex
 	trigger   chan struct{}
+	// helmConcurrency caps the parallel dispatch fan-out for
+	// executeOperation; zero falls back to the package default.
+	helmConcurrency int
 }
 
 // NewArgoCDHandler creates a new ArgoCD handler.
@@ -1060,11 +1063,76 @@ func lastArgoCDEvents(events []sqlc.ArgocdOperationEvent, n int) []sqlc.ArgocdOp
 }
 
 func (h *ArgoCDHandler) processPendingOperations(ctx context.Context) {
+	// Claim under the lock, dispatch outside — one stuck Argo CD
+	// instance must not block other clusters' operations. Same
+	// pattern as catalog/tools/monitoring.
+	claimed := h.claimPendingArgoCDOperations(ctx)
+	if len(claimed) == 0 {
+		return
+	}
+	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
+	var wg sync.WaitGroup
+	for _, op := range claimed {
+		wg.Add(1)
+		op := op
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			result, err := h.executeOperation(ctx, op)
+			if err != nil {
+				h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+				_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
+					ID:           op.ID,
+					Phase:        "Failed",
+					ErrorMessage: err.Error(),
+					Message:      err.Error(),
+				})
+				if h.log != nil {
+					h.log.Warn("argocd operation failed", "id", op.ID.String(), "error", err)
+				}
+				return
+			}
+			// If the operation is still in flight upstream, leave it
+			// as 'running' and let pollRunningOperations drive
+			// completion. Otherwise mark it complete.
+			if result.async {
+				h.recordArgoCDOperationEvent(ctx, op.ID, "info", "sync", "operation accepted upstream; polling for completion", map[string]any{
+					"phase":       result.phase,
+					"operationId": result.operationID,
+					"revision":    result.revision,
+				})
+				_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
+					ID:          op.ID,
+					Phase:       result.phase,
+					OperationID: result.operationID,
+					Revision:    result.revision,
+					Message:     result.message,
+				})
+				return
+			}
+			h.recordArgoCDOperationEvent(ctx, op.ID, "info", "complete", "operation completed", map[string]any{
+				"phase":    result.phase,
+				"revision": result.revision,
+			})
+			_, _ = h.queries.CompleteArgoCDOperationWithResult(ctx, sqlc.CompleteArgoCDOperationWithResultParams{
+				ID:          op.ID,
+				Phase:       firstNonEmptyString(result.phase, "Succeeded"),
+				OperationID: result.operationID,
+				Revision:    result.revision,
+				Message:     result.message,
+			})
+		}()
+	}
+	wg.Wait()
+}
+
+func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []sqlc.ArgocdOperation {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingArgoCDOperations(ctx, 20)
 	if err != nil {
-		return
+		return nil
 	}
 	latestByTarget := map[string]uuid.UUID{}
 	for i := len(ops) - 1; i >= 0; i-- {
@@ -1073,6 +1141,7 @@ func (h *ArgoCDHandler) processPendingOperations(ctx context.Context) {
 			latestByTarget[key] = ops[i].ID
 		}
 	}
+	claimed := make([]sqlc.ArgocdOperation, 0, len(ops))
 	for _, op := range ops {
 		key := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
@@ -1099,49 +1168,9 @@ func (h *ArgoCDHandler) processPendingOperations(ctx context.Context) {
 			"targetKey":     running.TargetKey,
 			"attemptCount":  running.AttemptCount,
 		})
-		result, err := h.executeOperation(ctx, running)
-		if err != nil {
-			h.recordArgoCDOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-			_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
-				ID:           running.ID,
-				Phase:        "Failed",
-				ErrorMessage: err.Error(),
-				Message:      err.Error(),
-			})
-			if h.log != nil {
-				h.log.Warn("argocd operation failed", "id", running.ID.String(), "error", err)
-			}
-			continue
-		}
-		// If the operation is still in flight upstream, leave it as 'running' and
-		// let pollRunningOperations drive completion. Otherwise mark it complete.
-		if result.async {
-			h.recordArgoCDOperationEvent(ctx, running.ID, "info", "sync", "operation accepted upstream; polling for completion", map[string]any{
-				"phase":       result.phase,
-				"operationId": result.operationID,
-				"revision":    result.revision,
-			})
-			_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
-				ID:          running.ID,
-				Phase:       result.phase,
-				OperationID: result.operationID,
-				Revision:    result.revision,
-				Message:     result.message,
-			})
-			continue
-		}
-		h.recordArgoCDOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{
-			"phase":    result.phase,
-			"revision": result.revision,
-		})
-		_, _ = h.queries.CompleteArgoCDOperationWithResult(ctx, sqlc.CompleteArgoCDOperationWithResultParams{
-			ID:          running.ID,
-			Phase:       firstNonEmptyString(result.phase, "Succeeded"),
-			OperationID: result.operationID,
-			Revision:    result.revision,
-			Message:     result.message,
-		})
+		claimed = append(claimed, running)
 	}
+	return claimed
 }
 
 // operationResult communicates the outcome of executeOperation to its caller

@@ -636,14 +636,7 @@ func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, cluste
 	if h.queue == nil {
 		return
 	}
-	// FEATURES-051126 T22 — propagate correlation ID into the task
-	// payload so worker logs tie back to the originating request.
-	payload := task.Payload()
-	if cid := middleware.GetCorrelationID(ctx); cid != "" {
-		payload = observability.WithCorrelationPayload(payload, cid)
-	}
-	// T15: inject traceparent so the worker handler runs as a child span.
-	payload = observability.WithTracingPayload(ctx, payload)
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload)
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project reconcile task", "error", err)
@@ -680,12 +673,7 @@ func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterI
 		})
 		return
 	}
-	payload := task.Payload()
-	if cid := middleware.GetCorrelationID(ctx); cid != "" {
-		payload = observability.WithCorrelationPayload(payload, cid)
-	}
-	// T15: traceparent propagation — same shape as enqueueApply above.
-	payload = observability.WithTracingPayload(ctx, payload)
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload)
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project cleanup task", "error", err)
