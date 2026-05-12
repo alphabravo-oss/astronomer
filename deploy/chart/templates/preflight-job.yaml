@@ -28,23 +28,38 @@ spec:
       # tool requirements (the migrate binary) than the CRD/Secret checks.
       # Failure here fails the whole pod, which fails the helm hook, which
       # fails the install — exactly the gate we want (FEATURES-051126 T13).
+      #
+      # IMPORTANT: this init container only runs when the operator points
+      # at an *external* Postgres. The chart-bundled Postgres
+      # StatefulSet is itself a regular release resource, so it doesn't
+      # exist at pre-install-hook time and the connectivity check would
+      # always fail. T13's value is gating production-mode installs
+      # against an unreachable / mis-configured external DB; that path
+      # is preserved here.
       initContainers:
+        {{- if eq (include "astronomer.postgresBundledEnabled" .) "false" }}
         - name: db-preflight
           image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             {{- if .Values.postgres.external.dsnSecretRef.name }}
+            # Operator-provided secret: must already exist in the
+            # namespace before `helm install`. Pre-install hooks can
+            # reference it because secrets are not chart-managed here.
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
                   key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
             {{- else }}
+            # Inline the computed URL via the same helper the ConfigMap
+            # uses at install time. The ConfigMap itself is a regular
+            # release resource, so it doesn't exist when this pre-install
+            # hook runs — referencing it via configMapKeyRef stalls the
+            # pod in CreateContainerConfigError until helm gives up on
+            # the hook. Inlining keeps the preflight self-contained.
             - name: DATABASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "astronomer.fullname" . }}-config
-                  key: DATABASE_URL
+              value: {{ include "astronomer.databaseURL" . | quote }}
             {{- end }}
           command:
             - /bin/sh
@@ -91,6 +106,7 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+        {{- end }}
       containers:
         - name: preflight
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "registry" .Values.preflight.image.registry "fallback" .Values.image.registry) | quote }}

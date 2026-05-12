@@ -24,6 +24,24 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # Wait for the chart-bundled Postgres pod to accept connections
+      # before launching the migrate container. helm post-install hooks
+      # fire after the StatefulSet is *created* but not necessarily
+      # *ready*, so without this wait the migrate races against
+      # postgres startup and BackoffLimitExceeded'd within ~60s on
+      # fresh installs.
+      initContainers:
+        {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+        - name: wait-postgres
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for postgres..."
+              until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
+              echo "postgres up"
+        {{- end }}
       containers:
         - name: migrate
           image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
