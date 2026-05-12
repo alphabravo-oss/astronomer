@@ -49,6 +49,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // ClusterSnapshotQuerier is the narrow DB surface ClusterSnapshotsHandler
@@ -500,7 +501,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		return
 	}
 
-	clusterSnapshotsCreatedInFlight.WithLabelValues(clusterID.String()).Inc()
+	clusterSnapshotsCreatedInFlight.WithLabelValues(observability.MetricValues(clusterID.String())...).Inc()
 	recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
 		"cluster_id":  clusterID.String(),
 		"velero_name": row.VeleroName,
@@ -865,7 +866,7 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 			Namespace: defaultVeleroNamespace,
 			Reason:    err.Error(),
 		}
-		veleroInstallStatus.WithLabelValues(clusterID.String(), "unreachable").Set(0)
+		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "unreachable")...).Set(0)
 		RespondJSON(w, http.StatusOK, out)
 		return
 	}
@@ -875,7 +876,7 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 			Namespace: defaultVeleroNamespace,
 			Reason:    "no BackupStorageLocation CRDs found",
 		}
-		veleroInstallStatus.WithLabelValues(clusterID.String(), "missing").Set(0)
+		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "missing")...).Set(0)
 		RespondJSON(w, http.StatusOK, out)
 		return
 	}
@@ -896,9 +897,9 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 		StorageLocations: summaries,
 	}
 	if anyReady {
-		veleroInstallStatus.WithLabelValues(clusterID.String(), "ready").Set(1)
+		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "ready")...).Set(1)
 	} else {
-		veleroInstallStatus.WithLabelValues(clusterID.String(), "unavailable").Set(0)
+		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "unavailable")...).Set(0)
 	}
 	RespondJSON(w, http.StatusOK, out)
 }

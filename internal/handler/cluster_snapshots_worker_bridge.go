@@ -18,6 +18,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -117,6 +118,14 @@ func WireSnapshotWorkerMetrics() {
 		if outcome == "" {
 			return
 		}
-		clusterSnapshotsTotal.WithLabelValues(clusterID, outcome).Inc()
+		clusterSnapshotsTotal.WithLabelValues(observability.MetricValues(clusterID, outcome)...).Inc()
 	})
+}
+
+// SetInFlightSnapshotGauge updates the per-cluster in-flight gauge to
+// `count`. The poller worker calls this on every tick so the gauge
+// stays accurate even when snapshots churn quickly. The argument is
+// the number of non-terminal rows the poller observed for the cluster.
+func SetInFlightSnapshotGauge(clusterID string, count float64) {
+	clusterSnapshotsInFlight.WithLabelValues(observability.MetricValues(clusterID)...).Set(count)
 }
