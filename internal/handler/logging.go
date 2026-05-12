@@ -990,38 +990,15 @@ func (h *LoggingHandler) processPendingOperations(ctx context.Context) {
 	// Claim under the lock, dispatch outside — same pattern as
 	// catalog/tools/monitoring. One slow cluster must not block other
 	// clusters' logging-config rollouts.
-	claimed := h.claimPendingLoggingOperations(ctx)
-	if len(claimed) == 0 {
-		return
-	}
-	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
-	var wg sync.WaitGroup
-	for _, op := range claimed {
-		wg.Add(1)
-		op := op
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			if err := h.executeOperation(ctx, op); err != nil {
-				h.recordEvent(ctx, op.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-				_, _ = h.queries.MarkLoggingOperationFailed(ctx, sqlc.MarkLoggingOperationFailedParams{
-					ID:           op.ID,
-					ErrorMessage: err.Error(),
-				})
-				if h.log != nil {
-					h.log.Warn("logging operation failed", "id", op.ID.String(), "error", err)
-				}
-				return
-			}
-			h.recordEvent(ctx, op.ID, "info", "complete", "operation completed", map[string]any{})
-			_, _ = h.queries.MarkLoggingOperationCompleted(ctx, op.ID)
-		}()
-	}
-	wg.Wait()
+	dispatchClaimed(ctx, h.helmConcurrency, h.claimPendingLoggingOperations(ctx))
 }
 
-func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []sqlc.LoggingOperation {
+// claimPendingLoggingOperations holds h.mu just long enough to
+// supersede stale targets and mark this tick's claims "running". Each
+// returned claimedOp captures the row + the type-specific
+// execute/complete/fail callbacks so dispatchClaimed can drive it
+// without holding the lock.
+func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingLoggingOperations(ctx, 20)
@@ -1041,7 +1018,7 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []sq
 			latestByTarget[key] = ops[i].ID
 		}
 	}
-	claimed := make([]sqlc.LoggingOperation, 0, len(ops))
+	claimed := make([]claimedOp, 0, len(ops))
 	for _, op := range ops {
 		key := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
@@ -1070,7 +1047,26 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []sq
 			"targetKey":     running.TargetKey,
 			"attemptCount":  running.AttemptCount,
 		})
-		claimed = append(claimed, running)
+		claimed = append(claimed, claimedOp{
+			ID: running.ID,
+			Run: func(ctx context.Context) error {
+				return h.executeOperation(ctx, running)
+			},
+			OnComplete: func(ctx context.Context) {
+				h.recordEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
+				_, _ = h.queries.MarkLoggingOperationCompleted(ctx, running.ID)
+			},
+			OnFailure: func(ctx context.Context, err error) {
+				h.recordEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+				_, _ = h.queries.MarkLoggingOperationFailed(ctx, sqlc.MarkLoggingOperationFailedParams{
+					ID:           running.ID,
+					ErrorMessage: err.Error(),
+				})
+				if h.log != nil {
+					h.log.Warn("logging operation failed", "id", running.ID.String(), "error", err)
+				}
+			},
+		})
 	}
 	return claimed
 }

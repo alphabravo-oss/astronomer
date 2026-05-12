@@ -1356,41 +1356,14 @@ func (h *CatalogHandler) processPendingOperations(ctx context.Context) {
 	// Claim under the lock, then release before
 	// the (potentially 10-minute) helm dispatch so other clusters'
 	// operations are not stalled behind one stuck install.
-	claimed := h.claimPendingCatalogOperations(ctx)
-	if len(claimed) == 0 {
-		return
-	}
-	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
-	var wg sync.WaitGroup
-	for _, op := range claimed {
-		wg.Add(1)
-		op := op
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			if err := h.executeOperation(ctx, op); err != nil {
-				h.recordCatalogOperationEvent(ctx, op.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-				_, _ = h.queries.MarkCatalogOperationFailed(ctx, sqlc.MarkCatalogOperationFailedParams{
-					ID:           op.ID,
-					ErrorMessage: err.Error(),
-				})
-				if h.log != nil {
-					h.log.Warn("catalog operation failed", "id", op.ID.String(), "error", err)
-				}
-				return
-			}
-			h.recordCatalogOperationEvent(ctx, op.ID, "info", "complete", "operation completed", map[string]any{})
-			_, _ = h.queries.MarkCatalogOperationCompleted(ctx, op.ID)
-		}()
-	}
-	wg.Wait()
+	dispatchClaimed(ctx, h.helmConcurrency, h.claimPendingCatalogOperations(ctx))
 }
 
 // claimPendingCatalogOperations holds h.mu just long enough to mark
-// supersession + claim the batch ("running" state). Returns the rows it
-// owns; the caller dispatches executeOperation outside the lock.
-func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []sqlc.CatalogOperation {
+// supersession + claim the batch ("running" state). Returns the rows
+// it owns wrapped as claimedOps; dispatchClaimed runs them outside the
+// lock via per-row Run/OnComplete/OnFailure closures.
+func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingCatalogOperations(ctx, 20)
@@ -1404,7 +1377,7 @@ func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []sq
 			latestByTarget[key] = ops[i].ID
 		}
 	}
-	claimed := make([]sqlc.CatalogOperation, 0, len(ops))
+	claimed := make([]claimedOp, 0, len(ops))
 	for _, op := range ops {
 		key := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
@@ -1431,7 +1404,26 @@ func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []sq
 			"targetKey":     running.TargetKey,
 			"attemptCount":  running.AttemptCount,
 		})
-		claimed = append(claimed, running)
+		claimed = append(claimed, claimedOp{
+			ID: running.ID,
+			Run: func(ctx context.Context) error {
+				return h.executeOperation(ctx, running)
+			},
+			OnComplete: func(ctx context.Context) {
+				h.recordCatalogOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
+				_, _ = h.queries.MarkCatalogOperationCompleted(ctx, running.ID)
+			},
+			OnFailure: func(ctx context.Context, err error) {
+				h.recordCatalogOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+				_, _ = h.queries.MarkCatalogOperationFailed(ctx, sqlc.MarkCatalogOperationFailedParams{
+					ID:           running.ID,
+					ErrorMessage: err.Error(),
+				})
+				if h.log != nil {
+					h.log.Warn("catalog operation failed", "id", running.ID.String(), "error", err)
+				}
+			},
+		})
 	}
 	return claimed
 }
