@@ -103,6 +103,15 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Migration 055: SIEM forwarder dispatch + retention.
+		//   - Dispatch: every 2s drains every enabled forwarder's queue
+		//     into the configured transport. The 2s cadence is the SLA
+		//     between event-fire and SIEM receipt; the per-forwarder
+		//     flush_interval_ms column further throttles batches.
+		//   - Cleanup: daily at 04:30 prunes queue rows older than 7
+		//     days regardless of forwarder status.
+		{"@every 2s", tasks.SIEMDispatchType, "siem dispatch (forwarder queue drain)"},
+		{"30 4 * * *", tasks.SIEMCleanupOldType, "siem queue retention sweep (7d)"},
 	}
 
 	for _, e := range entries {
