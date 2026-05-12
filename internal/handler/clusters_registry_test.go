@@ -90,6 +90,23 @@ func (q *clusterRegistryTestQuerier) GetLatestClusterDecommissionByCluster(conte
 	return sqlc.ClusterDecommission{}, nil
 }
 
+// Sprint 074 — auto-attach surface. These three methods are no-ops in
+// this test (the registry tests don't exercise Create), but the
+// ClusterQuerier interface requires them, so we satisfy them with
+// zero-value returns. The auto-attach is gated on a Valid FK in the
+// platform_configuration row; this fake returns the zero
+// PlatformConfiguration which has Valid:false, so the auto-attach
+// short-circuits and the registry-test code path is unaffected.
+func (q *clusterRegistryTestQuerier) GetPlatformConfig(context.Context) (sqlc.PlatformConfiguration, error) {
+	return sqlc.PlatformConfiguration{}, nil
+}
+func (q *clusterRegistryTestQuerier) GetClusterTemplateByID(context.Context, uuid.UUID) (sqlc.ClusterTemplate, error) {
+	return sqlc.ClusterTemplate{}, nil
+}
+func (q *clusterRegistryTestQuerier) UpsertClusterTemplateApplication(context.Context, sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
+	return sqlc.ClusterTemplateApplication{}, nil
+}
+
 func TestDeleteRegistryConfig(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}
