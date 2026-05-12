@@ -221,7 +221,7 @@ func (h *LoggingHandler) controllerSummary(ctx context.Context) (map[string]any,
 	mostRecentPerTarget := map[string]string{} // target -> status
 	for _, op := range ops {
 		opCounts[op.Status]++
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
 			staleRunning++
 		}
 		key := op.TargetType + ":" + op.TargetKey
@@ -232,17 +232,17 @@ func (h *LoggingHandler) controllerSummary(ctx context.Context) (map[string]any,
 		if len(recent) < 5 {
 			recent = append(recent, loggingOperationResponse(op))
 		}
-		if op.Status == "failed" && time.Since(op.CreatedAt) <= 30*time.Minute {
+		if op.Status == OpStatusFailed && time.Since(op.CreatedAt) <= 30*time.Minute {
 			recentFailures++
 		}
-		if latestFailure == nil && op.Status == "failed" {
+		if latestFailure == nil && op.Status == OpStatusFailed {
 			latestFailure = loggingOperationResponse(op)
 		}
 	}
 	return map[string]any{
 		"reconciler": map[string]any{
 			"enabled":              true,
-			"queueDepth":           opCounts["pending"] + opCounts["running"],
+			"queueDepth":           opCounts[OpStatusPending] + opCounts[OpStatusRunning],
 			"staleRunningCount":    staleRunning,
 			"staleThresholdSecond": 60,
 		},
@@ -865,7 +865,7 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusNotFound, "not_found", "Logging operation not found")
 		return
 	}
-	if op.Status != "failed" && op.Status != "superseded" {
+	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
 		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
 		return
 	}
@@ -974,7 +974,7 @@ func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targe
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
-		Status:        "pending",
+		Status:        OpStatusPending,
 		CreatedByID:   userID,
 	})
 	if err == nil {
@@ -1057,7 +1057,7 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []sq
 		}
 		// Avoid stampeding a still-fresh running row (e.g. another
 		// process picked it up moments ago).
-		if op.Status == "running" && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
+		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
 			continue
 		}
 		running, err := h.queries.MarkLoggingOperationRunning(ctx, op.ID)
