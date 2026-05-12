@@ -103,6 +103,13 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Migration 055: nightly recompute of chart_rating_aggregates
+		// (Bayesian score) + chart_co_installation matrix. The handler
+		// keeps the aggregates fresh on rating writes; this sweep
+		// handles co-installation (the only path that touches the
+		// matrix) and back-fills aggregates that drifted from
+		// cascade-deletes between rating writes.
+		{"30 3 * * *", tasks.ChartRecommendationsRecomputeType, "chart rating + recommendations recompute (daily 03:30)"},
 	}
 
 	for _, e := range entries {

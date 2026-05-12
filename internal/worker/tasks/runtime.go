@@ -91,6 +91,20 @@ type RuntimeQuerier interface {
 	CountClusters(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CountProjects(ctx context.Context) (int64, error)
+
+	// Migration 055: chart ratings + recommendations. The nightly
+	// chart_recommendations:recompute task uses these to rebuild the
+	// per-chart aggregate and the co-installation matrix.
+	ListChartRatingsByChart(ctx context.Context, arg sqlc.ListChartRatingsByChartParams) ([]sqlc.ChartRating, error)
+	CountChartRatingsByChart(ctx context.Context, chartID uuid.UUID) (int64, error)
+	UpsertChartRatingAggregate(ctx context.Context, arg sqlc.UpsertChartRatingAggregateParams) (sqlc.ChartRatingAggregate, error)
+	GetChartRatingAggregate(ctx context.Context, chartID uuid.UUID) (sqlc.ChartRatingAggregate, error)
+	ListTopChartsByBayesian(ctx context.Context, arg sqlc.ListTopChartsByBayesianParams) ([]sqlc.ChartRatingAggregate, error)
+	ListChartCoInstallationsFor(ctx context.Context, arg sqlc.ListChartCoInstallationsForParams) ([]sqlc.ChartCoInstallation, error)
+	TruncateChartCoInstallation(ctx context.Context) error
+	UpsertChartCoInstallation(ctx context.Context, arg sqlc.UpsertChartCoInstallationParams) error
+	ListInstalledChartChartPairs(ctx context.Context) ([]sqlc.InstalledChartChartPair, error)
+	ListDistinctRatedChartIDs(ctx context.Context) ([]uuid.UUID, error)
 }
 
 type RuntimeDependencies struct {

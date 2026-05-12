@@ -556,6 +556,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		ArgoCD:       argocdHandler,
 		Backups:      backupHandler,
 		Catalog:      catalogHandler,
+		// Migration 055: chart-rating + recommendation surface. Bound
+		// to the same *sqlc.Queries used for the rest of the catalog
+		// so audit / superuser checks see the same row.
+		ChartRatings: func() *handler.ChartRatingsHandler {
+			h := handler.NewChartRatingsHandler(queries)
+			h.SetLogger(logger)
+			return h
+		}(),
 		Logging:      loggingHandler,
 		Monitoring:   monitoringHandler,
 		ControlPlane: controlPlaneHandler,

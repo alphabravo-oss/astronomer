@@ -87,6 +87,12 @@ type RouterDependencies struct {
 	ArgoCD       *handler.ArgoCDHandler
 	Backups      *handler.BackupHandler
 	Catalog      *handler.CatalogHandler
+	// ChartRatings owns /api/v1/charts/{chart_id}/ratings/* and
+	// /api/v1/catalog/recommendations/{popular,similar}/* — the
+	// migration-055 catalog rating surface. Nil-safe: routes are
+	// only mounted when this field is non-nil so tests that don't
+	// need the surface (and don't supply the querier) keep building.
+	ChartRatings *handler.ChartRatingsHandler
 	Logging      *handler.LoggingHandler
 	Monitoring   *handler.MonitoringHandler
 	ControlPlane *handler.ControlPlaneHandler
@@ -927,6 +933,27 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Post("/installed/{id}/rollback/", deps.Catalog.RollbackInstalledChart)
 			r.Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
 			r.Get("/installed/{id}/values/", deps.Catalog.GetInstalledChartValues)
+		})
+	}
+
+	if deps.ChartRatings != nil {
+		// Per-chart rating CRUD lives under /charts/{chart_id}/ratings/
+		// rather than nested inside the catalog block above. Reason:
+		// the catalog block is feature-gated behind feature.catalog;
+		// ratings should remain visible even when the platform admin
+		// has hidden the catalog UX, so they can't be lost on a feature
+		// flag toggle.
+		r.Route("/charts/{chart_id}/ratings", func(r chi.Router) {
+			r.Post("/", deps.ChartRatings.CreateRating)
+			r.Get("/", deps.ChartRatings.ListRatings)
+			r.Get("/aggregate/", deps.ChartRatings.GetAggregate)
+			r.Get("/mine/", deps.ChartRatings.GetMyRating)
+			r.Put("/{rating_id}/", deps.ChartRatings.UpdateRating)
+			r.Delete("/{rating_id}/", deps.ChartRatings.DeleteRating)
+		})
+		r.Route("/catalog/recommendations", func(r chi.Router) {
+			r.Get("/popular/", deps.ChartRatings.PopularRecommendations)
+			r.Get("/similar/{chart_id}/", deps.ChartRatings.SimilarRecommendations)
 		})
 	}
 

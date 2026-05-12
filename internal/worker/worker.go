@@ -75,6 +75,9 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
+	// Migration 055: nightly chart-rating aggregate + co-installation
+	// matrix recompute.
+	TypeChartRecommendationsRecompute = tasks.ChartRecommendationsRecomputeType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -152,6 +155,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
+	w.mux.HandleFunc(TypeChartRecommendationsRecompute, instrumentTask(TypeChartRecommendationsRecompute, tasks.HandleChartRecommendationsRecompute))
 
 	w.log.Info("registered all task handlers")
 }
