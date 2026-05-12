@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -35,7 +36,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	database, err := db.Connect(context.Background(), cfg.DatabaseURL)
+	database, err := db.ConnectWithConfig(context.Background(), cfg.DatabaseURL, db.PoolConfig{
+		MaxConns:          cfg.DBMaxConns,
+		MinConns:          cfg.DBMinConns,
+		MaxConnLifetime:   time.Duration(cfg.DBMaxConnLifetimeMin) * time.Minute,
+		MaxConnIdleTime:   time.Duration(cfg.DBMaxConnIdleMin) * time.Minute,
+		HealthCheckPeriod: time.Duration(cfg.DBHealthCheckPeriodSec) * time.Second,
+	})
 	if err != nil {
 		log.Error("failed to connect database", "error", err)
 		os.Exit(1)

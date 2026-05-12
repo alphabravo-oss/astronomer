@@ -11,6 +11,17 @@ type dbHealthChecker interface {
 	Health(ctx context.Context) error
 }
 
+// dbPoolSaturationReporter is an optional add-on to dbHealthChecker so the
+// readiness probe can flip the pod out of Service rotation when the pgxpool
+// is fully empty AND callers are queueing. Implemented by *db.DB
+// (FEATURES-051126 T21).
+type dbPoolSaturationReporter interface {
+	// PoolWaitingForConn returns true when the pool has been at zero
+	// available connections AND queueing acquires for a sustained interval.
+	// Implementations decide what "sustained" means.
+	PoolWaitingForConn() bool
+}
+
 type queuePinger interface {
 	Ping() error
 }
@@ -58,6 +69,17 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		cancel()
 		checks["database"] = readinessCheck{OK: err == nil, Error: errString(err)}
 		if err != nil {
+			statusCode = http.StatusServiceUnavailable
+		}
+		// Pool saturation gate (T21). When the pool is wedged at empty
+		// with waiters, returning 503 deregisters this pod from Service
+		// endpoints so traffic moves to a sibling with headroom. The
+		// optional interface keeps tests + non-pgx implementations clean.
+		if sat, ok := h.db.(dbPoolSaturationReporter); ok && sat.PoolWaitingForConn() {
+			checks["database"] = readinessCheck{
+				OK:    false,
+				Error: "pgx pool exhausted: callers queueing for connections",
+			}
 			statusCode = http.StatusServiceUnavailable
 		}
 	}

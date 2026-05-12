@@ -129,7 +129,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		)
 	}
 
-	database, err := db.Connect(ctx, cfg.DatabaseURL)
+	database, err := db.ConnectWithConfig(ctx, cfg.DatabaseURL, db.PoolConfig{
+		MaxConns:          cfg.DBMaxConns,
+		MinConns:          cfg.DBMinConns,
+		MaxConnLifetime:   time.Duration(cfg.DBMaxConnLifetimeMin) * time.Minute,
+		MaxConnIdleTime:   time.Duration(cfg.DBMaxConnIdleMin) * time.Minute,
+		HealthCheckPeriod: time.Duration(cfg.DBHealthCheckPeriodSec) * time.Second,
+	})
 	if err != nil {
 		return nil, err
 	}

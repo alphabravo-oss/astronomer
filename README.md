@@ -166,13 +166,13 @@ Key variables:
 
 | Variable              | Description                                 | Default                        |
 |-----------------------|---------------------------------------------|--------------------------------|
-| `DJANGO_SECRET_KEY`   | Cryptographic signing key                   | *(generate a random value)*    |
-| `DJANGO_DEBUG`        | Enable debug mode                           | `True`                         |
+| `SECRET_KEY`          | JWT HMAC signing key (multi-key supported via comma) | *(generate a random value)* |
+| `ASTRONOMER_ENCRYPTION_KEY` | Fernet key wrapping SSO/agent secrets | *(required for production)* |
 | `DATABASE_URL`        | PostgreSQL connection string                | `postgres://...@postgres:5432` |
 | `REDIS_URL`           | Redis connection string                     | `redis://redis:6379/0`         |
-| `GITHUB_CLIENT_ID`    | GitHub OAuth app client ID                  | *(empty)*                      |
-| `NEXTAUTH_SECRET`     | NextAuth.js session encryption secret       | *(generate a random value)*    |
-| `SENTRY_DSN`          | Sentry error tracking DSN                   | *(empty, disabled)*            |
+| `SERVER_URL`          | External base URL of this install           | *(empty)*                      |
+| `DEBUG`               | Enable debug logging                        | `false`                        |
+| `ENV`                 | Environment label (development / production)| `development`                  |
 
 ---
 

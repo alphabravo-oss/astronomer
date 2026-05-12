@@ -166,6 +166,21 @@ postgres:
     dsnSecretRef:
       name: ""
       key: ""
+  # pgxpool sizing for the server + worker processes (FEATURES-051126 T21).
+  # Zero / unset = use the binary's defaults (MaxConns=25, MinConns=5,
+  # MaxConnLifetime=30m, MaxConnIdleTime=5m, HealthCheckPeriod=30s).
+  #
+  # Tuning guidance for 50+ managed clusters under load:
+  #   pool:
+  #     maxConns: 75            # 3× default
+  #     minConns: 10
+  #     maxConnLifetimeMinutes: 30
+  #     maxConnIdleMinutes: 5
+  #     healthCheckPeriodSeconds: 30
+  #
+  # When the pool runs empty AND callers queue, /readyz returns 503 so
+  # the pod is removed from Service endpoints until the pressure clears.
+  pool: {}
 
 redis:
   bundled:

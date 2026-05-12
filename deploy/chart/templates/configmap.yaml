@@ -26,3 +26,21 @@ data:
   SERVER_URL: {{ .Values.config.serverURL | default "" | quote }}
   AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | quote }}
   AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | quote }}
+  # pgxpool tunables (FEATURES-051126 T21). Empty == binary default.
+  {{- with .Values.postgres.pool }}
+  {{- if .maxConns }}
+  DB_MAX_CONNS: {{ .maxConns | quote }}
+  {{- end }}
+  {{- if .minConns }}
+  DB_MIN_CONNS: {{ .minConns | quote }}
+  {{- end }}
+  {{- if .maxConnLifetimeMinutes }}
+  DB_MAX_CONN_LIFETIME_MINUTES: {{ .maxConnLifetimeMinutes | quote }}
+  {{- end }}
+  {{- if .maxConnIdleMinutes }}
+  DB_MAX_CONN_IDLE_MINUTES: {{ .maxConnIdleMinutes | quote }}
+  {{- end }}
+  {{- if .healthCheckPeriodSeconds }}
+  DB_HEALTH_CHECK_PERIOD_SECONDS: {{ .healthCheckPeriodSeconds | quote }}
+  {{- end }}
+  {{- end }}

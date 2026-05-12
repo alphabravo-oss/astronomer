@@ -12,6 +12,15 @@ type Config struct {
 	RedisURL        string `mapstructure:"redis_url"`
 	CeleryBrokerURL string `mapstructure:"celery_broker_url"`
 
+	// pgxpool sizing — operator-tunable via the chart's `database.*`
+	// values (FEATURES-051126 T21). Zero values fall through to the
+	// defaults in internal/db/db.go so existing installs see no change.
+	DBMaxConns        int32 `mapstructure:"db_max_conns"`
+	DBMinConns        int32 `mapstructure:"db_min_conns"`
+	DBMaxConnLifetimeMin int `mapstructure:"db_max_conn_lifetime_minutes"`
+	DBMaxConnIdleMin     int `mapstructure:"db_max_conn_idle_minutes"`
+	DBHealthCheckPeriodSec int `mapstructure:"db_health_check_period_seconds"`
+
 	SecretKey string `mapstructure:"secret_key"`
 	Env       string `mapstructure:"env"`
 	Debug     bool   `mapstructure:"debug"`
@@ -72,11 +81,6 @@ func Load() (*Config, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 
-	// Map DJANGO_* env vars to our config keys.
-	v.BindEnv("secret_key", "DJANGO_SECRET_KEY")
-	v.BindEnv("env", "DJANGO_ENV")
-	v.BindEnv("debug", "DJANGO_DEBUG")
-
 	// Bind env vars for secret/optional fields without defaults so AutomaticEnv resolves them.
 	v.BindEnv("astronomer_encryption_key")
 	v.BindEnv("github_client_id")
@@ -95,6 +99,11 @@ func Load() (*Config, error) {
 	v.BindEnv("audit_log_retention_months")
 	v.BindEnv("server_metrics_addr")
 	v.BindEnv("worker_metrics_addr")
+	v.BindEnv("db_max_conns")
+	v.BindEnv("db_min_conns")
+	v.BindEnv("db_max_conn_lifetime_minutes")
+	v.BindEnv("db_max_conn_idle_minutes")
+	v.BindEnv("db_health_check_period_seconds")
 
 	v.SetDefault("database_url", "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable")
 	v.SetDefault("redis_url", "redis://localhost:6379/0")
