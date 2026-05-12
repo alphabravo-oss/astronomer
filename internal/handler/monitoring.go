@@ -35,6 +35,9 @@ type MonitoringHandler struct {
 	authz     authorizationSupport
 	mu        sync.Mutex
 	triggerCh chan struct{}
+	// helmConcurrency caps the number of executeMonitoringOperation
+	// goroutines dispatched per reconciler tick. T17 FEATURES-051126.
+	helmConcurrency int
 }
 
 type MonitoringQuerier interface {
@@ -2948,7 +2951,59 @@ func lastMonitoringEvents(events []sqlc.MonitoringOperationEvent, n int) []sqlc.
 	return events[len(events)-n:]
 }
 
+// claimedMonitoringOp pairs a claimed row with its resolved retry budget so
+// the dispatch goroutine can decide whether to requeue without re-reading
+// the payload.
+type claimedMonitoringOp struct {
+	op          sqlc.MonitoringOperation
+	maxAttempts int32
+}
+
 func (h *MonitoringHandler) processPendingMonitoringOperations(ctx context.Context) {
+	// T17 FEATURES-051126: claim under the lock, dispatch outside it.
+	// Same-target double-dispatch is still prevented by the supersession
+	// pass below + DB row "running" state.
+	claimed := h.claimPendingMonitoringOperations(ctx)
+	if len(claimed) == 0 {
+		return
+	}
+	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
+	var wg sync.WaitGroup
+	for _, c := range claimed {
+		wg.Add(1)
+		c := c
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := h.executeMonitoringOperation(ctx, c.op); err != nil {
+				h.recordMonitoringOperationEvent(ctx, c.op.ID, "error", "complete", "operation failed", map[string]any{
+					"error": err.Error(),
+				})
+				_, _ = h.queries.MarkMonitoringOperationFailed(ctx, sqlc.MarkMonitoringOperationFailedParams{ID: c.op.ID, ErrorMessage: err.Error()})
+				if c.op.AttemptCount < c.maxAttempts {
+					h.recordMonitoringOperationEvent(ctx, c.op.ID, "warn", "retry", "operation requeued by retry policy", map[string]any{
+						"attemptCount": c.op.AttemptCount,
+						"maxAttempts":  c.maxAttempts,
+					})
+					_, _ = h.queries.RequeueMonitoringOperation(ctx, c.op.ID)
+				}
+				if h.log != nil {
+					h.log.Warn("monitoring operation failed", "id", c.op.ID.String(), "target_type", c.op.TargetType, "operation_type", c.op.OperationType, "error", err)
+				}
+				return
+			}
+			h.recordMonitoringOperationEvent(ctx, c.op.ID, "info", "complete", "operation completed", map[string]any{})
+			_, _ = h.queries.MarkMonitoringOperationCompleted(ctx, c.op.ID)
+		}()
+	}
+	wg.Wait()
+}
+
+// claimPendingMonitoringOperations supersedes stale targets and marks
+// this tick's claims "running" while holding h.mu. Returned rows are
+// dispatched in parallel by the caller.
+func (h *MonitoringHandler) claimPendingMonitoringOperations(ctx context.Context) []claimedMonitoringOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingMonitoringOperations(ctx, 20)
@@ -2956,7 +3011,7 @@ func (h *MonitoringHandler) processPendingMonitoringOperations(ctx context.Conte
 		if h.log != nil {
 			h.log.Warn("failed to list pending monitoring operations", "error", err)
 		}
-		return
+		return nil
 	}
 	latestByTarget := make(map[string]uuid.UUID, len(ops))
 	for i := len(ops) - 1; i >= 0; i-- {
@@ -2965,6 +3020,7 @@ func (h *MonitoringHandler) processPendingMonitoringOperations(ctx context.Conte
 			latestByTarget[key] = ops[i].ID
 		}
 	}
+	claimed := make([]claimedMonitoringOp, 0, len(ops))
 	for _, op := range ops {
 		targetKey := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[targetKey]; ok && latestID != op.ID {
@@ -2995,26 +3051,9 @@ func (h *MonitoringHandler) processPendingMonitoringOperations(ctx context.Conte
 			"attemptCount":  running.AttemptCount,
 			"maxAttempts":   maxAttempts,
 		})
-		if err := h.executeMonitoringOperation(ctx, running); err != nil {
-			h.recordMonitoringOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{
-				"error": err.Error(),
-			})
-			_, _ = h.queries.MarkMonitoringOperationFailed(ctx, sqlc.MarkMonitoringOperationFailedParams{ID: running.ID, ErrorMessage: err.Error()})
-			if running.AttemptCount < maxAttempts {
-				h.recordMonitoringOperationEvent(ctx, running.ID, "warn", "retry", "operation requeued by retry policy", map[string]any{
-					"attemptCount": running.AttemptCount,
-					"maxAttempts":  maxAttempts,
-				})
-				_, _ = h.queries.RequeueMonitoringOperation(ctx, running.ID)
-			}
-			if h.log != nil {
-				h.log.Warn("monitoring operation failed", "id", running.ID.String(), "target_type", running.TargetType, "operation_type", running.OperationType, "error", err)
-			}
-			continue
-		}
-		h.recordMonitoringOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-		_, _ = h.queries.MarkMonitoringOperationCompleted(ctx, running.ID)
+		claimed = append(claimed, claimedMonitoringOp{op: running, maxAttempts: maxAttempts})
 	}
+	return claimed
 }
 
 func (h *MonitoringHandler) executeMonitoringOperation(ctx context.Context, op sqlc.MonitoringOperation) error {

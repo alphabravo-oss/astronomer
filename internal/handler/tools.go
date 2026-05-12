@@ -60,6 +60,9 @@ type ToolHandler struct {
 	authz   authorizationSupport
 	mu      sync.Mutex
 	trigger chan struct{}
+	// helmConcurrency caps the number of executeOperation goroutines
+	// dispatched per reconciler tick. T17 FEATURES-051126.
+	helmConcurrency int
 }
 
 func NewToolHandler(queries ToolQuerier) *ToolHandler {
@@ -1021,11 +1024,49 @@ func lastToolEvents(events []sqlc.ToolOperationEvent, n int) []sqlc.ToolOperatio
 }
 
 func (h *ToolHandler) processPendingOperations(ctx context.Context) {
+	// T17 FEATURES-051126: claim under the lock, then release before
+	// helm dispatch so unrelated clusters' operations are not stalled
+	// behind a stuck install (helmTimeout = 10 minutes).
+	claimed := h.claimPendingToolOperations(ctx)
+	if len(claimed) == 0 {
+		return
+	}
+	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
+	var wg sync.WaitGroup
+	for _, op := range claimed {
+		wg.Add(1)
+		op := op
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := h.executeOperation(ctx, op); err != nil {
+				h.recordToolOperationEvent(ctx, op.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+				_, _ = h.queries.MarkToolOperationFailed(ctx, sqlc.MarkToolOperationFailedParams{
+					ID:           op.ID,
+					ErrorMessage: err.Error(),
+				})
+				if h.log != nil {
+					h.log.Warn("tool operation failed", "id", op.ID.String(), "error", err)
+				}
+				return
+			}
+			h.recordToolOperationEvent(ctx, op.ID, "info", "complete", "operation completed", map[string]any{})
+			_, _ = h.queries.MarkToolOperationCompleted(ctx, op.ID)
+		}()
+	}
+	wg.Wait()
+}
+
+// claimPendingToolOperations holds h.mu just long enough to supersede
+// stale rows and mark this tick's claims "running" in the DB. Returned
+// rows are dispatched outside the lock.
+func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []sqlc.ToolOperation {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingToolOperations(ctx, 20)
 	if err != nil {
-		return
+		return nil
 	}
 	latestByTarget := map[string]uuid.UUID{}
 	for i := len(ops) - 1; i >= 0; i-- {
@@ -1034,6 +1075,7 @@ func (h *ToolHandler) processPendingOperations(ctx context.Context) {
 			latestByTarget[key] = ops[i].ID
 		}
 	}
+	claimed := make([]sqlc.ToolOperation, 0, len(ops))
 	for _, op := range ops {
 		key := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
@@ -1060,20 +1102,9 @@ func (h *ToolHandler) processPendingOperations(ctx context.Context) {
 			"targetKey":     running.TargetKey,
 			"attemptCount":  running.AttemptCount,
 		})
-		if err := h.executeOperation(ctx, running); err != nil {
-			h.recordToolOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-			_, _ = h.queries.MarkToolOperationFailed(ctx, sqlc.MarkToolOperationFailedParams{
-				ID:           running.ID,
-				ErrorMessage: err.Error(),
-			})
-			if h.log != nil {
-				h.log.Warn("tool operation failed", "id", running.ID.String(), "error", err)
-			}
-			continue
-		}
-		h.recordToolOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-		_, _ = h.queries.MarkToolOperationCompleted(ctx, running.ID)
+		claimed = append(claimed, running)
 	}
+	return claimed
 }
 
 func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperation) error {
