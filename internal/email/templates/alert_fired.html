@@ -1,0 +1,13 @@
+<!doctype html>
+<html><body>
+<p><strong>{{.Branding.ProductName}}</strong> alert: <strong>{{.Data.AlertName}}</strong></p>
+<ul>
+<li><strong>Severity:</strong> {{.Data.Severity}}</li>
+<li><strong>Fired at:</strong> {{.Data.FiredAt}}</li>
+<li><strong>Resource:</strong> {{.Data.Resource}}</li>
+</ul>
+<p>{{.Data.Message}}</p>
+<p>Open the dashboard for details: <a href="{{.Data.DashboardURL}}">{{.Data.DashboardURL}}</a></p>
+<hr/>
+<p style="color:#666;font-size:12px">{{.Branding.ProductName}} &middot; <a href="{{.Branding.SupportURL}}">{{.Branding.SupportURL}}</a></p>
+</body></html>

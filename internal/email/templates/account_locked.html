@@ -1,0 +1,9 @@
+<!doctype html>
+<html><body>
+<p>Hello {{.Data.Username}},</p>
+<p>Your <strong>{{.Branding.ProductName}}</strong> account has been temporarily locked after too many failed sign-in attempts.</p>
+<p>The lock will clear automatically at <strong>{{.Data.UnlockAt}}</strong>. If you need access sooner, contact your administrator.</p>
+<p>If you did not attempt to sign in, your password may be compromised &mdash; reset it as soon as the lock clears and review recent activity in the dashboard.</p>
+<hr/>
+<p style="color:#666;font-size:12px">{{.Branding.ProductName}} security &middot; <a href="{{.Branding.SupportURL}}">{{.Branding.SupportURL}}</a></p>
+</body></html>

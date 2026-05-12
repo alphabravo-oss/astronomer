@@ -1,0 +1,13 @@
+<!doctype html>
+<html><body>
+<p>Hello {{.Data.Username}},</p>
+<p>A new API token has been created on your <strong>{{.Branding.ProductName}}</strong> account.</p>
+<ul>
+<li><strong>Name:</strong> {{.Data.TokenName}}</li>
+<li><strong>Prefix:</strong> {{.Data.TokenPrefix}}</li>
+<li><strong>When:</strong> {{.Data.CreatedAt}}</li>
+</ul>
+<p>If this wasn't you, revoke the token from the dashboard's Tokens page and rotate your password.</p>
+<hr/>
+<p style="color:#666;font-size:12px">{{.Branding.ProductName}} security &middot; <a href="{{.Branding.SupportURL}}">{{.Branding.SupportURL}}</a></p>
+</body></html>

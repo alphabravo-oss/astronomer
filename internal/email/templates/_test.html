@@ -1,0 +1,11 @@
+<!doctype html>
+<html><body>
+<p>This is a test message from <strong>{{.Branding.ProductName}}</strong>.</p>
+<p>If you received this, your SMTP relay is configured correctly.</p>
+<ul>
+<li>Sent at: {{.Data.SentAt}}</li>
+<li>Triggered by: {{.Data.TriggeredBy}}</li>
+</ul>
+<hr/>
+<p style="color:#666;font-size:12px">{{.Branding.ProductName}} &middot; <a href="{{.Branding.SupportURL}}">{{.Branding.SupportURL}}</a></p>
+</body></html>

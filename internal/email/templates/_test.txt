@@ -1,0 +1,10 @@
+This is a test message from {{.Branding.ProductName}}.
+
+If you received this, your SMTP relay is configured correctly.
+
+Sent at: {{.Data.SentAt}}
+Triggered by: {{.Data.TriggeredBy}}
+
+--
+{{.Branding.ProductName}}
+{{.Branding.SupportURL}}

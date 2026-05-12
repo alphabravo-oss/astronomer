@@ -1,0 +1,11 @@
+Hello {{.Data.Username}},
+
+Your {{.Branding.ProductName}} account has been temporarily locked after too many failed sign-in attempts.
+
+The lock will clear automatically at {{.Data.UnlockAt}}. If you need access sooner, contact your administrator.
+
+If you did not attempt to sign in, your password may be compromised — reset it as soon as the lock clears and review recent activity in the dashboard.
+
+--
+{{.Branding.ProductName}} security
+{{.Branding.SupportURL}}
