@@ -1130,32 +1130,10 @@ func (h *WorkloadHandler) processPendingOperations(ctx context.Context) {
 	// Claim under the lock, dispatch outside — one slow cluster must
 	// not block other clusters' workload operations. Same shape as the
 	// catalog/tools/monitoring reconcilers.
-	claimed := h.claimPendingWorkloadOperations(ctx)
-	if len(claimed) == 0 {
-		return
-	}
-	sem := make(chan struct{}, effectiveHelmConcurrency(h.helmConcurrency))
-	var wg sync.WaitGroup
-	for _, op := range claimed {
-		wg.Add(1)
-		op := op
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			if err := h.executeOperation(ctx, op); err != nil {
-				h.recordOperationEvent(ctx, op.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-				_, _ = h.queries.MarkWorkloadOperationFailed(ctx, sqlc.MarkWorkloadOperationFailedParams{ID: op.ID, ErrorMessage: err.Error()})
-				return
-			}
-			h.recordOperationEvent(ctx, op.ID, "info", "complete", "operation completed", map[string]any{})
-			_, _ = h.queries.MarkWorkloadOperationCompleted(ctx, op.ID)
-		}()
-	}
-	wg.Wait()
+	dispatchClaimed(ctx, h.helmConcurrency, h.claimPendingWorkloadOperations(ctx))
 }
 
-func (h *WorkloadHandler) claimPendingWorkloadOperations(ctx context.Context) []sqlc.WorkloadOperation {
+func (h *WorkloadHandler) claimPendingWorkloadOperations(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListPendingWorkloadOperations(ctx, 20)
@@ -1169,7 +1147,7 @@ func (h *WorkloadHandler) claimPendingWorkloadOperations(ctx context.Context) []
 			latestByTarget[key] = ops[i].ID
 		}
 	}
-	claimed := make([]sqlc.WorkloadOperation, 0, len(ops))
+	claimed := make([]claimedOp, 0, len(ops))
 	for _, op := range ops {
 		key := op.TargetType + ":" + op.TargetKey
 		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
@@ -1185,7 +1163,20 @@ func (h *WorkloadHandler) claimPendingWorkloadOperations(ctx context.Context) []
 			continue
 		}
 		h.recordOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{"operationType": running.OperationType, "targetKey": running.TargetKey})
-		claimed = append(claimed, running)
+		claimed = append(claimed, claimedOp{
+			ID: running.ID,
+			Run: func(ctx context.Context) error {
+				return h.executeOperation(ctx, running)
+			},
+			OnComplete: func(ctx context.Context) {
+				h.recordOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
+				_, _ = h.queries.MarkWorkloadOperationCompleted(ctx, running.ID)
+			},
+			OnFailure: func(ctx context.Context, err error) {
+				h.recordOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+				_, _ = h.queries.MarkWorkloadOperationFailed(ctx, sqlc.MarkWorkloadOperationFailedParams{ID: running.ID, ErrorMessage: err.Error()})
+			},
+		})
 	}
 	return claimed
 }
