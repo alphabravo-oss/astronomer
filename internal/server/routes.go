@@ -177,6 +177,12 @@ type RouterDependencies struct {
 	// /api/v1/dashboards/{global,clusters/{id},projects/{id}}/
 	// render endpoints (migration 058). Nil-safe.
 	Dashboards *handler.DashboardHandler
+	// GitOps owns /api/v1/admin/gitops-sources/* (migration 060). CRUD over
+	// gitops_registration_sources plus the per-source /sync/, /preview/, and
+	// /clusters/ subroutes. Nil-safe — when unwired the routes are omitted
+	// and the periodic gitops:sync worker still runs whatever rows exist
+	// in the DB.
+	GitOps *handler.GitOpsHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -475,6 +481,22 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/notification-templates/{key}/", deps.NotificationTemplates.Delete)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/notification-templates/{key}/preview/", deps.NotificationTemplates.Preview)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/notification-templates/{key}/variables/", deps.NotificationTemplates.Variables)
+		}
+
+		// GitOps cluster registration sources (migration 060). Superuser-gated
+		// inside each handler — non-admins get a clean 403. The periodic
+		// gitops:sync worker is the actual reconciler; these endpoints
+		// manage the source config + expose the manual-sync, dry-run
+		// preview, and per-source managed-clusters readers.
+		if deps.GitOps != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/gitops-sources/", deps.GitOps.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/gitops-sources/", deps.GitOps.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/gitops-sources/{id}/", deps.GitOps.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/gitops-sources/{id}/", deps.GitOps.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/gitops-sources/{id}/", deps.GitOps.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/gitops-sources/{id}/sync/", deps.GitOps.Sync)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/gitops-sources/{id}/preview/", deps.GitOps.Preview)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/gitops-sources/{id}/clusters/", deps.GitOps.ListClusters)
 		}
 
 		if deps.GroupMappings != nil {

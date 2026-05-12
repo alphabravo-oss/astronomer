@@ -172,6 +172,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
 	w.mux.HandleFunc(TypeFleetOrchestrate, instrumentTask(TypeFleetOrchestrate, tasks.HandleFleetOrchestrate))
 	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
+	// Migration 060: GitOps cluster registration sync.
+	w.mux.HandleFunc(tasks.GitOpsSyncType, instrumentTask(tasks.GitOpsSyncType, tasks.HandleGitOpsSync))
 
 	w.log.Info("registered all task handlers")
 }

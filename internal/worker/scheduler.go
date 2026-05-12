@@ -122,6 +122,12 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// has elapsed and re-fires the queued operation through the
 		// per-op-type replayer registered at server start.
 		{"@every 60s", tasks.DispatchDeferredType, "maintenance dispatch deferred operations"},
+		// Migration 060: GitOps cluster registration sync. 60s cadence
+		// matches the schema default sync_interval_seconds; per-source
+		// last_synced_at gates whether each row actually executes on
+		// this tick. The same handler runs the tombstone reaper at the
+		// end of every successful tick.
+		{"@every 60s", tasks.GitOpsSyncType, "gitops cluster registration sync"},
 	}
 
 	for _, e := range entries {

@@ -748,6 +748,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// in the per-request check instantly.
 		Maintenance: handler.NewMaintenanceHandler(queries, maintenanceEvaluator),
 		Dashboards:  dashboardsHandler,
+		// GitOps cluster registration (migration 060). Operators commit
+		// ClusterRegistration YAML to a tracked Git repo and Astronomer
+		// reconciles via the gitops:sync worker. The handler exposes
+		// CRUD over the gitops_registration_sources rows plus manual
+		// /sync/ + dry-run /preview/ subroutes; the runner adapter
+		// shells into the worker-tasks package so the same code path
+		// drives both the periodic tick and the manual button.
+		GitOps: func() *handler.GitOpsHandler {
+			h := handler.NewGitOpsHandler(queries, handler.DefaultGitOpsSyncRunner(), logger)
+			h.SetAuditWriter(queries)
+			return h
+		}(),
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
@@ -946,6 +958,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Queries:   queries,
 		Requester: handler.ProjectK8sRequesterFromHandlerRequester(requester),
 		Decryptor: encryptor,
+	})
+	// GitOps sync worker (migration 060). Wires the periodic gitops:sync
+	// task to the cluster_decommission enqueuer so on_delete=decommission
+	// + the 24h tombstone reaper share the same decom code path. The
+	// cache lives under /tmp/gitops/<source_id>; subsequent ticks fetch
+	// instead of cloning, so worker restart is idempotent.
+	tasks.ConfigureGitOps(tasks.GitOpsDeps{
+		Queries:  queries,
+		Enqueuer: queue,
+		Log:      logger,
 	})
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
 	// DB lease handles multiple worker pods racing on the same row).
