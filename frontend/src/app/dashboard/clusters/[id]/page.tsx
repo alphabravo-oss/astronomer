@@ -45,6 +45,8 @@ import {
   CircleHelp,
 } from 'lucide-react';
 import type { ClusterCondition } from '@/types';
+import { WidgetGrid } from '@/components/dashboards/widget-grid';
+import { renderForCluster } from '@/lib/api/dashboards';
 
 export default function ClusterDetailPage() {
   const params = useParams();
@@ -282,6 +284,15 @@ export default function ClusterDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Custom dashboard widgets (migration 058). Per-cluster scope,
+          templated against the cluster's cluster_uid. */}
+      {cluster?.id ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Widgets</h3>
+          <WidgetGrid fetcher={() => renderForCluster(cluster.id)} emptyHint="" />
+        </section>
+      ) : null}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

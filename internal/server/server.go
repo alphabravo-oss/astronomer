@@ -309,6 +309,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	cloudCredentialsHandler.SetEncryptor(encryptor)
 	cloudCredentialsHandler.SetEnqueuer(queue)
 	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
+	// Dashboard widgets (migration 058). Admin CRUD over widget rows +
+	// datasource rows; render endpoints serve a per-scope widget grid.
+	// The settings cache is wired later (after the deps struct is built);
+	// the encryptor is wired here so the datasource-auth column can be
+	// sealed at write time.
+	dashboardsHandler := handler.NewDashboardHandler(queries)
+	dashboardsHandler.SetAuditor(queries)
+	dashboardsHandler.SetEncryptor(encryptor)
 	// Cluster snapshots (migration 052). Velero CRDs are driven over
 	// the existing tunnel K8sRequester so the same circuit-breaker /
 	// retry behaviour as every other tunnel-mediated K8s op applies.
@@ -706,9 +714,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// every gated mutation, so PUT/DELETE invalidations are reflected
 		// in the per-request check instantly.
 		Maintenance: handler.NewMaintenanceHandler(queries, maintenanceEvaluator),
+		Dashboards:  dashboardsHandler,
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
+	}
+	// Wire the shared settings cache into the dashboard handler so the
+	// iframe-host allow-list reads from the same in-process cache the
+	// FeatureGate middleware uses.
+	if deps.Dashboards != nil && deps.SettingsCache != nil {
+		deps.Dashboards.SetSettingsCache(deps.SettingsCache)
 	}
 
 	// Wire the quota enforcer into the create-side handlers and start

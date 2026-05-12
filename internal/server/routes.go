@@ -167,6 +167,11 @@ type RouterDependencies struct {
 	// Nil-safe: when unwired the routes are omitted and the gate
 	// short-circuits to "not blocked" on every mutation.
 	Maintenance *handler.MaintenanceHandler
+	// Dashboards owns /api/v1/admin/dashboard-widgets/*,
+	// /api/v1/admin/prometheus-datasources/*, and the per-scope
+	// /api/v1/dashboards/{global,clusters/{id},projects/{id}}/
+	// render endpoints (migration 058). Nil-safe.
+	Dashboards *handler.DashboardHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -517,6 +522,24 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/deferred-operations/{id}/cancel/", deps.Maintenance.CancelDeferred)
 		}
 
+		// Dashboard widgets (migration 058) — admin CRUD over
+		// dashboard_widgets + prometheus_datasources. Superuser-gated
+		// inside the handler. Writes carry the scope-write API-token
+		// gate so a stolen read-only token can't reshape the dashboard
+		// surface.
+		if deps.Dashboards != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/dashboard-widgets/", deps.Dashboards.AdminList)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/dashboard-widgets/", deps.Dashboards.AdminCreate)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/dashboard-widgets/{id}/", deps.Dashboards.AdminGet)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/dashboard-widgets/{id}/", deps.Dashboards.AdminUpdate)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/dashboard-widgets/{id}/", deps.Dashboards.AdminDelete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/prometheus-datasources/", deps.Dashboards.AdminListDatasources)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/prometheus-datasources/", deps.Dashboards.AdminCreateDatasource)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/prometheus-datasources/{id}/", deps.Dashboards.AdminUpdateDatasource)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/prometheus-datasources/{id}/", deps.Dashboards.AdminDeleteDatasource)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/prometheus-datasources/{id}/test/", deps.Dashboards.AdminTestDatasource)
+		}
+
 		authenticated := r
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
@@ -774,6 +797,18 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Delete)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.CloudCredentials.Test)
+	}
+
+	// Dashboard widgets — public render endpoints (migration 058).
+	// Three scopes; per-cluster and per-project are RBAC-gated on
+	// the parent resource:read verb so an operator who can view a
+	// cluster automatically gets its widgets (no separate
+	// dashboards:read role needed). The global endpoint requires
+	// auth only — anyone logged in can see the platform overview.
+	if deps.Dashboards != nil {
+		r.Get("/dashboards/global/", deps.Dashboards.RenderGlobal)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/dashboards/clusters/{id}/", deps.Dashboards.RenderCluster)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/dashboards/projects/{id}/", deps.Dashboards.RenderProject)
 	}
 
 	if deps.Tools != nil {
