@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Settings as SettingsIcon,
   ShieldAlert,
+  KeyRound,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -78,6 +79,12 @@ const CARDS: SettingsCard[] = [
     title: 'Authentication',
     description: 'Dex connectors, SSO providers, password policy.',
     icon: ShieldAlert,
+  },
+  {
+    href: '/dashboard/settings/vault',
+    title: 'Vault connections',
+    description: 'HashiCorp Vault sources for ${vault://...} install-time secret refs.',
+    icon: KeyRound,
   },
   {
     href: '/dashboard/settings/general',
