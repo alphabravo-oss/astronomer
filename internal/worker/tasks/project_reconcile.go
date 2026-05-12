@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,11 +55,32 @@ const projectNamespaceLabelKey = "astronomer.io/project-id"
 
 // Managed object names. Stable so re-apply lands on the same object and so
 // the cleanup path (RemoveNamespace) can DELETE deterministically.
+//
+// managedQuotaName is the legacy quota object rendered from the project's
+// resource_quota JSON blob (free-form K8s ResourceQuota.spec.hard map);
+// managedProjectQuotaName is the per-project quota driven by the explicit
+// pod_security_profile / resource_quota_* columns introduced in migration 040.
+// They live side-by-side because the two have different owners: the JSON blob
+// is power-user / cluster-operator territory, the new columns are the simple
+// "set a cap" path the project owner uses through the admin UI.
 const (
 	managedQuotaName          = "astronomer-quota"
+	managedProjectQuotaName   = "astronomer-project-quota"
 	managedLimitRangeName     = "astronomer-limits"
 	managedNetworkPolicyName  = "astronomer-isolation"
 	managedRegistrySecretName = "astronomer-registry"
+)
+
+// projectPolicyLabelKey marks the per-project quota object so a future GC pass
+// (or a humans-with-kubectl audit) can find every CR this controller owns.
+const projectPolicyLabelKey = "astronomer.io/project"
+
+// Valid per-project Pod Security profiles. Keep in sync with the CHECK
+// constraint in internal/db/migrations/040_project_policy.up.sql.
+const (
+	PodSecurityProfilePrivileged = "privileged"
+	PodSecurityProfileBaseline   = "baseline"
+	PodSecurityProfileRestricted = "restricted"
 )
 
 // reconcileLeaseTTL is how long a worker holds the lease for a single
@@ -237,6 +259,14 @@ func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, r
 	if err != nil {
 		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("resolve psa labels: %v", err))
 	}
+	// Per-project PSS overrides the cluster-wide template's enforce/audit/warn
+	// levels (the project owner has explicit authority over their namespaces'
+	// posture). Only fires when the column is non-empty so a project that
+	// pre-dates migration 040 keeps falling through to the legacy template
+	// path — no surprise tightening on upgrade.
+	if strings.TrimSpace(project.PodSecurityProfile) != "" {
+		mergePodSecurityProfile(labels, project.PodSecurityProfile)
+	}
 	if err := labelNamespace(ctx, requester, clusterIDStr, namespace, labels); err != nil {
 		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("label namespace: %v", err))
 	}
@@ -244,6 +274,19 @@ func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, r
 	quota := renderResourceQuota(namespace, project.ResourceQuota)
 	if err := serverSideApply(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedQuotaName), quota); err != nil {
 		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("apply resourcequota: %v", err))
+	}
+
+	// Per-project explicit quota (cpu/memory/pods) → astronomer-project-quota.
+	// Empty fields mean "unbounded" — applying an empty ResourceQuota would
+	// flip the namespace from unbounded to ban-everything, so we DELETE in
+	// that case to keep the steady state consistent.
+	if hasProjectQuotaPolicy(project) {
+		projectQuota := renderProjectResourceQuota(namespace, project)
+		if err := serverSideApply(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedProjectQuotaName), projectQuota); err != nil {
+			return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("apply project resourcequota: %v", err))
+		}
+	} else {
+		_ = deleteIfExists(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedProjectQuotaName))
 	}
 
 	if hasLimitRangeFields(project.LimitRange) {
@@ -278,6 +321,7 @@ func reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, r
 // caller (RemoveNamespace path) ignores them.
 func removeProjectEnforcement(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, projectID uuid.UUID) error {
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedQuotaName))
+	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedProjectQuotaName))
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/limitranges/%s", namespace, managedLimitRangeName))
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/apis/networking.k8s.io/v1/namespaces/%s/networkpolicies/%s", namespace, managedNetworkPolicyName))
 	_ = removeProjectRegistryAccess(ctx, requester, clusterID, namespace)
@@ -623,6 +667,91 @@ func normalizeNetworkPolicyMode(mode string) string {
 		return mode
 	default:
 		return "none"
+	}
+}
+
+// normalizePodSecurityProfile coerces a user / DB string to a known PSS
+// profile. Unknown / empty → "privileged" (i.e. no restriction), matching the
+// migration's safety-first default for pre-existing rows.
+func normalizePodSecurityProfile(profile string) string {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case PodSecurityProfileBaseline:
+		return PodSecurityProfileBaseline
+	case PodSecurityProfileRestricted:
+		return PodSecurityProfileRestricted
+	default:
+		return PodSecurityProfilePrivileged
+	}
+}
+
+// mergePodSecurityProfile sets the six PSS labels (enforce/audit/warn × level
+// + version) into the namespace label set. Per the K8s docs we always pin
+// version=latest so the namespace receives policy fixes when the cluster
+// upgrades. Caller order matters: this OVERRIDES anything previously set by
+// the cluster-wide template — the project owner's policy wins.
+//
+// Reference: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+func mergePodSecurityProfile(labels map[string]string, profile string) {
+	if labels == nil {
+		return
+	}
+	p := normalizePodSecurityProfile(profile)
+	labels["pod-security.kubernetes.io/enforce"] = p
+	labels["pod-security.kubernetes.io/enforce-version"] = "latest"
+	labels["pod-security.kubernetes.io/audit"] = p
+	labels["pod-security.kubernetes.io/audit-version"] = "latest"
+	labels["pod-security.kubernetes.io/warn"] = p
+	labels["pod-security.kubernetes.io/warn-version"] = "latest"
+}
+
+// hasProjectQuotaPolicy returns true iff at least one explicit quota field is
+// set on the project. Empty everywhere → "unbounded", and we MUST NOT render
+// the object in that case (an empty ResourceQuota.spec.hard means
+// "ban everything", which would brick the namespace).
+func hasProjectQuotaPolicy(project sqlc.Project) bool {
+	if strings.TrimSpace(project.ResourceQuotaCpuLimit) != "" {
+		return true
+	}
+	if strings.TrimSpace(project.ResourceQuotaMemoryLimit) != "" {
+		return true
+	}
+	if project.ResourceQuotaPodCount > 0 {
+		return true
+	}
+	return false
+}
+
+// renderProjectResourceQuota turns the explicit per-project policy fields
+// (cpu/memory/pods) into a ResourceQuota named astronomer-project-quota. Only
+// fields that the project owner actually set land on spec.hard — leaving the
+// rest unbounded.
+func renderProjectResourceQuota(namespace string, project sqlc.Project) map[string]any {
+	hard := map[string]any{}
+	if v := strings.TrimSpace(project.ResourceQuotaCpuLimit); v != "" {
+		hard["limits.cpu"] = v
+	}
+	if v := strings.TrimSpace(project.ResourceQuotaMemoryLimit); v != "" {
+		hard["limits.memory"] = v
+	}
+	if project.ResourceQuotaPodCount > 0 {
+		// ResourceQuota.spec.hard values are quantities; stringifying the int
+		// is the canonical form K8s accepts for count-style resources.
+		hard["pods"] = strconv.Itoa(int(project.ResourceQuotaPodCount))
+	}
+	return map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ResourceQuota",
+		"metadata": map[string]any{
+			"name":      managedProjectQuotaName,
+			"namespace": namespace,
+			"labels": map[string]any{
+				"app.kubernetes.io/managed-by": "astronomer",
+				projectPolicyLabelKey:          project.ID.String(),
+			},
+		},
+		"spec": map[string]any{
+			"hard": hard,
+		},
 	}
 }
 

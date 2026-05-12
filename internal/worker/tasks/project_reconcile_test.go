@@ -306,11 +306,12 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 		t.Errorf("expected empty last_reconcile_error, got %q", q.lastMark.LastReconcileError)
 	}
 
-	// Seven calls: label PATCH on ns, SSA quota, DELETE limitrange (no fields
-	// in the project), SSA network policy, GET default SA, PATCH default SA
-	// skip is not needed because no registry config means reconcile only does a
-	// cleanup GET on the default SA plus DELETE managed secret.
-	if got, want := len(r.calls), 6; got != want {
+	// Seven calls: label PATCH on ns, SSA legacy quota, DELETE
+	// astronomer-project-quota (empty per-project policy in this fixture),
+	// DELETE limitrange (no fields in the project), SSA network policy,
+	// GET default SA, DELETE managed registry secret. No registry config means
+	// reconcile only does a cleanup GET on the default SA plus the DELETE.
+	if got, want := len(r.calls), 7; got != want {
 		t.Fatalf("expected %d API calls, got %d: %+v", want, got, r.calls)
 	}
 	if !strings.HasSuffix(r.calls[0].path, "/api/v1/namespaces/team-a") || r.calls[0].method != http.MethodPatch {
@@ -337,18 +338,23 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 	if quotaCall.headers["Content-Type"] != "application/apply-patch+yaml" {
 		t.Errorf("SSA Content-Type wrong: %v", quotaCall.headers)
 	}
+	// astronomer-project-quota DELETE happens because the per-project policy
+	// columns are all empty in this fixture.
+	if r.calls[2].method != http.MethodDelete || !strings.Contains(r.calls[2].path, "/resourcequotas/"+managedProjectQuotaName) {
+		t.Errorf("third call should DELETE the project quota, got %+v", r.calls[2])
+	}
 	// Limit-range DELETE happens because project.LimitRange is empty.
-	if r.calls[2].method != http.MethodDelete || !strings.Contains(r.calls[2].path, "/limitranges/"+managedLimitRangeName) {
-		t.Errorf("third call should DELETE limitrange, got %+v", r.calls[2])
+	if r.calls[3].method != http.MethodDelete || !strings.Contains(r.calls[3].path, "/limitranges/"+managedLimitRangeName) {
+		t.Errorf("fourth call should DELETE limitrange, got %+v", r.calls[3])
 	}
-	if !strings.Contains(r.calls[3].path, "/networkpolicies/"+managedNetworkPolicyName) {
-		t.Errorf("fourth call should target managed NetworkPolicy, got %+v", r.calls[3])
+	if !strings.Contains(r.calls[4].path, "/networkpolicies/"+managedNetworkPolicyName) {
+		t.Errorf("fifth call should target managed NetworkPolicy, got %+v", r.calls[4])
 	}
-	if r.calls[4].method != http.MethodGet || !strings.Contains(r.calls[4].path, "/serviceaccounts/default") {
-		t.Errorf("fifth call should GET the default serviceaccount, got %+v", r.calls[4])
+	if r.calls[5].method != http.MethodGet || !strings.Contains(r.calls[5].path, "/serviceaccounts/default") {
+		t.Errorf("sixth call should GET the default serviceaccount, got %+v", r.calls[5])
 	}
-	if r.calls[5].method != http.MethodDelete || !strings.Contains(r.calls[5].path, "/secrets/"+managedRegistrySecretName) {
-		t.Errorf("sixth call should cleanup managed registry secret, got %+v", r.calls[5])
+	if r.calls[6].method != http.MethodDelete || !strings.Contains(r.calls[6].path, "/secrets/"+managedRegistrySecretName) {
+		t.Errorf("seventh call should cleanup managed registry secret, got %+v", r.calls[6])
 	}
 }
 
@@ -668,6 +674,214 @@ func TestHasLimitRangeFields_OnlySubmapsCount(t *testing.T) {
 	}
 	if !hasLimitRangeFields(json.RawMessage(`{"default":{"cpu":"1"}}`)) {
 		t.Error("default submap with content should report limit fields present")
+	}
+}
+
+// --- per-project policy (migration 040) tests ----------------------------
+
+// TestReconcileProjectNamespace_AppliesPSSLabels asserts the project-level
+// pod_security_profile overrides the cluster template's PSS labels.
+func TestReconcileProjectNamespace_AppliesPSSLabels(t *testing.T) {
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	q := &fakeProjectQuerier{
+		project: sqlc.Project{
+			ID:                 projectID,
+			ClusterID:          clusterID,
+			PodSecurityProfile: "restricted",
+		},
+		registryConfigErr: errors.New("no rows in result set"),
+		// Template would otherwise set baseline — confirm the project value wins.
+		defaultTemplate: sqlc.PodSecurityTemplate{
+			EnforceLevel:   "baseline",
+			EnforceVersion: "v1.29",
+			AuditLevel:     "baseline",
+			WarnLevel:      "baseline",
+		},
+	}
+	r := &fakeProjectRequester{}
+	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	if len(r.calls) == 0 || r.calls[0].method != http.MethodPatch {
+		t.Fatalf("expected namespace label PATCH as first call, got %+v", r.calls)
+	}
+	var nsPatch map[string]any
+	if err := json.Unmarshal(r.calls[0].body, &nsPatch); err != nil {
+		t.Fatalf("unmarshal namespace patch: %v", err)
+	}
+	labels := nsPatch["metadata"].(map[string]any)["labels"].(map[string]any)
+	wantLabels := map[string]string{
+		"pod-security.kubernetes.io/enforce":         "restricted",
+		"pod-security.kubernetes.io/enforce-version": "latest",
+		"pod-security.kubernetes.io/audit":           "restricted",
+		"pod-security.kubernetes.io/audit-version":   "latest",
+		"pod-security.kubernetes.io/warn":            "restricted",
+		"pod-security.kubernetes.io/warn-version":    "latest",
+	}
+	for k, want := range wantLabels {
+		got, _ := labels[k].(string)
+		if got != want {
+			t.Errorf("label %q = %q, want %q (full set: %+v)", k, got, want, labels)
+		}
+	}
+	// Project label must remain alongside.
+	if labels[projectNamespaceLabelKey] != projectID.String() {
+		t.Errorf("expected project-id label preserved, got %+v", labels)
+	}
+}
+
+// TestReconcileProjectNamespace_AppliesResourceQuota asserts that with any
+// non-empty quota field, an SSA call is dispatched against the project quota
+// CR with the rendered spec.hard map.
+func TestReconcileProjectNamespace_AppliesResourceQuota(t *testing.T) {
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	q := &fakeProjectQuerier{
+		project: sqlc.Project{
+			ID:                       projectID,
+			ClusterID:                clusterID,
+			PodSecurityProfile:       "baseline",
+			ResourceQuotaCpuLimit:    "4",
+			ResourceQuotaMemoryLimit: "8Gi",
+			ResourceQuotaPodCount:    20,
+		},
+		registryConfigErr: errors.New("no rows in result set"),
+	}
+	r := &fakeProjectRequester{}
+	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	var projectQuotaCall *fakeCall
+	for i := range r.calls {
+		c := &r.calls[i]
+		if c.method == http.MethodPatch && strings.Contains(c.path, "/resourcequotas/"+managedProjectQuotaName) {
+			projectQuotaCall = c
+			break
+		}
+	}
+	if projectQuotaCall == nil {
+		t.Fatalf("expected SSA apply on %s, got calls: %+v", managedProjectQuotaName, r.calls)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(projectQuotaCall.body, &manifest); err != nil {
+		t.Fatalf("unmarshal project quota manifest: %v", err)
+	}
+	if manifest["kind"] != "ResourceQuota" {
+		t.Errorf("kind: got %v, want ResourceQuota", manifest["kind"])
+	}
+	meta := manifest["metadata"].(map[string]any)
+	if meta["name"] != managedProjectQuotaName {
+		t.Errorf("name: got %v, want %s", meta["name"], managedProjectQuotaName)
+	}
+	mlabels := meta["labels"].(map[string]any)
+	if mlabels["app.kubernetes.io/managed-by"] != "astronomer" {
+		t.Errorf("managed-by label wrong: %+v", mlabels)
+	}
+	if mlabels[projectPolicyLabelKey] != projectID.String() {
+		t.Errorf("project id label wrong: %+v", mlabels)
+	}
+	hard := manifest["spec"].(map[string]any)["hard"].(map[string]any)
+	if hard["limits.cpu"] != "4" {
+		t.Errorf("limits.cpu: got %v, want 4", hard["limits.cpu"])
+	}
+	if hard["limits.memory"] != "8Gi" {
+		t.Errorf("limits.memory: got %v, want 8Gi", hard["limits.memory"])
+	}
+	if hard["pods"] != "20" {
+		t.Errorf("pods: got %v, want 20", hard["pods"])
+	}
+}
+
+// TestReconcileProjectNamespace_SkipsQuotaWhenAllEmpty asserts that empty
+// policy columns produce NO ResourceQuota apply — only a defensive DELETE so
+// any stale object is reaped — preventing the empty-Quota-bans-everything
+// foot-gun called out in the spec.
+func TestReconcileProjectNamespace_SkipsQuotaWhenAllEmpty(t *testing.T) {
+	clusterID := uuid.New()
+	q := &fakeProjectQuerier{
+		project: sqlc.Project{
+			ID:                 uuid.New(),
+			ClusterID:          clusterID,
+			PodSecurityProfile: "baseline",
+			// cpu/memory/pods left empty/zero on purpose.
+		},
+		registryConfigErr: errors.New("no rows in result set"),
+	}
+	r := &fakeProjectRequester{}
+	if err := reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	for _, c := range r.calls {
+		if c.method == http.MethodPatch && strings.Contains(c.path, "/resourcequotas/"+managedProjectQuotaName) {
+			t.Fatalf("expected NO apply on %s when all quota fields empty, got %+v", managedProjectQuotaName, c)
+		}
+	}
+	// We DO expect a defensive DELETE so that a previously-set quota gets
+	// cleaned up when an admin clears the fields.
+	sawDelete := false
+	for _, c := range r.calls {
+		if c.method == http.MethodDelete && strings.Contains(c.path, "/resourcequotas/"+managedProjectQuotaName) {
+			sawDelete = true
+		}
+	}
+	if !sawDelete {
+		t.Errorf("expected defensive DELETE on %s, calls=%+v", managedProjectQuotaName, r.calls)
+	}
+}
+
+func TestRenderProjectResourceQuota_OnlyIncludesSetFields(t *testing.T) {
+	project := sqlc.Project{
+		ID:                       uuid.New(),
+		PodSecurityProfile:       "baseline",
+		ResourceQuotaCpuLimit:    "2",
+		ResourceQuotaMemoryLimit: "", // intentionally unset
+		ResourceQuotaPodCount:    0,  // intentionally unset
+	}
+	got := renderProjectResourceQuota("team-a", project)
+	hard := got["spec"].(map[string]any)["hard"].(map[string]any)
+	if hard["limits.cpu"] != "2" {
+		t.Errorf("expected limits.cpu=2, got %+v", hard)
+	}
+	if _, ok := hard["limits.memory"]; ok {
+		t.Errorf("expected no limits.memory entry, got %+v", hard)
+	}
+	if _, ok := hard["pods"]; ok {
+		t.Errorf("expected no pods entry, got %+v", hard)
+	}
+}
+
+func TestNormalizePodSecurityProfile(t *testing.T) {
+	cases := map[string]string{
+		"":           "privileged",
+		"  ":         "privileged",
+		"BASELINE":   "baseline",
+		"baseline":   "baseline",
+		"restricted": "restricted",
+		"privileged": "privileged",
+		"banana":     "privileged",
+	}
+	for in, want := range cases {
+		if got := normalizePodSecurityProfile(in); got != want {
+			t.Errorf("normalizePodSecurityProfile(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHasProjectQuotaPolicy(t *testing.T) {
+	if hasProjectQuotaPolicy(sqlc.Project{}) {
+		t.Error("empty project should not have policy")
+	}
+	if !hasProjectQuotaPolicy(sqlc.Project{ResourceQuotaCpuLimit: "2"}) {
+		t.Error("cpu set should count")
+	}
+	if !hasProjectQuotaPolicy(sqlc.Project{ResourceQuotaMemoryLimit: "8Gi"}) {
+		t.Error("memory set should count")
+	}
+	if !hasProjectQuotaPolicy(sqlc.Project{ResourceQuotaPodCount: 1}) {
+		t.Error("pods set should count")
 	}
 }
 
