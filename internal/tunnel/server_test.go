@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -118,8 +117,10 @@ func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clust
 }
 
 func TestAgentConnectAndDisconnect(t *testing.T) {
-	var buf bytes.Buffer
-	h := NewHub(slog.New(slog.NewJSONHandler(&buf, nil)))
+	// The hub writes log lines from its goroutine while the test reads
+	// the buffer at the end — guard the buffer to avoid a -race fail.
+	buf := newSyncBuffer()
+	h := NewHub(slog.New(slog.NewJSONHandler(buf, nil)))
 	_, conn, ctx := testServerAndClient(t, h)
 
 	connectAgent(t, conn, ctx, "cluster-1", "agent-1")

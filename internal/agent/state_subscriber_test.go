@@ -371,21 +371,23 @@ func TestStateSubscriberDispatchSendFailedMetric(t *testing.T) {
 }
 
 // setStateSubscriberTunables overrides the package-level tuning vars for
-// testing and returns a restore func.
+// testing and returns a restore func. The vars are atomic.Int64s so
+// concurrent reads from the running subscriber goroutine don't race
+// against the test's set/restore.
 func setStateSubscriberTunables(minInterval, evictAfter, evictEvery, eventCutoff time.Duration) func() {
-	prevMin := stateSubscriberMinInterval
-	prevEvictAfter := stateSubscriberEvictAfter
-	prevEvictEvery := stateSubscriberEvictEvery
-	prevEventCutoff := stateSubscriberEventCutoff
-	stateSubscriberMinInterval = minInterval
-	stateSubscriberEvictAfter = evictAfter
-	stateSubscriberEvictEvery = evictEvery
-	stateSubscriberEventCutoff = eventCutoff
+	prevMin := stateSubscriberMinInterval.Load()
+	prevEvictAfter := stateSubscriberEvictAfter.Load()
+	prevEvictEvery := stateSubscriberEvictEvery.Load()
+	prevEventCutoff := stateSubscriberEventCutoff.Load()
+	stateSubscriberMinInterval.Store(int64(minInterval))
+	stateSubscriberEvictAfter.Store(int64(evictAfter))
+	stateSubscriberEvictEvery.Store(int64(evictEvery))
+	stateSubscriberEventCutoff.Store(int64(eventCutoff))
 	return func() {
-		stateSubscriberMinInterval = prevMin
-		stateSubscriberEvictAfter = prevEvictAfter
-		stateSubscriberEvictEvery = prevEvictEvery
-		stateSubscriberEventCutoff = prevEventCutoff
+		stateSubscriberMinInterval.Store(prevMin)
+		stateSubscriberEvictAfter.Store(prevEvictAfter)
+		stateSubscriberEvictEvery.Store(prevEvictEvery)
+		stateSubscriberEventCutoff.Store(prevEventCutoff)
 	}
 }
 

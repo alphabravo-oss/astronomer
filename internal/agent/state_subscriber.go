@@ -22,32 +22,67 @@ import (
 )
 
 // Default tunables for the agent-side informer fan-out. Exposed as package
-// vars (not consts) so tests can override without changing public API.
+// Tunables stored as atomic.Int64 (nanoseconds) so tests can mutate
+// them without racing against the Run goroutine's reads. Use the
+// matching get/set helpers below; never read or write the variables
+// directly. Pre-existing test infrastructure race documented in
+// FEATURES-051126 cleanup (sprint 8).
 var (
-	// stateSubscriberResyncPeriod is the SharedInformerFactory resync interval.
-	// Long resyncs avoid hammering the apiserver while still catching anything
-	// the informer missed during a partial reconnect.
-	stateSubscriberResyncPeriod = 30 * time.Minute
+	// stateSubscriberResyncPeriod is the SharedInformerFactory resync
+	// interval. Long resyncs avoid hammering the apiserver while still
+	// catching anything the informer missed during a partial reconnect.
+	stateSubscriberResyncPeriod atomic.Int64
 
-	// stateSubscriberMinInterval is the per-key minimum gap between two emits.
-	// Configured to 1s to absorb the burst when a Deployment scales (hundreds
-	// of Pod updates per second arrive at the informer); each key still gets
-	// at least one update per second.
-	stateSubscriberMinInterval = 1 * time.Second
+	// stateSubscriberMinInterval is the per-key minimum gap between
+	// two emits. Configured to 1s to absorb the burst when a
+	// Deployment scales (hundreds of Pod updates per second arrive at
+	// the informer); each key still gets at least one update per
+	// second.
+	stateSubscriberMinInterval atomic.Int64
 
-	// stateSubscriberEvictAfter is how long an unused key is kept in the
-	// rate-limiter map. Anything older is purged to keep the map bounded for
-	// long-running agents that touch many resources.
-	stateSubscriberEvictAfter = 60 * time.Second
+	// stateSubscriberEvictAfter is how long an unused key is kept in
+	// the rate-limiter map. Anything older is purged to keep the map
+	// bounded for long-running agents that touch many resources.
+	stateSubscriberEvictAfter atomic.Int64
 
-	// stateSubscriberEvictEvery is the eviction goroutine's tick interval.
-	stateSubscriberEvictEvery = 1 * time.Minute
+	// stateSubscriberEvictEvery is the eviction goroutine's tick
+	// interval.
+	stateSubscriberEvictEvery atomic.Int64
 
-	// stateSubscriberEventCutoff filters out historical Events on initial list.
-	// Without this, a fresh agent would emit thousands of stale Events on
-	// startup; we only forward Events that are newer than this window.
-	stateSubscriberEventCutoff = 5 * time.Minute
+	// stateSubscriberEventCutoff filters out historical Events on
+	// initial list. Without this, a fresh agent would emit thousands
+	// of stale Events on startup; we only forward Events that are
+	// newer than this window.
+	stateSubscriberEventCutoff atomic.Int64
 )
+
+func init() {
+	stateSubscriberResyncPeriod.Store(int64(30 * time.Minute))
+	stateSubscriberMinInterval.Store(int64(1 * time.Second))
+	stateSubscriberEvictAfter.Store(int64(60 * time.Second))
+	stateSubscriberEvictEvery.Store(int64(1 * time.Minute))
+	stateSubscriberEventCutoff.Store(int64(5 * time.Minute))
+}
+
+// getStateSubscriberMinInterval and friends provide race-free reads
+// against tunables that tests are allowed to mutate at runtime. Reading
+// the atomic.Int64 directly via .Load() is what we do, but the helpers
+// give a single Duration value so call sites don't repeat the cast.
+func getStateSubscriberResyncPeriod() time.Duration {
+	return time.Duration(stateSubscriberResyncPeriod.Load())
+}
+func getStateSubscriberMinInterval() time.Duration {
+	return time.Duration(stateSubscriberMinInterval.Load())
+}
+func getStateSubscriberEvictAfter() time.Duration {
+	return time.Duration(stateSubscriberEvictAfter.Load())
+}
+func getStateSubscriberEvictEvery() time.Duration {
+	return time.Duration(stateSubscriberEvictEvery.Load())
+}
+func getStateSubscriberEventCutoff() time.Duration {
+	return time.Duration(stateSubscriberEventCutoff.Load())
+}
 
 // stateSender is the minimal slice of TunnelClient the subscriber needs.
 // Defining the interface here (instead of taking *TunnelClient directly)
@@ -146,7 +181,7 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		client:    client,
 		sender:    sender,
 		log:       log,
-		limiter:   newStateRateLimiter(stateSubscriberMinInterval, stateSubscriberEvictAfter),
+		limiter:   newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
 		readyCh:   make(chan struct{}),
 		startedAt: time.Now(),
 	}
@@ -178,7 +213,7 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 		return
 	}
 
-	factory := informers.NewSharedInformerFactory(s.client, stateSubscriberResyncPeriod)
+	factory := informers.NewSharedInformerFactory(s.client, getStateSubscriberResyncPeriod())
 
 	// Register per-resource handlers. The handler funcs share the same
 	// dispatch logic; only the Kind / API group differ.
@@ -203,17 +238,17 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 	}
 	s.ready.Store(true)
 	s.once.Do(func() { close(s.readyCh) })
-	s.log.Info("state subscriber started", "resync_period", stateSubscriberResyncPeriod.String())
+	s.log.Info("state subscriber started", "resync_period", getStateSubscriberResyncPeriod().String())
 
 	// Eviction goroutine.
-	evictTicker := time.NewTicker(stateSubscriberEvictEvery)
+	evictTicker := time.NewTicker(getStateSubscriberEvictEvery())
 	defer evictTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-evictTicker.C:
-			cutoff := time.Now().Add(-stateSubscriberEvictAfter)
+			cutoff := time.Now().Add(-getStateSubscriberEvictAfter())
 			if dropped := s.limiter.evictOlderThan(cutoff); dropped > 0 {
 				s.log.Debug("state subscriber: evicted rate-limiter keys", "dropped", dropped)
 			}
@@ -372,7 +407,7 @@ func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, ap
 // forward. The informer replays old events as Adds during initial list /
 // resync; without this filter we'd flood on every reconnect.
 func (s *StateSubscriber) eventIsRecent(obj any) bool {
-	cutoff := time.Now().Add(-stateSubscriberEventCutoff)
+	cutoff := time.Now().Add(-getStateSubscriberEventCutoff())
 	switch e := obj.(type) {
 	case *eventsv1.Event:
 		ts := e.EventTime.Time
