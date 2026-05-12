@@ -39,6 +39,12 @@ type CatalogQuerier interface {
 	CountHelmRepositories(ctx context.Context) (int64, error)
 	// Charts
 	ListHelmCharts(ctx context.Context, arg sqlc.ListHelmChartsParams) ([]sqlc.HelmChart, error)
+	// ListHelmChartsByTag + CountHelmChartsByTag drive the ?tag= filter
+	// (migration 071). The handler falls back to the unfiltered list
+	// when these aren't wired so the CatalogQuerier surface stays
+	// optional for older test harnesses.
+	ListHelmChartsByTag(ctx context.Context, arg sqlc.ListHelmChartsByTagParams) ([]sqlc.HelmChart, error)
+	CountHelmChartsByTag(ctx context.Context, tag string) (int64, error)
 	ListChartVersions(ctx context.Context, arg sqlc.ListChartVersionsParams) ([]sqlc.HelmChartVersion, error)
 	ListChartsByRepository(ctx context.Context, arg sqlc.ListChartsByRepositoryParams) ([]sqlc.HelmChart, error)
 	GetHelmChartByID(ctx context.Context, id uuid.UUID) (sqlc.HelmChart, error)
@@ -650,9 +656,31 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 // set is narrowed from "every helm_repositories row" to the project-scoped
 // union (globals + own + subscribed). Without project_id the behaviour
 // is unchanged for the admin view.
+// Migration 071: also accepts ?tag= to filter on helm_chart_tags (used by
+// the service-mesh tab "Install" deep-link).
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
+	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
+
+	if tag != "" {
+		charts, err := h.queries.ListHelmChartsByTag(r.Context(), sqlc.ListHelmChartsByTagParams{
+			Tag:    tag,
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list charts by tag")
+			return
+		}
+		total, err := h.queries.CountHelmChartsByTag(r.Context(), tag)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count charts by tag")
+			return
+		}
+		RespondPaginated(w, r, charts, total)
+		return
+	}
 
 	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
 		pid, err := uuid.Parse(pidRaw)

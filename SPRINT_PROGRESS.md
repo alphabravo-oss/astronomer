@@ -1,67 +1,66 @@
 # astronomer-go sprint progress snapshot
 
-_Snapshot updated 2026-05-12 18:06. Branch: `main` @ `33d0332`. Live `.247` running this revision (re-tagged as `:dev`)._
+_Updated 2026-05-12 ~19:35. Branch: `main` @ `c8140f4`. Live `.247` at migration head **074**._
 
-## Cumulative shipped (through sprint 18)
+## Cumulative shipped
 
-Migration head: **69**. Live URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYltBgV`.
+URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYltBgV`
 
-### Sprint 15
-- 055 SIEM forwarder · 056 Fleet operations · 057 Maintenance windows
+### Sprint 15 (merged) — 055 SIEM forwarder · 056 Fleet operations · 057 Maintenance windows
+### Sprint 16 (merged) — 058 Dashboard widgets · 059 Notification templates · 060 GitOps registration · 061 BYO catalogs
+### Sprint 17 (merged) — 062 Image vuln scans · 063 Read audit · 064 Compliance baselines · 065 Kubectl shell · wterm swap
+### Sprint 18 (merged) — 066 Cluster groups · 067 Vault · 068 NetworkPolicy templates · 069 CRD-mirror v2
+### Sprint 19 (070 merged; 071–073 pending) — 070 Apiserver allow-list
+### Sprint 20 (merged) — 074 Platform baseline auto-attach + kubectl image preload + empty-state CTAs
 
-### Sprint 16
-- 058 Dashboard widgets · 059 Notification template editor · 060 GitOps cluster registration · 061 BYO helm catalogs per project
+## What's PENDING on worktree branches (not yet merged to main)
 
-### Sprint 17
-- 062 Image vulnerability scanning · 063 Read-side API audit · 064 Compliance baselines · 065 In-browser kubectl shell · **wterm swap**
+| Sprint 19 worktree | Migration | Branch |
+|---|---|---|
+| Service mesh detect tile | 071 | `worktree-agent-ac6f9e3c054e86270` |
+| Anomaly detection on alerting | 072 | `worktree-agent-ac65dc923f75ed66f` |
+| Catalog ratings + recommendations | 073 (agent used 055 locally; needs rename to 073 before merge) | `worktree-agent-aaf5e65b6644bfbb0` |
 
-### Sprint 18
-- 066 Cluster groups / folders (tree-depth 3, fleet selector ext is a follow-up)
-- 067 Vault integration (resolver in helm install / tools / cluster-templates)
-- 068 Network policy templates (4 builtins + reconciler + drift sweep)
-- 069 CRD-mirror v2 (IngressClass / GatewayClass / NetworkPolicy / ResourceQuota / LimitRange)
-- **Live UI fix**: `frontend/src/lib/api/dashboards.ts` was prepending `/api/v1/` over the axios baseURL → 404. Stripped the prefix; all dashboard calls now route via the shared baseURL.
-- **Merge follow-fix**: CRD-mirror v2 `listMirrored*` exports + types were dropped during the cluster-detail.ts merge (HEAD-only); re-appended from worktree before deploy.
+Each shipped as an isolated worktree on an older base commit. Standard merge pattern:
+1. `git merge worktree-agent-<id> --no-ff -m "merge: sprint 19 — <feature> (migration NNN)"`
+2. Resolve worker/scheduler/querier/routes/server additively (same as every prior merge).
+3. Rename migration files inside the worktree before merging if they collide (catalog-ratings is the one that needs this).
 
-Live verification done:
-- `/health/` → version `369fb14`
-- migrations head `SELECT MAX(version)` = 69
-- `dashboards/global/` 200 (was 404 with doubled prefix)
-- `cluster-groups/`, `admin/vault-connections/`, `admin/network-policy-templates/` all 200
+## Recent live ops + fixes (this session)
 
-## Pending (sprint 19 — agents to launch)
+- Dashboard layout rework: full-width clusters table + Recent Activity + Platform Health rail + Quick Actions row.
+- `datasource_not_found: default` 404 fix → demo widgets silently dropped when their datasource is missing.
+- `/api/v1/api/v1/dashboards/global/` doubled-prefix 404 → `dashboards.ts` paths normalized.
+- Kubectl shell ImagePullBackOff in k3d → pre-loading `bitnami/kubectl:1.31.4` via `k3d-bootstrap.sh` + `images.txt` (sprint 20).
+- UI guards: `is_local=true` clusters now hide Shell + Image Scans tabs with helpful empty-state pages.
+- Architectural answer: cluster registration now auto-attaches a `Platform baseline` cluster_template (sprint 20). Operators can change or disable it via `/admin/platform-settings/default-cluster-template/`.
 
-Picking the next 4 from the roadmap. Mix of security hardening + operator UX.
+## Tech-debt punch list (carry forward, not yet scheduled)
 
-| # | Feature | Why | Effort | Migration |
-|---|---|---|---|---|
-| 1 | **Cluster apiserver allow-list** | Operators want a "lockbox" mode: only Astronomer's tunnel egress IPs can hit the cluster apiserver. Sprint 070 adds a per-cluster `apiserver_allowlist_cidrs` config + a reconciler that patches the cloud LB / firewall. | M | 070 |
-| 2 | **Service mesh tile (Istio + Linkerd detect/install)** | We mirror lots of CRDs already (sprint 069); sprint 071 adds a dedicated tile that detects an installed mesh (gateway/peerauth/destinationrule shapes), and lets operators install via the catalog. | M | 071 |
-| 3 | **Alerting anomaly detection** | Today alerts are static-threshold (`> 90% CPU`). Sprint 072 adds rolling-window baselines per `cluster × metric` and "deviation from baseline" alert rules. | M | 072 |
-| 4 | **Catalog ratings + recommendations** | Sister of sprint 061 BYO catalogs. Operators rate installed charts; we surface "popular in your org" + "frequently installed together" recommendations on the catalog browse. | S/M | 073 |
-
-After sprint 19: deploy + verify live.
-
-## Tech-debt punch list (carry forward)
-
-- **060**: Fernet-encrypt the `gitops_registration_sources.auth_encrypted` blob at write time.
-- **062**: Wire the Trivy `Ingester.AuditHook` once a CRD-mirror event dispatcher exists.
-- **064**: Webhook + SMTP delete enforcement when those resources are listed in an active baseline's `required_*` field.
-- **065**: Audit-log fan-out for kubectl session `expired`/`reaped` worker events. Register `astronomer_kubectl_sessions_active` gauge + opened/commands counters.
-- **066**: Fleet selector `group_id` branch — schema + API field exist, but `internal/worker/tasks/fleet_orchestrate.go` still uses main's selector evaluator without the group expansion.
-- **066**: Sidebar hierarchical tree + cluster-detail "Move to group" + breadcrumb (admin CRUD already shipped).
-- **067**: `vault.reference.resolved` / `.failed` audit-log rows (metrics only today).
+- **060**: Fernet-encrypt `gitops_registration_sources.auth_encrypted` at write time.
+- **062**: Wire Trivy `Ingester.AuditHook` once a CRD-mirror event dispatcher exists.
+- **064**: Webhook + SMTP delete enforcement when listed in an active baseline's `required_*` field.
+- **065**: Audit-log fan-out for kubectl session `expired`/`reaped` worker events. Register `astronomer_kubectl_sessions_active` gauge.
+- **066**: Fleet selector `group_id` branch — schema + API field exist, but the orchestrator's selector evaluator doesn't expand group_id yet.
+- **066**: Sidebar hierarchical tree + cluster-detail "Move to group" + breadcrumb (admin CRUD shipped).
+- **067**: `vault.reference.resolved` / `.failed` audit-log rows (metrics-only today).
 - **068**: Audit `drift_detected` / `reconciled` actions for NetworkPolicy reconciler.
-- **069**: `astronomer_crd_mirror_rows` gauge populator task; `CustomResourceDefinition` self-mirror.
+- **069**: `astronomer_crd_mirror_rows` gauge populator; `CustomResourceDefinition` self-mirror.
+- **070**: AKS / DOKS / SelfManaged real provider drivers (EKS + GKE done; rest are detect-only scaffolds).
+- **074**: Catalog chart-install page accepting `?cluster_id=` so CTAs deep-link into a pre-targeted install; today the Trivy CTA falls back to `/dashboard/catalog?search=trivy`.
+- **074**: Dedicated "Image Scans" frontend tab — CTA currently lives on the CIS-scans tab.
+- **074**: `kind=builtin` enforcement on cluster_templates handler (seeded row has `spec.builtin=true` flag for future use).
 
-## Cumulative roadmap remaining (post-19)
+## Cumulative roadmap remaining
+
+Larger / not-yet-scoped:
 
 - Cost allocation per project (L effort, AWS Cost Explorer / GCP billing API plumbing)
-- Application marketplace recommendation engine v2 (cross-tenant trends, requires telemetry opt-in)
-- Per-namespace fine-grained RBAC mirror for kubectl shell (sprint 065 v1 was cluster-wide)
-- Bulk cluster operations richer UI (fleet ops 056 backend is rich, UI is sparse)
+- Anomaly v2: cross-cluster baselines ("this cluster's CPU is 4σ above fleet mean")
+- Per-namespace fine-grained RBAC mirror for kubectl shell (sprint 065 v1 is cluster-wide)
+- Bulk cluster operations richer UI (fleet ops 056 backend is rich; UI sparse)
+- Application marketplace recommendation engine v2 (cross-tenant, requires telemetry opt-in)
 - IP geolocation badges on audit log
-- Service-account-token rotation reminder
 - Helm `--atomic --wait` toggle per project
 
 User declined: licensing management.
@@ -74,8 +73,9 @@ User declined: licensing management.
 - sqlc CLI broken (compliance.sql lexer); hand-write `*_ext.sql.go` / `*_manual.go`.
 - ArgoCD self-manage reconciles helm values back to `:dev`. Deploy via re-tag locally + `kubectl rollout restart`.
 - CWD discipline: worktree agents stay in their own dir; merge work happens from primary.
-- **Frontend leak**: agents working on `frontend/src/lib/api/cluster-detail.ts` produce massive HEAD-vs-worktree blobs; remember to scan for missing `Mirrored*` / `listMirrored*` style imports after the merge before docker building. Symptom: Next.js build "export not found" with import trace pointing at the consumer page.
-- **Frontend axios baseURL**: it's `/api/v1` (set in `lib/api.ts`). API client modules should pass paths starting at `/admin/...` or `/clusters/...` — NEVER prefix `/api/v1/`. The sprint-058 dashboards client had that bug; verify any new API client file against this rule before deploy.
+- **Frontend leak**: agents working on `frontend/src/lib/api/cluster-detail.ts` produce massive HEAD-vs-worktree blobs; scan for missing `listMirrored*` / `Mirrored*` imports after the merge before docker building.
+- **Frontend axios baseURL** is `/api/v1`. API client modules pass paths starting at `/admin/...` or `/clusters/...` — NEVER prefix `/api/v1/`.
+- **kubectl shell + image scans require a remote agent**. The local-agent inside the server pod doesn't reliably support these flows. UI is now gated on `is_local`.
 
 ## Memory index (unchanged)
 

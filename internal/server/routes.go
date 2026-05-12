@@ -240,6 +240,9 @@ type RouterDependencies struct {
 	// (migration 070). The reconciler worker is the auto-correct path;
 	// this handler is the CRUD + on-demand reconcile surface. Nil-safe.
 	ApiserverAllowlist *handler.ApiserverAllowlistHandler
+	// ServiceMesh owns /api/v1/clusters/{cluster_id}/service-mesh/*
+	// (migration 071). Read-only detection + on-demand re-detect; nil-safe.
+	ServiceMesh *handler.ServiceMeshHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -920,13 +923,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
 	}
 
-	// Apiserver allow-list (migration 070). Per-cluster lockbox for the
-	// cluster's apiserver. Reads (GET / preview / snapshots) gate on
-	// clusters:read; writes (PUT / reconcile) gate on clusters:update
-	// — same rule the snapshot + registry routes use, since the
-	// operator who can edit a cluster also owns its access posture.
-	// Nil-safe: when the handler isn't wired the routes are omitted and
-	// the periodic reconciler still walks whatever rows exist in the DB.
+	// Apiserver allow-list (migration 070).
 	if deps.ApiserverAllowlist != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/", deps.ApiserverAllowlist.Get)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/apiserver-allowlist/", deps.ApiserverAllowlist.Update)
@@ -935,13 +932,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/preview/", deps.ApiserverAllowlist.Preview)
 	}
 
-	// Fleet operations (migration 056). Coordinated multi-cluster
-	// actions: drain N clusters, upgrade a tool across the fleet,
-	// apply-template fanout. Gated on the dedicated
-	// ResourceFleetOperations rbac resource so a "fleet runbook author"
-	// role can be granted fleet_operations:* without also granting
-	// clusters:* — the operation itself is scoped to clusters the
-	// orchestrator can identify by label, not by explicit ID.
+	// Fleet operations (migration 056).
 	if deps.FleetOperations != nil {
 		r.Route("/fleet-operations", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbList)).Get("/", deps.FleetOperations.List)
@@ -953,6 +944,13 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/abort/", deps.FleetOperations.Abort)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/retry-failed/", deps.FleetOperations.RetryFailed)
 		})
+	}
+
+	// Service mesh tile (migration 071).
+	if deps.ServiceMesh != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/", deps.ServiceMesh.Get)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/clusters/{cluster_id}/service-mesh/detect/", deps.ServiceMesh.Detect)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/mtls/", deps.ServiceMesh.MTLS)
 	}
 
 	if deps.Projects != nil {
