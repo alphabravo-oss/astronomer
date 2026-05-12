@@ -144,6 +144,15 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30m", tasks.NetworkPolicyDriftCheckType, "network policy drift sweep"},
 		// Sprint 069: CRD-mirror v2 stale-row prune.
 		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
+		// Migration 070: apiserver allow-list reconciler. Every 15m
+		// the sweep walks every active (mode != 'disabled') row and
+		// drives per-cluster reconcile (GetEffective → diff → optional
+		// Apply on enforce, snapshot, stamp sync_status). 04:45 daily
+		// the snapshot retention sweep prunes rows older than 90 days
+		// (offset from the email/webhook/siem cleanup tasks to spread
+		// DB load).
+		{"@every 15m", tasks.ApiserverAllowlistReconcileAllType, "apiserver allowlist reconcile sweep"},
+		{"45 4 * * *", tasks.ApiserverAllowlistCleanupSnapshotsType, "apiserver allowlist snapshots retention (daily 04:45)"},
 	}
 
 	for _, e := range entries {

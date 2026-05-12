@@ -103,6 +103,16 @@ const (
 	TypeNetworkPolicyDriftCheck = tasks.NetworkPolicyDriftCheckType
 	// Sprint 069: CRD-mirror v2 stale-row prune.
 	TypeCrdMirrorPruneStale = tasks.CrdMirrorPruneStaleType
+	// Migration 070: apiserver allow-list reconciler. Three task types
+	// share one querier + registry wiring; see
+	// tasks.ConfigureApiserverAllowlistReconcile.
+	//   - Reconcile         : per-cluster reconcile (enqueued by handler
+	//                         and by the periodic ReconcileAll sweep).
+	//   - ReconcileAll      : every-15m sweep over every active row.
+	//   - CleanupSnapshots  : daily 90d retention prune on snapshots.
+	TypeApiserverAllowlistReconcile        = tasks.ApiserverAllowlistReconcileType
+	TypeApiserverAllowlistReconcileAll     = tasks.ApiserverAllowlistReconcileAllType
+	TypeApiserverAllowlistCleanupSnapshots = tasks.ApiserverAllowlistCleanupSnapshotsType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -191,6 +201,10 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeNetworkPolicyApply, instrumentTask(TypeNetworkPolicyApply, tasks.HandleNetworkPolicyApply))
 	w.mux.HandleFunc(TypeNetworkPolicyDriftCheck, instrumentTask(TypeNetworkPolicyDriftCheck, tasks.HandleNetworkPolicyDriftCheck))
 	w.mux.HandleFunc(TypeCrdMirrorPruneStale, instrumentTask(TypeCrdMirrorPruneStale, tasks.HandleCrdMirrorPruneStale))
+	// Migration 070: apiserver allow-list reconciler.
+	w.mux.HandleFunc(TypeApiserverAllowlistReconcile, instrumentTask(TypeApiserverAllowlistReconcile, tasks.HandleApiserverAllowlistReconcile))
+	w.mux.HandleFunc(TypeApiserverAllowlistReconcileAll, instrumentTask(TypeApiserverAllowlistReconcileAll, tasks.HandleApiserverAllowlistReconcileAll))
+	w.mux.HandleFunc(TypeApiserverAllowlistCleanupSnapshots, instrumentTask(TypeApiserverAllowlistCleanupSnapshots, tasks.HandleApiserverAllowlistCleanupSnapshots))
 
 	w.log.Info("registered all task handlers")
 }
