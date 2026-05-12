@@ -138,6 +138,7 @@ type Querier interface {
 	DeleteArgoCDApplication(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgoCDManagedClusterParams) error
+	DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error

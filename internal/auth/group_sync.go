@@ -433,3 +433,40 @@ func RegisterGroupSyncMetrics() {
 func init() {
 	RegisterGroupSyncMetrics()
 }
+
+// GroupSyncBindingsCounter abstracts the three count-by-scope queries
+// used by RefreshGroupSyncMetrics. Implemented by *sqlc.Queries; the
+// interface keeps the metrics refresher loosely coupled.
+type GroupSyncBindingsCounter interface {
+	CountGroupSyncGlobalBindings(ctx context.Context) (int64, error)
+	CountGroupSyncClusterBindings(ctx context.Context) (int64, error)
+	CountGroupSyncProjectBindings(ctx context.Context) (int64, error)
+}
+
+// RefreshGroupSyncMetrics recomputes the per-scope gauge from the DB.
+// Called periodically from the worker scheduler and on demand after a
+// sync run. Errors are surfaced to the caller; the gauge is only
+// updated for scopes whose query succeeded so a partial outage
+// doesn't zero the other dimensions.
+func RefreshGroupSyncMetrics(ctx context.Context, q GroupSyncBindingsCounter) error {
+	if q == nil {
+		return nil
+	}
+	var firstErr error
+	if n, err := q.CountGroupSyncGlobalBindings(ctx); err == nil {
+		GroupSyncBindingsGauge.WithLabelValues(observability.MetricValues("global")...).Set(float64(n))
+	} else if firstErr == nil {
+		firstErr = err
+	}
+	if n, err := q.CountGroupSyncClusterBindings(ctx); err == nil {
+		GroupSyncBindingsGauge.WithLabelValues(observability.MetricValues("cluster")...).Set(float64(n))
+	} else if firstErr == nil {
+		firstErr = err
+	}
+	if n, err := q.CountGroupSyncProjectBindings(ctx); err == nil {
+		GroupSyncBindingsGauge.WithLabelValues(observability.MetricValues("project")...).Set(float64(n))
+	} else if firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
+}

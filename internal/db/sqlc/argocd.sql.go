@@ -215,6 +215,18 @@ func (q *Queries) DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgo
 	return err
 }
 
+const deleteArgoCDManagedClustersByCluster = `-- name: DeleteArgoCDManagedClustersByCluster :execrows
+DELETE FROM argocd_managed_clusters WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteArgoCDManagedClustersByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getArgoCDApplicationByID = `-- name: GetArgoCDApplicationByID :one
 
 SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at FROM argocd_applications WHERE id = $1

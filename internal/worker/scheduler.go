@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // Scheduler manages periodic tasks, replacing Celery Beat.
@@ -59,6 +61,9 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// up rows whose worker process crashed mid-phase (status=running)
 		// and rows that failed and need a retry (status=failed→running).
 		{"@every 1m", TypeClusterDecommissionAll, "cluster decommission sweep"},
+		// Recompute the auth_group_bindings gauge so it doesn't go
+		// stale between SSO login runs. Cheap — three COUNT(*)s.
+		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
 	}
 
 	for _, e := range entries {

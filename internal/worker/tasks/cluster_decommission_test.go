@@ -197,6 +197,14 @@ func (f *fakeDecommQuerier) DeleteClusterRoleBindingsByCluster(_ context.Context
 	f.bump("DeleteClusterRoleBindingsByCluster")
 	return 9, f.roleBindingsErr
 }
+func (f *fakeDecommQuerier) ListArgoCDManagedClustersByCluster(_ context.Context, _ uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
+	f.bump("ListArgoCDManagedClustersByCluster")
+	return nil, nil
+}
+func (f *fakeDecommQuerier) DeleteArgoCDManagedClustersByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteArgoCDManagedClustersByCluster")
+	return 0, nil
+}
 func (f *fakeDecommQuerier) TombstoneCluster(_ context.Context, _ uuid.UUID) error {
 	f.bump("TombstoneCluster")
 	return f.tombstoneErr

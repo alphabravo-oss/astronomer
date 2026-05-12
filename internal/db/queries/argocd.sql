@@ -113,6 +113,14 @@ SELECT * FROM argocd_managed_clusters WHERE cluster_id = $1 ORDER BY created_at 
 -- name: DeleteArgoCDManagedCluster :exec
 DELETE FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2;
 
+-- name: DeleteArgoCDManagedClustersByCluster :execrows
+-- Bulk-delete every (instance, cluster) mapping for one cluster. Used by
+-- the decommission worker to drop local rows after a cluster is tombstoned.
+-- Upstream Argo cluster Secrets (the actual k8s resource in each Argo
+-- namespace) need a separate unregister flow; the orphans are surfaced via
+-- the cluster.decommission.argocd_secret_orphan audit row.
+DELETE FROM argocd_managed_clusters WHERE cluster_id = $1;
+
 -- name: UpdateArgoCDManagedClusterLabels :one
 UPDATE argocd_managed_clusters
 SET labels = $3, updated_at = now()

@@ -31,6 +31,7 @@ type SSOQuerier interface {
 	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
 	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
+	GetDexConnectorByName(ctx context.Context, name string) (sqlc.DexConnector, error)
 	auth.GroupSyncQuerier
 }
 
@@ -253,11 +254,23 @@ func (h *SSOHandler) syncGroupsFromClaims(r *http.Request, userID uuid.UUID, inf
 	if h == nil || h.queries == nil || info == nil {
 		return
 	}
+	// Resolve a dex_connector row for the SSO provider so
+	// connector-scoped group mappings match. Look up by name first
+	// (operators usually name their dex_connectors row after the
+	// provider type), then fall back to wildcard. A non-existent
+	// connector for an enabled SSO path is normal in dev — wildcard
+	// mappings still apply.
+	connectorID := pgtype.UUID{}
+	if info.Provider != "" {
+		if c, err := h.queries.GetDexConnectorByName(r.Context(), info.Provider); err == nil {
+			connectorID = pgtype.UUID{Bytes: c.ID, Valid: true}
+		}
+	}
 	result, err := auth.SyncUserGroups(
 		r.Context(),
 		h.queries,
 		userID,
-		pgtype.UUID{}, // no connector_id resolution today; wildcard mappings still match
+		connectorID,
 		info.Groups,
 		true, // claims are fresh on every SSO callback
 	)

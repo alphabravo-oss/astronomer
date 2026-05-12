@@ -128,6 +128,10 @@ type ClusterDecommissionQuerier interface {
 	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Argo CD managed-cluster mappings + an enumerator so we can audit
+	// the orphans (upstream Argo Secrets that need manual unregister).
+	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
+	DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 
 	// Phase 5: tombstone (soft-delete) the cluster row.
 	TombstoneCluster(ctx context.Context, id uuid.UUID) error
@@ -608,6 +612,44 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		}
 		counts[o.name] = n
 	}
+	// Argo CD managed-cluster mappings: surface the orphan upstream
+	// Secrets via audit, then drop the local rows. The Secret in each
+	// Argo instance's namespace stays until an operator unregisters it
+	// (or until that Argo install is itself torn down). Surfacing the
+	// orphans gives operators a clear, queryable signal — see
+	// docs/runbooks/cluster-decommission.md.
+	managed, mErr := q.ListArgoCDManagedClustersByCluster(ctx, cid)
+	if mErr != nil && firstErr == nil {
+		firstErr = fmt.Errorf("list argocd_managed_clusters: %w", mErr)
+	}
+	if len(managed) > 0 {
+		orphans := make([]map[string]any, 0, len(managed))
+		for _, m := range managed {
+			orphans = append(orphans, map[string]any{
+				"argocd_instance_id":  m.ArgocdInstanceID.String(),
+				"cluster_secret_name": m.ClusterSecretName,
+				"server_url":          m.ServerUrl,
+			})
+		}
+		auditDetail := map[string]any{
+			"cluster_id": cid.String(),
+			"orphans":    orphans,
+		}
+		if payload, err := json.Marshal(auditDetail); err == nil {
+			_ = q.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+				Source:       "worker",
+				Action:       "cluster.decommission.argocd_secret_orphan",
+				ResourceType: "cluster",
+				ResourceID:   cid.String(),
+				Detail:       payload,
+			})
+		}
+	}
+	deleted, mErr := q.DeleteArgoCDManagedClustersByCluster(ctx, cid)
+	if mErr != nil && firstErr == nil {
+		firstErr = fmt.Errorf("delete argocd_managed_clusters: %w", mErr)
+	}
+	counts["argocd_managed_clusters"] = deleted
 	// Flush the per-user binding cache: every user who had any cluster role
 	// on this cluster just had it removed and would otherwise see the stale
 	// binding for up to one cache TTL on the hot path.
