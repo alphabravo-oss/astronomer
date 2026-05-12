@@ -20,6 +20,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
+	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -572,6 +573,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		RBACQueries:   rbacQuerier,
 		RBACEngine:    rbacEngine,
 		Security:      securityHandler,
+		ImageVulns: func() *handler.ImageVulnHandler {
+			h := handler.NewImageVulnHandler(queries)
+			h.SetK8sRequester(requester)
+			h.SetAuditQuerier(queries)
+			h.SetLogger(logger)
+			return h
+		}(),
 		ServiceProxy:  handler.NewServiceProxyHandler(requester),
 		Workloads:     workloadHandler,
 		Hub:           hub,
@@ -661,6 +669,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	quotaEnforcer := quota.New(queries, logger)
 	quota.MustRegister()
 	quota.StartReporter(ctx, queries, logger)
+	// Sprint 062 — image vuln scanner ingest metrics. Registration is
+	// idempotent so re-init in tests is safe.
+	scanner.MustRegisterMetrics()
 	if deps.Clusters != nil {
 		deps.Clusters.SetQuotaEnforcer(quotaEnforcer)
 	}
