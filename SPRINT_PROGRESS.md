@@ -1,6 +1,6 @@
 # astronomer-go sprint progress snapshot
 
-_Updated 2026-05-12 ~19:47. Branch: `main` @ `8844890`. Live `.247` at migration head **074**, server version `8844890`._
+_Updated 2026-05-12 ~20:11. Branch: `main`. Live `.247` at migration head **077**._
 
 ## Cumulative shipped
 
@@ -14,20 +14,23 @@ URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYlt
 | 18 | Cluster groups · Vault · NetPol templates · CRD-mirror v2 | 066–069 | live |
 | 19 | Apiserver allow-list · Service mesh · Anomaly detection · Catalog ratings | 070–073 | live |
 | 20 | Platform-baseline auto-attach · kubectl image preload · empty-state CTAs | 074 | live |
+| 21 | Seeded helm repos (bitnami/aqua/jetstack/prometheus-community) · first-boot catalog sync · slug-coverage endpoint · `prometheus-node-exporter` slug fix | 075–077 | live |
 
-## Pending (sprint 21 — seeded catalogs at bootstrap)
+## Live "register a cluster → auto-install" flow is now closed
 
-Closes the last gap in the auto-attach flow uncovered during sprint 20 live testing. When the platform-baseline template auto-attaches on cluster register, the reconciler looks up each tool's slug (trivy-operator, kube-state-metrics, node-exporter, fluent-bit, cert-manager) in `helm_charts`. If the upstream `helm_repositories` haven't been registered + synced yet (the default on a fresh install), every slug resolves to nothing → all five tool installs fail per-row.
+Verified end-to-end on `.247` 2026-05-12:
+- `GET /admin/platform-settings/default-cluster-template/coverage/` → `5/5 resolved, missing_slugs: []`.
+- `POST /clusters/` → `cluster_template_applications` row inserted in 0 ms with `status=pending`.
+- Per-cluster install dispatches as soon as the agent connects.
 
-**Sprint 21 fix**: seed the chart's recommended helm_repositories at bootstrap + kick an initial `catalog:sync` so the slugs resolve out-of-the-box.
+## Pending (sprint 22 — next batch)
 
-| Repo | Charts we care about |
-|---|---|
-| Bitnami (`https://charts.bitnami.com/bitnami`) | kube-state-metrics, node-exporter, fluent-bit |
-| Aqua Security (`https://aquasecurity.github.io/helm-charts`) | trivy-operator |
-| Jetstack (`https://charts.jetstack.io`) | cert-manager |
+No specific feature scheduled yet. Candidates from the roadmap list below. Next high-leverage picks (smallest effort, biggest UX win on a fresh install):
 
-Migration **075** seeds the three rows (idempotent ON CONFLICT). Bootstrap kicks `catalog:sync` once at first-boot if the helm_charts table is empty.
+1. **Empty-state polish across remaining tabs** — apply the sprint-074 CTA pattern (Apply Platform Baseline / Install <tool>) to: Image Scans, Tools, Security/CIS scans, Metrics, Logs. Each is ~30 lines and stops a fresh install from looking dead.
+2. **Catalog chart-install page accepts `?cluster_id=`** so the sprint-074 CTAs deep-link to a pre-scoped install form.
+3. **Dedicated Image Scans tab** in the cluster-detail nav (the CTA currently lives on the CIS-scans tab as a stopgap).
+4. **Fleet selector `group_id` branch** — schema + API field shipped in sprint 066; orchestrator evaluator still uses labels-only.
 
 ## Tech-debt punch list (carry forward)
 
