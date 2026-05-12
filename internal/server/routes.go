@@ -159,12 +159,12 @@ type RouterDependencies struct {
 	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
 	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
 	PlatformSettings *handler.PlatformSettingsHandler
-	// PlatformDefaultTemplate owns
-	// /api/v1/admin/platform-settings/default-cluster-template/* (sprint
-	// 074). Manages the operator-configured default cluster_template
-	// the cluster Create handler auto-attaches to every newly-registered
-	// cluster. Nil-safe.
+	// PlatformDefaultTemplate (sprint 074) owns
+	// /api/v1/admin/platform-settings/default-cluster-template/*.
 	PlatformDefaultTemplate *handler.PlatformDefaultTemplateHandler
+	// PlatformBaselineCoverage (sprint 075) owns the read-only
+	// /coverage/ subroute reporting slug resolution status.
+	PlatformBaselineCoverage *handler.PlatformBaselineCoverageHandler
 	// SettingsCache is the shared process-local cache for platform
 	// settings, consumed by the FeatureGate middleware below. Optional
 	// — when nil, every feature-gated route falls through as enabled.
@@ -624,6 +624,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/platform-settings/default-cluster-template/", deps.PlatformDefaultTemplate.Get)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/platform-settings/default-cluster-template/", deps.PlatformDefaultTemplate.Update)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/platform-settings/default-cluster-template/reapply/{cluster_id}/", deps.PlatformDefaultTemplate.Reapply)
+		}
+
+		// Sprint 075 — read-only platform-baseline slug-coverage check.
+		if deps.PlatformBaselineCoverage != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get(
+				"/admin/platform-settings/default-cluster-template/coverage/",
+				deps.PlatformBaselineCoverage.Coverage,
+			)
 		}
 
 		// Per-tenant resource quotas (migration 051). Plan CRUD +

@@ -796,15 +796,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// per-request feature check effectively free.
 		PlatformSettings: handler.NewPlatformSettingsHandler(queries),
 		SettingsCache:    handler.NewSettingsCache(queries, 30*time.Second),
-		// Sprint 074 — platform-default cluster template. Auto-attach
-		// baseline (trivy-operator + metrics + log forwarding +
-		// cert-manager) for newly-registered clusters; PUT/reapply
-		// surface so operators can change/back-fill the default.
+		// Sprint 074 — platform-default cluster template.
 		PlatformDefaultTemplate: func() *handler.PlatformDefaultTemplateHandler {
 			h := handler.NewPlatformDefaultTemplateHandler(queries)
 			h.SetApplyQueue(queue)
 			return h
 		}(),
+		// Sprint 075: slug-coverage endpoint for the platform-baseline.
+		PlatformBaselineCoverage: handler.NewPlatformBaselineCoverageHandler(queries),
 		// Per-tenant resource quotas (migration 051). The handler is
 		// constructed first so the enforcer below can borrow the same
 		// queries surface. The enforcer wires into clusters / auth /
@@ -1128,7 +1127,72 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// controller can't dial the API server.
 	startCRDController(reconcileCtx, logger, queries, queue)
 
+	// Sprint 075: kick a first-boot catalog sync if the catalog is empty.
+	// Migration 075 seeds three well-known helm_repositories rows; without
+	// this kick, the cluster_template reconciler can't resolve its baseline
+	// slugs (trivy-operator, kube-state-metrics, node-exporter, fluent-bit,
+	// cert-manager) until the periodic catalog:sync ticker fires — which is
+	// once every 6h (see internal/worker/scheduler.go). Enqueueing here
+	// turns "wait 6 hours after fresh install" into "wait ~30s for the
+	// worker to drain the queue".
+	//
+	// Best-effort: any failure here (Redis offline, DB hiccup, marshal
+	// error) logs a warning and the periodic schedule still recovers the
+	// platform within one 6h tick. NEVER fail server startup because the
+	// enqueue didn't land.
+	kickFirstBootCatalogSync(reconcileCtx, logger, queries, queue)
+
 	return s, nil
+}
+
+// firstBootSyncCounter is the narrow DB surface kickFirstBootCatalogSync
+// needs. *sqlc.Queries satisfies it; tests inject a fake.
+type firstBootSyncCounter interface {
+	CountHelmCharts(ctx context.Context) (int64, error)
+}
+
+// firstBootSyncEnqueuer is the narrow asynq surface kickFirstBootCatalogSync
+// needs. *asynq.Client satisfies it; tests inject a recording fake.
+type firstBootSyncEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
+// kickFirstBootCatalogSync enqueues a one-shot catalog:sync when the
+// helm_charts table is empty. Idempotent: a second server start (or a
+// scheduler-driven sync that already ran) leaves the catalog non-empty
+// so this is a no-op. The 6h periodic schedule continues to handle
+// steady-state catalog refresh.
+//
+// Wired separately from the scheduler so it runs on every server start
+// (not just the leader's). asynq's redis-backed queue dedupes if two
+// replicas race; HandleCatalogSync itself uses runPeriodicTaskWithLeader
+// to make the actual sync single-flighted.
+//
+// Best-effort: any failure (Redis offline, DB hiccup, marshal error)
+// logs a warning and returns silently. NEVER fails server startup.
+func kickFirstBootCatalogSync(ctx context.Context, logger *slog.Logger, queries firstBootSyncCounter, queue firstBootSyncEnqueuer) {
+	if queries == nil || queue == nil {
+		return
+	}
+	n, err := queries.CountHelmCharts(ctx)
+	if err != nil {
+		logger.Warn("sprint075: first-boot catalog sync count failed", "error", err)
+		return
+	}
+	if n > 0 {
+		logger.Debug("sprint075: catalog already populated, skipping first-boot sync", "chart_count", n)
+		return
+	}
+	task, err := tasks.NewCatalogSyncTask(tasks.CatalogSyncPayload{})
+	if err != nil {
+		logger.Warn("sprint075: first-boot catalog sync build failed", "error", err)
+		return
+	}
+	if _, err := queue.Enqueue(task); err != nil {
+		logger.Warn("sprint075: first-boot catalog sync enqueue failed", "error", err)
+		return
+	}
+	logger.Info("sprint075: first-boot catalog sync enqueued")
 }
 
 // bootstrapLocalCluster ensures the local cluster row exists. It builds a
