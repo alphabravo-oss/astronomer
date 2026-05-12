@@ -392,6 +392,14 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/{id}/", deps.Projects.Delete)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/add-namespace/", deps.Projects.AddNamespace)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/remove-namespace/", deps.Projects.RemoveNamespace)
+			// Policy PATCH is a targeted update of just the PSS + ResourceQuota
+			// columns; gated on projects:update so an admin who can edit the
+			// project can also retune its security posture.
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/policy/", deps.Projects.UpdatePolicy)
+			// Quota-usage is read-only and reflects current cluster state, so
+			// projects:read is the right gate. Multi-cluster fanout surfaces
+			// per-cluster partial failures the way resources_search does.
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/quota-usage/", deps.Projects.QuotaUsage)
 		})
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.Projects.ListByCluster)
 	}

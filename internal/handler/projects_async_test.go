@@ -40,6 +40,12 @@ func (q *projectAsyncQuerier) CreateProject(context.Context, sqlc.CreateProjectP
 func (q *projectAsyncQuerier) UpdateProject(context.Context, sqlc.UpdateProjectParams) (sqlc.Project, error) {
 	return sqlc.Project{}, nil
 }
+func (q *projectAsyncQuerier) UpdateProjectPolicy(context.Context, sqlc.UpdateProjectPolicyParams) (sqlc.Project, error) {
+	return sqlc.Project{}, nil
+}
+func (q *projectAsyncQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {
+	return sqlc.Cluster{}, nil
+}
 func (q *projectAsyncQuerier) DeleteProject(context.Context, uuid.UUID) error { return nil }
 func (q *projectAsyncQuerier) CountProjects(context.Context) (int64, error)   { return 0, nil }
 func (q *projectAsyncQuerier) CountProjectsByCluster(context.Context, uuid.UUID) (int64, error) {

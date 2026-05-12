@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -32,6 +33,7 @@ type ProjectQuerier interface {
 	ListProjectsByCluster(ctx context.Context, arg sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error)
 	CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.Project, error)
 	UpdateProject(ctx context.Context, arg sqlc.UpdateProjectParams) (sqlc.Project, error)
+	UpdateProjectPolicy(ctx context.Context, arg sqlc.UpdateProjectPolicyParams) (sqlc.Project, error)
 	DeleteProject(ctx context.Context, id uuid.UUID) error
 	CountProjects(ctx context.Context) (int64, error)
 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
@@ -47,6 +49,11 @@ type ProjectQuerier interface {
 	ListAllProjectNamespaces(ctx context.Context) ([]sqlc.ProjectNamespace, error)
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error)
 	MarkProjectNamespaceReconciled(ctx context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) error
+
+	// Quota usage endpoint needs the cluster display name for the response
+	// shape (one row per (cluster, namespace)). The full Cluster row is
+	// already loaded so we don't have to wedge a name-only query.
+	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 }
 
 // ProjectHandler handles project endpoints.
@@ -141,38 +148,70 @@ func (h *ProjectHandler) logger() *slog.Logger {
 	return slog.Default()
 }
 
+// Default Pod Security profile for net-new projects created through the API.
+// Existing rows keep the migration-time default ('privileged') to avoid
+// unexpectedly tightening running workloads; new projects opt into baseline
+// because that's the K8s-recommended posture and the spec called it out as
+// the default for new resources.
+const defaultPodSecurityProfile = "baseline"
+
+// validPodSecurityProfiles is the closed enum enforced both at the DB layer
+// (via the CHECK constraint in migration 040) and by the policy PATCH handler.
+var validPodSecurityProfiles = map[string]struct{}{
+	"privileged": {},
+	"baseline":   {},
+	"restricted": {},
+}
+
+func isValidPodSecurityProfile(profile string) bool {
+	_, ok := validPodSecurityProfiles[strings.ToLower(strings.TrimSpace(profile))]
+	return ok
+}
+
 // ProjectResponse represents a project in API responses. The B3 fields
 // (limit_range, network_policy_mode) are surfaced so the UI can show
 // enforcement settings; legacy fields stay where they were so existing
 // frontends don't break on a partial deploy.
+//
+// Migration 040 added pod_security_profile + resource_quota_{cpu,memory,pod}
+// fields. They're appended to the response shape; clients that ignore unknown
+// fields keep working unchanged.
 type ProjectResponse struct {
-	ID                string          `json:"id"`
-	Name              string          `json:"name"`
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	ClusterID         string          `json:"cluster_id"`
-	Namespaces        json.RawMessage `json:"namespaces"`
-	ResourceQuota     json.RawMessage `json:"resource_quota"`
-	LimitRange        json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode string          `json:"network_policy_mode"`
-	CreatedByID       *string         `json:"created_by_id"`
-	CreatedAt         string          `json:"created_at"`
-	UpdatedAt         string          `json:"updated_at"`
+	ID                       string          `json:"id"`
+	Name                     string          `json:"name"`
+	DisplayName              string          `json:"display_name"`
+	Description              string          `json:"description"`
+	ClusterID                string          `json:"cluster_id"`
+	Namespaces               json.RawMessage `json:"namespaces"`
+	ResourceQuota            json.RawMessage `json:"resource_quota"`
+	LimitRange               json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode        string          `json:"network_policy_mode"`
+	PodSecurityProfile       string          `json:"pod_security_profile"`
+	ResourceQuotaCpuLimit    string          `json:"resource_quota_cpu_limit"`
+	ResourceQuotaMemoryLimit string          `json:"resource_quota_memory_limit"`
+	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
+	CreatedByID              *string         `json:"created_by_id"`
+	CreatedAt                string          `json:"created_at"`
+	UpdatedAt                string          `json:"updated_at"`
 }
 
 func projectToResponse(p sqlc.Project) ProjectResponse {
 	resp := ProjectResponse{
-		ID:                p.ID.String(),
-		Name:              p.Name,
-		DisplayName:       p.DisplayName,
-		Description:       p.Description,
-		ClusterID:         p.ClusterID.String(),
-		Namespaces:        p.Namespaces,
-		ResourceQuota:     p.ResourceQuota,
-		LimitRange:        p.LimitRange,
-		NetworkPolicyMode: p.NetworkPolicyMode,
-		CreatedAt:         p.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:         p.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ID:                       p.ID.String(),
+		Name:                     p.Name,
+		DisplayName:              p.DisplayName,
+		Description:              p.Description,
+		ClusterID:                p.ClusterID.String(),
+		Namespaces:               p.Namespaces,
+		ResourceQuota:            p.ResourceQuota,
+		LimitRange:               p.LimitRange,
+		NetworkPolicyMode:        p.NetworkPolicyMode,
+		PodSecurityProfile:       p.PodSecurityProfile,
+		ResourceQuotaCpuLimit:    p.ResourceQuotaCpuLimit,
+		ResourceQuotaMemoryLimit: p.ResourceQuotaMemoryLimit,
+		ResourceQuotaPodCount:    p.ResourceQuotaPodCount,
+		CreatedAt:                p.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:                p.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
 	if resp.LimitRange == nil {
 		resp.LimitRange = json.RawMessage(`{}`)
@@ -188,25 +227,54 @@ func projectToResponse(p sqlc.Project) ProjectResponse {
 }
 
 // CreateProjectRequest represents the request body for creating a project.
+//
+// Policy fields are pointers so an older client (which doesn't know about
+// them yet) can omit them and pick up the defaults rather than reset existing
+// rows to the zero value. Field-by-field semantics:
+//
+//   - PodSecurityProfile: omitted ⇒ defaultPodSecurityProfile (baseline).
+//   - ResourceQuota*:     omitted ⇒ unbounded (empty string / 0).
 type CreateProjectRequest struct {
-	Name              string          `json:"name"`
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	ClusterID         string          `json:"cluster_id"`
-	Namespaces        json.RawMessage `json:"namespaces"`
-	ResourceQuota     json.RawMessage `json:"resource_quota"`
-	LimitRange        json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode string          `json:"network_policy_mode"`
+	Name                     string          `json:"name"`
+	DisplayName              string          `json:"display_name"`
+	Description              string          `json:"description"`
+	ClusterID                string          `json:"cluster_id"`
+	Namespaces               json.RawMessage `json:"namespaces"`
+	ResourceQuota            json.RawMessage `json:"resource_quota"`
+	LimitRange               json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode        string          `json:"network_policy_mode"`
+	PodSecurityProfile       *string         `json:"pod_security_profile,omitempty"`
+	ResourceQuotaCpuLimit    *string         `json:"resource_quota_cpu_limit,omitempty"`
+	ResourceQuotaMemoryLimit *string         `json:"resource_quota_memory_limit,omitempty"`
+	ResourceQuotaPodCount    *int32          `json:"resource_quota_pod_count,omitempty"`
 }
 
 // UpdateProjectRequest represents the request body for updating a project.
+//
+// Policy fields stay pointer-typed so an old client that doesn't know about
+// the new columns can still PUT the project without nuking them. If a field
+// is omitted from the payload, the existing DB value is preserved (the
+// handler loads the row first to copy missing fields through to UpdateProject).
 type UpdateProjectRequest struct {
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	Namespaces        json.RawMessage `json:"namespaces"`
-	ResourceQuota     json.RawMessage `json:"resource_quota"`
-	LimitRange        json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode string          `json:"network_policy_mode"`
+	DisplayName              string          `json:"display_name"`
+	Description              string          `json:"description"`
+	Namespaces               json.RawMessage `json:"namespaces"`
+	ResourceQuota            json.RawMessage `json:"resource_quota"`
+	LimitRange               json.RawMessage `json:"limit_range"`
+	NetworkPolicyMode        string          `json:"network_policy_mode"`
+	PodSecurityProfile       *string         `json:"pod_security_profile,omitempty"`
+	ResourceQuotaCpuLimit    *string         `json:"resource_quota_cpu_limit,omitempty"`
+	ResourceQuotaMemoryLimit *string         `json:"resource_quota_memory_limit,omitempty"`
+	ResourceQuotaPodCount    *int32          `json:"resource_quota_pod_count,omitempty"`
+}
+
+// UpdateProjectPolicyRequest is the body for PATCH /projects/{id}/policy/.
+// All fields are optional; missing ones leave the existing value in place.
+type UpdateProjectPolicyRequest struct {
+	PodSecurityProfile       *string `json:"pod_security_profile,omitempty"`
+	ResourceQuotaCpuLimit    *string `json:"resource_quota_cpu_limit,omitempty"`
+	ResourceQuotaMemoryLimit *string `json:"resource_quota_memory_limit,omitempty"`
+	ResourceQuotaPodCount    *int32  `json:"resource_quota_pod_count,omitempty"`
 }
 
 // List handles GET /api/v1/projects/.
@@ -280,16 +348,46 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		req.NetworkPolicyMode = "none"
 	}
 
+	// Per-project policy defaults (migration 040). New projects default to
+	// the recommended PSS baseline; quota fields default to unbounded.
+	pssProfile := defaultPodSecurityProfile
+	if req.PodSecurityProfile != nil {
+		pssProfile = strings.TrimSpace(*req.PodSecurityProfile)
+		if pssProfile == "" {
+			pssProfile = defaultPodSecurityProfile
+		}
+		if !isValidPodSecurityProfile(pssProfile) {
+			RespondError(w, http.StatusBadRequest, "validation_error", "Invalid pod_security_profile (must be privileged | baseline | restricted)")
+			return
+		}
+	}
+	cpuLimit := ""
+	if req.ResourceQuotaCpuLimit != nil {
+		cpuLimit = strings.TrimSpace(*req.ResourceQuotaCpuLimit)
+	}
+	memLimit := ""
+	if req.ResourceQuotaMemoryLimit != nil {
+		memLimit = strings.TrimSpace(*req.ResourceQuotaMemoryLimit)
+	}
+	var podCount int32
+	if req.ResourceQuotaPodCount != nil && *req.ResourceQuotaPodCount > 0 {
+		podCount = *req.ResourceQuotaPodCount
+	}
+
 	project, err := h.queries.CreateProject(r.Context(), sqlc.CreateProjectParams{
-		Name:              req.Name,
-		DisplayName:       req.DisplayName,
-		Description:       req.Description,
-		ClusterID:         clusterID,
-		Namespaces:        req.Namespaces,
-		ResourceQuota:     req.ResourceQuota,
-		LimitRange:        req.LimitRange,
-		NetworkPolicyMode: req.NetworkPolicyMode,
-		CreatedByID:       createdByID,
+		Name:                     req.Name,
+		DisplayName:              req.DisplayName,
+		Description:              req.Description,
+		ClusterID:                clusterID,
+		Namespaces:               req.Namespaces,
+		ResourceQuota:            req.ResourceQuota,
+		LimitRange:               req.LimitRange,
+		NetworkPolicyMode:        req.NetworkPolicyMode,
+		CreatedByID:              createdByID,
+		PodSecurityProfile:       pssProfile,
+		ResourceQuotaCpuLimit:    cpuLimit,
+		ResourceQuotaMemoryLimit: memLimit,
+		ResourceQuotaPodCount:    podCount,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create project")
@@ -352,14 +450,61 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		req.NetworkPolicyMode = "none"
 	}
 
+	// Preserve existing policy fields when the client omits them. An old
+	// client (pre-040) doesn't send these columns; without this load it would
+	// reset them to "" on every PUT.
+	existing, err := h.queries.GetProjectByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+	pssProfile := existing.PodSecurityProfile
+	if req.PodSecurityProfile != nil {
+		candidate := strings.TrimSpace(*req.PodSecurityProfile)
+		if candidate == "" {
+			candidate = defaultPodSecurityProfile
+		}
+		if !isValidPodSecurityProfile(candidate) {
+			RespondError(w, http.StatusBadRequest, "validation_error", "Invalid pod_security_profile (must be privileged | baseline | restricted)")
+			return
+		}
+		pssProfile = candidate
+	}
+	if pssProfile == "" {
+		// Existing rows that pre-date migration 040 still have whatever the
+		// CHECK constraint defaulted ('privileged'); guard against the empty
+		// case anyway so a misconfigured client can't bypass the constraint.
+		pssProfile = "privileged"
+	}
+	cpuLimit := existing.ResourceQuotaCpuLimit
+	if req.ResourceQuotaCpuLimit != nil {
+		cpuLimit = strings.TrimSpace(*req.ResourceQuotaCpuLimit)
+	}
+	memLimit := existing.ResourceQuotaMemoryLimit
+	if req.ResourceQuotaMemoryLimit != nil {
+		memLimit = strings.TrimSpace(*req.ResourceQuotaMemoryLimit)
+	}
+	podCount := existing.ResourceQuotaPodCount
+	if req.ResourceQuotaPodCount != nil {
+		if *req.ResourceQuotaPodCount < 0 {
+			podCount = 0
+		} else {
+			podCount = *req.ResourceQuotaPodCount
+		}
+	}
+
 	project, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
-		ID:                id,
-		DisplayName:       req.DisplayName,
-		Description:       req.Description,
-		Namespaces:        req.Namespaces,
-		ResourceQuota:     req.ResourceQuota,
-		LimitRange:        req.LimitRange,
-		NetworkPolicyMode: req.NetworkPolicyMode,
+		ID:                       id,
+		DisplayName:              req.DisplayName,
+		Description:              req.Description,
+		Namespaces:               req.Namespaces,
+		ResourceQuota:            req.ResourceQuota,
+		LimitRange:               req.LimitRange,
+		NetworkPolicyMode:        req.NetworkPolicyMode,
+		PodSecurityProfile:       pssProfile,
+		ResourceQuotaCpuLimit:    cpuLimit,
+		ResourceQuotaMemoryLimit: memLimit,
+		ResourceQuotaPodCount:    podCount,
 	})
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Project not found")
@@ -375,6 +520,230 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, projectToResponse(project))
+}
+
+// UpdatePolicy handles PATCH /api/v1/projects/{id}/policy/.
+//
+// Updates only the per-project policy fields (pod_security_profile, the three
+// resource_quota_* limits). The next reconciler tick picks up the new policy
+// — we don't re-enqueue every namespace here because the periodic sweep is
+// cheap and policy changes are idempotent at apply-time.
+//
+// All four fields are optional. Missing fields keep their current value, so
+// a caller can change just the PSS profile without resending quota numbers.
+func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		return
+	}
+
+	var req UpdateProjectPolicyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+
+	existing, err := h.queries.GetProjectByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+
+	pssProfile := existing.PodSecurityProfile
+	if req.PodSecurityProfile != nil {
+		candidate := strings.TrimSpace(*req.PodSecurityProfile)
+		if !isValidPodSecurityProfile(candidate) {
+			RespondError(w, http.StatusBadRequest, "validation_error", "Invalid pod_security_profile (must be privileged | baseline | restricted)")
+			return
+		}
+		pssProfile = strings.ToLower(candidate)
+	}
+	cpuLimit := existing.ResourceQuotaCpuLimit
+	if req.ResourceQuotaCpuLimit != nil {
+		cpuLimit = strings.TrimSpace(*req.ResourceQuotaCpuLimit)
+	}
+	memLimit := existing.ResourceQuotaMemoryLimit
+	if req.ResourceQuotaMemoryLimit != nil {
+		memLimit = strings.TrimSpace(*req.ResourceQuotaMemoryLimit)
+	}
+	podCount := existing.ResourceQuotaPodCount
+	if req.ResourceQuotaPodCount != nil {
+		if *req.ResourceQuotaPodCount < 0 {
+			podCount = 0
+		} else {
+			podCount = *req.ResourceQuotaPodCount
+		}
+	}
+
+	updated, err := h.queries.UpdateProjectPolicy(r.Context(), sqlc.UpdateProjectPolicyParams{
+		ID:                       id,
+		PodSecurityProfile:       pssProfile,
+		ResourceQuotaCpuLimit:    cpuLimit,
+		ResourceQuotaMemoryLimit: memLimit,
+		ResourceQuotaPodCount:    podCount,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update project policy")
+		return
+	}
+	h.recordProjectAudit(r, "project.update_policy", updated, map[string]any{
+		"pod_security_profile":        updated.PodSecurityProfile,
+		"resource_quota_cpu_limit":    updated.ResourceQuotaCpuLimit,
+		"resource_quota_memory_limit": updated.ResourceQuotaMemoryLimit,
+		"resource_quota_pod_count":    updated.ResourceQuotaPodCount,
+	})
+	RespondJSON(w, http.StatusOK, projectToResponse(updated))
+}
+
+// QuotaUsage handles GET /api/v1/projects/{id}/quota-usage/.
+//
+// For each (cluster, namespace) pair owned by the project, fan out to the
+// agent and fetch the live ResourceQuota.status.used + spec.hard for the
+// managed astronomer-project-quota object. Errors are surfaced per-cluster
+// in the same shape resources_search.go uses so a single broken tunnel
+// doesn't kill the whole response.
+func (h *ProjectHandler) QuotaUsage(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		return
+	}
+	if h.requester == nil {
+		RespondError(w, http.StatusServiceUnavailable, "tunnel_unavailable", "Cluster tunnel is not configured")
+		return
+	}
+
+	project, err := h.queries.GetProjectByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Project not found")
+		return
+	}
+
+	rows, err := h.queries.ListProjectNamespaces(r.Context(), project.ID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list project namespaces")
+		return
+	}
+
+	type quotaItem struct {
+		ClusterID   string         `json:"cluster_id"`
+		ClusterName string         `json:"cluster_name"`
+		Namespace   string         `json:"namespace"`
+		Used        map[string]any `json:"used"`
+		Hard        map[string]any `json:"hard"`
+	}
+	type quotaErr struct {
+		ClusterID   string `json:"cluster_id"`
+		ClusterName string `json:"cluster_name"`
+		Namespace   string `json:"namespace"`
+		Error       string `json:"error"`
+	}
+
+	items := make([]quotaItem, 0, len(rows))
+	errs := make([]quotaErr, 0)
+	clusterNameCache := map[uuid.UUID]string{}
+	for _, row := range rows {
+		clusterName, ok := clusterNameCache[row.ClusterID]
+		if !ok {
+			cluster, cerr := h.queries.GetClusterByID(r.Context(), row.ClusterID)
+			if cerr == nil {
+				clusterName = clusterDisplayName(cluster)
+			} else {
+				clusterName = row.ClusterID.String()
+			}
+			clusterNameCache[row.ClusterID] = clusterName
+		}
+
+		path := "/api/v1/namespaces/" + row.Namespace + "/resourcequotas/astronomer-project-quota"
+		resp, derr := h.requester.Do(r.Context(), row.ClusterID.String(), http.MethodGet, path, nil, requestHeaders(""))
+		if derr != nil {
+			errs = append(errs, quotaErr{
+				ClusterID:   row.ClusterID.String(),
+				ClusterName: clusterName,
+				Namespace:   row.Namespace,
+				Error:       derr.Error(),
+			})
+			continue
+		}
+		// 404 = no quota object yet. Surface it as an empty result rather
+		// than as a hard error — the project may simply have unbounded
+		// policy in this namespace.
+		if resp.StatusCode == http.StatusNotFound {
+			items = append(items, quotaItem{
+				ClusterID:   row.ClusterID.String(),
+				ClusterName: clusterName,
+				Namespace:   row.Namespace,
+				Used:        map[string]any{},
+				Hard:        map[string]any{},
+			})
+			continue
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			errs = append(errs, quotaErr{
+				ClusterID:   row.ClusterID.String(),
+				ClusterName: clusterName,
+				Namespace:   row.Namespace,
+				Error:       fmt.Sprintf("agent returned %d", resp.StatusCode),
+			})
+			continue
+		}
+		body, derr := decodeResponseBody(resp)
+		if derr != nil {
+			errs = append(errs, quotaErr{
+				ClusterID:   row.ClusterID.String(),
+				ClusterName: clusterName,
+				Namespace:   row.Namespace,
+				Error:       "decode body: " + derr.Error(),
+			})
+			continue
+		}
+		var doc struct {
+			Spec struct {
+				Hard map[string]any `json:"hard"`
+			} `json:"spec"`
+			Status struct {
+				Used map[string]any `json:"used"`
+				Hard map[string]any `json:"hard"`
+			} `json:"status"`
+		}
+		if len(body) > 0 {
+			if uerr := json.Unmarshal(body, &doc); uerr != nil {
+				errs = append(errs, quotaErr{
+					ClusterID:   row.ClusterID.String(),
+					ClusterName: clusterName,
+					Namespace:   row.Namespace,
+					Error:       "unmarshal quota: " + uerr.Error(),
+				})
+				continue
+			}
+		}
+		hard := doc.Status.Hard
+		if hard == nil {
+			hard = doc.Spec.Hard
+		}
+		if hard == nil {
+			hard = map[string]any{}
+		}
+		used := doc.Status.Used
+		if used == nil {
+			used = map[string]any{}
+		}
+		items = append(items, quotaItem{
+			ClusterID:   row.ClusterID.String(),
+			ClusterName: clusterName,
+			Namespace:   row.Namespace,
+			Used:        used,
+			Hard:        hard,
+		})
+	}
+
+	RespondJSON(w, http.StatusOK, map[string]any{
+		"results": items,
+		"errors":  errs,
+	})
 }
 
 // Delete handles DELETE /api/v1/projects/{id}/.
@@ -515,13 +884,17 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
-		ID:                id,
-		DisplayName:       project.DisplayName,
-		Description:       project.Description,
-		Namespaces:        encoded,
-		ResourceQuota:     defaultIfEmpty(project.ResourceQuota, `{}`),
-		LimitRange:        defaultIfEmpty(project.LimitRange, `{}`),
-		NetworkPolicyMode: defaultMode(project.NetworkPolicyMode),
+		ID:                       id,
+		DisplayName:              project.DisplayName,
+		Description:              project.Description,
+		Namespaces:               encoded,
+		ResourceQuota:            defaultIfEmpty(project.ResourceQuota, `{}`),
+		LimitRange:               defaultIfEmpty(project.LimitRange, `{}`),
+		NetworkPolicyMode:        defaultMode(project.NetworkPolicyMode),
+		PodSecurityProfile:       project.PodSecurityProfile,
+		ResourceQuotaCpuLimit:    project.ResourceQuotaCpuLimit,
+		ResourceQuotaMemoryLimit: project.ResourceQuotaMemoryLimit,
+		ResourceQuotaPodCount:    project.ResourceQuotaPodCount,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update project")
@@ -587,13 +960,17 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, req.Namespace)
 
 	updated, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
-		ID:                id,
-		DisplayName:       project.DisplayName,
-		Description:       project.Description,
-		Namespaces:        encoded,
-		ResourceQuota:     defaultIfEmpty(project.ResourceQuota, `{}`),
-		LimitRange:        defaultIfEmpty(project.LimitRange, `{}`),
-		NetworkPolicyMode: defaultMode(project.NetworkPolicyMode),
+		ID:                       id,
+		DisplayName:              project.DisplayName,
+		Description:              project.Description,
+		Namespaces:               encoded,
+		ResourceQuota:            defaultIfEmpty(project.ResourceQuota, `{}`),
+		LimitRange:               defaultIfEmpty(project.LimitRange, `{}`),
+		NetworkPolicyMode:        defaultMode(project.NetworkPolicyMode),
+		PodSecurityProfile:       project.PodSecurityProfile,
+		ResourceQuotaCpuLimit:    project.ResourceQuotaCpuLimit,
+		ResourceQuotaMemoryLimit: project.ResourceQuotaMemoryLimit,
+		ResourceQuotaPodCount:    project.ResourceQuotaPodCount,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update project")
