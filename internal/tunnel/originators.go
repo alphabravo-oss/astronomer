@@ -101,6 +101,68 @@ const rbacSyncTimeout = 60 * time.Second
 // agent applies its own per-call timeout independently.
 const serviceProxyTimeout = 60 * time.Second
 
+// roundTrip sends a typed payload to the agent for clusterID and waits
+// for the matching reply. The reply is JSON-unmarshaled into Resp.
+// Per-call timeout caps the wait; ctx-cancellation is honored.
+//
+// The outbound message sets both StreamID and RequestID to the same
+// generated UUID so agent handlers that address replies by either field
+// (e.g. RBAC sync uses RequestID; helm + service-proxy use StreamID)
+// route correctly without per-call branching.
+//
+// Used by SendHelmRequest, SyncRBAC, ServiceProxyRequest — see those
+// wrappers for typed entry points + span instrumentation + post-checks.
+func roundTrip[Resp any](
+	ctx context.Context,
+	h *Hub,
+	clusterID string,
+	msgType protocol.MessageType,
+	payload any,
+	timeout time.Duration,
+) (*Resp, error) {
+	agent := h.GetAgent(clusterID)
+	if agent == nil {
+		return nil, fmt.Errorf("cluster agent not connected")
+	}
+	streamID := uuid.NewString()
+	stream, err := agent.Streams.CreateStream(streamID)
+	if err != nil {
+		return nil, err
+	}
+	defer agent.Streams.CloseStream(streamID)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.SendToAgent(clusterID, &protocol.Message{
+		Type:      msgType,
+		StreamID:  streamID,
+		RequestID: streamID,
+		ClusterID: clusterID,
+		Timestamp: time.Now().UTC(),
+		Payload:   body,
+	}); err != nil {
+		return nil, err
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	select {
+	case data := <-stream.DataCh:
+		var result Resp
+		if err := json.Unmarshal(data, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
+	case <-stream.DoneCh:
+		return nil, errors.New("stream closed unexpectedly")
+	case <-waitCtx.Done():
+		return nil, waitCtx.Err()
+	}
+}
+
 // SendHelmRequest dispatches a HELM_INSTALL / UPGRADE / UNINSTALL / ROLLBACK
 // / STATUS message through the tunnel and waits for the matching HELM_RESULT.
 //
@@ -130,140 +192,29 @@ func (h *Hub) SendHelmRequest(ctx context.Context, clusterID string, msgType pro
 		return nil, fmt.Errorf("invalid helm message type %q", msgType)
 	}
 
-	agent := h.GetAgent(clusterID)
-	if agent == nil {
-		return nil, fmt.Errorf("cluster agent not connected")
-	}
-
-	streamID := uuid.NewString()
-	stream, err := agent.Streams.CreateStream(streamID)
+	reply, err = roundTrip[protocol.HelmResultPayload](ctx, h, clusterID, msgType, payload, helmTimeout)
 	if err != nil {
-		return nil, err
+		return reply, err
 	}
-	defer agent.Streams.CloseStream(streamID)
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
+	if !reply.Success && reply.Error != "" {
+		return reply, errors.New(reply.Error)
 	}
-	if err := h.SendToAgent(clusterID, &protocol.Message{
-		Type:      msgType,
-		StreamID:  streamID,
-		ClusterID: clusterID,
-		Timestamp: time.Now().UTC(),
-		Payload:   body,
-	}); err != nil {
-		return nil, err
-	}
-
-	waitCtx, cancel := context.WithTimeout(ctx, helmTimeout)
-	defer cancel()
-
-	select {
-	case data := <-stream.DataCh:
-		var result protocol.HelmResultPayload
-		if err := json.Unmarshal(data, &result); err != nil {
-			return nil, err
-		}
-		if !result.Success && result.Error != "" {
-			return &result, errors.New(result.Error)
-		}
-		return &result, nil
-	case <-stream.DoneCh:
-		return nil, errors.New("helm stream closed unexpectedly")
-	case <-waitCtx.Done():
-		return nil, waitCtx.Err()
-	}
+	return reply, nil
 }
 
 // SyncRBAC dispatches an RBAC_SYNC_REQUEST and waits for the RBAC_SYNC_RESULT.
+//
+// The agent replies with RequestID only (no StreamID); roundTrip sets both
+// fields on the outbound message so the server's stream router picks up
+// the reply via its RequestID fallback.
 func (h *Hub) SyncRBAC(ctx context.Context, clusterID string, payload protocol.RBACSyncRequestPayload) (*RBACReply, error) {
-	agent := h.GetAgent(clusterID)
-	if agent == nil {
-		return nil, fmt.Errorf("cluster agent not connected")
-	}
-	streamID := uuid.NewString()
-	stream, err := agent.Streams.CreateStream(streamID)
-	if err != nil {
-		return nil, err
-	}
-	defer agent.Streams.CloseStream(streamID)
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	if err := h.SendToAgent(clusterID, &protocol.Message{
-		Type:      protocol.MsgRBACSyncRequest,
-		StreamID:  streamID,
-		RequestID: streamID, // agent uses RequestID to address the reply
-		ClusterID: clusterID,
-		Timestamp: time.Now().UTC(),
-		Payload:   body,
-	}); err != nil {
-		return nil, err
-	}
-
-	waitCtx, cancel := context.WithTimeout(ctx, rbacSyncTimeout)
-	defer cancel()
-
-	select {
-	case data := <-stream.DataCh:
-		var out protocol.RBACSyncResultPayload
-		if err := json.Unmarshal(data, &out); err != nil {
-			return nil, err
-		}
-		return &out, nil
-	case <-stream.DoneCh:
-		return nil, errors.New("rbac sync stream closed unexpectedly")
-	case <-waitCtx.Done():
-		return nil, waitCtx.Err()
-	}
+	return roundTrip[protocol.RBACSyncResultPayload](ctx, h, clusterID, protocol.MsgRBACSyncRequest, payload, rbacSyncTimeout)
 }
 
 // ServiceProxyRequest dispatches a SERVICE_PROXY_REQUEST and waits for the
 // SERVICE_PROXY_RESPONSE.
 func (h *Hub) ServiceProxyRequest(ctx context.Context, clusterID string, payload protocol.ServiceProxyRequestPayload) (*ServiceProxyReply, error) {
-	agent := h.GetAgent(clusterID)
-	if agent == nil {
-		return nil, fmt.Errorf("cluster agent not connected")
-	}
-	streamID := uuid.NewString()
-	stream, err := agent.Streams.CreateStream(streamID)
-	if err != nil {
-		return nil, err
-	}
-	defer agent.Streams.CloseStream(streamID)
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	if err := h.SendToAgent(clusterID, &protocol.Message{
-		Type:      protocol.MsgServiceProxyRequest,
-		StreamID:  streamID,
-		ClusterID: clusterID,
-		Timestamp: time.Now().UTC(),
-		Payload:   body,
-	}); err != nil {
-		return nil, err
-	}
-
-	waitCtx, cancel := context.WithTimeout(ctx, serviceProxyTimeout)
-	defer cancel()
-
-	select {
-	case data := <-stream.DataCh:
-		var out protocol.ServiceProxyResponsePayload
-		if err := json.Unmarshal(data, &out); err != nil {
-			return nil, err
-		}
-		return &out, nil
-	case <-stream.DoneCh:
-		return nil, errors.New("service proxy stream closed unexpectedly")
-	case <-waitCtx.Done():
-		return nil, waitCtx.Err()
-	}
+	return roundTrip[protocol.ServiceProxyResponsePayload](ctx, h, clusterID, protocol.MsgServiceProxyRequest, payload, serviceProxyTimeout)
 }
 
 // StartLogStream sends LOG_START and returns a LogStream whose Lines channel
