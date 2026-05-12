@@ -75,6 +75,15 @@ type Config struct {
 	TOTPIssuer  string `mapstructure:"totp_issuer"`
 	TOTPRequire bool   `mapstructure:"totp_require"`
 
+	// In-browser kubectl shell (migration 065 / sprint 17). Default
+	// false — operators flip this on per-install once their audit-log
+	// retention is sized for the kubectl_session_commands rows. When
+	// disabled the handler is not wired and the routes return 404.
+	KubectlShellEnabled            bool   `mapstructure:"kubectl_shell_enabled"`
+	KubectlShellImage              string `mapstructure:"kubectl_shell_image"`
+	KubectlShellIdleTimeoutMinutes int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
+	KubectlShellSessionHardCapHours int   `mapstructure:"kubectl_shell_session_hard_cap_hours"`
+
 	// ArgoCDUIUpstream is the in-cluster URL of argocd-server. The /argocd/*
 	// reverse proxy mounted on the public Astronomer router forwards browser
 	// traffic here after Astronomer's JWT/cookie auth has cleared. ArgoCD
@@ -140,6 +149,14 @@ func Load() (*Config, error) {
 	v.SetDefault("lockout_duration_minutes", 15)
 	v.SetDefault("totp_issuer", "Astronomer")
 	v.SetDefault("totp_require", false)
+	v.SetDefault("kubectl_shell_enabled", false)
+	v.SetDefault("kubectl_shell_image", "bitnami/kubectl:1.31")
+	v.SetDefault("kubectl_shell_idle_timeout_minutes", 30)
+	v.SetDefault("kubectl_shell_session_hard_cap_hours", 4)
+	v.BindEnv("kubectl_shell_enabled")
+	v.BindEnv("kubectl_shell_image")
+	v.BindEnv("kubectl_shell_idle_timeout_minutes")
+	v.BindEnv("kubectl_shell_session_hard_cap_hours")
 	v.SetDefault("server_metrics_addr", ":9090")
 	v.SetDefault("worker_metrics_addr", ":9090")
 	v.SetDefault("argocd_ui_upstream", "http://argocd-server.argocd.svc.cluster.local:80")
