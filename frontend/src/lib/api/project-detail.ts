@@ -332,3 +332,106 @@ export async function getClusterTemplateBoundClusters(
   );
   return res.data.data;
 }
+
+// ============================================================
+// Project catalogs (BYO Helm repos — migration 061)
+// ============================================================
+
+/**
+ * Wire shape returned by /api/v1/projects/{id}/catalogs/. The `visibility`
+ * field discriminates how the UI should badge each row:
+ *
+ *   - "own"               → project-owned (private) catalog.
+ *   - "subscribed_public" → global catalog the project has explicitly
+ *                            opted into; unsubscribe drops only the row.
+ *   - "public"            → global catalog with no explicit subscription;
+ *                            still browseable because globals are
+ *                            universally visible.
+ *   - "foreign_private"   → another project's private catalog. Only ever
+ *                            returned to superusers via the admin
+ *                            include_project_owned path.
+ */
+export interface ProjectCatalog {
+  id: string;
+  name: string;
+  url: string;
+  repoType: string;
+  description: string;
+  authType: string;
+  enabled: boolean;
+  ownerProjectId: string | null;
+  visibility: 'own' | 'subscribed_public' | 'public' | 'foreign_private';
+  createdAt: string;
+  updatedAt: string;
+  lastSyncedAt?: string;
+}
+
+export interface CreateProjectCatalogRequest {
+  name: string;
+  url: string;
+  repoType?: string;
+  description?: string;
+  authType?: string;
+  authConfig?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface HelmChartSummary {
+  id: string;
+  repositoryId: string;
+  name: string;
+  displayName: string;
+  description: string;
+  iconUrl: string;
+  homeUrl: string;
+  category: string;
+  deprecated: boolean;
+}
+
+export async function listProjectCatalogs(projectId: string): Promise<ProjectCatalog[]> {
+  const res = await api.get<APIResponse<ProjectCatalog[]>>(`/projects/${projectId}/catalogs`);
+  return res.data.data;
+}
+
+export async function createProjectCatalog(
+  projectId: string,
+  body: CreateProjectCatalogRequest,
+): Promise<ProjectCatalog> {
+  const res = await api.post<APIResponse<ProjectCatalog>>(
+    `/projects/${projectId}/catalogs`,
+    body,
+  );
+  return res.data.data;
+}
+
+export async function subscribeProjectCatalog(
+  projectId: string,
+  catalogId: string,
+): Promise<void> {
+  await api.post(`/projects/${projectId}/catalogs/${catalogId}/subscribe`);
+}
+
+/**
+ * Bifurcated semantics in one endpoint:
+ *  - When the catalog is project-owned by `projectId`, this DELETES the
+ *    catalog row entirely (CASCADE drops charts + subscriptions).
+ *  - Otherwise it removes only the subscription row.
+ * The audit trail emits distinct keys so the two cases stay distinguishable
+ * after the fact.
+ */
+export async function deleteProjectCatalog(
+  projectId: string,
+  catalogId: string,
+): Promise<void> {
+  await api.delete(`/projects/${projectId}/catalogs/${catalogId}`);
+}
+
+export async function listProjectCatalogCharts(
+  projectId: string,
+  catalogId: string,
+): Promise<HelmChartSummary[]> {
+  const res = await api.get<APIResponse<HelmChartSummary[]>>(
+    `/projects/${projectId}/catalogs/${catalogId}/charts`,
+  );
+  return res.data.data;
+}

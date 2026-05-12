@@ -34,6 +34,10 @@ export const projectDetailKeys = {
   cloudCredential: (projectId: string, credentialId: string) =>
     ['projects', 'detail', projectId, 'cloud-credentials', credentialId] as const,
   cloudCredentialProviders: ['cloud-credentials', 'providers'] as const,
+  // BYO catalogs (migration 061).
+  catalogs: (projectId: string) => ['projects', 'detail', projectId, 'catalogs'] as const,
+  catalogCharts: (projectId: string, catalogId: string) =>
+    ['projects', 'detail', projectId, 'catalogs', catalogId, 'charts'] as const,
 };
 
 export const clusterTemplateKeys = {
@@ -294,4 +298,67 @@ export function canReadClusterTemplates(user: RoleHolder): boolean {
 
 export function canWriteClusterTemplates(user: RoleHolder): boolean {
   return hasPermission(user, 'cluster_templates:write');
+}
+
+// ============================================================
+// Project catalogs (BYO Helm — migration 061)
+// ============================================================
+
+export function useProjectCatalogs(projectId: string) {
+  return useQuery({
+    queryKey: projectDetailKeys.catalogs(projectId),
+    queryFn: () => api.listProjectCatalogs(projectId),
+    enabled: !!projectId,
+  });
+}
+
+export function useProjectCatalogCharts(projectId: string, catalogId: string | undefined) {
+  return useQuery({
+    queryKey: projectDetailKeys.catalogCharts(projectId, catalogId || ''),
+    queryFn: () => api.listProjectCatalogCharts(projectId, catalogId as string),
+    enabled: !!projectId && !!catalogId,
+  });
+}
+
+export function useCreateProjectCatalog(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: api.CreateProjectCatalogRequest) =>
+      api.createProjectCatalog(projectId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
+      toast.success('Catalog created');
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to create catalog: ${err.message}`);
+    },
+  });
+}
+
+export function useSubscribeProjectCatalog(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (catalogId: string) => api.subscribeProjectCatalog(projectId, catalogId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
+      toast.success('Subscribed to catalog');
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to subscribe: ${err.message}`);
+    },
+  });
+}
+
+export function useDeleteProjectCatalog(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (catalogId: string) => api.deleteProjectCatalog(projectId, catalogId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
+      toast.success('Catalog unsubscribed');
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to unsubscribe: ${err.message}`);
+    },
+  });
 }
