@@ -47,6 +47,10 @@ type RouterDependencies struct {
 	// site (lockout, totp enroll/disable, recovery regenerate, api
 	// token created, alert fired). Wired in NewApp.
 	EmailEnqueuer *email.Enqueuer
+	// Webhooks owns /api/v1/admin/webhooks/* + the deliveries audit
+	// sub-routes (migration 048). Nil when the encryptor isn't wired
+	// (the secret is Fernet-encrypted, so we degrade off cleanly).
+	Webhooks *handler.WebhookHandler
 	Auth           *handler.AuthHandler
 	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
 	// + Queries by cmd/server before NewRouter runs. When nil (test
@@ -56,8 +60,18 @@ type RouterDependencies struct {
 	TOTP         *handler.TOTPHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
-	Projects     *handler.ProjectHandler
-	Tools        *handler.ToolHandler
+	// ClusterTemplates owns /api/v1/cluster-templates/* (CRUD) and the
+	// per-cluster /api/v1/clusters/{cluster_id}/template/* bind/apply
+	// surface. Migration 049. Nil-safe: omitted from the router when
+	// not wired (test harnesses, pre-migration boots).
+	ClusterTemplates *handler.ClusterTemplateHandler
+	// ClusterRegistries owns /api/v1/clusters/{cluster_id}/registries/*
+	// — the multi-registry-per-cluster admin UX from migration 050. The
+	// legacy single-row /registry/ endpoints on the cluster handler are
+	// left in place for back-compat. Nil-safe.
+	ClusterRegistries *handler.ClusterRegistriesHandler
+	Projects         *handler.ProjectHandler
+	Tools            *handler.ToolHandler
 	Audit        *handler.AuditHandler
 	Alerting     *handler.AlertingHandler
 	ArgoCD       *handler.ArgoCDHandler
@@ -353,6 +367,21 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/emails/", deps.SMTP.List)
 		}
 
+		// Outbound webhook subscriptions (migration 048). Superuser-gated
+		// inside each handler so the failure mode is a clean 403. The
+		// dispatcher worker is the actual sender; these endpoints only
+		// manage the config + view the delivery history.
+		if deps.Webhooks != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/webhooks/", deps.Webhooks.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/webhooks/", deps.Webhooks.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/webhooks/{id}/", deps.Webhooks.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/webhooks/{id}/", deps.Webhooks.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/webhooks/{id}/", deps.Webhooks.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/webhooks/{id}/test/", deps.Webhooks.Test)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/webhooks/{id}/deliveries/", deps.Webhooks.Deliveries)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/webhooks/{id}/deliveries/{delivery_id}/retry/", deps.Webhooks.RetryDelivery)
+		}
+
 		if deps.GroupMappings != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/group-mappings/", deps.GroupMappings.List)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/group-mappings/", deps.GroupMappings.Create)
@@ -524,6 +553,44 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbDelete)).Delete("/{id}/monitoring/stack/uninstall/", deps.Monitoring.UninstallStack)
 			}
 		})
+	}
+
+	// Cluster templates (migration 049). Two mount points:
+	//   - /cluster-templates/* — CRUD on templates, gated on the new
+	//     cluster_templates resource so superusers and a dedicated
+	//     "template administrator" role can manage them without
+	//     requiring full clusters:write.
+	//   - /clusters/{cluster_id}/template/* — bind/apply/detach, gated on
+	//     ResourceClusters + VerbUpdate (the operator who can edit a
+	//     cluster can apply a template to it).
+	if deps.ClusterTemplates != nil {
+		r.Route("/cluster-templates", func(r chi.Router) {
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbList)).Get("/", deps.ClusterTemplates.List)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbCreate)).Post("/", deps.ClusterTemplates.Create)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbRead)).Get("/{id}/", deps.ClusterTemplates.Get)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbUpdate)).Put("/{id}/", deps.ClusterTemplates.Update)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbUpdate)).Patch("/{id}/", deps.ClusterTemplates.Update)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusterTemplates, rbac.VerbDelete)).Delete("/{id}/", deps.ClusterTemplates.Delete)
+		})
+		// Per-cluster bind / status / reapply / detach.
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/template/", deps.ClusterTemplates.Apply)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/template/", deps.ClusterTemplates.GetApplication)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/template/reapply/", deps.ClusterTemplates.Reapply)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/template/", deps.ClusterTemplates.Detach)
+	}
+
+	// Cluster registries (migration 050) — multi-registry-per-cluster admin
+	// UX, mounted alongside the legacy /clusters/{id}/registry/ single-row
+	// route. All endpoints are gated on the parent cluster's RBAC verb so
+	// "admin who can edit cluster X" implicitly also manages X's registry
+	// pull secrets.
+	if deps.ClusterRegistries != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/registries/", deps.ClusterRegistries.List)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/registries/", deps.ClusterRegistries.Create)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/registries/{id}/", deps.ClusterRegistries.Get)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/registries/{id}/", deps.ClusterRegistries.Update)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/registries/{id}/", deps.ClusterRegistries.Delete)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/registries/{id}/test/", deps.ClusterRegistries.Test)
 	}
 
 	if deps.Projects != nil {

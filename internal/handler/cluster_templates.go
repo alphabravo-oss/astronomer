@@ -1,0 +1,652 @@
+// Cluster templates (migration 049).
+//
+// Templates package the manual cluster onboarding flow (environment +
+// labels + tool installs + a default project + a token rotation policy)
+// into operator-defined "Production Web App" style presets. Applying a
+// template to a cluster is async + idempotent: the handler upserts a
+// cluster_template_applications row with status='pending' and enqueues
+// a cluster_template:apply task; the worker walks the spec and converges
+// the cluster to match.
+//
+// The handler validates the spec JSONB at create/update time:
+//   - top-level keys are restricted to a known set (unknown keys -> 400)
+//   - environment is one of "production"|"staging"|"development"
+//   - default_project.pod_security_profile is one of
+//     "privileged"|"baseline"|"restricted"
+//   - registration_policy.token_rotation_days is non-negative
+//
+// Everything else (label k/v shapes, tools[].slug existence, project
+// quota strings) is validated at apply time by the worker — the spec
+// stays expressive enough that future fields don't need a handler
+// change to flow through.
+
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+)
+
+// ClusterTemplateQuerier is the database surface the handler needs. The
+// production *sqlc.Queries satisfies it; tests stand up a narrow fake.
+type ClusterTemplateQuerier interface {
+	// Template CRUD.
+	ListClusterTemplates(ctx context.Context, arg sqlc.ListClusterTemplatesParams) ([]sqlc.ClusterTemplate, error)
+	CountClusterTemplates(ctx context.Context) (int64, error)
+	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error)
+	GetClusterTemplateByName(ctx context.Context, name string) (sqlc.ClusterTemplate, error)
+	CreateClusterTemplate(ctx context.Context, arg sqlc.CreateClusterTemplateParams) (sqlc.ClusterTemplate, error)
+	UpdateClusterTemplate(ctx context.Context, arg sqlc.UpdateClusterTemplateParams) (sqlc.ClusterTemplate, error)
+	DeleteClusterTemplate(ctx context.Context, id uuid.UUID) error
+	CountClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) (int64, error)
+
+	// Application + status surface.
+	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error)
+	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
+	MarkClusterTemplateApplicationStatus(ctx context.Context, arg sqlc.MarkClusterTemplateApplicationStatusParams) (sqlc.ClusterTemplateApplication, error)
+	DeleteClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) error
+
+	// Cluster existence check for the bind endpoints.
+	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+
+	// Registration policy detach when the operator unbinds a template
+	// that stamped one.
+	DeleteClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) error
+}
+
+// ClusterTemplateEnqueuer is the minimal asynq.Client surface used to
+// schedule cluster_template:apply tasks. Mirrors the pattern from
+// ClusterDecommissionEnqueuer in clusters.go.
+type ClusterTemplateEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
+// ClusterTemplateHandler owns /api/v1/cluster-templates/* and the per-
+// cluster /api/v1/clusters/{cluster_id}/template/* endpoints.
+type ClusterTemplateHandler struct {
+	queries ClusterTemplateQuerier
+	// queue is the asynq client used to schedule apply tasks. Optional —
+	// nil-safe so tests can drive the handler without a Redis-backed
+	// asynq.Client. When nil, the handler still upserts the application
+	// row but the worker only picks it up via the periodic sweep.
+	queue ClusterTemplateEnqueuer
+}
+
+// NewClusterTemplateHandler constructs the handler.
+func NewClusterTemplateHandler(queries ClusterTemplateQuerier) *ClusterTemplateHandler {
+	return &ClusterTemplateHandler{queries: queries}
+}
+
+// SetQueue wires the asynq client used to enqueue apply tasks. Optional;
+// when not wired, applies still write the pending row but rely on the
+// periodic worker sweep to converge.
+func (h *ClusterTemplateHandler) SetQueue(q ClusterTemplateEnqueuer) {
+	if h == nil {
+		return
+	}
+	h.queue = q
+}
+
+// Status constants for cluster_template_applications.status. Kept in
+// lockstep with the worker's transitions.
+const (
+	ClusterTemplateStatusPending  = "pending"
+	ClusterTemplateStatusApplying = "applying"
+	ClusterTemplateStatusApplied  = "applied"
+	ClusterTemplateStatusFailed   = "failed"
+)
+
+// ClusterTemplateResponse is the wire shape returned by the list/get/
+// create/update endpoints.
+type ClusterTemplateResponse struct {
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Spec        json.RawMessage `json:"spec"`
+	CreatedBy   string          `json:"created_by,omitempty"`
+	CreatedAt   string          `json:"created_at"`
+	UpdatedAt   string          `json:"updated_at"`
+}
+
+func templateToResponse(t sqlc.ClusterTemplate) ClusterTemplateResponse {
+	resp := ClusterTemplateResponse{
+		ID:          t.ID.String(),
+		Name:        t.Name,
+		Description: t.Description,
+		Spec:        t.Spec,
+		CreatedAt:   t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:   t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	}
+	if t.CreatedBy.Valid {
+		resp.CreatedBy = uuid.UUID(t.CreatedBy.Bytes).String()
+	}
+	return resp
+}
+
+// ClusterTemplateApplicationResponse is the wire shape for the
+// /clusters/{id}/template/ GET status endpoint.
+type ClusterTemplateApplicationResponse struct {
+	ClusterID    string          `json:"cluster_id"`
+	TemplateID   string          `json:"template_id"`
+	TemplateName string          `json:"template_name,omitempty"`
+	Status       string          `json:"status"`
+	SpecSnapshot json.RawMessage `json:"spec_snapshot"`
+	LastError    string          `json:"last_error,omitempty"`
+	AppliedAt    string          `json:"applied_at,omitempty"`
+	CreatedAt    string          `json:"created_at"`
+	UpdatedAt    string          `json:"updated_at"`
+	// Drift is filled in only by the drift-check task; the GET endpoint
+	// reports the cached value. Empty string means "not yet evaluated".
+	// Possible values: "synced" | "drift" | "".
+	Drift string `json:"drift,omitempty"`
+}
+
+func applicationToResponse(a sqlc.ClusterTemplateApplication, templateName string) ClusterTemplateApplicationResponse {
+	resp := ClusterTemplateApplicationResponse{
+		ClusterID:    a.ClusterID.String(),
+		TemplateID:   a.TemplateID.String(),
+		TemplateName: templateName,
+		Status:       a.Status,
+		SpecSnapshot: a.SpecSnapshot,
+		LastError:    a.LastError,
+		CreatedAt:    a.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:    a.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	}
+	if a.AppliedAt.Valid {
+		resp.AppliedAt = a.AppliedAt.Time.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return resp
+}
+
+// CreateClusterTemplateRequest is the POST/PUT body shape.
+type CreateClusterTemplateRequest struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Spec        json.RawMessage `json:"spec"`
+}
+
+// ApplyClusterTemplateRequest is the POST /clusters/{id}/template/ body.
+type ApplyClusterTemplateRequest struct {
+	TemplateID string `json:"template_id"`
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Spec validation
+// ────────────────────────────────────────────────────────────────────────
+
+// validTemplateTopKeys are the only top-level keys the spec is allowed
+// to contain. Anything else is rejected at write time so a typo
+// (e.g. "registration_polciy") doesn't silently fail to apply.
+var validTemplateTopKeys = map[string]struct{}{
+	"environment":         {},
+	"labels":              {},
+	"tools":               {},
+	"default_project":     {},
+	"registration_policy": {},
+}
+
+var validTemplateEnvironments = map[string]struct{}{
+	"production":  {},
+	"staging":     {},
+	"development": {},
+}
+
+// validPodSecurityProfiles is defined in projects.go — reuse the same
+// closed enum so a template's spec validation stays in lockstep with
+// the per-project policy validation.
+
+// validateTemplateSpec returns nil when the spec is a syntactically and
+// enum-wise valid template body. It deliberately does NOT enforce that
+// referenced tool slugs or chart presets actually exist — that's done at
+// apply time by the worker so an operator can stage a template
+// pre-catalog-sync without an order-of-operations footgun.
+func validateTemplateSpec(raw json.RawMessage) error {
+	if len(raw) == 0 {
+		// Empty spec is a valid no-op template.
+		return nil
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return fmt.Errorf("spec must be a JSON object: %w", err)
+	}
+	for k := range top {
+		if _, ok := validTemplateTopKeys[k]; !ok {
+			return fmt.Errorf("unknown spec key %q (allowed: environment, labels, tools, default_project, registration_policy)", k)
+		}
+	}
+	if envRaw, ok := top["environment"]; ok {
+		var env string
+		if err := json.Unmarshal(envRaw, &env); err != nil {
+			return fmt.Errorf("environment must be a string")
+		}
+		if _, ok := validTemplateEnvironments[env]; !ok {
+			return fmt.Errorf("environment must be production|staging|development, got %q", env)
+		}
+	}
+	if labelsRaw, ok := top["labels"]; ok {
+		var labels map[string]string
+		if err := json.Unmarshal(labelsRaw, &labels); err != nil {
+			return fmt.Errorf("labels must be an object of string->string")
+		}
+	}
+	if toolsRaw, ok := top["tools"]; ok {
+		var tools []map[string]any
+		if err := json.Unmarshal(toolsRaw, &tools); err != nil {
+			return fmt.Errorf("tools must be an array of {slug, preset, values}")
+		}
+		for i, t := range tools {
+			slug, _ := t["slug"].(string)
+			if strings.TrimSpace(slug) == "" {
+				return fmt.Errorf("tools[%d].slug is required", i)
+			}
+		}
+	}
+	if dpRaw, ok := top["default_project"]; ok {
+		var dp map[string]any
+		if err := json.Unmarshal(dpRaw, &dp); err != nil {
+			return fmt.Errorf("default_project must be an object")
+		}
+		if name, _ := dp["name"].(string); strings.TrimSpace(name) == "" {
+			return fmt.Errorf("default_project.name is required")
+		}
+		if pss, ok := dp["pod_security_profile"].(string); ok && pss != "" {
+			if _, ok := validPodSecurityProfiles[pss]; !ok {
+				return fmt.Errorf("default_project.pod_security_profile must be privileged|baseline|restricted")
+			}
+		}
+	}
+	if rpRaw, ok := top["registration_policy"]; ok {
+		var rp map[string]any
+		if err := json.Unmarshal(rpRaw, &rp); err != nil {
+			return fmt.Errorf("registration_policy must be an object")
+		}
+		if days, ok := rp["token_rotation_days"]; ok {
+			f, ok := days.(float64)
+			if !ok || f < 0 {
+				return fmt.Errorf("registration_policy.token_rotation_days must be a non-negative integer")
+			}
+		}
+	}
+	return nil
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Template CRUD
+// ────────────────────────────────────────────────────────────────────────
+
+// List handles GET /api/v1/cluster-templates/.
+func (h *ClusterTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
+	items, err := h.queries.ListClusterTemplates(r.Context(), sqlc.ListClusterTemplatesParams{
+		Limit:  int32(queryInt(r, "limit", 20)),
+		Offset: int32(queryInt(r, "offset", 0)),
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list cluster templates")
+		return
+	}
+	total, _ := h.queries.CountClusterTemplates(r.Context())
+	resp := make([]ClusterTemplateResponse, 0, len(items))
+	for _, t := range items {
+		resp = append(resp, templateToResponse(t))
+	}
+	RespondPaginated(w, r, resp, total)
+}
+
+// Get handles GET /api/v1/cluster-templates/{id}/.
+func (h *ClusterTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		return
+	}
+	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, templateToResponse(tmpl))
+}
+
+// Create handles POST /api/v1/cluster-templates/.
+func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var req CreateClusterTemplateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
+		return
+	}
+	spec := req.Spec
+	if len(spec) == 0 {
+		spec = json.RawMessage(`{}`)
+	}
+	if err := validateTemplateSpec(spec); err != nil {
+		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	tmpl, err := h.queries.CreateClusterTemplate(r.Context(), sqlc.CreateClusterTemplateParams{
+		Name:        req.Name,
+		Description: req.Description,
+		Spec:        spec,
+		CreatedBy:   currentUserUUID(r),
+	})
+	if err != nil {
+		// Unique-name conflict on cluster_templates_name_key bubbles up as
+		// a 23505. Translate so the UI sees a clean 409 rather than 500.
+		if isUniqueViolation(err) {
+			RespondError(w, http.StatusConflict, "duplicate_name", "A template with this name already exists")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create cluster template")
+		return
+	}
+	recordAudit(r, h.queries, "admin.cluster_template.created", "cluster_template", tmpl.ID.String(), tmpl.Name, map[string]any{
+		"description": tmpl.Description,
+	})
+	RespondJSON(w, http.StatusCreated, templateToResponse(tmpl))
+}
+
+// Update handles PUT /api/v1/cluster-templates/{id}/.
+func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		return
+	}
+	var req CreateClusterTemplateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
+		return
+	}
+	spec := req.Spec
+	if len(spec) == 0 {
+		spec = json.RawMessage(`{}`)
+	}
+	if err := validateTemplateSpec(spec); err != nil {
+		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	tmpl, err := h.queries.UpdateClusterTemplate(r.Context(), sqlc.UpdateClusterTemplateParams{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+		Spec:        spec,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+			return
+		}
+		if isUniqueViolation(err) {
+			RespondError(w, http.StatusConflict, "duplicate_name", "A template with this name already exists")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update cluster template")
+		return
+	}
+	recordAudit(r, h.queries, "admin.cluster_template.updated", "cluster_template", tmpl.ID.String(), tmpl.Name, nil)
+	RespondJSON(w, http.StatusOK, templateToResponse(tmpl))
+}
+
+// Delete handles DELETE /api/v1/cluster-templates/{id}/. Refuses to
+// remove a template that's still applied to at least one cluster — the
+// operator must detach those bindings first. We do the count-first check
+// (instead of relying on the FK violation) so the 409 body can include
+// the exact reason without parsing pgconn error codes.
+func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		return
+	}
+	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		return
+	}
+	count, err := h.queries.CountClusterTemplateApplicationsByTemplate(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to count template applications")
+		return
+	}
+	if count > 0 {
+		RespondError(w, http.StatusConflict, "template_in_use",
+			fmt.Sprintf("Template is applied to %d cluster(s); detach it from those clusters before deleting.", count))
+		return
+	}
+	if err := h.queries.DeleteClusterTemplate(r.Context(), id); err != nil {
+		// Belt-and-suspenders: the count check above closes the race for
+		// normal traffic, but a concurrent POST to /clusters/{id}/template/
+		// could insert a binding between count and delete. Treat the FK
+		// violation as the same 409.
+		if isFKRestrictViolation(err) {
+			RespondError(w, http.StatusConflict, "template_in_use", "Template is in use; detach from clusters first.")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete cluster template")
+		return
+	}
+	recordAudit(r, h.queries, "admin.cluster_template.deleted", "cluster_template", tmpl.ID.String(), tmpl.Name, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Per-cluster apply / detach / status endpoints
+// ────────────────────────────────────────────────────────────────────────
+
+// Apply handles POST /api/v1/clusters/{cluster_id}/template/. Binds the
+// template to the cluster (replacing any previous binding) and enqueues
+// the convergence task. Returns 202 Accepted with the current status row.
+func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		return
+	}
+	var req ApplyClusterTemplateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	templateID, err := uuid.Parse(req.TemplateID)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "validation_error", "Invalid template_id")
+		return
+	}
+	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), templateID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		return
+	}
+
+	app, err := h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
+		ClusterID:    clusterID,
+		TemplateID:   tmpl.ID,
+		SpecSnapshot: tmpl.Spec,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "apply_error", "Failed to bind template to cluster")
+		return
+	}
+	h.enqueueApply(r, clusterID)
+
+	recordAudit(r, h.queries, "cluster.template_applied", "cluster", clusterID.String(), cluster.Name, map[string]any{
+		"template_id":   tmpl.ID.String(),
+		"template_name": tmpl.Name,
+	})
+	RespondJSON(w, http.StatusAccepted, applicationToResponse(app, tmpl.Name))
+}
+
+// GetApplication handles GET /api/v1/clusters/{cluster_id}/template/.
+func (h *ClusterTemplateHandler) GetApplication(w http.ResponseWriter, r *http.Request) {
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	app, err := h.queries.GetClusterTemplateApplication(r.Context(), clusterID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "not_found", "No template applied to this cluster")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to load template application")
+		return
+	}
+	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), app.TemplateID)
+	templateName := ""
+	if err == nil {
+		templateName = tmpl.Name
+	}
+	RespondJSON(w, http.StatusOK, applicationToResponse(app, templateName))
+}
+
+// Reapply handles POST /api/v1/clusters/{cluster_id}/template/reapply/.
+// Used for drift correction — resets the application status to pending
+// and re-enqueues the apply task. Spec snapshot is refreshed from the
+// current template body so the convergence target tracks the latest.
+func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request) {
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		return
+	}
+	app, err := h.queries.GetClusterTemplateApplication(r.Context(), clusterID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "not_found", "No template applied to this cluster")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to load template application")
+		return
+	}
+	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), app.TemplateID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "lookup_error", "Template no longer exists")
+		return
+	}
+	app, err = h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
+		ClusterID:    clusterID,
+		TemplateID:   tmpl.ID,
+		SpecSnapshot: tmpl.Spec,
+	})
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "apply_error", "Failed to reset template application")
+		return
+	}
+	h.enqueueApply(r, clusterID)
+	recordAudit(r, h.queries, "cluster.template_reapplied", "cluster", clusterID.String(), cluster.Name, map[string]any{
+		"template_id":   tmpl.ID.String(),
+		"template_name": tmpl.Name,
+	})
+	RespondJSON(w, http.StatusAccepted, applicationToResponse(app, tmpl.Name))
+}
+
+// Detach handles DELETE /api/v1/clusters/{cluster_id}/template/. Removes
+// the binding (and the associated registration-policy row) but leaves
+// any tools/projects the apply task installed in place — the operator
+// can clean those up via the individual handlers if a full teardown is
+// desired. This conservative behavior matches the user expectation that
+// "unbind" not destroy operator-installed workloads.
+func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) {
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		return
+	}
+	if err := h.queries.DeleteClusterTemplateApplication(r.Context(), clusterID); err != nil {
+		RespondError(w, http.StatusInternalServerError, "detach_error", "Failed to detach template")
+		return
+	}
+	// Best-effort detach of the policy stamp. Errors here are non-fatal —
+	// the binding is already gone; the worst case is a stale policy row
+	// that the next apply (to any template) will overwrite.
+	_ = h.queries.DeleteClusterRegistrationPolicy(r.Context(), clusterID)
+	recordAudit(r, h.queries, "cluster.template_detached", "cluster", clusterID.String(), cluster.Name, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// enqueueApply schedules a cluster_template:apply task. Optional —
+// nil-safe when no queue is wired, in which case the periodic sweep
+// will eventually pick up pending rows.
+func (h *ClusterTemplateHandler) enqueueApply(r *http.Request, clusterID uuid.UUID) {
+	if h == nil || h.queue == nil {
+		return
+	}
+	task, err := tasks.NewClusterTemplateApplyTask(clusterID)
+	if err != nil {
+		return
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+	_, _ = h.queue.Enqueue(task)
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Error classification helpers
+// ────────────────────────────────────────────────────────────────────────
+
+// isUniqueViolation returns true for Postgres unique_violation (23505).
+// Matches the pattern used by ToolHandler.EnsureInstalled.
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
+}
+
+// isFKRestrictViolation returns true for the 23503 foreign_key_violation
+// raised when the FK ON DELETE RESTRICT clause blocks a cluster_templates
+// DELETE while at least one cluster_template_applications row still
+// references it.
+func isFKRestrictViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23503"
+	}
+	return false
+}

@@ -21,7 +21,12 @@ const (
 	ResourceUsers      Resource = "users"
 	ResourceAuditLogs  Resource = "audit_logs"
 	ResourceAgents     Resource = "agents"
-	ResourceWildcard   Resource = "*"
+	// ResourceClusterTemplates gates the /api/v1/cluster-templates/* CRUD
+	// (migration 049). The cluster bind/detach endpoints reuse
+	// ResourceClusters + VerbUpdate so an operator who can already update a
+	// cluster doesn't need a second permission to apply a template to it.
+	ResourceClusterTemplates Resource = "cluster_templates"
+	ResourceWildcard         Resource = "*"
 )
 
 // Verb represents an action on a resource
