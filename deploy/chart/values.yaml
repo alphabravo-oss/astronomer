@@ -663,3 +663,130 @@ managementRestoreDrill:
       memory: 1Gi
   nodeSelector: {}
   tolerations: []
+
+# =============================================================================
+# Management-plane log forwarding (T03 FEATURES-051226)
+# =============================================================================
+# Ships the management plane's own logs (server, worker) to an external sink
+# via a chart-side Fluent Bit DaemonSet. Distinct from the per-cluster
+# logging reconciler in internal/handler/logging.go which is about MEMBER
+# clusters; this is about the astronomer install itself.
+#
+# Off by default — opt-in per install. Operators that already run a node-
+# level log collector (Fluent Bit, Vector, OpenTelemetry Collector) can
+# leave this disabled and instead point that collector at the same Pod
+# log files.
+#
+# When enabled=true the chart renders:
+#   - ConfigMap with a Fluent Bit config that tails the server + worker
+#     container logs under /var/log/containers/<release>-server-*.log /
+#     /var/log/containers/<release>-worker-*.log
+#   - DaemonSet running fluent/fluent-bit with hostPath access to
+#     /var/log/containers and /var/log/pods
+#   - ServiceAccount + ClusterRole + ClusterRoleBinding so the kubernetes
+#     filter can enrich each line with pod labels/annotations
+#
+# Supported backends: loki | elasticsearch | splunk | http. Each renders a
+# different OUTPUT stanza; see management-logging-configmap.yaml.
+managementLogging:
+  enabled: false
+  # One of: loki | elasticsearch | splunk | http.
+  backend: loki
+  # Required when enabled=true. Backend-specific:
+  #   - loki: http(s)://loki.observability.svc:3100
+  #   - elasticsearch: https://es.observability.svc:9200
+  #   - splunk: https://splunk-hec.observability.svc:8088
+  #   - http: any HTTP(S) URL with a JSON body sink
+  endpoint: ""
+  # Drop level=DEBUG lines at the forwarder. The chart wires this via the
+  # Fluent Bit grep filter; leave on by default to keep volumes manageable.
+  excludeDebug: true
+  # Which management-plane components to tail. Default is server + worker;
+  # the agent is the member-cluster side and ships its own logs via the
+  # logging reconciler — set includeAgent=true only if you want both
+  # halves of the loop colocated.
+  includeServer: true
+  includeWorker: true
+  includeAgent: false
+  # Optional bearer-token auth applied to the OUTPUT stanza. The Secret
+  # must already exist in the release namespace and contain the named
+  # key. Empty name skips the auth lines.
+  auth:
+    bearerSecretRef:
+      name: ""
+      key: "token"
+  # Backend-specific knobs. Only the section matching .backend is read at
+  # render time; the others are ignored.
+  loki:
+    # Optional tenant identifier — Loki uses this as the X-Scope-OrgID
+    # header. Empty disables multi-tenancy.
+    tenantID: ""
+  elasticsearch:
+    # Index template applied to every record. Fluent Bit's es output
+    # accepts both static names and Logstash-style date suffixes via
+    # Logstash_Format On + Logstash_Prefix.
+    index: "astronomer"
+    logstashFormat: true
+    logstashPrefix: "astronomer"
+  splunk:
+    # HEC token Splunk requires for ingest. Wire the same Secret as
+    # auth.bearerSecretRef and Fluent Bit will use it as the
+    # Splunk_Token. Empty falls back to the bearer-secret value.
+    hecTokenSecretRef:
+      name: ""
+      key: "hec_token"
+    # Splunk index to write to. Empty uses the HEC token's default.
+    index: ""
+  http:
+    # Pass through to the HTTP output's format key. "json_lines" matches
+    # most generic ingest endpoints; "json" produces a single JSON array
+    # per flush.
+    format: "json_lines"
+  image:
+    # Default to the upstream fluent-bit image. Override to a mirrored
+    # registry in air-gapped installs via .registry or the chart-wide
+    # image.registry prefix (T23).
+    repository: fluent/fluent-bit
+    tag: "3.2.4"
+    pullPolicy: IfNotPresent
+    registry: ""    # T23 air-gapped override; falls back to image.registry
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # Standard DaemonSet scheduling knobs. nodeSelector pins the daemon to
+  # specific nodes (e.g. linux only); tolerations let it run on tainted
+  # nodes (e.g. the control-plane). Default tolerations are empty so the
+  # daemon lands on worker nodes only.
+  nodeSelector: {}
+  tolerations: []
+  # The handler exposes GET /api/v1/admin/management-logs/?component=...
+  # for the operator UI. Cap how many lines a single request can return
+  # to keep payloads bounded; the chart-side Fluent Bit pipeline is the
+  # durable long-term path.
+  handler:
+    maxLines: 1000
+    maxBytes: 1048576    # 1 MiB
+
+# =============================================================================
+# CRD-mirror management API
+# =============================================================================
+# When `crds.enabled=true`, the chart installs two CustomResourceDefinitions
+# (Cluster, Project) under the management.astronomer.io/v1alpha1 group and the
+# server pod runs a controller that reconciles each CR against the matching DB
+# row. Operators can then manage clusters + projects via kubectl, GitOps, or
+# any standard K8s tooling instead of REST. See docs/crd-api.md.
+#
+# This is an opt-in feature: defaults to off so existing installs see no
+# change. The REST API is unaffected when the flag is on — both surfaces
+# eventually-converge to the same row.
+crds:
+  enabled: false
+  # Namespace the controller watches. The chart-shipped manifests assume
+  # `astronomer-mgmt`; operators can override per-environment if needed.
+  # The namespace itself is NOT created by the chart — operators install
+  # the CRD into an existing namespace they own.
+  watchNamespace: astronomer-mgmt

@@ -1,0 +1,131 @@
+{{- if .Values.managementLogging.enabled }}
+{{- /*
+  Management-plane log forwarder DaemonSet (T03 FEATURES-051226).
+
+  One pod per node tailing /var/log/containers/ via hostPath. The
+  ConfigMap rendered in management-logging-configmap.yaml carries the
+  Fluent Bit pipeline; we annotate the pod template with a SHA-256 of
+  that ConfigMap so a values change rolls every Pod on the next
+  reconcile.
+*/ -}}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "astronomer.fullname" . }}-mgmt-logging
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-logging") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "management-logging") | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "management-logging") | nindent 8 }}
+      annotations:
+        # Hash the rendered Fluent Bit config so values changes roll the
+        # DaemonSet pods. Without this annotation `helm upgrade` would
+        # leave running pods on the old config until the pod template
+        # itself happened to change.
+        checksum/config: {{ include (print $.Template.BasePath "/management-logging-configmap.yaml") . | sha256sum }}
+        # Scraped by Prometheus alongside the rest of the platform. The
+        # T03 AstronomerManagementLoggingForwarderDown alert keys off
+        # the `job=astronomer-mgmt-logging` label set by the
+        # ServiceMonitor below.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2020"
+        prometheus.io/path: "/api/v1/metrics/prometheus"
+    spec:
+      serviceAccountName: {{ include "astronomer.fullname" . }}-mgmt-logging
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.managementLogging.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.managementLogging.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Required for the hostPath log mounts. DaemonSets that tail node
+      # logs need full read access to /var/log; this is the standard
+      # Fluent Bit pattern.
+      hostNetwork: false
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: fluent-bit
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementLogging.image.repository "tag" .Values.managementLogging.image.tag "registry" .Values.managementLogging.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.managementLogging.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - --config=/fluent-bit/etc-astronomer/fluent-bit.conf
+            - --parser=/fluent-bit/etc-astronomer/parsers.conf
+          ports:
+            - name: http-metrics
+              containerPort: 2020
+              protocol: TCP
+          {{- if .Values.managementLogging.auth.bearerSecretRef.name }}
+          env:
+            - name: BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.managementLogging.auth.bearerSecretRef.name | quote }}
+                  key: {{ .Values.managementLogging.auth.bearerSecretRef.key | default "token" | quote }}
+          {{- end }}
+          {{- if and (eq (.Values.managementLogging.backend | default "loki") "splunk") .Values.managementLogging.splunk.hecTokenSecretRef.name }}
+          {{- if not .Values.managementLogging.auth.bearerSecretRef.name }}
+          env:
+          {{- end }}
+            - name: SPLUNK_HEC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.managementLogging.splunk.hecTokenSecretRef.name | quote }}
+                  key: {{ .Values.managementLogging.splunk.hecTokenSecretRef.key | default "hec_token" | quote }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.managementLogging.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 2020
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 2020
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc-astronomer
+              readOnly: true
+            - name: varlog
+              mountPath: /var/log
+              readOnly: false
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "astronomer.fullname" . }}-mgmt-logging-config
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+{{- end }}

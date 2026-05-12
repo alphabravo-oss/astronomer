@@ -1,0 +1,198 @@
+{{- if .Values.managementLogging.enabled }}
+{{- /*
+  Management-plane log forwarder (T03 FEATURES-051226).
+
+  Renders a Fluent Bit config from .Values.managementLogging. The
+  DaemonSet (templates/management-logging-daemonset.yaml) tails
+  /var/log/containers/<release>-server-*.log + worker pod logs, enriches
+  via the Kubernetes filter, optionally drops DEBUG, and forwards to one
+  of: loki | elasticsearch | splunk | http.
+
+  Reference: https://docs.fluentbit.io/manual/pipeline
+
+  The DaemonSet annotates its pod template with the SHA-256 of this
+  ConfigMap so a values change rolls the pods even though the DaemonSet
+  Spec itself is unchanged.
+*/ -}}
+{{- $backend := .Values.managementLogging.backend | default "loki" -}}
+{{- if not (has $backend (list "loki" "elasticsearch" "splunk" "http")) -}}
+{{- fail (printf "managementLogging.backend must be one of: loki, elasticsearch, splunk, http (got %q)" $backend) -}}
+{{- end -}}
+{{- if eq (.Values.managementLogging.endpoint | default "") "" -}}
+{{- fail "managementLogging.endpoint must be set when managementLogging.enabled=true" -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "astronomer.fullname" . }}-mgmt-logging-config
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-logging") | nindent 4 }}
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  /fluent-bit/etc/parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+    {{- $fullname := include "astronomer.fullname" . }}
+    {{- $paths := list }}
+    {{- if .Values.managementLogging.includeServer }}
+    {{- $paths = append $paths (printf "/var/log/containers/%s-server-*.log" $fullname) }}
+    {{- end }}
+    {{- if .Values.managementLogging.includeWorker }}
+    {{- $paths = append $paths (printf "/var/log/containers/%s-worker-*.log" $fullname) }}
+    {{- end }}
+    {{- if .Values.managementLogging.includeAgent }}
+    {{- $paths = append $paths (printf "/var/log/containers/%s-agent-*.log" $fullname) }}
+    {{- end }}
+    {{- if eq (len $paths) 0 }}
+    {{- fail "managementLogging: at least one of includeServer/includeWorker/includeAgent must be true" }}
+    {{- end }}
+
+    [INPUT]
+        Name              tail
+        Path              {{ join "," $paths }}
+        Parser            cri
+        Tag               astronomer.*
+        Refresh_Interval  5
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+        DB                /var/log/flb-astronomer.db
+
+    [FILTER]
+        Name                kubernetes
+        Match               astronomer.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Merge_Log           On
+        Merge_Log_Key       log_processed
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude On
+        Keep_Log            Off
+        Annotations         Off
+
+    [FILTER]
+        Name          record_modifier
+        Match         astronomer.*
+        Record        astronomer_release {{ .Release.Name }}
+        Record        astronomer_namespace {{ .Release.Namespace }}
+
+    {{- if .Values.managementLogging.excludeDebug }}
+    [FILTER]
+        Name          grep
+        Match         astronomer.*
+        Exclude       log /(?i)\bdebug\b/
+    {{- end }}
+
+    {{- /* Strip a scheme + path off the endpoint when the backend wants
+           Host/Port split — loki / es / splunk all take Host + Port + TLS
+           rather than a single URI. */ -}}
+    {{- $endpoint := tpl .Values.managementLogging.endpoint . -}}
+    {{- $tls := "Off" -}}
+    {{- if hasPrefix "https://" $endpoint -}}{{ $tls = "On" }}{{- end -}}
+    {{- $hostport := $endpoint | trimPrefix "https://" | trimPrefix "http://" -}}
+    {{- $hostport = $hostport | trimSuffix "/" -}}
+    {{- /* Allow a /path suffix on the endpoint for HTTP backends.
+           Sprig doesn't expose strings.Index, so we splitN on the first
+           "/" and rebuild the URI from the trailing segments. */ -}}
+    {{- $uri := "/" -}}
+    {{- if contains "/" $hostport -}}
+      {{- $segs := splitList "/" $hostport -}}
+      {{- $hostport = index $segs 0 -}}
+      {{- $tail := rest $segs -}}
+      {{- $uri = printf "/%s" (join "/" $tail) -}}
+    {{- end -}}
+    {{- $defaultPort := "80" -}}
+    {{- if eq $tls "On" -}}{{ $defaultPort = "443" }}{{- end -}}
+    {{- $host := $hostport -}}
+    {{- $port := $defaultPort -}}
+    {{- if contains ":" $hostport -}}
+      {{- $parts := splitList ":" $hostport -}}
+      {{- $host = index $parts 0 -}}
+      {{- $port = index $parts 1 -}}
+    {{- end }}
+
+    {{- if eq $backend "loki" }}
+    [OUTPUT]
+        Name              loki
+        Match             astronomer.*
+        Host              {{ $host }}
+        Port              {{ $port }}
+        Tls               {{ $tls }}
+        Tls.verify        On
+        Labels            job=astronomer, release={{ .Release.Name }}, namespace={{ .Release.Namespace }}, component=$kubernetes['labels']['app.kubernetes.io/component'], pod=$kubernetes['pod_name']
+        Label_keys        $kubernetes['labels']['app.kubernetes.io/component']
+        Line_format       json
+        {{- with .Values.managementLogging.loki.tenantID }}
+        Tenant_id         {{ . }}
+        {{- end }}
+        {{- if .Values.managementLogging.auth.bearerSecretRef.name }}
+        http_user         token
+        http_passwd       ${BEARER_TOKEN}
+        {{- end }}
+    {{- else if eq $backend "elasticsearch" }}
+    [OUTPUT]
+        Name              es
+        Match             astronomer.*
+        Host              {{ $host }}
+        Port              {{ $port }}
+        Tls               {{ $tls }}
+        Tls.verify        On
+        Index             {{ .Values.managementLogging.elasticsearch.index | default "astronomer" }}
+        Logstash_Format   {{ ternary "On" "Off" .Values.managementLogging.elasticsearch.logstashFormat }}
+        {{- if .Values.managementLogging.elasticsearch.logstashFormat }}
+        Logstash_Prefix   {{ .Values.managementLogging.elasticsearch.logstashPrefix | default "astronomer" }}
+        {{- end }}
+        Suppress_Type_Name On
+        Retry_Limit       False
+        {{- if .Values.managementLogging.auth.bearerSecretRef.name }}
+        HTTP_User         token
+        HTTP_Passwd       ${BEARER_TOKEN}
+        {{- end }}
+    {{- else if eq $backend "splunk" }}
+    [OUTPUT]
+        Name              splunk
+        Match             astronomer.*
+        Host              {{ $host }}
+        Port              {{ $port }}
+        Tls               {{ $tls }}
+        Tls.verify        On
+        {{- with .Values.managementLogging.splunk.index }}
+        Splunk_Send_Raw   Off
+        Event_Index       {{ . }}
+        {{- end }}
+        {{- if .Values.managementLogging.splunk.hecTokenSecretRef.name }}
+        Splunk_Token      ${SPLUNK_HEC_TOKEN}
+        {{- else if .Values.managementLogging.auth.bearerSecretRef.name }}
+        Splunk_Token      ${BEARER_TOKEN}
+        {{- end }}
+    {{- else if eq $backend "http" }}
+    [OUTPUT]
+        Name              http
+        Match             astronomer.*
+        Host              {{ $host }}
+        Port              {{ $port }}
+        URI               {{ $uri }}
+        Tls               {{ $tls }}
+        Tls.verify        On
+        Format            {{ .Values.managementLogging.http.format | default "json_lines" }}
+        Json_date_key     timestamp
+        Json_date_format  iso8601
+        {{- if .Values.managementLogging.auth.bearerSecretRef.name }}
+        Header            Authorization Bearer ${BEARER_TOKEN}
+        {{- end }}
+    {{- end }}
+
+  parsers.conf: |
+    [PARSER]
+        Name        cri
+        Format      regex
+        Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+{{- end }}

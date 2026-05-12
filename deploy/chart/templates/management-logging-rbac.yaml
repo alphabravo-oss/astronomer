@@ -1,0 +1,54 @@
+{{- if .Values.managementLogging.enabled }}
+{{- /*
+  ServiceAccount + ClusterRole + ClusterRoleBinding for the
+  management-plane log forwarder. The Fluent Bit kubernetes filter calls
+  the k8s API to look up pod metadata (labels, annotations, container
+  IDs) for each log record it sees, so the DaemonSet needs cluster-wide
+  read access on pods/namespaces.
+
+  We deliberately use a dedicated ClusterRole (not the platform's main
+  ServiceAccount) so a misconfigured Fluent Bit can't accidentally read
+  Secrets or other sensitive resources — least privilege.
+*/ -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "astronomer.fullname" . }}-mgmt-logging
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-logging") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "astronomer.fullname" . }}-mgmt-logging
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-logging") | nindent 4 }}
+rules:
+  # The kubernetes filter looks up pod metadata for each log line it
+  # ingests. List+get on pods is the minimum surface; namespaces is
+  # required for cross-namespace enrichment when the DaemonSet runs on a
+  # node hosting pods from multiple namespaces.
+  - apiGroups: [""]
+    resources:
+      - pods
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "astronomer.fullname" . }}-mgmt-logging
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-logging") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "astronomer.fullname" . }}-mgmt-logging
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "astronomer.fullname" . }}-mgmt-logging
+    namespace: {{ .Release.Namespace }}
+{{- end }}
