@@ -84,6 +84,11 @@ type RouterDependencies struct {
 	// /snapshot-schedules/* and /velero-status/ — the per-cluster
 	// Velero self-service surface from migration 052. Nil-safe.
 	ClusterSnapshots *handler.ClusterSnapshotsHandler
+	// FleetOperations owns /api/v1/fleet-operations/* — coordinated
+	// multi-cluster actions (drain, tool upgrade, apply-template fanout)
+	// with label-selector targeting and bounded blast radius
+	// (migration 056). Nil-safe.
+	FleetOperations *handler.FleetOperationHandler
 	Projects         *handler.ProjectHandler
 	Tools            *handler.ToolHandler
 	Audit        *handler.AuditHandler
@@ -686,6 +691,26 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.UpdateSchedule)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.DeleteSchedule)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
+	}
+
+	// Fleet operations (migration 056). Coordinated multi-cluster
+	// actions: drain N clusters, upgrade a tool across the fleet,
+	// apply-template fanout. Gated on the dedicated
+	// ResourceFleetOperations rbac resource so a "fleet runbook author"
+	// role can be granted fleet_operations:* without also granting
+	// clusters:* — the operation itself is scoped to clusters the
+	// orchestrator can identify by label, not by explicit ID.
+	if deps.FleetOperations != nil {
+		r.Route("/fleet-operations", func(r chi.Router) {
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbList)).Get("/", deps.FleetOperations.List)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbCreate)).Post("/", deps.FleetOperations.Create)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbRead)).Get("/{id}/", deps.FleetOperations.Get)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbRead)).Get("/{id}/targets/", deps.FleetOperations.ListTargets)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/pause/", deps.FleetOperations.Pause)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/resume/", deps.FleetOperations.Resume)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/abort/", deps.FleetOperations.Abort)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceFleetOperations, rbac.VerbUpdate)).Post("/{id}/retry-failed/", deps.FleetOperations.RetryFailed)
+		})
 	}
 
 	if deps.Projects != nil {

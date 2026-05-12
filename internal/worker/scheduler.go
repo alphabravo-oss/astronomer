@@ -112,6 +112,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		//     days regardless of forwarder status.
 		{"@every 2s", tasks.SIEMDispatchType, "siem dispatch (forwarder queue drain)"},
 		{"30 4 * * *", tasks.SIEMCleanupOldType, "siem queue retention sweep (7d)"},
+		// Migration 056: fleet operations orchestrator. 10s cadence so an
+		// operator's pause/resume/abort click reaches steady state inside
+		// one screen refresh. Per-tick budget is 30s — overflow rolls
+		// into the next tick (no lease held across ticks).
+		{"@every 10s", tasks.FleetOrchestrateType, "fleet operations orchestrator"},
 	}
 
 	for _, e := range entries {

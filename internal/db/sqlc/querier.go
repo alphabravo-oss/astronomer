@@ -740,6 +740,31 @@ type Querier interface {
 	ListSIEMQueueExhausted(ctx context.Context, arg ListSIEMQueueExhaustedParams) ([]SiemForwardQueue, error)
 	UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error)
 	UpsertSIEMForwarderStatus(ctx context.Context, arg UpsertSIEMForwarderStatusParams) error
+	// Fleet operations (migration 056).
+	CreateFleetOperation(ctx context.Context, arg CreateFleetOperationParams) (FleetOperation, error)
+	GetFleetOperation(ctx context.Context, id uuid.UUID) (FleetOperation, error)
+	ListFleetOperations(ctx context.Context, arg ListFleetOperationsParams) ([]FleetOperation, error)
+	CountFleetOperations(ctx context.Context, status pgtype.Text) (int64, error)
+	ListPendingFleetOperations(ctx context.Context, queryLimit int32) ([]FleetOperation, error)
+	MarkFleetOperationTransition(ctx context.Context, arg MarkFleetOperationTransitionParams) (FleetOperation, error)
+	UpdateFleetOperationCounters(ctx context.Context, arg UpdateFleetOperationCountersParams) (FleetOperation, error)
+	SetFleetOperationStatus(ctx context.Context, arg SetFleetOperationStatusParams) (FleetOperation, error)
+	DeleteFleetOperation(ctx context.Context, id uuid.UUID) error
+	CreateFleetOperationTarget(ctx context.Context, arg CreateFleetOperationTargetParams) (FleetOperationTarget, error)
+	ListFleetOperationTargets(ctx context.Context, arg ListFleetOperationTargetsParams) ([]FleetOperationTarget, error)
+	CountFleetOperationTargets(ctx context.Context, operationID uuid.UUID) (int64, error)
+	ListPendingTargetsForOperation(ctx context.Context, arg ListPendingTargetsForOperationParams) ([]FleetOperationTarget, error)
+	ListRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) ([]FleetOperationTarget, error)
+	CountRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
+	CountFailedTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
+	CountTerminalTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
+	CountFleetOperationTargetsByStatus(ctx context.Context, operationID uuid.UUID) ([]CountFleetOperationTargetsByStatusRow, error)
+	MarkFleetTargetDispatched(ctx context.Context, arg MarkFleetTargetDispatchedParams) (FleetOperationTarget, error)
+	MarkFleetTargetCompleted(ctx context.Context, id uuid.UUID) (FleetOperationTarget, error)
+	MarkFleetTargetFailed(ctx context.Context, arg MarkFleetTargetFailedParams) (FleetOperationTarget, error)
+	MarkFleetTargetSkipped(ctx context.Context, arg MarkFleetTargetSkippedParams) (FleetOperationTarget, error)
+	RequeueFailedTargets(ctx context.Context, operationID uuid.UUID) error
+	ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

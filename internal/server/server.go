@@ -314,6 +314,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Metric registration is idempotent — see RegisterClusterSnapshotsMetrics.
 	clusterSnapshotsHandler := handler.NewClusterSnapshotsHandler(queries)
 	clusterSnapshotsHandler.SetRequester(requester)
+	// Fleet operations (migration 056). Coordinated multi-cluster actions
+	// (drain N clusters, upgrade a tool across the fleet, apply-template
+	// fanout) with label-selector targeting + bounded blast radius.
+	// Handler owns CRUD + state-transition endpoints; orchestrator worker
+	// drives every pending/running row toward a terminal status.
+	fleetOperationsHandler := handler.NewFleetOperationHandler(queries)
+	fleetDispatcher := handler.NewFleetDispatcher(toolHandler, clusterTemplateHandler, queries)
+	tasks.ConfigureFleetOrchestrate(tasks.FleetOrchestrateDeps{
+		Queries:    queries,
+		Dispatcher: fleetDispatcher,
+	})
 	handler.RegisterClusterSnapshotsMetrics()
 	handler.WireSnapshotWorkerMetrics()
 	tasks.ConfigureClusterSnapshotTasks(tasks.ClusterSnapshotDeps{
@@ -570,6 +581,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		ClusterTemplates:  clusterTemplateHandler,
 		ClusterRegistries: clusterRegistriesHandler,
 		ClusterSnapshots:  clusterSnapshotsHandler,
+		FleetOperations:   fleetOperationsHandler,
 		Projects:         projectHandler,
 		Tools:            toolHandler,
 		Audit:        handler.NewAuditHandler(queries),

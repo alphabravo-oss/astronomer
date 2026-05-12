@@ -81,6 +81,14 @@ const (
 	// forwarder status.
 	TypeSIEMDispatch   = tasks.SIEMDispatchType
 	TypeSIEMCleanupOld = tasks.SIEMCleanupOldType
+	// Migration 056: fleet operations orchestrator. Periodic task that
+	// drives every pending/running fleet_operations row toward a
+	// terminal status — evaluates the selector at launch, dispatches
+	// up to max_concurrent per-cluster sub-operations, polls them,
+	// applies the abort-on-error policy. Idempotent: re-running a tick
+	// on the same operation won't re-fire sub-operations that already
+	// completed.
+	TypeFleetOrchestrate = tasks.FleetOrchestrateType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -160,6 +168,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
 	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
 	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
+	w.mux.HandleFunc(TypeFleetOrchestrate, instrumentTask(TypeFleetOrchestrate, tasks.HandleFleetOrchestrate))
 
 	w.log.Info("registered all task handlers")
 }
