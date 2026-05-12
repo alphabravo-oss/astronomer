@@ -573,3 +573,100 @@ export async function listMirroredLimitRanges(
   const res = await api.get<APIResponse<MirroredLimitRange[]>>(url);
   return res.data.data ?? [];
 }
+
+// ============================================================
+// Apiserver allow-list (migration 070)
+// ============================================================
+
+export type ApiserverAllowlistMode = 'monitor' | 'enforce' | 'disabled';
+export type ApiserverAllowlistSyncStatus =
+  | 'synced'
+  | 'drifting'
+  | 'pending'
+  | 'failed';
+export type ApiserverAllowlistProvider =
+  | 'eks'
+  | 'gke'
+  | 'aks'
+  | 'doks'
+  | 'self_managed'
+  | 'unknown';
+
+export interface ApiserverAllowlistResponse {
+  clusterId: string;
+  operatorCidrs: string[];
+  astronomerEgress: string[];
+  emergency: string[];
+  desired: string[];
+  effective: string[];
+  mode: ApiserverAllowlistMode;
+  detectedProvider: ApiserverAllowlistProvider;
+  syncStatus: ApiserverAllowlistSyncStatus;
+  lastError?: string;
+  lastReconciledAt?: string;
+  drift: boolean;
+}
+
+export interface ApiserverAllowlistUpdateRequest {
+  cidrs: string[];
+  mode: ApiserverAllowlistMode;
+  forceApply?: boolean;
+}
+
+export interface ApiserverAllowlistSnapshot {
+  id: number;
+  clusterId: string;
+  capturedAt: string;
+  effectiveCidrs: string[];
+  desiredCidrs: string[];
+  drift: boolean;
+}
+
+export async function getApiserverAllowlist(
+  clusterId: string,
+): Promise<ApiserverAllowlistResponse> {
+  const res = await api.get<APIResponse<ApiserverAllowlistResponse>>(
+    `/clusters/${clusterId}/apiserver-allowlist/`,
+  );
+  return res.data.data;
+}
+
+export async function previewApiserverAllowlist(
+  clusterId: string,
+): Promise<ApiserverAllowlistResponse> {
+  const res = await api.get<APIResponse<ApiserverAllowlistResponse>>(
+    `/clusters/${clusterId}/apiserver-allowlist/preview/`,
+  );
+  return res.data.data;
+}
+
+export async function updateApiserverAllowlist(
+  clusterId: string,
+  body: ApiserverAllowlistUpdateRequest,
+): Promise<ApiserverAllowlistResponse> {
+  const res = await api.put<APIResponse<ApiserverAllowlistResponse>>(
+    `/clusters/${clusterId}/apiserver-allowlist/`,
+    body,
+  );
+  return res.data.data;
+}
+
+export async function reconcileApiserverAllowlist(
+  clusterId: string,
+): Promise<void> {
+  await api.post(`/clusters/${clusterId}/apiserver-allowlist/reconcile/`);
+}
+
+export async function listApiserverAllowlistSnapshots(
+  clusterId: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<ApiserverAllowlistSnapshot[]> {
+  const q = new URLSearchParams();
+  if (opts?.limit !== undefined) q.set('limit', String(opts.limit));
+  if (opts?.offset !== undefined) q.set('offset', String(opts.offset));
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  const res = await api.get<APIResponse<{ items: ApiserverAllowlistSnapshot[] }>>(
+    `/clusters/${clusterId}/apiserver-allowlist/snapshots/${suffix}`,
+  );
+  return res.data.data.items ?? [];
+}
