@@ -69,6 +69,12 @@ const (
 	TypeClusterSnapshotPoll              = tasks.ClusterSnapshotPollType
 	TypeClusterSnapshotDispatchScheduled = tasks.ClusterSnapshotDispatchScheduledType
 	TypeClusterSnapshotCleanupExpired    = tasks.ClusterSnapshotCleanupExpiredType
+	// Migration 053: cloud credentials → in-cluster k8s Secret. The
+	// CloudCredentialMaterialize task runs for one (credential, cluster,
+	// namespace) tuple; the CloudCredentialDriftReconcile sweep walks
+	// every materialization not in the "applied" state on a 30m cadence.
+	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
+	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -144,6 +150,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotPoll, instrumentTask(TypeClusterSnapshotPoll, tasks.HandleClusterSnapshotPoll))
 	w.mux.HandleFunc(TypeClusterSnapshotDispatchScheduled, instrumentTask(TypeClusterSnapshotDispatchScheduled, tasks.HandleClusterSnapshotDispatchScheduled))
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
+	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
+	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
 
 	w.log.Info("registered all task handlers")
 }

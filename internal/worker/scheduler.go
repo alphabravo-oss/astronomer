@@ -98,6 +98,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30s", tasks.ClusterSnapshotPollType, "cluster snapshot poll"},
 		{"@every 1m", tasks.ClusterSnapshotDispatchScheduledType, "cluster snapshot scheduled dispatcher"},
 		{"15 4 * * *", tasks.ClusterSnapshotCleanupExpiredType, "cluster snapshot expired cleanup (daily 04:15)"},
+		// Migration 053: drift sweep for cloud-credential materializations.
+		// Walks every row whose status != 'applied' and retries — the
+		// Secret SSA is idempotent so converged rows fast-fail through
+		// the apply path without a wire write.
+		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
 	}
 
 	for _, e := range entries {

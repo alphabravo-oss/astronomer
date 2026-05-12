@@ -1186,3 +1186,15 @@ func (a projectRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 	bodyBytes, _ := decodeResponseBody(resp)
 	return &tasks.ProjectK8sResponse{StatusCode: resp.StatusCode, Body: bodyBytes}, nil
 }
+
+// ProjectK8sRequesterFromHandlerRequester wraps a handler-side
+// K8sRequester in the adapter that tasks expect (tasks.ProjectK8sRequester).
+// Used by cross-task wiring such as the cloud-credentials materialization
+// worker so a single handler.K8sRequester is shared across every
+// reconciler that drives K8s SSA through the tunnel.
+func ProjectK8sRequesterFromHandlerRequester(r K8sRequester) tasks.ProjectK8sRequester {
+	if r == nil {
+		return nil
+	}
+	return projectRequesterAdapter{r: r}
+}
