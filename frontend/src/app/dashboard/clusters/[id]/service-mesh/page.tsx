@@ -79,7 +79,7 @@ function meshAccent(kind: ServiceMeshKind): string {
 }
 
 // ─── Detection hero card ────────────────────────────────────────────────────
-function HeroCard({ detection }: { detection: ServiceMeshDetection }) {
+function HeroCard({ detection, clusterId }: { detection: ServiceMeshDetection; clusterId: string }) {
   const isInstalled = detection.detectedMesh !== 'none' && detection.detectedMesh !== 'unknown';
   return (
     <div className="rounded-lg border border-border bg-card p-6">
@@ -126,7 +126,7 @@ function HeroCard({ detection }: { detection: ServiceMeshDetection }) {
         </div>
         {!isInstalled && (
           <Link
-            href={`/dashboard/catalog?tag=service-mesh`}
+            href={`/dashboard/catalog?tag=service-mesh&cluster_id=${clusterId}`}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex-shrink-0"
           >
@@ -235,7 +235,7 @@ export default function ClusterServiceMeshPage() {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : detection ? (
-        <HeroCard detection={detection} />
+        <HeroCard detection={detection} clusterId={clusterId} />
       ) : null}
 
       {/* Health 4-grid (Istio counts when Istio, Linkerd counts when Linkerd) */}

@@ -254,9 +254,30 @@ export default function ClusterImageScansPage() {
             )}
             {!images.isLoading && (images.data?.items.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                  No vulnerability reports yet — install trivy-operator from
-                  Catalog or wait for the next scan window.
+                <td colSpan={7} className="px-3 py-8 text-center">
+                  <div className="inline-flex flex-col items-center gap-2 text-muted-foreground">
+                    <ShieldAlert className="h-6 w-6" />
+                    <div className="font-medium text-foreground">No vulnerability reports yet</div>
+                    <p className="text-xs max-w-md">
+                      Install trivy-operator on this cluster and reports will populate within the
+                      first scan window (typically 5–15 min). Already installed? Use the rescan
+                      button above.
+                    </p>
+                    <div className="flex gap-2 mt-2">
+                      <a
+                        href={`/dashboard/catalog?search=trivy&cluster_id=${clusterId}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+                      >
+                        Install trivy-operator
+                      </a>
+                      <a
+                        href={`/dashboard/clusters/${clusterId}/provisioning`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
+                      >
+                        View Provisioning status
+                      </a>
+                    </div>
+                  </div>
                 </td>
               </tr>
             )}
