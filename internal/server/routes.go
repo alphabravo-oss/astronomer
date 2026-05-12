@@ -149,6 +149,12 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// ClusterResources owns the sprint-069 read-only "what's installed"
+	// surface: /clusters/{cluster_id}/{ingress-classes,gateway-classes,
+	// network-policies,resource-quotas,limit-ranges}/. Nil-safe — when
+	// unwired the routes are omitted and the dashboard tabs render an
+	// empty state.
+	ClusterResources *handler.ClusterResourcesHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -668,6 +674,19 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.UpdateSchedule)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshot-schedules/{id}/", deps.ClusterSnapshots.DeleteSchedule)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
+	}
+
+	// Sprint 069 — CRD-mirror v2 read-only "what's installed" surface.
+	// All endpoints gated on clusters:read. The full /network-policies/
+	// path returns every mirrored NetworkPolicy (managed + operator-
+	// created); the parallel sprint-068 /network-policies/applications/
+	// path owns the astronomer-managed subset.
+	if deps.ClusterResources != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/ingress-classes/", deps.ClusterResources.ListIngressClasses)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/gateway-classes/", deps.ClusterResources.ListGatewayClasses)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/network-policies/", deps.ClusterResources.ListNetworkPolicies)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/resource-quotas/", deps.ClusterResources.ListResourceQuotas)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/limit-ranges/", deps.ClusterResources.ListLimitRanges)
 	}
 
 	if deps.Projects != nil {
