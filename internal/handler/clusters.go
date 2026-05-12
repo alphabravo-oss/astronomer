@@ -13,6 +13,7 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
@@ -606,6 +607,13 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			// Best-effort enqueue. Errors are logged on the asynq side but
 			// the periodic sweep will pick the row up regardless, so we
 			// don't fail the request when redis is briefly unavailable.
+			// Inline-wrap the payload with the request's correlation ID so
+			// worker logs for this decommission tie back to the originating
+			// DELETE request (FEATURES-051126 T22).
+			correlationID := middleware.GetCorrelationID(r.Context())
+			if correlationID != "" {
+				task = asynq.NewTask(task.Type(), observability.WithCorrelationPayload(task.Payload(), correlationID))
+			}
 			_, _ = h.decommissionQueue.Enqueue(task)
 		}
 	}

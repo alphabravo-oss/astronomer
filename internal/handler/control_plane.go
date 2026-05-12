@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -453,6 +455,12 @@ func (h *ControlPlaneHandler) enqueueNotifications(ctx context.Context, alert sq
 		})
 		if err != nil {
 			continue
+		}
+		// FEATURES-051126 T22: propagate correlation ID so the
+		// downstream notification.send worker logs trace back to the
+		// alert evaluation that triggered them.
+		if cid := middleware.GetCorrelationID(ctx); cid != "" {
+			task = asynq.NewTask(task.Type(), observability.WithCorrelationPayload(task.Payload(), cid))
 		}
 		_, _ = h.queue.Enqueue(task)
 	}

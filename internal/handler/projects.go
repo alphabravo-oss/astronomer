@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -635,6 +636,11 @@ func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, cluste
 	if h.queue == nil {
 		return
 	}
+	// FEATURES-051126 T22 — propagate correlation ID into the task
+	// payload so worker logs tie back to the originating request.
+	if cid := middleware.GetCorrelationID(ctx); cid != "" {
+		task = asynq.NewTask(task.Type(), observability.WithCorrelationPayload(task.Payload(), cid))
+	}
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project reconcile task", "error", err)
 	}
@@ -669,6 +675,9 @@ func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterI
 			Namespace: namespace,
 		})
 		return
+	}
+	if cid := middleware.GetCorrelationID(ctx); cid != "" {
+		task = asynq.NewTask(task.Type(), observability.WithCorrelationPayload(task.Payload(), cid))
 	}
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project cleanup task", "error", err)

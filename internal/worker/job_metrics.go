@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -42,11 +43,41 @@ func registerJobMetrics() {
 	})
 }
 
+// EnqueueWithCorrelation wraps client.Enqueue and merges the supplied
+// correlation ID into the task payload as `_correlation_id`. Pulled out
+// to one helper so all 5 enqueue sites in the codebase use the same
+// convention; the matching dequeue extraction lives in instrumentTask.
+// FEATURES-051126 T22.
+func EnqueueWithCorrelation(client *asynq.Client, task *asynq.Task, correlationID string, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+	if task == nil || client == nil {
+		return nil, asynqEnqueueNilErr
+	}
+	if correlationID != "" {
+		wrapped := observability.WithCorrelationPayload(task.Payload(), correlationID)
+		task = asynq.NewTask(task.Type(), wrapped, opts...)
+	}
+	return client.Enqueue(task, opts...)
+}
+
+// asynqEnqueueNilErr is the sentinel for "you passed a nil task or
+// client". Kept as a typed package-level err so test cases can assert
+// against it.
+var asynqEnqueueNilErr = errors.New("worker: enqueue called with nil task or client")
+
 func instrumentTask(job string, handler func(context.Context, *asynq.Task) error) func(context.Context, *asynq.Task) error {
 	registerJobMetrics()
 	return func(ctx context.Context, task *asynq.Task) error {
 		start := time.Now()
-		observability.WithEvent(slog.Default(), "worker_job_started").Info("worker job started",
+		// FEATURES-051126 T22: pull `_correlation_id` (if any) out of
+		// the task payload and stamp it on the per-job logger. This
+		// stitches worker logs back to the HTTP request that enqueued
+		// the task — previously the worker side was a dead-end for
+		// correlation tracing.
+		logger := slog.Default()
+		if cid := observability.ExtractAsynqCorrelationID(task.Payload()); cid != "" {
+			logger = observability.WithCorrelationID(logger, cid)
+		}
+		observability.WithEvent(logger, "worker_job_started").Info("worker job started",
 			"job", job,
 		)
 		err := handler(ctx, task)
@@ -54,7 +85,7 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		if err != nil {
 			status = "error"
 		}
-		observability.WithEvent(slog.Default(), "worker_job_completed").Info("worker job completed",
+		observability.WithEvent(logger, "worker_job_completed").Info("worker job completed",
 			"job", job,
 			"status", status,
 			"duration_ms", time.Since(start).Milliseconds(),
