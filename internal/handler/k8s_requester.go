@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -95,17 +96,107 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		return nil, err
 	}
 
+	// FEATURES-051126 T20: the agent may respond either with one
+	// K8sResponse (small bodies) or with chunked K8sStreamFrame
+	// (header + N data + end) for large bodies. Probe the first
+	// frame to discriminate; both shapes assemble into a single
+	// K8sResponsePayload before returning to the caller.
+	first, err := readStreamFrame(ctx, stream.DataCh, stream.DoneCh)
+	if err != nil {
+		return nil, err
+	}
+	if isStreamFrame(first) {
+		return assembleChunkedResponse(ctx, stream.DataCh, stream.DoneCh, first)
+	}
+	var parsed protocol.K8sResponsePayload
+	if err := json.Unmarshal(first, &parsed); err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+// readStreamFrame waits for one frame on the agent stream. Channels are
+// passed in directly so this can be exercised by tests with synthetic
+// channels (no full Stream construction required).
+func readStreamFrame(ctx context.Context, dataCh <-chan []byte, doneCh <-chan struct{}) ([]byte, error) {
 	select {
-	case data := <-stream.DataCh:
-		var resp protocol.K8sResponsePayload
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, err
+	case data, ok := <-dataCh:
+		if !ok {
+			return nil, fmt.Errorf("stream closed unexpectedly")
 		}
-		return &resp, nil
-	case <-stream.DoneCh:
+		return data, nil
+	case <-doneCh:
 		return nil, fmt.Errorf("stream closed unexpectedly")
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// isStreamFrame inspects a JSON blob to decide whether it's a
+// K8sStreamFrame (has a top-level `kind` field) or a K8sResponsePayload
+// (has no `kind`). Cheap one-field probe; we re-unmarshal the full
+// struct in the caller.
+func isStreamFrame(data []byte) bool {
+	var probe struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	return probe.Kind != ""
+}
+
+// assembleChunkedResponse reads K8sStreamFrame data frames until it sees
+// the end frame, concatenates the base64-decoded body, and returns one
+// K8sResponsePayload to the caller — same shape as the single-message
+// path. Caps total assembled body at 64 MiB so a runaway agent can't OOM
+// the server.
+const maxAssembledResponseBytes = 64 * 1024 * 1024
+
+func assembleChunkedResponse(ctx context.Context, dataCh <-chan []byte, doneCh <-chan struct{}, first []byte) (*protocol.K8sResponsePayload, error) {
+	var header protocol.K8sStreamFrame
+	if err := json.Unmarshal(first, &header); err != nil {
+		return nil, fmt.Errorf("decode first stream frame: %w", err)
+	}
+	if header.Kind != protocol.K8sStreamFrameHeader {
+		return nil, fmt.Errorf("expected header frame first, got %q", header.Kind)
+	}
+	out := &protocol.K8sResponsePayload{
+		StatusCode: header.StatusCode,
+		Headers:    header.Headers,
+	}
+	var body bytes.Buffer
+	for {
+		raw, err := readStreamFrame(ctx, dataCh, doneCh)
+		if err != nil {
+			return nil, err
+		}
+		var frame protocol.K8sStreamFrame
+		if err := json.Unmarshal(raw, &frame); err != nil {
+			return nil, fmt.Errorf("decode stream frame: %w", err)
+		}
+		switch frame.Kind {
+		case protocol.K8sStreamFrameData:
+			if frame.Body == "" {
+				continue
+			}
+			decoded, derr := base64.StdEncoding.DecodeString(frame.Body)
+			if derr != nil {
+				return nil, fmt.Errorf("decode chunk body: %w", derr)
+			}
+			if body.Len()+len(decoded) > maxAssembledResponseBytes {
+				return nil, fmt.Errorf("chunked response exceeded %d-byte cap", maxAssembledResponseBytes)
+			}
+			body.Write(decoded)
+		case protocol.K8sStreamFrameEnd:
+			if frame.Error != "" {
+				return nil, fmt.Errorf("agent reported stream error: %s", frame.Error)
+			}
+			out.Body = base64.StdEncoding.EncodeToString(body.Bytes())
+			return out, nil
+		default:
+			return nil, fmt.Errorf("unexpected stream frame kind %q during assembly", frame.Kind)
+		}
 	}
 }
 

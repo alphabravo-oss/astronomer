@@ -268,30 +268,123 @@ func (p *K8sProxy) sendStreamEnd(sendFn func(*protocol.Message) error, streamID 
 }
 
 // HandleRequest processes a K8S_REQUEST message and returns a K8S_RESPONSE.
+// Kept as a single-shot handler for backward compatibility with the legacy
+// MessageHandler shape; the production wiring uses HandleRequestStreaming
+// (FEATURES-051126 T20) which chunks large bodies. Small responses go
+// through here unchanged.
 func (p *K8sProxy) HandleRequest(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
+	respBody, statusCode, respHeaders, err := p.executeUpstream(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+	responsePayload := protocol.K8sResponsePayload{
+		StatusCode: statusCode,
+		Headers:    respHeaders,
+		Body:       base64.StdEncoding.EncodeToString(respBody),
+	}
+	payloadBytes, err := json.Marshal(responsePayload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal k8s response: %w", err)
+	}
+	return &protocol.Message{
+		Type:      protocol.MsgK8sResponse,
+		StreamID:  msg.StreamID,
+		Timestamp: time.Now().UTC(),
+		Payload:   payloadBytes,
+	}, nil
+}
+
+// HandleRequestStreaming is the same as HandleRequest but emits chunked
+// K8sStreamFrame messages when the response body exceeds
+// protocol.K8sChunkSizeBytes. The server's k8s_requester auto-detects
+// the shape (header frame → data frames → end frame) and reassembles a
+// single K8sResponsePayload before returning to its caller — the
+// handler-side contract is unchanged.
+//
+// Why two methods: this one fits the AdaptStreamingHandler shape
+// (returns frames via sendFn). The legacy single-shot HandleRequest
+// stays for tests + any callers that want one in-memory response.
+//
+// FEATURES-051126 T20.
+func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Message, sendFn func(*protocol.Message) error) error {
+	respBody, statusCode, respHeaders, err := p.executeUpstream(ctx, msg)
+	if err != nil {
+		return err
+	}
+
+	// Small body: single K8sResponse, same wire shape as before. The
+	// server's requester handles both shapes; keeping the small path
+	// unchanged avoids regressing the common case (single-resource
+	// reads).
+	if len(respBody) <= protocol.K8sChunkSizeBytes {
+		responsePayload := protocol.K8sResponsePayload{
+			StatusCode: statusCode,
+			Headers:    respHeaders,
+			Body:       base64.StdEncoding.EncodeToString(respBody),
+		}
+		payloadBytes, merr := json.Marshal(responsePayload)
+		if merr != nil {
+			return fmt.Errorf("marshal k8s response: %w", merr)
+		}
+		return sendFn(&protocol.Message{
+			Type:      protocol.MsgK8sResponse,
+			StreamID:  msg.StreamID,
+			Timestamp: time.Now().UTC(),
+			Payload:   payloadBytes,
+		})
+	}
+
+	// Large body: chunked stream. Header frame carries StatusCode +
+	// Headers; data frames carry K8sChunkSizeBytes of body per frame
+	// (final chunk may be smaller); end frame closes the stream.
+	if err := p.sendStreamFrame(sendFn, msg.StreamID, protocol.K8sStreamFrame{
+		Kind:       protocol.K8sStreamFrameHeader,
+		StatusCode: statusCode,
+		Headers:    respHeaders,
+	}); err != nil {
+		return err
+	}
+	for offset := 0; offset < len(respBody); offset += protocol.K8sChunkSizeBytes {
+		end := offset + protocol.K8sChunkSizeBytes
+		if end > len(respBody) {
+			end = len(respBody)
+		}
+		if err := p.sendStreamFrame(sendFn, msg.StreamID, protocol.K8sStreamFrame{
+			Kind: protocol.K8sStreamFrameData,
+			Body: base64.StdEncoding.EncodeToString(respBody[offset:end]),
+		}); err != nil {
+			return err
+		}
+	}
+	return p.sendStreamEnd(sendFn, msg.StreamID, nil)
+}
+
+// executeUpstream performs the actual k8s API call and returns the raw
+// body + status + headers. Factored out so HandleRequest and
+// HandleRequestStreaming share the I/O path; the only difference is how
+// they frame the response on the way back.
+func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) ([]byte, int, map[string]string, error) {
 	var req protocol.K8sRequestPayload
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, fmt.Errorf("unmarshal k8s request: %w", err)
+		return nil, 0, nil, fmt.Errorf("unmarshal k8s request: %w", err)
 	}
 
 	p.log.Info("proxying k8s request", "method", req.Method, "path", req.Path)
 
-	// Build the target URL using the API server host from the rest config.
 	targetURL := p.restConfig.Host + req.Path
 
-	// Decode body if present.
 	var bodyReader io.Reader
 	if req.Body != "" {
 		decoded, err := base64.StdEncoding.DecodeString(req.Body)
 		if err != nil {
-			return nil, fmt.Errorf("decode request body: %w", err)
+			return nil, 0, nil, fmt.Errorf("decode request body: %w", err)
 		}
 		bodyReader = bytes.NewReader(decoded)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, targetURL, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("create http request: %w", err)
+		return nil, 0, nil, fmt.Errorf("create http request: %w", err)
 	}
 
 	for k, v := range req.Headers {
@@ -300,35 +393,18 @@ func (p *K8sProxy) HandleRequest(ctx context.Context, msg *protocol.Message) (*p
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("execute k8s request: %w", err)
+		return nil, 0, nil, fmt.Errorf("execute k8s request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read k8s response body: %w", err)
+		return nil, 0, nil, fmt.Errorf("read k8s response body: %w", err)
 	}
 
 	respHeaders := make(map[string]string)
 	for k := range resp.Header {
 		respHeaders[k] = resp.Header.Get(k)
 	}
-
-	responsePayload := protocol.K8sResponsePayload{
-		StatusCode: resp.StatusCode,
-		Headers:    respHeaders,
-		Body:       base64.StdEncoding.EncodeToString(respBody),
-	}
-
-	payloadBytes, err := json.Marshal(responsePayload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal k8s response: %w", err)
-	}
-
-	return &protocol.Message{
-		Type:      protocol.MsgK8sResponse,
-		StreamID:  msg.StreamID,
-		Timestamp: time.Now().UTC(),
-		Payload:   payloadBytes,
-	}, nil
+	return respBody, resp.StatusCode, respHeaders, nil
 }

@@ -205,6 +205,15 @@ const (
 // All Data frames carry base64-encoded chunks; chunk size is agent-chosen and
 // MUST NOT be assumed to align with watch-event boundaries — the consumer is
 // responsible for re-framing the JSON-on-newlines protocol that k8s emits.
+//
+// Two distinct uses share this frame shape:
+//   - Watch (the original): the agent sends a continuous stream as the
+//     upstream k8s API emits events. Triggered by MsgK8sStreamRequest.
+//   - Large unary response (FEATURES-051126 T20): the agent splits a
+//     large response body into ≤K8sChunkSizeBytes data frames in
+//     response to a normal MsgK8sRequest. The server's k8s_requester
+//     auto-detects this shape and reassembles the body before
+//     returning a single K8sResponsePayload to the caller.
 type K8sStreamFrame struct {
 	Kind       K8sStreamFrameKind `json:"kind"`
 	StatusCode int                `json:"status_code,omitempty"`
@@ -212,6 +221,13 @@ type K8sStreamFrame struct {
 	Body       string             `json:"body,omitempty"` // base64 (data frames)
 	Error      string             `json:"error,omitempty"`
 }
+
+// K8sChunkSizeBytes is the agent's threshold + per-data-frame body cap.
+// Bodies <= this size travel as a single K8sResponse; larger bodies are
+// split into K8sStreamFrame{Kind:"data"} chunks at exactly this length
+// (the final chunk may be smaller). 256 KiB keeps assembled buffer
+// growth predictable and stays well under the 16 MiB per-WS-frame cap.
+const K8sChunkSizeBytes = 256 * 1024
 
 // HelmRequestPayload represents a Helm operation request.
 type HelmRequestPayload struct {

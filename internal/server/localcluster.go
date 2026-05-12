@@ -183,7 +183,10 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	if err != nil {
 		return fmt.Errorf("create local k8s proxy: %w", err)
 	}
-	tunnelClient.RegisterHandler(protocol.MsgK8sRequest, k8sProxy.HandleRequest)
+	// FEATURES-051126 T20: streaming variant for the embedded local agent —
+	// large list responses (e.g. /apis/.../resources) get chunked instead
+	// of pinned to a single 16 MiB WS frame.
+	tunnelClient.RegisterHandler(protocol.MsgK8sRequest, agent.AdaptStreamingHandler(tunnelClient, k8sProxy.HandleRequestStreaming))
 
 	execHandler := agent.NewExecHandler(clientset, restCfg, logger)
 	tunnelClient.RegisterHandler(protocol.MsgExecStart, agent.AdaptStreamingHandler(tunnelClient, execHandler.HandleExecStart))

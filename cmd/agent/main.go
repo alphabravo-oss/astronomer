@@ -99,7 +99,12 @@ func runConnect(logger *slog.Logger) error {
 	if err != nil {
 		logger.Warn("k8s proxy unavailable (not running in cluster?)", "error", err)
 	} else {
-		tunnel.RegisterHandler(protocol.MsgK8sRequest, k8s.HandleRequest)
+		// FEATURES-051126 T20: streaming variant chunks large response
+		// bodies through K8sStreamFrame instead of one giant
+		// K8sResponse that hits the 16 MiB WS frame cap. Small
+		// responses still travel as a single K8sResponse — the
+		// streaming handler decides per-call.
+		tunnel.RegisterHandler(protocol.MsgK8sRequest, agent.AdaptStreamingHandler(tunnel, k8s.HandleRequestStreaming))
 		// Streaming variant for long-lived k8s responses (Watch). Uses the
 		// existing AdaptStreamingHandler pattern: handler emits frames via
 		// sendFn and returns nil so the dispatcher doesn't expect a single
