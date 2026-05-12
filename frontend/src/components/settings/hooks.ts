@@ -68,6 +68,10 @@ export const settingsKeys = {
   backupDrill: ['settings', 'backup-drill'] as const,
   backupDrillHistory: (params?: Record<string, unknown>) =>
     ['settings', 'backup-drill', 'history', params] as const,
+  gitopsSources: ['settings', 'gitops-sources'] as const,
+  gitopsSource: (id: string) => ['settings', 'gitops-sources', id] as const,
+  gitopsClusters: (id: string) =>
+    ['settings', 'gitops-sources', id, 'clusters'] as const,
 };
 
 // ============================================================
@@ -383,5 +387,106 @@ export function useBackupDrillHistory(params?: { page?: number; page_size?: numb
   return useQuery({
     queryKey: settingsKeys.backupDrillHistory(params),
     queryFn: () => api.listBackupDrillHistory(params),
+  });
+}
+
+// ============================================================
+// GitOps cluster registration (migration 060)
+// ============================================================
+
+export function useGitOpsSources() {
+  return useQuery({
+    queryKey: settingsKeys.gitopsSources,
+    queryFn: () => api.listGitOpsSources(),
+  });
+}
+
+export function useGitOpsSource(id: string | undefined) {
+  return useQuery({
+    queryKey: settingsKeys.gitopsSource(id ?? ''),
+    queryFn: () => api.getGitOpsSource(id!),
+    enabled: !!id,
+  });
+}
+
+export function useGitOpsSourceClusters(id: string | undefined) {
+  return useQuery({
+    queryKey: settingsKeys.gitopsClusters(id ?? ''),
+    queryFn: () => api.listGitOpsSourceClusters(id!),
+    enabled: !!id,
+  });
+}
+
+export function useCreateGitOpsSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: api.GitOpsSourceWriteRequest) =>
+      api.createGitOpsSource(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
+      toast.success('GitOps source created');
+    },
+    onError: (err: Error) => {
+      toast.error(`Create failed: ${err.message}`);
+    },
+  });
+}
+
+export function useUpdateGitOpsSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: Partial<api.GitOpsSourceWriteRequest>;
+    }) => api.updateGitOpsSource(id, body),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
+      qc.invalidateQueries({ queryKey: settingsKeys.gitopsSource(vars.id) });
+      toast.success('GitOps source updated');
+    },
+    onError: (err: Error) => {
+      toast.error(`Update failed: ${err.message}`);
+    },
+  });
+}
+
+export function useDeleteGitOpsSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteGitOpsSource(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
+      toast.success('GitOps source deleted');
+    },
+    onError: (err: Error) => {
+      toast.error(`Delete failed: ${err.message}`);
+    },
+  });
+}
+
+export function useSyncGitOpsSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.syncGitOpsSource(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: settingsKeys.gitopsSource(id) });
+      qc.invalidateQueries({ queryKey: settingsKeys.gitopsClusters(id) });
+      toast.success('Sync triggered');
+    },
+    onError: (err: Error) => {
+      toast.error(`Sync failed: ${err.message}`);
+    },
+  });
+}
+
+export function usePreviewGitOpsSource() {
+  return useMutation({
+    mutationFn: (id: string) => api.previewGitOpsSource(id),
+    onError: (err: Error) => {
+      toast.error(`Preview failed: ${err.message}`);
+    },
   });
 }

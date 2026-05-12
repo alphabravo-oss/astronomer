@@ -579,3 +579,149 @@ export async function listBackupDrillHistory(params?: {
   );
   return res.data;
 }
+
+// ============================================================
+// Types — GitOps cluster registration (migration 060)
+// ============================================================
+
+export type GitOpsAuthMode = 'none' | 'https_token' | 'ssh_key';
+export type GitOpsSyncMode = 'manual' | 'interval';
+export type GitOpsOnDelete = 'log' | 'tombstone' | 'decommission';
+
+/** Sentinel echoed by the backend when an auth blob is configured. PUT
+ *  the sentinel back to "keep existing"; substitute a real value to
+ *  rotate. */
+export const GITOPS_AUTH_SENTINEL = '<encrypted>';
+
+export interface GitOpsSource {
+  id: string;
+  name: string;
+  repo_url: string;
+  branch: string;
+  path_prefix: string;
+  auth_mode: GitOpsAuthMode;
+  auth: string;
+  auth_configured: boolean;
+  sync_mode: GitOpsSyncMode;
+  sync_interval_seconds: number;
+  on_delete: GitOpsOnDelete;
+  last_synced_at?: string;
+  last_synced_sha?: string;
+  last_error?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitOpsSourceWriteRequest {
+  name: string;
+  repo_url: string;
+  branch?: string;
+  path_prefix?: string;
+  auth_mode?: GitOpsAuthMode;
+  auth?: string;
+  sync_mode?: GitOpsSyncMode;
+  sync_interval_seconds?: number;
+  on_delete?: GitOpsOnDelete;
+  enabled?: boolean;
+}
+
+export interface GitOpsManagedCluster {
+  cluster_id: string;
+  cluster_name?: string;
+  display_name?: string;
+  repo_path: string;
+  last_yaml_sha: string;
+  last_applied_at: string;
+  status: 'active' | 'tombstoned';
+  tombstoned_at?: string;
+}
+
+export interface GitOpsApplyPreview {
+  cluster_name: string;
+  cluster_id?: string;
+  repo_path: string;
+  created: boolean;
+  updated: boolean;
+  no_op: boolean;
+  template_bound: boolean;
+  registries: string[];
+  tool_presets: string[];
+  project?: string;
+  restored_active?: boolean;
+}
+
+export interface GitOpsPreviewResult {
+  head_sha: string;
+  source_id: string;
+  source_name: string;
+  applies: GitOpsApplyPreview[];
+  would_miss: string[];
+  would_restore: string[];
+  on_delete_policy: GitOpsOnDelete;
+}
+
+// ============================================================
+// GitOps — API funcs
+// ============================================================
+
+export async function listGitOpsSources(): Promise<GitOpsSource[]> {
+  const res = await api.get<APIResponse<{ sources: GitOpsSource[] }>>(
+    '/admin/gitops-sources',
+  );
+  return res.data.data?.sources ?? [];
+}
+
+export async function getGitOpsSource(id: string): Promise<GitOpsSource> {
+  const res = await api.get<APIResponse<GitOpsSource>>(
+    `/admin/gitops-sources/${id}`,
+  );
+  return res.data.data ?? (res.data as unknown as GitOpsSource);
+}
+
+export async function createGitOpsSource(
+  body: GitOpsSourceWriteRequest,
+): Promise<GitOpsSource> {
+  const res = await api.post<APIResponse<GitOpsSource>>(
+    '/admin/gitops-sources',
+    body,
+  );
+  return res.data.data ?? (res.data as unknown as GitOpsSource);
+}
+
+export async function updateGitOpsSource(
+  id: string,
+  body: Partial<GitOpsSourceWriteRequest>,
+): Promise<GitOpsSource> {
+  const res = await api.put<APIResponse<GitOpsSource>>(
+    `/admin/gitops-sources/${id}`,
+    body,
+  );
+  return res.data.data ?? (res.data as unknown as GitOpsSource);
+}
+
+export async function deleteGitOpsSource(id: string): Promise<void> {
+  await api.delete(`/admin/gitops-sources/${id}`);
+}
+
+export async function syncGitOpsSource(id: string): Promise<void> {
+  await api.post(`/admin/gitops-sources/${id}/sync`);
+}
+
+export async function previewGitOpsSource(
+  id: string,
+): Promise<GitOpsPreviewResult> {
+  const res = await api.get<APIResponse<GitOpsPreviewResult>>(
+    `/admin/gitops-sources/${id}/preview`,
+  );
+  return res.data.data ?? (res.data as unknown as GitOpsPreviewResult);
+}
+
+export async function listGitOpsSourceClusters(
+  id: string,
+): Promise<GitOpsManagedCluster[]> {
+  const res = await api.get<APIResponse<{ clusters: GitOpsManagedCluster[] }>>(
+    `/admin/gitops-sources/${id}/clusters`,
+  );
+  return res.data.data?.clusters ?? [];
+}
