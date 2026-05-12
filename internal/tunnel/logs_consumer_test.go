@@ -70,20 +70,8 @@ func TestTranslateLogLine(t *testing.T) {
 	}
 }
 
-// TestBearerFromHeader covers the small helper that pulls the token out of an
-// Authorization header. The WS log handler uses this before falling back to
-// the `?token=` query param.
-func TestBearerFromHeader(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"", ""},
-		{"Bearer abc", "abc"},
-		{"bearer xyz", "xyz"},
-		{"Basic abc", ""},
-		{"Bearer", ""},
-	}
-	for _, tc := range cases {
-		if got := bearerFromHeader(tc.in); got != tc.want {
-			t.Errorf("bearerFromHeader(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
+// Note: the small `bearerFromHeader` helper that used to live in this package
+// was extracted to internal/auth as auth.BearerFromHeader so the three
+// long-lived stream endpoints (WS logs, WS exec, SSE events) share a single
+// implementation. The unit test for the helper now lives next to it in
+// internal/auth/streamauth_test.go.

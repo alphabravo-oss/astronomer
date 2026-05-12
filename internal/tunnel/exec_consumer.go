@@ -2,12 +2,9 @@ package tunnel
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -69,56 +66,11 @@ func (ec *ExecConsumer) SetAuth(jwt *iauth.JWTManager, queries appmiddleware.Tok
 
 // authenticate validates the request via Authorization header (preferred) or
 // `?token=` query parameter (browser WebSocket fallback). Returns true if
-// authenticated, or if no JWT manager is wired (dev/test mode).
+// authenticated, or if no JWT manager is wired (dev/test mode). Delegates to
+// the shared auth.AuthorizeStreamRequest helper.
 func (ec *ExecConsumer) authenticate(r *http.Request) bool {
-	if ec.jwt == nil {
-		return true
-	}
-	token := bearerToken(r.Header.Get("Authorization"))
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-	if token == "" {
-		return false
-	}
-	if strings.HasPrefix(token, "astro_") {
-		if ec.queries == nil {
-			return false
-		}
-		hash := sha256.Sum256([]byte(token))
-		hashStr := hex.EncodeToString(hash[:])
-		apiToken, err := ec.queries.GetTokenByHash(r.Context(), hashStr)
-		if err != nil {
-			return false
-		}
-		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
-			return false
-		}
-		dbUser, err := ec.queries.GetUserByID(r.Context(), apiToken.UserID)
-		if err != nil || !dbUser.IsActive {
-			return false
-		}
-		return true
-	}
-	claims, err := ec.jwt.ValidateToken(token)
-	if err != nil {
-		return false
-	}
-	if claims.UserID == uuid.Nil {
-		return false
-	}
-	return true
-}
-
-func bearerToken(h string) string {
-	if h == "" {
-		return ""
-	}
-	parts := strings.SplitN(h, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return parts[1]
+	_, ok := iauth.AuthorizeStreamRequest(r, ec.queries, ec.jwt)
+	return ok
 }
 
 // HandleExec upgrades to WebSocket and relays exec I/O between the frontend

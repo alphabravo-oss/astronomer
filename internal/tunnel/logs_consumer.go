@@ -2,8 +2,6 @@ package tunnel
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -61,53 +59,12 @@ func (lc *LogsConsumer) SetAuth(jwt *auth.JWTManager, queries middleware.TokenUs
 }
 
 // authenticate validates the request via Authorization header (preferred)
-// or `?token=` query parameter (browser-WS fallback).
+// or `?token=` query parameter (browser-WS fallback). Delegates to the
+// shared auth.AuthorizeStreamRequest helper so the three long-lived stream
+// endpoints (WS logs, WS exec, SSE events) share a single validation path.
 func (lc *LogsConsumer) authenticate(r *http.Request) bool {
-	if lc.jwt == nil {
-		return true
-	}
-	token := bearerFromHeader(r.Header.Get("Authorization"))
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-	if token == "" {
-		return false
-	}
-	if strings.HasPrefix(token, "astro_") {
-		if lc.queries == nil {
-			return false
-		}
-		hash := sha256.Sum256([]byte(token))
-		hashStr := hex.EncodeToString(hash[:])
-		apiToken, err := lc.queries.GetTokenByHash(r.Context(), hashStr)
-		if err != nil {
-			return false
-		}
-		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
-			return false
-		}
-		dbUser, err := lc.queries.GetUserByID(r.Context(), apiToken.UserID)
-		if err != nil || !dbUser.IsActive {
-			return false
-		}
-		return true
-	}
-	claims, err := lc.jwt.ValidateToken(token)
-	if err != nil {
-		return false
-	}
-	return claims.UserID != uuid.Nil
-}
-
-func bearerFromHeader(h string) string {
-	if h == "" {
-		return ""
-	}
-	parts := strings.SplitN(h, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return parts[1]
+	_, ok := auth.AuthorizeStreamRequest(r, lc.queries, lc.jwt)
+	return ok
 }
 
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent

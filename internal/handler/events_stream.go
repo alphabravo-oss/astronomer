@@ -1,15 +1,10 @@
 package handler
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -62,57 +57,11 @@ func (h *EventStreamHandler) SetAuth(jwt *auth.JWTManager, queries middleware.To
 
 // authenticateRequest validates the request via Authorization header (preferred)
 // or `?token=` query parameter (EventSource fallback). Returns true if either
-// path succeeded, or if no JWT manager is wired (dev/test mode).
+// path succeeded, or if no JWT manager is wired (dev/test mode). Delegates to
+// the shared auth.AuthorizeStreamRequest helper.
 func (h *EventStreamHandler) authenticateRequest(r *http.Request) bool {
-	if h.jwt == nil {
-		return true
-	}
-	token := bearerFromHeader(r.Header.Get("Authorization"))
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-	if token == "" {
-		return false
-	}
-	if strings.HasPrefix(token, "astro_") {
-		if h.queries == nil {
-			// No DB -> can't verify api_token; reject.
-			return false
-		}
-		hash := sha256.Sum256([]byte(token))
-		hashStr := hex.EncodeToString(hash[:])
-		apiToken, err := h.queries.GetTokenByHash(r.Context(), hashStr)
-		if err != nil {
-			return false
-		}
-		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
-			return false
-		}
-		dbUser, err := h.queries.GetUserByID(r.Context(), apiToken.UserID)
-		if err != nil || !dbUser.IsActive {
-			return false
-		}
-		return true
-	}
-	claims, err := h.jwt.ValidateToken(token)
-	if err != nil {
-		return false
-	}
-	if claims.UserID == uuid.Nil {
-		return false
-	}
-	return true
-}
-
-func bearerFromHeader(h string) string {
-	if h == "" {
-		return ""
-	}
-	parts := strings.SplitN(h, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return parts[1]
+	_, ok := auth.AuthorizeStreamRequest(r, h.queries, h.jwt)
+	return ok
 }
 
 // Stream is the GET handler for SSE.
