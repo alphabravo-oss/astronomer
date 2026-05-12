@@ -434,6 +434,14 @@ type ClusterMonitoringConfig struct {
 	LastDriftDetectedAt     pgtype.Timestamptz `json:"last_drift_detected_at"`
 }
 
+type ClusterRegistrationPolicy struct {
+	ClusterID         uuid.UUID   `json:"cluster_id"`
+	TokenRotationDays int32       `json:"token_rotation_days"`
+	SourceTemplateID  pgtype.UUID `json:"source_template_id"`
+	CreatedAt         time.Time   `json:"created_at"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+}
+
 type ClusterRegistrationToken struct {
 	ID        uuid.UUID `json:"id"`
 	ClusterID uuid.UUID `json:"cluster_id"`
@@ -444,16 +452,49 @@ type ClusterRegistrationToken struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// ClusterTemplate is migration-049's operator-defined "Production Web App"
+// style template. spec is JSONB; the handler validates the shape at
+// write time so a future schema evolution doesn't require an ALTER TABLE.
+type ClusterTemplate struct {
+	ID          uuid.UUID       `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Spec        json.RawMessage `json:"spec"`
+	CreatedBy   pgtype.UUID     `json:"created_by"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+// ClusterTemplateApplication tracks "which template is bound to this
+// cluster, and how did the most recent apply go?". One row per cluster
+// (cluster_id is the PK). spec_snapshot is the template body at the time
+// of the last apply — drift detection compares the live state to this.
+type ClusterTemplateApplication struct {
+	ClusterID    uuid.UUID          `json:"cluster_id"`
+	TemplateID   uuid.UUID          `json:"template_id"`
+	Status       string             `json:"status"`
+	SpecSnapshot json.RawMessage    `json:"spec_snapshot"`
+	LastError    string             `json:"last_error"`
+	AppliedAt    pgtype.Timestamptz `json:"applied_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
 type ClusterRegistryConfig struct {
-	ID                 uuid.UUID `json:"id"`
-	ClusterID          uuid.UUID `json:"cluster_id"`
-	PrivateRegistryUrl string    `json:"private_registry_url"`
-	RegistryUsername   string    `json:"registry_username"`
-	RegistryPassword   string    `json:"registry_password"`
-	Insecure           bool      `json:"insecure"`
-	CaBundle           string    `json:"ca_bundle"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                 uuid.UUID          `json:"id"`
+	ClusterID          uuid.UUID          `json:"cluster_id"`
+	PrivateRegistryUrl string             `json:"private_registry_url"`
+	RegistryUsername   string             `json:"registry_username"`
+	RegistryPassword   string             `json:"registry_password"`
+	Insecure           bool               `json:"insecure"`
+	CaBundle           string             `json:"ca_bundle"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	Namespaces         json.RawMessage    `json:"namespaces"`
+	InjectDefaultSa    bool               `json:"inject_default_sa"`
+	SecretName         string             `json:"secret_name"`
+	LastAppliedAt      pgtype.Timestamptz `json:"last_applied_at"`
+	LastApplyError     string             `json:"last_apply_error"`
 }
 
 type ClusterRole struct {
@@ -1109,4 +1150,43 @@ type PasswordResetToken struct {
 	ExpiresAt           time.Time          `json:"expires_at"`
 	UsedAt              pgtype.Timestamptz `json:"used_at"`
 	CreatedAt           time.Time          `json:"created_at"`
+}
+
+// WebhookSubscription is migration-048's operator-managed outbound
+// webhook config. secret_encrypted is Fernet-encrypted under
+// auth.Encryptor (same key set as smtp_settings.password_encrypted).
+type WebhookSubscription struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Url             string          `json:"url"`
+	SecretEncrypted string          `json:"secret_encrypted"`
+	EventFilters    json.RawMessage `json:"event_filters"`
+	PayloadTemplate string          `json:"payload_template"`
+	ExtraHeaders    json.RawMessage `json:"extra_headers"`
+	Enabled         bool            `json:"enabled"`
+	MaxRetries      int32           `json:"max_retries"`
+	TimeoutSeconds  int32           `json:"timeout_seconds"`
+	CreatedBy       pgtype.UUID     `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// WebhookDelivery is one POST attempt for a (subscription, event) pair.
+// Migration 048. The dispatcher reads queued/failed rows and ships them
+// to the subscription URL; status transitions to delivered/dropped.
+type WebhookDelivery struct {
+	ID             uuid.UUID          `json:"id"`
+	SubscriptionID uuid.UUID          `json:"subscription_id"`
+	EventName      string             `json:"event_name"`
+	EventID        string             `json:"event_id"`
+	Payload        json.RawMessage    `json:"payload"`
+	PayloadSize    int32              `json:"payload_size"`
+	Status         string             `json:"status"`
+	Attempts       int32              `json:"attempts"`
+	ResponseStatus int32              `json:"response_status"`
+	ResponseBody   string             `json:"response_body"`
+	LastError      string             `json:"last_error"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt      time.Time          `json:"created_at"`
 }

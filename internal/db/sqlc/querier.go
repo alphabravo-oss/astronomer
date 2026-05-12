@@ -637,6 +637,42 @@ type Querier interface {
 	MarkEmailSent(ctx context.Context, arg MarkEmailSentParams) error
 	MarkEmailSkipped(ctx context.Context, arg MarkEmailSkippedParams) error
 	UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSettings, error)
+	// Outbound webhook subscriptions + delivery history (migration 048).
+	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
+	CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error)
+	DeleteWebhookDeliveriesOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
+	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
+	GetWebhookSubscription(ctx context.Context, id uuid.UUID) (WebhookSubscription, error)
+	GetWebhookSubscriptionByName(ctx context.Context, name string) (WebhookSubscription, error)
+	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
+	ListEnabledWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
+	ListPendingWebhookDeliveries(ctx context.Context, arg ListPendingWebhookDeliveriesParams) ([]WebhookDelivery, error)
+	ListWebhookDeliveriesBySubscription(ctx context.Context, arg ListWebhookDeliveriesBySubscriptionParams) ([]WebhookDelivery, error)
+	ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
+	MarkWebhookDeliveryDelivered(ctx context.Context, arg MarkWebhookDeliveryDeliveredParams) error
+	MarkWebhookDeliveryDropped(ctx context.Context, arg MarkWebhookDeliveryDroppedParams) error
+	MarkWebhookDeliveryFailed(ctx context.Context, arg MarkWebhookDeliveryFailedParams) error
+	RetryWebhookDelivery(ctx context.Context, arg RetryWebhookDeliveryParams) error
+	UpdateWebhookSubscription(ctx context.Context, arg UpdateWebhookSubscriptionParams) (WebhookSubscription, error)
+	// Cluster templates (migration 049).
+	CountClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) (int64, error)
+	CountClusterTemplates(ctx context.Context) (int64, error)
+	CreateClusterTemplate(ctx context.Context, arg CreateClusterTemplateParams) (ClusterTemplate, error)
+	DeleteClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) error
+	DeleteClusterTemplate(ctx context.Context, id uuid.UUID) error
+	DeleteClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) error
+	GetClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) (ClusterRegistrationPolicy, error)
+	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (ClusterTemplateApplication, error)
+	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (ClusterTemplate, error)
+	GetClusterTemplateByName(ctx context.Context, name string) (ClusterTemplate, error)
+	ListClusterTemplateApplicationsByStatus(ctx context.Context, arg ListClusterTemplateApplicationsByStatusParams) ([]ClusterTemplateApplication, error)
+	ListClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) ([]ClusterTemplateApplication, error)
+	ListClusterTemplates(ctx context.Context, arg ListClusterTemplatesParams) ([]ClusterTemplate, error)
+	MarkClusterTemplateApplicationStatus(ctx context.Context, arg MarkClusterTemplateApplicationStatusParams) (ClusterTemplateApplication, error)
+	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
+	UpsertClusterRegistrationPolicy(ctx context.Context, arg UpsertClusterRegistrationPolicyParams) (ClusterRegistrationPolicy, error)
+	UpsertClusterTemplateApplication(ctx context.Context, arg UpsertClusterTemplateApplicationParams) (ClusterTemplateApplication, error)
 }
 
 var _ Querier = (*Queries)(nil)
