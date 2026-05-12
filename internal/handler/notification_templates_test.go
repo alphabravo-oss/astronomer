@@ -87,7 +87,7 @@ func withNotifyURLParam(req *http.Request, name, value string) *http.Request {
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
-func TestHandler_RequiresSuperuser(t *testing.T) {
+func TestNotificationTemplateHandler_RequiresSuperuser(t *testing.T) {
 	q := &fakeNotifyQuerier{rows: map[string]sqlc.NotificationTemplate{}, users: map[uuid.UUID]sqlc.User{}}
 	id := uuid.New()
 	q.users[id] = sqlc.User{ID: id, IsSuperuser: false, IsActive: true}

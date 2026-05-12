@@ -152,7 +152,7 @@ func gitopsAuthedRequest(method, target string, body []byte, callerID uuid.UUID)
 	return req.WithContext(ctx)
 }
 
-func TestHandler_RequiresSuperuser(t *testing.T) {
+func TestGitOpsHandler_RequiresSuperuser(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeHandlerQuerier()
 	q.user = sqlc.User{ID: callerID, IsSuperuser: false}

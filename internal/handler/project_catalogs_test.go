@@ -573,6 +573,9 @@ func (m *minimalCatalogQuerier) DeleteHelmRepository(_ context.Context, _ uuid.U
 func (m *minimalCatalogQuerier) CountHelmRepositories(_ context.Context) (int64, error) {
 	return int64(len(m.catalogs)), nil
 }
+func (m *minimalCatalogQuerier) GetClusterByID(_ context.Context, _ uuid.UUID) (sqlc.Cluster, error) {
+	return sqlc.Cluster{}, pgx.ErrNoRows
+}
 func (m *minimalCatalogQuerier) ListHelmCharts(_ context.Context, _ sqlc.ListHelmChartsParams) ([]sqlc.HelmChart, error) {
 	all := []sqlc.HelmChart{}
 	for _, items := range m.chartsByRepo {
