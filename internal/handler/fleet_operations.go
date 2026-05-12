@@ -411,7 +411,7 @@ func (h *FleetOperationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create fleet operation")
 		return
 	}
-	recordAudit(r, h.queries, "fleet_operation.created", "fleet_operation", op.ID.String(), op.Name, map[string]any{
+	recordAudit(r, h.queries, "fleet.operation.created", "fleet_operation", op.ID.String(), op.Name, map[string]any{
 		"operation_type": op.OperationType,
 		"strategy":       op.Strategy,
 		"max_concurrent": op.MaxConcurrent,
@@ -457,13 +457,13 @@ func (h *FleetOperationHandler) ListTargets(w http.ResponseWriter, r *http.Reque
 // run to completion. Paused operations resume from where they left
 // off; an operator who wants to stop in-flight work uses abort.
 func (h *FleetOperationHandler) Pause(w http.ResponseWriter, r *http.Request) {
-	h.transitionStatus(w, r, []string{tasks.FleetOpStatusRunning}, tasks.FleetOpStatusPaused, "paused", "fleet_operation.paused")
+	h.transitionStatus(w, r, []string{tasks.FleetOpStatusRunning}, tasks.FleetOpStatusPaused, "paused", "fleet.operation.paused")
 }
 
 // Resume handles POST /api/v1/fleet-operations/{id}/resume/.
 // paused -> running.
 func (h *FleetOperationHandler) Resume(w http.ResponseWriter, r *http.Request) {
-	h.transitionStatus(w, r, []string{tasks.FleetOpStatusPaused}, tasks.FleetOpStatusRunning, "", "fleet_operation.resumed")
+	h.transitionStatus(w, r, []string{tasks.FleetOpStatusPaused}, tasks.FleetOpStatusRunning, "", "fleet.operation.resumed")
 }
 
 // Abort handles POST /api/v1/fleet-operations/{id}/abort/.
@@ -475,7 +475,7 @@ func (h *FleetOperationHandler) Resume(w http.ResponseWriter, r *http.Request) {
 func (h *FleetOperationHandler) Abort(w http.ResponseWriter, r *http.Request) {
 	h.transitionStatus(w, r,
 		[]string{tasks.FleetOpStatusPending, tasks.FleetOpStatusRunning, tasks.FleetOpStatusPaused},
-		tasks.FleetOpStatusAborted, "aborted by operator", "fleet_operation.aborted",
+		tasks.FleetOpStatusAborted, "aborted by operator", "fleet.operation.aborted",
 	)
 }
 
@@ -512,7 +512,7 @@ func (h *FleetOperationHandler) RetryFailed(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	recordAudit(r, h.queries, "fleet_operation.retry_failed", "fleet_operation", id.String(), op.Name, nil)
+	recordAudit(r, h.queries, "fleet.operation.retry_failed", "fleet_operation", id.String(), op.Name, nil)
 	h.kickOrchestrator(r.Context())
 	op, _ = h.queries.GetFleetOperation(r.Context(), id)
 	RespondJSON(w, http.StatusAccepted, fleetOperationToResponse(op))

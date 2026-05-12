@@ -325,19 +325,30 @@ func runFleetOrchestrateTick(ctx context.Context, deps FleetOrchestrateDeps) err
 
 // reconcileFleetOperation is the per-operation step. Single source of
 // truth for the state machine — every call site that wants to move an
-// operation forward goes through here.
+// operation forward goes through here. When a pending op transitions
+// to running inside this call, we also drive the running tick on the
+// same call so a freshly-created 50-cluster fanout starts dispatching
+// immediately rather than waiting another scheduler period.
 func reconcileFleetOperation(ctx context.Context, deps FleetOrchestrateDeps, op sqlc.FleetOperation) error {
-	switch op.Status {
-	case FleetOpStatusPending:
-		return launchFleetOperation(ctx, deps, op)
-	case FleetOpStatusRunning:
-		return tickRunningFleetOperation(ctx, deps, op)
-	default:
-		// Paused / completed / failed / aborted — nothing to do.
-		// (The list query already filters to pending/running, but
-		// defending here keeps the function total.)
-		return nil
+	if op.Status == FleetOpStatusPending {
+		if err := launchFleetOperation(ctx, deps, op); err != nil {
+			return err
+		}
+		// Reload — the launch may have transitioned to running (or to
+		// completed if the selector matched nothing). Fall through to
+		// the running-tick step so the first batch of dispatches
+		// happens this tick.
+		reloaded, err := deps.Queries.GetFleetOperation(ctx, op.ID)
+		if err != nil {
+			return err
+		}
+		op = reloaded
 	}
+	if op.Status == FleetOpStatusRunning {
+		return tickRunningFleetOperation(ctx, deps, op)
+	}
+	// Paused / completed / failed / aborted — nothing to do.
+	return nil
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -460,13 +471,15 @@ func tickRunningFleetOperation(ctx context.Context, deps FleetOrchestrateDeps, o
 	}
 
 	// Refresh op + counters because step 1 may have transitioned
-	// targets. The dispatch decision below reads the latest counts.
+	// targets. Refresh first (writes to DB), then reload so the in-
+	// memory op carries the freshly-written aggregate counts the
+	// abort and finalize checks rely on.
+	if err := refreshFleetOperationCounters(ctx, deps, op.ID); err != nil {
+		runtimeLogger().WarnContext(ctx, "refresh counters mid-tick", "error", err, "operation_id", op.ID)
+	}
 	op, err = deps.Queries.GetFleetOperation(ctx, op.ID)
 	if err != nil {
 		return fmt.Errorf("reload operation: %w", err)
-	}
-	if err := refreshFleetOperationCounters(ctx, deps, op.ID); err != nil {
-		runtimeLogger().WarnContext(ctx, "refresh counters mid-tick", "error", err, "operation_id", op.ID)
 	}
 
 	// 2. Abort-on-error? Check before dispatching more work.
