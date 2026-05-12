@@ -15,6 +15,9 @@ import {
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
+import { getServiceMeshDetection, type ServiceMeshKind } from '@/lib/api/cluster-detail';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { RegisterClusterModal } from '@/components/clusters/register-cluster-modal';
@@ -58,6 +61,16 @@ export default function ClusterDetailPage() {
   const generateKubeconfig = useGenerateKubeconfig();
   const deleteMutation = useDeleteCluster();
   const updateMutation = useUpdateCluster();
+  // Service-mesh badge data (sprint 071). Cheap query — the row is one
+  // SELECT keyed by cluster_id; if no detection has run yet the API
+  // returns an "unknown" stub so we can render "—" without a 404 dance.
+  const { data: meshDetection } = useQuery({
+    queryKey: ['clusters', clusterId, 'service-mesh', 'header'] as const,
+    queryFn: () => getServiceMeshDetection(clusterId),
+    enabled: !!clusterId,
+    refetchInterval: 5 * 60 * 1000,
+    refetchIntervalInBackground: false,
+  });
 
   // Refresh detail + metrics-summary + events lists when any cluster-level
   // event arrives. cluster.metrics is intentionally omitted — the layout
@@ -180,6 +193,7 @@ export default function ClusterDetailPage() {
               {cluster.displayName}
             </h1>
             <StatusBadge status={cluster.status} size="lg" />
+            {meshDetection && <MeshHeaderBadge clusterId={clusterId} mesh={meshDetection.detectedMesh} />}
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span>{distributionDisplayName(cluster.distribution)}</span>
@@ -445,5 +459,38 @@ function ClusterConditionsBar({ conditions }: { conditions: ClusterCondition[] }
         );
       })}
     </div>
+  );
+}
+
+// MeshHeaderBadge — compact "Istio" / "Linkerd" / "—" pill rendered next
+// to the cluster status badge. Links to the per-cluster service-mesh
+// tab so a single click drills into the full tile. When the detector
+// reports "unknown" / "none" the badge collapses to "—" so it never
+// claims a mesh we don't have signal for.
+function MeshHeaderBadge({ clusterId, mesh }: { clusterId: string; mesh: ServiceMeshKind }) {
+  const label =
+    mesh === 'istio'
+      ? 'Istio'
+      : mesh === 'linkerd'
+        ? 'Linkerd'
+        : mesh === 'kuma'
+          ? 'Kuma'
+          : mesh === 'cilium'
+            ? 'Cilium'
+            : '—';
+  const tone =
+    mesh === 'istio'
+      ? 'border-blue-500/30 text-blue-500 bg-blue-500/10'
+      : mesh === 'linkerd'
+        ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10'
+        : 'border-border text-muted-foreground bg-muted/30';
+  return (
+    <Link
+      href={`/dashboard/clusters/${clusterId}/service-mesh/`}
+      title="Service mesh detection"
+      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
+    >
+      mesh: {label}
+    </Link>
   );
 }

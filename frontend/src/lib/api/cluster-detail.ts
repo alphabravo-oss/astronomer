@@ -317,3 +317,77 @@ export async function reapplyClusterTemplate(
 export async function detachClusterTemplate(clusterId: string): Promise<void> {
   await api.delete(`/clusters/${clusterId}/template`);
 }
+
+// ============================================================
+// Service Mesh tile (migration 071)
+//
+// Three endpoints — current detection, on-demand re-detect, mTLS breakdown.
+// All gated on clusters:read on the backend; the UI wraps them in the
+// same auth context as the rest of the cluster-detail surface.
+// ============================================================
+
+export type ServiceMeshKind =
+  | 'istio'
+  | 'linkerd'
+  | 'kuma'
+  | 'cilium'
+  | 'none'
+  | 'unknown';
+
+export interface ServiceMeshDetection {
+  clusterId: string;
+  detectedMesh: ServiceMeshKind;
+  detectedVersion: string;
+  controlPlaneNamespace: string;
+  gatewayCount: number;
+  virtualServiceCount: number;
+  destinationRuleCount: number;
+  peerAuthenticationCount: number;
+  serviceProfileCount: number;
+  serverAuthCount: number;
+  mtlsCoveragePct: number;
+  lastDetectedAt?: string;
+  lastError?: string;
+}
+
+export interface MTLSBreakdownRow {
+  namespace: string;
+  mode: string;
+  rules: number;
+}
+
+export interface MTLSBreakdown {
+  clusterId: string;
+  mesh: ServiceMeshKind;
+  mtlsCoveragePct: number;
+  totalCount: number;
+  rows: MTLSBreakdownRow[];
+  notice?: string;
+}
+
+export async function getServiceMeshDetection(
+  clusterId: string,
+): Promise<ServiceMeshDetection> {
+  const res = await api.get<APIResponse<ServiceMeshDetection>>(
+    `/clusters/${clusterId}/service-mesh/`,
+  );
+  return res.data.data;
+}
+
+export async function reDetectServiceMesh(
+  clusterId: string,
+): Promise<ServiceMeshDetection> {
+  const res = await api.post<APIResponse<ServiceMeshDetection>>(
+    `/clusters/${clusterId}/service-mesh/detect/`,
+  );
+  return res.data.data;
+}
+
+export async function getServiceMeshMTLS(
+  clusterId: string,
+): Promise<MTLSBreakdown> {
+  const res = await api.get<APIResponse<MTLSBreakdown>>(
+    `/clusters/${clusterId}/service-mesh/mtls/`,
+  );
+  return res.data.data;
+}
