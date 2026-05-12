@@ -349,6 +349,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetAsynqInspector(asynq.NewInspector(redisOpt))
 			return h
 		}(),
+		// FEATURES-051126 T28 — admin queue inspector
+		AdminQueues: handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
 			// FEATURES-051126 T11 — enable the asynq-queues + schema-

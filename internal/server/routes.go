@@ -32,6 +32,7 @@ type RouterDependencies struct {
 	Encryptor      *iauth.Encryptor
 	AuthQueries    appmiddleware.TokenUserQuerier
 	PlatformHealth *handler.PlatformHealthHandler
+	AdminQueues    *handler.AdminQueuesHandler
 	Auth           *handler.AuthHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
@@ -250,6 +251,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// (FEATURES-051126 T05).
 		if deps.PlatformHealth != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/platform/health-summary/", deps.PlatformHealth.Summary)
+		}
+
+		// Admin queue inspector — depths + DLQ contents for the asynq
+		// queues, gated on superuser inside the handler. Used by the
+		// Operations tab in the dashboard (FEATURES-051126 T28).
+		if deps.AdminQueues != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/", deps.AdminQueues.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/{queue}/dlq/", deps.AdminQueues.DLQ)
 		}
 
 		authenticated := r
