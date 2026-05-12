@@ -1,0 +1,41 @@
+'use client';
+
+// Migration 065 / sprint 17 — in-browser kubectl shell page.
+//
+// Full-page xterm.js terminal wired to a kubectl_sessions row. The page
+// itself just hosts the ClusterShell component; lifecycle (open / close /
+// stream) lives there.
+
+import { useParams } from 'next/navigation';
+import { useCluster } from '@/lib/hooks';
+import { ClusterShell } from '@/components/clusters/cluster-shell';
+import { Loader2, Server } from 'lucide-react';
+
+export default function ClusterShellPage() {
+  const params = useParams();
+  const clusterId = params?.id as string;
+  const { data: cluster, isLoading } = useCluster(clusterId);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!cluster) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+        <Server className="h-8 w-8 mb-3" />
+        <p>Cluster not found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-[calc(100vh-8rem)]">
+      <ClusterShell clusterId={clusterId} />
+    </div>
+  );
+}

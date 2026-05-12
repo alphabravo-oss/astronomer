@@ -46,6 +46,7 @@ import {
   Wrench,
   ExternalLink,
   BookOpen,
+  TerminalSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
@@ -145,6 +146,12 @@ function getClusterNavGroups(clusterId: string): NavGroup[] {
         { label: 'Namespaces', href: `${base}/namespaces`, icon: Layers, countKey: 'namespaces' },
         { label: 'Events', href: `${base}/events`, icon: Activity, countKey: 'events' },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
+        // Sprint 17 / migration 065: in-browser kubectl shell. The
+        // backend gates the routes on clusters:update; the link is
+        // always rendered (the page itself shows a polite 403/disabled
+        // state when the feature is off or the operator lacks the
+        // permission).
+        { label: 'Shell', href: `${base}/shell`, icon: TerminalSquare },
       ],
     },
     {
