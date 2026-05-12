@@ -2,6 +2,7 @@
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  transpilePackages: ['@wterm/core', '@wterm/dom', '@wterm/react'],
   async rewrites() {
     return [
       {
