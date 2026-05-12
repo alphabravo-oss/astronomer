@@ -19,16 +19,45 @@ type K8sRequester interface {
 }
 
 type TunnelK8sRequester struct {
-	hub *tunnel.Hub
+	hub     *tunnel.Hub
+	breaker *clusterBreaker
 }
 
 func NewTunnelK8sRequester(hub *tunnel.Hub) *TunnelK8sRequester {
-	return &TunnelK8sRequester{hub: hub}
+	// 5 consecutive failures opens the circuit; 30s cooldown before
+	// the half-open trial. Tunable in NewTunnelK8sRequesterWithBreaker
+	// for tests + future operator config (FEATURES-051126 T19).
+	return NewTunnelK8sRequesterWithBreaker(hub, 5, 30*time.Second)
 }
 
-func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+// NewTunnelK8sRequesterWithBreaker constructs the requester with explicit
+// breaker tunables. Production callers use NewTunnelK8sRequester; tests use
+// this to drive the failure thresholds without waiting 30s.
+func NewTunnelK8sRequesterWithBreaker(hub *tunnel.Hub, threshold int, openDuration time.Duration) *TunnelK8sRequester {
+	return &TunnelK8sRequester{
+		hub:     hub,
+		breaker: newClusterBreaker(threshold, openDuration),
+	}
+}
+
+func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (resp *protocol.K8sResponsePayload, retErr error) {
 	if r == nil || r.hub == nil {
 		return nil, fmt.Errorf("tunnel requester not configured")
+	}
+
+	// FEATURES-051126 T19: short-circuit calls to a known-failing
+	// cluster instead of burning the ctx timeout. The breaker is
+	// per-cluster so this only fast-fails the offender; other
+	// clusters keep flowing normally. The named-return retErr is
+	// captured by the deferred finalize so we record the outcome
+	// the function actually returns, regardless of which branch
+	// produced it.
+	if r.breaker != nil {
+		proceed, finalize := r.breaker.allow(clusterID)
+		if !proceed {
+			return nil, fmt.Errorf("%w for cluster %q", ErrCircuitOpen, clusterID)
+		}
+		defer func() { finalize(retErr) }()
 	}
 
 	agent := r.hub.GetAgent(clusterID)
