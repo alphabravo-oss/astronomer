@@ -45,7 +45,7 @@ func main() {
 		"env", cfg.Env,
 	)
 
-	// FEATURES-051126 T15: distributed tracing foundation. No-op when
+	// Distributed tracing foundation. No-op when
 	// OTEL_EXPORTER_OTLP_ENDPOINT is unset; otherwise wires an OTLP/HTTP
 	// exporter behind the global TracerProvider so the chi otelhttp
 	// middleware, pgx OTel tracer, and tunnel originator spans all

@@ -226,7 +226,7 @@ func (a metricsRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 // CACHED metrics snapshot into the wire-format struct. Cache-only on
 // purpose: this is called from List which iterates every cluster, and a
 // slow agent on a single cluster previously stalled the entire response
-// for up to 5s × N clusters (FEATURES-051126 T07). The background metrics
+// for up to 5s × N clusters. The background metrics
 // publisher (internal/metrics/publisher.go) keeps the cache warm; stale
 // or missing entries return zero values rather than blocking.
 func (h *ClusterHandler) enrichClusterFromCache(c sqlc.Cluster) clusterWithMetrics {

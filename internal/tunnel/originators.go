@@ -15,8 +15,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// tunnelTracer is the named OTel tracer for span emission in this
-// package. T15 FEATURES-051126.
+// tunnelTracer is the named OTel tracer for span emission in this package.
 var tunnelTracer = otel.Tracer("astronomer/tunnel")
 
 // HelmReply is the result of a Helm operation that travelled through the tunnel.
@@ -106,7 +105,7 @@ const serviceProxyTimeout = 60 * time.Second
 //
 // The msgType MUST be one of the Helm constants in pkg/protocol.
 func (h *Hub) SendHelmRequest(ctx context.Context, clusterID string, msgType protocol.MessageType, payload protocol.HelmRequestPayload) (reply *HelmReply, err error) {
-	// T15: span around the full helm round-trip. Named after the msg
+	// Span around the full helm round-trip. Named after the msg
 	// type so traces show "helm.HELM_INSTALL" / "helm.HELM_UPGRADE"
 	// etc. Attributes carry cluster ID + release name for filtering.
 	ctx, span := tunnelTracer.Start(ctx, "tunnel.helm "+string(msgType))

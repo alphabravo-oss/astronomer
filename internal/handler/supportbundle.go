@@ -42,8 +42,8 @@ type SupportBundleQuerier interface {
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 	ListArgoCDInstances(ctx context.Context, arg sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error)
 	ListAuditLogV1(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
-	// ListActiveConnections drives the agent-connections bundle section
-	// (FEATURES-051126 T11) — last-seen + cluster_id are exactly what an
+	// ListActiveConnections drives the agent-connections bundle section —
+	// last-seen + cluster_id are exactly what an
 	// L3 engineer needs when triaging a "why are these clusters offline?"
 	// question.
 	ListActiveConnections(ctx context.Context) ([]sqlc.AgentConnection, error)
@@ -77,7 +77,7 @@ type SupportBundleHandler struct {
 }
 
 // SetAsynqInspector wires the asynq queue inspector. Enables the
-// asynq-queues.json section (FEATURES-051126 T11). nil disables it.
+// asynq-queues.json section. nil disables it.
 func (h *SupportBundleHandler) SetAsynqInspector(insp SupportBundleAsynqInspector) {
 	if h == nil {
 		return
@@ -157,7 +157,7 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	h.writeAuditLog(r.Context(), zw, collected)
 	h.writePods(r.Context(), zw, collected)
 	h.writePodLogs(r.Context(), zw, collected)
-	// FEATURES-051126 T11 — extra context an L3 engineer needs without
+	// Extra context an L3 engineer needs without
 	// shell access to the cluster:
 	h.writeEvents(r.Context(), zw, collected)
 	h.writeHelmRelease(r.Context(), zw, collected)
@@ -425,7 +425,7 @@ func (h *SupportBundleHandler) writeHelmRelease(ctx context.Context, zw *zip.Wri
 
 // writeSchemaMigrations surfaces the migrate-binary state table. The dirty
 // flag is what an L3 engineer needs to see when a release is stuck on
-// migration recovery — same signal T13 added to the preflight Job.
+// migration recovery — same signal the preflight Job surfaces.
 func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zip.Writer, log *sectionLog) {
 	if h.db == nil {
 		log.skipped("schema-migrations.json", "db pool not wired")

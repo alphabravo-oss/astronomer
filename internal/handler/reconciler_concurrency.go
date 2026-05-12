@@ -1,6 +1,6 @@
 package handler
 
-// FEATURES-051126 T17 — parallel helm dispatch.
+// Parallel helm dispatch.
 //
 // Catalog, Tool, and Monitoring reconcilers each pop a batch of pending
 // operations and call helm.Do, which can block up to helmTimeout (10

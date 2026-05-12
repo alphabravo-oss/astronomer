@@ -270,7 +270,7 @@ func (p *K8sProxy) sendStreamEnd(sendFn func(*protocol.Message) error, streamID 
 // HandleRequest processes a K8S_REQUEST message and returns a K8S_RESPONSE.
 // Kept as a single-shot handler for backward compatibility with the legacy
 // MessageHandler shape; the production wiring uses HandleRequestStreaming
-// (FEATURES-051126 T20) which chunks large bodies. Small responses go
+// which chunks large bodies. Small responses go
 // through here unchanged.
 func (p *K8sProxy) HandleRequest(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	respBody, statusCode, respHeaders, err := p.executeUpstream(ctx, msg)
@@ -304,8 +304,6 @@ func (p *K8sProxy) HandleRequest(ctx context.Context, msg *protocol.Message) (*p
 // Why two methods: this one fits the AdaptStreamingHandler shape
 // (returns frames via sendFn). The legacy single-shot HandleRequest
 // stays for tests + any callers that want one in-memory response.
-//
-// FEATURES-051126 T20.
 func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Message, sendFn func(*protocol.Message) error) error {
 	respBody, statusCode, respHeaders, err := p.executeUpstream(ctx, msg)
 	if err != nil {

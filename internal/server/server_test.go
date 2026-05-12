@@ -23,7 +23,7 @@ func TestResolveCallbackBaseURLWithoutPlatformConfig(t *testing.T) {
 
 // dsnEnforcesTLS gates the production warning when DATABASE_URL doesn't
 // require TLS. The values an operator could mis-set into a Helm install
-// must all map to the right verdict (FEATURES-051126 T01).
+// must all map to the right verdict.
 func TestDSNEnforcesTLS(t *testing.T) {
 	cases := []struct {
 		name string

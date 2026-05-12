@@ -56,7 +56,7 @@ func TestNewTunnelClient(t *testing.T) {
 	}
 }
 
-// FEATURES-051126 T10: at attempt=0 the reconnect loop must use a uniform
+// At attempt=0 the reconnect loop must use a uniform
 // spread over [0, base) rather than the exponential's first step, to
 // avoid stampeding a fleet's worth of agents into the same 1.25s window
 // after a synchronised disconnect (e.g. all agents observing a hub
@@ -241,7 +241,7 @@ func TestSendChannelFull(t *testing.T) {
 	}
 }
 
-// FEATURES-051126 T33: when sendCh is saturated, Send() must force a
+// When sendCh is saturated, Send() must force a
 // connection close so server-side originators stop waiting on the
 // missing reply. We verify by setting connected=true, filling the
 // channel, calling Send, then waiting for the async failClose

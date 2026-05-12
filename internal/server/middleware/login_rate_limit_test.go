@@ -85,7 +85,7 @@ func TestClientKeyUsesHostPart(t *testing.T) {
 // must be evicted by the janitor. Without this, the map grows unboundedly
 // over the process lifetime — every distinct client IP that ever hit
 // /auth/login leaves a row. The bug was caught by the 2026-05-11
-// enterprise audit (FEATURES-051126 T09).
+// enterprise audit.
 func TestLoginRateLimiterEvictsExpiredBuckets(t *testing.T) {
 	now := time.Unix(0, 0)
 	limiter := newLoginRateLimiter(5, time.Minute, func() time.Time { return now })

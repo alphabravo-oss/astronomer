@@ -32,7 +32,7 @@ type TunnelClient struct {
 	mu        sync.RWMutex
 	connected bool
 
-	// failCloseOnce ensures the buffer-full eager close (T33) only
+	// failCloseOnce ensures the buffer-full eager close only
 	// fires once per connection — repeated congestion shouldn't
 	// hammer tc.conn.Close. Reset by dial() on each new connection.
 	failCloseOnce *sync.Once
@@ -158,7 +158,7 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 
 	tc.mu.Lock()
 	tc.conn = conn
-	// T33: reset the buffer-full eager-close gate for the new
+	// Reset the buffer-full eager-close gate for the new
 	// connection so congestion on a previous session doesn't suppress
 	// the safety mechanism on this one.
 	tc.failCloseOnce = &sync.Once{}
@@ -246,8 +246,6 @@ func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *ra
 // agents, the previous code packed every reconnect into a 1.25s window
 // (the ±25% jitter only); the spread now smears them across a full 1s
 // before the exponential takes over.
-//
-// FEATURES-051126 T10.
 func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for attempt := 0; ; attempt++ {
@@ -379,7 +377,7 @@ func (tc *TunnelClient) Send(msg *protocol.Message) error {
 		return nil
 	default:
 		observability.RecordDroppedEvent("agent_tunnel_send", "channel_full")
-		// T33 FEATURES-051126: dropping the message leaves the
+		// Dropping the message leaves the
 		// server-side originator waiting on stream.DataCh until ctx
 		// timeout (10 minutes for helm). Force an async WS close so
 		// the server's CloseAll (server.go:305) wakes every in-flight

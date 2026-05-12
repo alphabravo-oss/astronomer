@@ -13,8 +13,7 @@ type dbHealthChecker interface {
 
 // dbPoolSaturationReporter is an optional add-on to dbHealthChecker so the
 // readiness probe can flip the pod out of Service rotation when the pgxpool
-// is fully empty AND callers are queueing. Implemented by *db.DB
-// (FEATURES-051126 T21).
+// is fully empty AND callers are queueing. Implemented by *db.DB.
 type dbPoolSaturationReporter interface {
 	// PoolWaitingForConn returns true when the pool has been at zero
 	// available connections AND queueing acquires for a sustained interval.
@@ -71,7 +70,7 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			statusCode = http.StatusServiceUnavailable
 		}
-		// Pool saturation gate (T21). When the pool is wedged at empty
+		// Pool saturation gate. When the pool is wedged at empty
 		// with waiters, returning 503 deregisters this pod from Service
 		// endpoints so traffic moves to a sibling with headroom. The
 		// optional interface keeps tests + non-pgx implementations clean.
@@ -92,7 +91,7 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// T31 FEATURES-051126: fail closed if the hub is missing entirely.
+	// Fail closed if the hub is missing entirely.
 	// A nil hub means readiness was wired without the tunnel hub — the
 	// pod should not be in Service rotation in that state. Previously
 	// this case was silently skipped, so a misconfigured pod looked

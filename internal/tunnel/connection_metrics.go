@@ -40,8 +40,8 @@ var (
 		observability.MetricLabels("cluster_id", "direction"),
 	)
 
-	// FEATURES-051126 T16: counter of (re)connects keyed by cluster ID.
-	// Useful both for sizing the reconnect-storm fix (T10) and for
+	// Counter of (re)connects keyed by cluster ID.
+	// Useful both for sizing the reconnect-storm fix and for
 	// alerting on a cluster that's flapping (rate > N over window).
 	agentReconnectsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{

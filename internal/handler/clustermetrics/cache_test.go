@@ -170,7 +170,7 @@ func TestProvider_CacheHitSuppressesRequests(t *testing.T) {
 
 // Peek is the cache-only accessor used by hot fan-out paths (the cluster
 // List endpoint). Must NEVER trigger a transport call — that was the
-// whole point of FEATURES-051126 T07. Two cases:
+// whole point of the cache-only contract. Two cases:
 //   - cold miss: returns Snapshot{} without calling fakeRequester
 //   - warm hit: returns the cached snapshot, also without calling
 //     fakeRequester again

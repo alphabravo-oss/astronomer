@@ -1,6 +1,6 @@
 // Package handler — admin queue inspector.
 //
-// FEATURES-051126 T28: superuser-only endpoint that exposes the asynq
+// Superuser-only endpoint that exposes the asynq
 // queue state (depths, DLQ contents, active tasks, retry counts) as JSON
 // so an operator can answer "why isn't anything reconciling?" from the
 // UI / curl instead of shelling into a worker pod for the asynq CLI.
@@ -10,8 +10,8 @@
 //   GET /api/v1/admin/queues/                     — summary across queues
 //   GET /api/v1/admin/queues/{queue}/dlq/         — recent DLQ entries
 //
-// The handler uses the same SupportBundleAsynqInspector interface T11
-// added; it's the smallest dependency that *asynq.Inspector satisfies.
+// The handler uses the same SupportBundleAsynqInspector interface the
+// support-bundle code added; it's the smallest dependency that *asynq.Inspector satisfies.
 package handler
 
 import (
@@ -173,7 +173,7 @@ func (h *AdminQueuesHandler) gate(w http.ResponseWriter, r *http.Request) bool {
 			"Queue inspector requires superuser privileges")
 		return false
 	}
-	// Audit trail — same pattern as T04 (key-status + support-bundle).
+	// Audit trail — same pattern as key-status + support-bundle.
 	recordAudit(r, h.queries, "admin.queues.viewed", "platform", "", "queues", map[string]any{
 		"path": r.URL.Path,
 	})

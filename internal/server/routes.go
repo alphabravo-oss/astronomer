@@ -90,10 +90,10 @@ type RouterDependencies struct {
 func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
 
-	// FEATURES-051126 T08 — per-endpoint-class rate limiter. Bucket store
+	// Per-endpoint-class rate limiter. Bucket store
 	// lives for the lifetime of the process; the janitor inside cleans up
 	// idle buckets so the map doesn't leak (same pattern as the login
-	// limiter from T09). One limiter shared across all four classes so
+	// limiter). One limiter shared across all four classes so
 	// chart-tuned configs apply uniformly.
 	rateLimitCtx := context.Background()
 	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
@@ -106,7 +106,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.Metrics)
-	// T15: rename the otelhttp server span to use chi's route pattern
+	// Rename the otelhttp server span to use chi's route pattern
 	// once routing has run. otelhttp.NewHandler wraps the router with
 	// only the HTTP method as a placeholder span name; this middleware
 	// upgrades it to "METHOD /api/v1/path/{id}" so traces aggregate by
@@ -253,15 +253,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 
 		// Platform health rollup — single JSON document with cluster +
 		// queue health for the top-of-dashboard banner. Authenticated;
-		// no superuser gate since the dashboard banner is for everyone
-		// (FEATURES-051126 T05).
+		// no superuser gate since the dashboard banner is for everyone.
 		if deps.PlatformHealth != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/platform/health-summary/", deps.PlatformHealth.Summary)
 		}
 
 		// Admin queue inspector — depths + DLQ contents for the asynq
 		// queues, gated on superuser inside the handler. Used by the
-		// Operations tab in the dashboard (FEATURES-051126 T28).
+		// Operations tab in the dashboard.
 		if deps.AdminQueues != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/", deps.AdminQueues.List)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/{queue}/dlq/", deps.AdminQueues.DLQ)

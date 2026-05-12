@@ -1,6 +1,6 @@
 // Package observability — reconciler instrumentation.
 //
-// FEATURES-051126 T16: every periodic task that flows through
+// Every periodic task that flows through
 // internal/worker/tasks.runPeriodicTaskWithLeader gets first-class
 // metrics for free:
 //
@@ -11,7 +11,7 @@
 //     failed).
 //   - astronomer_reconciler_last_success_timestamp_seconds{name}
 //     — wall-clock seconds of the most recent successful run. Drives
-//     the AstronomerReconcilerStalled rule shipped with T03; alerts
+//     the AstronomerReconcilerStalled rule; alerts
 //     fire when this lags more than 2× the reconciler's expected
 //     interval.
 //   - astronomer_reconciler_duration_seconds{name}

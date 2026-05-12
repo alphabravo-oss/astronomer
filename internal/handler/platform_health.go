@@ -1,6 +1,6 @@
 // Package handler — platform health summary.
 //
-// FEATURES-051126 T05: a single GET endpoint that aggregates the signals
+// A single GET endpoint that aggregates the signals
 // an operator needs to answer "is anything broken right now?" without
 // drilling cluster-by-cluster. The numbers fall into three buckets:
 //

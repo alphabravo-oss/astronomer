@@ -5,7 +5,7 @@ import (
 )
 
 // Round-trip: Set + Get under multiple clusterIDs returns the right
-// agent each time. FEATURES-051126 T18.
+// agent each time.
 func TestShardedAgents_SetGet(t *testing.T) {
 	s := newShardedAgents()
 	a := &AgentConnection{ClusterID: "a"}

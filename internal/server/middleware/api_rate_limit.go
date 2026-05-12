@@ -1,6 +1,6 @@
 // Package middleware — API rate limiting.
 //
-// FEATURES-051126 T08: a generic per-(user, endpoint-class) token-bucket
+// A generic per-(user, endpoint-class) token-bucket
 // limiter. Three endpoint classes carry meaningful DoS surface today:
 //
 //   - search: the cross-cluster resource search fan-out can hammer every
@@ -16,7 +16,7 @@
 // Keying: authenticated user ID when present, falls back to client IP.
 // Token-bucket from golang.org/x/time/rate; one bucket per (key, class).
 // Idle buckets are evicted by a background janitor (same pattern as the
-// login limiter from T09 — eviction is what stops the map from leaking).
+// login limiter — eviction is what stops the map from leaking).
 package middleware
 
 import (
@@ -140,7 +140,7 @@ func (l *apiRateLimiter) allow(class APIRateLimitClass, key string) (bool, time.
 }
 
 // evictExpired drops idle buckets. Same shape as the login limiter's
-// janitor (T09). Returns the count for tests.
+// janitor. Returns the count for tests.
 func (l *apiRateLimiter) evictExpired() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()

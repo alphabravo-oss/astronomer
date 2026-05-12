@@ -6,7 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// FEATURES-051126 T15 — chain multiple pgx.QueryTracer implementations.
+// Chain multiple pgx.QueryTracer implementations.
 //
 // pgx accepts exactly one Tracer per ConnConfig, so the OTel tracer
 // (spans) and the existing query tracer (Prometheus histograms) cannot
