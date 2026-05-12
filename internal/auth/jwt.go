@@ -17,6 +17,31 @@ type TokenType string
 const (
 	AccessToken  TokenType = "access"
 	RefreshToken TokenType = "refresh"
+	// PurposeToken is the marker for a "purpose-bound" short-lived
+	// challenge JWT — used today by the 2FA flow to keep the post-
+	// bcrypt user identity around without yet issuing a full session.
+	// The Purpose claim carries the specific use (e.g.
+	// "totp_challenge"); validators check both that and the regular
+	// signature/expiry.
+	PurposeToken TokenType = "purpose"
+)
+
+// TOTPChallengeTTL bounds the lifetime of a /auth/login -> /auth/totp/verify
+// handshake. Long enough that a user who fumbled their phone has time to
+// retype; short enough that a stolen token from a network capture isn't
+// useful by the time it's noticed.
+const TOTPChallengeTTL = 5 * time.Minute
+
+// Well-known Purpose values. Stringly-typed so the package boundary is
+// the only thing callers need to import.
+const (
+	PurposeTOTPChallenge = "totp_challenge"
+	// PurposeTOTPEnrollOnly is the "you must enroll before doing
+	// anything else" challenge used when auth.totp.require=true and a
+	// not-yet-enrolled user logs in. Holders can only POST to the
+	// enrollment-start / enrollment-confirm endpoints — the regular
+	// auth middleware does NOT accept it as a session token.
+	PurposeTOTPEnrollOnly = "totp_enroll_only"
 )
 
 // Claims represents the JWT claims for Astronomer tokens
@@ -24,6 +49,12 @@ type Claims struct {
 	jwt.RegisteredClaims
 	UserID    uuid.UUID `json:"user_id"`
 	TokenType TokenType `json:"token_type"`
+	// Purpose narrows what a PurposeToken is allowed to do. Empty on
+	// regular access / refresh tokens. The verify handler is the only
+	// thing that should accept a non-empty Purpose; the regular auth
+	// middleware rejects any token whose TokenType is PurposeToken so
+	// the challenge can't be replayed as a session.
+	Purpose string `json:"purpose,omitempty"`
 }
 
 // RevocationChecker is the optional dependency the JWTManager consults on
@@ -190,6 +221,40 @@ func (m *JWTManager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 // GenerateRefreshToken creates a refresh token
 func (m *JWTManager) GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime)
+}
+
+// GeneratePurposeToken creates a short-lived JWT whose only legitimate use
+// is the named `purpose` flow (e.g. PurposeTOTPChallenge). The validator
+// in the consuming handler MUST check both signature validity AND the
+// expected Purpose string — that's why the regular auth middleware refuses
+// every PurposeToken regardless of signature: it stops a stolen challenge
+// JWT from being replayed as a session token.
+//
+// `ttl` is bounded by the caller (typically TOTPChallengeTTL).
+func (m *JWTManager) GeneratePurposeToken(userID uuid.UUID, purpose string, ttl time.Duration) (string, error) {
+	if purpose == "" {
+		return "", fmt.Errorf("purpose token requires a non-empty purpose")
+	}
+	if ttl <= 0 {
+		ttl = TOTPChallengeTTL
+	}
+	now := time.Now()
+	claims := Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+		UserID:    userID,
+		TokenType: PurposeToken,
+		Purpose:   purpose,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString(m.secretKeys[0])
+	if err != nil {
+		return "", fmt.Errorf("signing purpose token: %w", err)
+	}
+	return signed, nil
 }
 
 // ValidateToken parses and validates a JWT token, returning the claims.

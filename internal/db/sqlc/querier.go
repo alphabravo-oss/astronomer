@@ -602,6 +602,17 @@ type Querier interface {
 	ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
 	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
 	UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error)
+	// TOTP / 2FA (migration 043).
+	ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCodeParams) (int64, error)
+	CountTOTPEnrollments(ctx context.Context) (int64, error)
+	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteRecoveryCodesByUser(ctx context.Context, userID uuid.UUID) error
+	DeleteUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) error
+	GetUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) (UserTotpEnrollment, error)
+	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
+	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]UserTotpRecoveryCode, error)
+	TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLastUsedParams) error
+	UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error)
 }
 
 var _ Querier = (*Queries)(nil)

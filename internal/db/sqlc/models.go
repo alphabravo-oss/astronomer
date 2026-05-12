@@ -895,6 +895,30 @@ type UserIdpGroup struct {
 	SyncedAt    time.Time       `json:"synced_at"`
 }
 
+// UserTotpEnrollment is the row shape for user_totp_enrollments — the
+// per-user TOTP secret (Fernet-encrypted) plus the metadata surfaced
+// in /auth/totp/status. Migration 043.
+type UserTotpEnrollment struct {
+	UserID          uuid.UUID          `json:"user_id"`
+	SecretEncrypted string             `json:"secret_encrypted"`
+	Label           string             `json:"label"`
+	ConfirmedAt     time.Time          `json:"confirmed_at"`
+	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+// UserTotpRecoveryCode is one of N one-time-use recovery codes for a
+// TOTP-enrolled user. Only the sha256 hash of the displayed code is
+// stored; the literal is shown once at enrollment. Migration 043.
+type UserTotpRecoveryCode struct {
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	CodeHash  string             `json:"code_hash"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt time.Time          `json:"created_at"`
+}
+
 type RestoreOperation struct {
 	ID                 uuid.UUID          `json:"id"`
 	BackupID           uuid.UUID          `json:"backup_id"`

@@ -38,6 +38,12 @@ type RouterDependencies struct {
 	// identity_group_mappings plus the per-user re-sync endpoint.
 	GroupMappings *handler.GroupMappingsHandler
 	Auth           *handler.AuthHandler
+	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
+	// + Queries by cmd/server before NewRouter runs. When nil (test
+	// fakes, pre-encryption-key bootstrap), the TOTP routes are
+	// omitted and Login continues to behave as the legacy password
+	// flow.
+	TOTP         *handler.TOTPHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
 	Projects     *handler.ProjectHandler
@@ -194,6 +200,22 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/tokens/", deps.Auth.ListTokens)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/tokens/", deps.Auth.CreateToken)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/auth/tokens/{id}/", deps.Auth.RevokeToken)
+		}
+
+		// 2FA / TOTP routes (migration 043). Verify is PUBLIC — its proof
+		// of identity is the challenge_token issued by Login. The other
+		// endpoints require an active session (they're self-service
+		// enrollment / management for the logged-in user).
+		if deps.TOTP != nil {
+			// Same rate-limit class as /auth/login — a brute-forcer
+			// hitting verify with 1m TOTP codes would otherwise have
+			// 10s windows of guess room per minute.
+			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/totp/verify/", deps.TOTP.Verify)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/enroll/start/", deps.TOTP.EnrollStart)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/enroll/confirm/", deps.TOTP.EnrollConfirm)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/disable/", deps.TOTP.Disable)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/totp/status/", deps.TOTP.Status)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/recovery-codes/regenerate/", deps.TOTP.RegenerateRecoveryCodes)
 		}
 
 		// SSO OAuth handshake. Both routes are public — Login redirects to the
@@ -754,6 +776,10 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		// non-superuser hits a clean 403 instead of falling through.
 		r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/unlock/", deps.Resources.UnlockUser)
 		r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/force-logout/", deps.Resources.ForceLogoutUser)
+		// 2FA admin override. Superuser-only inside the handler.
+		if deps.TOTP != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/disable-totp/", deps.TOTP.AdminForceDisable)
+		}
 	}
 
 	if deps.Security != nil {
