@@ -36,6 +36,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// T15: distributed tracing — same InitTracing/Shutdown contract as
+	// the server. The worker's asynq handlers extract traceparent from
+	// incoming task payloads (planned follow-up in this same sprint),
+	// so when both processes point at the same OTLP endpoint a single
+	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
+	tracingCfg := observability.TracingFromEnv()
+	tracingCfg.ServiceName = "astronomer-worker"
+	tracingCfg.ServiceVersion = version.Version
+	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
+	if err != nil {
+		log.Error("failed to init otel tracing", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(ctx); err != nil {
+			log.Warn("otel shutdown error", "error", err)
+		}
+	}()
+
 	database, err := db.ConnectWithConfig(context.Background(), cfg.DatabaseURL, db.PoolConfig{
 		MaxConns:          cfg.DBMaxConns,
 		MinConns:          cfg.DBMinConns,

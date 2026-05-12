@@ -45,6 +45,20 @@ func main() {
 		"env", cfg.Env,
 	)
 
+	// FEATURES-051126 T15: distributed tracing foundation. No-op when
+	// OTEL_EXPORTER_OTLP_ENDPOINT is unset; otherwise wires an OTLP/HTTP
+	// exporter behind the global TracerProvider so the chi otelhttp
+	// middleware, pgx OTel tracer, and tunnel originator spans all
+	// flow into the same backend.
+	tracingCfg := observability.TracingFromEnv()
+	tracingCfg.ServiceName = "astronomer-server"
+	tracingCfg.ServiceVersion = version.Version
+	otelShutdown, err := observability.InitTracing(context.Background(), logger, tracingCfg)
+	if err != nil {
+		logger.Error("failed to init otel tracing", "error", err)
+		os.Exit(1)
+	}
+
 	srv, err := server.NewApp(context.Background(), cfg, logger)
 	if err != nil {
 		logger.Error("failed to initialize server", "error", err)
@@ -105,6 +119,14 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
 		os.Exit(1)
+	}
+
+	// Flush + close the OTel pipeline before exit so the last batch of
+	// spans isn't dropped. Bounded by the same 10s window as the HTTP
+	// shutdown — anything still buffered after that loses to graceful
+	// exit pressure.
+	if err := otelShutdown(shutdownCtx); err != nil {
+		observability.WithEvent(logger, "server_otel_shutdown_error").Warn("otel shutdown error", "error", err)
 	}
 
 	observability.WithEvent(logger, "server_stopped").Info("server stopped")

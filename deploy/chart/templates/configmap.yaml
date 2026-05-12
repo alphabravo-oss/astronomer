@@ -44,3 +44,22 @@ data:
   DB_HEALTH_CHECK_PERIOD_SECONDS: {{ .healthCheckPeriodSeconds | quote }}
   {{- end }}
   {{- end }}
+  # T15 — distributed tracing. All four vars are no-ops when endpoint is
+  # empty (the InitTracing helper short-circuits), so this stays render-
+  # safe for installs that don't opt in.
+  {{- with .Values.observability }}
+  {{- with .tracing }}
+  {{- if .endpoint }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .endpoint | quote }}
+  {{- end }}
+  {{- if .insecure }}
+  OTEL_EXPORTER_OTLP_INSECURE: {{ .insecure | quote }}
+  {{- end }}
+  {{- if .headers }}
+  OTEL_EXPORTER_OTLP_HEADERS: {{ .headers | quote }}
+  {{- end }}
+  {{- if .samplerRatio }}
+  OTEL_TRACES_SAMPLER_ARG: {{ .samplerRatio | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}

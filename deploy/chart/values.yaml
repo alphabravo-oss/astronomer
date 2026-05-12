@@ -388,6 +388,32 @@ metrics:
     runbookBaseURL: "https://github.com/alphabravo-oss/astronomer/blob/main/astronomer-go/docs/runbooks"
 
 # =============================================================================
+# Observability — distributed tracing (T15 FEATURES-051126)
+# =============================================================================
+# When tracing.endpoint is empty (the default), the server and worker
+# install the W3C propagator but never start an OTLP exporter — no extra
+# CPU, no egress, no traces. Set endpoint to an OTLP/HTTP collector to
+# light it up. The same endpoint is shared by both processes; spans get
+# linked into a single trace via traceparent propagation in asynq
+# payloads (see internal/observability/asynq_correlation.go) and tunnel
+# originator hand-offs.
+observability:
+  tracing:
+    # Example: "http://otel-collector.observability.svc:4318" for an
+    # in-cluster collector. Empty disables tracing.
+    endpoint: ""
+    # Force plain HTTP. Auto-detected from http:// prefix on endpoint;
+    # only set explicitly when the scheme is otel-collector:4318 form.
+    insecure: false
+    # Comma-separated key=value list forwarded with every OTLP export.
+    # Typical use: "Authorization=Bearer xyz" for hosted backends.
+    headers: ""
+    # Head sampler ratio in [0.0, 1.0]. Empty/zero defaults to 0.05.
+    # Set to "1.0" while bootstrapping the trace pipeline so every
+    # request appears; turn down once volume is acceptable.
+    samplerRatio: ""
+
+# =============================================================================
 # Management-plane DR (pg_dump -> S3)
 # =============================================================================
 # Nightly logical backup of Astronomer's own Postgres database to S3-compatible

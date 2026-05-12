@@ -106,6 +106,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.Metrics)
+	// T15: rename the otelhttp server span to use chi's route pattern
+	// once routing has run. otelhttp.NewHandler wraps the router with
+	// only the HTTP method as a placeholder span name; this middleware
+	// upgrades it to "METHOD /api/v1/path/{id}" so traces aggregate by
+	// route instead of by raw URL.
+	r.Use(chiRoutePatternSpanName)
 	// NOTE: chimiddleware.Timeout is applied per-group below — it MUST NOT be
 	// applied globally because /api/v1/ws/... carries long-lived WebSocket
 	// connections that would otherwise be force-closed at the timeout.

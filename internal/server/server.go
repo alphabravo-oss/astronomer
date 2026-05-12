@@ -104,7 +104,10 @@ func New(cfg *config.Config, logger *slog.Logger) *Server {
 	}
 
 	s.httpServer = &http.Server{
-		Handler: router,
+		// T15: wrap with otelhttp so every request emits a server span
+		// when the global TracerProvider has an exporter; no-op when it
+		// doesn't.
+		Handler: wrapWithTracing(router),
 		// ReadHeaderTimeout caps the slowloris exposure but does not bound the
 		// long-lived WebSocket tunnel connection (which lives in /api/v1/ws/...).
 		// Keep ReadTimeout/WriteTimeout at zero so the WS connection is not
@@ -414,7 +417,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		SSO:       ssoManager,
 	}
 	s.httpServer = &http.Server{
-		Handler: router,
+		// T15: wrap with otelhttp so every request emits a server span
+		// when the global TracerProvider has an exporter; no-op when it
+		// doesn't.
+		Handler: wrapWithTracing(router),
 		// ReadHeaderTimeout caps the slowloris exposure but does not bound the
 		// long-lived WebSocket tunnel connection (which lives in /api/v1/ws/...).
 		// Keep ReadTimeout/WriteTimeout at zero so the WS connection is not
