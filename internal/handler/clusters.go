@@ -14,6 +14,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
@@ -105,6 +106,10 @@ type ClusterHandler struct {
 	// purpose so wiring stays trivial. Optional and nil-safe.
 	argoCDRefreshQueue ClusterDecommissionEnqueuer
 	agentImage        string
+	// enforcer gates Create against the fleet-wide cluster cap
+	// configured by the 'global' quota plan (migration 051).
+	// Optional; nil disables the check (test fakes, pre-migration).
+	enforcer *quota.Enforcer
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -174,6 +179,16 @@ func (h *ClusterHandler) SetEventPublisher(p EventPublisher) {
 		return
 	}
 	h.publisher = p
+}
+
+// SetQuotaEnforcer wires the per-tenant quota enforcer that gates Create
+// against the fleet-wide cluster cap (migration 051). Optional; nil
+// disables the check so tests can construct the handler without it.
+func (h *ClusterHandler) SetQuotaEnforcer(e *quota.Enforcer) {
+	if h == nil {
+		return
+	}
+	h.enforcer = e
 }
 
 // SetDecommissionQueue wires the asynq client used by the DELETE handler to
@@ -369,6 +384,20 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadRequest, "validation_error",
 			"Cluster name must be RFC-1123 (lowercase letters, digits, hyphens; start and end with an alphanumeric; max 63 chars)")
 		return
+	}
+
+	// Fleet-wide cap (migration 051). The 'global' quota plan's
+	// max_total_clusters caps how many clusters the platform will
+	// hold. Soft enforcement is logged + metric'd; hard returns a 429.
+	if h.enforcer != nil {
+		if err := h.enforcer.CheckGlobalClusterCreate(r.Context()); err != nil {
+			if qe, ok := quota.IsQuotaExceeded(err); ok {
+				WriteQuotaExceeded(w, qe)
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate cluster quota")
+			return
+		}
 	}
 
 	cluster, err := h.queries.CreateCluster(r.Context(), sqlc.CreateClusterParams{

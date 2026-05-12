@@ -34,7 +34,7 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 const createBootstrapAdmin = `-- name: CreateBootstrapAdmin :one
 INSERT INTO users (email, username, first_name, last_name, password, is_active, is_staff, is_superuser, must_change_password)
 VALUES ($1, $2, $3, $4, $5, true, true, true, true)
-RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at
+RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides
 `
 
 type CreateBootstrapAdminParams struct {
@@ -78,6 +78,8 @@ func (q *Queries) CreateBootstrapAdmin(ctx context.Context, arg CreateBootstrapA
 		&i.LockedUntil,
 		&i.LockedReason,
 		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
 	)
 	return i, err
 }
@@ -85,7 +87,7 @@ func (q *Queries) CreateBootstrapAdmin(ctx context.Context, arg CreateBootstrapA
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, username, first_name, last_name, password, is_active, is_staff, is_superuser)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at
+RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides
 `
 
 type CreateUserParams struct {
@@ -131,6 +133,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.LockedUntil,
 		&i.LockedReason,
 		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
 	)
 	return i, err
 }
@@ -145,7 +149,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at FROM users WHERE email = $1
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -171,12 +175,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.LockedUntil,
 		&i.LockedReason,
 		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at FROM users WHERE id = $1
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -202,12 +208,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.LockedUntil,
 		&i.LockedReason,
 		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at FROM users WHERE username = $1
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -233,12 +241,14 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.LockedUntil,
 		&i.LockedReason,
 		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListUsersParams struct {
@@ -275,6 +285,8 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.LockedUntil,
 			&i.LockedReason,
 			&i.TokensInvalidatedAt,
+			&i.QuotaPlan,
+			&i.QuotaOverrides,
 		); err != nil {
 			return nil, err
 		}
@@ -295,7 +307,7 @@ UPDATE users SET
     is_active = $6,
     updated_at = now()
 WHERE id = $1
-RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at
+RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides
 `
 
 type UpdateUserParams struct {
@@ -337,6 +349,8 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.LockedUntil,
 		&i.LockedReason,
 		&i.TokensInvalidatedAt,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
 	)
 	return i, err
 }

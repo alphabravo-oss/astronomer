@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -53,6 +54,10 @@ type RBACHandler struct {
 	queries  RBACQuerier
 	engine   *rbac.Engine
 	bindings middleware.RBACQuerier
+	// enforcer gates CreateProjectRoleBinding against the per-project
+	// max_members_per_project and per-user max_projects_per_user caps
+	// (migration 051). Optional; nil disables the check.
+	enforcer *quota.Enforcer
 }
 
 func NewRBACHandler(queries RBACQuerier) *RBACHandler {
@@ -63,6 +68,16 @@ func NewRBACHandler(queries RBACQuerier) *RBACHandler {
 func (h *RBACHandler) SetAuthorization(engine *rbac.Engine, bindings middleware.RBACQuerier) {
 	h.engine = engine
 	h.bindings = bindings
+}
+
+// SetQuotaEnforcer wires the per-tenant quota enforcer for the RBAC
+// handler. Optional; without it CreateProjectRoleBinding skips the
+// per-project member / per-user project caps from migration 051.
+func (h *RBACHandler) SetQuotaEnforcer(e *quota.Enforcer) {
+	if h == nil {
+		return
+	}
+	h.enforcer = e
 }
 
 // invalidateUser drops the per-user RBAC cache entry, if the configured
@@ -650,6 +665,33 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		RespondError(w, http.StatusBadRequest, "invalid_project_id", "Project ID is required")
 		return
 	}
+
+	// Per-tenant quota checks (migration 051). Two caps apply at the
+	// "add user-X to project-Y" pivot: the per-project member cap and
+	// the per-user project cap. Group bindings (user_id == nil) skip
+	// the per-user check since group membership is dynamic and the
+	// quota count would be ambiguous.
+	if h.enforcer != nil {
+		if err := h.enforcer.CheckProjectMemberAdd(r.Context(), projectID); err != nil {
+			if qe, ok := quota.IsQuotaExceeded(err); ok {
+				WriteQuotaExceeded(w, qe)
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate project member quota")
+			return
+		}
+		if userID.Valid {
+			if err := h.enforcer.CheckUserProjectAdd(r.Context(), uuid.UUID(userID.Bytes)); err != nil {
+				if qe, ok := quota.IsQuotaExceeded(err); ok {
+					WriteQuotaExceeded(w, qe)
+					return
+				}
+				RespondError(w, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate user project quota")
+				return
+			}
+		}
+	}
+
 	binding, err := h.queries.CreateProjectRoleBinding(r.Context(), sqlc.CreateProjectRoleBindingParams{
 		UserID:    userID,
 		Group:     req.Group,

@@ -673,6 +673,26 @@ type Querier interface {
 	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
 	UpsertClusterRegistrationPolicy(ctx context.Context, arg UpsertClusterRegistrationPolicyParams) (ClusterRegistrationPolicy, error)
 	UpsertClusterTemplateApplication(ctx context.Context, arg UpsertClusterTemplateApplicationParams) (ClusterTemplateApplication, error)
+	// Tenant quotas (migration 051).
+	ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error)
+	GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, error)
+	UpsertQuotaPlan(ctx context.Context, arg UpsertQuotaPlanParams) (QuotaPlan, error)
+	DeleteQuotaPlan(ctx context.Context, name string) error
+	CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
+	CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
+	GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error)
+	GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error)
+	SetProjectQuotaPlan(ctx context.Context, arg SetProjectQuotaPlanParams) (Project, error)
+	SetUserQuotaPlan(ctx context.Context, arg SetUserQuotaPlanParams) (User, error)
+	CountClustersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
+	CountNamespacesInProject(ctx context.Context, projectID uuid.UUID) (int32, error)
+	CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
+	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountTotalClusters(ctx context.Context) (int64, error)
+	CountTotalActiveUsers(ctx context.Context) (int64, error)
+	ListProjectQuotaSnapshots(ctx context.Context, arg ListProjectQuotaSnapshotsParams) ([]ProjectQuotaSnapshotRow, error)
+	ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]UserQuotaSnapshotRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
