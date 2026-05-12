@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -135,6 +136,7 @@ func Record(ctx context.Context, q Querier, event Event) {
 		// case is separately visible via the dropped_total counter and
 		// a throttled warn log inside Enqueue.
 		emitRecordedLog(row)
+		publishToBus(event, row)
 		return
 	}
 
@@ -155,6 +157,79 @@ func Record(ctx context.Context, q Querier, event Event) {
 		return
 	}
 	emitRecordedLog(row)
+	publishToBus(event, row)
+}
+
+// BusPublisher is the optional sink the audit package publishes recorded
+// events to. Wired by the server (which owns the events.Bus). The contract
+// is event-name = "audit." + action, with the structured detail map +
+// resource identifiers preserved as the second argument. Slow or
+// nil-implementations MUST NOT block the audit hot path — see the
+// fan-out shape in internal/events.Bus.Publish (best-effort with drops).
+type BusPublisher interface {
+	Publish(eventName string, data any)
+}
+
+var (
+	busPublisherMu sync.RWMutex
+	busPublisher   BusPublisher
+)
+
+// SetBusPublisher installs the package-level bus publisher. Pass nil to
+// clear (tests rely on this). Idempotent.
+func SetBusPublisher(p BusPublisher) {
+	busPublisherMu.Lock()
+	defer busPublisherMu.Unlock()
+	busPublisher = p
+}
+
+func publishToBus(event Event, row sqlc.CreateAuditLogV1Params) {
+	busPublisherMu.RLock()
+	p := busPublisher
+	busPublisherMu.RUnlock()
+	if p == nil || row.Action == "" {
+		return
+	}
+	// The published event-name is "audit.<action>" so glob filters like
+	// "audit.*" subscribe to every audit row, and a more targeted glob
+	// like "audit.admin.webhook.*" subscribes only to webhook config
+	// changes. The detail map mirrors what a downstream receiver would
+	// want without having to round-trip back to the audit_log table.
+	data := map[string]any{
+		"action":          row.Action,
+		"resource_type":   row.ResourceType,
+		"resource_id":     row.ResourceID,
+		"resource_name":   row.ResourceName,
+		"actor_user_id":   userIDString(row.UserID),
+		"actor_auth_method": row.ActorAuthMethod,
+		"correlation_id":  row.CorrelationID,
+		"request_id":      row.RequestID,
+		"source":          row.Source,
+		"http_method":     row.HTTPMethod,
+		"path":            row.Path,
+		"status_code":     row.StatusCode,
+		"detail":          event.Detail,
+	}
+	p.Publish("audit."+row.Action, data)
+}
+
+// userIDString renders the pgtype.UUID actor as a printable string or
+// empty when the row carries an anonymous (NULL) user. We don't want
+// "00000000-0000-0000-0000-000000000000" leaking onto the wire for
+// failed-login style events.
+func userIDString(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
+	out, err := u.Value()
+	if err != nil || out == nil {
+		return ""
+	}
+	s, ok := out.(string)
+	if !ok {
+		return ""
+	}
+	return s
 }
 
 // buildRow turns an Event into the sqlc params struct. Detail sanitization,
