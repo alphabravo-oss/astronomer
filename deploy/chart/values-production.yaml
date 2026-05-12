@@ -207,6 +207,16 @@ secrets:
   secretKey: ""        # required — JWT signing
   encryptionKey: ""    # required — wraps SSO/agent secrets
 
+# ── Dex (migration 045) ───────────────────────────────────────────────────
+# Production posture: Dex is the only source of truth for who can sign in.
+# The chart-templated Dex pod runs HA (2 replicas) and is auto-wired into
+# Astronomer's dex_settings on first boot. Operator MUST override
+# dex.clientSecret away from the chart's known weak default.
+dex:
+  enabled: true
+  replicaCount: 2
+  clientSecret: ""    # required — replace with `openssl rand -hex 32` or similar
+
 # Production deploys should pin the bootstrap password rather than relying
 # on the chart's random generator: the value lives in a Secret with
 # resource-policy=keep so rotation is annoying, and operators usually

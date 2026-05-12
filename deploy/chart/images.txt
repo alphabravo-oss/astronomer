@@ -19,5 +19,6 @@ astronomer-go-server:dev
 astronomer-go-worker:dev
 bitnami/kubectl:latest
 busybox:1.36
+dexidp/dex:v2.41.1
 postgres:16-alpine
 redis:7-alpine

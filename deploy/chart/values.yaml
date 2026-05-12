@@ -287,6 +287,51 @@ config:
     totp:
       issuer: "Astronomer"
       require: false
+    # Migration 045: when dex.enabled=false in production, the operator
+    # must explicitly acknowledge the local-password-only posture by
+    # setting this flag. Without it the chart's production preflight
+    # fails so a misconfigured install can't accidentally ship with no
+    # enterprise auth path enabled.
+    localPasswordOnly: false
+
+# =============================================================================
+# Dex (in-chart identity broker) — migration 045
+# =============================================================================
+# Astronomer brokers all enterprise auth (Okta, Azure AD, LDAP, SAML, GitHub,
+# GitLab, etc.) through Dex (https://dexidp.io). The card-grid wizard at
+# /dashboard/settings/auth/connectors/new writes rows into dex_connectors;
+# DexHandler.Apply re-renders Dex's ConfigMap and triggers a rollout.
+#
+# Set dex.enabled=true to deploy the in-cluster Dex; the server's bootstrap
+# (see internal/server/dex_bootstrap.go) auto-wires dex_settings so the first
+# connector + Apply works without any manual settings step. dex.enabled=false
+# (the default for local dev) leaves the connector wizard browseable but
+# returns 503 from /api/v1/auth/dex/apply.
+#
+# values-production.yaml flips dex.enabled to true and bumps replicaCount to 2.
+dex:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: dexidp/dex
+    tag: v2.41.1
+    registry: ""              # T23 air-gapped override; falls back to image.registry
+  # Issuer URL Astronomer seeds into dex_settings on first boot. When empty
+  # we derive `${config.serverURL}/dex` automatically (see _helpers.tpl
+  # astronomer.dex.issuerURL). Override only if Dex is reachable on a
+  # different hostname than the rest of Astronomer.
+  issuerURL: ""
+  # Static OAuth client secret used by the Astronomer server when talking to
+  # Dex. Empty = use the chart's shipped weak default which production-mode
+  # preflight refuses. Replace with a freshly-generated value in production.
+  clientSecret: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 # =============================================================================
 # Secrets — set these from --set-file or external secret manager in real usage.

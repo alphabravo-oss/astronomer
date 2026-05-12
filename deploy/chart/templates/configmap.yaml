@@ -34,6 +34,17 @@ data:
   {{- if .Values.config.lockoutDurationMinutes }}
   LOCKOUT_DURATION_MINUTES: {{ .Values.config.lockoutDurationMinutes | quote }}
   {{- end }}
+  # Migration 045 — Dex bootstrap. When dex.enabled=true the server's boot
+  # path auto-wires dex_settings to point at the in-chart Dex Deployment +
+  # ConfigMap so the first connector + Apply works without a manual settings
+  # step. Empty / unset == bootstrap skipped (legacy operator-managed Dex).
+  {{- if .Values.dex.enabled }}
+  DEX_BUNDLED_ENABLED: "true"
+  DEX_BUNDLED_NAMESPACE: {{ .Release.Namespace | quote }}
+  DEX_BUNDLED_RELEASE_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
+  DEX_BUNDLED_CONFIGMAP_NAME: {{ printf "%s-dex-config" (include "astronomer.fullname" .) | quote }}
+  DEX_BUNDLED_ISSUER_URL: {{ include "astronomer.dex.issuerURL" . | quote }}
+  {{- end }}
   # 2FA / TOTP (migration 043). Empty issuer == binary default ("Astronomer").
   # require=true makes 2FA mandatory for all local-password users.
   {{- with .Values.config.auth }}

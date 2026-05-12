@@ -276,6 +276,23 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 {{- end }}
 
 {{/*
+Issuer URL for the in-chart Dex deployment. Operators can override
+via .Values.dex.issuerURL; otherwise we derive it from .Values.config.serverURL
++ "/dex". This is also the value the server's dex bootstrap seeds into the
+dex_settings.issuer_url column on first boot. Falls back to a localtest.me
+default to keep `helm template` clean for local dev.
+*/}}
+{{- define "astronomer.dex.issuerURL" -}}
+{{- if .Values.dex.issuerURL -}}
+{{- .Values.dex.issuerURL -}}
+{{- else if .Values.config.serverURL -}}
+{{- printf "%s/dex" (trimSuffix "/" .Values.config.serverURL) -}}
+{{- else -}}
+http://astronomer.localtest.me/dex
+{{- end -}}
+{{- end }}
+
+{{/*
 astronomer.validateInputs runs on every render (any env), catching misconfig
 that produces silent-noop rather than fail-fast. Currently checks:
   - additionalTrustedCAs.enabled=true requires existingSecret (otherwise the
@@ -355,6 +372,18 @@ rendered manifest.
     {{- end }}
     {{- if not .Values.secrets.encryptionKey }}
       {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
+    {{- end }}
+    {{- /* Migration 045 soft check: production posture is "Dex on" unless
+           the operator explicitly opts into local-password-only auth. The
+           default chart value of config.auth.localPasswordOnly=false makes
+           the misconfigured-install path fail closed. */ -}}
+    {{- if and (not .Values.dex.enabled) (not (and .Values.config.auth (and .Values.config.auth.localPasswordOnly)) ) }}
+      {{- $errs = append $errs "  - dex.enabled=false but config.auth.localPasswordOnly is not true. Either flip dex.enabled=true (recommended) or set config.auth.localPasswordOnly=true to confirm the install will only ever use local passwords (no SSO)." }}
+    {{- end }}
+    {{- /* Production must replace the chart's known weak dex.clientSecret
+           default so the static-client secret is unique per install. */ -}}
+    {{- if and .Values.dex.enabled (eq (default "" .Values.dex.clientSecret) "") }}
+      {{- $errs = append $errs "  - dex.clientSecret is empty; replace with a freshly-generated value (the chart's default is intentionally weak and refused in production)" }}
     {{- end }}
     {{- if gt (len $errs) 0 }}
       {{- $msg := printf "\n\nAstronomer production preflight failed:\n%s\n\nSee deploy/chart/README.md and deploy/chart/values-production.yaml for the expected wiring." (join "\n" $errs) }}
