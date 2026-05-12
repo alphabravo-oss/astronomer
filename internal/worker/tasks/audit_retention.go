@@ -23,6 +23,17 @@ type jwtRevocationPurger interface {
 	PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
 }
 
+// ssoSessionPurger drains the sso_sessions table (migration 054) on
+// the same daily cron. Rows are bounded by the access JWT's natural
+// expiry — once the JWT is unusable the stored id_token is useless
+// too — but we still want to GC so encrypted bearer-equivalent
+// secrets don't accumulate at rest forever. Sub-interface so the
+// production *sqlc.Queries satisfies it without test fakes having
+// to grow another method.
+type ssoSessionPurger interface {
+	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
+}
+
 // EnforceAuditLogRetentionType is the periodic task identifier for pruning old
 // monthly audit_log partitions after they age out of the configured window.
 const EnforceAuditLogRetentionType = "audit_log:enforce_retention"
@@ -69,6 +80,18 @@ func enforceAuditLogRetention(ctx context.Context, q auditRetentionQuerier, now 
 			runtimeLogger().WarnContext(ctx, "purge expired jwt revocations failed", "error", err)
 		} else if purged > 0 {
 			runtimeLogger().InfoContext(ctx, "purged expired jwt revocations", "rows", purged)
+		}
+	}
+	// SLO session GC (migration 054). Same daily cadence as the
+	// JWT revocation purge — the lifetime envelope is the same, and
+	// the cost is a single DELETE so there's no value in a second
+	// scheduler entry. Independent failure handling so a transient
+	// DB blip on one purge doesn't suppress the other.
+	if purger, ok := q.(ssoSessionPurger); ok {
+		if purged, err := purger.PurgeExpiredSSOSessions(ctx); err != nil {
+			runtimeLogger().WarnContext(ctx, "purge expired sso sessions failed", "error", err)
+		} else if purged > 0 {
+			runtimeLogger().InfoContext(ctx, "purged expired sso sessions", "rows", purged)
 		}
 	}
 	return nil

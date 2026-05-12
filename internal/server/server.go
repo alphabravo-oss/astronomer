@@ -296,6 +296,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
 	clusterRegistriesHandler.SetApplyEnqueue(queue)
 	clusterRegistriesHandler.SetRequester(requester)
+	// Cloud credentials (migration 053). Project-scoped CRUD over
+	// AWS / GCP / Azure / Generic secrets, with a /test/ endpoint
+	// that dials each provider's "validate" SDK and a materialization
+	// worker that fans the cleartext out to in-cluster k8s Secrets
+	// via the tunnel. Encryptor is required for any write; tester is
+	// the default impl (10s budget per provider call).
+	cloudCredentialsHandler := handler.NewCloudCredentialHandler(queries)
+	cloudCredentialsHandler.SetAuditor(queries)
+	cloudCredentialsHandler.SetEncryptor(encryptor)
+	cloudCredentialsHandler.SetEnqueuer(queue)
+	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
 	// Cluster snapshots (migration 052). Velero CRDs are driven over
 	// the existing tunnel K8sRequester so the same circuit-breaker /
 	// retry behaviour as every other tunnel-mediated K8s op applies.
@@ -320,6 +331,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	authHandler.SetLockoutQuerier(queries)
 	authHandler.SetRevocationQuerier(queries)
 	authHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
+	// Single sign-out (migration 054 / NIST 800-53 AC-12). Wired when
+	// the encryptor is available: the stored upstream id_token is
+	// Fernet-encrypted at rest, so without the key Logout has nothing
+	// to decrypt. The post_logout_redirect_uri is derived from the
+	// callback base URL — keeping it adjacent to the SSO redirect URI
+	// means the same dashboard hostname is registered with the IdP for
+	// both legs of the OIDC flow.
+	authHandler.SetSSOSessionStore(queries)
+	if encryptor != nil {
+		authHandler.SetEncryptor(encryptor)
+		callbackBase := resolveCallbackBaseURL(ctx, cfg, queries)
+		authHandler.SetPostLogoutRedirectURL(callbackBase + "/auth/logout-done/")
+	}
 
 	// 2FA / TOTP (migration 043). The handler needs the Fernet
 	// encryptor to wrap secrets at rest; without it we skip wiring so
@@ -345,6 +369,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	var ssoHandler *handler.SSOHandler
 	if ssoManager != nil {
 		ssoHandler = handler.NewSSOHandler(ssoManager, queries, jwtManager, "/")
+		// SLO persistence (migration 054). Wire both the writer + the
+		// encryptor so the Callback can store Fernet-encrypted upstream
+		// id_tokens onto the sso_sessions row keyed by the access JWT's
+		// JTI. Without either, the Callback silently skips persistence
+		// and Logout degrades to "JWT revoked locally only".
+		ssoHandler.SetSSOSessionWriter(queries)
+		if encryptor != nil {
+			ssoHandler.SetEncryptor(encryptor)
+		}
 	}
 
 	// Phase B4 — Dex shim handler. Always wire it (even pre-encryption-key)
@@ -418,6 +451,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	resourceHandler.SetEncryptor(encryptor)
 	resourceHandler.SetSSOManager(ssoManager)
 	resourceHandler.SetJWTManager(jwtManager)
+	// Admin force-logout SLO clean-up (migration 054). The handler
+	// enumerates the target user's sso_sessions rows and fires
+	// best-effort back-channel end-session POSTs against each IdP
+	// before deleting the rows. Wired unconditionally; the encryptor
+	// gate inside the handler is what actually decides whether the
+	// back-channel POST can fire.
+	resourceHandler.SetSSOSessionStore(queries)
+	resourceHandler.SetSSOBackchannelClient(handler.NewDefaultSSOBackchannelClient())
 	// User delete cascades through *_role_bindings; signal the RBAC cache to
 	// drop the per-user entry instead of waiting out the TTL.
 	if cache := rbacQuerier.Cache(); cache != nil {
@@ -604,6 +645,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// queries surface. The enforcer wires into clusters / auth /
 		// rbac handlers via SetQuotaEnforcer (see below).
 		Quotas: handler.NewQuotaHandler(queries),
+		// Cloud credentials (migration 053). Provider-typed secrets at
+		// the project level + a materialization worker that fans them
+		// out to in-cluster k8s Secrets.
+		CloudCredentials: cloudCredentialsHandler,
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
@@ -749,6 +794,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// ProjectK8sRequester adapter that the project reconciler already
 	// installs; the bridge decoder is in internal/handler/projects.go.
 	clusterRegistriesHandler.ConfigureWorkerDeps(queries)
+	// Cloud-credentials materialization worker (migration 053). Reuses
+	// the same handler.K8sRequester → tasks.ProjectK8sRequester adapter
+	// the project reconciler and cluster-registry apply paths already
+	// use. Decryptor is the same Fernet encryptor used by the handler so
+	// ciphertexts round-trip through one key set across the worker /
+	// API surface.
+	tasks.ConfigureCloudCredentialMaterialize(tasks.CloudCredentialMaterializeDeps{
+		Queries:   queries,
+		Requester: handler.ProjectK8sRequesterFromHandlerRequester(requester),
+		Decryptor: encryptor,
+	})
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
 	// DB lease handles multiple worker pods racing on the same row).
 	projectHandler.StartReconciler(reconcileCtx)

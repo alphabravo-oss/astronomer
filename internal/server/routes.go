@@ -143,6 +143,12 @@ type RouterDependencies struct {
 	// /projects/{id}/quota/ + /auth/me/quota/ readers. Migration 051.
 	// Nil-safe — when not wired the quota routes are omitted.
 	Quotas *handler.QuotaHandler
+	// CloudCredentials owns /api/v1/projects/{project_id}/cloud-credentials/*
+	// + /api/v1/cloud-credentials/providers/ (migration 053). The handler
+	// is nil-safe — when unwired the routes are omitted and the materialize
+	// worker still runs whatever rows exist in the DB through the drift
+	// sweep.
+	CloudCredentials *handler.CloudCredentialHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -684,6 +690,22 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/quota-usage/", deps.Projects.QuotaUsage)
 		})
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.Projects.ListByCluster)
+	}
+
+	// Cloud credentials (migration 053). Project-scoped CRUD with the
+	// /test/ endpoint that hits each provider's "validate this
+	// credential" SDK call. The public /providers/ list is exposed
+	// outside the project tree so the UI's "Add credential" wizard can
+	// load the form-builder schema without a project id.
+	if deps.CloudCredentials != nil {
+		r.Get("/cloud-credentials/providers/", deps.CloudCredentials.ListProviders)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/cloud-credentials/", deps.CloudCredentials.List)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/", deps.CloudCredentials.Create)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Get)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Delete)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.CloudCredentials.Test)
 	}
 
 	if deps.Tools != nil {
