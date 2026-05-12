@@ -76,7 +76,12 @@ export default function SettingsPage() {
 
   const { data: ssoProviders, isLoading: ssoLoading } = useSSOProviders();
   const { data: tokens, isLoading: tokensLoading } = useAPITokens();
-  const { data: auditData, isLoading: auditLoading } = useAuditLogs({ pageSize: 50 });
+  // Migration 063 — `action_class` filter for read-side audit rows.
+  const [auditClassFilter, setAuditClassFilter] = useState<'all' | 'mutation' | 'read' | 'auth' | 'system'>('all');
+  const { data: auditData, isLoading: auditLoading } = useAuditLogs({
+    pageSize: 50,
+    ...(auditClassFilter !== 'all' ? { action_class: auditClassFilter } : {}),
+  });
   const createToken = useCreateAPIToken();
   const deleteToken = useDeleteAPIToken();
 
@@ -472,15 +477,36 @@ export default function SettingsPage() {
 
         {/* Audit Log */}
         {activeTab === 'audit' && (
-          <DataTable
-            data={auditLogs}
-            columns={auditColumns}
-            keyExtractor={(row) => row.id}
-            searchPlaceholder="Search audit logs..."
-            loading={auditLoading}
-            emptyMessage="No audit log entries"
-            pageSize={25}
-          />
+          <div className="space-y-3">
+            {/* action_class filter (migration 063). "all" leaves the
+                query unfiltered. "read" surfaces credential-read audit
+                rows specifically; "mutation" hides the read-side noise. */}
+            <div className="flex items-center gap-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Class
+              </label>
+              <select
+                value={auditClassFilter}
+                onChange={(e) => setAuditClassFilter(e.target.value as typeof auditClassFilter)}
+                className="rounded-md border border-border bg-background text-sm px-2 py-1"
+              >
+                <option value="all">All</option>
+                <option value="mutation">Mutation</option>
+                <option value="read">Read (credential view)</option>
+                <option value="auth">Auth</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+            <DataTable
+              data={auditLogs}
+              columns={auditColumns}
+              keyExtractor={(row) => row.id}
+              searchPlaceholder="Search audit logs..."
+              loading={auditLoading}
+              emptyMessage="No audit log entries"
+              pageSize={25}
+            />
+          </div>
         )}
 
         {/* Support */}

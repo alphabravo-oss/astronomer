@@ -560,6 +560,8 @@ export interface APIToken {
 export interface AuditLogEntry {
   id: string;
   action: string;
+  // Migration 063 — action_class distinguishes read-side from mutation rows.
+  actionClass?: 'mutation' | 'read' | 'auth' | 'system';
   resourceType: string;
   resourceName: string;
   user: string;

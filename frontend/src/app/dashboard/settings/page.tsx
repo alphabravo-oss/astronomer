@@ -23,6 +23,7 @@ import {
   ShieldAlert,
   LayoutDashboard,
   FileText,
+  FileSearch,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -98,6 +99,12 @@ const CARDS: SettingsCard[] = [
     title: 'General',
     description: 'Platform name, audit logging, API tokens, support bundle.',
     icon: SettingsIcon,
+  },
+  {
+    href: '/dashboard/settings/read-audit',
+    title: 'Read-audit policies',
+    description: 'Which GET endpoints emit a "who saw what credential" audit row.',
+    icon: FileSearch,
   },
 ];
 

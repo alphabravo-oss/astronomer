@@ -807,7 +807,14 @@ export function useDeleteAPIToken() {
   });
 }
 
-export function useAuditLogs(params?: { page?: number; pageSize?: number; action?: string; user?: string }) {
+export function useAuditLogs(params?: {
+  page?: number;
+  pageSize?: number;
+  action?: string;
+  user?: string;
+  // migration 063 — read/mutation/auth/system filter.
+  action_class?: string;
+}) {
   return useQuery({
     queryKey: queryKeys.settings.auditLogs(params),
     queryFn: () => apiClient.getAuditLogs(params),

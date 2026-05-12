@@ -833,3 +833,72 @@ export async function listGitOpsSourceClusters(
   );
   return res.data.data?.clusters ?? [];
 }
+
+// ---------------------------------------------------------------
+// Read-audit policies (migration 063).
+// ---------------------------------------------------------------
+
+export interface ReadAuditPolicy {
+  id: string;
+  name: string;
+  description: string;
+  path_pattern: string;
+  verbs: string;
+  sample_rate: number;
+  enabled: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReadAuditPolicyCreateBody {
+  name: string;
+  description?: string;
+  path_pattern: string;
+  verbs?: string;
+  sample_rate?: number;
+  enabled?: boolean;
+}
+
+export interface ReadAuditPolicyUpdateBody {
+  description?: string;
+  path_pattern?: string;
+  verbs?: string;
+  sample_rate?: number;
+  enabled?: boolean;
+}
+
+export async function listReadAuditPolicies(): Promise<ReadAuditPolicy[]> {
+  const res = await api.get<APIResponse<{ items: ReadAuditPolicy[]; total: number }>>(
+    '/admin/read-audit-policies/',
+  );
+  const data = res.data.data ?? (res.data as unknown as { items: ReadAuditPolicy[] });
+  return data.items ?? [];
+}
+
+export async function getReadAuditPolicy(id: string): Promise<ReadAuditPolicy> {
+  const res = await api.get<APIResponse<ReadAuditPolicy>>(`/admin/read-audit-policies/${id}/`);
+  return res.data.data ?? (res.data as unknown as ReadAuditPolicy);
+}
+
+export async function createReadAuditPolicy(
+  body: ReadAuditPolicyCreateBody,
+): Promise<ReadAuditPolicy> {
+  const res = await api.post<APIResponse<ReadAuditPolicy>>('/admin/read-audit-policies/', body);
+  return res.data.data ?? (res.data as unknown as ReadAuditPolicy);
+}
+
+export async function updateReadAuditPolicy(
+  id: string,
+  body: ReadAuditPolicyUpdateBody,
+): Promise<ReadAuditPolicy> {
+  const res = await api.put<APIResponse<ReadAuditPolicy>>(
+    `/admin/read-audit-policies/${id}/`,
+    body,
+  );
+  return res.data.data ?? (res.data as unknown as ReadAuditPolicy);
+}
+
+export async function deleteReadAuditPolicy(id: string): Promise<void> {
+  await api.delete(`/admin/read-audit-policies/${id}/`);
+}

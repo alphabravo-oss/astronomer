@@ -642,7 +642,14 @@ export async function deleteAPIToken(id: string) {
   await api.delete(`/settings/tokens/${id}`);
 }
 
-export async function getAuditLogs(params?: { page?: number; pageSize?: number; action?: string; user?: string }) {
+export async function getAuditLogs(params?: {
+  page?: number;
+  pageSize?: number;
+  action?: string;
+  user?: string;
+  // action_class: "mutation" | "read" | "auth" | "system" — migration 063.
+  action_class?: string;
+}) {
   const res = await api.get<PaginatedResponse<import('@/types').AuditLogEntry>>('/settings/audit-logs', { params });
   return res.data;
 }
