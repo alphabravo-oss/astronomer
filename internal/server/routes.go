@@ -149,6 +149,10 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// ClusterGroups owns /api/v1/cluster-groups/* — operator-defined folder
+	// hierarchy over clusters (migration 066). Tree depth capped at 3
+	// (root + 2 levels). Nil-safe: omitted from the router when not wired.
+	ClusterGroups *handler.ClusterGroupHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -706,6 +710,24 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Delete)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.CloudCredentials.Test)
+	}
+
+	// Cluster groups (migration 066). All routes gated by clusters:update
+	// because group admin is a clusters-admin concept; the LIST/GET reads
+	// are also gated to keep the boundary tight (operators who can't
+	// administer clusters shouldn't see the operator-defined folder
+	// structure either).
+	if deps.ClusterGroups != nil {
+		r.Route("/cluster-groups", func(r chi.Router) {
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/", deps.ClusterGroups.List)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/", deps.ClusterGroups.Create)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/{id}/", deps.ClusterGroups.Get)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/", deps.ClusterGroups.Update)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Patch("/{id}/", deps.ClusterGroups.Update)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/{id}/", deps.ClusterGroups.Delete)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Get("/{id}/clusters/", deps.ClusterGroups.ListClusters)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/move/", deps.ClusterGroups.MoveClusters)
+		})
 	}
 
 	if deps.Tools != nil {

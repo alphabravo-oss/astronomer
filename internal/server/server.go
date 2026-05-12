@@ -307,6 +307,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	cloudCredentialsHandler.SetEncryptor(encryptor)
 	cloudCredentialsHandler.SetEnqueuer(queue)
 	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
+	// Cluster groups (migration 066). Operator-defined folder hierarchy
+	// over clusters; gated by clusters:update. Auditor is the same
+	// *sqlc.Queries used for the rest of the audit table.
+	clusterGroupsHandler := handler.NewClusterGroupHandler(queries)
+	clusterGroupsHandler.SetAuditor(queries)
+	// Wire the gauge refresh hook + register metrics. The asynq periodic
+	// scheduler invokes HandleClusterGroupMetricsRefresh on cadence, which
+	// in turn calls the installed refresher (set here) — no import cycle
+	// because tasks holds a function pointer rather than importing handler.
+	handler.RegisterClusterGroupMetrics()
+	tasks.ClusterGroupMetricsRefresher = func(ctx context.Context) {
+		handler.RefreshClusterGroupMetrics(ctx, queries)
+	}
 	// Cluster snapshots (migration 052). Velero CRDs are driven over
 	// the existing tunnel K8sRequester so the same circuit-breaker /
 	// retry behaviour as every other tunnel-mediated K8s op applies.
@@ -649,6 +662,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// the project level + a materialization worker that fans them
 		// out to in-cluster k8s Secrets.
 		CloudCredentials: cloudCredentialsHandler,
+		// Cluster groups (migration 066). Operator-defined folder hierarchy
+		// over clusters with a tree depth cap of 3.
+		ClusterGroups: clusterGroupsHandler,
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
