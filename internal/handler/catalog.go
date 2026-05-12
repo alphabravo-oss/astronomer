@@ -21,6 +21,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -82,6 +83,22 @@ type CatalogHandler struct {
 	// dispatched per reconciler tick. Zero falls back to the package
 	// default (see effectiveHelmConcurrency).
 	helmConcurrency int
+	// vaultResolver substitutes ${vault://...} markers in the values
+	// blob right before the install task is enqueued. Migration 067.
+	// Nil-safe: when no vault refs appear in the blob the handler
+	// proceeds unchanged; when refs appear and the resolver is nil
+	// the install fails with a clear error.
+	vaultResolver *avault.Resolver
+}
+
+// SetVaultResolver wires the Vault resolver used to substitute
+// ${vault://...} markers in operator-supplied values blobs at install
+// time. See internal/vault/resolver.go for the reference grammar.
+func (h *CatalogHandler) SetVaultResolver(r *avault.Resolver) {
+	if h == nil {
+		return
+	}
+	h.vaultResolver = r
 }
 
 // NewCatalogHandler creates a new catalog handler.
@@ -715,6 +732,19 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create installation")
 		return
 	}
+	// Migration 067 — resolve ${vault://...} markers in the values blob
+	// IN-MEMORY before enqueueing the install task. The DB row keeps
+	// the original blob (so the operator can re-resolve on upgrade and
+	// no cleartext secret is persisted). Catalog installs are
+	// cluster-scoped and not tied to a single project, so unqualified
+	// references (no <connection> segment) require the operator to use
+	// the explicit "${vault://<connection>/...}" form. The hook fails
+	// clear when a reference is unresolvable.
+	resolvedValues, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, installation.ValuesOverride)
+	if vaultErr != nil {
+		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		return
+	}
 	op, err := h.enqueueOperation(r.Context(), "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
 		InstalledChartID: installation.ID.String(),
 		ClusterID:        clusterID.String(),
@@ -724,8 +754,10 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		ChartName:        chart.Name,
 		RepoURL:          repo.Url,
 		Version:          version.Version,
-		ValuesOverride:   installation.ValuesOverride,
-		Notes:            installation.Notes,
+		// Resolved values flow to the cluster; the persisted row keeps
+		// the original ${vault://...}-bearing blob.
+		ValuesOverride: resolvedValues,
+		Notes:          installation.Notes,
 	}, currentUserUUID(r))
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installation")

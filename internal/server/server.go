@@ -26,6 +26,7 @@ import (
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
+	"github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
@@ -307,6 +308,21 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	cloudCredentialsHandler.SetEncryptor(encryptor)
 	cloudCredentialsHandler.SetEnqueuer(queue)
 	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
+	// Vault integration (migration 067). The resolver is wired into
+	// each install path so ${vault://...} markers in operator-supplied
+	// values blobs are substituted in-memory at install time. The
+	// vault_connections handler owns the admin CRUD over the table; the
+	// project-default endpoint owns the per-project pointer.
+	vaultResolver := vault.NewResolver(queries, encryptor)
+	vaultResolver.SetObserver(vaultMetricsObserver{})
+	vaultHandler := handler.NewVaultHandler(queries)
+	vaultHandler.SetAuditor(queries)
+	vaultHandler.SetEncryptor(encryptor)
+	vaultHandler.SetProbe(handler.LiveVaultProbe{})
+	vaultHandler.SetResolver(vaultResolver)
+	catalogHandler.SetVaultResolver(vaultResolver)
+	toolHandler.SetVaultResolver(vaultResolver)
+	clusterTemplateHandler.SetVaultResolver(vaultResolver)
 	// Cluster snapshots (migration 052). Velero CRDs are driven over
 	// the existing tunnel K8sRequester so the same circuit-breaker /
 	// retry behaviour as every other tunnel-mediated K8s op applies.
@@ -649,6 +665,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// the project level + a materialization worker that fans them
 		// out to in-cluster k8s Secrets.
 		CloudCredentials: cloudCredentialsHandler,
+		// Vault integration (migration 067). Admin CRUD over
+		// vault_connections + project default pointer.
+		Vault: vaultHandler,
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)

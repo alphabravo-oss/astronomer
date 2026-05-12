@@ -39,6 +39,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -85,6 +86,22 @@ type ClusterTemplateHandler struct {
 	// asynq.Client. When nil, the handler still upserts the application
 	// row but the worker only picks it up via the periodic sweep.
 	queue ClusterTemplateEnqueuer
+	// vaultResolver pre-flights ${vault://...} references in the
+	// template spec at Apply time so an obviously bad template (missing
+	// key / wrong connection) fails the API call instead of the worker.
+	// The spec snapshot is NEVER mutated with resolved values — that
+	// would persist cleartext secrets in the DB; the worker re-resolves
+	// at install time. Migration 067. Nil-safe.
+	vaultResolver *avault.Resolver
+}
+
+// SetVaultResolver wires the Vault resolver used to pre-flight
+// ${vault://...} references in template specs at Apply time.
+func (h *ClusterTemplateHandler) SetVaultResolver(r *avault.Resolver) {
+	if h == nil {
+		return
+	}
+	h.vaultResolver = r
 }
 
 // NewClusterTemplateHandler constructs the handler.
@@ -483,6 +500,18 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), templateID)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		return
+	}
+
+	// Migration 067 — pre-flight every ${vault://...} reference in the
+	// spec so a bad template (missing key / wrong connection) fails the
+	// API call instead of the worker. We DELIBERATELY DO NOT persist
+	// the resolved values: the spec snapshot keeps the original
+	// ${vault://...} markers, and the worker re-resolves at install
+	// time. Cluster-scoped apply, no project context, so unqualified
+	// refs require the explicit ${vault://<connection>/...} form.
+	if _, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, string(tmpl.Spec)); vaultErr != nil {
+		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
 		return
 	}
 

@@ -149,6 +149,13 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// Vault owns /api/v1/admin/vault-connections/* (superuser) +
+	// /api/v1/projects/{id}/default-vault-connection/ (project RBAC).
+	// Migration 067. Nil-safe: when not wired the routes are omitted.
+	// The Vault resolver (the runtime hook into helm install / tools /
+	// cluster_templates) is wired SEPARATELY on each install handler
+	// via SetVaultResolver, NOT through this dependency.
+	Vault *handler.VaultHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -706,6 +713,24 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Delete)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.CloudCredentials.Test)
+	}
+
+	// Vault integration (migration 067). Superuser gating lives
+	// inside each admin handler method — same pattern as admin_drill
+	// / admin_queues — so no route-level middleware. Project-default
+	// endpoints use project RBAC because picking a Vault connection
+	// for a project is a project-edit concern, not platform-admin.
+	if deps.Vault != nil {
+		r.Get("/admin/vault-connections/", deps.Vault.List)
+		r.Post("/admin/vault-connections/", deps.Vault.Create)
+		r.Get("/admin/vault-connections/{id}/", deps.Vault.Get)
+		r.Put("/admin/vault-connections/{id}/", deps.Vault.Update)
+		r.Delete("/admin/vault-connections/{id}/", deps.Vault.Delete)
+		r.Post("/admin/vault-connections/{id}/test/", deps.Vault.Test)
+		r.Post("/admin/vault-connections/{id}/health/", deps.Vault.Health)
+
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{id}/default-vault-connection/", deps.Vault.GetProjectDefault)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{id}/default-vault-connection/", deps.Vault.PutProjectDefault)
 	}
 
 	if deps.Tools != nil {
