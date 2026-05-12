@@ -248,6 +248,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	authHandler.SetRoleBindings(queries)
 	authHandler.SetAuditWriter(queries)
 	authHandler.SetLogger(logger)
+	// Auth hardening (migration 039): account lockout + JWT session revocation.
+	authHandler.SetLockoutQuerier(queries)
+	authHandler.SetRevocationQuerier(queries)
+	authHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
+	// Wire the same revocation + cutoff backend into the JWT validator
+	// so the auth middleware enforces the deny-list on every authenticated
+	// request — without it, Logout would write a row no validator ever
+	// consults.
+	jwtManager.SetRevocationChecker(handler.NewJWTRevocationChecker(queries))
 
 	var ssoHandler *handler.SSOHandler
 	if ssoManager != nil {
@@ -301,6 +310,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	resourceHandler := handler.NewResourceHandlerWithQueries(queries, requester)
 	resourceHandler.SetEncryptor(encryptor)
 	resourceHandler.SetSSOManager(ssoManager)
+	resourceHandler.SetJWTManager(jwtManager)
 	// User delete cascades through *_role_bindings; signal the RBAC cache to
 	// drop the per-user entry instead of waiting out the TTL.
 	if cache := rbacQuerier.Cache(); cache != nil {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -28,6 +29,26 @@ type UserQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
+}
+
+// LockoutQuerier is the optional dependency that backs the account-
+// lockout policy. When unwired (the test-fake path), Login behaves
+// exactly as before — no per-account state is tracked. When attached
+// from production, Login increments the failed-attempt counter, locks
+// the account after the threshold, and resets the counter on success.
+type LockoutQuerier interface {
+	IncrementFailedLoginCount(ctx context.Context, arg sqlc.IncrementFailedLoginCountParams) error
+	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
+	LockUser(ctx context.Context, arg sqlc.LockUserParams) error
+	UnlockUser(ctx context.Context, id uuid.UUID) error
+}
+
+// RevocationQuerier backs the JWT revocation list + per-user invalidation
+// cutoff. Wired separately from UserQuerier so test fakes can opt in
+// piece-by-piece.
+type RevocationQuerier interface {
+	RevokeJWT(ctx context.Context, arg sqlc.RevokeJWTParams) error
+	InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error
 }
 
 // AuthAuditWriter is the optional audit-writer dependency for AuthHandler.
@@ -71,13 +92,17 @@ type TokenQuerier interface {
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	queries  UserQuerier
-	tokens   TokenQuerier
-	rehasher PasswordRehasher
-	roles    RoleBindingsQuerier
-	audit    AuthAuditWriter
-	jwt      *auth.JWTManager
-	log      *slog.Logger
+	queries     UserQuerier
+	tokens      TokenQuerier
+	rehasher    PasswordRehasher
+	roles       RoleBindingsQuerier
+	audit       AuthAuditWriter
+	lockout     LockoutQuerier
+	revocation  RevocationQuerier
+	jwt         *auth.JWTManager
+	log         *slog.Logger
+	lockoutDur  time.Duration
+	failThresh  int
 }
 
 // NewAuthHandler creates a new auth handler.
@@ -123,6 +148,47 @@ func (h *AuthHandler) SetLogger(log *slog.Logger) {
 	if log != nil {
 		h.log = log
 	}
+}
+
+// SetLockoutQuerier wires the account-lockout backend. When unset, Login
+// behaves as before (no per-account failure counter, no lockout). The
+// threshold + duration come from SetLockoutPolicy; defaults are read
+// from internal/auth/lockout.go.
+func (h *AuthHandler) SetLockoutQuerier(q LockoutQuerier) {
+	h.lockout = q
+}
+
+// SetRevocationQuerier wires the JWT revocation deny-list + per-user
+// invalidation cutoff backend. When unset, Logout is a no-op and
+// force-logout cannot be served.
+func (h *AuthHandler) SetRevocationQuerier(q RevocationQuerier) {
+	h.revocation = q
+}
+
+// SetLockoutPolicy overrides the failure threshold + lockout duration
+// from the chart-tuned config. Zero values keep the package defaults.
+func (h *AuthHandler) SetLockoutPolicy(threshold int, duration time.Duration) {
+	if threshold > 0 {
+		h.failThresh = threshold
+	}
+	if duration > 0 {
+		h.lockoutDur = duration
+	}
+}
+
+// effectiveLockoutPolicy returns the runtime threshold + duration with
+// the package-level defaults filled in. Keeps the Login handler's
+// branching tidy.
+func (h *AuthHandler) effectiveLockoutPolicy() (int, time.Duration) {
+	t := h.failThresh
+	if t <= 0 {
+		t = auth.LoginFailureThreshold
+	}
+	d := h.lockoutDur
+	if d <= 0 {
+		d = auth.LockoutDuration
+	}
+	return t, d
 }
 
 // LoginRequest represents the login request body.
@@ -234,6 +300,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Account-lockout gate. Sits BEFORE bcrypt so a locked account
+	// can't be probed for password validity (which would also chew
+	// CPU). An expired lock falls through naturally because the
+	// timestamp comparison returns false. NIST 800-53 AC-7.
+	if user.LockedUntil.Valid && user.LockedUntil.Time.After(time.Now()) {
+		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.login_locked", "user", user.ID.String(), user.Username, map[string]any{
+				"reason":       "account_locked",
+				"locked_until": user.LockedUntil.Time.UTC().Format(time.RFC3339),
+				"locked_reason": user.LockedReason,
+			})
+		// 423 Locked is the RFC 4918 status that fits best; we keep
+		// the JSON error envelope shape unchanged so the frontend
+		// can surface "account_locked" without parsing the status.
+		RespondError(w, http.StatusLocked, "account_locked", "Account is temporarily locked. Try again later or contact an administrator.")
+		return
+	}
+
 	ok, needsRehash, verifyErr := auth.VerifyPassword(user.Password, req.Password)
 	if verifyErr != nil {
 		// A malformed stored hash is treated as a credential failure to avoid
@@ -241,16 +325,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if h.log != nil {
 			h.log.Warn("password verification error", "user_id", user.ID.String(), "error", verifyErr)
 		}
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.login_failed", "user", user.ID.String(), user.Username, map[string]any{
-			"reason": "verify_error",
-		})
+		h.handleFailedAttempt(ctx, r, user, "verify_error")
 		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		return
 	}
 	if !ok {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.login_failed", "user", user.ID.String(), user.Username, map[string]any{
-			"reason": "bad_password",
-		})
+		h.handleFailedAttempt(ctx, r, user, "bad_password")
 		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		return
 	}
@@ -261,6 +341,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		})
 		RespondError(w, http.StatusForbidden, "account_disabled", "Account is disabled")
 		return
+	}
+
+	// Successful auth — reset failure counter + clear any expired lock
+	// from a prior cycle. Best-effort; failure here doesn't block login.
+	if h.lockout != nil {
+		if err := h.lockout.ResetFailedLoginCount(ctx, user.ID); err != nil && h.log != nil {
+			h.log.Warn("failed to reset login failure counter", "user_id", user.ID.String(), "error", err)
+		}
 	}
 
 	// Opportunistically upgrade legacy Django PBKDF2/argon2 hashes to bcrypt.
@@ -309,6 +397,67 @@ func loginIdentifierType(identifier string) string {
 		return "email"
 	}
 	return "username"
+}
+
+// handleFailedAttempt is the shared post-bcrypt-miss branch: increment
+// the per-user failure counter, lock the account when the threshold is
+// reached, and emit the audit row. Best-effort — every DB error is
+// logged but never blocks the HTTP response (the caller already returned
+// the user-facing 401).
+//
+// `reason` distinguishes between "bcrypt mismatch" (bad_password) and
+// "stored hash unparseable" (verify_error); both count toward the
+// threshold because either way the caller didn't prove possession of
+// the credential.
+func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, user sqlc.User, reason string) {
+	threshold, lockDur := h.effectiveLockoutPolicy()
+
+	// Default audit row mirrors the legacy bad-password path so
+	// downstream consumers don't have to special-case the new
+	// columns.
+	auditDetail := map[string]any{
+		"reason":               reason,
+		"failed_login_count":   int(user.FailedLoginCount) + 1, // optimistic — DB roundtrip below
+		"lockout_threshold":    threshold,
+	}
+
+	if h.lockout != nil {
+		now := time.Now()
+		if err := h.lockout.IncrementFailedLoginCount(ctx, sqlc.IncrementFailedLoginCountParams{
+			ID:            user.ID,
+			FailedLoginAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
+			if h.log != nil {
+				h.log.Warn("failed to increment failed-login count", "user_id", user.ID.String(), "error", err)
+			}
+		}
+
+		// Threshold check uses the OLD value + 1 because we just
+		// observed the increment. If the row was already at
+		// (threshold-1), this attempt is the one that crosses it.
+		if int(user.FailedLoginCount)+1 >= threshold {
+			lockedUntil := now.Add(lockDur)
+			if err := h.lockout.LockUser(ctx, sqlc.LockUserParams{
+				ID:           user.ID,
+				LockedUntil:  pgtype.Timestamptz{Time: lockedUntil, Valid: true},
+				LockedReason: auth.LockoutReasonTooManyFailedAttempts,
+			}); err != nil {
+				if h.log != nil {
+					h.log.Warn("failed to lock user", "user_id", user.ID.String(), "error", err)
+				}
+			} else {
+				auth.AccountLockoutsTotal.WithLabelValues(observability.MetricValues(auth.LockoutReasonTooManyFailedAttempts)...).Inc()
+				auditDetail["locked"] = true
+				auditDetail["locked_until"] = lockedUntil.UTC().Format(time.RFC3339)
+				recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+					"auth.login_locked", "user", user.ID.String(), user.Username, auditDetail)
+				return
+			}
+		}
+	}
+
+	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+		"auth.login_failed", "user", user.ID.String(), user.Username, auditDetail)
 }
 
 // Refresh handles POST /api/v1/auth/refresh/.
@@ -360,15 +509,80 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 // Logout handles POST /api/v1/auth/logout/.
 //
-// JWTs are stateless on the server, so logout is a no-op server-side: the
-// frontend discards the token. We still expose this endpoint so the frontend's
-// logout call doesn't 404 and to keep parity with the Python implementation,
-// which returned a {"detail":"..."} envelope.
+// JWTs are normally stateless on the server, but with the revocation
+// layer wired we add the caller's JTI to the deny list so the
+// no-longer-valid token can't be replayed before its natural expiry.
+// When the revocation backend is unwired (tests / pre-DB bootstrap),
+// the endpoint degrades back to the historical no-op shape: emit the
+// audit row and return 200.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	if user, ok := middleware.GetAuthenticatedUser(r.Context()); ok && user != nil {
-		recordAudit(r, h.audit, "auth.logout", "user", user.ID, user.Username, nil)
+	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
+	auditDetail := map[string]any{}
+
+	// Extract the JTI from the bearer JWT so we can add THIS token's
+	// JTI to the deny list. We don't trust the AuthenticatedUser to
+	// carry it (the middleware doesn't propagate it today), so we
+	// parse from the Authorization header.
+	if h.revocation != nil && h.jwt != nil {
+		if token := bearerTokenFromRequest(r); token != "" {
+			if claims, err := h.jwt.ValidateTokenContext(r.Context(), token); err == nil {
+				expiresAt := time.Time{}
+				if claims.ExpiresAt != nil {
+					expiresAt = claims.ExpiresAt.Time
+				}
+				if expiresAt.IsZero() {
+					// Belt-and-braces: a token with no exp shouldn't
+					// reach here (ValidateToken rejects), but if it
+					// did, hold the deny entry for one access lifetime
+					// so it can't be replayed forever.
+					expiresAt = time.Now().Add(24 * time.Hour)
+				}
+				if err := h.revocation.RevokeJWT(r.Context(), sqlc.RevokeJWTParams{
+					Jti:       claims.ID,
+					UserID:    claims.UserID,
+					ExpiresAt: expiresAt,
+					Reason:    "user_logout",
+				}); err != nil {
+					if h.log != nil {
+						h.log.Warn("failed to revoke JWT", "user_id", claims.UserID.String(), "jti", claims.ID, "error", err)
+					}
+				} else {
+					auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("jti", "user_logout")...).Inc()
+					auditDetail["jti"] = claims.ID
+					auditDetail["revoked"] = true
+					// Drop the cached "this JTI is valid" entry so an in-flight
+					// validator running in another worker doesn't accept the
+					// same token before TTL expiry.
+					h.jwt.InvalidateCache()
+				}
+			}
+		}
+	}
+
+	if ok && authUser != nil {
+		recordAudit(r, h.audit, "auth.logout", "user", authUser.ID, authUser.Username, auditDetail)
+	} else {
+		// Anonymous logout (no auth header / expired) — keep the audit
+		// trail so brute-force probes of /logout are still visible.
+		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.logout", "user", "", "", auditDetail)
 	}
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]string{"detail": "Logged out"})
+}
+
+// bearerTokenFromRequest extracts the JWT from the Authorization header.
+// Used by Logout to pull the caller's JTI for the deny list — the auth
+// middleware doesn't currently propagate the JTI into the AuthenticatedUser
+// struct so we re-parse here. Returns empty when no bearer is present.
+func bearerTokenFromRequest(r *http.Request) string {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return ""
+	}
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return parts[1]
 }
 
 // ChangePasswordRequest is the body for POST /api/v1/auth/change-password/.

@@ -319,6 +319,15 @@ type Querier interface {
 	GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([]GlobalRole, error)
 	GetUserProjectRoles(ctx context.Context, arg GetUserProjectRolesParams) ([]ProjectRole, error)
 	GetWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	// Account lockout (NIST 800-53 AC-7).
+	//
+	// The Login handler increments on every bcrypt miss, locks the account
+	// when the running count exceeds the chart-tuned threshold, and resets
+	// on a successful auth. Auto-unlock is implicit: a locked_until in the
+	// past behaves like "not locked".
+	IncrementFailedLoginCount(ctx context.Context, arg IncrementFailedLoginCountParams) error
+	InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error
+	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
 	ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error)
 	ListActiveAlertsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertRule, error)
 	ListActiveConnections(ctx context.Context) ([]AgentConnection, error)
@@ -424,6 +433,7 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
 	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)
+	LockUser(ctx context.Context, arg LockUserParams) error
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)
 	MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
@@ -453,6 +463,10 @@ type Querier interface {
 	MarkWorkloadOperationFailed(ctx context.Context, arg MarkWorkloadOperationFailedParams) (WorkloadOperation, error)
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
+	// Called by the nightly retention worker so the deny list doesn't grow
+	// without bound. Returning the rowcount lets the worker emit it as a
+	// metric.
+	PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
 	RemovePipelineOutput(ctx context.Context, arg RemovePipelineOutputParams) error
 	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
@@ -461,12 +475,15 @@ type Querier interface {
 	RequeueMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	RequeueToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
+	RevokeJWT(ctx context.Context, arg RevokeJWTParams) error
 	TombstoneCluster(ctx context.Context, id uuid.UUID) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
+	UnlockUser(ctx context.Context, id uuid.UUID) error
 	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg UpdateAgentConnectionStatusParams) error

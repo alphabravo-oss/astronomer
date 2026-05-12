@@ -8,6 +8,7 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -294,6 +295,59 @@ func (q *Queries) GetTokenByHash(ctx context.Context, tokenHash string) (ApiToke
 	return i, err
 }
 
+const incrementFailedLoginCount = `-- name: IncrementFailedLoginCount :exec
+
+UPDATE users
+SET failed_login_count = failed_login_count + 1,
+    failed_login_at    = $2,
+    updated_at         = now()
+WHERE id = $1
+`
+
+type IncrementFailedLoginCountParams struct {
+	ID            uuid.UUID          `json:"id"`
+	FailedLoginAt pgtype.Timestamptz `json:"failed_login_at"`
+}
+
+// Account lockout (NIST 800-53 AC-7).
+//
+// The Login handler increments on every bcrypt miss, locks the account
+// when the running count exceeds the chart-tuned threshold, and resets
+// on a successful auth. Auto-unlock is implicit: a locked_until in the
+// past behaves like "not locked".
+func (q *Queries) IncrementFailedLoginCount(ctx context.Context, arg IncrementFailedLoginCountParams) error {
+	_, err := q.db.Exec(ctx, incrementFailedLoginCount, arg.ID, arg.FailedLoginAt)
+	return err
+}
+
+const invalidateAllTokens = `-- name: InvalidateAllTokens :exec
+UPDATE users
+SET tokens_invalidated_at = $2,
+    updated_at            = now()
+WHERE id = $1
+`
+
+type InvalidateAllTokensParams struct {
+	ID                  uuid.UUID          `json:"id"`
+	TokensInvalidatedAt pgtype.Timestamptz `json:"tokens_invalidated_at"`
+}
+
+func (q *Queries) InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error {
+	_, err := q.db.Exec(ctx, invalidateAllTokens, arg.ID, arg.TokensInvalidatedAt)
+	return err
+}
+
+const isJWTRevoked = `-- name: IsJWTRevoked :one
+SELECT EXISTS (SELECT 1 FROM jwt_revocations WHERE jti = $1) AS revoked
+`
+
+func (q *Queries) IsJWTRevoked(ctx context.Context, jti string) (bool, error) {
+	row := q.db.QueryRow(ctx, isJWTRevoked, jti)
+	var revoked bool
+	err := row.Scan(&revoked)
+	return revoked, err
+}
+
 const listAPITokens = `-- name: ListAPITokens :many
 SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at FROM api_tokens ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
@@ -462,12 +516,111 @@ func (q *Queries) ListTokensByUser(ctx context.Context, arg ListTokensByUserPara
 	return items, nil
 }
 
+const lockUser = `-- name: LockUser :exec
+UPDATE users
+SET locked_until  = $2,
+    locked_reason = $3,
+    updated_at    = now()
+WHERE id = $1
+`
+
+type LockUserParams struct {
+	ID           uuid.UUID          `json:"id"`
+	LockedUntil  pgtype.Timestamptz `json:"locked_until"`
+	LockedReason string             `json:"locked_reason"`
+}
+
+func (q *Queries) LockUser(ctx context.Context, arg LockUserParams) error {
+	_, err := q.db.Exec(ctx, lockUser, arg.ID, arg.LockedUntil, arg.LockedReason)
+	return err
+}
+
+const purgeExpiredJWTRevocations = `-- name: PurgeExpiredJWTRevocations :execrows
+DELETE FROM jwt_revocations WHERE expires_at < now()
+`
+
+// Called by the nightly retention worker so the deny list doesn't grow
+// without bound. Returning the rowcount lets the worker emit it as a
+// metric.
+func (q *Queries) PurgeExpiredJWTRevocations(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredJWTRevocations)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const resetFailedLoginCount = `-- name: ResetFailedLoginCount :exec
+UPDATE users
+SET failed_login_count = 0,
+    failed_login_at    = NULL,
+    locked_until       = NULL,
+    locked_reason      = '',
+    updated_at         = now()
+WHERE id = $1
+`
+
+// Called on a successful login. Also clears any expired lock so the next
+// failed-attempt cycle starts from a clean state.
+func (q *Queries) ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, resetFailedLoginCount, id)
+	return err
+}
+
 const revokeAPIToken = `-- name: RevokeAPIToken :exec
 UPDATE api_tokens SET is_revoked = true WHERE id = $1
 `
 
 func (q *Queries) RevokeAPIToken(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, revokeAPIToken, id)
+	return err
+}
+
+const revokeJWT = `-- name: RevokeJWT :exec
+
+INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (jti) DO NOTHING
+`
+
+type RevokeJWTParams struct {
+	Jti       string    `json:"jti"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Reason    string    `json:"reason"`
+}
+
+// JWT session revocation.
+//
+// Two layers:
+//  1. Per-JTI deny list. Used by Logout. ON CONFLICT lets the same JTI
+//     be submitted multiple times (idempotent).
+//  2. Per-user `tokens_invalidated_at` cutoff. Used by admin force-
+//     logout to invalidate ALL active tokens for a user without having
+//     to enumerate them — the JWT validator rejects any token whose
+//     iat predates the cutoff.
+func (q *Queries) RevokeJWT(ctx context.Context, arg RevokeJWTParams) error {
+	_, err := q.db.Exec(ctx, revokeJWT,
+		arg.Jti,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.Reason,
+	)
+	return err
+}
+
+const unlockUser = `-- name: UnlockUser :exec
+UPDATE users
+SET failed_login_count = 0,
+    failed_login_at    = NULL,
+    locked_until       = NULL,
+    locked_reason      = '',
+    updated_at         = now()
+WHERE id = $1
+`
+
+func (q *Queries) UnlockUser(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, unlockUser, id)
 	return err
 }
 

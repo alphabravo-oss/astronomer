@@ -33,6 +33,16 @@ type ResourceHandler struct {
 	encryptor *auth.Encryptor
 	ssoMgr    SSOProviderRegistrar
 	rbacCache rbacCacheInvalidator
+	// jwt is the optional JWT manager used by the admin force-logout
+	// endpoint to flush its positive-validation cache. Nil-safe.
+	jwt *auth.JWTManager
+}
+
+// SetJWTManager wires the JWT manager so admin endpoints that change
+// session state (force-logout) can invalidate the in-process validation
+// cache. Optional; nil-safe.
+func (h *ResourceHandler) SetJWTManager(j *auth.JWTManager) {
+	h.jwt = j
 }
 
 type ResourceQuerier interface {
@@ -49,6 +59,12 @@ type ResourceQuerier interface {
 	UpdateUser(ctx context.Context, arg sqlc.UpdateUserParams) (sqlc.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg sqlc.UpdateUserPasswordParams) error
+	// Auth hardening (migration 039). UnlockUser clears the per-account
+	// lockout fields; InvalidateAllTokens bumps the per-user cutoff
+	// timestamp so every in-flight JWT for the user is rejected on its
+	// next validation.
+	UnlockUser(ctx context.Context, id uuid.UUID) error
+	InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error
 }
 
 type SSOSettingsQuerier interface {

@@ -684,6 +684,14 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.Patch("/users/{id}/", deps.Resources.UpdateUser)
 		r.Delete("/users/{id}/", deps.Resources.DeleteUser)
 		r.Post("/users/{id}/reset-password/", deps.Resources.ResetUserPassword)
+		// Admin-only auth hardening endpoints (migration 039).
+		//
+		// Superuser gating lives inside the handler — same pattern as the
+		// other /admin/* routes here (keyStatusHandler, AdminQueues etc.).
+		// We deliberately keep the auth requirement on the wrapper so a
+		// non-superuser hits a clean 403 instead of falling through.
+		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/users/{id}/unlock/", deps.Resources.UnlockUser)
+		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/users/{id}/force-logout/", deps.Resources.ForceLogoutUser)
 	}
 
 	if deps.Security != nil {

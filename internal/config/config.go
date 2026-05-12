@@ -58,6 +58,13 @@ type Config struct {
 	ServerMetricsAddr       string `mapstructure:"server_metrics_addr"`
 	WorkerMetricsAddr       string `mapstructure:"worker_metrics_addr"`
 
+	// Account-lockout policy (migration 039 / NIST 800-53 AC-7).
+	// LoginFailureThreshold defaults to 5 when zero/negative; the
+	// duration defaults to 15 minutes. Both are chart-tunable via
+	// LOGIN_FAILURE_THRESHOLD / LOCKOUT_DURATION_MINUTES env vars.
+	LoginFailureThreshold  int `mapstructure:"login_failure_threshold"`
+	LockoutDurationMinutes int `mapstructure:"lockout_duration_minutes"`
+
 	// ArgoCDUIUpstream is the in-cluster URL of argocd-server. The /argocd/*
 	// reverse proxy mounted on the public Astronomer router forwards browser
 	// traffic here after Astronomer's JWT/cookie auth has cleared. ArgoCD
@@ -99,6 +106,8 @@ func Load() (*Config, error) {
 	v.BindEnv("audit_log_retention_months")
 	v.BindEnv("server_metrics_addr")
 	v.BindEnv("worker_metrics_addr")
+	v.BindEnv("login_failure_threshold")
+	v.BindEnv("lockout_duration_minutes")
 	v.BindEnv("db_max_conns")
 	v.BindEnv("db_min_conns")
 	v.BindEnv("db_max_conn_lifetime_minutes")
@@ -115,6 +124,8 @@ func Load() (*Config, error) {
 	v.SetDefault("agent_token_expiry_hours", 24)
 	v.SetDefault("log_level", "info")
 	v.SetDefault("audit_log_retention_months", 13)
+	v.SetDefault("login_failure_threshold", 5)
+	v.SetDefault("lockout_duration_minutes", 15)
 	v.SetDefault("server_metrics_addr", ":9090")
 	v.SetDefault("worker_metrics_addr", ":9090")
 	v.SetDefault("argocd_ui_upstream", "http://argocd-server.argocd.svc.cluster.local:80")
