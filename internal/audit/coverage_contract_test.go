@@ -63,6 +63,12 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 			"Apply",
 			"RegisterAsSSO",
 		},
+		// Identity-group sync admin endpoints (migration 042).
+		"../handler/group_mappings.go": {
+			"Create",
+			"Delete",
+			"ResyncUser",
+		},
 		"../handler/projects.go": {
 			"Create",
 			"Update",
