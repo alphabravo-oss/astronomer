@@ -53,6 +53,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/registration"
 )
 
 // ClusterTemplateApplyType is the asynq task type. Re-exported via
@@ -128,12 +129,17 @@ type ClusterTemplateApplyDeps struct {
 }
 
 // ClusterTemplateRegistrationAdvancer is the narrow surface the apply
-// worker uses to advance the wizard phase. registration.Service
-// implements this natively.
+// worker uses to advance the wizard phase + write per-tool step rows.
+// registration.Service implements this natively.
 type ClusterTemplateRegistrationAdvancer interface {
 	OnTemplateApplyStart(ctx context.Context, clusterID uuid.UUID) error
 	OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUID) error
 	OnTemplateApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error
+	// Sprint 23: per-tool step rows. Each tool install gets a row when
+	// it starts and the same row is updated to success/failed on
+	// completion so the wizard page-3 timeline shows individual progress.
+	WriteStep(ctx context.Context, clusterID uuid.UUID, in registration.StepInput) (sqlc.ClusterRegistrationStep, error)
+	UpdateStep(ctx context.Context, in registration.UpdateStepInput) (sqlc.ClusterRegistrationStep, error)
 }
 
 var clusterTemplateApplyDeps ClusterTemplateApplyDeps
@@ -369,13 +375,50 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, clusterID uu
 		// the operator is running in a unit-test or chart-less env.
 		return nil
 	}
+	// Sprint 23: emit a per-tool step row + SSE event so the wizard
+	// progress timeline (page 3) shows individual install progress
+	// instead of one opaque "Applying Platform Baseline → applied"
+	// transition. Each tool gets a running row when its install starts
+	// and the same row is updated to success / failed on completion.
+	// Registration service is nil-safe: when unwired (test fakes) we
+	// just install without writing step rows.
 	for _, t := range spec.Tools {
 		valuesYAML := ""
 		if len(t.Values) > 0 {
 			valuesYAML = string(t.Values)
 		}
-		if _, err := deps.Installer.EnsureInstalled(ctx, clusterID, t.Slug, t.Slug, t.Preset, valuesYAML); err != nil {
+		var stepID uuid.UUID
+		if deps.Registration != nil {
+			step, werr := deps.Registration.WriteStep(ctx, clusterID, registration.StepInput{
+				StepName:    "tool_installing:" + t.Slug,
+				Status:      "running",
+				ProgressPct: 0,
+				Detail: map[string]any{
+					"slug":   t.Slug,
+					"preset": t.Preset,
+				},
+				MarkStarted: true,
+			})
+			if werr == nil {
+				stepID = step.ID
+			}
+		}
+		_, err := deps.Installer.EnsureInstalled(ctx, clusterID, t.Slug, t.Slug, t.Preset, valuesYAML)
+		if err != nil {
+			if deps.Registration != nil && stepID != uuid.Nil {
+				_, _ = deps.Registration.UpdateStep(ctx, registration.UpdateStepInput{
+					StepID:       stepID,
+					Status:       "failed",
+					ErrorMessage: err.Error(),
+				})
+			}
 			return fmt.Errorf("ensure tool %q installed: %w", t.Slug, err)
+		}
+		if deps.Registration != nil && stepID != uuid.Nil {
+			_, _ = deps.Registration.UpdateStep(ctx, registration.UpdateStepInput{
+				StepID: stepID,
+				Status: "success",
+			})
 		}
 	}
 	return nil

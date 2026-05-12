@@ -1,6 +1,6 @@
 # astronomer-go sprint progress snapshot
 
-_Updated 2026-05-12 ~20:11. Branch: `main`. Live `.247` at migration head **077**._
+_Updated 2026-05-12 ~21:08. Branch: `main` @ `f751540`. Live `.247` at migration head **077**._
 
 ## Cumulative shipped
 
@@ -14,60 +14,60 @@ URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYlt
 | 18 | Cluster groups · Vault · NetPol templates · CRD-mirror v2 | 066–069 | live |
 | 19 | Apiserver allow-list · Service mesh · Anomaly detection · Catalog ratings | 070–073 | live |
 | 20 | Platform-baseline auto-attach · kubectl image preload · empty-state CTAs | 074 | live |
-| 21 | Seeded helm repos (bitnami/aqua/jetstack/prometheus-community) · first-boot catalog sync · slug-coverage endpoint · `prometheus-node-exporter` slug fix | 075–077 | live |
+| 21 | Seeded helm repos (bitnami/aqua/jetstack/prometheus-community) · first-boot sync · coverage endpoint · slug fix | 075–077 | live |
+| 22 | Rancher-style 3-page registration wizard · phase machine · SSE event stream · tombstone filter on cluster list | 078 | live |
 
-## Live "register a cluster → auto-install" flow is now closed
+## Recent live fixes
 
-Verified end-to-end on `.247` 2026-05-12:
-- `GET /admin/platform-settings/default-cluster-template/coverage/` → `5/5 resolved, missing_slugs: []`.
-- `POST /clusters/` → `cluster_template_applications` row inserted in 0 ms with `status=pending`.
-- Per-cluster install dispatches as soon as the agent connects.
+- **Tombstoned-cluster ghosts** — `ListClusters` etc. now filter `WHERE decommissioned_at IS NULL`. Deletes actually clear from the UI once the worker tombstones.
+- **Registration wizard live** — multi-page flow replaces the old modal; SSE drives the progress timeline.
+- **TypeScript build errors** in the wizard fixed: `LiveEventType` union extended with the two registration event types; `ClusterRegistration` interface gained `distribution / region / install_baseline`.
 
-## Pending (sprint 22 — next batch)
+## Pending (sprint 23 — polish + close known gaps)
 
-No specific feature scheduled yet. Candidates from the roadmap list below. Next high-leverage picks (smallest effort, biggest UX win on a fresh install):
+Punch-list items from prior sprints that are user-visible:
 
-1. **Empty-state polish across remaining tabs** — apply the sprint-074 CTA pattern (Apply Platform Baseline / Install <tool>) to: Image Scans, Tools, Security/CIS scans, Metrics, Logs. Each is ~30 lines and stops a fresh install from looking dead.
-2. **Catalog chart-install page accepts `?cluster_id=`** so the sprint-074 CTAs deep-link to a pre-scoped install form.
-3. **Dedicated Image Scans tab** in the cluster-detail nav (the CTA currently lives on the CIS-scans tab as a stopgap).
-4. **Fleet selector `group_id` branch** — schema + API field shipped in sprint 066; orchestrator evaluator still uses labels-only.
+1. **Cluster detail "Provisioning" tab** — sprint 22 deferred this. The wizard page-3 timeline exists; we need the same component reused on cluster detail so an operator returning to a half-provisioned cluster sees the same view.
+2. **Catalog install page accepts `?cluster_id=`** — sprint 074 CTAs deep-link to `/catalog?search=trivy` as a stopgap. With a `cluster_id` param, the install form scopes to that cluster.
+3. **Dedicated Image Scans tab on cluster detail** — sprint 074 landed the CTA on the CIS-scans tab as nearest-fit; it deserves its own tab.
+4. **Empty-state CTAs across remaining cluster-detail tabs** — Tools (✓ done sprint 074), but Metrics, Logs, Workloads, Network Policies, Service Mesh still look dead on fresh clusters.
+5. **Baseline reconciler check**: live test registered cluster `e81c58ee-...` and the `cluster_template_applications` row stayed `pending` because the worker short-circuits when the agent isn't actually healthy. Worth a small diagnostic + retry-with-backoff improvement so operators see the failure reason, not just an indefinitely-pending row.
 
 ## Tech-debt punch list (carry forward)
 
-- **060**: Fernet-encrypt `gitops_registration_sources.auth_encrypted`.
-- **062**: Wire Trivy `Ingester.AuditHook` once a CRD-mirror event dispatcher exists.
-- **064**: Webhook + SMTP delete enforcement when listed in an active baseline's `required_*` field.
-- **065**: Audit fan-out for kubectl session `expired`/`reaped` worker events. Register the active-sessions gauge.
-- **066**: Fleet selector `group_id` branch — schema + API field shipped; selector evaluator doesn't expand group_id yet. Sidebar hierarchical tree + cluster-detail "Move to group" deferred.
-- **067**: `vault.reference.resolved` / `.failed` audit-log rows (metrics-only today).
-- **068**: Audit `drift_detected` / `reconciled` actions for NetworkPolicy reconciler.
-- **069**: `astronomer_crd_mirror_rows` gauge populator; `CustomResourceDefinition` self-mirror.
-- **070**: AKS / DOKS / SelfManaged real provider drivers (EKS + GKE done; rest are detect-only scaffolds).
-- **074**: Catalog chart-install page accepting `?cluster_id=`; dedicated Image-Scans frontend tab; `kind=builtin` enforcement on cluster_templates handler.
+- **060** Fernet-encrypt `gitops_registration_sources.auth_encrypted`.
+- **062** Wire Trivy `Ingester.AuditHook` to a CRD-mirror event dispatcher.
+- **064** Webhook + SMTP delete enforcement when listed in active baseline `required_*`.
+- **065** Audit fan-out for kubectl session `expired`/`reaped`; register active-sessions gauge.
+- **066** Fleet selector `group_id` evaluator branch (schema + field shipped; orchestrator still labels-only). Sidebar hierarchical tree.
+- **067** `vault.reference.resolved` / `.failed` audit rows (metrics-only today).
+- **068** Audit `drift_detected` / `reconciled` actions for NetworkPolicy reconciler.
+- **069** `astronomer_crd_mirror_rows` gauge populator; CustomResourceDefinition self-mirror.
+- **070** AKS / DOKS / SelfManaged real provider drivers (EKS + GKE done; rest are detect-only).
+- **074** `kind=builtin` enforcement on cluster_templates handler (seed marks `spec.builtin=true` for future).
+- **078** Cluster-detail Provisioning tab; signed manifest URL with short TTL; per-tool install step rows in registration timeline; baseline lookup at startup wiring (`SetBaselineTemplateID`).
 
 ## Cumulative roadmap remaining
 
 Larger / not-yet-scoped:
 
 - Cost allocation per project (L effort, billing-API plumbing)
-- Anomaly v2: cross-cluster baselines ("this cluster's CPU is 4σ above fleet mean")
+- Anomaly v2: cross-cluster baselines
 - Per-namespace fine-grained RBAC mirror for kubectl shell
 - Bulk cluster operations richer UI (fleet-ops backend is rich; UI sparse)
-- Application marketplace recommendation engine v2 (cross-tenant, requires telemetry opt-in)
+- Application marketplace recommendation engine v2 (cross-tenant, opt-in telemetry)
 - IP geolocation badges on audit log
 - Helm `--atomic --wait` toggle per project
 
 User declined: licensing management.
 
-## Process notes (carry forward — unchanged)
+## Process notes (unchanged)
 
 - Worktree agent leaks to main: `git checkout -- .`, remove untracked, then re-merge.
 - 3-way merge for worker/scheduler/querier/routes/server: every backend sprint adds entries; resolve additively.
 - Test-name collisions: prefix per-feature.
 - sqlc CLI broken (compliance.sql lexer); hand-write `*_ext.sql.go` / `*_manual.go`.
 - ArgoCD self-manage reconciles helm values back to `:dev`. Deploy via re-tag locally + `kubectl rollout restart`.
-- CWD discipline: worktree agents stay in their own dir; merge work happens from primary.
-- Frontend leak guard: agents working on `frontend/src/lib/api/cluster-detail.ts` produce massive HEAD-vs-worktree blobs; scan for missing `listMirrored*` / `Mirrored*` imports after merge before docker building.
 - Frontend axios baseURL is `/api/v1` — API client paths start at `/admin/...` or `/clusters/...`, NEVER `/api/v1/`.
 - Kubectl shell + image scans require a remote agent. UI is gated on `is_local`.
 
