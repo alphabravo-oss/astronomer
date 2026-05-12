@@ -174,6 +174,7 @@ type Querier interface {
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
+	DeletePlatformSetting(ctx context.Context, key string) error
 	DeletePodSecurityTemplate(ctx context.Context, id uuid.UUID) error
 	DeleteProject(ctx context.Context, id uuid.UUID) error
 	DeleteProjectNamespace(ctx context.Context, arg DeleteProjectNamespaceParams) error
@@ -294,6 +295,7 @@ type Querier interface {
 	// Notification Channels
 	GetNotificationChannelByID(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
 	GetPlatformConfig(ctx context.Context) (PlatformConfiguration, error)
+	GetPlatformSetting(ctx context.Context, key string) (PlatformSetting, error)
 	// Pod Security Templates
 	GetPodSecurityTemplateByID(ctx context.Context, id uuid.UUID) (PodSecurityTemplate, error)
 	GetPodSecurityTemplateByName(ctx context.Context, name string) (PodSecurityTemplate, error)
@@ -418,6 +420,8 @@ type Querier interface {
 	ListPendingWorkloadOperations(ctx context.Context, limit int32) ([]WorkloadOperation, error)
 	ListPipelinesByCluster(ctx context.Context, arg ListPipelinesByClusterParams) ([]LoggingPipeline, error)
 	ListPipelinesForOutput(ctx context.Context, loggingOutputID uuid.UUID) ([]LoggingPipeline, error)
+	ListPlatformSettings(ctx context.Context) ([]PlatformSetting, error)
+	ListPlatformSettingsByPrefix(ctx context.Context, prefix string) ([]PlatformSetting, error)
 	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectRoleBindings(ctx context.Context, arg ListProjectRoleBindingsParams) ([]ProjectRoleBinding, error)
@@ -580,6 +584,7 @@ type Querier interface {
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
 	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfiguration, error)
+	UpsertPlatformSetting(ctx context.Context, arg UpsertPlatformSettingParams) (PlatformSetting, error)
 	UpsertProjectNamespace(ctx context.Context, arg UpsertProjectNamespaceParams) (ProjectNamespace, error)
 	// Group-claim sync (migration 042).
 	CountGroupMappings(ctx context.Context) (int64, error)
