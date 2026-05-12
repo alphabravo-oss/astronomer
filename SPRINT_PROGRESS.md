@@ -1,10 +1,10 @@
 # astronomer-go sprint progress snapshot
 
-_Snapshot updated 2026-05-12 16:55. Branch: `main` @ `319d9b5`. Live `.247` running this revision (re-tagged as `:dev`)._
+_Snapshot updated 2026-05-12 18:06. Branch: `main` @ `33d0332`. Live `.247` running this revision (re-tagged as `:dev`)._
 
-## Cumulative shipped (through sprint 17 + wterm swap)
+## Cumulative shipped (through sprint 18)
 
-Migration head: **65**. Live deploy URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYltBgV`.
+Migration head: **69**. Live URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYltBgV`.
 
 ### Sprint 15
 - 055 SIEM forwarder · 056 Fleet operations · 057 Maintenance windows
@@ -13,60 +13,69 @@ Migration head: **65**. Live deploy URL: `http://astronomer.5.78.101.247.nip.io:
 - 058 Dashboard widgets · 059 Notification template editor · 060 GitOps cluster registration · 061 BYO helm catalogs per project
 
 ### Sprint 17
-- 062 Image vulnerability scanning (Trivy CRD ingest)
-- 063 Read-side API audit (8 seeded policies, middleware + cache evaluator)
-- 064 Compliance baselines (PCI / HIPAA / FedRAMP-Moderate / SOC2 presets)
-- 065 In-browser kubectl shell (xterm initially, swapped to wterm same-day)
+- 062 Image vulnerability scanning · 063 Read-side API audit · 064 Compliance baselines · 065 In-browser kubectl shell · **wterm swap**
 
-### One-off this session
-- **wterm swap** — replaced xterm.js (`@xterm/xterm@5.5.0`) with `@wterm/react@0.3.0` across both terminal consumers (cluster-shell + pod-terminal). Vercel-Labs Zig→WASM core. Bundle drops xterm.js + 2 addons; prebuild script copies `node_modules/@wterm/core/wasm/wterm.wasm` → `public/wterm.wasm`. next.config.js gained `transpilePackages: ['@wterm/core', '@wterm/dom', '@wterm/react']`. **Rollback**: `git revert 319d9b5`.
+### Sprint 18
+- 066 Cluster groups / folders (tree-depth 3, fleet selector ext is a follow-up)
+- 067 Vault integration (resolver in helm install / tools / cluster-templates)
+- 068 Network policy templates (4 builtins + reconciler + drift sweep)
+- 069 CRD-mirror v2 (IngressClass / GatewayClass / NetworkPolicy / ResourceQuota / LimitRange)
+- **Live UI fix**: `frontend/src/lib/api/dashboards.ts` was prepending `/api/v1/` over the axios baseURL → 404. Stripped the prefix; all dashboard calls now route via the shared baseURL.
+- **Merge follow-fix**: CRD-mirror v2 `listMirrored*` exports + types were dropped during the cluster-detail.ts merge (HEAD-only); re-appended from worktree before deploy.
 
-Live `.247` verification:
-- `/health/` → version `9036610`
-- `SELECT MAX(version) FROM schema_migrations` = 61… wait, 65 now. Already verified earlier.
-- All sprint-15-17 admin endpoints return 200 with admin JWT.
+Live verification done:
+- `/health/` → version `369fb14`
+- migrations head `SELECT MAX(version)` = 69
+- `dashboards/global/` 200 (was 404 with doubled prefix)
+- `cluster-groups/`, `admin/vault-connections/`, `admin/network-policy-templates/` all 200
 
-## Pending (sprint 18 — agents to launch)
+## Pending (sprint 19 — agents to launch)
 
-Picking 4 more from the remaining Rancher parity gap. Mix of operator UX + security hardening.
+Picking the next 4 from the roadmap. Mix of security hardening + operator UX.
 
 | # | Feature | Why | Effort | Migration |
 |---|---|---|---|---|
-| 1 | **Cluster groups / folders** | Fleets of 50+ clusters need org structure. Today the list is flat. Groups = label-style folders + bulk-apply target for fleet ops. | M | 066 |
-| 2 | **Vault integration for helm values** | Operators store secrets in HashiCorp Vault. Sprint 067 lets helm-chart values reference `vault://path/key` and the materializer fetches at install time. | M | 067 |
-| 3 | **Network policy templates** | Pre-built NetworkPolicy bundles (deny-all-ingress, project-isolated, namespace-only) + per-cluster apply. Sister of sprint 049 cluster_templates. | S/M | 068 |
-| 4 | **CRD-mirror v2: more managed resources** | Sprint 014 mirrors a handful of CRDs. Add: IngressClass, GatewayClass, NetworkPolicy, ResourceQuota, LimitRange — read-side, so the cluster detail page shows "what's installed" without a fresh kubectl roundtrip. | S/M | 069 |
+| 1 | **Cluster apiserver allow-list** | Operators want a "lockbox" mode: only Astronomer's tunnel egress IPs can hit the cluster apiserver. Sprint 070 adds a per-cluster `apiserver_allowlist_cidrs` config + a reconciler that patches the cloud LB / firewall. | M | 070 |
+| 2 | **Service mesh tile (Istio + Linkerd detect/install)** | We mirror lots of CRDs already (sprint 069); sprint 071 adds a dedicated tile that detects an installed mesh (gateway/peerauth/destinationrule shapes), and lets operators install via the catalog. | M | 071 |
+| 3 | **Alerting anomaly detection** | Today alerts are static-threshold (`> 90% CPU`). Sprint 072 adds rolling-window baselines per `cluster × metric` and "deviation from baseline" alert rules. | M | 072 |
+| 4 | **Catalog ratings + recommendations** | Sister of sprint 061 BYO catalogs. Operators rate installed charts; we surface "popular in your org" + "frequently installed together" recommendations on the catalog browse. | S/M | 073 |
 
-After sprint 18: deploy + verify live.
+After sprint 19: deploy + verify live.
 
-## Tech-debt punch list (from prior sprint reports, not yet scheduled)
+## Tech-debt punch list (carry forward)
 
-Mostly small, defer until convenient:
-- **Sprint 060**: Fernet-encrypt the `gitops_registration_sources.auth_encrypted` blob at write time (column exists; ciphertext support is the missing piece).
-- **Sprint 062**: Wire the Trivy `Ingester.AuditHook` in `server.go` once a CRD-mirror event dispatcher exists.
-- **Sprint 064**: Webhook + SMTP delete enforcement when those resources are listed in an active baseline's `required_*` field (currently recorded, not enforced).
-- **Sprint 065**: Audit-log fan-out for the kubectl session `expired` / `reaped` events fired from the worker reaper. Also: register the `astronomer_kubectl_sessions_active` gauge + opened/commands counters.
-- **Sprint 063**: `audit_log` policy `path_pattern` was `/audit-log` in the spec; live uses `/audit` (matches chi mount). Same intent.
-- **GitOps spec.project + spec.registries + spec.toolPresets** binding — the YAML fields are parsed and surfaced through preview, but binding them into the actual cluster_registry_configs / tool installations is a follow-up.
+- **060**: Fernet-encrypt the `gitops_registration_sources.auth_encrypted` blob at write time.
+- **062**: Wire the Trivy `Ingester.AuditHook` once a CRD-mirror event dispatcher exists.
+- **064**: Webhook + SMTP delete enforcement when those resources are listed in an active baseline's `required_*` field.
+- **065**: Audit-log fan-out for kubectl session `expired`/`reaped` worker events. Register `astronomer_kubectl_sessions_active` gauge + opened/commands counters.
+- **066**: Fleet selector `group_id` branch — schema + API field exist, but `internal/worker/tasks/fleet_orchestrate.go` still uses main's selector evaluator without the group expansion.
+- **066**: Sidebar hierarchical tree + cluster-detail "Move to group" + breadcrumb (admin CRUD already shipped).
+- **067**: `vault.reference.resolved` / `.failed` audit-log rows (metrics only today).
+- **068**: Audit `drift_detected` / `reconciled` actions for NetworkPolicy reconciler.
+- **069**: `astronomer_crd_mirror_rows` gauge populator task; `CustomResourceDefinition` self-mirror.
 
-## Cumulative roadmap remaining (post-18)
+## Cumulative roadmap remaining (post-19)
 
 - Cost allocation per project (L effort, AWS Cost Explorer / GCP billing API plumbing)
-- Anomaly detection on metrics (alerting++)
-- Application marketplace ratings/recommendations
-- IP allow-list per cluster (apiserver firewall)
-- Service mesh (Istio/Linkerd) integration tile
+- Application marketplace recommendation engine v2 (cross-tenant trends, requires telemetry opt-in)
+- Per-namespace fine-grained RBAC mirror for kubectl shell (sprint 065 v1 was cluster-wide)
+- Bulk cluster operations richer UI (fleet ops 056 backend is rich, UI is sparse)
+- IP geolocation badges on audit log
+- Service-account-token rotation reminder
+- Helm `--atomic --wait` toggle per project
 
 User declined: licensing management.
 
-## Process notes (carry forward, unchanged)
+## Process notes (unchanged)
 
 - Agent leaks to main: `git checkout -- .` + remove untracked, then re-merge the worktree branch.
-- 3-way merge for worker/scheduler/querier: every backend sprint adds entries; resolve additively.
-- Test-name collisions: prefix per-feature (avoid generic `TestHandler_RequiresSuperuser`).
+- 3-way merge for worker/scheduler/querier/routes/server: every backend sprint adds entries; resolve additively.
+- Test-name collisions: prefix per-feature.
 - sqlc CLI broken (compliance.sql lexer); hand-write `*_ext.sql.go` / `*_manual.go`.
-- ArgoCD self-manage reconciles helm values back to `:dev`. Deploy via re-tag locally + `kubectl rollout restart` (don't fight Argo).
+- ArgoCD self-manage reconciles helm values back to `:dev`. Deploy via re-tag locally + `kubectl rollout restart`.
 - CWD discipline: worktree agents stay in their own dir; merge work happens from primary.
+- **Frontend leak**: agents working on `frontend/src/lib/api/cluster-detail.ts` produce massive HEAD-vs-worktree blobs; remember to scan for missing `Mirrored*` / `listMirrored*` style imports after the merge before docker building. Symptom: Next.js build "export not found" with import trace pointing at the consumer page.
+- **Frontend axios baseURL**: it's `/api/v1` (set in `lib/api.ts`). API client modules should pass paths starting at `/admin/...` or `/clusters/...` — NEVER prefix `/api/v1/`. The sprint-058 dashboards client had that bug; verify any new API client file against this rule before deploy.
 
 ## Memory index (unchanged)
 

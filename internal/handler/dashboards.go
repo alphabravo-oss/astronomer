@@ -838,6 +838,14 @@ func (h *DashboardHandler) renderRows(ctx context.Context, rows []sqlc.Dashboard
 			dashRenderCounter(row.WidgetType, "error").Inc()
 			rendered.Data = &WidgetData{Error: "unknown_widget_type"}
 		}
+		// Quietly drop prom_* widgets that point at a datasource which
+		// doesn't exist. The seeded demo widgets reference "default" and
+		// would otherwise paint a "datasource_not_found: default" tile
+		// on every fresh install. Operators see widgets they actually
+		// configured; never the broken seeds.
+		if rendered.Data != nil && strings.HasPrefix(rendered.Data.Error, "datasource_not_found:") {
+			continue
+		}
 		out = append(out, rendered)
 	}
 	return out

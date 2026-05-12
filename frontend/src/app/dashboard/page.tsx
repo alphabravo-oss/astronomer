@@ -3,9 +3,8 @@
 import { useClusters, useActivityFeed, queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { MetricCard } from '@/components/ui/metric-card';
-import { ClusterCard } from '@/components/clusters/cluster-card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime, cn } from '@/lib/utils';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
 import { renderGlobal } from '@/lib/api/dashboards';
 import {
@@ -99,98 +98,137 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Cluster Grid */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium text-foreground">Clusters</h2>
+      {/* Clusters table — full width */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium text-foreground">Clusters</h2>
+          <Link
+            href="/dashboard/clusters"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        {clustersLoading ? (
+          <div className="flex items-center justify-center h-48 rounded-lg border border-border">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : clusters.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 rounded-lg border border-dashed border-border">
+            <Server className="h-8 w-8 text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground mb-3">No clusters registered yet</p>
             <Link
-              href="/dashboard/clusters"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              href="/dashboard/clusters?register=true"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
             >
-              View all
-              <ArrowRight className="h-3.5 w-3.5" />
+              Register Cluster
             </Link>
           </div>
+        ) : (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Name</th>
+                  <th className="text-left px-4 py-2 font-medium">Status</th>
+                  <th className="text-left px-4 py-2 font-medium">Version</th>
+                  <th className="text-right px-4 py-2 font-medium">Nodes</th>
+                  <th className="text-right px-4 py-2 font-medium">Pods</th>
+                  <th className="text-right px-4 py-2 font-medium">CPU</th>
+                  <th className="text-right px-4 py-2 font-medium">Memory</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {clusters.map((cluster) => (
+                  <tr key={cluster.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2">
+                      <Link
+                        href={`/dashboard/clusters/${cluster.id}`}
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        {cluster.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2">
+                      <StatusBadge status={cluster.status} />
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground font-mono text-xs">
+                      {cluster.kubernetesVersion || '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-xs">{cluster.nodeCount}</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs">{cluster.podCount}</td>
+                    <td className={cn('px-4 py-2 text-right font-mono text-xs',
+                      cluster.cpuPercentage >= 90 ? 'text-red-500' :
+                      cluster.cpuPercentage >= 75 ? 'text-yellow-500' : 'text-muted-foreground')}>
+                      {cluster.cpuPercentage != null ? `${cluster.cpuPercentage.toFixed(0)}%` : '—'}
+                    </td>
+                    <td className={cn('px-4 py-2 text-right font-mono text-xs',
+                      cluster.memoryPercentage >= 90 ? 'text-red-500' :
+                      cluster.memoryPercentage >= 75 ? 'text-yellow-500' : 'text-muted-foreground')}>
+                      {cluster.memoryPercentage != null ? `${cluster.memoryPercentage.toFixed(0)}%` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-          {clustersLoading ? (
+      {/* Recent Activity — below clusters, full width */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium text-foreground">Recent Activity</h2>
+
+        <div className="rounded-lg border border-border overflow-hidden">
+          {activityLoading ? (
             <div className="flex items-center justify-center h-48">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : clusters.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 rounded-lg border border-dashed border-border">
-              <Server className="h-8 w-8 text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground mb-3">No clusters registered yet</p>
-              <Link
-                href="/dashboard/clusters?register=true"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                Register Cluster
-              </Link>
+          ) : activity.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+              <Activity className="h-6 w-6 mb-2" />
+              <p className="text-sm">No recent activity</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {clusters.slice(0, 6).map((cluster) => (
-                <ClusterCard key={cluster.id} cluster={cluster} />
+            <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+              {activity.map((event) => (
+                <div key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
+                        event.type === 'cluster'
+                          ? 'bg-blue-400'
+                          : event.type === 'workload'
+                            ? 'bg-green-400'
+                            : event.type === 'deployment'
+                              ? 'bg-violet-400'
+                              : event.type === 'rbac'
+                                ? 'bg-yellow-400'
+                                : 'bg-zinc-400'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground leading-snug">
+                        {event.message}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {event.user && (
+                          <span className="text-xs text-muted-foreground">{event.user}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground/60">
+                          {formatRelativeTime(event.timestamp)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           )}
         </div>
-
-        {/* Activity Feed */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-medium text-foreground">Recent Activity</h2>
-
-          <div className="rounded-lg border border-border overflow-hidden">
-            {activityLoading ? (
-              <div className="flex items-center justify-center h-48">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : activity.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-                <Activity className="h-6 w-6 mb-2" />
-                <p className="text-sm">No recent activity</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
-                {activity.map((event) => (
-                  <div key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
-                          event.type === 'cluster'
-                            ? 'bg-blue-400'
-                            : event.type === 'workload'
-                              ? 'bg-green-400'
-                              : event.type === 'deployment'
-                                ? 'bg-violet-400'
-                                : event.type === 'rbac'
-                                  ? 'bg-yellow-400'
-                                  : 'bg-zinc-400'
-                        }`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground leading-snug">
-                          {event.message}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {event.user && (
-                            <span className="text-xs text-muted-foreground">{event.user}</span>
-                          )}
-                          <span className="text-xs text-muted-foreground/60">
-                            {formatRelativeTime(event.timestamp)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
