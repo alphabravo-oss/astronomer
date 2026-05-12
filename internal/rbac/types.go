@@ -26,7 +26,13 @@ const (
 	// ResourceClusters + VerbUpdate so an operator who can already update a
 	// cluster doesn't need a second permission to apply a template to it.
 	ResourceClusterTemplates Resource = "cluster_templates"
-	ResourceWildcard         Resource = "*"
+	// ResourceFleetOperations gates /api/v1/fleet-operations/* (migration
+	// 056). A coordinated multi-cluster action (drain, tool upgrade,
+	// apply-template fanout) has blast radius up to every matched cluster;
+	// the dedicated resource lets operators grant "fleet runbook author"
+	// without also granting clusters:* or cluster_templates:*.
+	ResourceFleetOperations Resource = "fleet_operations"
+	ResourceWildcard        Resource = "*"
 )
 
 // Verb represents an action on a resource

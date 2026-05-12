@@ -103,6 +103,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Migration 056: fleet operations orchestrator. 10s cadence so an
+		// operator's pause/resume/abort click reaches steady state inside
+		// one screen refresh. Per-tick budget is 30s — overflow rolls
+		// into the next tick (no lease held across ticks).
+		{"@every 10s", tasks.FleetOrchestrateType, "fleet operations orchestrator"},
 	}
 
 	for _, e := range entries {
