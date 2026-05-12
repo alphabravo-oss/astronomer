@@ -1,0 +1,23 @@
+# Astronomer Helm chart image list (T23 air-gapped install)
+#
+# Regenerated via: make images.txt
+# Source:          deploy/chart/values.yaml + helm template
+#
+# Air-gapped install procedure:
+#   1) grep -v '^#' deploy/chart/images.txt > /tmp/images.txt
+#   2) Mirror each image to your internal registry with skopeo:
+#        while read -r img; do
+#          skopeo copy --all "docker://$img" "docker://internal.example.com/astronomer/$img"
+#        done < /tmp/images.txt
+#   3) helm install --set image.registry=internal.example.com/astronomer ...
+#
+# See docs/airgapped-install.md for the full operator procedure.
+astronomer-frontend:dev
+astronomer-go-agent:dev
+astronomer-go-migrate:dev
+astronomer-go-server:dev
+astronomer-go-worker:dev
+bitnami/kubectl:latest
+busybox:1.36
+postgres:16-alpine
+redis:7-alpine

@@ -19,6 +19,10 @@ fullnameOverride: ""
 # Container images
 # =============================================================================
 image:
+  # T23 — air-gapped: a single `registry` value applied as a prefix to
+  # EVERY image in the chart unless an image-specific override is set.
+  # The full set of images that participate is enumerated by
+  # `make images.txt` (see scripts/extract-images.sh).
   registry: ""           # Empty registry = use local images (k3d-imported).
   pullPolicy: IfNotPresent
   pullSecrets: []
@@ -35,6 +39,19 @@ image:
   migrate:
     repository: astronomer-go-migrate
     tag: dev
+
+# =============================================================================
+# Utility images
+# =============================================================================
+# Third-party tools used as init containers / sidecars. Each respects
+# image.registry as a prefix unless an explicit `registry` is provided
+# here (e.g. air-gapped operators that mirror busybox into a separate
+# location from the rest).
+utilities:
+  busybox:
+    repository: busybox
+    tag: "1.36"
+    registry: ""
 
 # =============================================================================
 # Frontend (optional Next.js dashboard)
@@ -59,6 +76,7 @@ frontend:
   image:
     repository: astronomer-frontend
     tag: dev
+    registry: ""    # T23 air-gapped override; falls back to image.registry
   apiBaseUrl: "http://astronomer-server:8000"
   wsBaseUrl: "ws://astronomer-server:8000/api/v1/ws"
   hostAliases: []
@@ -154,6 +172,7 @@ postgres:
   image:
     repository: postgres
     tag: 16-alpine
+    registry: ""    # T23 air-gapped override; falls back to image.registry
   user: astronomer
   password: astronomer    # Override in production!
   database: astronomer
@@ -188,6 +207,7 @@ redis:
   image:
     repository: redis
     tag: 7-alpine
+    registry: ""    # T23 air-gapped override; falls back to image.registry
   port: 6379
   storage:
     size: 2Gi
@@ -218,6 +238,7 @@ preflight:
   image:
     repository: bitnami/kubectl
     tag: latest
+    registry: ""    # T23 air-gapped override; falls back to image.registry
 
 # =============================================================================
 # Connection strings (consumed by server + worker)
@@ -474,6 +495,7 @@ managementBackup:
     repository: ghcr.io/alphabravocompany/pgdump-s3
     tag: "16-awscli"
     pullPolicy: IfNotPresent
+    registry: ""    # T23 air-gapped override; falls back to image.registry
   resources:
     requests:
       cpu: 100m

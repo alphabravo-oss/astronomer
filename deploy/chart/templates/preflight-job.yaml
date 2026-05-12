@@ -93,7 +93,7 @@ spec:
               memory: 128Mi
       containers:
         - name: preflight
-          image: "{{ .Values.preflight.image.repository }}:{{ .Values.preflight.image.tag }}"
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "registry" .Values.preflight.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - /bin/sh

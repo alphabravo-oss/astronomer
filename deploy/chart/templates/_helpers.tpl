@@ -77,7 +77,8 @@ ServiceAccount name to use.
 {{- end }}
 
 {{/*
-Image reference helper. Pass dict { context: $, component: "server"|"worker"|"agent"|"migrate" }.
+Image reference helper for astronomer-built images. Pass dict
+  { context: $, component: "server"|"worker"|"agent"|"migrate" }.
 Honours .Values.image.registry as an optional global prefix.
 */}}
 {{- define "astronomer.image" -}}
@@ -87,6 +88,30 @@ Honours .Values.image.registry as an optional global prefix.
 {{ printf "%s/%s:%s" $reg $img.repository $img.tag }}
 {{- else -}}
 {{ printf "%s:%s" $img.repository $img.tag }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Third-party image helper. T23 FEATURES-051126 — air-gapped installs
+mirror third-party images (postgres, redis, kubectl, busybox, pgdump-s3
+sidecar, frontend) into the operator's internal registry. Each image
+config supports an optional .registry override; when unset, falls back
+to .Values.image.registry; when that's also unset, the image is left
+unprefixed. Pass dict { repository: $repo, tag: $tag, registry: $reg, fallback: $.Values.image.registry }.
+
+Usage:
+  {{ include "astronomer.thirdPartyImage" (dict
+       "repository" .Values.postgres.image.repository
+       "tag"        .Values.postgres.image.tag
+       "registry"   .Values.postgres.image.registry
+       "fallback"   $.Values.image.registry) }}
+*/}}
+{{- define "astronomer.thirdPartyImage" -}}
+{{- $reg := .registry | default .fallback | default "" -}}
+{{- if $reg -}}
+{{ printf "%s/%s:%s" $reg .repository .tag }}
+{{- else -}}
+{{ printf "%s:%s" .repository .tag }}
 {{- end -}}
 {{- end }}
 

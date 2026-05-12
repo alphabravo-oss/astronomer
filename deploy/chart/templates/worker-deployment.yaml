@@ -28,7 +28,7 @@ spec:
       initContainers:
         {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
         - name: wait-postgres
-          image: busybox:1.36
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           command:
             - sh
             - -c
@@ -39,7 +39,7 @@ spec:
         {{- end }}
         {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
         - name: wait-redis
-          image: busybox:1.36
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           command:
             - sh
             - -c

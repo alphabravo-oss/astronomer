@@ -34,7 +34,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
           ports:
             - name: postgres
               containerPort: 5432

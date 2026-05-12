@@ -48,7 +48,7 @@ spec:
           {{- end }}
           containers:
             - name: pgdump-s3
-              image: "{{ .Values.managementBackup.image.repository }}:{{ .Values.managementBackup.image.tag }}"
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementBackup.image.repository "tag" .Values.managementBackup.image.tag "registry" .Values.managementBackup.image.registry "fallback" .Values.image.registry) | quote }}
               imagePullPolicy: {{ .Values.managementBackup.image.pullPolicy | default "IfNotPresent" }}
               command: ["/bin/sh", "-eu", "-c"]
               args:

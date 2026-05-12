@@ -56,6 +56,11 @@ lint: ## Run golangci-lint
 check-migrations: ## Lint *.up.sql migrations for unsafe ADD COLUMN NOT NULL patterns (T30)
 	./scripts/check-migrations.sh
 
+images.txt: ## Regenerate deploy/chart/images.txt — list of every image the chart pulls (T23)
+	./scripts/extract-images.sh > deploy/chart/images.txt
+	@echo ""
+	@echo "deploy/chart/images.txt updated. Commit alongside any chart values change that adds/removes an image."
+
 fmt: ## Format Go source files
 	go fmt ./...
 
