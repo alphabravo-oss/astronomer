@@ -112,6 +112,11 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 			"UpgradeInstalledChart",
 			"RollbackInstalledChart",
 		},
+		"../handler/project_catalogs.go": {
+			"Create",
+			"Subscribe",
+			"Delete",
+		},
 		"../handler/logging.go": {
 			"CreateOutput",
 			"UpdateOutput",

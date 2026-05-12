@@ -307,6 +307,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	cloudCredentialsHandler.SetEncryptor(encryptor)
 	cloudCredentialsHandler.SetEnqueuer(queue)
 	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
+	// Per-project BYO catalogs (migration 061). Mirrors the cloud-creds
+	// wiring shape — handler holds the queries surface + an auditor.
+	projectCatalogsHandler := handler.NewProjectCatalogHandler(queries)
+	projectCatalogsHandler.SetAuditor(queries)
 	// Cluster snapshots (migration 052). Velero CRDs are driven over
 	// the existing tunnel K8sRequester so the same circuit-breaker /
 	// retry behaviour as every other tunnel-mediated K8s op applies.
@@ -649,6 +653,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// the project level + a materialization worker that fans them
 		// out to in-cluster k8s Secrets.
 		CloudCredentials: cloudCredentialsHandler,
+		ProjectCatalogs:  projectCatalogsHandler,
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)

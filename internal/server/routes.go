@@ -149,6 +149,10 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// ProjectCatalogs owns /api/v1/projects/{project_id}/catalogs/*
+	// (migration 061). When nil the per-project BYO catalog routes are
+	// omitted; the existing /catalog/* admin surface is untouched.
+	ProjectCatalogs *handler.ProjectCatalogHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -706,6 +710,16 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Delete)
 		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.CloudCredentials.Test)
+	}
+
+	// Per-project ("BYO") Helm catalogs (migration 061). Gated by the
+	// project-update permission — same shape as cloud-credentials above.
+	if deps.ProjectCatalogs != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/", deps.ProjectCatalogs.List)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/", deps.ProjectCatalogs.Create)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/{catalog_id}/subscribe/", deps.ProjectCatalogs.Subscribe)
+		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/catalogs/{catalog_id}/", deps.ProjectCatalogs.Delete)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/{catalog_id}/charts/", deps.ProjectCatalogs.ListCharts)
 	}
 
 	if deps.Tools != nil {
