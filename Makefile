@@ -183,3 +183,24 @@ dev-down: ## Stop dev environment
 
 dev-clean: ## Stop dev environment and remove volumes
 	docker compose -f deploy/docker-compose.yml down -v
+
+# ── Load test ───────────────────────────────────────────────────────────────
+# Synthetic-agent + HTTP workload driver. Tune via LOADTEST_* env vars; output
+# is a markdown report containing a greppable `VERDICT: pass|fail` line plus
+# per-scenario p50/p95/p99 and a server resource snapshot. See
+# scripts/loadtest/README.md and docs/scale-baseline.md.
+LOADTEST_SERVER   ?= http://localhost:8080
+LOADTEST_CLUSTERS ?= 50
+LOADTEST_RPS      ?= 100
+LOADTEST_DURATION ?= 5m
+LOADTEST_OUT      ?= loadtest-report-$(shell date +%Y%m%d).md
+LOADTEST_TOKEN    ?=
+
+load-test: ## Run the load-test harness (see scripts/loadtest/README.md)
+	@LOADTEST_SERVER='$(LOADTEST_SERVER)' \
+	 LOADTEST_CLUSTERS='$(LOADTEST_CLUSTERS)' \
+	 LOADTEST_RPS='$(LOADTEST_RPS)' \
+	 LOADTEST_DURATION='$(LOADTEST_DURATION)' \
+	 LOADTEST_OUT='$(LOADTEST_OUT)' \
+	 LOADTEST_TOKEN='$(LOADTEST_TOKEN)' \
+	 go run ./scripts/loadtest
