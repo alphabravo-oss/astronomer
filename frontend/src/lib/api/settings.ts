@@ -1054,3 +1054,125 @@ export async function revertComplianceBaselineApplication(
   );
   return res.data.data ?? (res.data as unknown as { application_id: string; status: string });
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// Network policy templates (migration 068)
+// ────────────────────────────────────────────────────────────────────────
+
+export interface NetworkPolicyTemplate {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  kind: 'builtin' | 'custom';
+  spec_template: string;
+  enabled: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NetworkPolicyApplication {
+  id: string;
+  template_id: string;
+  template_slug?: string;
+  cluster_id: string;
+  namespace: string;
+  policy_name: string;
+  status: 'pending' | 'applied' | 'failed' | 'drifting';
+  last_applied_at?: string;
+  last_error?: string;
+  applied_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NetworkPolicyTemplateWriteRequest {
+  slug?: string;
+  name: string;
+  description?: string;
+  spec_template: string;
+  enabled?: boolean;
+  clone_from?: string;
+}
+
+export interface ApplyNetworkPolicyRequest {
+  template_id: string;
+  namespace?: string;
+  namespaces?: string[];
+}
+
+/** GET /admin/network-policy-templates/ */
+export async function listNetworkPolicyTemplates(): Promise<NetworkPolicyTemplate[]> {
+  const res = await api.get<PaginatedResponse<NetworkPolicyTemplate>>('/admin/network-policy-templates');
+  return res.data.data ?? (res.data as unknown as NetworkPolicyTemplate[]);
+}
+
+/** GET /admin/network-policy-templates/{id}/ */
+export async function getNetworkPolicyTemplate(id: string): Promise<NetworkPolicyTemplate> {
+  const res = await api.get<APIResponse<NetworkPolicyTemplate>>(`/admin/network-policy-templates/${id}`);
+  return res.data.data ?? (res.data as unknown as NetworkPolicyTemplate);
+}
+
+/** POST /admin/network-policy-templates/ */
+export async function createNetworkPolicyTemplate(
+  body: NetworkPolicyTemplateWriteRequest,
+): Promise<NetworkPolicyTemplate> {
+  const res = await api.post<APIResponse<NetworkPolicyTemplate>>('/admin/network-policy-templates', body);
+  return res.data.data ?? (res.data as unknown as NetworkPolicyTemplate);
+}
+
+/** PUT /admin/network-policy-templates/{id}/ */
+export async function updateNetworkPolicyTemplate(
+  id: string,
+  body: NetworkPolicyTemplateWriteRequest,
+): Promise<NetworkPolicyTemplate> {
+  const res = await api.put<APIResponse<NetworkPolicyTemplate>>(`/admin/network-policy-templates/${id}`, body);
+  return res.data.data ?? (res.data as unknown as NetworkPolicyTemplate);
+}
+
+/** DELETE /admin/network-policy-templates/{id}/ */
+export async function deleteNetworkPolicyTemplate(id: string): Promise<void> {
+  await api.delete(`/admin/network-policy-templates/${id}`);
+}
+
+/** GET /clusters/{cluster_id}/network-policies/applications/ */
+export async function listNetworkPolicyApplications(
+  clusterID: string,
+): Promise<NetworkPolicyApplication[]> {
+  const res = await api.get<APIResponse<NetworkPolicyApplication[]>>(
+    `/clusters/${clusterID}/network-policies/applications`,
+  );
+  return res.data.data ?? (res.data as unknown as NetworkPolicyApplication[]);
+}
+
+/** POST /clusters/{cluster_id}/network-policies/applications/ */
+export async function applyNetworkPolicy(
+  clusterID: string,
+  body: ApplyNetworkPolicyRequest,
+): Promise<NetworkPolicyApplication[]> {
+  const res = await api.post<APIResponse<NetworkPolicyApplication[]>>(
+    `/clusters/${clusterID}/network-policies/applications`,
+    body,
+  );
+  return res.data.data ?? (res.data as unknown as NetworkPolicyApplication[]);
+}
+
+/** DELETE /clusters/{cluster_id}/network-policies/applications/{id}/ */
+export async function deleteNetworkPolicyApplication(
+  clusterID: string,
+  applicationID: string,
+): Promise<void> {
+  await api.delete(`/clusters/${clusterID}/network-policies/applications/${applicationID}`);
+}
+
+/** POST /clusters/{cluster_id}/network-policies/applications/{id}/reapply/ */
+export async function reapplyNetworkPolicyApplication(
+  clusterID: string,
+  applicationID: string,
+): Promise<NetworkPolicyApplication> {
+  const res = await api.post<APIResponse<NetworkPolicyApplication>>(
+    `/clusters/${clusterID}/network-policies/applications/${applicationID}/reapply`,
+  );
+  return res.data.data ?? (res.data as unknown as NetworkPolicyApplication);
+}

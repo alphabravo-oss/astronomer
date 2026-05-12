@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   FileText,
   FileSearch,
+  Network,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -105,6 +106,12 @@ const CARDS: SettingsCard[] = [
     title: 'Read-audit policies',
     description: 'Which GET endpoints emit a "who saw what credential" audit row.',
     icon: FileSearch,
+  },
+  {
+    href: '/dashboard/settings/network-policies',
+    title: 'Network policy templates',
+    description: 'Deny-all / project-isolated / namespace-only Kubernetes NetworkPolicy bundles.',
+    icon: Network,
   },
 ];
 
