@@ -1,0 +1,62 @@
+{{- /*
+Migration 045 — Dex as the single auth-provider source of truth.
+
+The chart now templates a minimal in-cluster Dex deployment behind a
+`dex.enabled` toggle. Astronomer's existing dex_settings + dex_connectors
+tables continue to drive the runtime configuration; the server's bootstrap
+seeds the singleton settings row to point at this Deployment + ConfigMap so
+the operator's first connector + Apply works without any manual settings
+step.
+
+We deliberately keep the surface small (no helm/dex sub-chart) so:
+  - Air-gapped installs work via the standard `image.registry` override.
+  - Operators can pin a single Dex image tag and see all auth-related
+    objects in one place when they helm-template.
+  - The RBAC role + storage shape is tight enough to audit by eye.
+
+Storage type is `kubernetes` so Dex persists its own CRDs (refresh tokens,
+auth codes, signing keys, etc.) in the release namespace. The Role below
+grants the dex.coreos.com API group it needs, scoped to this namespace.
+*/ -}}
+{{- if .Values.dex.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+rules:
+  # Dex CRDs (AuthCode, AuthRequest, RefreshToken, SigningKey, OAuth2Client,
+  # Connector, OfflineSessions, DeviceRequest, DeviceToken). Scoped to this
+  # namespace so a compromised Dex pod can't snoop across the cluster.
+  - apiGroups: ["dex.coreos.com"]
+    resources: ["*"]
+    verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
+  # The CRD installation runs once on first boot. Dex applies these
+  # itself when the storage.type=kubernetes path is used.
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create", "get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "astronomer.fullname" . }}-dex
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "astronomer.fullname" . }}-dex
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -32,6 +32,7 @@ type Querier interface {
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg CompleteArgoCDOperationWithResultParams) (ArgocdOperation, error)
 	CountAPITokens(ctx context.Context) (int64, error)
 	CountActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountActiveUnmigratedSSORows(ctx context.Context) (int64, error)
 	CountAgentConnections(ctx context.Context) (int64, error)
 	CountAlertEvents(ctx context.Context) (int64, error)
 	CountAlertRules(ctx context.Context) (int64, error)

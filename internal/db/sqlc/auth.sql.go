@@ -36,6 +36,22 @@ func (q *Queries) CountSSOConfigurations(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countActiveUnmigratedSSORows = `-- name: CountActiveUnmigratedSSORows :one
+SELECT count(*) FROM sso_configurations
+WHERE is_enabled = true AND migrated_to_dex_at IS NULL
+`
+
+// CountActiveUnmigratedSSORows drives the startup-time deprecation warning
+// for migration 045. Rows the operator added AFTER cutover have a NULL
+// migrated_to_dex_at; this query counts them so the boot path can log a
+// warn when the drift is visible.
+func (q *Queries) CountActiveUnmigratedSSORows(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveUnmigratedSSORows)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTokensByUser = `-- name: CountTokensByUser :one
 SELECT count(*) FROM api_tokens WHERE user_id = $1 AND is_revoked = false
 `

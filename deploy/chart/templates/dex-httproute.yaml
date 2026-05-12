@@ -1,0 +1,37 @@
+{{- /*
+HTTPRoute exposing the in-chart Dex at /dex/* on the public Gateway. This
+matches the issuer URL Astronomer seeds into dex_settings.issuer_url, so
+browsers redirected to <serverURL>/dex/auth?... land on Dex without an
+extra cookie domain or DNS entry.
+
+Only rendered when both `gateway.enabled` AND `dex.enabled` are true.
+Operators running on the legacy Ingress path can stand up their own
+ingress object for Dex; the Astronomer server only requires that
+dex_settings.issuer_url is reachable from browsers.
+*/ -}}
+{{- if and .Values.dex.enabled .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ include "astronomer.fullname" . }}
+  hostnames:
+    {{- range .Values.gateway.hosts }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dex/
+        - path:
+            type: Exact
+            value: /dex
+      backendRefs:
+        - name: {{ include "astronomer.fullname" . }}-dex
+          port: 5556
+{{- end }}

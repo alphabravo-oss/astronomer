@@ -1,0 +1,24 @@
+{{- /*
+Dex service. The server pod talks to this Service when seeding
+dex_settings (the issuer URL is the public hostname, but the OIDC
+discovery client honours the issuer claim). The Gateway/HTTPRoute below
+exposes the same Service to the outside world under /dex/* so browsers
+can complete the auth dance.
+*/ -}}
+{{- if .Values.dex.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5556
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 4 }}
+{{- end }}

@@ -1,0 +1,81 @@
+{{- /*
+Dex deployment.
+
+The Astronomer server's DexHandler.Apply() flow restarts this Deployment
+(via a kubectl.kubernetes.io/restartedAt annotation patch on the pod
+template) whenever the ConfigMap changes. Dex's k8s storage backend
+persists state in CRDs in this namespace, so a restart is safe.
+
+Resource requests are intentionally modest — Dex serves a handful of
+QPS even on big installs because every successful sign-in caches a
+session JWT for hours.
+*/ -}}
+{{- if .Values.dex.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+spec:
+  replicas: {{ .Values.dex.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "astronomer.fullname" . }}-dex
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: dex
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.dex.image.repository "tag" .Values.dex.image.tag "registry" .Values.dex.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /usr/local/bin/dex
+            - serve
+            - /etc/dex/config.yaml
+          ports:
+            - name: http
+              containerPort: 5556
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /dex/.well-known/openid-configuration
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.dex.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "astronomer.fullname" . }}-dex-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
