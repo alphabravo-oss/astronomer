@@ -505,3 +505,90 @@ managementBackup:
       memory: 1Gi
   nodeSelector: {}
   tolerations: []
+
+# =============================================================================
+# Management-plane backup restore drill (FEATURES-051226 + NIST CP-9)
+# =============================================================================
+# Weekly automated proof that the nightly pg_dump is actually restorable.
+# A separate CronJob:
+#   1. Pulls the most recent backup from S3 (same bucket / prefix the
+#      managementBackup CronJob writes to)
+#   2. Restores it into an ephemeral sidecar Postgres in the SAME pod
+#      (emptyDir, never touches anything persistent)
+#   3. Runs schema-sanity + row-count checks against the restored DB
+#   4. Records the outcome in the production `backup_drill_results`
+#      table — the ONLY production write the drill ever does.
+#
+# Read-side: an admin endpoint (GET /api/v1/admin/backup-drill/) surfaces
+# the latest result; PrometheusRule fires when no successful drill has
+# happened in 14 days (AstronomerBackupRestoreDrillStale).
+#
+# Off by default — this is operator-opt-in because it only makes sense
+# when managementBackup is enabled AND backups have actually been
+# written. The chart template gates render-time on both.
+managementRestoreDrill:
+  enabled: false
+  # 4 AM UTC every Monday. Far enough from the nightly backup (3 AM)
+  # that they never overlap; weekly cadence is the audit minimum and
+  # matches NIST CP-9's "periodic" requirement without burning the cluster
+  # on it daily.
+  schedule: "0 4 * * 1"
+  # Standard Job/CronJob knobs — same shape as managementBackup.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  scratchSizeLimit: 8Gi
+  # The drill enforces these two invariants against the restored DB.
+  # Update expectedMinSchemaVersion in step with each release that ships
+  # a migration — the drill will fail if the restored DB is below it,
+  # signalling either backup corruption or a stale backup tier the
+  # retention policy should be re-evaluating.
+  expectedMinSchemaVersion: 38
+  # Critical tables whose row count MUST be > 0 in the restored DB. If
+  # one of these comes back empty, the most likely cause is a partial
+  # backup (pg_dump aborted mid-flight) or a backup taken before the
+  # table was populated. Override per-deployment if your install runs
+  # without one of these (e.g. headless / non-multi-tenant).
+  expectedTables:
+    - users
+    - clusters
+    - projects
+    - audit_log
+  # Image bundling postgresql-client + aws-cli — reuse the same image
+  # as managementBackup so the drill can run wherever the backup runs.
+  image:
+    repository: ghcr.io/alphabravocompany/pgdump-s3
+    tag: "16-awscli"
+    pullPolicy: IfNotPresent
+    registry: ""    # T23 air-gapped override; falls back to image.registry
+  # The sidecar Postgres that the drill restores INTO. emptyDir-backed
+  # and torn down with the pod; keep the image in lockstep with the
+  # bundled postgres so a successful restore actually proves nothing
+  # broke against the production Postgres version.
+  sidecar:
+    image:
+      repository: postgres
+      tag: "16-alpine"
+      pullPolicy: IfNotPresent
+      registry: ""    # T23 air-gapped override; falls back to image.registry
+    # Throwaway password used between the two containers inside the
+    # Job pod only. Never exposed and never persisted.
+    password: "drill-throwaway"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
