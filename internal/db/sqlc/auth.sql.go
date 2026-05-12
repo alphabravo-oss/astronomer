@@ -48,18 +48,19 @@ func (q *Queries) CountTokensByUser(ctx context.Context, userID uuid.UUID) (int6
 }
 
 const createAPIToken = `-- name: CreateAPIToken :one
-INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at, scopes)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at
+INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at, scopes, allowed_cidrs)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip
 `
 
 type CreateAPITokenParams struct {
-	UserID    uuid.UUID          `json:"user_id"`
-	Name      string             `json:"name"`
-	TokenHash string             `json:"token_hash"`
-	Prefix    string             `json:"prefix"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	Scopes    json.RawMessage    `json:"scopes"`
+	UserID       uuid.UUID          `json:"user_id"`
+	Name         string             `json:"name"`
+	TokenHash    string             `json:"token_hash"`
+	Prefix       string             `json:"prefix"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	Scopes       json.RawMessage    `json:"scopes"`
+	AllowedCidrs string             `json:"allowed_cidrs"`
 }
 
 func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error) {
@@ -70,6 +71,7 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 		arg.Prefix,
 		arg.ExpiresAt,
 		arg.Scopes,
+		arg.AllowedCidrs,
 	)
 	var i ApiToken
 	err := row.Scan(
@@ -84,6 +86,8 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowedCidrs,
+		&i.LastSeenRemoteIp,
 	)
 	return i, err
 }
@@ -159,7 +163,7 @@ func (q *Queries) DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) erro
 
 const getAPITokenByID = `-- name: GetAPITokenByID :one
 
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at FROM api_tokens WHERE id = $1
+SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens WHERE id = $1
 `
 
 // API Tokens
@@ -178,6 +182,8 @@ func (q *Queries) GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, 
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowedCidrs,
+		&i.LastSeenRemoteIp,
 	)
 	return i, err
 }
@@ -273,7 +279,7 @@ func (q *Queries) GetSSOConfigurationByProvider(ctx context.Context, provider st
 }
 
 const getTokenByHash = `-- name: GetTokenByHash :one
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at FROM api_tokens WHERE token_hash = $1 AND is_revoked = false
+SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens WHERE token_hash = $1 AND is_revoked = false
 `
 
 func (q *Queries) GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error) {
@@ -291,6 +297,8 @@ func (q *Queries) GetTokenByHash(ctx context.Context, tokenHash string) (ApiToke
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowedCidrs,
+		&i.LastSeenRemoteIp,
 	)
 	return i, err
 }
@@ -349,7 +357,7 @@ func (q *Queries) IsJWTRevoked(ctx context.Context, jti string) (bool, error) {
 }
 
 const listAPITokens = `-- name: ListAPITokens :many
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at FROM api_tokens ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListAPITokensParams struct {
@@ -378,6 +386,8 @@ func (q *Queries) ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([
 			&i.Scopes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AllowedCidrs,
+			&i.LastSeenRemoteIp,
 		); err != nil {
 			return nil, err
 		}
@@ -390,7 +400,7 @@ func (q *Queries) ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([
 }
 
 const listAllTokensByUser = `-- name: ListAllTokensByUser :many
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListAllTokensByUserParams struct {
@@ -420,6 +430,8 @@ func (q *Queries) ListAllTokensByUser(ctx context.Context, arg ListAllTokensByUs
 			&i.Scopes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AllowedCidrs,
+			&i.LastSeenRemoteIp,
 		); err != nil {
 			return nil, err
 		}
@@ -475,7 +487,7 @@ func (q *Queries) ListSSOConfigurations(ctx context.Context, arg ListSSOConfigur
 }
 
 const listTokensByUser = `-- name: ListTokensByUser :many
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at FROM api_tokens WHERE user_id = $1 AND is_revoked = false ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens WHERE user_id = $1 AND is_revoked = false ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListTokensByUserParams struct {
@@ -505,6 +517,8 @@ func (q *Queries) ListTokensByUser(ctx context.Context, arg ListTokensByUserPara
 			&i.Scopes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AllowedCidrs,
+			&i.LastSeenRemoteIp,
 		); err != nil {
 			return nil, err
 		}
@@ -621,6 +635,24 @@ WHERE id = $1
 
 func (q *Queries) UnlockUser(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, unlockUser, id)
+	return err
+}
+
+const updateAPITokenLastSeenIP = `-- name: UpdateAPITokenLastSeenIP :exec
+UPDATE api_tokens SET last_seen_remote_ip = $2 WHERE id = $1
+`
+
+type UpdateAPITokenLastSeenIPParams struct {
+	ID               uuid.UUID `json:"id"`
+	LastSeenRemoteIp string    `json:"last_seen_remote_ip"`
+}
+
+// Best-effort stamp written from the auth middleware on every successful
+// API-token request. The handler ignores write errors — this column is
+// informational (operator UI / forensic review) and must NEVER cause a
+// 5xx on the request path.
+func (q *Queries) UpdateAPITokenLastSeenIP(ctx context.Context, arg UpdateAPITokenLastSeenIPParams) error {
+	_, err := q.db.Exec(ctx, updateAPITokenLastSeenIP, arg.ID, arg.LastSeenRemoteIp)
 	return err
 }
 

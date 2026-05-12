@@ -37,6 +37,19 @@ var (
 		},
 		observability.MetricLabels("kind", "reason"),
 	)
+
+	// APITokenDeniedTotal counts API-token-authenticated requests
+	// rejected by the migration-044 hardening checks. The `reason`
+	// label is one of {"scope","ip"}; dashboards split on it so a
+	// surge in either is visible as its own line.
+	APITokenDeniedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Name:      "auth_api_token_denied_total",
+			Help:      "Total API-token requests denied by scope or IP-allowlist enforcement.",
+		},
+		observability.MetricLabels("reason"),
+	)
 )
 
 // RegisterAuthMetrics is idempotent; tests that spin up multiple
@@ -44,7 +57,7 @@ var (
 // Register call.
 func RegisterAuthMetrics() {
 	authMetricsOnce.Do(func() {
-		for _, c := range []prometheus.Collector{AccountLockoutsTotal, SessionRevocationsTotal} {
+		for _, c := range []prometheus.Collector{AccountLockoutsTotal, SessionRevocationsTotal, APITokenDeniedTotal} {
 			if err := prometheus.Register(c); err != nil {
 				if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 					panic(err)

@@ -498,6 +498,11 @@ type Querier interface {
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
 	UnlockUser(ctx context.Context, id uuid.UUID) error
 	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
+	// Best-effort stamp written from the auth middleware on every successful
+	// API-token request. The handler ignores write errors — this column is
+	// informational (operator UI / forensic review) and must NEVER cause a
+	// 5xx on the request path.
+	UpdateAPITokenLastSeenIP(ctx context.Context, arg UpdateAPITokenLastSeenIPParams) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg UpdateAgentConnectionStatusParams) error
 	UpdateAlertEventStatus(ctx context.Context, arg UpdateAlertEventStatusParams) error

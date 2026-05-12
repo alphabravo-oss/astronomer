@@ -299,10 +299,10 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// 403 instead of a generic permission rejection.
 		if deps.GroupMappings != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/group-mappings/", deps.GroupMappings.List)
-			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/group-mappings/", deps.GroupMappings.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/group-mappings/", deps.GroupMappings.Create)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/group-mappings/{id}/", deps.GroupMappings.Get)
-			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/group-mappings/{id}/", deps.GroupMappings.Delete)
-			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/users/{id}/resync-groups/", deps.GroupMappings.ResyncUser)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/group-mappings/{id}/", deps.GroupMappings.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/resync-groups/", deps.GroupMappings.ResyncUser)
 		}
 
 		authenticated := r
@@ -370,6 +370,14 @@ func requireAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) 
 	return appmiddleware.RequireAuthWithQueries(jwt, queries)
 }
 
+// requireScope returns the API-token scope-enforcement middleware
+// configured for `scope`. JWT sessions bypass the check; legacy
+// (pre-044, empty-`scopes`) tokens are allowed through. See
+// `APITokenScopeEnforce` for the full semantics.
+func requireScope(scope string) func(http.Handler) http.Handler {
+	return appmiddleware.APITokenScopeEnforce(scope)
+}
+
 func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
 		return func(next http.Handler) http.Handler {
@@ -380,14 +388,21 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 }
 
 func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies, rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler) {
+	// Migration-044 API-token scope-enforcement middleware. JWT
+	// sessions and legacy (pre-044, empty-`scopes`) tokens bypass;
+	// post-044 tokens must carry the matching scope or `admin`/`*`.
+	writeClusters := requireScope(iauth.ScopeWriteClusters)
+	writeProjects := requireScope(iauth.ScopeWriteProjects)
+	writeRBAC := requireScope(iauth.ScopeWriteRBAC)
+
 	if deps.Clusters != nil {
 		r.Route("/clusters", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/", deps.Clusters.List)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbCreate)).Post("/", deps.Clusters.Create)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbCreate)).Post("/", deps.Clusters.Create)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/", deps.Clusters.Get)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/", deps.Clusters.Update)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Patch("/{id}/", deps.Clusters.Update)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbDelete)).Delete("/{id}/", deps.Clusters.Delete)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/", deps.Clusters.Update)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Patch("/{id}/", deps.Clusters.Update)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbDelete)).Delete("/{id}/", deps.Clusters.Delete)
 			// Cluster decommission status — poll endpoint paired with the
 			// DELETE handler's 202 Accepted response. Returns the latest
 			// cluster_decommissions row's phase progress so the operator can
@@ -395,10 +410,10 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/decommission/", deps.Clusters.GetDecommission)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/health/", deps.Clusters.GetHealth)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/conditions/", deps.Clusters.ListConditions)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/register/", deps.Clusters.GenerateRegistrationToken)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/register/", deps.Clusters.GenerateRegistrationToken)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/registry/", deps.Clusters.GetRegistryConfig)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/registry/", deps.Clusters.UpdateRegistryConfig)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/{id}/registry/", deps.Clusters.DeleteRegistryConfig)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/registry/", deps.Clusters.UpdateRegistryConfig)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/{id}/registry/", deps.Clusters.DeleteRegistryConfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/manifest/", deps.Clusters.GetManifest)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/kubeconfig/", deps.Clusters.GetKubeconfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/{id}/generate-kubeconfig/", deps.Clusters.GenerateKubeconfig)
@@ -424,17 +439,17 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	if deps.Projects != nil {
 		r.Route("/projects", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/", deps.Projects.List)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbCreate)).Post("/", deps.Projects.Create)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbCreate)).Post("/", deps.Projects.Create)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/", deps.Projects.Get)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/{id}/", deps.Projects.Update)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/", deps.Projects.Update)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/{id}/", deps.Projects.Delete)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/add-namespace/", deps.Projects.AddNamespace)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/remove-namespace/", deps.Projects.RemoveNamespace)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/{id}/", deps.Projects.Update)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/", deps.Projects.Update)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/{id}/", deps.Projects.Delete)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/add-namespace/", deps.Projects.AddNamespace)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/remove-namespace/", deps.Projects.RemoveNamespace)
 			// Policy PATCH is a targeted update of just the PSS + ResourceQuota
 			// columns; gated on projects:update so an admin who can edit the
 			// project can also retune its security posture.
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/policy/", deps.Projects.UpdatePolicy)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/policy/", deps.Projects.UpdatePolicy)
 			// Quota-usage is read-only and reflects current cluster state, so
 			// projects:read is the right gate. Multi-cluster fanout surfaces
 			// per-cluster partial failures the way resources_search does.
@@ -476,39 +491,39 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	if deps.RBAC != nil {
 		r.Route("/rbac", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/global-roles/", deps.RBAC.ListGlobalRoles)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/global-roles/", deps.RBAC.CreateGlobalRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/global-roles/", deps.RBAC.CreateGlobalRole)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/global-roles/{id}/", deps.RBAC.GetGlobalRole)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbUpdate)).Put("/global-roles/{id}/", deps.RBAC.UpdateGlobalRole)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/global-roles/{id}/", deps.RBAC.DeleteGlobalRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbUpdate)).Put("/global-roles/{id}/", deps.RBAC.UpdateGlobalRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/global-roles/{id}/", deps.RBAC.DeleteGlobalRole)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/cluster-roles/", deps.RBAC.ListClusterRoles)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/cluster-roles/", deps.RBAC.CreateClusterRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/cluster-roles/", deps.RBAC.CreateClusterRole)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/cluster-roles/{id}/", deps.RBAC.GetClusterRole)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbUpdate)).Put("/cluster-roles/{id}/", deps.RBAC.UpdateClusterRole)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/cluster-roles/{id}/", deps.RBAC.DeleteClusterRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbUpdate)).Put("/cluster-roles/{id}/", deps.RBAC.UpdateClusterRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/cluster-roles/{id}/", deps.RBAC.DeleteClusterRole)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/project-roles/", deps.RBAC.ListProjectRoles)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/project-roles/", deps.RBAC.CreateProjectRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/project-roles/", deps.RBAC.CreateProjectRole)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/project-roles/{id}/", deps.RBAC.GetProjectRole)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbUpdate)).Put("/project-roles/{id}/", deps.RBAC.UpdateProjectRole)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/project-roles/{id}/", deps.RBAC.DeleteProjectRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbUpdate)).Put("/project-roles/{id}/", deps.RBAC.UpdateProjectRole)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/project-roles/{id}/", deps.RBAC.DeleteProjectRole)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/global-bindings/", deps.RBAC.ListGlobalRoleBindings)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/global-bindings/", deps.RBAC.CreateGlobalRoleBinding)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/global-bindings/{id}/", deps.RBAC.DeleteGlobalRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/global-bindings/", deps.RBAC.CreateGlobalRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/global-bindings/{id}/", deps.RBAC.DeleteGlobalRoleBinding)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/cluster-bindings/", deps.RBAC.ListClusterRoleBindings)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/cluster-bindings/", deps.RBAC.CreateClusterRoleBinding)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/cluster-bindings/{id}/", deps.RBAC.DeleteClusterRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/cluster-bindings/", deps.RBAC.CreateClusterRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/cluster-bindings/{id}/", deps.RBAC.DeleteClusterRoleBinding)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/project-bindings/", deps.RBAC.ListProjectRoleBindings)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/project-bindings/", deps.RBAC.CreateProjectRoleBinding)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/project-bindings/{id}/", deps.RBAC.DeleteProjectRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/project-bindings/", deps.RBAC.CreateProjectRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/project-bindings/{id}/", deps.RBAC.DeleteProjectRoleBinding)
 			// Python-named binding path aliases (so both old and new clients work).
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/global-role-bindings/", deps.RBAC.ListGlobalRoleBindings)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/global-role-bindings/", deps.RBAC.CreateGlobalRoleBinding)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/global-role-bindings/{id}/", deps.RBAC.DeleteGlobalRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/global-role-bindings/", deps.RBAC.CreateGlobalRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/global-role-bindings/{id}/", deps.RBAC.DeleteGlobalRoleBinding)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/cluster-role-bindings/", deps.RBAC.ListClusterRoleBindings)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/cluster-role-bindings/", deps.RBAC.CreateClusterRoleBinding)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/cluster-role-bindings/{id}/", deps.RBAC.DeleteClusterRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/cluster-role-bindings/", deps.RBAC.CreateClusterRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/cluster-role-bindings/{id}/", deps.RBAC.DeleteClusterRoleBinding)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/project-role-bindings/", deps.RBAC.ListProjectRoleBindings)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/project-role-bindings/", deps.RBAC.CreateProjectRoleBinding)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/project-role-bindings/{id}/", deps.RBAC.DeleteProjectRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/project-role-bindings/", deps.RBAC.CreateProjectRoleBinding)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/project-role-bindings/{id}/", deps.RBAC.DeleteProjectRoleBinding)
 			// Current user's effective roles + permission check.
 			r.Get("/my-roles/", deps.RBAC.MyRoles)
 			r.Get("/my-roles/check/", deps.RBAC.CheckMyRole)
@@ -737,8 +752,8 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		// other /admin/* routes here (keyStatusHandler, AdminQueues etc.).
 		// We deliberately keep the auth requirement on the wrapper so a
 		// non-superuser hits a clean 403 instead of falling through.
-		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/users/{id}/unlock/", deps.Resources.UnlockUser)
-		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/users/{id}/force-logout/", deps.Resources.ForceLogoutUser)
+		r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/unlock/", deps.Resources.UnlockUser)
+		r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/force-logout/", deps.Resources.ForceLogoutUser)
 	}
 
 	if deps.Security != nil {

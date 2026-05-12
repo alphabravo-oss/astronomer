@@ -779,27 +779,37 @@ type CreateTokenRequest struct {
 	Name          string   `json:"name"`
 	ExpiresInDays int      `json:"expires_in_days"`
 	Scopes        []string `json:"scopes"`
+	// AllowedCIDRs is a comma-separated CIDR list (migration 044). Empty
+	// preserves the pre-044 behaviour (no IP restriction). Both bare
+	// IPv4/IPv6 and CIDR forms are accepted; we re-serialise into the
+	// stored canonical form before persisting.
+	AllowedCIDRs string `json:"allowed_cidrs"`
 }
 
 // CreateTokenResponse is returned once after token creation, including the plaintext.
 type CreateTokenResponse struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Token     string  `json:"token"`
-	Prefix    string  `json:"prefix"`
-	ExpiresAt *string `json:"expires_at"`
-	CreatedAt string  `json:"created_at"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Token        string   `json:"token"`
+	Prefix       string   `json:"prefix"`
+	ExpiresAt    *string  `json:"expires_at"`
+	CreatedAt    string   `json:"created_at"`
+	Scopes       []string `json:"scopes"`
+	AllowedCIDRs string   `json:"allowed_cidrs"`
 }
 
 // TokenListItem is a single token in the list response (no plaintext).
 type TokenListItem struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	Prefix     string  `json:"prefix"`
-	ExpiresAt  *string `json:"expires_at"`
-	LastUsedAt *string `json:"last_used_at"`
-	IsRevoked  bool    `json:"is_revoked"`
-	CreatedAt  string  `json:"created_at"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Prefix           string   `json:"prefix"`
+	ExpiresAt        *string  `json:"expires_at"`
+	LastUsedAt       *string  `json:"last_used_at"`
+	IsRevoked        bool     `json:"is_revoked"`
+	CreatedAt        string   `json:"created_at"`
+	Scopes           []string `json:"scopes"`
+	AllowedCIDRs     string   `json:"allowed_cidrs"`
+	LastSeenRemoteIP string   `json:"last_seen_remote_ip"`
 }
 
 // generateAPIToken creates a random API token with prefix, hash, and prefix string.
@@ -864,23 +874,48 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		scopes = json.RawMessage(`[]`)
 	}
 
+	// Validate the CIDR list up-front so an operator typo fails the
+	// CREATE with a 400 instead of a silent allow-everything row.
+	// Empty string is the legacy "no IP restriction" mode and skips
+	// the check entirely. We persist the user's raw string so the
+	// CRUD UI round-trips byte-identically; parsing happens at auth
+	// time.
+	allowedCIDRs := strings.TrimSpace(req.AllowedCIDRs)
+	if allowedCIDRs != "" {
+		if _, perr := auth.ParseAllowedCIDRs(allowedCIDRs); perr != nil {
+			RespondError(w, http.StatusBadRequest, "validation_error",
+				"allowed_cidrs must be a comma-separated list of valid CIDR ranges or IP addresses")
+			return
+		}
+	}
+
 	token, err := h.tokens.CreateAPIToken(r.Context(), sqlc.CreateAPITokenParams{
-		UserID:    userID,
-		Name:      req.Name,
-		TokenHash: tokenHash,
-		Prefix:    prefix,
-		ExpiresAt: expiresAt,
-		Scopes:    scopes,
+		UserID:       userID,
+		Name:         req.Name,
+		TokenHash:    tokenHash,
+		Prefix:       prefix,
+		ExpiresAt:    expiresAt,
+		Scopes:       scopes,
+		AllowedCidrs: allowedCIDRs,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create token")
 		return
 	}
 
+	// The audit row captures the scope set + whether an IP allowlist
+	// was attached (count, not the literal CIDRs — those are operator-
+	// supplied operational data, not credentials, but the count is what
+	// reviewers actually need to flag "this token is unrestricted").
+	cidrCount := 0
+	if allowedCIDRs != "" {
+		cidrCount = strings.Count(allowedCIDRs, ",") + 1
+	}
 	recordAudit(r, h.audit, "auth.token.create", "api_token", token.ID.String(), token.Name, map[string]any{
-		"prefix":          token.Prefix,
-		"expires_in_days": req.ExpiresInDays,
-		"scopes":          req.Scopes,
+		"prefix":             token.Prefix,
+		"expires_in_days":    req.ExpiresInDays,
+		"scopes":             req.Scopes,
+		"allowed_cidr_count": cidrCount,
 	})
 
 	var expiresAtStr *string
@@ -889,13 +924,19 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		expiresAtStr = &s
 	}
 
+	respScopes := req.Scopes
+	if respScopes == nil {
+		respScopes = []string{}
+	}
 	RespondJSON(w, http.StatusCreated, CreateTokenResponse{
-		ID:        token.ID.String(),
-		Name:      token.Name,
-		Token:     plaintext,
-		Prefix:    token.Prefix,
-		ExpiresAt: expiresAtStr,
-		CreatedAt: token.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ID:           token.ID.String(),
+		Name:         token.Name,
+		Token:        plaintext,
+		Prefix:       token.Prefix,
+		ExpiresAt:    expiresAtStr,
+		CreatedAt:    token.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		Scopes:       respScopes,
+		AllowedCIDRs: token.AllowedCidrs,
 	})
 }
 
@@ -939,12 +980,19 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]TokenListItem, 0, len(tokens))
 	for _, t := range tokens {
+		scopes, _ := auth.ParseTokenScopes(t.Scopes)
+		if scopes == nil {
+			scopes = []string{}
+		}
 		item := TokenListItem{
-			ID:        t.ID.String(),
-			Name:      t.Name,
-			Prefix:    t.Prefix,
-			IsRevoked: t.IsRevoked,
-			CreatedAt: t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			ID:               t.ID.String(),
+			Name:             t.Name,
+			Prefix:           t.Prefix,
+			IsRevoked:        t.IsRevoked,
+			CreatedAt:        t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			Scopes:           scopes,
+			AllowedCIDRs:     t.AllowedCidrs,
+			LastSeenRemoteIP: t.LastSeenRemoteIp,
 		}
 		if t.ExpiresAt.Valid {
 			s := t.ExpiresAt.Time.UTC().Format("2006-01-02T15:04:05Z")

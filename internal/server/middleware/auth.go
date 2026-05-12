@@ -11,6 +11,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/google/uuid"
 )
 
@@ -18,7 +19,8 @@ import (
 type authContextKey string
 
 const (
-	userContextKey authContextKey = "authenticated_user"
+	userContextKey     authContextKey = "authenticated_user"
+	apiTokenContextKey authContextKey = "authenticated_api_token"
 )
 
 // AuthenticatedUser represents the user extracted from auth.
@@ -37,10 +39,34 @@ type TokenUserQuerier interface {
 	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 }
 
+// APITokenLastSeenUpdater is the optional capability used by the IP-
+// allowlist enforcer to stamp the last-seen remote IP onto the token
+// row. Wired through TokenUserQuerier in production via *sqlc.Queries;
+// the in-memory test fake doesn't have to implement it.
+type APITokenLastSeenUpdater interface {
+	UpdateAPITokenLastSeenIP(ctx context.Context, arg sqlc.UpdateAPITokenLastSeenIPParams) error
+}
+
 // GetAuthenticatedUser extracts the authenticated user from context.
 func GetAuthenticatedUser(ctx context.Context) (*AuthenticatedUser, bool) {
 	u, ok := ctx.Value(userContextKey).(*AuthenticatedUser)
 	return u, ok
+}
+
+// GetAuthenticatedAPIToken returns the validated API token row when the
+// current request was authenticated via API token. Returns (nil, false)
+// for JWT-authenticated requests (the dashboard / browser SPA). Used
+// by APITokenScopeEnforce so the scope check doesn't re-query the DB.
+func GetAuthenticatedAPIToken(ctx context.Context) (*sqlc.ApiToken, bool) {
+	t, ok := ctx.Value(apiTokenContextKey).(*sqlc.ApiToken)
+	return t, ok
+}
+
+// SetAuthenticatedAPITokenForTest injects an API token row into the
+// context. Tests use this to drive APITokenScopeEnforce without
+// running the full Auth middleware.
+func SetAuthenticatedAPITokenForTest(ctx context.Context, tok *sqlc.ApiToken) context.Context {
+	return context.WithValue(ctx, apiTokenContextKey, tok)
 }
 
 // authError writes a JSON 401 error response.
@@ -89,6 +115,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 			}
 
 			var user *AuthenticatedUser
+			var apiTokenForCtx *sqlc.ApiToken
 
 			if strings.HasPrefix(token, "astro_") {
 				hash := sha256.Sum256([]byte(token))
@@ -113,13 +140,41 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 						authError(w, "authentication_required", "Invalid or expired token")
 						return
 					}
+					// Migration-044: per-token IP allowlist. Empty
+					// allowed_cidrs preserves the pre-044 behaviour
+					// (no restriction). Parse errors fail closed so a
+					// misconfigured token can't silently bypass the
+					// check.
+					if strings.TrimSpace(apiToken.AllowedCidrs) != "" {
+						nets, perr := auth.ParseAllowedCIDRs(apiToken.AllowedCidrs)
+						if perr != nil || !auth.IPAllowed(nets, auth.RemoteIPForRequest(r)) {
+							auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
+							authError(w, "ip_not_allowlisted", "Token not permitted from this IP address")
+							return
+						}
+					}
 					_ = queries.UpdateAPITokenLastUsed(r.Context(), apiToken.ID)
+					// Best-effort last-seen IP stamp — never fail the
+					// request on a write error. Cast through the
+					// optional capability interface so test fakes that
+					// don't expose the new method still satisfy
+					// TokenUserQuerier.
+					if updater, ok := queries.(APITokenLastSeenUpdater); ok && updater != nil {
+						if ip := auth.RemoteIPForRequest(r); ip != nil {
+							_ = updater.UpdateAPITokenLastSeenIP(r.Context(), sqlc.UpdateAPITokenLastSeenIPParams{
+								ID:               apiToken.ID,
+								LastSeenRemoteIp: ip.String(),
+							})
+						}
+					}
 					user = &AuthenticatedUser{
 						ID:         dbUser.ID.String(),
 						Email:      dbUser.Email,
 						Username:   dbUser.Username,
 						AuthMethod: "api_token",
 					}
+					tok := apiToken
+					apiTokenForCtx = &tok
 				}
 			} else {
 				// JWT path
@@ -142,6 +197,9 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 			}
 
 			ctx := context.WithValue(r.Context(), userContextKey, user)
+			if apiTokenForCtx != nil {
+				ctx = context.WithValue(ctx, apiTokenContextKey, apiTokenForCtx)
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

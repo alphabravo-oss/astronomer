@@ -322,16 +322,17 @@ func (m *mockTokenQuerier) CreateAPIToken(_ context.Context, arg sqlc.CreateAPIT
 		return sqlc.ApiToken{}, m.createErr
 	}
 	t := sqlc.ApiToken{
-		ID:        uuid.New(),
-		UserID:    arg.UserID,
-		Name:      arg.Name,
-		TokenHash: arg.TokenHash,
-		Prefix:    arg.Prefix,
-		ExpiresAt: arg.ExpiresAt,
-		IsRevoked: false,
-		Scopes:    arg.Scopes,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		ID:           uuid.New(),
+		UserID:       arg.UserID,
+		Name:         arg.Name,
+		TokenHash:    arg.TokenHash,
+		Prefix:       arg.Prefix,
+		ExpiresAt:    arg.ExpiresAt,
+		IsRevoked:    false,
+		Scopes:       arg.Scopes,
+		AllowedCidrs: arg.AllowedCidrs,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 	m.tokens[t.ID] = t
 	return t, nil
@@ -677,5 +678,89 @@ func TestGenerateAPIToken(t *testing.T) {
 	}
 	if plaintext == plaintext2 {
 		t.Fatal("expected unique tokens")
+	}
+}
+
+// TestCreateToken_PersistsScopesAndCidrs covers the migration-044
+// CreateToken path: the request's `scopes` and `allowed_cidrs` MUST
+// land in the stored row + come back in the response so the CRUD UI
+// can render them immediately.
+func TestCreateToken_PersistsScopesAndCidrs(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	userID := uuid.New()
+
+	tokenQ := newMockTokenQuerier()
+	handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+
+	body := `{
+		"name": "ci-deployer",
+		"expires_in_days": 30,
+		"scopes": ["clusters:write","read"],
+		"allowed_cidrs": "10.0.0.0/8,192.168.1.5"
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/tokens/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = setAuthUser(req, userID.String())
+
+	w := httptest.NewRecorder()
+	handler.CreateToken(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d (body=%s)", w.Code, w.Body.String())
+	}
+
+	var envelope struct {
+		Data CreateTokenResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	resp := envelope.Data
+	if resp.AllowedCIDRs != "10.0.0.0/8,192.168.1.5" {
+		t.Errorf("allowed_cidrs = %q, want round-trip of input", resp.AllowedCIDRs)
+	}
+	if len(resp.Scopes) != 2 || resp.Scopes[0] != "clusters:write" || resp.Scopes[1] != "read" {
+		t.Errorf("scopes = %v, want [clusters:write read]", resp.Scopes)
+	}
+
+	// Check the stored row carries the same fields.
+	if len(tokenQ.tokens) != 1 {
+		t.Fatalf("expected exactly one stored token, got %d", len(tokenQ.tokens))
+	}
+	for _, stored := range tokenQ.tokens {
+		if stored.AllowedCidrs != "10.0.0.0/8,192.168.1.5" {
+			t.Errorf("stored allowed_cidrs = %q", stored.AllowedCidrs)
+		}
+		var scopes []string
+		if err := json.Unmarshal(stored.Scopes, &scopes); err != nil {
+			t.Fatalf("unmarshal stored scopes: %v", err)
+		}
+		if len(scopes) != 2 {
+			t.Errorf("stored scopes = %v, want 2 entries", scopes)
+		}
+	}
+}
+
+// TestCreateToken_RejectsInvalidCIDR ensures a typo in allowed_cidrs
+// fails the CREATE with a 400 rather than silently allowing every IP.
+func TestCreateToken_RejectsInvalidCIDR(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	userID := uuid.New()
+	tokenQ := newMockTokenQuerier()
+	handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+
+	body := `{"name": "bad", "allowed_cidrs": "not-a-cidr"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/tokens/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = setAuthUser(req, userID.String())
+
+	w := httptest.NewRecorder()
+	handler.CreateToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", w.Code, w.Body.String())
+	}
+	if len(tokenQ.tokens) != 0 {
+		t.Errorf("invalid CIDR should not have persisted a row")
 	}
 }

@@ -77,17 +77,19 @@ type AlertSilence struct {
 }
 
 type ApiToken struct {
-	ID         uuid.UUID          `json:"id"`
-	UserID     uuid.UUID          `json:"user_id"`
-	Name       string             `json:"name"`
-	TokenHash  string             `json:"token_hash"`
-	Prefix     string             `json:"prefix"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
-	IsRevoked  bool               `json:"is_revoked"`
-	Scopes     json.RawMessage    `json:"scopes"`
-	CreatedAt  time.Time          `json:"created_at"`
-	UpdatedAt  time.Time          `json:"updated_at"`
+	ID               uuid.UUID          `json:"id"`
+	UserID           uuid.UUID          `json:"user_id"`
+	Name             string             `json:"name"`
+	TokenHash        string             `json:"token_hash"`
+	Prefix           string             `json:"prefix"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt       pgtype.Timestamptz `json:"last_used_at"`
+	IsRevoked        bool               `json:"is_revoked"`
+	Scopes           json.RawMessage    `json:"scopes"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	AllowedCidrs     string             `json:"allowed_cidrs"`
+	LastSeenRemoteIp string             `json:"last_seen_remote_ip"`
 }
 
 type ArgocdApplication struct {

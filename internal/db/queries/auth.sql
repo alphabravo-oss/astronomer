@@ -16,8 +16,8 @@ SELECT * FROM api_tokens WHERE user_id = $1 AND is_revoked = false ORDER BY crea
 SELECT * FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateAPIToken :one
-INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at, scopes)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at, scopes, allowed_cidrs)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: RevokeAPIToken :exec
@@ -25,6 +25,13 @@ UPDATE api_tokens SET is_revoked = true WHERE id = $1;
 
 -- name: UpdateAPITokenLastUsed :exec
 UPDATE api_tokens SET last_used_at = now() WHERE id = $1;
+
+-- name: UpdateAPITokenLastSeenIP :exec
+-- Best-effort stamp written from the auth middleware on every successful
+-- API-token request. The handler ignores write errors — this column is
+-- informational (operator UI / forensic review) and must NEVER cause a
+-- 5xx on the request path.
+UPDATE api_tokens SET last_seen_remote_ip = $2 WHERE id = $1;
 
 -- name: DeleteAPIToken :exec
 DELETE FROM api_tokens WHERE id = $1;
