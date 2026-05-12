@@ -63,6 +63,9 @@ type ToolHandler struct {
 	// helmConcurrency caps the number of executeOperation goroutines
 	// dispatched per reconciler tick.
 	helmConcurrency int
+	// maintenanceGate is the migration-057 hook on tool.{install,
+	// upgrade,uninstall}. Optional + nil-safe; see clusters.SetMaintenanceGate.
+	maintenanceGate *MaintenanceGate
 }
 
 func NewToolHandler(queries ToolQuerier) *ToolHandler {
@@ -80,6 +83,16 @@ func NewToolHandlerWithHelm(queries ToolQuerier, helm HelmRequester) *ToolHandle
 		log:     slog.Default(),
 		trigger: make(chan struct{}, 1),
 	}
+}
+
+// SetMaintenanceGate wires the migration-057 gate that refuses or
+// defers tool.{install,upgrade,uninstall} during an active maintenance
+// window. Optional + nil-safe.
+func (h *ToolHandler) SetMaintenanceGate(g *MaintenanceGate) {
+	if h == nil {
+		return
+	}
+	h.maintenanceGate = g
 }
 
 type ToolResponse struct {
@@ -347,6 +360,11 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
 		return
 	}
+	// Migration 057: maintenance window gate. Look up the cluster's
+	// labels for selector matching.
+	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool.install"); blocked {
+		return
+	}
 	releaseName := req.ReleaseName
 	if releaseName == "" {
 		releaseName = tool.Slug
@@ -406,6 +424,10 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
 		return
 	}
+	// Migration 057: maintenance window gate.
+	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool.upgrade"); blocked {
+		return
+	}
 	existing, err := h.findInstalledTool(r.Context(), clusterID, tool.Slug)
 	if err != nil {
 		if errors.Is(err, errInstalledChartNotFound) {
@@ -462,6 +484,10 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
+		return
+	}
+	// Migration 057: maintenance window gate.
+	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool.uninstall"); blocked {
 		return
 	}
 	existing, err := h.findInstalledTool(r.Context(), clusterID, slug)
@@ -950,6 +976,25 @@ func toolStatusFromInstalled(status string) string {
 	default:
 		return status
 	}
+}
+
+// checkToolMaintenanceWindow consults the migration-057 maintenance
+// gate and writes the 409/202 response when the operation is blocked.
+// Returns true when the caller should stop processing (response
+// already written). The cluster lookup tolerates errors silently —
+// failing the gate on a missing cluster row would mask the bigger
+// problem of the cluster being gone, so we let the underlying handler
+// emit its own not-found.
+func (h *ToolHandler) checkToolMaintenanceWindow(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, opType string) bool {
+	if h == nil || h.maintenanceGate == nil {
+		return false
+	}
+	labels := map[string]string{}
+	if cluster, err := h.queries.GetClusterByID(r.Context(), clusterID); err == nil {
+		labels = MaintenanceGateClusterLabels(cluster)
+	}
+	return EnforceMaintenanceWindow(w, r, h.maintenanceGate, opType, labels,
+		pgtype.UUID{Bytes: clusterID, Valid: true}, pgtype.UUID{})
 }
 
 type toolInstallPersister interface {

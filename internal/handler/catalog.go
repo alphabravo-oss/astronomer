@@ -26,6 +26,9 @@ import (
 
 // CatalogQuerier abstracts the catalog-related database queries needed by CatalogHandler.
 type CatalogQuerier interface {
+	// Cluster lookup — used by the migration-057 maintenance gate to
+	// resolve the target cluster's labels for selector matching.
+	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	// Repositories
 	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (sqlc.HelmRepository, error)
 	ListHelmRepositories(ctx context.Context, arg sqlc.ListHelmRepositoriesParams) ([]sqlc.HelmRepository, error)
@@ -82,6 +85,18 @@ type CatalogHandler struct {
 	// dispatched per reconciler tick. Zero falls back to the package
 	// default (see effectiveHelmConcurrency).
 	helmConcurrency int
+	// maintenanceGate is the migration-057 hook on helm.{install,
+	// uninstall}. Optional + nil-safe.
+	maintenanceGate *MaintenanceGate
+}
+
+// SetMaintenanceGate wires the migration-057 gate that refuses or
+// defers helm install / uninstall during an active window.
+func (h *CatalogHandler) SetMaintenanceGate(g *MaintenanceGate) {
+	if h == nil {
+		return
+	}
+	h.maintenanceGate = g
 }
 
 // NewCatalogHandler creates a new catalog handler.
@@ -650,6 +665,11 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Migration 057: maintenance window gate.
+	if blocked := h.checkCatalogMaintenanceWindow(w, r, clusterID, "helm.install"); blocked {
+		return
+	}
+
 	var req CreateInstallationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
@@ -759,6 +779,10 @@ func (h *CatalogHandler) DeleteInstallation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installation.ClusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
+		return
+	}
+	// Migration 057: maintenance window gate.
+	if blocked := h.checkCatalogMaintenanceWindow(w, r, installation.ClusterID, "helm.uninstall"); blocked {
 		return
 	}
 	if err := h.queries.UpdateInstalledChartStatus(r.Context(), sqlc.UpdateInstalledChartStatusParams{
@@ -1518,6 +1542,23 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 	default:
 		return fmt.Errorf("unsupported catalog operation type: %s", op.OperationType)
 	}
+}
+
+// checkCatalogMaintenanceWindow consults the migration-057 gate and
+// writes the 409/202 response when the operation is blocked. Returns
+// true when the caller should stop. Best-effort cluster lookup —
+// failing to resolve labels leaves the selector check on an empty
+// label set rather than erroring the user out at gate time.
+func (h *CatalogHandler) checkCatalogMaintenanceWindow(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, opType string) bool {
+	if h == nil || h.maintenanceGate == nil {
+		return false
+	}
+	labels := map[string]string{}
+	if cluster, err := h.queries.GetClusterByID(r.Context(), clusterID); err == nil {
+		labels = MaintenanceGateClusterLabels(cluster)
+	}
+	return EnforceMaintenanceWindow(w, r, h.maintenanceGate, opType, labels,
+		pgtype.UUID{Bytes: clusterID, Valid: true}, pgtype.UUID{})
 }
 
 func (h *CatalogHandler) sendHelm(ctx context.Context, clusterID string, msgType protocol.MessageType, env catalogOperationEnvelope) (*protocol.HelmResultPayload, error) {

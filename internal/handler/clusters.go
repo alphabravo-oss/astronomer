@@ -110,6 +110,11 @@ type ClusterHandler struct {
 	// configured by the 'global' quota plan (migration 051).
 	// Optional; nil disables the check (test fakes, pre-migration).
 	enforcer *quota.Enforcer
+	// maintenanceGate is the migration-057 hook that refuses /
+	// defers destructive mutations during an active maintenance
+	// window. Optional; nil-safe — when unwired, every Delete
+	// falls through the gate as if no windows existed.
+	maintenanceGate *MaintenanceGate
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -189,6 +194,17 @@ func (h *ClusterHandler) SetQuotaEnforcer(e *quota.Enforcer) {
 		return
 	}
 	h.enforcer = e
+}
+
+// SetMaintenanceGate wires the migration-057 gate that refuses or
+// defers cluster.delete during an active maintenance window. Optional;
+// nil-safe — pre-wiring the field disables the gate (every Delete
+// proceeds as before).
+func (h *ClusterHandler) SetMaintenanceGate(g *MaintenanceGate) {
+	if h == nil {
+		return
+	}
+	h.maintenanceGate = g
 }
 
 // SetDecommissionQueue wires the asynq client used by the DELETE handler to
@@ -640,6 +656,14 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		// The local cluster represents the host this server itself runs in;
 		// decommissioning it would tear down the management plane. Refuse.
 		RespondError(w, http.StatusForbidden, "forbidden", "Cannot decommission the local cluster")
+		return
+	}
+
+	// Migration 057: refuse or defer when an active maintenance window
+	// applies to cluster.delete on this cluster's labels.
+	if EnforceMaintenanceWindow(w, r, h.maintenanceGate, "cluster.delete",
+		MaintenanceGateClusterLabels(cluster),
+		pgtype.UUID{Bytes: id, Valid: true}, pgtype.UUID{}) {
 		return
 	}
 
