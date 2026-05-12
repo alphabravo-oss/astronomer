@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -87,6 +88,16 @@ type RouterDependencies struct {
 // NewRouter builds and returns the Chi router with all routes and middleware.
 func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
+
+	// FEATURES-051126 T08 — per-endpoint-class rate limiter. Bucket store
+	// lives for the lifetime of the process; the janitor inside cleans up
+	// idle buckets so the map doesn't leak (same pattern as the login
+	// limiter from T09). One limiter shared across all four classes so
+	// chart-tuned configs apply uniformly.
+	rateLimitCtx := context.Background()
+	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
+		return appmiddleware.APIRateLimit(rateLimitCtx, class, nil)
+	}
 
 	// Middleware
 	r.Use(appmiddleware.RequestID)
@@ -275,13 +286,23 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		r.Get("/api/v1/clusters/{id}/v2/pods/", remoteV2PodsHandler(deps))
 	}
 	if deps.Proxy != nil {
-		r.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
+		// k8s passthrough is the most common loop-DoS target — any
+		// authenticated user can fire arbitrary list calls. Token bucket
+		// is sized so a normal UI burst (clicking through tabs) passes;
+		// a runaway loop trips within ~20 requests.
+		r.With(rateLimit(appmiddleware.ClassK8sProxy)).
+			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
 	}
 	if deps.Exec != nil {
-		r.Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", deps.Exec.HandleExec)
+		// Exec session opens hold a goroutine + WS connection until the
+		// shell exits. Limit new-session opens so a misbehaving caller
+		// can't spawn arbitrary parallel terminals.
+		r.With(rateLimit(appmiddleware.ClassExecLogs)).
+			Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", deps.Exec.HandleExec)
 	}
 	if deps.Logs != nil {
-		r.Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", deps.Logs.HandleLogs)
+		r.With(rateLimit(appmiddleware.ClassExecLogs)).
+			Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", deps.Logs.HandleLogs)
 	}
 
 	return r
@@ -306,6 +327,16 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 }
 
 func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies) {
+	// FEATURES-051126 T08 — duplicate of the NewRouter rateLimit factory.
+	// We deliberately make a second bucket store here rather than threading
+	// the limiter through deps: the protected-routes scope is well-defined
+	// and the eviction cost of a second small map is dwarfed by the cost
+	// of plumbing it through every signature.
+	rateLimitCtx := context.Background()
+	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
+		return appmiddleware.APIRateLimit(rateLimitCtx, class, nil)
+	}
+	_ = rateLimit // referenced below for /resources/search/ etc.
 	if deps.Clusters != nil {
 		r.Route("/clusters", func(r chi.Router) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/", deps.Clusters.List)
@@ -703,7 +734,10 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	// response includes per-cluster errors + counts so the UI can surface
 	// partial failures gracefully.
 	if deps.ResourcesSearch != nil {
-		r.Get("/resources/search/", deps.ResourcesSearch.Search)
+		// Cross-cluster fan-out — each call hits every connected tunnel.
+		// Rate limit per-user so a runaway typeahead can't DoS the fleet.
+		r.With(rateLimit(appmiddleware.ClassSearch)).
+			Get("/resources/search/", deps.ResourcesSearch.Search)
 	}
 
 	// --- Phase B5: CIS scans via cis-operator ------------------------------
