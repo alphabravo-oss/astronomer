@@ -333,7 +333,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		RemoteServer:  remoteServer,
 		RemoteQueries: queries,
 		EventStream:   handler.NewEventStreamHandler(bus),
-		SupportBundle: handler.NewSupportBundleHandler(queries, localK8s, localNamespace),
+		SupportBundle: func() *handler.SupportBundleHandler {
+			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
+			// FEATURES-051126 T11 — enable the asynq-queues + schema-
+			// migrations sections by wiring the inspector and the DB pool.
+			h.SetAsynqInspector(asynq.NewInspector(redisOpt))
+			h.SetDBPool(database.Pool())
+			return h
+		}(),
 	}
 	// EventSource cannot send Authorization headers, so the stream handler
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT

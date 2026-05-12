@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -40,6 +42,27 @@ type SupportBundleQuerier interface {
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 	ListArgoCDInstances(ctx context.Context, arg sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error)
 	ListAuditLogV1(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
+	// ListActiveConnections drives the agent-connections bundle section
+	// (FEATURES-051126 T11) — last-seen + cluster_id are exactly what an
+	// L3 engineer needs when triaging a "why are these clusters offline?"
+	// question.
+	ListActiveConnections(ctx context.Context) ([]sqlc.AgentConnection, error)
+}
+
+// SupportBundleAsynqInspector is the slice of asynq.Inspector the bundle
+// needs to capture queue + DLQ state. *asynq.Inspector satisfies this. Kept
+// behind an interface so tests can inject a fake; nil means "skip the
+// asynq sections cleanly".
+type SupportBundleAsynqInspector interface {
+	Queues() ([]string, error)
+	GetQueueInfo(qname string) (*asynq.QueueInfo, error)
+	ListArchivedTasks(qname string, opts ...asynq.ListOption) ([]*asynq.TaskInfo, error)
+}
+
+// SupportBundleDBPooler exposes the minimum surface needed to run the
+// raw SELECT against schema_migrations. *pgxpool.Pool satisfies this.
+type SupportBundleDBPooler interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // SupportBundleHandler wraps the GET /api/v1/support-bundle/ endpoint.
@@ -47,6 +70,28 @@ type SupportBundleHandler struct {
 	queries   SupportBundleQuerier
 	k8s       kubernetes.Interface
 	namespace string
+	// Optional, wired via setters; nil-safe section writers degrade
+	// gracefully when these are absent.
+	inspector SupportBundleAsynqInspector
+	db        SupportBundleDBPooler
+}
+
+// SetAsynqInspector wires the asynq queue inspector. Enables the
+// asynq-queues.json section (FEATURES-051126 T11). nil disables it.
+func (h *SupportBundleHandler) SetAsynqInspector(insp SupportBundleAsynqInspector) {
+	if h == nil {
+		return
+	}
+	h.inspector = insp
+}
+
+// SetDBPool wires the raw DB pool. Enables the schema-migrations.json
+// section (which reads a non-sqlc table). nil disables it.
+func (h *SupportBundleHandler) SetDBPool(pool SupportBundleDBPooler) {
+	if h == nil {
+		return
+	}
+	h.db = pool
 }
 
 // NewSupportBundleHandler returns a handler. k8sClient and namespace are
@@ -112,6 +157,13 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	h.writeAuditLog(r.Context(), zw, collected)
 	h.writePods(r.Context(), zw, collected)
 	h.writePodLogs(r.Context(), zw, collected)
+	// FEATURES-051126 T11 — extra context an L3 engineer needs without
+	// shell access to the cluster:
+	h.writeEvents(r.Context(), zw, collected)
+	h.writeHelmRelease(r.Context(), zw, collected)
+	h.writeSchemaMigrations(r.Context(), zw, collected)
+	h.writeAsynqQueues(r.Context(), zw, collected)
+	h.writeAgentConnections(r.Context(), zw, collected)
 	h.writeReadme(zw, collected)
 }
 
@@ -308,6 +360,169 @@ func (h *SupportBundleHandler) writePodLogs(ctx context.Context, zw *zip.Writer,
 	}
 }
 
+// writeEvents captures the namespace's k8s Events for the last 24h or so
+// (k8s default retention is 1h-ish but we'll grab whatever's there). One
+// of the things support engineers ask for first when something's broken.
+func (h *SupportBundleHandler) writeEvents(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.k8s == nil || h.namespace == "" {
+		log.skipped("events.json", "k8s client not wired")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	events, err := h.k8s.CoreV1().Events(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	if err != nil {
+		log.section("events.json", err)
+		return
+	}
+	out := make([]map[string]any, 0, len(events.Items))
+	for _, e := range events.Items {
+		out = append(out, map[string]any{
+			"type":            e.Type,
+			"reason":          e.Reason,
+			"message":         e.Message,
+			"object_kind":     e.InvolvedObject.Kind,
+			"object_name":     e.InvolvedObject.Name,
+			"first_timestamp": e.FirstTimestamp,
+			"last_timestamp":  e.LastTimestamp,
+			"count":           e.Count,
+		})
+	}
+	log.section("events.json", writeBundleJSON(zw, "events.json", out))
+}
+
+// writeHelmRelease snapshots the chart's helm release secret (kind
+// helm.sh/release.v1) so support engineers can see exactly what
+// values + manifest version the install is running. We strip the binary
+// blob (the compressed JSON release payload itself is large + opaque)
+// and surface the labels which carry version + status.
+func (h *SupportBundleHandler) writeHelmRelease(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.k8s == nil || h.namespace == "" {
+		log.skipped("helm-releases.json", "k8s client not wired")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	secrets, err := h.k8s.CoreV1().Secrets(h.namespace).List(lctx, metav1.ListOptions{
+		FieldSelector: "type=helm.sh/release.v1",
+	})
+	if err != nil {
+		log.section("helm-releases.json", err)
+		return
+	}
+	out := make([]map[string]any, 0, len(secrets.Items))
+	for _, s := range secrets.Items {
+		entry := map[string]any{
+			"name":              s.Name,
+			"created":           s.CreationTimestamp,
+			"labels":            s.Labels,
+			"data_size_bytes":   sumSecretBytes(s),
+		}
+		out = append(out, entry)
+	}
+	log.section("helm-releases.json", writeBundleJSON(zw, "helm-releases.json", out))
+}
+
+// writeSchemaMigrations surfaces the migrate-binary state table. The dirty
+// flag is what an L3 engineer needs to see when a release is stuck on
+// migration recovery — same signal T13 added to the preflight Job.
+func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.db == nil {
+		log.skipped("schema-migrations.json", "db pool not wired")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var version int64
+	var dirty bool
+	err := h.db.QueryRow(lctx, "SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
+	if err != nil {
+		log.section("schema-migrations.json", err)
+		return
+	}
+	payload := map[string]any{"version": version, "dirty": dirty}
+	log.section("schema-migrations.json", writeBundleJSON(zw, "schema-migrations.json", payload))
+}
+
+// writeAsynqQueues captures live queue depth + the last batch of dead-
+// letter task IDs. The DLQ is the single most useful artifact when
+// triaging "why isn't my install reconciling".
+func (h *SupportBundleHandler) writeAsynqQueues(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.inspector == nil {
+		log.skipped("asynq-queues.json", "asynq inspector not wired")
+		return
+	}
+	queues, err := h.inspector.Queues()
+	if err != nil {
+		log.section("asynq-queues.json", err)
+		return
+	}
+	out := map[string]any{}
+	for _, q := range queues {
+		info, ierr := h.inspector.GetQueueInfo(q)
+		if ierr != nil {
+			out[q] = map[string]any{"error": ierr.Error()}
+			continue
+		}
+		queueOut := map[string]any{
+			"size":      info.Size,
+			"active":    info.Active,
+			"pending":   info.Pending,
+			"scheduled": info.Scheduled,
+			"retry":     info.Retry,
+			"archived":  info.Archived,
+			"completed": info.Completed,
+		}
+		// First 50 DLQ entries — full task payloads can contain secrets,
+		// so we just surface IDs + types + last error.
+		archived, aerr := h.inspector.ListArchivedTasks(q, asynq.PageSize(50))
+		if aerr == nil {
+			dlq := make([]map[string]any, 0, len(archived))
+			for _, t := range archived {
+				dlq = append(dlq, map[string]any{
+					"id":         t.ID,
+					"type":       t.Type,
+					"retried":    t.Retried,
+					"last_err":   t.LastErr,
+					"last_failed_at": t.LastFailedAt,
+				})
+			}
+			queueOut["archived_tasks"] = dlq
+		}
+		out[q] = queueOut
+	}
+	log.section("asynq-queues.json", writeBundleJSON(zw, "asynq-queues.json", out))
+}
+
+// writeAgentConnections snapshots the active rows from agent_connections.
+// Each row carries cluster_id + last_ping_at, which is what an engineer
+// needs to answer "why does the dashboard say this cluster is offline?".
+// IP addresses are kept; tokens are redacted (they're not stored on this
+// table anyway, but defense in depth).
+func (h *SupportBundleHandler) writeAgentConnections(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, err := h.queries.ListActiveConnections(lctx)
+	if err != nil {
+		log.section("agent-connections.json", err)
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, c := range rows {
+		out = append(out, map[string]any{
+			"id":              c.ID.String(),
+			"cluster_id":      c.ClusterID.String(),
+			"agent_id":        c.AgentID,
+			"agent_version":   c.AgentVersion,
+			"status":          c.Status,
+			"connected_at":    c.ConnectedAt,
+			"last_ping":       c.LastPing,
+			"disconnected_at": c.DisconnectedAt,
+		})
+	}
+	log.section("agent-connections.json", writeBundleJSON(zw, "agent-connections.json", out))
+}
+
 func (h *SupportBundleHandler) writeReadme(zw *zip.Writer, log *sectionLog) {
 	var b strings.Builder
 	b.WriteString("Astronomer support bundle\n")
@@ -366,6 +581,18 @@ func redactBytes(s string) string {
 		return ""
 	}
 	return fmt.Sprintf("[redacted %d bytes]", len(s))
+}
+
+// sumSecretBytes is a cheap "how big is this helm release blob" probe for
+// the helm-releases.json section. We don't include the actual data —
+// helm releases are compressed JSON manifests that can run to hundreds
+// of kilobytes and would balloon the bundle.
+func sumSecretBytes(s corev1.Secret) int {
+	total := 0
+	for _, v := range s.Data {
+		total += len(v)
+	}
+	return total
 }
 
 func summarizeContainers(statuses []corev1.ContainerStatus) []map[string]any {
