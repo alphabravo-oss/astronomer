@@ -128,6 +128,11 @@ type RouterDependencies struct {
 	// settings, consumed by the FeatureGate middleware below. Optional
 	// — when nil, every feature-gated route falls through as enabled.
 	SettingsCache *handler.SettingsCache
+	// Quotas owns /api/v1/admin/quota-plans/* CRUD, the
+	// /admin/quota-usage/ fleet snapshot, and the per-tenant
+	// /projects/{id}/quota/ + /auth/me/quota/ readers. Migration 051.
+	// Nil-safe — when not wired the quota routes are omitted.
+	Quotas *handler.QuotaHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -410,6 +415,25 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// namespace allowlist (`branding`, `banner`).
 			r.Get("/settings/branding/", deps.PlatformSettings.PublicBranding)
 			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
+		}
+
+		// Per-tenant resource quotas (migration 051). Plan CRUD +
+		// fleet-usage snapshot are superuser-gated inside the handler
+		// (same pattern as platform_settings + smtp). The per-tenant
+		// /quota/ readers are wired below alongside the projects and
+		// auth groups so they inherit those RBAC/auth chains.
+		if deps.Quotas != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/quota-plans/", deps.Quotas.ListPlans)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/quota-plans/", deps.Quotas.CreatePlan)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/quota-plans/{name}/", deps.Quotas.GetPlan)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/quota-plans/{name}/", deps.Quotas.UpdatePlan)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/quota-plans/{name}/", deps.Quotas.DeletePlan)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/quota-usage/", deps.Quotas.FleetUsage)
+			// Per-tenant readers. Authentication is required; the
+			// handler degrades gracefully when called for a user/
+			// project that doesn't exist.
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/projects/{id}/quota/", deps.Quotas.ProjectQuota)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/me/quota/", deps.Quotas.MyQuota)
 		}
 
 		authenticated := r

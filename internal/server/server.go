@@ -18,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -567,9 +568,31 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// per-request feature check effectively free.
 		PlatformSettings: handler.NewPlatformSettingsHandler(queries),
 		SettingsCache:    handler.NewSettingsCache(queries, 30*time.Second),
+		// Per-tenant resource quotas (migration 051). The handler is
+		// constructed first so the enforcer below can borrow the same
+		// queries surface. The enforcer wires into clusters / auth /
+		// rbac handlers via SetQuotaEnforcer (see below).
+		Quotas: handler.NewQuotaHandler(queries),
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
+	}
+
+	// Wire the quota enforcer into the create-side handlers and start
+	// the periodic usage reporter. The enforcer is optional on each
+	// handler (SetQuotaEnforcer is nil-safe), so we only attach it
+	// when both queries and the deps wiring are present.
+	quotaEnforcer := quota.New(queries, logger)
+	quota.MustRegister()
+	quota.StartReporter(ctx, queries, logger)
+	if deps.Clusters != nil {
+		deps.Clusters.SetQuotaEnforcer(quotaEnforcer)
+	}
+	if deps.Auth != nil {
+		deps.Auth.SetQuotaEnforcer(quotaEnforcer)
+	}
+	if deps.RBAC != nil {
+		deps.RBAC.SetQuotaEnforcer(quotaEnforcer)
 	}
 	// EventSource cannot send Authorization headers, so the stream handler
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
