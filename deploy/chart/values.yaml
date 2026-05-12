@@ -358,6 +358,19 @@ metrics:
     scrapeTimeout: 10s
     namespace: ""
     labels: {}
+  # Default PrometheusRule with the alert set every astronomer install
+  # benefits from. Auto-enabled when serviceMonitor.enabled=true since
+  # there's no scraping → no alerting tradeoff to evaluate separately.
+  # Turn off explicitly if you maintain your own central alert set.
+  prometheusRule:
+    enabled: true
+    # Same labels you'd set on the ServiceMonitor; lets your Prometheus
+    # Operator pick them up via the same selector. Example:
+    #   labels: { release: kube-prometheus-stack }
+    labels: {}
+    # Annotation appended to every rule. Operators can override to point
+    # at their own runbook tree. The default points at this repo's docs.
+    runbookBaseURL: "https://github.com/alphabravo-oss/astronomer/blob/main/astronomer-go/docs/runbooks"
 
 # =============================================================================
 # Management-plane DR (pg_dump -> S3)

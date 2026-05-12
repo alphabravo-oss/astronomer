@@ -1,0 +1,147 @@
+{{- /*
+PrometheusRule — default alert set for an astronomer install.
+
+Auto-enabled when metrics.serviceMonitor.enabled=true (since alerting
+without scraping is incoherent). Set metrics.prometheusRule.enabled=false
+to opt out if your platform team maintains a central alert library and
+you don't want chart-shipped rules.
+
+The rules deliberately use astronomer_* metric names so they're stable
+across operator-installed Prometheus stacks. Runbook URLs default to
+this repo's docs/runbooks/ tree; override metrics.prometheusRule.runbookBaseURL
+to point at your own.
+
+Caught by the 2026-05-11 enterprise audit (FEATURES-051126 T03).
+*/ -}}
+{{- /* Two gates: scraping must be on (alerting without scraping is
+       incoherent) AND prometheusRule.enabled must not be explicitly
+       false. We can't use `default true X` here because Helm/sprig
+       treats Go's bool zero-value (false) as "empty" and replaces it
+       with the default, which would make `enabled: false` a no-op. */ -}}
+{{- if and .Values.metrics.serviceMonitor.enabled (ne .Values.metrics.prometheusRule.enabled false) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "astronomer.fullname" . }}
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: astronomer.recording
+      interval: 30s
+      rules:
+        # Pre-aggregate the HTTP error ratio so the alert below stays
+        # cheap to evaluate on a busy Prometheus.
+        - record: astronomer:http_5xx_ratio:5m
+          expr: |
+            sum(rate(astronomer_http_requests_total{status_class="5xx"}[5m]))
+              / clamp_min(sum(rate(astronomer_http_requests_total[5m])), 1)
+
+    - name: astronomer.alerts
+      rules:
+        # ── Server HTTP error rate ──────────────────────────────────────
+        - alert: AstronomerHighHTTPErrorRate
+          expr: astronomer:http_5xx_ratio:5m > 0.01
+          for: 5m
+          labels:
+            severity: warning
+            component: server
+          annotations:
+            summary: "Astronomer server 5xx error rate > 1% (5m)"
+            description: |
+              5xx responses are {{ "{{" }} $value | humanizePercentage {{ "}}" }} of all
+              traffic over the last 5 minutes. Common causes: panic loop,
+              database connectivity, downstream tunnel failures.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/high-http-error-rate.md
+
+        # ── asynq queue depth (pending) ─────────────────────────────────
+        - alert: AstronomerWorkerQueueBacklog
+          expr: max(astronomer_worker_queue_depth{state="pending"}) > 1000
+          for: 5m
+          labels:
+            severity: warning
+            component: worker
+          annotations:
+            summary: "Astronomer worker queue backlog > 1000 pending tasks"
+            description: |
+              Pending tasks have been above 1000 for 5+ minutes. Workers
+              may be too slow, blocked on a slow downstream, or a single
+              long-running task type is hogging concurrency slots.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/worker-queue-backlog.md
+
+        # ── asynq DLQ growth ────────────────────────────────────────────
+        # rate>0 instead of "depth>0" because some retries legitimately
+        # land in archived briefly; what we care about is *growth* in the
+        # DLQ over the recent window.
+        - alert: AstronomerWorkerDLQGrowing
+          expr: |
+            sum(increase(astronomer_worker_queue_depth{state="archived"}[10m])) > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: worker
+          annotations:
+            summary: "Astronomer worker dead-letter queue is growing"
+            description: |
+              Tasks are landing in the archived (DLQ) queue. Inspect the
+              DLQ via the support-bundle asynq-queues.json section or
+              the asynq CLI to see which task type is failing.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/worker-dlq-growing.md
+
+        # ── Database pool exhaustion ────────────────────────────────────
+        - alert: AstronomerDBPoolExhausted
+          expr: rate(db_pool_empty_acquire_count_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: server
+          annotations:
+            summary: "Astronomer DB pool wait events firing"
+            description: |
+              Connection acquisitions are blocking on an empty pool.
+              Either bump database.maxConns (chart values), or hunt the
+              long-held conn (look for queries that hold an advisory lock,
+              especially around the leader election in periodic tasks).
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/db-pool-exhausted.md
+
+        # ── Agent disconnected ──────────────────────────────────────────
+        # 120s = 4× the default heartbeat interval — small enough to
+        # catch real failures, large enough to ride out a single missed
+        # tick.
+        - alert: AstronomerAgentDisconnected
+          expr: astronomer_agent_last_seen_seconds > 120
+          for: 2m
+          labels:
+            severity: warning
+            component: tunnel
+          annotations:
+            summary: "Cluster agent has not pinged in {{ "{{" }} $value | humanizeDuration {{ "}}" }}"
+            description: |
+              The tunnel between the server and a cluster agent has gone
+              quiet. The cluster id is in the metric label; check the
+              agent pod's logs and connectivity in that cluster.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/agent-disconnected.md
+
+        # ── Argo CD self-manage drift ───────────────────────────────────
+        # FEATURES-051126 T26 — fires when the astronomer-self-manage
+        # Application drifts. argocd_app_info is published by Argo CD's
+        # own metrics; this rule only fires when Argo CD is installed
+        # AND its metrics are scraped by the same Prometheus.
+        - alert: AstronomerArgoSelfManageDrift
+          expr: |
+            argocd_app_info{name="astronomer-self-manage", sync_status!="Synced"} > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: gitops
+          annotations:
+            summary: "Astronomer self-manage Argo CD app drifted from Git"
+            description: |
+              The Argo CD Application that owns this install is
+              OutOfSync. Either reconcile via the Argo CD UI or
+              investigate the upstream chart values.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/argocd-drift.md
+{{- end }}
