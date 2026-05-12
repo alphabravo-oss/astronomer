@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
+  ShieldCheck,
 } from 'lucide-react';
 
 /**
@@ -166,8 +167,55 @@ export function CISScansTab() {
     },
   ];
 
+  // Sprint 074 — empty-state CTA. When NO scans have run yet, prompt the
+  // operator to install trivy-operator for image vulnerability scans
+  // (image-scan + CIS are the two complementary "scan results" sources
+  // the dashboard shows). Deep-links to the catalog with the chart
+  // pre-selected via ?search=trivy — the chart-install page does not
+  // currently accept a `cluster_id` query param (deferred, sprint 074),
+  // so the secondary "Platform Baseline" link is the recommended path
+  // for operators who want to bind the cluster atomically.
+  const noScans = !isLoading && scans.length === 0;
+
   return (
     <div className="space-y-4">
+      {/* Sprint 074 — image-scan empty-state CTA. */}
+      {noScans && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                No vulnerability reports yet
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Install <strong>trivy-operator</strong> to scan every container image running
+                in your clusters for CVEs. Reports appear here automatically once the
+                operator finishes its first scan window.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <Link
+                  href="/dashboard/catalog?search=trivy"
+                  className="font-medium text-primary hover:underline"
+                >
+                  Install trivy-operator →
+                </Link>
+                <span className="text-muted-foreground">or</span>
+                <Link
+                  href="/dashboard/clusters"
+                  className="font-medium text-primary hover:underline"
+                >
+                  Apply the Platform Baseline template to a cluster →
+                </Link>
+                <span className="text-muted-foreground">
+                  (auto-applied to newly-registered clusters)
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recent failure summary — only renders when something needs attention. */}
       {recentFailures.length > 0 && (
         <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-4">
