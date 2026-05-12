@@ -225,6 +225,13 @@ export interface ClusterRegistration {
   description?: string;
   labels?: Record<string, string>;
   directAccessEnabled?: boolean;
+  // Sprint 078 — registration wizard fields. distribution is a free-form
+  // dropdown on the wizard; the backend accepts it but doesn't otherwise
+  // gate on it. install_baseline is the Quick Start opt-in.
+  distribution?: ClusterDistribution;
+  region?: string;
+  provider?: ClusterProvider;
+  install_baseline?: boolean;
 }
 
 export interface ClusterRegistrationResponse {

@@ -39,7 +39,10 @@ export type LiveEventType =
   | 'cluster.deleted'
   | 'cluster.k8s_changed'
   | 'agent.reconnecting'
-  | 'agent.failed';
+  | 'agent.failed'
+  // Sprint 078 — cluster registration wizard live events.
+  | 'cluster.registration.step'
+  | 'cluster.registration.phase';
 
 /** Wire shape produced by the backend's events.Bus. */
 export interface LiveEvent<T = unknown> {

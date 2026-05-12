@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { Server, Loader2, Info } from 'lucide-react';
 import { createCluster } from '@/lib/api';
 import { setRegistrationOptions } from '@/lib/api';
-import type { ClusterEnvironment } from '@/types';
+import type { ClusterEnvironment, ClusterDistribution } from '@/types';
 
 export default function RegisterClusterWizardPage() {
   const router = useRouter();
@@ -26,7 +26,7 @@ export default function RegisterClusterWizardPage() {
     displayName: '',
     description: '',
     environment: 'development' as ClusterEnvironment,
-    distribution: 'k8s',
+    distribution: 'k8s' as ClusterDistribution,
     region: '',
     installBaseline: false,
   });
@@ -120,7 +120,7 @@ export default function RegisterClusterWizardPage() {
           <Field label="Distribution">
             <select
               value={form.distribution}
-              onChange={(e) => setForm((f) => ({ ...f, distribution: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, distribution: e.target.value as ClusterDistribution }))}
               className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
             >
               <option value="k3s">k3s</option>

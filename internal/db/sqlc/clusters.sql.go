@@ -15,7 +15,7 @@ import (
 )
 
 const countClusters = `-- name: CountClusters :one
-SELECT count(*) FROM clusters
+SELECT count(*) FROM clusters WHERE decommissioned_at IS NULL
 `
 
 func (q *Queries) CountClusters(ctx context.Context) (int64, error) {
@@ -336,7 +336,7 @@ func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, er
 }
 
 const getClusterByName = `-- name: GetClusterByName :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE name = $1
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE name = $1 AND decommissioned_at IS NULL
 `
 
 func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, error) {
@@ -471,7 +471,7 @@ func (q *Queries) ListClusterConditions(ctx context.Context, clusterID uuid.UUID
 }
 
 const listClusters = `-- name: ListClusters :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClustersParams struct {
@@ -523,7 +523,7 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 }
 
 const listClustersByStatus = `-- name: ListClustersByStatus :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE status = $1 ORDER BY created_at DESC LIMIT $3 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE status = $1 AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $2
 `
 
 type ListClustersByStatusParams struct {

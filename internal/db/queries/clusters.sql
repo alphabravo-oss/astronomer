@@ -44,13 +44,15 @@ SELECT * FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inser
 LIMIT 1;
 
 -- name: GetClusterByName :one
-SELECT * FROM clusters WHERE name = $1;
+SELECT * FROM clusters WHERE name = $1 AND decommissioned_at IS NULL;
 
 -- name: ListClusters :many
-SELECT * FROM clusters ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+-- Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
+-- their row in the DB for forensics but never appear in the UI list.
+SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: ListClustersByStatus :many
-SELECT * FROM clusters WHERE status = sqlc.arg(status) ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateCluster :one
 INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, created_by_id)
@@ -84,7 +86,7 @@ WHERE id = $1;
 DELETE FROM clusters WHERE id = $1;
 
 -- name: CountClusters :one
-SELECT count(*) FROM clusters;
+SELECT count(*) FROM clusters WHERE decommissioned_at IS NULL;
 
 -- name: GetClusterHealthStatus :one
 SELECT * FROM cluster_health_statuses WHERE cluster_id = $1;
