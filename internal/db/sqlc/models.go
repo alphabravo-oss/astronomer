@@ -1026,6 +1026,21 @@ type SsoConfiguration struct {
 	UpdatedAt             time.Time       `json:"updated_at"`
 }
 
+// SsoSession is the row shape for sso_sessions — single sign-out
+// (SLO) tracking from migration 054. One row per active Astronomer
+// JWT issued via an upstream OIDC handshake. The Logout handler joins
+// this against the access JWT's JTI to mint the RP-initiated logout
+// redirect URL. The upstream_id_token is Fernet-encrypted at rest.
+type SsoSession struct {
+	Jti                      string    `json:"jti"`
+	UserID                   uuid.UUID `json:"user_id"`
+	ProviderName             string    `json:"provider_name"`
+	UpstreamIdTokenEncrypted string    `json:"upstream_id_token_encrypted"`
+	EndSessionEndpoint       string    `json:"end_session_endpoint"`
+	ExpiresAt                time.Time `json:"expires_at"`
+	CreatedAt                time.Time `json:"created_at"`
+}
+
 type ToolOperation struct {
 	ID            uuid.UUID          `json:"id"`
 	TargetType    string             `json:"target_type"`

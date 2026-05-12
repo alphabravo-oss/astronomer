@@ -183,6 +183,14 @@ type Querier interface {
 	DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) error
 	DeleteRestoreOperation(ctx context.Context, id uuid.UUID) error
 	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
+	// Drops a single row by JTI. Called by Logout after the end-session
+	// redirect URL is built, so the upstream session can't be redirected
+	// twice (which some IdPs treat as a CSRF attempt).
+	DeleteSSOSession(ctx context.Context, jti string) error
+	// Used by admin force-logout to clear every row for a user after
+	// firing the back-channel end-session POSTs. Matches the semantics of
+	// InvalidateAllTokens: the user is logged out everywhere.
+	DeleteSSOSessionsByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteSecurityScanResult(ctx context.Context, id uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
@@ -320,6 +328,11 @@ type Querier interface {
 	// SSO Configurations
 	GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (SsoConfiguration, error)
 	GetSSOConfigurationByProvider(ctx context.Context, provider string) (SsoConfiguration, error)
+	// Lookup the upstream session row for an Astronomer JWT's JTI. Used by
+	// Logout to mint the end-session redirect URL. Returns sql.ErrNoRows
+	// when the user logged in via local password (no upstream session) —
+	// the handler treats that as "no redirect_url in the response".
+	GetSSOSession(ctx context.Context, jti string) (SsoSession, error)
 	// Security Scan Results
 	GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (SecurityScanResult, error)
 	GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error)
@@ -340,6 +353,13 @@ type Querier interface {
 	// past behaves like "not locked".
 	IncrementFailedLoginCount(ctx context.Context, arg IncrementFailedLoginCountParams) error
 	InsertBackupDrillResult(ctx context.Context, arg InsertBackupDrillResultParams) (BackupDrillResult, error)
+	// Called by the SSO Callback after the Astronomer JWT pair is minted.
+	// jti is the access JWT's JTI; upstream_id_token_encrypted is Fernet-
+	// ciphertext (the caller wraps before calling). ON CONFLICT replaces
+	// the row so a fresh login re-uses the JTI key (which it shouldn't —
+	// JTIs are uuid.New per token — but the upsert protects against a
+	// pathological repeat without an extra round-trip).
+	InsertSSOSession(ctx context.Context, arg InsertSSOSessionParams) error
 	InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
 	ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error)
@@ -436,6 +456,11 @@ type Querier interface {
 	ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]Backup, error)
 	ListRunningRestoresForPolling(ctx context.Context, limit int32) ([]RestoreOperation, error)
 	ListSSOConfigurations(ctx context.Context, arg ListSSOConfigurationsParams) ([]SsoConfiguration, error)
+	// Used by admin force-logout to enumerate the user's active upstream
+	// sessions for back-channel logout. Ordered by created_at DESC so the
+	// most-recent device fires first (best-effort relevance for the
+	// operator-facing audit row that records how many were torn down).
+	ListSSOSessionsByUser(ctx context.Context, userID uuid.UUID) ([]SsoSession, error)
 	ListScansByCluster(ctx context.Context, arg ListScansByClusterParams) ([]SecurityScanResult, error)
 	ListScansByClusterAndType(ctx context.Context, arg ListScansByClusterAndTypeParams) ([]SecurityScanResult, error)
 	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
@@ -485,6 +510,10 @@ type Querier interface {
 	// without bound. Returning the rowcount lets the worker emit it as a
 	// metric.
 	PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
+	// Called by the same nightly retention task that GCs jwt_revocations.
+	// Bounded by the JWT's natural expiry — once the JWT is unusable, the
+	// row's id_token_hint is moot too.
+	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
 	RemovePipelineOutput(ctx context.Context, arg RemovePipelineOutputParams) error
 	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
