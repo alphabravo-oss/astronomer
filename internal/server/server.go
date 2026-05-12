@@ -553,6 +553,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Tools:            toolHandler,
 		Audit:        handler.NewAuditHandler(queries),
 		Alerting:     handler.NewAlertingHandlerWithDeps(queries, requester),
+		Anomaly:      handler.NewAnomalyHandler(queries),
 		ArgoCD:       argocdHandler,
 		Backups:      backupHandler,
 		Catalog:      catalogHandler,
