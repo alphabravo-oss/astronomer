@@ -73,6 +73,24 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Email retention sweep — daily at 03:30 (offset from the
 		// 03:00 backup-retention task to spread DB load).
 		{"30 3 * * *", tasks.EmailCleanupOldType, "email retention sweep (90d)"},
+		// Migration 048: drain pending webhook_deliveries into HMAC-signed
+		// HTTP POSTs. 15s cadence — the bus tap enqueues with next_attempt_at=now
+		// so this tick is the SLA between event-fire and webhook receipt.
+		{"@every 15s", tasks.WebhookDispatchType, "webhook dispatch (outbound POST drain)"},
+		// Webhook delivery retention sweep — daily at 04:00 (offset from
+		// the email-retention task to spread DB load).
+		{"0 4 * * *", tasks.WebhookCleanupOldType, "webhook delivery retention sweep (30d)"},
+		// Cluster template drift sweep (migration 049). Hourly cadence —
+		// the per-cluster drift check is cheap (two JSONB diffs against
+		// the snapshot) and the result feeds a UI badge, not an
+		// auto-correct path.
+		{"@every 1h", tasks.ClusterTemplateDriftCheckType, "cluster template drift sweep"},
+		// Migration 050: drift sweep for cluster registry configs.
+		// Re-applies every cluster_registry_configs row so a new
+		// project namespace, an accidental Secret deletion, or a
+		// worker restart mid-apply self-heals. The SSA on the Secret
+		// is a no-op when state already matches, so this is cheap.
+		{"@every 30m", tasks.ClusterRegistryDriftReconcileType, "cluster registry drift reconcile"},
 	}
 
 	for _, e := range entries {

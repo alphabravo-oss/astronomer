@@ -50,6 +50,19 @@ const (
 	// Migration 047: SMTP email dispatch + retention.
 	TypeEmailDispatch   = tasks.EmailDispatchType
 	TypeEmailCleanupOld = tasks.EmailCleanupOldType
+	// Migration 048: outbound webhook dispatch + retention.
+	TypeWebhookDispatch   = tasks.WebhookDispatchType
+	TypeWebhookCleanupOld = tasks.WebhookCleanupOldType
+	// Migration 049: cluster template apply + drift sweep.
+	TypeClusterTemplateApply      = tasks.ClusterTemplateApplyType
+	TypeClusterTemplateDriftCheck = tasks.ClusterTemplateDriftCheckType
+	// Migration 050: cluster registry credentials → in-cluster
+	// dockerconfigjson Secret + default-SA imagePullSecrets patch.
+	// ClusterApplyRegistrySecret runs for a single registry row
+	// (enqueued by the handler on POST/PUT/DELETE); the
+	// ClusterRegistryDriftReconcile sweep is the every-30m fallback.
+	TypeClusterApplyRegistrySecret    = tasks.ClusterApplyRegistrySecretType
+	TypeClusterRegistryDriftReconcile = tasks.ClusterRegistryDriftReconcileType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -116,6 +129,12 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeTelemetrySend, instrumentTask(TypeTelemetrySend, tasks.HandleTelemetrySend))
 	w.mux.HandleFunc(TypeEmailDispatch, instrumentTask(TypeEmailDispatch, tasks.HandleEmailDispatch))
 	w.mux.HandleFunc(TypeEmailCleanupOld, instrumentTask(TypeEmailCleanupOld, tasks.HandleEmailCleanupOld))
+	w.mux.HandleFunc(TypeWebhookDispatch, instrumentTask(TypeWebhookDispatch, tasks.HandleWebhookDispatch))
+	w.mux.HandleFunc(TypeWebhookCleanupOld, instrumentTask(TypeWebhookCleanupOld, tasks.HandleWebhookCleanupOld))
+	w.mux.HandleFunc(TypeClusterTemplateApply, instrumentTask(TypeClusterTemplateApply, tasks.HandleClusterTemplateApply))
+	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
+	w.mux.HandleFunc(TypeClusterApplyRegistrySecret, instrumentTask(TypeClusterApplyRegistrySecret, tasks.HandleClusterApplyRegistrySecret))
+	w.mux.HandleFunc(TypeClusterRegistryDriftReconcile, instrumentTask(TypeClusterRegistryDriftReconcile, tasks.HandleClusterRegistryDriftReconcile))
 
 	w.log.Info("registered all task handlers")
 }
