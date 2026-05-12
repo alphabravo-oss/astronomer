@@ -85,6 +85,12 @@ type RuntimeQuerier interface {
 	CreateHelmChartVersion(ctx context.Context, arg sqlc.CreateHelmChartVersionParams) (sqlc.HelmChartVersion, error)
 	ListChartVersions(ctx context.Context, arg sqlc.ListChartVersionsParams) ([]sqlc.HelmChartVersion, error)
 	DeleteHelmChartVersion(ctx context.Context, id uuid.UUID) error
+
+	// Migration 046: telemetry sender + global settings hub.
+	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
+	CountClusters(ctx context.Context) (int64, error)
+	CountUsers(ctx context.Context) (int64, error)
+	CountProjects(ctx context.Context) (int64, error)
 }
 
 type RuntimeDependencies struct {

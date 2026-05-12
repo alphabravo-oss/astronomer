@@ -64,6 +64,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
+		// Opt-in telemetry POST (migration 046). Daily at 02:30 UTC —
+		// off-peak across our typical fleet. Handler short-circuits
+		// when telemetry.enabled is false, so an opt-out install
+		// pays one DB read per night and nothing else.
+		{"30 2 * * *", tasks.TelemetrySendType, "telemetry send (daily 02:30)"},
 	}
 
 	for _, e := range entries {
