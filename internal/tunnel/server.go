@@ -426,7 +426,49 @@ func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
 // know the cleanup-by-RPC path was unavailable. Idempotent — multiple
 // Disconnect calls are safe; the second one just observes the entry gone
 // from the map.
-func (h *Hub) Disconnect(clusterID string) bool {
+func (h *Hub) Disconnect(clusterID string) bool { return h.disconnectImpl(clusterID) }
+
+// Drain gracefully closes every connected agent in parallel. Called from
+// the server's Shutdown path before httpServer.Shutdown so agents
+// reconnect to a surviving replica immediately, instead of waiting out
+// the 20s WS-ping timeout that the previous shutdown path produced.
+//
+// Snapshots the agent set under the lock, then closes each agent OUTSIDE
+// the lock in parallel. Closing serially under the lock would multiply
+// close latency by N. Each close cancels the agent's context and shuts
+// its stream manager — the agent's read loop observes the close
+// immediately and re-dials, hitting the Service load balancer which
+// routes to a healthy sibling pod.
+//
+// Returns the number of agents that were drained. FEATURES-051126 T14.
+func (h *Hub) Drain() int {
+	h.mu.Lock()
+	if len(h.agents) == 0 {
+		h.mu.Unlock()
+		return 0
+	}
+	snapshot := make([]*AgentConnection, 0, len(h.agents))
+	for clusterID, agent := range h.agents {
+		snapshot = append(snapshot, agent)
+		delete(h.agents, clusterID)
+	}
+	h.mu.Unlock()
+
+	observability.WithEvent(h.log, "hub_drain_started").Info("draining all agent connections",
+		slog.Int("count", len(snapshot)),
+	)
+	for _, agent := range snapshot {
+		go func(a *AgentConnection) {
+			a.cancel()
+			a.Streams.CloseAll()
+		}(agent)
+	}
+	return len(snapshot)
+}
+
+// disconnectImpl is the unexported worker for the public Disconnect.
+// Kept separate so Drain doesn't recurse into a re-lock.
+func (h *Hub) disconnectImpl(clusterID string) bool {
 	h.mu.Lock()
 	agent, ok := h.agents[clusterID]
 	if ok {

@@ -21,6 +21,13 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      # FEATURES-051126 T14: graceful WS handover on rolling upgrades.
+      # The preStop hook below sleeps 10s so the Service load balancer
+      # has time to deregister this pod before SIGTERM lands. Combined
+      # with Hub.Drain() in the server's Shutdown path, agents observe
+      # a clean WS close and reconnect via the LB to a healthy sibling
+      # in ~1s instead of waiting 20s for the next WS ping to fail.
+      terminationGracePeriodSeconds: {{ default 60 .Values.server.terminationGracePeriodSeconds }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -140,6 +147,20 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
+          # FEATURES-051126 T14: pre-stop drain. The kubelet runs this
+          # BEFORE delivering SIGTERM. Sleeping here gives the Service
+          # load balancer time to remove the pod from endpoints (kube-
+          # proxy iptables rules update on watch, typically <2s, but we
+          # budget more for slow CNIs / userspace LBs). When SIGTERM
+          # arrives the server's Shutdown() drains the tunnel hub so
+          # agents reconnect to a sibling that's already taking traffic.
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - "sleep {{ default 10 .Values.server.preStopSleepSeconds }}"
       {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
       volumes:
         - name: tls-ca-additional

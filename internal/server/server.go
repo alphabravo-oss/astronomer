@@ -76,6 +76,10 @@ type Server struct {
 	db         *db.DB
 	cancel     context.CancelFunc
 	queue      *asynq.Client
+	// hub is the tunnel hub; nil in lightweight test servers. Held here
+	// so Shutdown can drain WS connections before tearing down HTTP
+	// (FEATURES-051126 T14).
+	hub *tunnel.Hub
 	// Encryptor is the Fernet encryptor wired into handlers that surface
 	// encrypted columns (argocd auth tokens, sso client secrets, etc.).
 	Encryptor *auth.Encryptor
@@ -403,6 +407,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		logger:    logger,
 		db:        database,
 		queue:     queue,
+		hub:       hub,
 		Encryptor: encryptor,
 		SSO:       ssoManager,
 	}
@@ -521,11 +526,29 @@ func (s *Server) Start(addr string) error {
 }
 
 // Shutdown gracefully shuts down the server with a deadline.
+//
+// Order matters:
+//  1. Drain the tunnel hub. Agents see a clean WS close and reconnect
+//     to a sibling replica in ~1s instead of waiting ~20s for the next
+//     ping to fail (FEATURES-051126 T14). The preStop hook in the
+//     chart's server-deployment runs `sleep 10` BEFORE SIGTERM lands
+//     so the Service load balancer has already removed this pod from
+//     endpoints — the drained agents reconnect through the LB to a
+//     healthy sibling.
+//  2. httpServer.Shutdown — blocks until in-flight HTTP handlers exit.
+//     New connections are rejected immediately; long-running requests
+//     get the deadline.
+//  3. cancel the reconcile context (in-process workers, publishers).
+//  4. close DB pool + asynq client.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.hub != nil {
+		drained := s.hub.Drain()
+		s.logger.Info("tunnel hub drained", "agents_disconnected", drained)
+	}
+	err := s.httpServer.Shutdown(ctx)
 	if s.cancel != nil {
 		s.cancel()
 	}
-	err := s.httpServer.Shutdown(ctx)
 	if s.db != nil {
 		s.db.Close()
 	}
