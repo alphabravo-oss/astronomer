@@ -19,6 +19,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -121,6 +122,19 @@ type AuthHandler struct {
 	// nil, the /auth/password-reset/* endpoints respond 503. Decoupled
 	// from emails so a test fake can wire one without the other.
 	passwordResets PasswordResetStore
+	// enforcer guards CreateToken against the per-user
+	// max_tokens_per_user quota (migration 051). Optional; nil
+	// disables the check.
+	enforcer *quota.Enforcer
+}
+
+// SetQuotaEnforcer wires the per-tenant quota enforcer for the auth
+// handler. Optional; without it CreateToken skips the quota check.
+func (h *AuthHandler) SetQuotaEnforcer(e *quota.Enforcer) {
+	if h == nil {
+		return
+	}
+	h.enforcer = e
 }
 
 // EmailNotifier is the surface AuthHandler (and the other hook-site
@@ -991,6 +1005,19 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
+	}
+
+	// Per-user token cap (migration 051). Soft enforcement allows the
+	// create but emits a metric; hard returns a 429 + structured body.
+	if h.enforcer != nil {
+		if err := h.enforcer.CheckUserTokenCreate(r.Context(), userID); err != nil {
+			if qe, ok := quota.IsQuotaExceeded(err); ok {
+				WriteQuotaExceeded(w, qe)
+				return
+			}
+			RespondError(w, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate token quota")
+			return
+		}
 	}
 
 	var expiresAt pgtype.Timestamptz

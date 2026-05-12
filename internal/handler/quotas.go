@@ -230,7 +230,7 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create quota plan")
 		return
 	}
-	recordAudit(r, h.queries, "quota_plan.create", "quota_plan", p.Name, p.Name, map[string]any{
+	recordAudit(r, h.queries, "quota.plan_create", "quota_plan", p.Name, p.Name, map[string]any{
 		"enforcement":              p.Enforcement,
 		"max_clusters_per_project": p.MaxClustersPerProject,
 		"max_projects_per_user":    p.MaxProjectsPerUser,
@@ -278,7 +278,7 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update quota plan")
 		return
 	}
-	recordAudit(r, h.queries, "quota_plan.update", "quota_plan", p.Name, p.Name, map[string]any{
+	recordAudit(r, h.queries, "quota.plan_update", "quota_plan", p.Name, p.Name, map[string]any{
 		"enforcement":              p.Enforcement,
 		"max_clusters_per_project": p.MaxClustersPerProject,
 		"max_projects_per_user":    p.MaxProjectsPerUser,
@@ -327,7 +327,7 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete quota plan")
 		return
 	}
-	recordAudit(r, h.queries, "quota_plan.delete", "quota_plan", name, name, nil)
+	recordAudit(r, h.queries, "quota.plan_delete", "quota_plan", name, name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

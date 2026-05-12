@@ -208,7 +208,7 @@ func TestQuotaPlans_CRUD(t *testing.T) {
 	}
 
 	// Audit trail should include create/update/delete actions.
-	wantActions := map[string]bool{"quota_plan.create": false, "quota_plan.update": false, "quota_plan.delete": false}
+	wantActions := map[string]bool{"quota.plan_create": false, "quota.plan_update": false, "quota.plan_delete": false}
 	for _, a := range q.auditOps {
 		if _, ok := wantActions[a]; ok {
 			wantActions[a] = true
@@ -388,3 +388,38 @@ func TestFleetUsage_TopOffenders(t *testing.T) {
 // Sentinel to make sure pgx.ErrNoRows imports are used and that the
 // 404 path on a missing plan is exercised at compile time.
 var _ = errors.Is(pgx.ErrNoRows, pgx.ErrNoRows)
+
+// TestQuotaUsage_AggregatesCorrectly covers the global-totals math in
+// FleetUsage: the response carries the actual count + the cap so the
+// dashboard can render "X / Y used".
+func TestQuotaUsage_AggregatesCorrectly(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	q.plans["global"] = sqlc.QuotaPlan{
+		Name: "global", MaxTotalClusters: 200, MaxTotalUsers: 500,
+	}
+	q.totalClusters = 175 // 87.5% — under threshold so should appear in totals only
+	q.totalActiveUsers = 5
+
+	h := NewQuotaHandler(q)
+	req := authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil)
+	w := httptest.NewRecorder()
+	h.FleetUsage(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var wrap map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &wrap); err != nil {
+		t.Fatalf("decode wrap: %v", err)
+	}
+	var resp quotaUsageResponse
+	if err := json.Unmarshal(wrap["data"], &resp); err != nil {
+		t.Fatalf("decode data: %v", err)
+	}
+	if resp.Global.TotalClusters != 175 || resp.Global.MaxTotalClusters != 200 {
+		t.Errorf("clusters: got %d/%d, want 175/200", resp.Global.TotalClusters, resp.Global.MaxTotalClusters)
+	}
+	if resp.Global.TotalUsers != 5 || resp.Global.MaxTotalUsers != 500 {
+		t.Errorf("users: got %d/%d, want 5/500", resp.Global.TotalUsers, resp.Global.MaxTotalUsers)
+	}
+}
