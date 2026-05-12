@@ -884,6 +884,8 @@ type Project struct {
 	ResourceQuotaCpuLimit    string          `json:"resource_quota_cpu_limit"`
 	ResourceQuotaMemoryLimit string          `json:"resource_quota_memory_limit"`
 	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
+	QuotaPlan                string          `json:"quota_plan"`
+	QuotaOverrides           json.RawMessage `json:"quota_overrides"`
 }
 
 type ProjectNamespace struct {
@@ -1070,6 +1072,8 @@ type User struct {
 	LockedUntil         pgtype.Timestamptz `json:"locked_until"`
 	LockedReason        string             `json:"locked_reason"`
 	TokensInvalidatedAt pgtype.Timestamptz `json:"tokens_invalidated_at"`
+	QuotaPlan           string             `json:"quota_plan"`
+	QuotaOverrides      json.RawMessage    `json:"quota_overrides"`
 }
 
 type WorkloadOperation struct {
