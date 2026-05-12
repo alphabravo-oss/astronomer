@@ -71,6 +71,10 @@ type RouterDependencies struct {
 	// surface. Migration 049. Nil-safe: omitted from the router when
 	// not wired (test harnesses, pre-migration boots).
 	ClusterTemplates *handler.ClusterTemplateHandler
+	// ClusterRegistration owns /api/v1/clusters/{id}/registration/*
+	// — the Rancher-style wizard endpoints from sprint 22 /
+	// migration 078. Nil-safe.
+	ClusterRegistration *handler.ClusterRegistrationHandler
 	// ClusterRegistries owns /api/v1/clusters/{cluster_id}/registries/*
 	// — the multi-registry-per-cluster admin UX from migration 050. The
 	// legacy single-row /registry/ endpoints on the cluster handler are
@@ -490,6 +494,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// outside the /api/v1 Timeout middleware group.
 		r.Get("/api/v1/events/stream/", deps.EventStream.Stream)
 	}
+	if deps.ClusterRegistration != nil {
+		// Per-cluster wizard SSE stream — same long-lived contract as
+		// the global stream above, registered outside the timeout group
+		// for the same reason.
+		r.Get("/api/v1/clusters/{id}/registration/events/", deps.ClusterRegistration.StreamEvents)
+	}
 	if deps.RemoteServer != nil {
 		// remotedialer hijacks the connection for a WS upgrade, so this MUST
 		// be registered outside the /api/v1 group that applies a Timeout
@@ -599,6 +609,14 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/kubeconfig-preview/", deps.Clusters.PreviewKubeconfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/metrics/", deps.Clusters.GetMetrics)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/metrics/summary/", deps.Clusters.GetMetricsSummary)
+			// Wizard endpoints — migration 078 / sprint 22.
+			if deps.ClusterRegistration != nil {
+				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/registration/status/", deps.ClusterRegistration.GetStatus)
+				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/registration/options/", deps.ClusterRegistration.PutOptions)
+				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/registration/confirm/", deps.ClusterRegistration.PostConfirm)
+				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/registration/retry/{step_id}/", deps.ClusterRegistration.PostRetry)
+				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/registration/cancel/", deps.ClusterRegistration.PostCancel)
+			}
 			if deps.Monitoring != nil {
 				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/monitoring/config/", deps.Monitoring.GetClusterConfig)
 				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbUpdate)).Put("/{id}/monitoring/config/", deps.Monitoring.UpdateClusterConfig)

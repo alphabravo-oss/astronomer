@@ -120,6 +120,20 @@ type ToolInstaller interface {
 type ClusterTemplateApplyDeps struct {
 	Queries  ClusterTemplateApplyQuerier
 	Installer ToolInstaller
+	// Registration is the wizard phase machine. Optional; when wired
+	// the worker calls it on start (→ provisioning) and on end
+	// (→ ready or → failed) so the SSE stream reflects the apply
+	// progress without polling. nil-safe.
+	Registration ClusterTemplateRegistrationAdvancer
+}
+
+// ClusterTemplateRegistrationAdvancer is the narrow surface the apply
+// worker uses to advance the wizard phase. registration.Service
+// implements this natively.
+type ClusterTemplateRegistrationAdvancer interface {
+	OnTemplateApplyStart(ctx context.Context, clusterID uuid.UUID) error
+	OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUID) error
+	OnTemplateApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error
 }
 
 var clusterTemplateApplyDeps ClusterTemplateApplyDeps
@@ -220,6 +234,14 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		return nil
 	}
 
+	// Wizard phase: connected → provisioning. Idempotent; nil-safe.
+	if deps.Registration != nil {
+		if err := deps.Registration.OnTemplateApplyStart(ctx, clusterID); err != nil {
+			runtimeLogger().WarnContext(ctx, "wizard phase advance on apply-start failed",
+				"cluster_id", clusterID, "error", err)
+		}
+	}
+
 	var spec templateSpec
 	if len(app.SpecSnapshot) > 0 {
 		if err := json.Unmarshal(app.SpecSnapshot, &spec); err != nil {
@@ -263,6 +285,14 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		runtimeLogger().ErrorContext(ctx, "mark applied", "error", err, "cluster_id", clusterID)
 		return nil
 	}
+
+	// Wizard phase: provisioning → ready. Nil-safe.
+	if deps.Registration != nil {
+		if err := deps.Registration.OnTemplateApplySuccess(ctx, clusterID); err != nil {
+			runtimeLogger().WarnContext(ctx, "wizard phase advance on apply-success failed",
+				"cluster_id", clusterID, "error", err)
+		}
+	}
 	return nil
 }
 
@@ -277,6 +307,13 @@ func persistApplyFailure(ctx context.Context, deps ClusterTemplateApplyDeps, clu
 		LastError: msg,
 	}); err != nil {
 		runtimeLogger().ErrorContext(ctx, "persist apply failure", "error", err, "cluster_id", clusterID, "msg", msg)
+	}
+	// Wizard phase: → failed. Nil-safe.
+	if deps.Registration != nil {
+		if err := deps.Registration.OnTemplateApplyFailure(ctx, clusterID, msg); err != nil {
+			runtimeLogger().WarnContext(ctx, "wizard phase advance on apply-failure failed",
+				"cluster_id", clusterID, "error", err)
+		}
 	}
 }
 

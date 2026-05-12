@@ -82,6 +82,10 @@ type Hub struct {
 	// publisher receives connect/disconnect/heartbeat lifecycle events for
 	// fan-out to SSE subscribers. Optional; nil-safe.
 	publisher LifecyclePublisher
+	// regAdvancer is the wizard phase machine. Optional; when set,
+	// the hub calls OnAgentConnected on first CONNECT_ACK so the
+	// cluster advances `awaiting_agent` → `connected` automatically.
+	regAdvancer RegistrationAdvancer
 	// stateLim collapses redundant STATE_UPDATE fan-outs at the (cluster_id,
 	// kind, namespace) granularity. Lazily constructed on first use so the
 	// hub remains zero-value-safe.
@@ -94,10 +98,29 @@ type LifecyclePublisher interface {
 	Publish(eventType string, data any)
 }
 
+// RegistrationAdvancer is the slice of the registration.Service surface
+// the hub needs. Declared as an interface here so the tunnel package
+// doesn't pull in internal/registration as a hard dependency (which
+// would import-cycle since registration depends on sqlc and could
+// later depend on tunnel for a metrics hook).
+type RegistrationAdvancer interface {
+	OnAgentConnected(ctx context.Context, clusterID uuid.UUID, agentVersion string) error
+}
+
 // SetPublisher attaches a lifecycle publisher (set once at startup).
 func (h *Hub) SetPublisher(p LifecyclePublisher) {
 	h.mu.Lock()
 	h.publisher = p
+	h.mu.Unlock()
+}
+
+// SetRegistrationAdvancer wires the wizard phase machine. When set,
+// the first heartbeat from a cluster in `awaiting_agent` advances it
+// to `connected` (and on through `ready`/`provisioning` per the
+// install_baseline choice).
+func (h *Hub) SetRegistrationAdvancer(a RegistrationAdvancer) {
+	h.mu.Lock()
+	h.regAdvancer = a
 	h.mu.Unlock()
 }
 
@@ -281,6 +304,25 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		slog.String("session_id", sessionID),
 	)
 	h.publish("cluster.connected", payload.ClusterID, sessionID, payload.AgentVersion)
+
+	// Wizard phase advance — wired by cmd/server when the registration
+	// service is constructed. Best-effort: when the cluster wasn't
+	// in awaiting_agent (e.g. legacy non-wizard registration) the
+	// service no-ops the transition. We don't fail the connect on a
+	// transition error.
+	h.mu.RLock()
+	advancer := h.regAdvancer
+	h.mu.RUnlock()
+	if advancer != nil {
+		if clusterUUID, perr := uuid.Parse(payload.ClusterID); perr == nil {
+			if err := advancer.OnAgentConnected(ctx, clusterUUID, payload.AgentVersion); err != nil {
+				h.log.Warn("registration advance on agent_connected failed",
+					slog.String("cluster_id", payload.ClusterID),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+	}
 
 	// 5. Start read/write goroutines.
 	var wg sync.WaitGroup
