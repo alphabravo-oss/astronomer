@@ -134,6 +134,11 @@ type RouterDependencies struct {
 	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
 	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
 	PlatformSettings *handler.PlatformSettingsHandler
+	// PlatformBaselineCoverage owns the read-only GET
+	// /api/v1/admin/platform-settings/default-cluster-template/coverage/
+	// endpoint added in sprint 075: returns whether each of the five
+	// baseline chart slugs resolves against the catalog. Superuser-only.
+	PlatformBaselineCoverage *handler.PlatformBaselineCoverageHandler
 	// SettingsCache is the shared process-local cache for platform
 	// settings, consumed by the FeatureGate middleware below. Optional
 	// — when nil, every feature-gated route falls through as enabled.
@@ -448,6 +453,19 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// namespace allowlist (`branding`, `banner`).
 			r.Get("/settings/branding/", deps.PlatformSettings.PublicBranding)
 			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
+		}
+
+		// Sprint 075: read-only platform-baseline coverage check.
+		// GET /admin/platform-settings/default-cluster-template/coverage/
+		// returns whether each of the five baseline chart slugs resolves
+		// against helm_charts. Superuser-gated inside the handler — same
+		// pattern as the other /admin/* readers. Used by the CI smoke
+		// test and the dashboard banner that says "5/5 slugs resolved".
+		if deps.PlatformBaselineCoverage != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get(
+				"/admin/platform-settings/default-cluster-template/coverage/",
+				deps.PlatformBaselineCoverage.Coverage,
+			)
 		}
 
 		// Per-tenant resource quotas (migration 051). Plan CRUD +
