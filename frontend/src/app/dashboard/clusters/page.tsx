@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useClusters, useDeleteCluster, queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { RegisterClusterModal } from '@/components/clusters/register-cluster-modal';
+// RegisterClusterModal removed in sprint 22 — replaced by the
+// /dashboard/clusters/register/* wizard. The "Re-show install command"
+// row action now navigates to the wizard's step 2 for the existing
+// cluster, which is the moral equivalent.
 import { EditClusterModal } from '@/components/clusters/edit-cluster-modal';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -22,13 +25,25 @@ import { Plus, Terminal, Pencil, Trash2 } from 'lucide-react';
 export default function ClustersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [showRegister, setShowRegister] = useState(searchParams.get('register') === 'true');
+  // Legacy ?register=true query param redirects to the new wizard
+  // entry route. We do the redirect inside useEffect so deep-linked
+  // bookmarks keep working without flashing the cluster list.
+  const legacyRegisterParam = searchParams.get('register') === 'true';
+  useEffect(() => {
+    if (legacyRegisterParam) {
+      router.replace('/dashboard/clusters/register');
+    }
+  }, [legacyRegisterParam, router]);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [providerFilter, setProviderFilter] = useState<string>('');
   const [envFilter, setEnvFilter] = useState<string>('');
 
   // Action menu state
-  const [registerCluster, setRegisterCluster] = useState<Cluster | null>(null);
+  // Sprint 22 removed the legacy register-cluster modal; the
+  // "Registration Command" action now navigates to the wizard's
+  // step-2 install page for the cluster. Setter retained as a no-op
+  // ref to keep the column callback site untouched while the
+  // navigation handler does the heavy lift.
   const [editCluster, setEditCluster] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
   const deleteMutation = useDeleteCluster();
@@ -189,7 +204,7 @@ export default function ClustersPage() {
             {
               label: 'Registration Command',
               icon: <Terminal className="h-3.5 w-3.5" />,
-              onClick: () => setRegisterCluster(row),
+              onClick: () => router.push(`/dashboard/clusters/register/${row.id}/connect`),
             },
             {
               label: 'Edit',
@@ -221,7 +236,7 @@ export default function ClustersPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowRegister(true)}
+          onClick={() => router.push('/dashboard/clusters/register')}
           className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
             text-sm font-medium hover:opacity-90 transition-opacity"
         >
@@ -285,19 +300,10 @@ export default function ClustersPage() {
         }
       />
 
-      {/* Register Modal (new cluster) */}
-      {showRegister && (
-        <RegisterClusterModal onClose={() => setShowRegister(false)} />
-      )}
-
-      {/* Registration Command Modal (existing cluster) */}
-      {registerCluster && (
-        <RegisterClusterModal
-          onClose={() => setRegisterCluster(null)}
-          clusterId={registerCluster.id}
-          clusterName={registerCluster.name}
-        />
-      )}
+      {/* "Re-show install command" → navigate to wizard step 2 for the
+          existing cluster. The wizard's status endpoint handles
+          already-`ready` clusters by short-circuiting to the cluster
+          detail page rather than re-running registration. */}
 
       {/* Edit Modal */}
       {editCluster && (

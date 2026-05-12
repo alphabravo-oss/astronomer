@@ -253,7 +253,7 @@ function ClusterPicker({
           Register a cluster first — Dex needs somewhere to live.
         </p>
         <Link
-          href="/dashboard/clusters?register=true"
+          href="/dashboard/clusters/register"
           className="inline-flex items-center gap-2 h-8 px-3 mt-4 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
         >
           Register Cluster
