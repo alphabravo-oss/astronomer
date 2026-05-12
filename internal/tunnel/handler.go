@@ -66,6 +66,9 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 	case protocol.MsgStateUpdate:
 		h.handleStateUpdate(conn, msg)
 
+	case protocol.MsgMirrorEvent:
+		h.handleMirrorEvent(conn, msg)
+
 	case protocol.MsgError:
 		h.handleError(conn, msg)
 
@@ -382,6 +385,48 @@ func (r *stateUpdateLimiter) evictLocked(now time.Time) {
 		if t.Before(cutoff) {
 			delete(r.last, k)
 		}
+	}
+}
+
+// handleMirrorEvent routes a sprint-069 MIRROR_EVENT frame into the
+// management-plane mirror tables via the registered MirrorIngester.
+// Nil-safe: when no ingester is wired (test fakes, pre-migration boots)
+// the frame is logged at DEBUG and dropped so the agent doesn't pile
+// up retries.
+func (h *Hub) handleMirrorEvent(conn *AgentConnection, msg *protocol.Message) {
+	h.mu.RLock()
+	ingester := h.mirror
+	h.mu.RUnlock()
+	if ingester == nil {
+		h.log.Debug("MIRROR_EVENT received but no ingester wired", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+	var payload protocol.MirrorEventPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		h.log.Warn("invalid MIRROR_EVENT payload",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	clusterID, err := uuid.Parse(conn.ClusterID)
+	if err != nil {
+		h.log.Warn("MIRROR_EVENT from cluster with invalid UUID",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	if err := ingester.RouteMirrorEvent(context.Background(), clusterID, payload); err != nil {
+		// Failure is logged but never propagated back to the agent —
+		// the agent's next resync (mirrorResyncPeriod) will re-emit,
+		// and periodic prune cleans up if a row stays stale.
+		h.log.Warn("MIRROR_EVENT ingest failed",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("kind", payload.Kind),
+			slog.String("name", payload.Name),
+			slog.String("error", err.Error()),
+		)
 	}
 }
 

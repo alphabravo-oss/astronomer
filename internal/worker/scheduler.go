@@ -103,6 +103,13 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		// Sprint 069: CRD-mirror v2 stale-row prune. The agent's
+		// SharedInformerFactory re-sends every object on reconnect (full
+		// resync), so a row whose last_seen_at is older than the 1h
+		// retention window is unambiguously gone from the cluster.
+		// Aggressive 30-minute cadence keeps the dashboard's
+		// "this is gone" signal under 90 minutes end-to-end.
+		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
 	}
 
 	for _, e := range entries {

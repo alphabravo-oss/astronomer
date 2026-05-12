@@ -75,6 +75,10 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
+	// Sprint 069: CRD-mirror v2 stale-row prune. Walks the five
+	// mirrored_* tables every 30m and drops rows whose last_seen_at is
+	// older than crd.StaleRetention (1h).
+	TypeCrdMirrorPruneStale = tasks.CrdMirrorPruneStaleType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -152,6 +156,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
+	w.mux.HandleFunc(TypeCrdMirrorPruneStale, instrumentTask(TypeCrdMirrorPruneStale, tasks.HandleCrdMirrorPruneStale))
 
 	w.log.Info("registered all task handlers")
 }
