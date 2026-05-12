@@ -241,6 +241,20 @@ export default function CompliancePage() {
           </p>
         </div>
         <ComplianceForm />
+        <div className="border rounded p-4 bg-card">
+          <h2 className="font-semibold text-sm">Compliance baselines</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            One-click preset profiles (PCI-DSS, HIPAA, FedRAMP, SOC 2) that snapshot
+            and apply the related platform settings, quota plans, audit retention,
+            and alert rules.
+          </p>
+          <Link
+            href="/dashboard/settings/compliance/baselines"
+            className="inline-block mt-3 text-sm px-3 py-1.5 rounded border bg-background hover:bg-muted"
+          >
+            Open baselines
+          </Link>
+        </div>
       </div>
     </SettingsAuthGate>
   );

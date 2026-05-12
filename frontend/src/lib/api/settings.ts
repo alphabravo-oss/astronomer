@@ -579,3 +579,155 @@ export async function listBackupDrillHistory(params?: {
   );
   return res.data;
 }
+
+// ============================================================
+// Compliance Baselines — sprint 17 (migration 064)
+// ============================================================
+
+/**
+ * The four preset compliance profiles. Slugs are stable; new presets
+ * append rows in future migrations without renaming the old ones.
+ */
+export type ComplianceBaselineSlug =
+  | 'pci_dss_4_0'
+  | 'hipaa'
+  | 'fedramp_moderate'
+  | 'soc2';
+
+export interface ComplianceQuotaPlanSpec {
+  name: string;
+  enforcement: string;
+  description?: string;
+  max_clusters_per_project?: number;
+  max_namespaces_per_project?: number;
+  max_members_per_project?: number;
+  max_projects_per_user?: number;
+  max_tokens_per_user?: number;
+  max_streams_per_user?: number;
+  max_total_clusters?: number;
+  max_total_users?: number;
+}
+
+export interface ComplianceMaintenanceWindowSpec {
+  name: string;
+  description?: string;
+  days_of_week?: number[];
+  start_hour: number;
+  start_minute: number;
+  duration_min: number;
+}
+
+export interface ComplianceAlertRuleSpec {
+  name: string;
+  rule_type: string;
+  severity: string;
+  cooldown_minutes?: number;
+  configuration: Record<string, unknown>;
+}
+
+export interface ComplianceBaselineSpec {
+  audit_retention_days: number;
+  pss_profile?: string;
+  totp_required?: boolean;
+  required_smtp?: boolean;
+  required_webhooks?: string[];
+  quota_plans?: ComplianceQuotaPlanSpec[];
+  maintenance_window_template?: ComplianceMaintenanceWindowSpec;
+  alert_rules?: ComplianceAlertRuleSpec[];
+  platform_settings?: Record<string, string>;
+  read_audit_policies?: string[];
+}
+
+export interface ComplianceBaseline {
+  id: string;
+  slug: ComplianceBaselineSlug;
+  name: string;
+  description: string;
+  version: string;
+  enabled: boolean;
+  active: boolean;
+  spec: ComplianceBaselineSpec;
+}
+
+export interface ComplianceBaselineDiff {
+  baseline_id: string;
+  baseline_slug: ComplianceBaselineSlug;
+  baseline_name: string;
+  current: Record<string, unknown>;
+  target: Record<string, unknown>;
+  changes: string[];
+}
+
+export interface ComplianceBaselineApplication {
+  id: string;
+  baseline_id: string;
+  baseline_slug: ComplianceBaselineSlug;
+  baseline_name: string;
+  applied_by?: string;
+  applied_at: string;
+  status: 'applied' | 'reverted';
+  reverted_at?: string;
+  reverted_by?: string;
+  notes: string;
+  previous_state?: unknown;
+}
+
+/** GET /admin/compliance-baselines/ */
+export async function listComplianceBaselines(): Promise<ComplianceBaseline[]> {
+  const res = await api.get<APIResponse<ComplianceBaseline[]>>('/admin/compliance-baselines');
+  return res.data.data ?? (res.data as unknown as ComplianceBaseline[]);
+}
+
+/** GET /admin/compliance-baselines/{id}/ */
+export async function getComplianceBaseline(id: string): Promise<ComplianceBaseline> {
+  const res = await api.get<APIResponse<ComplianceBaseline>>(`/admin/compliance-baselines/${id}`);
+  return res.data.data ?? (res.data as unknown as ComplianceBaseline);
+}
+
+/** GET /admin/compliance-baselines/{id}/diff/ */
+export async function getComplianceBaselineDiff(id: string): Promise<ComplianceBaselineDiff> {
+  const res = await api.get<APIResponse<ComplianceBaselineDiff>>(
+    `/admin/compliance-baselines/${id}/diff`,
+  );
+  return res.data.data ?? (res.data as unknown as ComplianceBaselineDiff);
+}
+
+/** POST /admin/compliance-baselines/{id}/apply/ */
+export async function applyComplianceBaseline(
+  id: string,
+  notes?: string,
+): Promise<{ application_id: string; baseline_id: string; slug: string }> {
+  const res = await api.post<APIResponse<{ application_id: string; baseline_id: string; slug: string }>>(
+    `/admin/compliance-baselines/${id}/apply`,
+    { notes: notes || '' },
+  );
+  return res.data.data ?? (res.data as unknown as { application_id: string; baseline_id: string; slug: string });
+}
+
+/** GET /admin/compliance-baselines/active/ */
+export async function getActiveComplianceBaseline(): Promise<{
+  active: ComplianceBaselineApplication | null;
+}> {
+  const res = await api.get<APIResponse<{ active: ComplianceBaselineApplication | null }>>(
+    '/admin/compliance-baselines/active',
+  );
+  return res.data.data ?? (res.data as unknown as { active: ComplianceBaselineApplication | null });
+}
+
+/** GET /admin/compliance-baseline-applications/ */
+export async function listComplianceBaselineApplications(): Promise<ComplianceBaselineApplication[]> {
+  const res = await api.get<APIResponse<ComplianceBaselineApplication[]>>(
+    '/admin/compliance-baseline-applications',
+  );
+  return res.data.data ?? (res.data as unknown as ComplianceBaselineApplication[]);
+}
+
+/** POST /admin/compliance-baseline-applications/{id}/revert/ */
+export async function revertComplianceBaselineApplication(
+  id: string,
+): Promise<{ application_id: string; status: string }> {
+  const res = await api.post<APIResponse<{ application_id: string; status: string }>>(
+    `/admin/compliance-baseline-applications/${id}/revert`,
+  );
+  return res.data.data ?? (res.data as unknown as { application_id: string; status: string });
+}
