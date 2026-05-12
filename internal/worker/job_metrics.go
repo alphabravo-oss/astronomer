@@ -9,6 +9,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -66,6 +67,7 @@ var asynqEnqueueNilErr = errors.New("worker: enqueue called with nil task or cli
 
 func instrumentTask(job string, handler func(context.Context, *asynq.Task) error) func(context.Context, *asynq.Task) error {
 	registerJobMetrics()
+	tracer := otel.Tracer("astronomer/worker")
 	return func(ctx context.Context, task *asynq.Task) error {
 		start := time.Now()
 		// FEATURES-051126 T22: pull `_correlation_id` (if any) out of
@@ -77,6 +79,14 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		if cid := observability.ExtractAsynqCorrelationID(task.Payload()); cid != "" {
 			logger = observability.WithCorrelationID(logger, cid)
 		}
+		// T15: rejoin the originating trace if traceparent rode the
+		// payload, then open a child span for the worker execution.
+		// When tracing is disabled at the SDK level, Start returns a
+		// no-op span and the ctx is unchanged in any meaningful way.
+		ctx = observability.ContextWithAsynqTracing(ctx, task.Payload())
+		ctx, span := tracer.Start(ctx, "asynq.job "+job)
+		defer span.End()
+
 		observability.WithEvent(logger, "worker_job_started").Info("worker job started",
 			"job", job,
 		)
@@ -84,6 +94,7 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		status := "success"
 		if err != nil {
 			status = "error"
+			span.RecordError(err)
 		}
 		observability.WithEvent(logger, "worker_job_completed").Info("worker job completed",
 			"job", job,

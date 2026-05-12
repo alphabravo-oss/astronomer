@@ -611,9 +611,13 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			// worker logs for this decommission tie back to the originating
 			// DELETE request (FEATURES-051126 T22).
 			correlationID := middleware.GetCorrelationID(r.Context())
+			payload := task.Payload()
 			if correlationID != "" {
-				task = asynq.NewTask(task.Type(), observability.WithCorrelationPayload(task.Payload(), correlationID))
+				payload = observability.WithCorrelationPayload(payload, correlationID)
 			}
+			// T15: inject traceparent so worker span attaches to this HTTP request's trace.
+			payload = observability.WithTracingPayload(r.Context(), payload)
+			task = asynq.NewTask(task.Type(), payload)
 			_, _ = h.decommissionQueue.Enqueue(task)
 		}
 	}

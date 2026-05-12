@@ -8,9 +8,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+// tunnelTracer is the named OTel tracer for span emission in this
+// package. T15 FEATURES-051126.
+var tunnelTracer = otel.Tracer("astronomer/tunnel")
 
 // HelmReply is the result of a Helm operation that travelled through the tunnel.
 type HelmReply = protocol.HelmResultPayload
@@ -98,7 +105,24 @@ const serviceProxyTimeout = 60 * time.Second
 // / STATUS message through the tunnel and waits for the matching HELM_RESULT.
 //
 // The msgType MUST be one of the Helm constants in pkg/protocol.
-func (h *Hub) SendHelmRequest(ctx context.Context, clusterID string, msgType protocol.MessageType, payload protocol.HelmRequestPayload) (*HelmReply, error) {
+func (h *Hub) SendHelmRequest(ctx context.Context, clusterID string, msgType protocol.MessageType, payload protocol.HelmRequestPayload) (reply *HelmReply, err error) {
+	// T15: span around the full helm round-trip. Named after the msg
+	// type so traces show "helm.HELM_INSTALL" / "helm.HELM_UPGRADE"
+	// etc. Attributes carry cluster ID + release name for filtering.
+	ctx, span := tunnelTracer.Start(ctx, "tunnel.helm "+string(msgType))
+	span.SetAttributes(
+		attribute.String("astronomer.cluster_id", clusterID),
+		attribute.String("astronomer.helm.release", payload.ReleaseName),
+		attribute.String("astronomer.helm.namespace", payload.Namespace),
+	)
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	switch msgType {
 	case protocol.MsgHelmInstall, protocol.MsgHelmUpgrade,
 		protocol.MsgHelmUninstall, protocol.MsgHelmRollback, protocol.MsgHelmStatus:

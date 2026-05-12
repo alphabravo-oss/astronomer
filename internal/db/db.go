@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,7 +55,18 @@ func ConnectWithConfig(ctx context.Context, databaseURL string, pc PoolConfig) (
 	cfg.MaxConnLifetime = pickDuration(pc.MaxConnLifetime, defaultMaxConnLifetime)
 	cfg.MaxConnIdleTime = pickDuration(pc.MaxConnIdleTime, defaultMaxConnIdleTime)
 	cfg.HealthCheckPeriod = pickDuration(pc.HealthCheckPeriod, defaultHealthCheckPeriod)
-	cfg.ConnConfig.Tracer = NewQueryTracer()
+	// T15 FEATURES-051126: emit OTel db.* spans for every query alongside
+	// the existing Prometheus query metrics. The MultiTracer composes
+	// both — otelpgx fires before/after each query for spans, the
+	// historical queryTracer captures duration histograms. When the
+	// global TracerProvider has no exporter, otelpgx's calls are
+	// effectively free (no-op span).
+	cfg.ConnConfig.Tracer = newCompositeQueryTracer(
+		otelpgx.NewTracer(
+			otelpgx.WithIncludeQueryParameters(),
+		),
+		NewQueryTracer(),
+	)
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

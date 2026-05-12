@@ -10,10 +10,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+// k8sRequesterTracer is the OTel tracer for tunnel k8s requests.
+// T15 FEATURES-051126.
+var k8sRequesterTracer = otel.Tracer("astronomer/k8s-requester")
 
 type K8sRequester interface {
 	Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error)
@@ -45,6 +52,25 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 	if r == nil || r.hub == nil {
 		return nil, fmt.Errorf("tunnel requester not configured")
 	}
+
+	// T15: span around the full k8s tunnel round-trip. Attributes
+	// carry the routed cluster + HTTP method so traces filter on
+	// either dimension. retErr is finalized via the named return.
+	ctx, span := k8sRequesterTracer.Start(ctx, "tunnel.k8s "+method)
+	span.SetAttributes(
+		attribute.String("astronomer.cluster_id", clusterID),
+		attribute.String("http.request.method", method),
+		attribute.String("url.path", path),
+	)
+	defer func() {
+		if retErr != nil {
+			span.RecordError(retErr)
+			span.SetStatus(codes.Error, retErr.Error())
+		} else if resp != nil {
+			span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
+		}
+		span.End()
+	}()
 
 	// FEATURES-051126 T19: short-circuit calls to a known-failing
 	// cluster instead of burning the ctx timeout. The breaker is
