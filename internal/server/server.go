@@ -403,6 +403,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// labels mutation lands on every upstream ArgoCD cluster Secret without
 	// the operator re-registering.
 	clusterHandler.SetArgoCDRefreshQueue(queue)
+	// Sprint 074 — auto-attach platform-default cluster_template on
+	// Create enqueues the apply task immediately so the operator sees
+	// the baseline operators install in seconds (not on the next
+	// drift_check sweep). Best-effort; nil-safe.
+	clusterHandler.SetTemplateApplyQueue(queue)
 	// Wire metrics: tunnel requester for remote clusters, in-cluster clients
 	// for the local cluster. Both are nil-safe; missing deps fall back to zero.
 	clusterHandler.SetMetricsRequester(requester)
@@ -640,6 +645,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// per-request feature check effectively free.
 		PlatformSettings: handler.NewPlatformSettingsHandler(queries),
 		SettingsCache:    handler.NewSettingsCache(queries, 30*time.Second),
+		// Sprint 074 — platform-default cluster template. Auto-attach
+		// baseline (trivy-operator + metrics + log forwarding +
+		// cert-manager) for newly-registered clusters; PUT/reapply
+		// surface so operators can change/back-fill the default.
+		PlatformDefaultTemplate: func() *handler.PlatformDefaultTemplateHandler {
+			h := handler.NewPlatformDefaultTemplateHandler(queries)
+			h.SetApplyQueue(queue)
+			return h
+		}(),
 		// Per-tenant resource quotas (migration 051). The handler is
 		// constructed first so the enforcer below can borrow the same
 		// queries surface. The enforcer wires into clusters / auth /

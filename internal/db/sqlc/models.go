@@ -837,6 +837,14 @@ type PlatformConfiguration struct {
 	TelemetryEnabled bool               `json:"telemetry_enabled"`
 	BootstrappedAt   pgtype.Timestamptz `json:"bootstrapped_at"`
 	InstanceID       uuid.UUID          `json:"instance_id"`
+	// DefaultClusterTemplateID is migration-074's auto-attach default.
+	// When Valid, the cluster Create handler records a
+	// cluster_template_applications row pointing at this template so the
+	// sprint-049 apply worker installs the baseline (trivy-operator,
+	// kube-state-metrics, node-exporter, fluent-bit, cert-manager) on
+	// every newly-registered cluster. ON DELETE SET NULL in the FK so
+	// removing the template gracefully degrades to "no auto-attach".
+	DefaultClusterTemplateID pgtype.UUID `json:"default_cluster_template_id"`
 }
 
 type PlatformSetting struct {
