@@ -32,6 +32,11 @@ const (
 	// the dedicated resource lets operators grant "fleet runbook author"
 	// without also granting clusters:* or cluster_templates:*.
 	ResourceFleetOperations Resource = "fleet_operations"
+	// ResourceNetworkPolicies gates the /api/v1/admin/network-policy-templates/*
+	// CRUD (migration 068). The per-cluster apply endpoints reuse
+	// ResourceClusters + VerbUpdate so an operator who can already update
+	// a cluster can apply a template to one of its namespaces.
+	ResourceNetworkPolicies Resource = "network_policies"
 	ResourceWildcard        Resource = "*"
 )
 

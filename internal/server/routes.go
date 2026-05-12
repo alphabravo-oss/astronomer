@@ -94,6 +94,10 @@ type RouterDependencies struct {
 	// with label-selector targeting and bounded blast radius
 	// (migration 056). Nil-safe.
 	FleetOperations *handler.FleetOperationHandler
+	// NetworkPolicies owns /api/v1/admin/network-policy-templates/* (CRUD)
+	// and /api/v1/clusters/{cluster_id}/network-policies/applications/*
+	// (per-cluster apply/list/delete) — migration 068. Nil-safe.
+	NetworkPolicies *handler.NetworkPolicyHandler
 	Projects         *handler.ProjectHandler
 	Tools            *handler.ToolHandler
 	Audit        *handler.AuditHandler
@@ -823,6 +827,26 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/template/", deps.ClusterTemplates.GetApplication)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/template/reapply/", deps.ClusterTemplates.Reapply)
 		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/template/", deps.ClusterTemplates.Detach)
+	}
+
+	// Network policy templates (migration 068). Two mount points:
+	//   - /admin/network-policy-templates/* — superuser CRUD over the
+	//     library. Builtin rows are read-only at the handler level.
+	//   - /clusters/{cluster_id}/network-policies/applications/* — per-
+	//     cluster apply/list/delete, gated on ResourceClusters +
+	//     VerbUpdate (same authority as editing the cluster).
+	if deps.NetworkPolicies != nil {
+		r.Route("/admin/network-policy-templates", func(r chi.Router) {
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNetworkPolicies, rbac.VerbList)).Get("/", deps.NetworkPolicies.ListTemplates)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNetworkPolicies, rbac.VerbCreate)).Post("/", deps.NetworkPolicies.CreateTemplate)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNetworkPolicies, rbac.VerbRead)).Get("/{id}/", deps.NetworkPolicies.GetTemplate)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNetworkPolicies, rbac.VerbUpdate)).Put("/{id}/", deps.NetworkPolicies.UpdateTemplate)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNetworkPolicies, rbac.VerbDelete)).Delete("/{id}/", deps.NetworkPolicies.DeleteTemplate)
+		})
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/network-policies/applications/", deps.NetworkPolicies.ListApplications)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/network-policies/applications/", deps.NetworkPolicies.CreateApplications)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/network-policies/applications/{id}/", deps.NetworkPolicies.DeleteApplication)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/network-policies/applications/{id}/reapply/", deps.NetworkPolicies.Reapply)
 	}
 
 	// Cluster registries (migration 050) — multi-registry-per-cluster admin

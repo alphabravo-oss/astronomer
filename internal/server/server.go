@@ -301,6 +301,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
 	clusterRegistriesHandler.SetApplyEnqueue(queue)
 	clusterRegistriesHandler.SetRequester(requester)
+	// Network policy templates (migration 068). Sister of cluster
+	// templates but namespace-scoped: deny-all-ingress, project-isolated,
+	// namespace-only, allow-ingress-controllers. The reconciler shares
+	// the tunnel K8sRequester so the same circuit-breaker / retry
+	// behavior as every other tunnel-mediated K8s op applies.
+	networkPoliciesHandler := handler.NewNetworkPolicyHandler(queries)
+	networkPoliciesHandler.SetQueue(queue)
+	networkPoliciesHandler.SetK8sRequester(requester)
+	tasks.ConfigureNetworkPolicyApply(tasks.NetworkPolicyApplyDeps{
+		Queries:   queries,
+		Requester: requester,
+	})
 	// Cloud credentials (migration 053). Project-scoped CRUD over
 	// AWS / GCP / Azure / Generic secrets, with a /test/ endpoint
 	// that dials each provider's "validate" SDK and a materialization
@@ -632,6 +644,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Clusters:          clusterHandler,
 		ClusterTemplates:  clusterTemplateHandler,
 		ClusterRegistries: clusterRegistriesHandler,
+		NetworkPolicies:   networkPoliciesHandler,
 		ClusterSnapshots:  clusterSnapshotsHandler,
 		FleetOperations:   fleetOperationsHandler,
 		Projects:         projectHandler,
