@@ -34,6 +34,18 @@ data:
   {{- if .Values.config.lockoutDurationMinutes }}
   LOCKOUT_DURATION_MINUTES: {{ .Values.config.lockoutDurationMinutes | quote }}
   {{- end }}
+  # 2FA / TOTP (migration 043). Empty issuer == binary default ("Astronomer").
+  # require=true makes 2FA mandatory for all local-password users.
+  {{- with .Values.config.auth }}
+  {{- with .totp }}
+  {{- if .issuer }}
+  TOTP_ISSUER: {{ .issuer | quote }}
+  {{- end }}
+  {{- if .require }}
+  TOTP_REQUIRE: {{ .require | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
   # pgxpool tunables (FEATURES-051126 T21). Empty == binary default.
   {{- with .Values.postgres.pool }}
   {{- if .maxConns }}

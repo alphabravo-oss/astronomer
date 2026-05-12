@@ -128,6 +128,14 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 					authError(w, "authentication_required", "Invalid or expired token")
 					return
 				}
+				// Purpose-bound tokens (TOTP challenge etc.) are NEVER accepted
+				// as session credentials. They're valid for their dedicated
+				// endpoint only — POST /auth/totp/verify reads them via
+				// JWTManager.ValidateToken + Purpose check directly.
+				if claims.TokenType == auth.PurposeToken {
+					authError(w, "authentication_required", "Token is not valid for this endpoint")
+					return
+				}
 
 				user = &AuthenticatedUser{
 					ID:         claims.UserID.String(),

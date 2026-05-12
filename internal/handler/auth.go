@@ -103,6 +103,23 @@ type AuthHandler struct {
 	log         *slog.Logger
 	lockoutDur  time.Duration
 	failThresh  int
+
+	// totpGate is the optional 2FA enrollment lookup. When wired,
+	// Login switches to the challenge-token flow whenever the user
+	// has a row in user_totp_enrollments; without it, the legacy
+	// password-only path stands. Separate from totpRequireAll so
+	// the test fakes can attach the gate without flipping the
+	// global enforcement bit.
+	totpGate        TOTPEnrollmentGate
+	totpRequireAll  bool
+}
+
+// TOTPEnrollmentGate is the surface AuthHandler needs to decide whether
+// to short-circuit a successful bcrypt into a TOTP challenge instead
+// of a session. Satisfied by TOTPHandler.IsEnrolled (in production)
+// and by trivial test fakes.
+type TOTPEnrollmentGate interface {
+	IsEnrolled(ctx context.Context, userID uuid.UUID) bool
 }
 
 // NewAuthHandler creates a new auth handler.
@@ -174,6 +191,19 @@ func (h *AuthHandler) SetLockoutPolicy(threshold int, duration time.Duration) {
 	if duration > 0 {
 		h.lockoutDur = duration
 	}
+}
+
+// SetTOTPGate wires the 2FA enrollment-check used by Login to gate the
+// session-issue path. Passing nil keeps the legacy password-only flow.
+func (h *AuthHandler) SetTOTPGate(g TOTPEnrollmentGate) {
+	h.totpGate = g
+}
+
+// SetTOTPRequireAll flips the chart-tuned auth.totp.require knob. When
+// true, every local-password user must be enrolled — the post-bcrypt
+// path returns an enrollment-only challenge for unenrolled accounts.
+func (h *AuthHandler) SetTOTPRequireAll(require bool) {
+	h.totpRequireAll = require
 }
 
 // effectiveLockoutPolicy returns the runtime threshold + duration with
@@ -364,6 +394,47 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		} else if h.log != nil {
 			h.log.Warn("failed to compute bcrypt hash for rehash", "user_id", user.ID.String(), "error", hashErr)
 		}
+	}
+
+	// 2FA gate. After bcrypt success, check whether this user has a
+	// confirmed TOTP enrollment. If so, do NOT issue the session pair
+	// — instead return a short-lived challenge token and 423 Locked
+	// (RFC 4918 — body carries the next-step machine-readable code).
+	// The browser flow swaps the challenge for a real session via
+	// POST /auth/totp/verify.
+	if h.totpGate != nil && h.totpGate.IsEnrolled(ctx, user.ID) {
+		challenge, gerr := h.jwt.GeneratePurposeToken(user.ID, auth.PurposeTOTPChallenge, auth.TOTPChallengeTTL)
+		if gerr != nil {
+			RespondError(w, http.StatusInternalServerError, "token_error", "Failed to mint TOTP challenge")
+			return
+		}
+		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.login_totp_required", "user", user.ID.String(), user.Username, map[string]any{
+				"identifier_type": loginIdentifierType(identifier),
+			})
+		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
+			"error":           "totp_required",
+			"challenge_token": challenge,
+		})
+		return
+	}
+
+	// require=true enforcement: the account passed password but hasn't
+	// enrolled. Hand back an enrollment-only challenge so the SPA can
+	// drive the user through the QR flow before letting them in.
+	if h.totpRequireAll && h.totpGate != nil && !h.totpGate.IsEnrolled(ctx, user.ID) {
+		enrollChallenge, gerr := h.jwt.GeneratePurposeToken(user.ID, auth.PurposeTOTPEnrollOnly, auth.TOTPChallengeTTL)
+		if gerr != nil {
+			RespondError(w, http.StatusInternalServerError, "token_error", "Failed to mint enrollment challenge")
+			return
+		}
+		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.login_totp_enroll_required", "user", user.ID.String(), user.Username, nil)
+		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
+			"error":           "totp_enrollment_required",
+			"challenge_token": enrollChallenge,
+		})
+		return
 	}
 
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)

@@ -65,6 +65,16 @@ type Config struct {
 	LoginFailureThreshold  int `mapstructure:"login_failure_threshold"`
 	LockoutDurationMinutes int `mapstructure:"lockout_duration_minutes"`
 
+	// 2FA policy (migration 043). Issuer is the brand string shown
+	// inside the user's authenticator app (e.g. "Astronomer"). Require
+	// flips the chart-tunable "every local-password user must enroll"
+	// switch — when true, login refuses to hand back a session for a
+	// not-yet-enrolled user; instead a short-lived
+	// PurposeTOTPEnrollOnly challenge is returned and the SPA drives
+	// the QR flow before retrying.
+	TOTPIssuer  string `mapstructure:"totp_issuer"`
+	TOTPRequire bool   `mapstructure:"totp_require"`
+
 	// ArgoCDUIUpstream is the in-cluster URL of argocd-server. The /argocd/*
 	// reverse proxy mounted on the public Astronomer router forwards browser
 	// traffic here after Astronomer's JWT/cookie auth has cleared. ArgoCD
@@ -108,6 +118,8 @@ func Load() (*Config, error) {
 	v.BindEnv("worker_metrics_addr")
 	v.BindEnv("login_failure_threshold")
 	v.BindEnv("lockout_duration_minutes")
+	v.BindEnv("totp_issuer")
+	v.BindEnv("totp_require")
 	v.BindEnv("db_max_conns")
 	v.BindEnv("db_min_conns")
 	v.BindEnv("db_max_conn_lifetime_minutes")
@@ -126,6 +138,8 @@ func Load() (*Config, error) {
 	v.SetDefault("audit_log_retention_months", 13)
 	v.SetDefault("login_failure_threshold", 5)
 	v.SetDefault("lockout_duration_minutes", 15)
+	v.SetDefault("totp_issuer", "Astronomer")
+	v.SetDefault("totp_require", false)
 	v.SetDefault("server_metrics_addr", ":9090")
 	v.SetDefault("worker_metrics_addr", ":9090")
 	v.SetDefault("argocd_ui_upstream", "http://argocd-server.argocd.svc.cluster.local:80")

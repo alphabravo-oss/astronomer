@@ -252,6 +252,22 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	authHandler.SetLockoutQuerier(queries)
 	authHandler.SetRevocationQuerier(queries)
 	authHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
+
+	// 2FA / TOTP (migration 043). The handler needs the Fernet
+	// encryptor to wrap secrets at rest; without it we skip wiring so
+	// /auth/totp/* returns 503 not_configured if invoked. The Login
+	// gate degrades to the legacy password-only flow.
+	var totpHandler *handler.TOTPHandler
+	if encryptor != nil {
+		totpHandler = handler.NewTOTPHandler(queries, queries, encryptor, jwtManager)
+		totpHandler.SetIssuer(cfg.TOTPIssuer)
+		totpHandler.SetAuditWriter(queries)
+		totpHandler.SetLogger(logger)
+		totpHandler.SetPasswordRehasher(queries)
+		totpHandler.SetRequireAll(cfg.TOTPRequire)
+		authHandler.SetTOTPGate(totpHandler)
+		authHandler.SetTOTPRequireAll(cfg.TOTPRequire)
+	}
 	// Wire the same revocation + cutoff backend into the JWT validator
 	// so the auth middleware enforces the deny-list on every authenticated
 	// request — without it, Logout would write a row no validator ever
@@ -356,6 +372,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Encryptor:    encryptor,
 		AuthQueries:  queries,
 		Auth:         authHandler,
+		TOTP:         totpHandler,
 		SSO:          ssoHandler,
 		Clusters:     clusterHandler,
 		Projects:     projectHandler,

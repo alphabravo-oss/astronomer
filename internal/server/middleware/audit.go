@@ -72,6 +72,14 @@ var skipPaths = map[string]bool{
 	"/api/v1/auth/refresh":         true,
 	"/api/v1/auth/logout":          true,
 	"/api/v1/auth/change-password": true,
+	// 2FA endpoints emit their own explicit audit rows from the
+	// TOTP handler (auth.totp.enrolled / verified / disabled / etc.)
+	// — let the middleware skip them to avoid double-counting.
+	"/api/v1/auth/totp/enroll/start":             true,
+	"/api/v1/auth/totp/enroll/confirm":           true,
+	"/api/v1/auth/totp/disable":                  true,
+	"/api/v1/auth/totp/verify":                   true,
+	"/api/v1/auth/totp/recovery-codes/regenerate": true,
 }
 
 type AuditWriterV1 interface {

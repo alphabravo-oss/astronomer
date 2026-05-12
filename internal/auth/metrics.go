@@ -37,6 +37,32 @@ var (
 		},
 		observability.MetricLabels("kind", "reason"),
 	)
+
+	// TOTPVerifiesTotal partitions the TOTP verify outcomes for the
+	// 2FA dashboard. `outcome` is one of: "success" (regular TOTP
+	// code accepted), "failed" (code/recovery did not match), or
+	// "recovery" (recovery code consumed in place of a TOTP code).
+	TOTPVerifiesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Name:      "auth_totp_verifies_total",
+			Help:      "Total number of TOTP / recovery-code verify attempts, by outcome.",
+		},
+		observability.MetricLabels("outcome"),
+	)
+
+	// TOTPEnrollmentsGauge tracks how many users currently have a
+	// confirmed TOTP enrollment. Refreshed by a periodic poller
+	// (or on demand by the admin endpoint) — Prometheus pulls the
+	// last-set value. Useful for compliance reporting + spotting
+	// downward drift (force-disable storms).
+	TOTPEnrollmentsGauge = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "astronomer",
+			Name:      "auth_totp_enrollments",
+			Help:      "Number of users with a confirmed TOTP enrollment row.",
+		},
+	)
 )
 
 // RegisterAuthMetrics is idempotent; tests that spin up multiple
@@ -44,7 +70,12 @@ var (
 // Register call.
 func RegisterAuthMetrics() {
 	authMetricsOnce.Do(func() {
-		for _, c := range []prometheus.Collector{AccountLockoutsTotal, SessionRevocationsTotal} {
+		for _, c := range []prometheus.Collector{
+			AccountLockoutsTotal,
+			SessionRevocationsTotal,
+			TOTPVerifiesTotal,
+			TOTPEnrollmentsGauge,
+		} {
 			if err := prometheus.Register(c); err != nil {
 				if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 					panic(err)

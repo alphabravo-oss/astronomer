@@ -271,6 +271,22 @@ config:
   # POST /api/v1/admin/users/{id}/unlock/.
   loginFailureThreshold: 5
   lockoutDurationMinutes: 15
+  # =============================================================================
+  # Two-factor authentication / TOTP (migration 043 / SOC 2 / ISO 27001)
+  # =============================================================================
+  # `auth.totp.issuer` is the label shown in the user's authenticator app
+  # (e.g. Google Authenticator, 1Password, Bitwarden). Pick something that
+  # disambiguates your installs — multiple installs that share the issuer
+  # string collide in the user's app.
+  #
+  # `auth.totp.require` makes 2FA mandatory: a successful password login
+  # for a NOT-YET-enrolled user is rebuffed with a 423 + an enrollment-only
+  # challenge token. The SPA drives the QR flow before retrying. Keep this
+  # false during rollout; flip to true once the user base has enrolled.
+  auth:
+    totp:
+      issuer: "Astronomer"
+      require: false
 
 # =============================================================================
 # Secrets — set these from --set-file or external secret manager in real usage.
