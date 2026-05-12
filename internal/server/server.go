@@ -766,6 +766,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		}(),
 		ProjectCatalogs: projectCatalogsHandler,
 	}
+	// Migration 063 — read-side audit. The PolicyEvaluator is shared
+	// between the middleware and the admin handler so policy writes
+	// invalidate the 30s cache. Both are nil-safe; when queries are
+	// unwired (test fakes) the middleware is omitted from the router.
+	if queries != nil {
+		readAuditEval := appmiddleware.NewPolicyEvaluator(queries)
+		readAuditHandler := handler.NewReadAuditPolicyHandler(queries, logger)
+		readAuditHandler.SetAuditWriter(queries)
+		readAuditHandler.SetCacheInvalidator(readAuditEval)
+		deps.ReadAuditEvaluator = readAuditEval
+		deps.ReadAuditPolicies = readAuditHandler
+	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
 	}

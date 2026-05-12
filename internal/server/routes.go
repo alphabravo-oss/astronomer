@@ -187,6 +187,16 @@ type RouterDependencies struct {
 	// (migration 061). When nil the per-project BYO catalog routes are
 	// omitted; the existing /catalog/* admin surface is untouched.
 	ProjectCatalogs *handler.ProjectCatalogHandler
+	// ReadAuditPolicies owns /api/v1/admin/read-audit-policies/* (migration
+	// 063). Superuser-gated CRUD over the read_audit_policies table.
+	// Nil-safe — when unwired the routes are omitted; the read-side audit
+	// middleware also no-ops because its PolicyEvaluator returns the empty
+	// list.
+	ReadAuditPolicies *handler.ReadAuditPolicyHandler
+	// ReadAuditEvaluator is the in-process PolicyEvaluator shared between
+	// the middleware and the handler (so policy writes invalidate the
+	// 30s cache). Nil-safe.
+	ReadAuditEvaluator *appmiddleware.PolicyEvaluator
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -568,6 +578,18 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/deferred-operations/{id}/cancel/", deps.Maintenance.CancelDeferred)
 		}
 
+		// Read-audit policies (migration 063). Superuser-gated CRUD over
+		// the read_audit_policies table. Writers invalidate the in-
+		// process PolicyEvaluator cache so operator changes apply
+		// immediately rather than after the 30s TTL.
+		if deps.ReadAuditPolicies != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/read-audit-policies/", deps.ReadAuditPolicies.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/read-audit-policies/", deps.ReadAuditPolicies.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/read-audit-policies/{id}/", deps.ReadAuditPolicies.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/read-audit-policies/{id}/", deps.ReadAuditPolicies.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/read-audit-policies/{id}/", deps.ReadAuditPolicies.Delete)
+		}
+
 		// Dashboard widgets (migration 058) — admin CRUD over
 		// dashboard_widgets + prometheus_datasources. Superuser-gated
 		// inside the handler. Writes carry the scope-write API-token
@@ -592,6 +614,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			authenticated.Use(appmiddleware.RequireAuthWithQueries(deps.JWT, deps.AuthQueries))
 			if deps.RemoteQueries != nil {
 				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
+			}
+			// Migration 063 — read-side audit. Wire AFTER auth so we
+			// know the actor, and BEFORE per-route handlers so the
+			// middleware sees every authenticated read. Nil-safe: when
+			// the evaluator or DB writer is unwired the middleware is
+			// simply not attached.
+			if deps.ReadAuditEvaluator != nil && deps.RemoteQueries != nil {
+				authenticated.Use(appmiddleware.ReadAudit(deps.ReadAuditEvaluator, deps.RemoteQueries))
 			}
 			r.Mount("/", authenticated)
 		}
