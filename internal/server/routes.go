@@ -27,10 +27,11 @@ import (
 
 // RouterDependencies contains the optional dependencies used to register API routes.
 type RouterDependencies struct {
-	JWT          *iauth.JWTManager
-	Encryptor    *iauth.Encryptor
-	AuthQueries  appmiddleware.TokenUserQuerier
-	Auth         *handler.AuthHandler
+	JWT            *iauth.JWTManager
+	Encryptor      *iauth.Encryptor
+	AuthQueries    appmiddleware.TokenUserQuerier
+	PlatformHealth *handler.PlatformHealthHandler
+	Auth           *handler.AuthHandler
 	SSO          *handler.SSOHandler
 	Clusters     *handler.ClusterHandler
 	Projects     *handler.ProjectHandler
@@ -231,6 +232,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// gates on superuser internally rather than via middleware so the
 		// failure mode is a clean 403.
 		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/key-status/", keyStatusHandler(deps))
+
+		// Platform health rollup — single JSON document with cluster +
+		// queue health for the top-of-dashboard banner. Authenticated;
+		// no superuser gate since the dashboard banner is for everyone
+		// (FEATURES-051126 T05).
+		if deps.PlatformHealth != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/platform/health-summary/", deps.PlatformHealth.Summary)
+		}
 
 		authenticated := r
 		if deps.JWT != nil {

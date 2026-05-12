@@ -332,7 +332,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Logs:          tunnel.NewLogsConsumer(hub, logger),
 		RemoteServer:  remoteServer,
 		RemoteQueries: queries,
-		EventStream:   handler.NewEventStreamHandler(bus),
+		EventStream: handler.NewEventStreamHandler(bus),
+		// FEATURES-051126 T05 — top-of-dashboard health rollup
+		PlatformHealth: func() *handler.PlatformHealthHandler {
+			h := handler.NewPlatformHealthHandler(database.Pool())
+			h.SetAsynqInspector(asynq.NewInspector(redisOpt))
+			return h
+		}(),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
 			// FEATURES-051126 T11 — enable the asynq-queues + schema-
