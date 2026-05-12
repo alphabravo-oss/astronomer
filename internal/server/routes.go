@@ -149,6 +149,12 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// ComplianceBaselines owns /api/v1/admin/compliance-baselines/* and
+	// the /admin/compliance-baseline-applications/* history endpoints
+	// (migration 064 — sprint 17). Apply / Revert require a pgxpool
+	// transaction; the handler is nil-safe and routes are omitted when
+	// the handler isn't wired.
+	ComplianceBaselines *handler.ComplianceBaselinesHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -347,6 +353,21 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.Compliance != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance/export/", deps.Compliance.Export)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance/exports/{id}/", deps.Compliance.GetExportStatus)
+		}
+
+		// Compliance baselines (migration 064 — sprint 17). Four preset
+		// profiles (PCI-DSS / HIPAA / FedRAMP-Moderate / SOC2) the
+		// operator can apply in one click. Superuser-gated inside the
+		// handler. Apply / Revert require the *pgxpool.Pool — the
+		// handler is nil when not wired and routes are simply omitted.
+		if deps.ComplianceBaselines != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance-baselines/", deps.ComplianceBaselines.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance-baselines/active/", deps.ComplianceBaselines.Active)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance-baselines/{id}/", deps.ComplianceBaselines.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance-baselines/{id}/diff/", deps.ComplianceBaselines.Diff)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/compliance-baselines/{id}/apply/", deps.ComplianceBaselines.Apply)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance-baseline-applications/", deps.ComplianceBaselines.History)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/compliance-baseline-applications/{id}/revert/", deps.ComplianceBaselines.Revert)
 		}
 
 		// Key-rotation status — surfaces how many encryption / JWT signing
