@@ -2,10 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight, Shield, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { getSSOProviders, loginWithCredentials } from '@/lib/api';
-import type { SSOProvider } from '@/types';
+import { getSSOProviders } from '@/lib/api';
+import {
+  loginWithCredentialsChallengeAware,
+  verifyTotpChallenge,
+  type TotpChallenge,
+} from '@/lib/api/account-security';
+import type { SSOProvider, User } from '@/types';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -16,6 +22,10 @@ export default function LoginPage() {
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
   const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([]);
   const [form, setForm] = useState({ email: '', password: '' });
+  // 423 challenge state: when present, render the TOTP screen instead of the
+  // credentials form. `enrollmentRequired` distinguishes the "you must enroll
+  // now" branch from the standard "enter your code" branch.
+  const [challenge, setChallenge] = useState<TotpChallenge | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,11 +54,15 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const data = await loginWithCredentials(form.email, form.password);
-      login(data.user, data.token);
-      localStorage.setItem('astronomer_token', data.token);
-      if (data.refresh) {
-        localStorage.setItem('astronomer_refresh', data.refresh);
+      const result = await loginWithCredentialsChallengeAware(form.email, form.password);
+      if (result.kind === 'challenge') {
+        setChallenge(result.challenge);
+        return;
+      }
+      login(result.user, result.token);
+      localStorage.setItem('astronomer_token', result.token);
+      if (result.refresh) {
+        localStorage.setItem('astronomer_refresh', result.refresh);
       }
       router.push('/dashboard');
     } catch (error) {
@@ -56,6 +70,15 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const completeTotp = (token: string, refresh: string | undefined, user: User) => {
+    login(user, token);
+    localStorage.setItem('astronomer_token', token);
+    if (refresh) {
+      localStorage.setItem('astronomer_refresh', refresh);
+    }
+    router.push('/dashboard');
   };
 
   const handleSSO = async (provider: string) => {
@@ -170,7 +193,15 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {ssoProviders.length > 0 && (
+          {challenge && (
+            <TotpChallengeForm
+              challenge={challenge}
+              onCancel={() => setChallenge(null)}
+              onSuccess={completeTotp}
+            />
+          )}
+
+          {!challenge && ssoProviders.length > 0 && (
             <div className="space-y-2.5">
               {ssoProviders.map((provider) => (
                 <button
@@ -193,6 +224,7 @@ export default function LoginPage() {
           )}
 
           {/* Divider */}
+          {!challenge && (
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-border" />
@@ -203,8 +235,10 @@ export default function LoginPage() {
               </span>
             </div>
           </div>
+          )}
 
           {/* Login Form */}
+          {!challenge && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="identifier" className="text-sm font-medium text-foreground">
@@ -268,7 +302,17 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            <div className="text-center">
+              <Link
+                href="/auth/login/forgot-password"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Forgot your password?
+              </Link>
+            </div>
           </form>
+          )}
 
           <p className="text-xs text-center text-muted-foreground">
             By signing in, you agree to the Astronomer terms of service and privacy policy.
@@ -276,5 +320,147 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Two-factor challenge step shown after a 423 from /auth/login.
+ *
+ * Two variants:
+ *  - `totp_required`            → user is enrolled, enter the 6-digit code.
+ *  - `totp_enrollment_required` → operator policy mandates TOTP; user must
+ *                                  finish enrolling before the dashboard.
+ *
+ * For the enrollment-required branch we route the user to the standalone
+ * enrollment page, passing the `challenge_token` via the URL hash so it does
+ * not appear in referer logs. The security page picks it up and uses it as
+ * the enrollment session token instead of issuing a regular `/start/`.
+ */
+function TotpChallengeForm({
+  challenge,
+  onCancel,
+  onSuccess,
+}: {
+  challenge: TotpChallenge;
+  onCancel: () => void;
+  onSuccess: (token: string, refresh: string | undefined, user: User) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (challenge.error === 'totp_enrollment_required') {
+    return (
+      <div className="rounded-lg border border-status-warning/40 bg-status-warning/10 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <Shield className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-foreground">2FA setup is required</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Your administrator requires two-factor authentication for all accounts. Set up an
+              authenticator app to continue.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center gap-1 h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
+          <button
+            onClick={() => {
+              window.location.href = `/dashboard/account/security#enroll=${encodeURIComponent(challenge.challengeToken)}`;
+            }}
+            className="flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+          >
+            Set up 2FA now
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code) return;
+    setBusy(true);
+    try {
+      const data = await verifyTotpChallenge(challenge.challengeToken, code);
+      onSuccess(data.token, data.refresh, data.user);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Invalid code');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="flex items-start gap-3 p-3 rounded-md border border-border bg-card">
+        <Shield className="h-4 w-4 text-foreground flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground">
+          Enter the {useRecovery ? 'recovery code' : 'six-digit code'} from your authenticator.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">
+          {useRecovery ? 'Recovery code' : 'Authenticator code'}
+        </label>
+        {useRecovery ? (
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value.trim())}
+            placeholder="xxxx-xxxx-xxxx"
+            autoFocus
+            autoComplete="off"
+            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        ) : (
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={code}
+            autoFocus
+            autoComplete="one-time-code"
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="123 456"
+            className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        )}
+      </div>
+      <button
+        type="submit"
+        disabled={!code || busy || (!useRecovery && code.length !== 6)}
+        className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Verify<ArrowRight className="h-4 w-4" /></>}
+      </button>
+      <div className="flex items-center justify-between text-xs">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Use a different account
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setUseRecovery((v) => !v);
+            setCode('');
+          }}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {useRecovery ? 'Use authenticator code' : 'Use recovery code instead'}
+        </button>
+      </div>
+    </form>
   );
 }

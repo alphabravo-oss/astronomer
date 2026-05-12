@@ -89,6 +89,11 @@ const globalNavGroups: NavGroup[] = [
     items: [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server },
+      // Top-level cluster templates page lives next to Clusters since both
+      // are concerned with the cluster lifecycle. Read-gating is enforced
+      // inside the page itself; we keep the link unconditionally visible
+      // so the URL remains stable while RBAC is still being rolled out.
+      { label: 'Cluster Templates', href: '/dashboard/cluster-templates', icon: Layers },
     ],
   },
   {

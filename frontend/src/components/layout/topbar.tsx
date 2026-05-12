@@ -9,6 +9,7 @@ import {
   ChevronRight,
   LogOut,
   Settings,
+  Shield,
   User,
   Command,
   Sun,
@@ -24,6 +25,7 @@ import { useClusters, useAlertEvents } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime } from '@/lib/utils';
 import { GlobalSearch } from '@/components/layout/global-search';
+import { logoutCurrentSession } from '@/lib/api/account-security';
 
 // --- Breadcrumb generation ---
 
@@ -317,8 +319,38 @@ export function Topbar() {
                 </button>
                 <button
                   onClick={() => {
+                    router.push('/dashboard/account/security');
+                    setUserMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
+                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <Shield className="h-4 w-4" />
+                  Security
+                </button>
+                <button
+                  onClick={async () => {
+                    // POST /auth/logout first so the backend can revoke the
+                    // session and (for SSO users) hand us a Dex end_session
+                    // URL to bounce through. We clear local state regardless
+                    // — even if the call fails the user has clicked "sign
+                    // out" and shouldn't be left looking authenticated.
+                    let redirectUrl: string | undefined;
+                    try {
+                      const res = await logoutCurrentSession();
+                      redirectUrl = res.redirectUrl;
+                    } catch {
+                      // Network failure / 401 — still clear local state.
+                    }
                     logout();
-                    router.push('/auth/login');
+                    if (redirectUrl) {
+                      // Top-level navigation to Dex's end_session endpoint.
+                      // Dex eventually redirects back to /api/v1/auth/logout-done/
+                      // which lands the SPA back on /auth/login.
+                      window.location.href = redirectUrl;
+                    } else {
+                      router.push('/auth/login');
+                    }
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
                     text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

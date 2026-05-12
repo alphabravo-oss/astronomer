@@ -2061,3 +2061,25 @@ export async function b2CreateRestore(
   );
   return res.data.data ?? (res.data as unknown as BackupRestore);
 }
+
+// ============================================================
+// Settings hub (platform, smtp, webhooks, quotas, group mappings,
+// compliance, backup drill) — see lib/api/settings.ts.
+// ============================================================
+export * from './api/settings';
+
+// ============================================================
+// Project detail tabs (policy, cloud credentials, effective
+// quota) and the top-level cluster-templates surface — see
+// lib/api/project-detail.ts. Consumers can also import directly
+// from '@/lib/api/project-detail' to skip the re-export hop.
+// ============================================================
+export * from './api/project-detail';
+
+// ============================================================
+// Account security (TOTP, password reset, admin user actions,
+// logout-with-redirect) — see lib/api/account-security.ts.
+// Consumers can also import directly from
+// '@/lib/api/account-security' to skip the re-export hop.
+// ============================================================
+export * from './api/account-security';
