@@ -58,6 +58,14 @@ func (f *fakeAuditQueries) CountAuditLogV1ByUser(_ context.Context, _ pgtype.UUI
 	return 1, nil
 }
 
+func (f *fakeAuditQueries) ListAuditLogV1ByActionClass(_ context.Context, _ sqlc.ListAuditLogsByActionClassParams) ([]sqlc.AuditLog, error) {
+	return nil, nil
+}
+
+func (f *fakeAuditQueries) CountAuditLogV1ByActionClass(_ context.Context, _ string) (int64, error) {
+	return 0, nil
+}
+
 func TestAuditHandlerListPrefersAuditLogV1(t *testing.T) {
 	id := uuid.New()
 	fake := &fakeAuditQueries{

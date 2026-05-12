@@ -20,9 +20,11 @@ type auditReaderV1 interface {
 	ListAuditLogV1ByUser(ctx context.Context, arg sqlc.ListAuditLogsByUserParams) ([]sqlc.AuditLog, error)
 	ListAuditLogV1ByResourceType(ctx context.Context, arg sqlc.ListAuditLogsByResourceTypeParams) ([]sqlc.AuditLog, error)
 	ListAuditLogV1ByAction(ctx context.Context, arg sqlc.ListAuditLogsByActionParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1ByActionClass(ctx context.Context, arg sqlc.ListAuditLogsByActionClassParams) ([]sqlc.AuditLog, error)
 	ListAuditLogV1Since(ctx context.Context, arg sqlc.ListAuditLogsSinceParams) ([]sqlc.AuditLog, error)
 	CountAuditLogV1(ctx context.Context) (int64, error)
 	CountAuditLogV1ByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CountAuditLogV1ByActionClass(ctx context.Context, actionClass string) (int64, error)
 }
 
 // AuditHandler handles audit log endpoints.
@@ -42,6 +44,7 @@ type AuditLogResponse struct {
 	Source        string          `json:"source"`
 	CorrelationID string          `json:"correlation_id"`
 	Action        string          `json:"action"`
+	ActionClass   string          `json:"action_class"`
 	ResourceType  string          `json:"resource_type"`
 	ResourceID    string          `json:"resource_id"`
 	ResourceName  string          `json:"resource_name"`
@@ -59,6 +62,7 @@ func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 		Source:        a.Source,
 		CorrelationID: a.CorrelationID,
 		Action:        a.Action,
+		ActionClass:   a.ActionClass,
 		ResourceType:  a.ResourceType,
 		ResourceID:    a.ResourceID,
 		ResourceName:  a.ResourceName,
@@ -88,6 +92,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	userIDStr := r.URL.Query().Get("user_id")
 	resourceType := r.URL.Query().Get("resource_type")
 	action := r.URL.Query().Get("action")
+	actionClass := r.URL.Query().Get("action_class")
 	sinceIDStr := r.URL.Query().Get("since")
 
 	var (
@@ -97,6 +102,18 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	)
 
 	switch {
+	case actionClass != "":
+		logs, err = h.queries.ListAuditLogV1ByActionClass(r.Context(), sqlc.ListAuditLogsByActionClassParams{
+			ActionClass: actionClass,
+			Limit:       limit,
+			Offset:      offset,
+		})
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			return
+		}
+		total, err = h.queries.CountAuditLogV1ByActionClass(r.Context(), actionClass)
+
 	case sinceIDStr != "":
 		sinceID, parseErr := uuid.Parse(sinceIDStr)
 		if parseErr != nil {
