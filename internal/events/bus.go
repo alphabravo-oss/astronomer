@@ -62,6 +62,19 @@ const (
 	// (cluster CRUD, agent reconnects). UI subscribers treat it as an
 	// invalidation hint for the resource list of a given cluster.
 	TypeClusterK8sChanged Type = "cluster.k8s_changed"
+
+	// TypeClusterRegistrationStep is fired by the wizard backend every
+	// time a cluster_registration_steps row is written or updated. The
+	// SSE endpoint (/api/v1/clusters/{id}/registration/events/) filters
+	// the event stream by cluster_id and forwards matching events to
+	// the wizard frontend / Provisioning tab. Sprint 22 (migration 078).
+	TypeClusterRegistrationStep Type = "cluster.registration.step"
+
+	// TypeClusterRegistrationPhase is fired alongside step events
+	// whenever the cluster's registration_phase column transitions.
+	// Carries the new phase so subscribers can route the wizard URL
+	// without re-fetching status.
+	TypeClusterRegistrationPhase Type = "cluster.registration.phase"
 )
 
 // Event is a single push payload. Data is opaque JSON-marshalable per Type.
