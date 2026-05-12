@@ -149,6 +149,15 @@ type RouterDependencies struct {
 	// worker still runs whatever rows exist in the DB through the drift
 	// sweep.
 	CloudCredentials *handler.CloudCredentialHandler
+	// Maintenance owns /api/v1/admin/maintenance-windows/* and the
+	// /api/v1/admin/deferred-operations/* admin surface (migration 057).
+	// The same migration's gate is wired into the destructive mutation
+	// handlers (cluster.Delete, project.Delete, tool.{Install,Upgrade,
+	// Uninstall}, catalog.{CreateInstallation,DeleteInstallation},
+	// cluster_template.Apply) via SetMaintenanceGate setters.
+	// Nil-safe: when unwired the routes are omitted and the gate
+	// short-circuits to "not blocked" on every mutation.
+	Maintenance *handler.MaintenanceHandler
 }
 
 // NewRouter builds and returns the Chi router with all routes and middleware.
@@ -467,6 +476,22 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// project that doesn't exist.
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/projects/{id}/quota/", deps.Quotas.ProjectQuota)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/me/quota/", deps.Quotas.MyQuota)
+		}
+
+		// Maintenance windows (migration 057). Operator-defined time
+		// windows that gate destructive ops. The handler is superuser-
+		// gated inside each method so the failure mode is a clean 403.
+		// Writers invalidate the in-memory window cache so operator
+		// changes apply immediately rather than after the 30s TTL.
+		if deps.Maintenance != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/maintenance-windows/", deps.Maintenance.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/maintenance-windows/", deps.Maintenance.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/maintenance-windows/active/", deps.Maintenance.ListActive)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/maintenance-windows/{id}/", deps.Maintenance.Get)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Put("/admin/maintenance-windows/{id}/", deps.Maintenance.Update)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Delete("/admin/maintenance-windows/{id}/", deps.Maintenance.Delete)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/deferred-operations/", deps.Maintenance.ListDeferred)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/deferred-operations/{id}/cancel/", deps.Maintenance.CancelDeferred)
 		}
 
 		authenticated := r

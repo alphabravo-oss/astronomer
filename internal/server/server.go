@@ -19,6 +19,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
@@ -538,6 +539,20 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		audit.SetBusPublisher(busPublisherAdapter{bus: bus})
 	}
 
+	// Migration 057: shared maintenance-window evaluator. One
+	// evaluator backs both the admin handler (which invalidates on
+	// writes) and every destructive mutation handler's gate. 30s TTL
+	// keeps the per-mutation check cheap; default operator stance is
+	// zero windows, so the steady-state cost is one cached read per
+	// gated request.
+	maintenanceEvaluator := maintenance.NewEvaluator(queries)
+	// Warn-level startup audit for permitted-mode + empty-op-types
+	// windows: those refuse ALL destructive ops outside the window,
+	// which is the most dangerous configuration. The handler validation
+	// won't reject this combination because it's a valid operator
+	// choice, but it MUST be intentional.
+	maintenanceStartupWarn(ctx, queries, logger)
+
 	deps := RouterDependencies{
 		JWT:          jwtManager,
 		Encryptor:    encryptor,
@@ -649,6 +664,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// the project level + a materialization worker that fans them
 		// out to in-cluster k8s Secrets.
 		CloudCredentials: cloudCredentialsHandler,
+		// Maintenance windows (migration 057). Operator-defined time
+		// windows that gate destructive ops; same handler also owns the
+		// /admin/deferred-operations/* admin surface for the queued-op
+		// drain. The evaluator wired here is shared with the
+		// MaintenanceGate that each destructive handler reads from on
+		// every gated mutation, so PUT/DELETE invalidations are reflected
+		// in the per-request check instantly.
+		Maintenance: handler.NewMaintenanceHandler(queries, maintenanceEvaluator),
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
@@ -670,6 +693,36 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if deps.RBAC != nil {
 		deps.RBAC.SetQuotaEnforcer(quotaEnforcer)
 	}
+
+	// Wire the migration-057 maintenance window gate into every
+	// destructive mutation handler. The gate shares a single Evaluator
+	// (30s in-memory cache) so the per-mutation check is cheap; the
+	// MaintenanceHandler invalidates the cache on POST/PUT/DELETE.
+	maintenanceGate := handler.NewMaintenanceGate(maintenanceEvaluator, queries)
+	if deps.Clusters != nil {
+		deps.Clusters.SetMaintenanceGate(maintenanceGate)
+	}
+	if deps.Projects != nil {
+		deps.Projects.SetMaintenanceGate(maintenanceGate)
+	}
+	if deps.Tools != nil {
+		deps.Tools.SetMaintenanceGate(maintenanceGate)
+	}
+	if deps.Catalog != nil {
+		deps.Catalog.SetMaintenanceGate(maintenanceGate)
+	}
+	if deps.ClusterTemplates != nil {
+		deps.ClusterTemplates.SetMaintenanceGate(maintenanceGate)
+	}
+	// The deferred-op dispatcher worker also needs the queries surface;
+	// op-type replayers are registered by each handler / task package's
+	// init in a follow-up commit. For now register a no-op replayer set
+	// so the dispatcher's failure mode is "mark failed" rather than a
+	// panic on unknown types.
+	tasks.ConfigureDeferredDispatch(tasks.DeferredDispatchDeps{
+		Queries:   queries,
+		Replayers: map[string]tasks.DeferredReplayer{},
+	})
 	// EventSource cannot send Authorization headers, so the stream handler
 	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
 	// manager + token querier the rest of the API uses.
@@ -992,4 +1045,43 @@ func detectReleaseNamespace() string {
 		}
 	}
 	return "astronomer"
+}
+
+// maintenanceStartupWarn (migration 057) logs a warn-level line on
+// boot for every enabled "permitted" window with an empty
+// operation_types list. That combination blocks ALL destructive ops
+// outside the window, which is the most dangerous configuration the
+// gate supports — operators MUST opt into it intentionally. The check
+// runs once at startup; the handler doesn't reject the configuration
+// at PUT time because it's a valid choice.
+func maintenanceStartupWarn(ctx context.Context, q maintenanceStartupQuerier, logger *slog.Logger) {
+	if q == nil {
+		return
+	}
+	rows, err := q.ListEnabledMaintenanceWindows(ctx)
+	if err != nil {
+		return
+	}
+	for _, row := range rows {
+		if row.Mode != maintenance.ModePermitted {
+			continue
+		}
+		// Empty operation_types JSONB encodes as the literal "[]";
+		// a missing or malformed value (very unusual; the schema
+		// defaults it) is treated the same way.
+		if len(row.OperationTypes) == 0 || string(row.OperationTypes) == "[]" {
+			logger.Warn("maintenance window in permitted mode with empty operation_types blocks ALL destructive ops outside its window",
+				"window_id", row.ID.String(),
+				"name", row.Name,
+				"cron_open", row.CronOpen,
+				"timezone", row.Timezone,
+			)
+		}
+	}
+}
+
+// maintenanceStartupQuerier is a narrow interface so the helper can be
+// tested independently of the full *sqlc.Queries surface.
+type maintenanceStartupQuerier interface {
+	ListEnabledMaintenanceWindows(ctx context.Context) ([]sqlc.MaintenanceWindow, error)
 }
