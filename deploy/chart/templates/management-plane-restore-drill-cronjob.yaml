@@ -23,7 +23,7 @@
   backup to restore.
 
   Companion bits:
-    - internal/db/migrations/039_backup_drill.up.sql  (status table)
+    - internal/db/migrations/041_backup_drill.up.sql  (status table)
     - internal/handler/admin_drill.go                 (read-side endpoint)
     - deploy/chart/templates/prometheus-rules.yaml    (staleness alert)
     - docs/runbooks/backup-restore-drill-failed.md    (when this fails)

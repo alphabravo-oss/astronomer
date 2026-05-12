@@ -146,4 +146,4 @@ Either:
 - [management-plane-dr-runbook.md](../management-plane-dr-runbook.md) — manual restore procedure
 - `deploy/chart/templates/management-plane-restore-drill-cronjob.yaml`
 - `internal/handler/admin_drill.go` — read-side endpoint
-- `internal/db/migrations/039_backup_drill.up.sql` — status table schema
+- `internal/db/migrations/041_backup_drill.up.sql` — status table schema
