@@ -71,6 +71,13 @@ type CatalogQuerier interface {
 	RequeueCatalogOperation(ctx context.Context, id uuid.UUID) (sqlc.CatalogOperation, error)
 	CreateCatalogOperationEvent(ctx context.Context, arg sqlc.CreateCatalogOperationEventParams) (sqlc.CatalogOperationEvent, error)
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]sqlc.CatalogOperationEvent, error)
+	// Migration 061 — project-scoped catalog browse + admin all-rows view.
+	// Optional on the interface: callers that don't use the project_id
+	// query param never reach these methods, so tests that omit them
+	// still satisfy the interface as long as they embed *sqlc.Queries.
+	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]sqlc.HelmRepositoryWithOwner, error)
+	ListAdminCatalogsIncludingProjectOwned(ctx context.Context, arg sqlc.ListAdminCatalogsIncludingProjectOwnedParams) ([]sqlc.HelmRepositoryWithOwner, error)
+	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (sqlc.HelmRepositoryWithOwner, error)
 }
 
 // CatalogHandler handles catalog endpoints (helm repositories, charts, installations).
@@ -163,17 +170,99 @@ func (h *CatalogHandler) runReconciler(ctx context.Context) {
 // --- Helm Repositories ---
 
 // ListRepos handles GET /api/v1/catalog/repositories/.
+//
+// Default behavior (admin view, no query params): excludes project-owned
+// (private) catalogs — operators expect /admin/ to show only the
+// operator-curated global set. Migration 061 added two new query params:
+//
+//   - ?include_project_owned=true → admin sees every helm_repositories row
+//     including private ones (used by the superuser "all catalogs"
+//     screen).
+//   - ?project_id=<uuid> → switches to project-scoped browse (globals +
+//     own + subscribed for that project).
+//
+// The two params are mutually exclusive: project_id always wins. If
+// neither is set, the legacy "global list" behaviour is preserved
+// verbatim — no semantic change for existing callers.
 func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
 
+	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
+		pid, err := uuid.Parse(pidRaw)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project_id query param")
+			return
+		}
+		rows, err := h.queries.ListCatalogsForProject(r.Context(), pid)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list project catalogs")
+			return
+		}
+		RespondJSON(w, http.StatusOK, rows)
+		return
+	}
+
+	if r.URL.Query().Get("include_project_owned") == "true" {
+		rows, err := h.queries.ListAdminCatalogsIncludingProjectOwned(r.Context(), sqlc.ListAdminCatalogsIncludingProjectOwnedParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list catalogs")
+			return
+		}
+		total, err := h.queries.CountHelmRepositories(r.Context())
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count repositories")
+			return
+		}
+		RespondPaginated(w, r, rows, total)
+		return
+	}
+
+	// Legacy admin path — explicit column list in catalog.sql.go means
+	// the existing query never sees owner_project_id, but we still want
+	// the admin default view to hide private catalogs. Filter in-Go:
+	// the row count for a typical install is modest enough that this
+	// doesn't warrant another sqlc query just for the admin default.
 	repos, err := h.queries.ListHelmRepositories(r.Context(), sqlc.ListHelmRepositoriesParams{
-		Limit:  limit,
-		Offset: offset,
+		Limit:  limit + offset + 50, // small over-fetch slack for the filter
+		Offset: 0,
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list repositories")
 		return
+	}
+
+	// Project-owned rows are filtered out by cross-checking
+	// owner_project_id via GetHelmRepositoryWithOwner. We accept the
+	// per-row lookup for the admin path because the default page size
+	// is 20 and the index on (id) makes each lookup O(log n).
+	visible := make([]sqlc.HelmRepository, 0, len(repos))
+	for _, repo := range repos {
+		row, err := h.queries.GetHelmRepositoryWithOwner(r.Context(), repo.ID)
+		if err != nil {
+			// Fall back to inclusive behaviour on lookup error so a
+			// transient DB hiccup never masks operator-visible rows.
+			visible = append(visible, repo)
+			continue
+		}
+		if row.OwnerProjectID.Valid {
+			continue
+		}
+		visible = append(visible, repo)
+	}
+
+	// Slice the in-memory page after filtering.
+	if int(offset) > len(visible) {
+		visible = nil
+	} else {
+		end := int(offset) + int(limit)
+		if end > len(visible) {
+			end = len(visible)
+		}
+		visible = visible[offset:end]
 	}
 
 	total, err := h.queries.CountHelmRepositories(r.Context())
@@ -182,7 +271,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, repos, total)
+	RespondPaginated(w, r, visible, total)
 }
 
 // CreateRepoRequest represents the request body for creating a helm repository.
@@ -539,9 +628,55 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 // --- Helm Charts ---
 
 // ListCharts handles GET /api/v1/catalog/charts/.
+//
+// Migration 061: when ?project_id=<uuid> is present, the visible catalog
+// set is narrowed from "every helm_repositories row" to the project-scoped
+// union (globals + own + subscribed). Without project_id the behaviour
+// is unchanged for the admin view.
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
+
+	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
+		pid, err := uuid.Parse(pidRaw)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project_id query param")
+			return
+		}
+		visibleCatalogs, err := h.queries.ListCatalogsForProject(r.Context(), pid)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to resolve project catalogs")
+			return
+		}
+		// Fan out per-catalog. The repo count per project is small
+		// enough (typically <20) that a per-repo ListChartsByRepository
+		// query is the right shape — no need for an IN-list query.
+		merged := []sqlc.HelmChart{}
+		for _, cat := range visibleCatalogs {
+			rowsForRepo, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
+				RepositoryID: cat.ID,
+				Limit:        1000,
+				Offset:       0,
+			})
+			if err != nil {
+				continue
+			}
+			merged = append(merged, rowsForRepo...)
+		}
+		// Slice in-memory to honor the caller's limit/offset.
+		total := int64(len(merged))
+		if int(offset) > len(merged) {
+			merged = nil
+		} else {
+			end := int(offset) + int(limit)
+			if end > len(merged) {
+				end = len(merged)
+			}
+			merged = merged[offset:end]
+		}
+		RespondPaginated(w, r, merged, total)
+		return
+	}
 
 	charts, err := h.queries.ListHelmCharts(r.Context(), sqlc.ListHelmChartsParams{
 		Limit:  limit,

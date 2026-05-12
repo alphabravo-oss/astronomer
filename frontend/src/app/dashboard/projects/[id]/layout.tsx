@@ -16,7 +16,7 @@
 import { use } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, FolderKanban, Shield, KeyRound, Gauge, Loader2, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Shield, KeyRound, Gauge, Loader2, LayoutDashboard, Package } from 'lucide-react';
 import { useProject } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +30,7 @@ const tabs = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard, segment: '' },
   { key: 'policy', label: 'Policy', icon: Shield, segment: '/policy' },
   { key: 'cloud-credentials', label: 'Cloud Credentials', icon: KeyRound, segment: '/cloud-credentials' },
+  { key: 'catalogs', label: 'Catalogs', icon: Package, segment: '/catalogs' },
   { key: 'quota', label: 'Quota', icon: Gauge, segment: '/quota' },
 ] as const;
 

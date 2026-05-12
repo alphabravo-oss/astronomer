@@ -318,6 +318,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	dashboardsHandler := handler.NewDashboardHandler(queries)
 	dashboardsHandler.SetAuditor(queries)
 	dashboardsHandler.SetEncryptor(encryptor)
+	// Per-project BYO catalogs (migration 061). Mirrors the cloud-creds
+	// wiring shape — handler holds the queries surface + an auditor.
+	projectCatalogsHandler := handler.NewProjectCatalogHandler(queries)
+	projectCatalogsHandler.SetAuditor(queries)
 	// Cluster snapshots (migration 052). Velero CRDs are driven over
 	// the existing tunnel K8sRequester so the same circuit-breaker /
 	// retry behaviour as every other tunnel-mediated K8s op applies.
@@ -760,6 +764,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetAuditWriter(queries)
 			return h
 		}(),
+		ProjectCatalogs: projectCatalogsHandler,
 	}
 	if deps.PlatformSettings != nil && deps.SettingsCache != nil {
 		deps.PlatformSettings.SetCache(deps.SettingsCache)
