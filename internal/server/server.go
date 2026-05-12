@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -17,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -279,6 +281,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	projectHandler.SetTaskQueue(queue)
 	projectHandler.SetK8sRequester(requester)
 	projectHandler.SetLogger(logger)
+	// Cluster templates (migration 049). Owns /api/v1/cluster-templates/*
+	// CRUD plus the per-cluster bind/apply/reapply/detach surface. The
+	// asynq client is shared with the rest of the platform so apply
+	// tasks land in the same queue as decommission/argocd-refresh.
+	clusterTemplateHandler := handler.NewClusterTemplateHandler(queries)
+	clusterTemplateHandler.SetQueue(queue)
+	// Cluster registries (migration 050). Multi-registry-per-cluster admin
+	// UX. Apply queue uses the same asynq client; tunnel requester is
+	// shared with project enforcement so the /test/ endpoint can dial the
+	// member cluster's network from the management plane.
+	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
+	clusterRegistriesHandler.SetApplyEnqueue(queue)
+	clusterRegistriesHandler.SetRequester(requester)
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
@@ -440,6 +455,33 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		})
 	}
 
+	// Outbound webhook subscriptions (migration 048). Wired only when
+	// the encryptor is available — the HMAC signing secret is
+	// Fernet-encrypted at rest. The Tap subscribes to the same in-memory
+	// bus the SSE stream consumes; the dispatcher task drains pending
+	// deliveries every 15s. Tap.Start runs further below alongside the
+	// other reconciler goroutines once reconcileCtx is defined.
+	var (
+		webhookHandler *handler.WebhookHandler
+		webhookTap     *webhook.Tap
+	)
+	if encryptor != nil {
+		webhookHandler = handler.NewWebhookHandler(queries, encryptor, logger)
+		webhookHandler.SetAuditWriter(queries)
+		webhookSender := webhook.NewSender(nil) // default http.Client
+		tasks.ConfigureWebhook(tasks.WebhookDeps{
+			Queries:   queries,
+			Sender:    webhookSender,
+			Encryptor: encryptor,
+		})
+		webhookTap = webhook.NewTap(queries, bus, logger)
+		webhookHandler.SetTap(webhookTap)
+		// Bridge audit.Record → bus so audit.* events fan out into
+		// webhook deliveries without every audit call site having to
+		// know about webhooks.
+		audit.SetBusPublisher(busPublisherAdapter{bus: bus})
+	}
+
 	deps := RouterDependencies{
 		JWT:          jwtManager,
 		Encryptor:    encryptor,
@@ -447,9 +489,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Auth:         authHandler,
 		TOTP:         totpHandler,
 		SSO:          ssoHandler,
-		Clusters:     clusterHandler,
-		Projects:     projectHandler,
-		Tools:        toolHandler,
+		Clusters:          clusterHandler,
+		ClusterTemplates:  clusterTemplateHandler,
+		ClusterRegistries: clusterRegistriesHandler,
+		Projects:         projectHandler,
+		Tools:            toolHandler,
 		Audit:        handler.NewAuditHandler(queries),
 		Alerting:     handler.NewAlertingHandlerWithDeps(queries, requester),
 		ArgoCD:       argocdHandler,
@@ -497,6 +541,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// nil-safe.
 		SMTP:          smtpHandler,
 		EmailEnqueuer: emailEnqueuer,
+		Webhooks:      webhookHandler,
 		// Identity-group sync admin endpoints (migration 042). CRUD
 		// over identity_group_mappings + per-user re-sync. The RBAC
 		// cache invalidator is wired below once rbacQuerier is known
@@ -607,6 +652,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	loggingHandler.StartReconciler(reconcileCtx)
 	controlPlaneHandler.StartEvaluator(reconcileCtx)
 	workloadHandler.StartReconciler(reconcileCtx)
+	// Migration 048: kick off the webhook bus tap if wired. Subscribes
+	// to the in-memory events.Bus and turns matching events into
+	// queued webhook_deliveries rows.
+	if webhookTap != nil {
+		webhookTap.Start(reconcileCtx)
+	}
 	// Phase B3 — configure the worker-task runtime in this process too, so the
 	// in-process project reconciler (and other server-side cron sweeps that
 	// rely on the same runtime) have the K8sRequester. The dedicated worker
@@ -633,6 +684,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// stale per-user entries in the middleware RBAC cache; flush them.
 		RBACCache: rbacQuerier.Cache(),
 	})
+	// Cluster-template apply worker (migration 049). The Installer bridge
+	// reuses the existing ToolHandler.EnsureInstalled — see the comment on
+	// tasks.ToolInstaller for why we narrow the surface.
+	tasks.ConfigureClusterTemplateApply(tasks.ClusterTemplateApplyDeps{
+		Queries:   queries,
+		Installer: toolHandler,
+	})
+	// Cluster-registry apply worker (migration 050). Shares the
+	// ProjectK8sRequester adapter that the project reconciler already
+	// installs; the bridge decoder is in internal/handler/projects.go.
+	clusterRegistriesHandler.ConfigureWorkerDeps(queries)
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
 	// DB lease handles multiple worker pods racing on the same row).
 	projectHandler.StartReconciler(reconcileCtx)
