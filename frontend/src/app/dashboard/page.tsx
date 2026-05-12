@@ -6,6 +6,8 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { ClusterCard } from '@/components/clusters/cluster-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime } from '@/lib/utils';
+import { WidgetGrid } from '@/components/dashboards/widget-grid';
+import { renderGlobal } from '@/lib/api/dashboards';
 import {
   Server,
   Activity,
@@ -58,6 +60,14 @@ export default function DashboardPage() {
           Real-time status of your Kubernetes infrastructure
         </p>
       </div>
+
+      {/* Custom dashboard widgets (migration 058). Hidden when no
+          widgets are configured to keep the platform overview clean
+          on a fresh install. */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Widgets</h2>
+        <WidgetGrid fetcher={renderGlobal} emptyHint="" />
+      </section>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

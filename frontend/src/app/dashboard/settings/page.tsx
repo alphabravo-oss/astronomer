@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Settings as SettingsIcon,
   ShieldAlert,
+  LayoutDashboard,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -78,6 +79,12 @@ const CARDS: SettingsCard[] = [
     title: 'Authentication',
     description: 'Dex connectors, SSO providers, password policy.',
     icon: ShieldAlert,
+  },
+  {
+    href: '/dashboard/settings/widgets',
+    title: 'Dashboard widgets',
+    description: 'Prometheus sparklines, Grafana panels, and URL iframes pinned to dashboards.',
+    icon: LayoutDashboard,
   },
   {
     href: '/dashboard/settings/general',
