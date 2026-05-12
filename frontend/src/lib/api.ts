@@ -2090,3 +2090,9 @@ export * from './api/project-detail';
 // '@/lib/api/account-security' to skip the re-export hop.
 // ============================================================
 export * from './api/account-security';
+
+// ============================================================
+// Cluster groups (migration 066) — operator-defined folder
+// hierarchy over clusters. See lib/api/cluster-groups.ts.
+// ============================================================
+export * from './api/cluster-groups';

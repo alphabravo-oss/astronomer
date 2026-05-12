@@ -25,6 +25,7 @@ import {
   FileText,
   FileSearch,
   Network,
+  FolderTree,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -70,6 +71,12 @@ const CARDS: SettingsCard[] = [
     title: 'Group mappings',
     description: 'SSO group → RBAC role bindings, with optional scoping.',
     icon: Users,
+  },
+  {
+    href: '/dashboard/settings/cluster-groups',
+    title: 'Cluster groups',
+    description: 'Organize clusters into folders by environment, region, or BU.',
+    icon: FolderTree,
   },
   {
     href: '/dashboard/settings/compliance',
