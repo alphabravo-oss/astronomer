@@ -182,6 +182,33 @@ spec:
               backup_drill_results.error_message for the last row.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
 
+        # ── Management-plane log forwarder down ─────────────────────────
+        # FEATURES-051226 T03 — the chart-side Fluent Bit DaemonSet (off
+        # by default; opt-in via managementLogging.enabled=true) ships the
+        # management plane's own server + worker logs to an external sink.
+        # When it's enabled but no Fluent Bit pod is reporting up=1 the
+        # operator's audit trail has a hole, so we page early.
+        # Gated on managementLogging.enabled so the alert doesn't fire on
+        # installs that intentionally opted out.
+        {{- if .Values.managementLogging.enabled }}
+        - alert: AstronomerManagementLoggingForwarderDown
+          expr: sum(up{job="astronomer-mgmt-logging"}) < 1
+          for: 5m
+          labels:
+            severity: warning
+            component: observability
+          annotations:
+            summary: "Astronomer management-plane log forwarder is down"
+            description: |
+              The Fluent Bit DaemonSet that ships astronomer-server and
+              astronomer-worker logs to {{ .Values.managementLogging.backend }}
+              has not had a single Pod reporting up=1 for 5 minutes.
+              Audit, error, and access logs are NOT being forwarded until
+              this recovers. Check the DaemonSet's Pod status and the
+              fluent-bit container logs.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/management-logging-down.md
+        {{- end }}
+
         # ── Argo CD self-manage drift ───────────────────────────────────
         # FEATURES-051126 T26 — fires when the astronomer-self-manage
         # Application drifts. argocd_app_info is published by Argo CD's
