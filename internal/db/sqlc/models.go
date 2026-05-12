@@ -209,6 +209,9 @@ type AuditLog struct {
 	Detail          json.RawMessage `json:"detail"`
 	Source          string          `json:"source"`
 	CorrelationID   string          `json:"correlation_id"`
+	// ActionClass classifies the row as mutation / read / auth / system.
+	// Added in migration 063 to support read-side audit filtering.
+	ActionClass string `json:"action_class"`
 }
 
 type AuditLogDefault struct {

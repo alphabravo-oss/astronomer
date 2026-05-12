@@ -31,9 +31,10 @@ INSERT INTO audit_log (
     request_id,
     ip_address,
     user_agent,
-    detail
+    detail,
+    action_class
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 )
 `
 
@@ -54,6 +55,9 @@ type CreateAuditLogV1Params struct {
 	IpAddress       *netip.Addr     `json:"ip_address"`
 	UserAgent       string          `json:"user_agent"`
 	Detail          json.RawMessage `json:"detail"`
+	// ActionClass is migration-063's "read"/"mutation"/"auth"/"system"
+	// label. Empty defers to the column DEFAULT 'mutation'.
+	ActionClass string `json:"action_class"`
 }
 
 type ListAuditLogsParams struct {
@@ -85,6 +89,10 @@ type ListAuditLogsSinceParams struct {
 }
 
 func (q *Queries) CreateAuditLogV1(ctx context.Context, arg CreateAuditLogV1Params) error {
+	cls := arg.ActionClass
+	if cls == "" {
+		cls = "mutation"
+	}
 	_, err := q.db.Exec(ctx, createAuditLogV1,
 		arg.Source,
 		arg.CorrelationID,
@@ -102,6 +110,7 @@ func (q *Queries) CreateAuditLogV1(ctx context.Context, arg CreateAuditLogV1Para
 		arg.IpAddress,
 		arg.UserAgent,
 		arg.Detail,
+		cls,
 	)
 	return err
 }
@@ -109,7 +118,7 @@ func (q *Queries) CreateAuditLogV1(ctx context.Context, arg CreateAuditLogV1Para
 // auditLogColumnsPerRow is the number of parameters per row in the
 // BatchInsertAuditLog VALUES list. Must stay in sync with the column list
 // in batchInsertAuditLogPrefix below.
-const auditLogColumnsPerRow = 16
+const auditLogColumnsPerRow = 17
 
 const batchInsertAuditLogPrefix = `
 INSERT INTO audit_log (
@@ -128,7 +137,8 @@ INSERT INTO audit_log (
     request_id,
     ip_address,
     user_agent,
-    detail
+    detail,
+    action_class
 ) VALUES `
 
 // BatchInsertAuditLog issues a single multi-row INSERT for the given rows.
@@ -187,6 +197,10 @@ func (q *Queries) execBatchInsertAuditLog(ctx context.Context, rows []CreateAudi
 			sb.WriteString(strconv.Itoa(i*auditLogColumnsPerRow + j + 1))
 		}
 		sb.WriteString(")")
+		cls := r.ActionClass
+		if cls == "" {
+			cls = "mutation"
+		}
 		args = append(args,
 			r.Source,
 			r.CorrelationID,
@@ -204,6 +218,7 @@ func (q *Queries) execBatchInsertAuditLog(ctx context.Context, rows []CreateAudi
 			r.IpAddress,
 			r.UserAgent,
 			r.Detail,
+			cls,
 		)
 	}
 
@@ -266,7 +281,7 @@ func (q *Queries) DropAuditLogPartition(ctx context.Context, name string) error 
 }
 
 const getAuditLogV1ByID = `
-SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail
+SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail, action_class
 FROM audit_log
 WHERE id = $1
 ORDER BY created_at DESC
@@ -296,6 +311,7 @@ func (q *Queries) GetAuditLogV1ByID(ctx context.Context, id uuid.UUID) (AuditLog
 		&item.IpAddress,
 		&item.UserAgent,
 		&item.Detail,
+		&item.ActionClass,
 	)
 	if err != nil {
 		return AuditLog{}, err
@@ -304,7 +320,7 @@ func (q *Queries) GetAuditLogV1ByID(ctx context.Context, id uuid.UUID) (AuditLog
 }
 
 const listAuditLogV1 = `
-SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail
+SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail, action_class
 FROM audit_log
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -315,7 +331,7 @@ func (q *Queries) ListAuditLogV1(ctx context.Context, arg ListAuditLogsParams) (
 }
 
 const listAuditLogV1ByUser = `
-SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail
+SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail, action_class
 FROM audit_log
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -327,7 +343,7 @@ func (q *Queries) ListAuditLogV1ByUser(ctx context.Context, arg ListAuditLogsByU
 }
 
 const listAuditLogV1ByResourceType = `
-SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail
+SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail, action_class
 FROM audit_log
 WHERE resource_type = $1
 ORDER BY created_at DESC
@@ -339,7 +355,7 @@ func (q *Queries) ListAuditLogV1ByResourceType(ctx context.Context, arg ListAudi
 }
 
 const listAuditLogV1ByAction = `
-SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail
+SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail, action_class
 FROM audit_log
 WHERE action = $1
 ORDER BY created_at DESC
@@ -347,7 +363,7 @@ LIMIT $2 OFFSET $3
 `
 
 const listAuditLogV1Since = `
-SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail
+SELECT id, created_at, schema_version, source, correlation_id, user_id, actor_auth_method, action, resource_type, resource_id, resource_name, http_method, path, status_code, duration_ms, request_id, ip_address, user_agent, detail, action_class
 FROM audit_log
 WHERE (created_at, id) > (
     SELECT created_at, id
@@ -435,6 +451,7 @@ func scanAuditLogV1(row interface {
 		&item.IpAddress,
 		&item.UserAgent,
 		&item.Detail,
+		&item.ActionClass,
 	)
 	if err != nil {
 		return AuditLog{}, err
