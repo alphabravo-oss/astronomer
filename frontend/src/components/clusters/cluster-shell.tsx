@@ -15,7 +15,7 @@
 // 2026-05-12.
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Loader2, Terminal as TerminalIcon, RefreshCw, AlertCircle, Clock } from 'lucide-react';
+import { Loader2, Terminal as TerminalIcon, RefreshCw, AlertCircle, Clock, Play, Square } from 'lucide-react';
 import { Terminal, useTerminal } from '@wterm/react';
 import '@wterm/react/css';
 import {
@@ -34,7 +34,7 @@ interface ClusterShellProps {
 }
 
 export function ClusterShell({ clusterId }: ClusterShellProps) {
-  const { ref, write, resize } = useTerminal();
+  const { ref, write } = useTerminal();
   const wsRef = useRef<WebSocket | null>(null);
   const sessionRef = useRef<ShellSession | null>(null);
   const readyRef = useRef(false);
@@ -71,39 +71,59 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
     };
   }, [clusterId, session, status]);
 
-  // POST /shell/sessions/ as soon as we mount. The actual stdin/stdout
-  // wiring happens later in `handleReady`, once wterm's WASM core has
-  // initialized and we know the terminal can accept writes.
-  useEffect(() => {
-    let cancelled = false;
-    const boot = async () => {
-      try {
-        setStatus('opening');
-        setErrorMsg('');
-        const info = await openShellSession(clusterId);
-        if (cancelled) {
-          await closeShellSession(clusterId, info.id).catch(() => {});
-          return;
-        }
-        setSession(info);
-        sessionRef.current = info;
-        // If wterm's onReady already fired before this resolves, kick the
-        // WebSocket immediately; otherwise handleReady will pick it up
-        // when the core is up.
-        if (readyRef.current) connectWS(info);
-        setStatus('connecting');
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setStatus('error');
-        setErrorMsg(msg);
+  // Explicit Connect handler — fires when the operator clicks "Connect"
+  // (previously this ran automatically on mount, which surfaced a flood
+  // of WebSocket reconnect attempts whenever auth / network failed and
+  // gave operators no way to bail out before a session was provisioned
+  // on the cluster).
+  const handleConnect = useCallback(async () => {
+    if (status === 'opening' || status === 'connecting' || status === 'connected') {
+      return; // already in-flight
+    }
+    setStatus('opening');
+    setErrorMsg('');
+    try {
+      const info = await openShellSession(clusterId);
+      setSession(info);
+      sessionRef.current = info;
+      // If wterm's onReady already fired before this resolves, kick the
+      // WebSocket immediately; otherwise handleReady will pick it up
+      // when the core is up.
+      if (readyRef.current) {
+        connectWS(info);
       }
-    };
-    boot();
+      setStatus('connecting');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('error');
+      setErrorMsg(msg);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clusterId, status]);
+
+  // Explicit Disconnect handler — closes the WS and tears down the
+  // pod-side session. Best-effort; reaper will catch any miss.
+  const handleDisconnect = useCallback(async () => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.close(1000, 'client requested disconnect'); } catch { /* ignore */ }
+    }
+    wsRef.current = null;
+    const s = sessionRef.current;
+    sessionRef.current = null;
+    setStatus('disconnected');
+    if (s) {
+      await closeShellSession(clusterId, s.id).catch(() => {});
+    }
+  }, [clusterId]);
+
+  // Unmount cleanup: if a session is still live, close it server-side
+  // so the cluster-side pod is reaped immediately instead of waiting
+  // for idleTimeout. Same fire-and-forget semantics as Disconnect.
+  useEffect(() => {
     return () => {
-      cancelled = true;
       try { wsRef.current?.close(); } catch { /* ignore */ }
       if (sessionRef.current) {
-        // Fire-and-forget — the reaper catches any miss.
         closeShellSession(clusterId, sessionRef.current.id).catch(() => {});
       }
     };
@@ -117,7 +137,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
     const wsHostNoTrail = wsHost.replace(/\/$/, '');
     const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
     const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-    const wsUrl = `${wsHostNoTrail}/ws/clusters/${info.cluster_id}/shell/sessions/${info.id}/${tokenQuery}`;
+    const wsUrl = `${wsHostNoTrail}/ws/clusters/${info.clusterId}/shell/sessions/${info.id}/${tokenQuery}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -161,7 +181,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
     write(`\x1b[36mOpening shell on cluster ${clusterId}\x1b[0m\r\n`);
     if (sessionRef.current) {
       const info = sessionRef.current;
-      write(`\x1b[2mpod: ${info.pod_name} (${info.pod_namespace})  container: ${info.container}\x1b[0m\r\n\r\n`);
+      write(`\x1b[2mpod: ${info.podName} (${info.podNamespace})  container: ${info.container}\x1b[0m\r\n\r\n`);
       connectWS(info);
     }
   }, [clusterId, write, connectWS]);
@@ -175,32 +195,44 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   }, []);
 
   // Terminal autoResize → forward to backend so the agent issues TIOCSWINSZ.
+  //
+  // Critical: do NOT call resize(cols, rows) here. The handler runs
+  // *after* the terminal has already resized to (cols, rows), so calling
+  // resize() back into the terminal triggers another onResize, recursing
+  // until the JS stack blows up ("Maximum call stack size exceeded" at
+  // _isScrolledToBottom → resize → onResize). Just forward to the WS.
   const handleResize = useCallback((cols: number, rows: number) => {
-    resize(cols, rows);
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'resize', cols, rows }));
     }
-  }, [resize]);
+  }, []);
 
   // Age + countdown copy.
-  const sessionAgeSeconds = session ? Math.floor((now - new Date(session.started_at).getTime()) / 1000) : 0;
-  const lastInputSeconds = session ? Math.floor((now - new Date(session.last_input_at).getTime()) / 1000) : 0;
-  const expiresInSeconds = session ? Math.max(0, Math.floor((new Date(session.expires_at).getTime() - now) / 1000)) : 0;
+  const sessionAgeSeconds = session ? Math.floor((now - new Date(session.startedAt).getTime()) / 1000) : 0;
+  const lastInputSeconds = session ? Math.floor((now - new Date(session.lastInputAt).getTime()) / 1000) : 0;
+  const expiresInSeconds = session ? Math.max(0, Math.floor((new Date(session.expiresAt).getTime() - now) / 1000)) : 0;
   const idleExpiresInSeconds = session
-    ? Math.max(0, session.idle_timeout_seconds - lastInputSeconds)
+    ? Math.max(0, session.idleTimeoutSeconds - lastInputSeconds)
     : 0;
+
+  // isLive == "a WebSocket is open or about to be"; opening is its own
+  // pre-WS state (POST /shell/sessions/ in flight) so the button can
+  // render a spinner without making Disconnect available before the
+  // session actually exists.
+  const isLive = status === 'connecting' || status === 'connected';
+  const isOpening = status === 'opening';
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-2 border-b bg-background">
+      <div className="flex items-center justify-between p-2 border-b bg-background gap-3">
         <div className="flex items-center gap-2 text-sm">
           <TerminalIcon className="h-4 w-4" />
           <span className="font-medium">Cluster shell</span>
           <StatusBadge status={status} />
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {session ? (
+          {session && isLive ? (
             <>
               <span>Session age: {formatDuration(sessionAgeSeconds)}</span>
               <span>•</span>
@@ -211,8 +243,37 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
                 Auto-expires in {formatDuration(Math.min(expiresInSeconds, idleExpiresInSeconds))}
               </span>
             </>
+          ) : isOpening ? (
+            <span>Provisioning session…</span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {isLive ? (
+            <button
+              onClick={handleDisconnect}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-background hover:bg-muted text-red-600"
+              title="Close the WebSocket and tear down the in-cluster debug pod"
+            >
+              <Square className="h-3 w-3" />
+              Disconnect
+            </button>
+          ) : isOpening ? (
+            <button
+              disabled
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground opacity-60"
+            >
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Opening…
+            </button>
           ) : (
-            <span>Preparing session...</span>
+            <button
+              onClick={handleConnect}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
+              title="Provision an ephemeral debug pod and open a shell"
+            >
+              <Play className="h-3 w-3" />
+              {status === 'disconnected' || status === 'error' ? 'Reconnect' : 'Connect'}
+            </button>
           )}
         </div>
       </div>
@@ -235,18 +296,72 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               Provisioning ephemeral debug pod...
             </div>
           )}
-          <Terminal
-            ref={ref}
-            cols={80}
-            rows={24}
-            wasmUrl="/wterm.wasm"
-            autoResize
-            cursorBlink
-            onData={handleData}
-            onResize={handleResize}
-            onReady={handleReady}
-            className="h-full w-full"
-          />
+          {status === 'idle' && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center max-w-sm pointer-events-auto">
+                <TerminalIcon className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm font-medium text-foreground">No active session</p>
+                <p className="text-xs text-muted-foreground mt-1.5 mb-4">
+                  Clicking <strong>Connect</strong> spins up an ephemeral kubectl pod in
+                  <code className="mx-1 px-1 rounded bg-muted font-mono">kube-system</code>, opens a shell into it,
+                  and records every command line you type to the audit log.
+                </p>
+                <button
+                  onClick={handleConnect}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
+                >
+                  <Play className="h-3 w-3" />
+                  Connect
+                </button>
+              </div>
+            </div>
+          )}
+          {(status === 'disconnected' || status === 'error') && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center max-w-sm pointer-events-auto">
+                <AlertCircle className={cn('h-8 w-8 mx-auto mb-3', status === 'error' ? 'text-red-500' : 'text-amber-500')} />
+                <p className="text-sm font-medium text-foreground">
+                  {status === 'error' ? 'Connection failed' : 'Session disconnected'}
+                </p>
+                {errorMsg && (
+                  <p className="text-xs text-muted-foreground mt-1.5 font-mono break-words">
+                    {errorMsg}
+                  </p>
+                )}
+                <button
+                  onClick={handleConnect}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 mt-4 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
+                >
+                  <Play className="h-3 w-3" />
+                  Reconnect
+                </button>
+              </div>
+            </div>
+          )}
+          {/* wterm renders an off-screen helper textarea that grabs
+              focus for IME / paste. When the terminal is hidden behind
+              an empty-state we set inert to keep that textarea out of
+              the a11y tree (xterm marks it aria-hidden=true but Chrome
+              still warns when focus lands inside, because aria-hidden
+              on a focused descendant violates WAI-ARIA). inert prevents
+              focus entirely, which is the spec-recommended fix. */}
+          <div
+            className={cn('h-full w-full', !(isLive || isOpening) && 'pointer-events-none opacity-0')}
+            {...(!(isLive || isOpening) ? { inert: '' as unknown as undefined } : {})}
+          >
+            <Terminal
+              ref={ref}
+              cols={80}
+              rows={24}
+              wasmUrl="/wterm.wasm"
+              autoResize
+              cursorBlink
+              onData={handleData}
+              onResize={handleResize}
+              onReady={handleReady}
+              className="h-full w-full"
+            />
+          </div>
         </div>
         <div className="w-72 border-l bg-background overflow-y-auto p-3">
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
@@ -260,9 +375,9 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               {commands.slice().reverse().map((c, i) => (
                 <li key={i} className="break-all">
                   <span className="text-muted-foreground">
-                    {new Date(c.command_at).toLocaleTimeString()}{' '}
+                    {new Date(c.commandAt).toLocaleTimeString()}{' '}
                   </span>
-                  <span className={cn('text-foreground')}>{c.command_line}</span>
+                  <span className={cn('text-foreground')}>{c.commandLine}</span>
                 </li>
               ))}
             </ul>
@@ -283,11 +398,13 @@ function StatusBadge({ status }: { status: Status }) {
     status === 'connecting' ? 'connecting' :
     status === 'opening' ? 'opening' :
     status === 'disconnected' ? 'disconnected' :
-    status === 'error' ? 'error' : 'idle';
+    status === 'error' ? 'error' :
+    'not connected';
   const colour =
     status === 'connected' ? 'bg-green-500' :
     status === 'error' ? 'bg-red-500' :
     status === 'disconnected' ? 'bg-yellow-500' :
+    status === 'idle' ? 'bg-muted-foreground' :
     'bg-blue-500';
   return (
     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">

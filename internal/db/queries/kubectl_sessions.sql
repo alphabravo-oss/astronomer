@@ -47,9 +47,13 @@ WHERE status IN ('starting', 'active')
   AND (expires_at < now() OR last_input_at + interval '30 minutes' < now());
 
 -- name: SetKubectlSessionStatus :exec
+-- Explicit ::text casts on $2 keep pgx happy. Without them pgx infers
+-- two different types for the same parameter (one for SET status, one
+-- inside the CASE WHEN literal IN list) and rejects the query with
+-- SQLSTATE 42P08 ("inconsistent types deduced for parameter").
 UPDATE kubectl_sessions
-SET status = $2,
-    closed_at = CASE WHEN $2 IN ('closed','expired','failed') THEN now() ELSE closed_at END,
+SET status = $2::text,
+    closed_at = CASE WHEN $2::text IN ('closed','expired','failed') THEN now() ELSE closed_at END,
     last_error = COALESCE($3, last_error)
 WHERE id = $1;
 

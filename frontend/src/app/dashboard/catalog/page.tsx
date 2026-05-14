@@ -18,6 +18,7 @@ import {
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { HelmValuesForm } from '@/components/catalog/helm-values-form';
+import { SuggestedCatalogs } from '@/components/catalog/suggested-catalogs';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import {
@@ -93,7 +94,9 @@ const categoryColors: Record<string, string> = {
 export default function CatalogPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('browse');
   const [selectedCategory, setSelectedCategory] = useState<HelmChartCategory | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const initialSearchParams = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(initialSearchParams?.get('search') ?? '');
+  const presetClusterIdPage = initialSearchParams?.get('cluster_id') ?? '';
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -105,6 +108,11 @@ export default function CatalogPage() {
   });
   const { data: installed, isLoading: installedLoading } = useInstalledCharts();
   const { data: repos, isLoading: reposLoading } = useHelmRepositories();
+  const { data: presetClusterData } = useClusters({ pageSize: 100 });
+  const presetCluster = useMemo(
+    () => (presetClusterIdPage ? (presetClusterData?.data || []).find((c) => c.id === presetClusterIdPage) : undefined),
+    [presetClusterIdPage, presetClusterData]
+  );
 
   const syncRepo = useSyncHelmRepository();
   const deleteRepo = useDeleteHelmRepository();
@@ -321,6 +329,15 @@ export default function CatalogPage() {
           <p className="text-sm text-muted-foreground mt-1">
             Browse, install, and manage Helm charts across your clusters
           </p>
+          {presetClusterIdPage && (
+            <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded bg-accent/40 text-foreground">
+              <Package className="h-3.5 w-3.5" />
+              Installing onto{' '}
+              <span className="font-medium">
+                {presetCluster?.displayName || presetCluster?.name || presetClusterIdPage}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {activeTab === 'repositories' && (
@@ -489,14 +506,20 @@ export default function CatalogPage() {
 
         {/* Repositories Tab */}
         {activeTab === 'repositories' && (
-          <DataTable
-            data={repos || []}
-            columns={repoColumns}
-            keyExtractor={(row) => row.id}
-            searchPlaceholder="Search repositories..."
-            loading={reposLoading}
-            emptyMessage="No repositories configured"
-          />
+          <div className="space-y-6">
+            <SuggestedCatalogs existing={repos} />
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-foreground">Your repositories</h2>
+              <DataTable
+                data={repos || []}
+                columns={repoColumns}
+                keyExtractor={(row) => row.id}
+                searchPlaceholder="Search repositories..."
+                loading={reposLoading}
+                emptyMessage="No repositories configured"
+              />
+            </div>
+          </div>
         )}
       </div>
 
@@ -942,7 +965,7 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
               type="text"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="bitnami"
+              placeholder="prometheus-community"
               className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
                 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
@@ -954,7 +977,7 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
               type="text"
               value={form.url}
               onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://charts.bitnami.com/bitnami"
+              placeholder="https://prometheus-community.github.io/helm-charts"
               className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
                 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />

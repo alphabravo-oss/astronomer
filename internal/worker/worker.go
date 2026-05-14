@@ -103,6 +103,8 @@ const (
 	TypeNetworkPolicyDriftCheck = tasks.NetworkPolicyDriftCheckType
 	// Sprint 069: CRD-mirror v2 stale-row prune.
 	TypeCrdMirrorPruneStale = tasks.CrdMirrorPruneStaleType
+	// T6.069: gauge populator for astronomer_crd_mirror_rows.
+	TypeCrdMirrorGaugePopulate = tasks.CrdMirrorGaugePopulateType
 	// Migration 070: apiserver allow-list reconciler. Three task types
 	// share one querier + registry wiring; see
 	// tasks.ConfigureApiserverAllowlistReconcile.
@@ -155,9 +157,52 @@ func NewWorker(redisURL string, log *slog.Logger) (*Worker, error) {
 	}, nil
 }
 
+// TunnelQueueName is the dedicated asynq queue for tasks that require
+// the tunnel hub (which only lives in the server pod). The standalone
+// astronomer-worker pod does NOT subscribe to this queue.
+const TunnelQueueName = tasks.ClusterTemplateApplyQueueName
+
+// NewTunnelWorker creates an Asynq server that exclusively drains the
+// "tunnel" queue. It is started inside the server pod's process because
+// the cluster_template:apply task (and its drift sweep) call into the
+// tunnel-bound ToolHandler.EnsureInstalled — that path is unreachable
+// from the standalone worker pod, which has no WebSocket terminations.
+// Concurrency is small because individual apply runs can be long-lived
+// (helm install of multiple operators) and we don't want one chatty
+// cluster starving the rest of the platform.
+func NewTunnelWorker(redisURL string, log *slog.Logger) (*Worker, error) {
+	redisOpt, err := asynq.ParseRedisURI(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
+	}
+	srv := asynq.NewServer(redisOpt, asynq.Config{
+		Concurrency: 2,
+		Queues: map[string]int{
+			TunnelQueueName: 1,
+		},
+	})
+	return &Worker{
+		server: srv,
+		mux:    asynq.NewServeMux(),
+		log:    log,
+	}, nil
+}
+
+// RegisterTunnelHandlers wires the tunnel-only handler set on the mux.
+// Kept separate from RegisterHandlers so the apply task isn't double-
+// registered on the standalone worker pod (where it'd just short-circuit
+// with "runtime not configured" and waste a redis round-trip).
+func (w *Worker) RegisterTunnelHandlers() {
+	w.mux.HandleFunc(TypeClusterTemplateApply, instrumentTask(TypeClusterTemplateApply, tasks.HandleClusterTemplateApply))
+	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
+	w.log.Info("registered tunnel-queue task handlers")
+}
+
 // RegisterHandlers sets up all task handlers on the mux.
 func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeHealthCheck, instrumentTask(TypeHealthCheck, tasks.HandleHealthCheck))
+	// Sprint 086 — cluster-condition remediation reconciler.
+	w.mux.HandleFunc(tasks.ClusterConditionReconcileType, instrumentTask(tasks.ClusterConditionReconcileType, tasks.HandleClusterConditionReconcile))
 	w.mux.HandleFunc(TypeAlertEvaluation, instrumentTask(TypeAlertEvaluation, tasks.HandleAlertEvaluation))
 	w.mux.HandleFunc(TypeCatalogSync, instrumentTask(TypeCatalogSync, tasks.HandleCatalogSync))
 	w.mux.HandleFunc(TypeMetricsAggregation, instrumentTask(TypeMetricsAggregation, tasks.HandleMetricsAggregation))
@@ -185,8 +230,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeEmailCleanupOld, instrumentTask(TypeEmailCleanupOld, tasks.HandleEmailCleanupOld))
 	w.mux.HandleFunc(TypeWebhookDispatch, instrumentTask(TypeWebhookDispatch, tasks.HandleWebhookDispatch))
 	w.mux.HandleFunc(TypeWebhookCleanupOld, instrumentTask(TypeWebhookCleanupOld, tasks.HandleWebhookCleanupOld))
-	w.mux.HandleFunc(TypeClusterTemplateApply, instrumentTask(TypeClusterTemplateApply, tasks.HandleClusterTemplateApply))
-	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
+	// cluster_template:apply + drift_check are tunnel-only — registered
+	// on the server-embedded tunnel worker, not here. See RegisterTunnelHandlers.
 	w.mux.HandleFunc(TypeClusterApplyRegistrySecret, instrumentTask(TypeClusterApplyRegistrySecret, tasks.HandleClusterApplyRegistrySecret))
 	w.mux.HandleFunc(TypeClusterRegistryDriftReconcile, instrumentTask(TypeClusterRegistryDriftReconcile, tasks.HandleClusterRegistryDriftReconcile))
 	w.mux.HandleFunc(TypeClusterSnapshotPoll, instrumentTask(TypeClusterSnapshotPoll, tasks.HandleClusterSnapshotPoll))
@@ -205,6 +250,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeNetworkPolicyApply, instrumentTask(TypeNetworkPolicyApply, tasks.HandleNetworkPolicyApply))
 	w.mux.HandleFunc(TypeNetworkPolicyDriftCheck, instrumentTask(TypeNetworkPolicyDriftCheck, tasks.HandleNetworkPolicyDriftCheck))
 	w.mux.HandleFunc(TypeCrdMirrorPruneStale, instrumentTask(TypeCrdMirrorPruneStale, tasks.HandleCrdMirrorPruneStale))
+	w.mux.HandleFunc(TypeCrdMirrorGaugePopulate, instrumentTask(TypeCrdMirrorGaugePopulate, tasks.HandleCrdMirrorGaugePopulate))
 	// Migration 070: apiserver allow-list reconciler.
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcile, instrumentTask(TypeApiserverAllowlistReconcile, tasks.HandleApiserverAllowlistReconcile))
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcileAll, instrumentTask(TypeApiserverAllowlistReconcileAll, tasks.HandleApiserverAllowlistReconcileAll))

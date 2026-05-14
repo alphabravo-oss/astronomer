@@ -150,7 +150,7 @@ func Load() (*Config, error) {
 	v.SetDefault("totp_issuer", "Astronomer")
 	v.SetDefault("totp_require", false)
 	v.SetDefault("kubectl_shell_enabled", false)
-	v.SetDefault("kubectl_shell_image", "bitnami/kubectl:1.31")
+	v.SetDefault("kubectl_shell_image", "astronomer-shell:dev")
 	v.SetDefault("kubectl_shell_idle_timeout_minutes", 30)
 	v.SetDefault("kubectl_shell_session_hard_cap_hours", 4)
 	v.BindEnv("kubectl_shell_enabled")

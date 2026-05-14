@@ -1,10 +1,14 @@
 # Platform baseline (sprint 075)
 
-After install / first boot the management plane seeds three well-known
-helm_repositories rows (bitnami, aqua, jetstack — migration 075) and
-kicks a one-shot `catalog:sync` if `helm_charts` is empty. This closes
-the "register cluster → auto-install platform baseline" gap: the five
-slugs the platform-baseline cluster_template (sprint 074) references —
+After install / first boot the management plane seeds well-known
+helm_repositories rows (aqua, jetstack, fluent, prometheus-community —
+migrations 075/077/079; migration 083 removes the original bitnami
+seed because Broadcom deprecated the public Bitnami catalog in Aug
+2025 and `helm install bitnami/...` now pulls stale unpatched images)
+and kicks a one-shot `catalog:sync` if `helm_charts` is empty. This
+closes the "register cluster → auto-install platform baseline" gap:
+the five slugs the platform-baseline cluster_template (sprint 074)
+references —
 
 - `trivy-operator`
 - `kube-state-metrics`
@@ -47,9 +51,9 @@ template spec to use the upstream chart name.
 ## Operator customization
 
 The migration uses `ON CONFLICT (name) DO NOTHING`, so an operator who
-re-points `bitnami` at a private mirror (or adds repos with the same
-name before the migration runs) is never overridden on re-runs. The
-`.down.sql` deletes only the three named rows so a downgrade keeps
+re-points a seeded repo at a private mirror (or adds repos with the
+same name before the migration runs) is never overridden on re-runs.
+The `.down.sql` deletes only the named rows so a downgrade keeps
 operator-added repos.
 
 ## Frontend banner

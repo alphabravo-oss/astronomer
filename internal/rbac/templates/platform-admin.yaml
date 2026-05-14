@@ -1,0 +1,12 @@
+name: platform-admin
+display_name: Platform Administrator
+description: |
+  Full platform-wide administrative access. Equivalent to is_superuser in
+  scope but expressed through explicit resource rules so audit logs and
+  binding-listings make the grant legible. Apply this template only at
+  the global scope.
+scope: global
+category: admin
+rules:
+  - resource: "*"
+    verbs: ["*"]

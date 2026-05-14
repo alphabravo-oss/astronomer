@@ -1,0 +1,669 @@
+# Astronomer Go — OpenAPI 3.1 specification
+#
+# Hand-curated rather than annotation-generated. Two reasons: (1) keeps
+# the route handlers free of Swag/Huma comment clutter that goes stale
+# silently, (2) we explicitly choose which surface is supported public
+# API vs internal implementation detail — operators relying on Swagger
+# UI should see exactly the stable contract, not every chi route.
+#
+# The CI smoke-test (scripts/smoke-fresh-cluster.sh) drives this same
+# surface end-to-end on a real k3d cluster, so the spec stays honest:
+# any drift between this file and the running server breaks the smoke
+# test before it lands.
+
+openapi: 3.1.0
+info:
+  title: Astronomer Management API
+  version: "1.0"
+  summary: Multi-cluster Kubernetes management plane
+  description: |
+    REST API surface for the Astronomer management plane. Covers the
+    cluster onboarding wizard, agent registration, image vulnerability
+    scans, kubectl shell sessions, helm catalog, and platform admin.
+
+    Auth: all endpoints under `/api/v1/` outside `/auth/` and the
+    `/internal/` namespace require either a session JWT issued by
+    POST `/auth/login/` or a personal API token. Pass the token as
+    `Authorization: Bearer <token>`.
+
+    RBAC: write endpoints check the caller's permissions against the
+    platform RBAC engine. Routes annotated `superuser` require
+    `users.is_superuser = true`; the rest gate on resource verbs
+    (clusters:update, clusters:read, etc.).
+  contact:
+    name: Astronomer engineering
+    url: https://github.com/alphabravocompany/astronomer-go
+servers:
+  - url: http://astronomer.5.78.101.247.nip.io:8080
+    description: Live dev (.247)
+  - url: http://localhost:8080
+    description: Local
+
+# ---------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------
+
+components:
+  securitySchemes:
+    bearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by `POST /api/v1/auth/login/` (session token) or
+        personal API token from `/api/v1/settings/tokens/`.
+
+  # ---------------------------------------------------------------------
+  # Schemas
+  # ---------------------------------------------------------------------
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+          required: [code, message]
+      required: [error]
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            token: { type: string, description: "Access JWT (~1h TTL)" }
+            refresh: { type: string, description: "Refresh JWT (~7d TTL)" }
+            user: { $ref: "#/components/schemas/User" }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string, format: email }
+        first_name: { type: string }
+        last_name: { type: string }
+        is_active: { type: boolean }
+        is_staff: { type: boolean }
+        is_superuser: { type: boolean }
+        date_joined: { type: string, format: date-time }
+        last_login: { type: string, format: date-time, nullable: true }
+        must_change_password: { type: boolean }
+
+    Cluster:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: "RFC-1123 cluster slug" }
+        display_name: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [pending, active, disconnected, error]
+        environment:
+          type: string
+          enum: [production, staging, development, dev]
+        region: { type: string }
+        provider:
+          type: string
+          description: "eks / gke / aks / k3d / kind / other"
+        distribution: { type: string, description: "vanilla / k3s / openshift / ..." }
+        labels: { type: object, additionalProperties: { type: string } }
+        annotations: { type: object, additionalProperties: { type: string } }
+        registration_phase:
+          type: string
+          enum: [created, awaiting_agent, connected, provisioning, ready, failed]
+        install_baseline: { type: boolean, nullable: true }
+        agent_version: { type: string }
+        kubernetes_version: { type: string }
+        node_count: { type: integer }
+        last_heartbeat: { type: string, format: date-time, nullable: true }
+        is_local: { type: boolean }
+        decommissioned_at: { type: string, format: date-time, nullable: true }
+        cpu_percentage: { type: number }
+        memory_percentage: { type: number }
+        pod_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateClusterRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, description: "RFC-1123 slug; must be lowercase + hyphens" }
+        display_name: { type: string }
+        description: { type: string }
+        environment: { type: string }
+        region: { type: string }
+        provider: { type: string }
+        distribution: { type: string }
+
+    RegistrationStatus:
+      type: object
+      properties:
+        cluster_id: { type: string, format: uuid }
+        phase:
+          type: string
+          enum: [created, awaiting_agent, connected, provisioning, ready, failed]
+        install_baseline: { type: boolean, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/RegistrationStep" }
+
+    RegistrationStep:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        step_name: { type: string }
+        label: { type: string }
+        status:
+          type: string
+          enum: [pending, running, success, failed, skipped]
+        progress_pct: { type: integer, minimum: 0, maximum: 100 }
+        detail: { type: object, additionalProperties: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        error_message: { type: string }
+        step_order: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    SetOptionsRequest:
+      type: object
+      required: [install_baseline]
+      properties:
+        install_baseline: { type: boolean }
+
+    VulnSummary:
+      type: object
+      properties:
+        critical: { type: integer }
+        high: { type: integer }
+        medium: { type: integer }
+        low: { type: integer }
+        unknown: { type: integer }
+        report_count: { type: integer }
+        last_scanned_at: { type: string, format: date-time, nullable: true }
+
+    VulnImage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cluster_id: { type: string, format: uuid }
+        report_name: { type: string }
+        namespace: { type: string }
+        workload_kind: { type: string }
+        workload_name: { type: string }
+        container_name: { type: string }
+        image_registry: { type: string }
+        image_repo: { type: string }
+        image_tag: { type: string }
+        image_digest: { type: string }
+        scanner: { type: string }
+        scanner_version: { type: string }
+        critical_count: { type: integer }
+        high_count: { type: integer }
+        medium_count: { type: integer }
+        low_count: { type: integer }
+        unknown_count: { type: integer }
+        scanned_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    KubectlSession:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cluster_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [starting, active, closed, expired, failed]
+        pod_name: { type: string }
+        pod_namespace: { type: string }
+        container: { type: string }
+        started_at: { type: string, format: date-time }
+        last_input_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        idle_timeout_seconds: { type: integer }
+
+    PaginatedClusters:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Cluster" }
+        count: { type: integer }
+        next: { type: string, nullable: true }
+        previous: { type: string, nullable: true }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not authorized for this resource
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+# Default: all routes require bearer auth.
+security:
+  - bearerJWT: []
+
+# ---------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------
+
+tags:
+  - { name: Auth, description: "Login, tokens, password reset" }
+  - { name: Clusters, description: "Cluster CRUD + lookup" }
+  - { name: Registration, description: "Onboarding wizard phase machine" }
+  - { name: Vulnerabilities, description: "Trivy image-scan results" }
+  - { name: Shell, description: "In-browser kubectl shell sessions" }
+  - { name: K8s, description: "Tunnel-passthrough to managed cluster's k8s API" }
+  - { name: Tools, description: "Cluster tool catalog + installs" }
+  - { name: Alerting, description: "Alert rules + notification channels (Slack/PagerDuty/MS Teams/webhook/email)" }
+
+# ---------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------
+
+paths:
+
+  # -- Auth --------------------------------------------------------------
+
+  /api/v1/auth/login/:
+    post:
+      tags: [Auth]
+      summary: Username/password login
+      description: |
+        Returns a JWT access token + refresh token. Rate-limited at
+        5/minute per source IP. If TOTP is required for the account
+        the response carries a `challenge_token` instead and the
+        client must POST to `/auth/totp/verify/`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Login succeeded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/me/:
+    get:
+      tags: [Auth]
+      summary: Current authenticated user
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/User" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # -- Clusters ----------------------------------------------------------
+
+  /api/v1/clusters/:
+    get:
+      tags: [Clusters]
+      summary: List clusters
+      description: |
+        Returns all clusters the caller can read, excluding tombstoned
+        rows (decommissioned_at IS NOT NULL).
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Substring match on name + display_name
+        - name: environment
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of clusters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginatedClusters" }
+    post:
+      tags: [Clusters]
+      summary: Create cluster (imported)
+      description: |
+        Records a new cluster row. Auto-attaches the platform-default
+        cluster template (typically Platform baseline) if one is
+        configured — the apply worker installs trivy-operator,
+        kube-state-metrics, prometheus-node-exporter, fluent-bit,
+        cert-manager via helm through the tunnel. Returns the cluster
+        with `registration_phase=created` so the wizard can drive the
+        next step.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateClusterRequest" }
+      responses:
+        "201":
+          description: Cluster created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Cluster" }
+        "400":
+          description: Validation error (e.g. non-RFC-1123 name)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/clusters/{id}/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Clusters]
+      summary: Get cluster
+      responses:
+        "200":
+          description: Cluster
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Cluster" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Clusters]
+      summary: Decommission cluster
+      description: |
+        Soft-deletes the cluster: tombstones the row + enqueues an
+        async reconciler that revokes the agent's registration token,
+        archives the audit log for that cluster, and prunes dependent
+        rows. The cluster's pod-side resources are NOT touched — the
+        operator's responsibility.
+      responses:
+        "204":
+          description: Decommission queued
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/clusters/{id}/manifest/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Clusters]
+      summary: Agent install manifest
+      description: |
+        Returns a kubectl-applyable YAML manifest that installs the
+        Astronomer agent into the target cluster. Each call mints a
+        fresh registration token bound to the cluster ID; tokens
+        expire 24h after issue. The manifest includes the agent's
+        ServiceAccount + ClusterRole + Secret + Deployment + Service +
+        NetworkPolicy + PodDisruptionBudget.
+      responses:
+        "200":
+          description: YAML manifest
+          content:
+            text/yaml:
+              schema: { type: string }
+
+  # -- Registration wizard ----------------------------------------------
+
+  /api/v1/clusters/{id}/registration/status/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Registration]
+      summary: Registration status + step timeline
+      responses:
+        "200":
+          description: Phase + steps
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/RegistrationStatus" }
+
+  /api/v1/clusters/{id}/registration/options/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [Registration]
+      summary: Set wizard step-1 options
+      description: Records the operator's `install_baseline` choice on the cluster row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetOptionsRequest" }
+      responses:
+        "200":
+          description: Updated status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/RegistrationStatus" }
+
+  /api/v1/clusters/{id}/registration/confirm/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Registration]
+      summary: Operator confirms manifest applied
+      description: |
+        Advances `created` → `awaiting_agent`. If `install_baseline=true`
+        was set on `/options/`, also upserts a
+        cluster_template_applications row with the platform-baseline
+        template's spec and enqueues the apply task on the tunnel queue.
+      responses:
+        "200":
+          description: Updated status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/RegistrationStatus" }
+        "409":
+          description: Illegal phase transition
+
+  /api/v1/clusters/{id}/registration/retry/{step_id}/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: step_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Registration]
+      summary: Retry a failed step
+      description: |
+        Re-fires the underlying cluster_template:apply task for a step
+        currently in `failed`. The phase machine rewinds
+        `failed` → `provisioning` before the apply re-runs.
+      responses:
+        "200":
+          description: Updated status
+        "409":
+          description: Step is not in failed state
+
+  /api/v1/clusters/{id}/registration/events/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Registration]
+      summary: Server-Sent Events stream
+      description: |
+        text/event-stream of `cluster.registration.*` events filtered
+        to this cluster. The wizard's page-3 timeline subscribes here.
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  # -- Vulnerabilities --------------------------------------------------
+
+  /api/v1/clusters/{id}/vulnerabilities/summary/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Vulnerabilities]
+      summary: Aggregate severity counts
+      responses:
+        "200":
+          description: Severity totals across all current reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/VulnSummary" }
+
+  /api/v1/clusters/{id}/vulnerabilities/images/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Vulnerabilities]
+      summary: Per-image vulnerability reports
+      responses:
+        "200":
+          description: Image vulnerability rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/VulnImage" }
+                  count: { type: integer }
+
+  # -- Shell ------------------------------------------------------------
+
+  /api/v1/clusters/{id}/shell/sessions/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Shell]
+      summary: List the caller's shell sessions on this cluster
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/KubectlSession" }
+    post:
+      tags: [Shell]
+      summary: Open a kubectl shell session
+      description: |
+        Creates a ServiceAccount + ClusterRole + RoleBinding + Pod
+        running `astronomer-shell` (alpine + kubectl built from
+        dl.k8s.io). Returns when the Pod is Ready; the operator then
+        attaches via WS at
+        `/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/`.
+      responses:
+        "200":
+          description: Session record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/KubectlSession" }
+        "502":
+          description: Open failed (e.g. agent disconnected, pod never reached Ready)
+
+  /api/v1/clusters/{id}/shell/sessions/{session_id}/close/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: session_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Shell]
+      summary: Close a shell session early
+      description: |
+        Tears down the SA/Role/RB/Pod and marks the session row
+        `status=closed`. The reaper would do this automatically on
+        idle/hard-cap; calling this is the polite version.
+      responses:
+        "204":
+          description: Closed
+
+  # -- K8s passthrough --------------------------------------------------
+
+  /api/v1/clusters/{id}/k8s/{path}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: path, in: path, required: true, schema: { type: string }, description: "any k8s API path, e.g. api/v1/pods or apis/apps/v1/namespaces/default/deployments" }
+    get:
+      tags: [K8s]
+      summary: Proxy a k8s GET through the tunnel
+      description: |
+        Forwards the request to the managed cluster's apiserver via
+        the agent's WebSocket tunnel. Supports both Watch
+        (`?watch=true`) streams and standard list/get calls. Auth
+        propagates from the JWT — the agent's ServiceAccount has
+        cluster-admin, but RBAC on the management plane gates which
+        clusters the caller can reach. Rate-limited.
+      responses:
+        "200":
+          description: K8s response body
+        "503":
+          description: Agent not connected
+
+  /api/v1/alerting/channels/:
+    get:
+      tags: [Alerting]
+      summary: List notification channels
+      responses:
+        "200":
+          description: Array of channels
+    post:
+      tags: [Alerting]
+      summary: Create a notification channel (channel_type, configuration)
+      description: |
+        Supported channel_type: slack, pagerduty, msteams, webhook, email.
+        See the Alerting tag header for the configuration key conventions
+        per channel type.
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Unsupported channel_type

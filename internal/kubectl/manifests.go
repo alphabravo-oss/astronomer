@@ -20,10 +20,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// DefaultImage is the kubectl debug pod image. Operators can override
-// via deps.ImageOverride (chart value kubectlShell.image) when they
-// run a private mirror.
-const DefaultImage = "bitnami/kubectl:1.31"
+// DefaultImage is the kubectl debug pod image. We ship our own
+// (deploy/docker/Dockerfile.shell — alpine + kubectl pulled directly
+// from dl.k8s.io, the Kubernetes Project's release CDN) so the shell
+// supply chain is fully under Astronomer's control. Previous
+// third-party choices each had problems:
+//
+//   - bitnami/kubectl:1.31 — 404'd on docker.io during the 2026
+//     Bitnami retag, breaking every fresh-cluster shell open.
+//   - rancher/kubectl — distroless, so /bin/sh missing → kubectl exec
+//     can't attach an interactive terminal.
+//   - alpine/k8s — works but tied to a release schedule we don't
+//     control; we can't promise an operator that a tag they pinned
+//     six months ago will still resolve.
+//
+// Operators with a private mirror still override via chart value
+// kubectlShell.image (config knob `kubectl_shell_image`).
+const DefaultImage = "astronomer-shell:dev"
 
 // DefaultNamespace is where every shell pod + SA lives. Kept in
 // kube-system because that's the conventional break-glass namespace

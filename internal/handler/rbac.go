@@ -58,6 +58,11 @@ type RBACHandler struct {
 	// max_members_per_project and per-user max_projects_per_user caps
 	// (migration 051). Optional; nil disables the check.
 	enforcer *quota.Enforcer
+	// templates is the pre-loaded role-templates catalog (T1.1).
+	// Optional; the ListTemplates / GetTemplate endpoints 503 when nil
+	// so a misconfigured deploy notices instead of silently returning
+	// an empty list.
+	templates *rbac.Catalog
 }
 
 func NewRBACHandler(queries RBACQuerier) *RBACHandler {

@@ -121,6 +121,19 @@ func (q *policyTestQuerier) MarkProjectNamespaceReconciled(context.Context, sqlc
 	return nil
 }
 
+// RBAC-matrix surface — the policy tests don't exercise this path,
+// but the interface needs satisfying. Return empty slices / NotFound
+// so a stray test hit doesn't blow up.
+func (q *policyTestQuerier) ListProjectRoleBindingsByProject(context.Context, sqlc.ListProjectRoleBindingsByProjectParams) ([]sqlc.ProjectRoleBinding, error) {
+	return nil, nil
+}
+func (q *policyTestQuerier) GetProjectRoleByID(context.Context, uuid.UUID) (sqlc.ProjectRole, error) {
+	return sqlc.ProjectRole{}, nil
+}
+func (q *policyTestQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc.User, error) {
+	return sqlc.User{}, nil
+}
+
 // patchURLParam wires a chi URL param into a request's context — handlers
 // pulled out of the router don't get URL params for free.
 func patchURLParam(req *http.Request, key, value string) *http.Request {

@@ -119,9 +119,32 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 		case EventTemplateFailed:
 			return PhaseFailed, nil
 		}
-	case PhaseReady, PhaseFailed:
-		// Terminal states. Only cancel/retry handled above can move
-		// off them, and ready specifically doesn't accept cancel.
+	case PhaseFailed:
+		// Self-healing edges out of `failed`. Until sprint 086 these
+		// were strictly terminal, but the orchestrator's auto-retry
+		// loop fires EventTemplateApplying again on each attempt
+		// without an explicit operator-driven retry, so a cluster
+		// whose tool install eventually succeeds would stay stuck on
+		// `failed` even though the agent finished cleanly. Treating
+		// these signals as implicit retries lets the phase column
+		// track reality instead of getting frozen on the first
+		// transient.
+		switch ev {
+		case EventTemplateApplying:
+			return PhaseProvisioning, nil
+		case EventTemplateApplied:
+			// A success delivered while we're still PhaseFailed (the
+			// orchestrator skipped the intermediate Applying step
+			// because it had one in-flight). Jump straight to Ready.
+			return PhaseReady, nil
+		case EventAgentConnected:
+			// Agent reconnect after a fail — get back to Connected
+			// so the wizard's "agent online" indicator clears.
+			return PhaseConnected, nil
+		}
+	case PhaseReady:
+		// Terminal end-state. Only cancel (handled above) can move
+		// off it, and ready specifically doesn't accept cancel.
 	}
 	_ = baseline // suppress unused warning when callers omit it from non-baseline events
 	return current, fmt.Errorf("%w: %s + %s", ErrIllegalTransition, current, ev)

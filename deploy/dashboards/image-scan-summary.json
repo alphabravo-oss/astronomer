@@ -1,0 +1,31 @@
+{
+  "title": "Astronomer — Image Scan Summary",
+  "uid": "astronomer-image-scan",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["astronomer", "security", "vulnerabilities"],
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {"list": [
+    {"name": "cluster", "type": "query", "query": "label_values(astronomer_image_vulnerability_count, cluster)", "refresh": 2}
+  ]},
+  "panels": [
+    {
+      "title": "Critical CVEs by cluster",
+      "type": "barchart",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 10},
+      "targets": [{"expr": "sum by (cluster) (astronomer_image_vulnerability_count{severity=\"critical\"})", "refId": "A"}]
+    },
+    {
+      "title": "High CVEs by cluster",
+      "type": "barchart",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 10},
+      "targets": [{"expr": "sum by (cluster) (astronomer_image_vulnerability_count{severity=\"high\"})", "refId": "A"}]
+    },
+    {
+      "title": "Scans per hour",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 8},
+      "targets": [{"expr": "sum by (cluster) (rate(astronomer_image_vulnerability_scans_total[5m]) * 3600)", "refId": "A"}]
+    }
+  ]
+}

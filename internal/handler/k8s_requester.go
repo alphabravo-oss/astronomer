@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -28,6 +29,11 @@ type K8sRequester interface {
 type TunnelK8sRequester struct {
 	hub     *tunnel.Hub
 	breaker *clusterBreaker
+	// psk authenticates cross-pod calls to the sibling's internal
+	// K8sRequest endpoint. Empty disables the fallback (single-replica
+	// install) and the requester returns "cluster agent not connected"
+	// on local-hub miss, same as before the locator existed.
+	psk string
 }
 
 func NewTunnelK8sRequester(hub *tunnel.Hub) *TunnelK8sRequester {
@@ -35,6 +41,18 @@ func NewTunnelK8sRequester(hub *tunnel.Hub) *TunnelK8sRequester {
 	// the half-open trial. Tunable in NewTunnelK8sRequesterWithBreaker
 	// for tests + future operator config.
 	return NewTunnelK8sRequesterWithBreaker(hub, 5, 30*time.Second)
+}
+
+// SetInternalPSK wires the shared-secret PSK that this requester uses
+// to authenticate to sibling pods' internal K8sRequest endpoint. Pass
+// the same value the InternalK8sHandler is configured with (typically
+// tunnel.DerivePSK(cfg.EncryptionKey)). Empty psk leaves the fallback
+// disabled.
+func (r *TunnelK8sRequester) SetInternalPSK(psk string) {
+	if r == nil {
+		return
+	}
+	r.psk = psk
 }
 
 // NewTunnelK8sRequesterWithBreaker constructs the requester with explicit
@@ -88,6 +106,15 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 
 	agent := r.hub.GetAgent(clusterID)
 	if agent == nil {
+		// Cross-pod fallback: ask the locator which sibling pod owns
+		// the agent's WS and forward the request there via the internal
+		// K8sRequest endpoint. Required for multi-replica server
+		// deployments — without this every server-internal tunnel call
+		// (shell open SA/Role/Pod create, project reconciler, etc.)
+		// 503s for the half of clusters whose WS landed on a sibling.
+		if resp, ok, ferr := r.forwardToOwner(ctx, clusterID, method, path, body, headers); ok {
+			return resp, ferr
+		}
 		return nil, fmt.Errorf("cluster agent not connected")
 	}
 
@@ -269,4 +296,68 @@ func ensureSuccess(resp *protocol.K8sResponsePayload) error {
 		return responseError(resp)
 	}
 	return nil
+}
+
+// forwardToOwner POSTs the K8sRequest to whichever sibling pod owns the
+// cluster's WS, per the redis-backed locator. The `ok` return is false
+// when there's no locator, no entry, the locator says we are the owner
+// (stale entry — falling through to the 503 surfaces the real
+// disconnect), or the PSK isn't configured. retErr non-nil means the
+// forward happened but the sibling returned an error.
+func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (resp *protocol.K8sResponsePayload, ok bool, retErr error) {
+	if r == nil || r.hub == nil || r.psk == "" {
+		return nil, false, nil
+	}
+	loc := r.hub.Locator()
+	if loc == nil {
+		return nil, false, nil
+	}
+	addr, err := loc.Lookup(ctx, clusterID)
+	if err != nil || addr == "" || addr == loc.Address() {
+		return nil, false, nil
+	}
+
+	payload := protocol.K8sRequestPayload{Method: method, Path: path, Headers: headers}
+	if len(body) > 0 {
+		payload.Body = base64.StdEncoding.EncodeToString(body)
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, true, err
+	}
+	target := "http://" + addr + "/internal/tunnel/k8s/" + clusterID
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return nil, true, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(tunnel.InternalPSKHeader, r.psk)
+
+	httpResp, err := internalK8sForwardClient.Do(req)
+	if err != nil {
+		return nil, true, err
+	}
+	defer httpResp.Body.Close()
+	respBytes, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, true, err
+	}
+	if httpResp.StatusCode >= 400 {
+		return nil, true, fmt.Errorf("sibling internal k8s endpoint %d: %s", httpResp.StatusCode, string(respBytes))
+	}
+	var out protocol.K8sResponsePayload
+	if err := json.Unmarshal(respBytes, &out); err != nil {
+		return nil, true, fmt.Errorf("decode sibling response: %w", err)
+	}
+	return &out, true, nil
+}
+
+// internalK8sForwardClient is the HTTP client used for cross-pod K8s
+// request forwarding. No global timeout — per-request context governs.
+var internalK8sForwardClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:          16,
+		IdleConnTimeout:       60 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+	},
 }

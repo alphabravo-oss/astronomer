@@ -122,6 +122,20 @@ func (q *Queries) CountInstalledChartsByCluster(ctx context.Context, clusterID u
 	return count, err
 }
 
+const deleteFailedInstallationsByCluster = `-- name: DeleteFailedInstallationsByCluster :execrows
+DELETE FROM installed_charts
+WHERE cluster_id = $1
+  AND status IN ('failed_install', 'failed_uninstall')
+`
+
+func (q *Queries) DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFailedInstallationsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createHelmChart = `-- name: CreateHelmChart :one
 INSERT INTO helm_charts (repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -590,7 +604,11 @@ func (q *Queries) GetInstalledChartByRelease(ctx context.Context, arg GetInstall
 }
 
 const getLatestChartVersion = `-- name: GetLatestChartVersion :one
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions WHERE chart_id = $1 ORDER BY created_at DESC LIMIT 1
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at
+FROM helm_chart_versions
+WHERE chart_id = $1
+ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
+LIMIT 1
 `
 
 func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (HelmChartVersion, error) {
@@ -614,7 +632,11 @@ func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) 
 }
 
 const listChartVersions = `-- name: ListChartVersions :many
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions WHERE chart_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at
+FROM helm_chart_versions
+WHERE chart_id = $1
+ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
+LIMIT $2 OFFSET $3
 `
 
 type ListChartVersionsParams struct {

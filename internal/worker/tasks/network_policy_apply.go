@@ -35,6 +35,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/netpol"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -258,6 +259,24 @@ func applyOneNetworkPolicy(ctx context.Context, deps NetworkPolicyApplyDeps, row
 		return
 	}
 	recordNetworkPolicyOutcome(tmpl.Slug, "success")
+	// T6.068 — audit fan-out on reconciled (apply success). Paired
+	// with the drift_detected emission so the audit log captures
+	// both legs of the reconcile loop.
+	if w, ok := any(deps.Queries).(audit.Querier); ok && w != nil {
+		audit.Record(ctx, w, audit.Event{
+			Source:       "worker",
+			Action:       "networkpolicy.reconciled",
+			ResourceType: "network_policy_application",
+			ResourceID:   row.ID.String(),
+			Detail: map[string]any{
+				"cluster_id":  row.ClusterID.String(),
+				"namespace":   row.Namespace,
+				"policy_name": row.PolicyName,
+				"template_id": row.TemplateID.String(),
+				"template_slug": tmpl.Slug,
+			},
+		})
+	}
 }
 
 // markNetworkPolicyFailure best-effort stamps last_error + status=failed
@@ -370,6 +389,25 @@ func runNetworkPolicyDriftSweep(ctx context.Context, deps NetworkPolicyApplyDeps
 				TouchApplied: false,
 			}); err != nil {
 				runtimeLogger().WarnContext(ctx, "mark drifting", "error", err, "id", row.ID)
+			}
+			// T6.068 — audit fan-out on drift detection. Reconciled
+			// rows are audited from the apply path (existing
+			// behaviour); drift_detected is the new signal so the
+			// audit log captures *when* the reconciler noticed
+			// divergence even before the reapply runs.
+			if w, ok := any(deps.Queries).(audit.Querier); ok && w != nil {
+				audit.Record(ctx, w, audit.Event{
+					Source:       "worker",
+					Action:       "networkpolicy.drift_detected",
+					ResourceType: "network_policy_application",
+					ResourceID:   row.ID.String(),
+					Detail: map[string]any{
+						"cluster_id":  row.ClusterID.String(),
+						"namespace":   row.Namespace,
+						"policy_name": row.PolicyName,
+						"template_id": row.TemplateID.String(),
+					},
+				})
 			}
 		}
 	}

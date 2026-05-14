@@ -54,3 +54,21 @@ WHERE id = $1;
 SELECT COALESCE(MAX(step_order), 0)::int
 FROM cluster_registration_steps
 WHERE cluster_id = $1;
+
+-- name: CloseRunningStepsForCluster :exec
+-- Sprint 086 — closes orphan "running" step rows on a given
+-- (cluster_id, step_name). The orchestrator's auto-retry path was
+-- writing a fresh `template_applying` row on every retry without
+-- closing the previous one, leaving the Provisioning tab showing
+-- "running" forever even after the apply finished. Called from
+-- OnTemplateApplyStart before the new row is written.
+UPDATE cluster_registration_steps
+   SET status = 'failed',
+       completed_at = COALESCE(completed_at, now()),
+       error_message = CASE
+           WHEN error_message = '' THEN 'superseded by retry'
+           ELSE error_message
+       END
+ WHERE cluster_id = $1
+   AND step_name = $2
+   AND status = 'running';

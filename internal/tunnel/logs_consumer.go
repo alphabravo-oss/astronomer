@@ -85,6 +85,14 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Multi-replica WS hand-off — same rationale as exec_consumer.go.
+	// Forward the upgrade to the sibling pod that owns the tunnel
+	// before we Accept, so log frames flow on the agent-owning pod
+	// and don't drop into "no stream found".
+	if ForwardWSToOwnerPod(lc.hub, lc.log, w, r, clusterID) {
+		return
+	}
+
 	// Accept WebSocket from frontend client.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,

@@ -57,6 +57,21 @@ type RuntimeQuerier interface {
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterHealthStatus, error)
 	UpsertClusterCondition(ctx context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
+	// Sprint 086 — remediation reconciler. Reads False conditions
+	// fleet-wide, writes attempt rows, and re-issues registration
+	// tokens for the Connected=False remedy path.
+	ListClusterConditionsByStatus(ctx context.Context, status string) ([]sqlc.ClusterCondition, error)
+	GetLatestClusterConditionRemediation(ctx context.Context, arg sqlc.GetLatestClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
+	InsertClusterConditionRemediation(ctx context.Context, arg sqlc.InsertClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
+	CountClusterConditionRemediationSinceForType(ctx context.Context, arg sqlc.CountClusterConditionRemediationSinceForTypeParams) (int64, error)
+	CreateClusterRegistrationToken(ctx context.Context, arg sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error)
+	// T8.4 — TemplateApplyStuck remediation. Reads the cluster's
+	// template-application row to confirm it is still stuck before
+	// resetting to 'failed'; the drift-sweep recovery sweep then
+	// re-enqueues.
+	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error)
+	MarkClusterTemplateApplicationStatus(ctx context.Context, arg sqlc.MarkClusterTemplateApplicationStatusParams) (sqlc.ClusterTemplateApplication, error)
+	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 	GetDefaultMonitoringBackend(ctx context.Context) (sqlc.MonitoringBackend, error)
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error)
 	GetClusterMonitoringConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterMonitoringConfig, error)

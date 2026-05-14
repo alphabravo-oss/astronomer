@@ -155,6 +155,12 @@ func (q *fakeAutoAttachClusterQuerier) UpsertClusterRegistryConfig(context.Conte
 func (q *fakeAutoAttachClusterQuerier) DeleteClusterRegistryConfig(context.Context, uuid.UUID) error {
 	return nil
 }
+func (q *fakeAutoAttachClusterQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
+	return sqlc.PlatformSetting{}, pgx.ErrNoRows
+}
+func (q *fakeAutoAttachClusterQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
+	return nil, nil
+}
 
 // createReq builds a minimal POST body. The Create handler validates
 // the name shape (RFC-1123), so we always pick a clean lowercase

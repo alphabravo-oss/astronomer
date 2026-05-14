@@ -291,7 +291,7 @@ func seedOwned(q *fakeProjectCatalogQuerier, name string, owner uuid.UUID) uuid.
 
 func TestListCatalogsForProject_IncludesGlobals(t *testing.T) {
 	h, q, projectA, _ := newProjectCatalogTestEnv(t)
-	seedGlobal(q, "bitnami-global")
+	seedGlobal(q, "prometheus-community-global")
 
 	caller := uuid.New()
 	q.users[caller] = sqlc.User{ID: caller}
@@ -344,7 +344,7 @@ func TestListCatalogsForProject_IncludesOwn(t *testing.T) {
 
 func TestListCatalogsForProject_IncludesSubscribed(t *testing.T) {
 	h, q, projectA, _ := newProjectCatalogTestEnv(t)
-	globalID := seedGlobal(q, "bitnami")
+	globalID := seedGlobal(q, "prometheus-community")
 	// Subscribe project A to the global.
 	q.subscriptions[projectA] = map[uuid.UUID]sqlc.ProjectCatalogSubscription{
 		globalID: {ID: uuid.New(), ProjectID: projectA, CatalogID: globalID, CreatedAt: time.Now()},
@@ -487,7 +487,7 @@ func TestUnsubscribeProjectOwned_DeletesCatalog(t *testing.T) {
 
 func TestUnsubscribeGlobal_KeepsCatalog(t *testing.T) {
 	h, q, projectA, _ := newProjectCatalogTestEnv(t)
-	globalID := seedGlobal(q, "bitnami")
+	globalID := seedGlobal(q, "prometheus-community")
 	q.subscriptions[projectA] = map[uuid.UUID]sqlc.ProjectCatalogSubscription{
 		globalID: {ID: uuid.New(), ProjectID: projectA, CatalogID: globalID},
 	}
@@ -641,6 +641,9 @@ func (m *minimalCatalogQuerier) UpdateInstalledChartValues(_ context.Context, _ 
 func (m *minimalCatalogQuerier) DeleteInstalledChart(_ context.Context, _ uuid.UUID) error {
 	return nil
 }
+func (m *minimalCatalogQuerier) DeleteFailedInstallationsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	return 0, nil
+}
 func (m *minimalCatalogQuerier) CountInstalledCharts(_ context.Context) (int64, error) {
 	return 0, nil
 }
@@ -686,6 +689,12 @@ func (m *minimalCatalogQuerier) ListAdminCatalogsIncludingProjectOwned(_ context
 		out = append(out, c)
 	}
 	return out, nil
+}
+func (m *minimalCatalogQuerier) UpdateHelmChartVersionContent(_ context.Context, _ sqlc.UpdateHelmChartVersionContentParams) error {
+	return nil
+}
+func (m *minimalCatalogQuerier) ListInstalledChartsWithMetadataByCluster(_ context.Context, _ sqlc.ListInstalledChartsWithMetadataByClusterParams) ([]sqlc.InstalledChartWithMetadata, error) {
+	return nil, nil
 }
 
 func TestCatalogBrowse_ProjectScopedFilter(t *testing.T) {

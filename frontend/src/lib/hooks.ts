@@ -55,7 +55,13 @@ export const queryKeys = {
     nodes: (id: string) => ['clusters', id, 'nodes'] as const,
     nodeDetail: (id: string, nodeName: string) => ['clusters', id, 'nodes', nodeName] as const,
     namespaces: (id: string) => ['clusters', id, 'namespaces'] as const,
-    events: (id: string) => ['clusters', id, 'events'] as const,
+    // Params is part of the key because callers ask for different
+    // limits (overview wants the latest 10; the events page + sidebar
+    // both want 200). Without the params in the cache key, whichever
+    // hook mounted last wins and the sidebar count flaps between 10
+    // and 200 as the user navigates Overview ↔ Events.
+    events: (id: string, params?: Record<string, unknown>) =>
+      ['clusters', id, 'events', params] as const,
     pods: (id: string) => ['clusters', id, 'pods'] as const,
     metrics: (id: string, range?: string) => ['clusters', id, 'metrics', range] as const,
     metricsSummary: (id: string) => ['clusters', id, 'metrics', 'summary'] as const,
@@ -210,6 +216,18 @@ export function useClusterConditions(clusterId: string) {
   });
 }
 
+// Sprint 086 — remediation history feeds the "Last action" footer
+// under the condition pills. 30s cadence matches the reconciler so a
+// fresh attempt shows up the next tick instead of one minute later.
+export function useClusterConditionRemediation(clusterId: string) {
+  return useQuery({
+    queryKey: ['clusters', clusterId, 'condition-remediation'] as const,
+    queryFn: () => apiClient.getClusterConditionRemediation(clusterId),
+    enabled: !!clusterId,
+    refetchInterval: 30000,
+  });
+}
+
 export function useNodeDetail(clusterId: string, nodeName: string) {
   return useQuery({
     queryKey: queryKeys.clusters.nodeDetail(clusterId, nodeName),
@@ -229,7 +247,7 @@ export function useClusterNamespaces(clusterId: string) {
 
 export function useClusterEvents(clusterId: string, params?: { type?: string; limit?: number }) {
   return useQuery({
-    queryKey: queryKeys.clusters.events(clusterId),
+    queryKey: queryKeys.clusters.events(clusterId, params as Record<string, unknown> | undefined),
     queryFn: () => apiClient.getClusterEvents(clusterId, params),
     enabled: !!clusterId,
     refetchInterval: 15000,

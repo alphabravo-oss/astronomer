@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -105,6 +106,12 @@ func (q *clusterRegistryTestQuerier) GetClusterTemplateByID(context.Context, uui
 }
 func (q *clusterRegistryTestQuerier) UpsertClusterTemplateApplication(context.Context, sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
 	return sqlc.ClusterTemplateApplication{}, nil
+}
+func (q *clusterRegistryTestQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
+	return sqlc.PlatformSetting{}, pgx.ErrNoRows
+}
+func (q *clusterRegistryTestQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
+	return nil, nil
 }
 
 func TestDeleteRegistryConfig(t *testing.T) {

@@ -55,6 +55,10 @@ const DEFAULTS: PlatformSettingsGrouped = {
     enabled: false,
     endpoint: '',
   },
+  registration: {
+    tlsMode: 'public_ca',
+    caBundle: '',
+  },
 };
 
 const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
@@ -76,6 +80,8 @@ const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
   'tokens.max_ttl_seconds': (g) => g.tokens.maxTtlSeconds,
   'telemetry.enabled': (g) => g.telemetry.enabled,
   'telemetry.endpoint': (g) => g.telemetry.endpoint,
+  'registration.tls_mode': (g) => g.registration.tlsMode,
+  'registration.ca_bundle': (g) => g.registration.caBundle,
 };
 
 function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettingsGrouped {
@@ -112,6 +118,10 @@ function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettings
     telemetry: {
       enabled: get('telemetry.enabled', DEFAULTS.telemetry.enabled),
       endpoint: get('telemetry.endpoint', DEFAULTS.telemetry.endpoint),
+    },
+    registration: {
+      tlsMode: get('registration.tls_mode', DEFAULTS.registration.tlsMode) as PlatformSettingsGrouped['registration']['tlsMode'],
+      caBundle: get('registration.ca_bundle', DEFAULTS.registration.caBundle),
     },
   };
 }
@@ -393,6 +403,65 @@ function PlatformSettingsForm() {
           onChange={(v) => setForm({ ...form, telemetry: { ...form.telemetry, endpoint: v } })}
           placeholder="https://telemetry.example.com/v1/ingest"
         />
+      </Section>
+
+      <Section
+        title="Cluster registration TLS"
+        description="Controls which curl variant the cluster-registration wizard shows by default and whether the public /api/v1/register/ca.crt endpoint serves a CA bundle."
+      >
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">TLS posture</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {(
+              [
+                { v: 'public_ca', label: 'Public CA', hint: 'Server certificate signed by a publicly-trusted CA. curl works with no flags.' },
+                { v: 'private_ca', label: 'Private CA', hint: 'Server cert signed by an internal CA. Paste the PEM below; agents fetch & --cacert.' },
+                { v: 'insecure', label: 'Skip verify', hint: 'Escape hatch — agents are told to use curl --insecure. Not recommended.' },
+              ] as const
+            ).map((opt) => {
+              const active = form.registration.tlsMode === opt.v;
+              return (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      registration: { ...form.registration, tlsMode: opt.v },
+                    })
+                  }
+                  className={cn(
+                    'text-left p-3 rounded-lg border transition-colors',
+                    active ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent',
+                  )}
+                >
+                  <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{opt.hint}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {form.registration.tlsMode === 'private_ca' && (
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">CA bundle (PEM)</label>
+            <textarea
+              value={form.registration.caBundle}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  registration: { ...form.registration, caBundle: e.target.value },
+                })
+              }
+              rows={10}
+              placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground">
+              Served via <code className="font-mono">GET /api/v1/register/ca.crt</code>. Concatenate any intermediate certs.
+            </p>
+          </div>
+        )}
       </Section>
 
       <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur p-3 shadow-sm">

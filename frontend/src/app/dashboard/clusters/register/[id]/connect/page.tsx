@@ -11,13 +11,16 @@ import { toast } from 'sonner';
 import { Loader2, Copy, Check, Download, Server } from 'lucide-react';
 import {
   confirmRegistration,
-  getClusterManifest,
+  getClusterManifestWithToken,
   getRegistrationStatus,
+  getRegistrationTLS,
   type RegistrationStatus,
+  type RegistrationTLSMode,
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live-events';
 
-type Tab = 'quick' | 'yaml' | 'airgapped';
+type Tab = 'curl' | 'quick' | 'yaml' | 'airgapped';
+type CurlVariant = 'public_ca' | 'private_ca' | 'insecure';
 
 export default function ConnectStepPage() {
   const router = useRouter();
@@ -25,21 +28,36 @@ export default function ConnectStepPage() {
   const clusterId = String(params?.id ?? '');
 
   const [manifest, setManifest] = useState('');
-  const [tab, setTab] = useState<Tab>('quick');
-  const [copied, setCopied] = useState(false);
+  const [registrationToken, setRegistrationToken] = useState('');
+  const [tab, setTab] = useState<Tab>('curl');
+  const [copied, setCopied] = useState<CurlVariant | 'quick' | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<RegistrationStatus | null>(null);
   const [autoDetect, setAutoDetect] = useState(true);
+  const [tlsMode, setTlsMode] = useState<RegistrationTLSMode>('public_ca');
+  const [curlVariant, setCurlVariant] = useState<CurlVariant>('public_ca');
   const advancedRef = useRef(false);
 
   // Fetch the manifest once on mount; the backend mints a fresh
-  // registration token each call.
+  // registration token each call and exposes it via response header
+  // so the Curl tab can render the Rancher-style one-liner.
   useEffect(() => {
     if (!clusterId) return;
-    getClusterManifest(clusterId)
-      .then(setManifest)
+    getClusterManifestWithToken(clusterId)
+      .then(({ manifest, token }) => {
+        setManifest(manifest);
+        setRegistrationToken(token);
+      })
       .catch(() => toast.error('Failed to fetch install manifest'));
     getRegistrationStatus(clusterId).then(setStatus).catch(() => {/* tolerated */});
+    // Operator-configured TLS posture from platform_settings. Defaults
+    // to public_ca on any failure so the wizard always renders something.
+    getRegistrationTLS()
+      .then((tls) => {
+        setTlsMode(tls.mode);
+        setCurlVariant(tls.mode);
+      })
+      .catch(() => {/* tolerated — keep public_ca default */});
   }, [clusterId]);
 
   // SSE subscription via the global live-events bus. When the agent
@@ -71,11 +89,50 @@ export default function ConnectStepPage() {
 
   const oneLiner = `cat <<'EOF' | kubectl apply -f -\n${manifest}\nEOF`;
 
-  const onCopy = async () => {
+  // Rancher-style one-liner that pulls the manifest from the public
+  // /api/v1/register/<token> endpoint and pipes it into kubectl apply.
+  // We build the URL from the browser's origin so the agent host hits
+  // the same server the operator is staring at. Falls back to a
+  // placeholder while the token is still in flight.
+  const curlOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  // The `.yaml` suffix matters: the server's trailing-slash middleware
+  // leaves dotted last segments alone, so chi dispatches the request
+  // directly to the public manifest handler without a trailing-slash
+  // rewrite stealing the request first.
+  const manifestURL = registrationToken
+    ? `${curlOrigin}/api/v1/register/${registrationToken}.yaml`
+    : '';
+  const caURL = `${curlOrigin}/api/v1/register/ca.crt`;
+
+  // Rancher offers three TLS postures. We render all three so the
+  // operator can pick whichever one matches their reality (the radio
+  // defaults to the platform-configured mode, but copy-paste is the
+  // ultimate decider).
+  const curlVariants: Record<CurlVariant, { label: string; hint: string; cmd: string }> = {
+    public_ca: {
+      label: 'Trusted CA',
+      hint: 'Use when this platform serves over HTTPS with a publicly-trusted certificate.',
+      cmd: manifestURL ? `curl -sfL ${manifestURL} | kubectl apply -f -` : '',
+    },
+    private_ca: {
+      label: 'Private CA',
+      hint: 'Use when this platform serves over HTTPS with a CA that isn\'t in the system trust store. The first curl fetches the operator-provided bundle, the second pins to it.',
+      cmd: manifestURL
+        ? `curl -sfL ${caURL} -o /tmp/astronomer-ca.crt\ncurl --cacert /tmp/astronomer-ca.crt -sfL ${manifestURL} | kubectl apply -f -`
+        : '',
+    },
+    insecure: {
+      label: 'Skip TLS verify',
+      hint: 'Escape hatch for ops who haven\'t pinned a CA yet. Functionally equivalent to passing --insecure-skip-tls-verify; not recommended for long-lived agents.',
+      cmd: manifestURL ? `curl --insecure -sfL ${manifestURL} | kubectl apply -f -` : '',
+    },
+  };
+
+  const onCopy = async (which: CurlVariant | 'quick', text: string) => {
     try {
-      await navigator.clipboard.writeText(oneLiner);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
     } catch {
       toast.error('Failed to copy');
     }
@@ -110,8 +167,11 @@ export default function ConnectStepPage() {
 
       <div className="border-b border-border mb-4">
         <nav className="flex gap-1">
+          <TabButton active={tab === 'curl'} onClick={() => setTab('curl')}>
+            Curl
+          </TabButton>
           <TabButton active={tab === 'quick'} onClick={() => setTab('quick')}>
-            Quick install
+            Inline
           </TabButton>
           <TabButton active={tab === 'yaml'} onClick={() => setTab('yaml')}>
             YAML manifest
@@ -122,21 +182,71 @@ export default function ConnectStepPage() {
         </nav>
       </div>
 
+      {tab === 'curl' && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            On a host with <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">kubectl</code> pointed at your cluster, run the variant that matches this platform&apos;s TLS posture:
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {(['public_ca', 'private_ca', 'insecure'] as const).map((v) => {
+              const active = curlVariant === v;
+              const isPlatformDefault = v === tlsMode;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setCurlVariant(v)}
+                  className={
+                    'inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-colors ' +
+                    (active
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-accent')
+                  }
+                >
+                  {curlVariants[v].label}
+                  {isPlatformDefault && (
+                    <span className="text-[10px] text-muted-foreground">(platform default)</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">{curlVariants[curlVariant].hint}</p>
+          <div className="relative">
+            <pre className="text-xs bg-muted/30 border border-border rounded-lg p-4 overflow-x-auto font-mono whitespace-pre">
+              {curlVariants[curlVariant].cmd || '# loading...'}
+            </pre>
+            <button
+              onClick={() => onCopy(curlVariant, curlVariants[curlVariant].cmd)}
+              disabled={!curlVariants[curlVariant].cmd}
+              className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent disabled:opacity-50"
+            >
+              {copied === curlVariant ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied === curlVariant ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The URL pulls a freshly-rendered manifest signed with a single-use registration token (24h TTL). The agent host must be able to reach{' '}
+            <code className="font-mono">{curlOrigin || 'this server'}</code>.
+          </p>
+        </div>
+      )}
+
       {tab === 'quick' && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Run this command on a host with <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">kubectl</code> pointed at your cluster:
+            Paste the rendered manifest directly into <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">kubectl apply</code>. Useful when the agent host can't reach this server's URL (the Curl tab needs egress to {curlOrigin || 'this server'}).
           </p>
           <div className="relative">
             <pre className="text-xs bg-muted/30 border border-border rounded-lg p-4 overflow-x-auto font-mono whitespace-pre">
               {oneLiner || (manifest ? '' : '# loading...')}
             </pre>
             <button
-              onClick={onCopy}
+              onClick={() => onCopy('quick', oneLiner)}
               className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent"
             >
-              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied === 'quick' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied === 'quick' ? 'Copied' : 'Copy'}
             </button>
           </div>
         </div>

@@ -388,8 +388,24 @@ func TestKubectlHandler_AdminCommands_SuperuserSeesAny(t *testing.T) {
 	}
 }
 
-func TestKubectlHandler_WSEndpointRedirects(t *testing.T) {
+// TestKubectlHandler_WSEndpointBridgesToExecProxy replaces the prior
+// "WS endpoint redirects" test: the v2 handler no longer 307-redirects
+// onto /api/v1/ws/exec/ because Firefox does not follow redirects on
+// WS handshakes (and some corporate proxies strip the Upgrade header).
+// Instead, after validating the session row, the handler upgrades the
+// inbound WS on the original route and calls ExecProxy.ProxyToAgent
+// with the pod coords pulled from the session record. This test
+// asserts the lookup→proxy wiring without bringing up a real WS by
+// driving the handler through the entrypoint that runs BEFORE the
+// upgrade (the missing-Exec 503 path) and through a fake proxy that
+// records its arguments.
+func TestKubectlHandler_WSEndpointBridgesToExecProxy(t *testing.T) {
 	h, _, userID, clusterID := newTestKubectlHandler(t)
+
+	// 1. Without an ExecProxy wired, an authenticated, authorized WS
+	//    handshake on an active session 503s with a clear code rather
+	//    than silently 200ing or 404ing. This protects against boot-
+	//    ordering bugs in server wiring.
 	r := newKubectlRouter(h)
 	req := authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", "", userID, false)
 	w := httptest.NewRecorder()
@@ -400,15 +416,23 @@ func TestKubectlHandler_WSEndpointRedirects(t *testing.T) {
 	req = authReq("GET", "/api/v1/ws/clusters/"+clusterID.String()+"/shell/sessions/"+info.ID.String()+"/", "", userID, false)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusTemporaryRedirect {
-		t.Fatalf("WS endpoint: want 307, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("WS endpoint without ExecProxy: want 503, got %d body=%s", w.Code, w.Body.String())
 	}
-	loc := w.Header().Get("Location")
-	if !strings.HasPrefix(loc, "/api/v1/ws/exec/") {
-		t.Fatalf("WS endpoint should redirect to /api/v1/ws/exec/, got %s", loc)
+	if !strings.Contains(w.Body.String(), "shell_unavailable") {
+		t.Fatalf("missing-ExecProxy body should include shell_unavailable; got %s", w.Body.String())
 	}
-	if !strings.Contains(loc, "/"+info.PodName+"/") {
-		t.Fatalf("WS redirect should include pod name; got %s", loc)
+
+	// 2. With a foreign caller, the session lookup must still 403
+	//    BEFORE any WS upgrade is attempted. We don't need an
+	//    ExecProxy wired for this assertion — loadSessionForCluster
+	//    fires first.
+	otherID := uuid.New()
+	req = authReq("GET", "/api/v1/ws/clusters/"+clusterID.String()+"/shell/sessions/"+info.ID.String()+"/", "", otherID, false)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("foreign WS caller: want 403, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

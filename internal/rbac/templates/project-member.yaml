@@ -1,0 +1,23 @@
+name: project-member
+display_name: Project Member
+description: |
+  Day-to-day developer access inside a project. Can deploy, scale, exec
+  into pods, and view monitoring + alerts. Cannot manage RBAC or the
+  project itself.
+scope: project
+category: project
+rules:
+  - resource: projects
+    verbs: [read, list]
+  - resource: workloads
+    verbs: [create, read, update, list, scale, restart]
+  - resource: pods
+    verbs: [read, list, watch, logs, exec]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: alerts
+    verbs: [read, list]
+  - resource: catalog
+    verbs: [read, list]
+  - resource: argocd
+    verbs: [read, list, sync]

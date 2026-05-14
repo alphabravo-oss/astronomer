@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/mail"
@@ -19,6 +20,21 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
+
+// activeBaselineRequiresSMTP returns (slug, true) when the active
+// compliance baseline declares required_smtp=true. Helper for
+// T6.064; fails-open on lookup errors so a broken compliance read
+// doesn't lock operators out of editing SMTP.
+func activeBaselineRequiresSMTP(ctx context.Context, q activeBaselineQuerier) (string, bool) {
+	slug, spec, ok := loadActiveBaselineSpec(ctx, q)
+	if !ok {
+		return "", false
+	}
+	if spec.RequiredSMTP {
+		return slug, true
+	}
+	return "", false
+}
 
 // callerUsername returns the authenticated user's username (or
 // "anonymous" when not authenticated). Used by the test-send path so
@@ -42,6 +58,11 @@ type SMTPQuerier interface {
 	ListEmailMessages(ctx context.Context, arg sqlc.ListEmailMessagesParams) ([]sqlc.EmailMessage, error)
 	CountEmailMessages(ctx context.Context) (int64, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
+	// T6.064 — baseline guard. Refuse Update calls that would
+	// disable SMTP when the active compliance baseline declares
+	// required_smtp=true.
+	GetActiveComplianceBaselineApplication(ctx context.Context) (sqlc.ComplianceBaselineApplication, error)
+	GetComplianceBaseline(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaseline, error)
 }
 
 // SMTPTestSender is the surface used by the test-send endpoint. The
@@ -217,6 +238,17 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if vErr := h.validate(merged); vErr != "" {
 		RespondError(w, http.StatusBadRequest, "validation_error", vErr)
 		return
+	}
+	// T6.064 — refuse to disable SMTP (or blank the host) when the
+	// active compliance baseline declares required_smtp=true. Setting
+	// enabled=false OR clearing the host both produce a non-functional
+	// mailer; we treat either as the disable signal.
+	if !merged.Enabled || merged.Host == "" {
+		if slug, required := activeBaselineRequiresSMTP(r.Context(), h.queries); required {
+			RespondError(w, http.StatusConflict, "baseline_required",
+				fmt.Sprintf("SMTP is required by the active compliance baseline %q; cannot disable.", slug))
+			return
+		}
 	}
 
 	// Encrypt the password if the admin sent a fresh value (anything

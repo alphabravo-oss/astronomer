@@ -1,0 +1,38 @@
+{
+  "title": "Astronomer — Workload Health",
+  "uid": "astronomer-workload-health",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["astronomer", "workloads"],
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {"list": [
+    {"name": "cluster", "type": "query", "query": "label_values(kube_pod_info, cluster)", "refresh": 2},
+    {"name": "namespace", "type": "query", "query": "label_values(kube_pod_info{cluster=~\"$cluster\"}, namespace)", "refresh": 2}
+  ]},
+  "panels": [
+    {
+      "title": "Pods not Ready",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 8, "h": 4},
+      "targets": [{"expr": "sum(kube_pod_status_ready{condition=\"false\", cluster=~\"$cluster\", namespace=~\"$namespace\"})", "refId": "A"}]
+    },
+    {
+      "title": "Restarts (5m)",
+      "type": "stat",
+      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 4},
+      "targets": [{"expr": "sum(increase(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", namespace=~\"$namespace\"}[5m]))", "refId": "A"}]
+    },
+    {
+      "title": "Workloads w/ unavailable replicas",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 4},
+      "targets": [{"expr": "count(kube_deployment_status_replicas_unavailable{cluster=~\"$cluster\", namespace=~\"$namespace\"} > 0)", "refId": "A"}]
+    },
+    {
+      "title": "Pod restart rate (per pod)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 10},
+      "targets": [{"expr": "sum by (namespace, pod) (rate(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", namespace=~\"$namespace\"}[5m]))", "refId": "A"}]
+    }
+  ]
+}

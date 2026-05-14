@@ -27,9 +27,20 @@ export default function ProjectsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const { data: projectsData, isLoading: projectsLoading } = useProjects();
+  const { data: clustersData } = useClusters();
   const deleteProject = useDeleteProject();
 
   const projects = projectsData?.data || [];
+
+  // cluster id → display name lookup so the table can render a real
+  // cluster column instead of opaque UUIDs. Per-cluster project pages
+  // already render the cluster context implicitly via the URL; the
+  // fleet-wide page needs to show it as a column or operators can't
+  // disambiguate two same-named projects on different clusters.
+  const clusterById = new Map<string, string>();
+  (clustersData?.data || []).forEach((c) => {
+    clusterById.set(c.id, c.displayName || c.name);
+  });
 
   const projectColumns: Column<Project>[] = [
     {
@@ -54,6 +65,48 @@ export default function ProjectsPage() {
         </span>
       ),
       sortable: false,
+    },
+    {
+      key: 'cluster',
+      header: 'Cluster',
+      accessor: (row) => {
+        // The Go backend returns cluster_id (singular). The legacy
+        // TypeScript type carries an optional clusterIds[] array from
+        // an earlier multi-cluster design — handle both gracefully so
+        // this column works against whichever shape the API ships.
+        const ids: string[] =
+          (row as unknown as { cluster_id?: string }).cluster_id
+            ? [(row as unknown as { cluster_id: string }).cluster_id]
+            : row.clusterIds || (row.clusterId ? [row.clusterId] : []);
+        if (ids.length === 0) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {ids.slice(0, 2).map((cid) => (
+              <span
+                key={cid}
+                className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium"
+                title={cid}
+              >
+                {clusterById.get(cid) || cid.slice(0, 8)}
+              </span>
+            ))}
+            {ids.length > 2 && (
+              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                +{ids.length - 2}
+              </span>
+            )}
+          </div>
+        );
+      },
+      sortAccessor: (row) => {
+        const cid = (row as unknown as { cluster_id?: string }).cluster_id
+          || row.clusterId
+          || (row.clusterIds && row.clusterIds[0])
+          || '';
+        return clusterById.get(cid) || '';
+      },
     },
     {
       key: 'namespaces',

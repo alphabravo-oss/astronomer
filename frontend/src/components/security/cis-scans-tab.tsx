@@ -195,18 +195,14 @@ export function CISScansTab() {
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                 <Link
-                  href="/dashboard/catalog?search=trivy"
-                  className="font-medium text-primary hover:underline"
-                >
-                  Install trivy-operator →
-                </Link>
-                <span className="text-muted-foreground">or</span>
-                <Link
                   href="/dashboard/clusters"
                   className="font-medium text-primary hover:underline"
                 >
                   Apply the Platform Baseline template to a cluster →
                 </Link>
+                <span className="text-muted-foreground">
+                  (installs trivy-operator + the other baseline tools)
+                </span>
                 <span className="text-muted-foreground">
                   (auto-applied to newly-registered clusters)
                 </span>

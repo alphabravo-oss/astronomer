@@ -56,6 +56,10 @@ type CatalogQuerier interface {
 	GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (sqlc.HelmChartVersion, error)
 	GetHelmChartVersion(ctx context.Context, arg sqlc.GetHelmChartVersionParams) (sqlc.HelmChartVersion, error)
 	CreateHelmChartVersion(ctx context.Context, arg sqlc.CreateHelmChartVersionParams) (sqlc.HelmChartVersion, error)
+	// Sprint 082 — lazy hydration writeback for default_values + readme.
+	UpdateHelmChartVersionContent(ctx context.Context, arg sqlc.UpdateHelmChartVersionContentParams) error
+	// Sprint 082 — joined Apps tab listing (chart name/icon/version + repo).
+	ListInstalledChartsWithMetadataByCluster(ctx context.Context, arg sqlc.ListInstalledChartsWithMetadataByClusterParams) ([]sqlc.InstalledChartWithMetadata, error)
 	// Installed Charts
 	ListInstalledCharts(ctx context.Context, arg sqlc.ListInstalledChartsParams) ([]sqlc.InstalledChart, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg sqlc.ListInstalledChartsByClusterParams) ([]sqlc.InstalledChart, error)
@@ -65,6 +69,8 @@ type CatalogQuerier interface {
 	UpdateInstalledChartStatus(ctx context.Context, arg sqlc.UpdateInstalledChartStatusParams) error
 	UpdateInstalledChartValues(ctx context.Context, arg sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error)
 	DeleteInstalledChart(ctx context.Context, id uuid.UUID) error
+	// Rancher-style bulk-delete of stuck releases; used by the Apps tab.
+	DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountInstalledCharts(ctx context.Context) (int64, error)
 	CountInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CreateCatalogOperation(ctx context.Context, arg sqlc.CreateCatalogOperationParams) (sqlc.CatalogOperation, error)
@@ -1257,6 +1263,17 @@ func (h *CatalogHandler) GetChartReadme(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusNotFound, "not_found", "No versions found for this chart.")
 		return
 	}
+	// Sprint 082: catalog sync stores empty README/default_values to
+	// stay fast. On first request we pull + parse the tarball and
+	// write the content back so subsequent requests are cached.
+	if version.Readme == "" && version.DefaultValues == "" {
+		if hydrated, hErr := h.hydrateChartVersion(r.Context(), version); hErr == nil {
+			version = hydrated
+		} else if h.log != nil {
+			h.log.Warn("chart readme hydration failed",
+				"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
+		}
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"chart":   chart.Name,
 		"version": version.Version,
@@ -1281,6 +1298,17 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "No versions found for this chart.")
 		return
+	}
+	// Sprint 082: lazy hydrate default_values + README on cache miss
+	// so the install modal's YAML editor gets real defaults instead
+	// of an empty box.
+	if version.DefaultValues == "" && version.Readme == "" {
+		if hydrated, hErr := h.hydrateChartVersion(r.Context(), version); hErr == nil {
+			version = hydrated
+		} else if h.log != nil {
+			h.log.Warn("chart values hydration failed",
+				"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
+		}
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"chart":          chart.Name,

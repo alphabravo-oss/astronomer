@@ -15,7 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // K8sRequester is the surface the lifecycle uses to talk to the
@@ -272,8 +274,6 @@ func Reap(ctx context.Context, deps Deps) error {
 	for _, row := range expired {
 		isHard := !row.ExpiresAt.After(now)
 		isIdle := row.LastInputAt.Add(idle).Before(now)
-		_ = isHard // status="expired" covers both — distinction is for audit
-		_ = isIdle
 		_ = hard
 
 		_ = tearDownK8s(ctx, deps, row.ClusterID.String(), namesFromRow(row))
@@ -281,6 +281,33 @@ func Reap(ctx context.Context, deps Deps) error {
 			ID:     row.ID,
 			Status: "expired",
 		})
+
+		// T6.065 — audit fan-out. Distinguish hard-cap vs idle in
+		// the audit detail so on-call can see *why* a session ended
+		// without correlating against the expires_at column.
+		reason := "idle_timeout"
+		switch {
+		case isHard && !isIdle:
+			reason = "hard_cap"
+		case isHard && isIdle:
+			reason = "hard_cap_and_idle"
+		}
+		if writer, ok := any(deps.Queries).(audit.Querier); ok && writer != nil {
+			audit.Record(ctx, writer, audit.Event{
+				Source:       "worker",
+				Action:       "cluster.shell.session.expired",
+				ResourceType: "kubectl_session",
+				ResourceID:   row.ID.String(),
+				Detail: map[string]any{
+					"reason":      reason,
+					"cluster_id":  row.ClusterID.String(),
+					"pod_name":    row.PodName,
+					"started_at":  row.StartedAt.UTC().Format(time.RFC3339),
+					"expires_at":  row.ExpiresAt.UTC().Format(time.RFC3339),
+					"last_input":  row.LastInputAt.UTC().Format(time.RFC3339),
+				},
+			})
+		}
 	}
 
 	// Orphan sweep: enumerate active rows per cluster, then list pods
@@ -308,6 +335,15 @@ func Reap(ctx context.Context, deps Deps) error {
 				slog.String("cluster_id", clusterID),
 				slog.String("error", err.Error()))
 		}
+	}
+	// T6.065 — gauge update. `active` was loaded earlier and reflects
+	// post-reap state because Reap flips expired rows to 'expired'
+	// before the ListAllActive call below would re-fetch — but we
+	// re-list here for correctness (in case sweepOrphanPods caused
+	// indirect status changes elsewhere).
+	postReap, lerr := deps.Queries.ListAllActiveKubectlSessions(ctx)
+	if lerr == nil {
+		observability.SetKubectlActiveSessions(len(postReap))
 	}
 	return nil
 }

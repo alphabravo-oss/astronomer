@@ -5,10 +5,13 @@
 //   trivy-operator, kube-state-metrics, node-exporter,
 //   fluent-bit, cert-manager
 //
-// Migration 075 seeds three helm_repositories (bitnami, aqua, jetstack)
-// that should contain those slugs once the first-boot catalog:sync
-// completes. This read-only endpoint is the operator's sanity check
-// after install: hit GET /api/v1/admin/platform-settings/default-cluster-template/coverage/
+// Migrations 075/077/079 seed the helm_repositories (aqua, jetstack,
+// fluent, prometheus-community) that contain those slugs once the
+// first-boot catalog:sync completes. Migration 083 removed the
+// original bitnami seed after Broadcom deprecated the public catalog
+// in Aug 2025. This read-only endpoint is the operator's sanity
+// check after install: hit
+//   GET /api/v1/admin/platform-settings/default-cluster-template/coverage/
 // and see "5/5 slugs resolved" or "3/5 resolved, 2 missing".
 //
 // The check is hard-coded against the documented baseline slug list

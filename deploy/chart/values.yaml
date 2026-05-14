@@ -236,13 +236,14 @@ migrate:
 preflight:
   enabled: true
   image:
-    repository: bitnami/kubectl
-    # Pinned (sprint 074) so the air-gapped chart bundle ships a
-    # specific kubectl version. `latest` made `make images.txt` produce
-    # a non-reproducible manifest and caused ImagePullBackOff on the
-    # kubectl-shell debug pods in clusters with no egress. The 1.31
-    # series matches the supported Kubernetes server-version skew.
-    tag: 1.31.4
+    # astronomer-shell is built from deploy/docker/Dockerfile.shell —
+    # alpine + kubectl pinned at v1.31.0, fetched from dl.k8s.io. It
+    # replaced the previous bitnami/kubectl default after Broadcom
+    # 404'd docker.io/bitnami/kubectl during the Aug 2025 retag.
+    # Same image runs the in-browser kubectl shell pods, so air-gapped
+    # operators only need to mirror one image for both surfaces.
+    repository: astronomer-shell
+    tag: dev
     registry: ""    # T23 air-gapped override; falls back to image.registry
 
 # =============================================================================
@@ -483,6 +484,21 @@ metrics:
     # Annotation appended to every rule. Operators can override to point
     # at their own runbook tree. The default points at this repo's docs.
     runbookBaseURL: "https://github.com/alphabravo-oss/astronomer/blob/main/astronomer-go/docs/runbooks"
+  # Grafana dashboards (T4.4). Ships ~6 curated dashboards as
+  # ConfigMaps with the sidecar label kube-prometheus-stack uses to
+  # auto-import them. Disabled by default so operators on a
+  # non-Grafana stack don't get unused ConfigMaps cluttering the
+  # namespace.
+  dashboards:
+    enabled: false
+    # Label kube-prometheus-stack's grafana sidecar selects on. Set
+    # to whatever your install uses; the chart default matches the
+    # common bitnami / kube-prometheus-stack defaults.
+    sidecarLabel: "grafana_dashboard"
+    sidecarLabelValue: "1"
+    # Folder annotation: tells the grafana sidecar which subfolder
+    # to drop the dashboards into. Empty drops them at root.
+    folderAnnotation: "Astronomer"
 
 # =============================================================================
 # Observability — distributed tracing (T15 FEATURES-051126)
@@ -564,9 +580,9 @@ managementBackup:
     credentialsSecretRef:
       name: ""
       key: "credentials"
-  # Image bundling postgresql-client + aws-cli. The default is the bitnami
-  # postgresql image with awscli layered on; override to an internally mirrored
-  # image when air-gapped.
+  # Image bundling postgresql-client + aws-cli. Built and published by
+  # Astronomer at ghcr.io/alphabravocompany/pgdump-s3; override to an
+  # internally mirrored image when air-gapped.
   image:
     repository: ghcr.io/alphabravocompany/pgdump-s3
     tag: "16-awscli"
@@ -811,10 +827,14 @@ crds:
 # their audit-log retention is sized for the additional volume.
 kubectlShell:
   enabled: false
-  # Image the debug pod runs. Bitnami's kubectl image ships kubectl +
-  # kubelogin + curl + common debug tools; operators on a private
-  # mirror should override.
-  image: "bitnami/kubectl:1.31"
+  # Image the debug pod runs. astronomer-shell is built from
+  # deploy/docker/Dockerfile.shell and ships kubectl (pinned to the
+  # supported control-plane skew, fetched from dl.k8s.io), bash,
+  # coreutils, curl, jq, and tini — enough for an interactive debug
+  # session without dragging in a third-party image whose tag could
+  # be retagged or disappear (see the Aug 2025 bitnami/kubectl 404).
+  # Operators on a private mirror should override.
+  image: "astronomer-shell:dev"
   # Idle expiry — if no input bytes hit the WS for this long, the
   # reaper closes the session and deletes the pod.
   idleTimeoutMinutes: 30

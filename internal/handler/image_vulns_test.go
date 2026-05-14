@@ -276,15 +276,20 @@ func TestImageVulnHandler_PerReportCVEs_CrossTenantBlocked(t *testing.T) {
 	}
 }
 
-// recordingK8s captures every call so the rescan test can assert the
-// expected PATCH was issued.
+// recordingK8s captures every call so the rescan tests can assert the
+// LIST + per-VR DELETE flow the rewritten nudgeTrivyOperator now uses.
+// `responder` is the per-call routing hook: tests register it to return
+// different payloads depending on method+path. The previous one-shot
+// `resp` field stays as a fallback for tests that only need a uniform
+// response.
 type recordingK8s struct {
 	calls []struct {
 		Method, Path string
 		Body         []byte
 	}
-	resp *protocol.K8sResponsePayload
-	err  error
+	resp      *protocol.K8sResponsePayload
+	err       error
+	responder func(method, path string) (*protocol.K8sResponsePayload, error)
 }
 
 func (r *recordingK8s) Do(_ context.Context, _ string, method, path string, body []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
@@ -292,12 +297,52 @@ func (r *recordingK8s) Do(_ context.Context, _ string, method, path string, body
 		Method, Path string
 		Body         []byte
 	}{Method: method, Path: path, Body: body})
+	if r.responder != nil {
+		return r.responder(method, path)
+	}
 	return r.resp, r.err
 }
 
+// vrListBody encodes a VulnerabilityReportList with the given items
+// into the base64-wrapped shape the tunnel proxy delivers. Keeps the
+// test free of inline base64.
+func vrListBody(items []struct{ Namespace, Name string }) string {
+	type meta struct {
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
+	}
+	type item struct {
+		Metadata meta `json:"metadata"`
+	}
+	out := struct {
+		Items []item `json:"items"`
+	}{}
+	for _, it := range items {
+		out.Items = append(out.Items, item{Metadata: meta{Name: it.Name, Namespace: it.Namespace}})
+	}
+	raw, _ := json.Marshal(out)
+	return base64.StdEncoding.EncodeToString(raw)
+}
+
+// TestImageVulnHandler_RescanNudgesOperator exercises the rewritten
+// nudge: a LIST of VulnerabilityReports across the cluster followed
+// by a DELETE per row. The earlier PATCH-on-Service approach was a
+// no-op pretending to be a rescan; this asserts the real delete flow.
 func TestImageVulnHandler_RescanNudgesOperator(t *testing.T) {
 	h := NewImageVulnHandler(newStubVulnQuerier())
-	rk := &recordingK8s{resp: &protocol.K8sResponsePayload{StatusCode: 200}}
+	vrs := []struct{ Namespace, Name string }{
+		{"default", "vr-nginx"},
+		{"kube-system", "vr-coredns"},
+	}
+	rk := &recordingK8s{
+		responder: func(method, path string) (*protocol.K8sResponsePayload, error) {
+			if method == http.MethodGet && strings.HasSuffix(path, "/vulnerabilityreports") {
+				return &protocol.K8sResponsePayload{StatusCode: 200, Body: vrListBody(vrs)}, nil
+			}
+			// DELETE on each /namespaces/<ns>/vulnerabilityreports/<name>.
+			return &protocol.K8sResponsePayload{StatusCode: 200}, nil
+		},
+	}
 	h.SetK8sRequester(rk)
 
 	clusterID := uuid.New()
@@ -306,22 +351,70 @@ func TestImageVulnHandler_RescanNudgesOperator(t *testing.T) {
 	h.ClusterRescan(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("got %d", rec.Code)
+		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
 	}
 	body := decodeJSON(t, rec)
 	data := body["data"].(map[string]any)
 	if data["triggered"].(bool) != true {
-		t.Fatalf("expected triggered=true")
+		t.Fatalf("expected triggered=true, body=%s", rec.Body.String())
+	}
+	// 1 LIST + N DELETEs.
+	if len(rk.calls) != 1+len(vrs) {
+		t.Fatalf("expected %d k8s calls (1 list + %d deletes), got %d", 1+len(vrs), len(vrs), len(rk.calls))
+	}
+	if rk.calls[0].Method != http.MethodGet {
+		t.Fatalf("first call must be GET (list), got %s", rk.calls[0].Method)
+	}
+	if !strings.HasSuffix(rk.calls[0].Path, "/vulnerabilityreports") {
+		t.Fatalf("list path = %q, want suffix /vulnerabilityreports", rk.calls[0].Path)
+	}
+	// Each delete path must include the VR name + namespace from the list.
+	seen := map[string]bool{}
+	for _, c := range rk.calls[1:] {
+		if c.Method != http.MethodDelete {
+			t.Fatalf("non-list call should be DELETE, got %s on %s", c.Method, c.Path)
+		}
+		for _, vr := range vrs {
+			needle := "/namespaces/" + vr.Namespace + "/vulnerabilityreports/" + vr.Name
+			if strings.HasSuffix(c.Path, needle) {
+				seen[vr.Name] = true
+			}
+		}
+	}
+	for _, vr := range vrs {
+		if !seen[vr.Name] {
+			t.Fatalf("DELETE for VR %s/%s was not issued; calls=%+v", vr.Namespace, vr.Name, rk.calls)
+		}
+	}
+}
+
+// TestImageVulnHandler_RescanSoftSucceedsOnEmptyList exercises the
+// "no VRs yet" branch: trivy hasn't produced any reports (cold-boot
+// cluster) so the LIST returns an empty items array. The handler
+// must still report triggered=true and skip the DELETE loop.
+func TestImageVulnHandler_RescanSoftSucceedsOnEmptyList(t *testing.T) {
+	h := NewImageVulnHandler(newStubVulnQuerier())
+	rk := &recordingK8s{
+		responder: func(method, path string) (*protocol.K8sResponsePayload, error) {
+			return &protocol.K8sResponsePayload{StatusCode: 200, Body: vrListBody(nil)}, nil
+		},
+	}
+	h.SetK8sRequester(rk)
+
+	clusterID := uuid.New()
+	req := requestWith(http.MethodPost, "/", map[string]string{"cluster_id": clusterID.String()})
+	rec := httptest.NewRecorder()
+	h.ClusterRescan(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d, body=%s", rec.Code, rec.Body.String())
+	}
+	data := decodeJSON(t, rec)["data"].(map[string]any)
+	if data["triggered"].(bool) != true {
+		t.Fatalf("expected triggered=true on empty list, body=%s", rec.Body.String())
 	}
 	if len(rk.calls) != 1 {
-		t.Fatalf("expected one k8s call, got %d", len(rk.calls))
-	}
-	call := rk.calls[0]
-	if call.Method != http.MethodPatch {
-		t.Fatalf("expected PATCH, got %s", call.Method)
-	}
-	if !strings.Contains(call.Path, "/services/trivy-operator") {
-		t.Fatalf("unexpected path: %s", call.Path)
+		t.Fatalf("expected 1 k8s call (LIST only, no deletes), got %d", len(rk.calls))
 	}
 }
 

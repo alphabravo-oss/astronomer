@@ -84,6 +84,15 @@ spec:
             - secretRef:
                 name: {{ include "astronomer.fullname" . }}-secrets
           env:
+            # Pod IP is the address sibling replicas use to reverse-proxy
+            # tunnel-bound requests (kubectl shell, k8s passthrough, image
+            # scans) to whichever pod holds the agent's WebSocket. Without
+            # this the nginx-pinned upstream pod 503s every cross-pod
+            # request because the in-memory hub is single-replica.
+            - name: ASTRONOMER_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             - name: ASTRONOMER_BOOTSTRAP_PASSWORD
               valueFrom:
                 secretKeyRef:

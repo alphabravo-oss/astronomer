@@ -154,8 +154,14 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Provisioning', href: `${base}/provisioning`, icon: Activity },
         { label: 'Nodes', href: `${base}/nodes`, icon: Server, countKey: 'nodes' },
         { label: 'Namespaces', href: `${base}/namespaces`, icon: Layers, countKey: 'namespaces' },
-        { label: 'Events', href: `${base}/events`, icon: Activity, countKey: 'events' },
+        // Event counts on a chatty cluster balloon into the
+        // thousands and the literal number isn't actionable — what
+        // operators want is "any Warning events recently?". Drop the
+        // numeric count for now; a status-dot replacement (green/amber
+        // driven by recent Warning count) is the better end state.
+        { label: 'Events', href: `${base}/events`, icon: Activity },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
+        { label: 'Apps', href: `${base}/apps`, icon: Package },
         ...agentRequiredItems,
       ],
     },

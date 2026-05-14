@@ -334,6 +334,34 @@ export async function getClusterManifest(clusterId: string): Promise<string> {
   return typeof res.data === 'string' ? res.data : String(res.data);
 }
 
+// Like getClusterManifest, but also returns the registration token that
+// was freshly minted to render it. The token comes back via response
+// header (X-Astronomer-Registration-Token) so the wizard can build a
+// Rancher-style `curl … | kubectl apply -f -` one-liner that points at
+// the public /api/v1/register/<token> endpoint.
+export async function getClusterManifestWithToken(clusterId: string): Promise<{ manifest: string; token: string }> {
+  const res = await api.get<string>(`/clusters/${clusterId}/manifest`, {
+    responseType: 'text',
+    transformResponse: (data: string) => data,
+  });
+  const manifest = typeof res.data === 'string' ? res.data : String(res.data);
+  // Axios normalises header names to lowercase.
+  const token = String(res.headers?.['x-astronomer-registration-token'] ?? '');
+  return { manifest, token };
+}
+
+export type RegistrationTLSMode = 'public_ca' | 'private_ca' | 'insecure';
+
+// Pre-auth read of the operator-configured registration TLS posture.
+// Drives which `curl …` variant the wizard renders by default.
+export async function getRegistrationTLS(): Promise<{ mode: RegistrationTLSMode; caBundle: string }> {
+  const res = await api.get<Record<string, unknown>>(`/settings/registration`);
+  const body = res.data ?? {};
+  const mode = String(body['registration.tls_mode'] ?? 'public_ca') as RegistrationTLSMode;
+  const caBundle = String(body['registration.ca_bundle'] ?? '');
+  return { mode, caBundle };
+}
+
 export async function updateCluster(id: string, data: Partial<import('@/types').ClusterRegistration>) {
   const res = await api.patch<APIResponse<import('@/types').Cluster>>(`/clusters/${id}`, data);
   return res.data.data;
@@ -345,6 +373,15 @@ export async function deleteCluster(id: string) {
 
 export async function getClusterConditions(clusterId: string) {
   const res = await api.get<APIResponse<import('@/types').ClusterCondition[]>>(`/clusters/${clusterId}/conditions`);
+  return res.data.data;
+}
+
+// Sprint 086 — recent attempts by the cluster-condition remediation
+// reconciler. Newest-first, capped at 50 server-side.
+export async function getClusterConditionRemediation(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').ClusterConditionRemediationAttempt[]>>(
+    `/clusters/${clusterId}/condition-remediation`,
+  );
   return res.data.data;
 }
 

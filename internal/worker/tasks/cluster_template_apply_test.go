@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,6 +30,7 @@ type fakeApplyQuerier struct {
 	clusterUpdateCount   int
 	projectCreateCount   int
 	registrationPolicies int
+	conditions           []fakeCondition
 
 	failOnUpdate bool
 }
@@ -85,9 +87,16 @@ func (f *fakeApplyQuerier) MarkClusterTemplateApplicationStatus(_ context.Contex
 	return f.application, nil
 }
 
-func (f *fakeApplyQuerier) ListClusterTemplateApplicationsByStatus(_ context.Context, _ sqlc.ListClusterTemplateApplicationsByStatusParams) ([]sqlc.ClusterTemplateApplication, error) {
+func (f *fakeApplyQuerier) ListClusterTemplateApplicationsByStatus(_ context.Context, arg sqlc.ListClusterTemplateApplicationsByStatusParams) ([]sqlc.ClusterTemplateApplication, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// Filter against the lone in-memory application so the drift sweep
+	// test, which lists 'applied', 'failed', and 'applying' separately,
+	// only ever observes the row in its current status — matching
+	// real DB semantics.
+	if f.application.Status != arg.Status {
+		return nil, nil
+	}
 	return []sqlc.ClusterTemplateApplication{f.application}, nil
 }
 
@@ -148,6 +157,31 @@ func (f *fakeApplyQuerier) ListInstalledChartsByCluster(_ context.Context, arg s
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.installedCharts[arg.ClusterID], nil
+}
+
+// upsertConditions records every condition write the worker emits.
+// Tests on the drift-sweep stuck-apply branch (T8.4) inspect this.
+type fakeCondition struct {
+	Type   string
+	Status string
+	Reason string
+}
+
+func (f *fakeApplyQuerier) UpsertClusterCondition(_ context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.conditions = append(f.conditions, fakeCondition{
+		Type:   arg.Type,
+		Status: arg.Status,
+		Reason: arg.Reason,
+	})
+	return sqlc.ClusterCondition{
+		ClusterID: arg.ClusterID,
+		Type:      arg.Type,
+		Status:    arg.Status,
+		Reason:    arg.Reason,
+		Message:   arg.Message,
+	}, nil
 }
 
 // fakeInstaller records EnsureInstalled calls so the test can assert
@@ -378,4 +412,67 @@ func lastStatus(q *fakeApplyQuerier) string {
 		return ""
 	}
 	return q.statusTransitions[len(q.statusTransitions)-1]
+}
+
+// TestClusterTemplate_DriftCheck_StuckApplyingEmitsCondition pins the
+// T8.4 wiring: an 'applying' application whose updated_at sits past
+// stuckApplyingThreshold should write a TemplateApplyStuck=True
+// condition during the periodic drift sweep.
+func TestClusterTemplate_DriftCheck_StuckApplyingEmitsCondition(t *testing.T) {
+	clusterID := uuid.New()
+	tmplID := uuid.New()
+	q := newFakeApplyQuerier(
+		sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`)},
+		sqlc.ClusterTemplateApplication{
+			ClusterID:    clusterID,
+			TemplateID:   tmplID,
+			SpecSnapshot: json.RawMessage(`{}`),
+			Status:       "applying",
+			// Push updated_at into the past so the sweep observes the
+			// row as stuck.
+			UpdatedAt: timeNowMinus(stuckApplyingThreshold + time.Minute),
+		},
+	)
+	ConfigureClusterTemplateApply(ClusterTemplateApplyDeps{Queries: q})
+	defer ResetClusterTemplateApply()
+	if err := HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
+		t.Fatalf("drift check: %v", err)
+	}
+	if got := len(q.conditions); got != 1 {
+		t.Fatalf("conditions written = %d, want 1: %+v", got, q.conditions)
+	}
+	c := q.conditions[0]
+	if c.Type != ConditionTemplateApplyStuck || c.Status != "True" {
+		t.Errorf("condition = %+v, want type=%s status=True", c, ConditionTemplateApplyStuck)
+	}
+}
+
+// TestClusterTemplate_DriftCheck_RecentApplyingNoCondition verifies the
+// inverse: an 'applying' row that updated within the grace window
+// must NOT emit the stuck condition.
+func TestClusterTemplate_DriftCheck_RecentApplyingNoCondition(t *testing.T) {
+	clusterID := uuid.New()
+	tmplID := uuid.New()
+	q := newFakeApplyQuerier(
+		sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`)},
+		sqlc.ClusterTemplateApplication{
+			ClusterID:    clusterID,
+			TemplateID:   tmplID,
+			SpecSnapshot: json.RawMessage(`{}`),
+			Status:       "applying",
+			UpdatedAt:    timeNowMinus(stuckApplyingThreshold / 2),
+		},
+	)
+	ConfigureClusterTemplateApply(ClusterTemplateApplyDeps{Queries: q})
+	defer ResetClusterTemplateApply()
+	if err := HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
+		t.Fatalf("drift check: %v", err)
+	}
+	if got := len(q.conditions); got != 0 {
+		t.Errorf("expected no conditions for fresh 'applying' row, got %d: %+v", got, q.conditions)
+	}
+}
+
+func timeNowMinus(d time.Duration) time.Time {
+	return time.Now().UTC().Add(-d)
 }

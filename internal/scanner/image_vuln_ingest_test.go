@@ -89,6 +89,13 @@ func (f *fakeQuerier) BatchInsertImageVulnerabilities(_ context.Context, rows []
 	return nil
 }
 
+// Sprint 081 — snapshot append. Tests don't assert on snapshot rows
+// (the history endpoints have their own unit coverage), but the
+// Querier interface now requires this method.
+func (f *fakeQuerier) InsertImageVulnerabilityReportSnapshot(_ context.Context, _ sqlc.InsertImageVulnerabilityReportSnapshotParams) error {
+	return nil
+}
+
 func (f *fakeQuerier) reportCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -319,6 +326,9 @@ func (failingQuerier) DeleteImageVulnerabilitiesByReport(_ context.Context, _ uu
 	return nil
 }
 func (failingQuerier) BatchInsertImageVulnerabilities(_ context.Context, _ []sqlc.InsertImageVulnerabilityParams) error {
+	return nil
+}
+func (failingQuerier) InsertImageVulnerabilityReportSnapshot(_ context.Context, _ sqlc.InsertImageVulnerabilityReportSnapshotParams) error {
 	return nil
 }
 

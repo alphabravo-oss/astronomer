@@ -1,0 +1,33 @@
+{{- /*
+Grafana dashboards ConfigMap (T4.4). One ConfigMap per dashboard so
+each is independently editable + the kube-prometheus-stack grafana
+sidecar can pick them up via its standard label selector. Gated on
+metrics.dashboards.enabled so non-Grafana installs don't see them.
+
+We load every *.json under deploy/dashboards/ via .Files.Glob; new
+dashboards land by dropping a JSON into that directory and bumping
+the chart.
+*/}}
+{{- if .Values.metrics.dashboards.enabled }}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+{{- $name := trimSuffix ".json" (base $path) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "astronomer-dashboard-%s" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "astronomer.name" $ }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: dashboards
+    {{ $.Values.metrics.dashboards.sidecarLabel }}: {{ $.Values.metrics.dashboards.sidecarLabelValue | quote }}
+  annotations:
+    {{- if $.Values.metrics.dashboards.folderAnnotation }}
+    grafana_folder: {{ $.Values.metrics.dashboards.folderAnnotation | quote }}
+    {{- end }}
+data:
+  {{ $name }}.json: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}

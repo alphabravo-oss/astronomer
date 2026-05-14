@@ -25,6 +25,7 @@ type Querier interface {
 	ListClusterRegistrationSteps(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterRegistrationStep, error)
 	GetClusterRegistrationStep(ctx context.Context, id uuid.UUID) (sqlc.ClusterRegistrationStep, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
+	CloseRunningStepsForCluster(ctx context.Context, arg sqlc.CloseRunningStepsForClusterParams) error
 }
 
 // Publisher is the SSE fan-out surface the service uses. *events.Bus
@@ -391,26 +392,79 @@ func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, age
 }
 
 // OnTemplateApplyStart is the apply-worker hook on task start.
-// Writes a `template_applying` step and advances connected → provisioning.
-// Idempotent / nil-safe.
+// Writes a `template_applying` step and advances the cluster's phase
+// into `provisioning` from whatever terminal-ish state it was in.
+//
+// Two entry paths into "we're applying again":
+//
+//   - Happy path: phase is `connected` (operator just confirmed the
+//     wizard). EventTemplateApplying transitions connected →
+//     provisioning.
+//
+//   - Retry path: phase is `failed` (a previous apply failed and the
+//     operator clicked reapply or the periodic recovery sweep
+//     re-enqueued the task). The phase machine rejects
+//     EventTemplateApplying from `failed` — we must first emit
+//     EventRetry (failed → provisioning), then the apply-success path
+//     will transition provisioning → ready cleanly.
+//
+// Idempotent / nil-safe; phase-machine ErrIllegalTransition is treated
+// as a no-op so a double-fire (e.g. async retry race) doesn't error
+// the caller.
 func (s *Service) OnTemplateApplyStart(ctx context.Context, clusterID uuid.UUID) error {
 	if s == nil || s.q == nil {
 		return nil
 	}
+	// Close any prior `template_applying` row still marked running.
+	// Without this, the orchestrator's auto-retry path leaves orphan
+	// "running" timeline rows that never resolve — see sprint 086.
+	_ = s.q.CloseRunningStepsForCluster(ctx, sqlc.CloseRunningStepsForClusterParams{
+		ClusterID: clusterID,
+		StepName:  "template_applying",
+	})
 	_, _ = s.WriteStep(ctx, clusterID, StepInput{
 		StepName: "template_applying",
 		Status:   "running",
 	})
-	if _, err := s.Advance(ctx, clusterID, EventTemplateApplying, WithSkipAutoStep()); err != nil {
-		if errors.Is(err, ErrIllegalTransition) {
-			return nil
+
+	// Recovery rewind: a cluster sitting in `failed` from a previous
+	// apply needs to rewind to `provisioning` before the regular
+	// applying-event will be accepted. Best-effort — if we can't read
+	// the record we fall through and let the EventTemplateApplying
+	// branch handle whatever illegal-transition the machine reports.
+	if rec, rerr := s.q.GetClusterRegistrationRecord(ctx, clusterID); rerr == nil && rec.RegistrationPhase == string(PhaseFailed) {
+		if _, err := s.Advance(ctx, clusterID, EventRetry, WithSkipAutoStep()); err != nil && !s.isIllegal(err) {
+			return err
 		}
-		if msg := err.Error(); len(msg) >= 26 && msg[:26] == "illegal phase transition: " {
+		// Phase is now `provisioning`. EventTemplateApplying from
+		// provisioning is illegal too (it expects `connected`), so
+		// return early — the apply task's success/failure event will
+		// drive the next transition from provisioning.
+		return nil
+	}
+
+	if _, err := s.Advance(ctx, clusterID, EventTemplateApplying, WithSkipAutoStep()); err != nil {
+		if s.isIllegal(err) {
 			return nil
 		}
 		return err
 	}
 	return nil
+}
+
+// isIllegal returns true for the phase-machine's "this transition isn't
+// allowed from the current state" error. Centralized so callers don't
+// re-implement the two checks (errors.Is + string-prefix fallback for
+// the wrapped variant) at every site.
+func (s *Service) isIllegal(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrIllegalTransition) {
+		return true
+	}
+	msg := err.Error()
+	return len(msg) >= 26 && msg[:26] == "illegal phase transition: "
 }
 
 // OnTemplateApplySuccess is the apply-worker hook on successful end.

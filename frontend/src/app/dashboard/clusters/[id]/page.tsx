@@ -5,13 +5,17 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   useCluster,
   useClusterConditions,
+  useClusterConditionRemediation,
   useClusterMetricsSummary,
   useClusterEvents,
+  useClusterToolsStatus,
   useGenerateKubeconfig,
   useDeleteCluster,
   useUpdateCluster,
+  useAnomalyBaselines,
   queryKeys,
 } from '@/lib/hooks';
+import { getImageVulnSummary } from '@/lib/api/cluster-detail';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -48,6 +52,8 @@ import {
   CheckCircle2,
   XCircle,
   CircleHelp,
+  ShieldAlert,
+  Package,
 } from 'lucide-react';
 import type { ClusterCondition } from '@/types';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
@@ -62,6 +68,18 @@ export default function ClusterDetailPage() {
   const { data: conditions } = useClusterConditions(clusterId);
   const { data: metricsSummary } = useClusterMetricsSummary(clusterId);
   const { data: events } = useClusterEvents(clusterId, { limit: 10 });
+  const { data: toolsStatus } = useClusterToolsStatus(clusterId);
+  // Image-vuln severity rollup — same endpoint the Image Scans tab
+  // uses, hoisted onto the overview as a top-line card so operators
+  // see "you have 47 criticals" at a glance instead of having to
+  // navigate two clicks deep.
+  const { data: vulnSummary } = useQuery({
+    queryKey: ['clusters', clusterId, 'vulnerabilities', 'summary'] as const,
+    queryFn: () => getImageVulnSummary(clusterId),
+    enabled: !!clusterId,
+    refetchInterval: 5 * 60 * 1000,
+    refetchIntervalInBackground: false,
+  });
   const generateKubeconfig = useGenerateKubeconfig();
   const deleteMutation = useDeleteCluster();
   const updateMutation = useUpdateCluster();
@@ -209,6 +227,7 @@ export default function ClusterDetailPage() {
           {conditions && conditions.length > 0 && (
             <ClusterConditionsBar conditions={conditions} />
           )}
+          <ClusterRemediationFooter clusterId={clusterId} />
         </div>
         <div className="flex items-center gap-2">
           <div ref={kubeconfigMenuRef} className="relative inline-flex">
@@ -302,28 +321,43 @@ export default function ClusterDetailPage() {
       )}
 
       {/* Custom dashboard widgets (migration 058). Per-cluster scope,
-          templated against the cluster's cluster_uid. */}
+          templated against the cluster's cluster_uid. WidgetGrid owns
+          the heading so the section collapses entirely when no widgets
+          are configured — otherwise the bare "Widgets" header floats
+          above an empty placeholder. */}
       {cluster?.id ? (
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Widgets</h3>
-          <WidgetGrid fetcher={() => renderForCluster(cluster.id)} emptyHint="" />
-        </section>
+        <WidgetGrid
+          fetcher={() => renderForCluster(cluster.id)}
+          title="Widgets"
+          hideWhenEmpty
+        />
       ) : null}
 
-      {/* Metrics Cards */}
+      {/* Metrics Cards. When neither the live summary nor the cached cluster
+          row has a usage/percentage value, we render an em-dash so the card
+          doesn't lie with a fake 0% — the gauge bar is also suppressed by
+          leaving `percentage` undefined. */}
+      {(() => {
+        const cpuPct = metricsSummary?.cpuPercentage ?? cluster.cpuPercentage ?? null;
+        const cpuUsage = metricsSummary?.cpuUsage ?? cluster.cpuUsage ?? null;
+        const cpuCap = metricsSummary?.cpuCapacity ?? cluster.cpuCapacity ?? null;
+        const memPct = metricsSummary?.memoryPercentage ?? cluster.memoryPercentage ?? null;
+        const memUsage = metricsSummary?.memoryUsage ?? cluster.memoryUsage ?? null;
+        const memCap = metricsSummary?.memoryCapacity ?? cluster.memoryCapacity ?? null;
+        return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="CPU Usage"
-          value={formatPercentage(metricsSummary?.cpuPercentage ?? cluster.cpuPercentage ?? 0)}
-          percentage={metricsSummary?.cpuPercentage ?? cluster.cpuPercentage ?? 0}
-          subtitle={`${formatCPU(metricsSummary?.cpuUsage ?? cluster.cpuUsage ?? 0)} / ${formatCPU(metricsSummary?.cpuCapacity ?? cluster.cpuCapacity ?? 0)}`}
+          value={formatPercentage(cpuPct)}
+          percentage={cpuPct ?? undefined}
+          subtitle={cpuUsage != null && cpuCap != null ? `${formatCPU(cpuUsage)} / ${formatCPU(cpuCap)}` : 'No data'}
           icon={<Cpu className="h-4 w-4" />}
         />
         <MetricCard
           title="Memory Usage"
-          value={formatPercentage(metricsSummary?.memoryPercentage ?? cluster.memoryPercentage ?? 0)}
-          percentage={metricsSummary?.memoryPercentage ?? cluster.memoryPercentage ?? 0}
-          subtitle={`${formatBytes(metricsSummary?.memoryUsage ?? cluster.memoryUsage ?? 0)} / ${formatBytes(metricsSummary?.memoryCapacity ?? cluster.memoryCapacity ?? 0)}`}
+          value={formatPercentage(memPct)}
+          percentage={memPct ?? undefined}
+          subtitle={memUsage != null && memCap != null ? `${formatBytes(memUsage)} / ${formatBytes(memCap)}` : 'No data'}
           icon={<MemoryStick className="h-4 w-4" />}
         />
         <MetricCard
@@ -336,6 +370,78 @@ export default function ClusterDetailPage() {
           value={metricsSummary?.podCount ?? cluster.podCount ?? 0}
           subtitle={metricsSummary ? `of ${metricsSummary.podCapacity} capacity` : undefined}
           icon={<Box className="h-4 w-4" />}
+        />
+      </div>
+        );
+      })()}
+
+      {/* Platform health row — image-scan severity + baseline-tool
+          installation status + agent freshness. The data here all
+          exists today on dedicated tabs (Image Scans / Tools), but
+          surfacing the rollup on the overview is what makes the page
+          read as a single-pane-of-glass instead of a starting point
+          for navigation. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link href={`/dashboard/clusters/${clusterId}/image-scans`} className="contents">
+          <MetricCard
+            title="Critical CVEs"
+            value={vulnSummary?.critical ?? 0}
+            subtitle={
+              vulnSummary?.lastScannedAt
+                ? `${vulnSummary.reportCount} reports · last ${formatRelativeTime(vulnSummary.lastScannedAt)}`
+                : vulnSummary && vulnSummary.reportCount > 0
+                  ? `${vulnSummary.reportCount} reports`
+                  : 'no scans yet'
+            }
+            icon={<ShieldAlert className="h-4 w-4" />}
+            className={
+              (vulnSummary?.critical ?? 0) > 0
+                ? 'cursor-pointer hover:border-status-critical/50 transition-colors'
+                : 'cursor-pointer hover:border-muted-foreground/50 transition-colors'
+            }
+          />
+        </Link>
+        <Link href={`/dashboard/clusters/${clusterId}/image-scans`} className="contents">
+          <MetricCard
+            title="High CVEs"
+            value={vulnSummary?.high ?? 0}
+            subtitle={
+              vulnSummary
+                ? `${vulnSummary.medium} med · ${vulnSummary.low} low`
+                : '—'
+            }
+            icon={<ShieldAlert className="h-4 w-4" />}
+            className="cursor-pointer hover:border-muted-foreground/50 transition-colors"
+          />
+        </Link>
+        <Link href={`/dashboard/clusters/${clusterId}/tools`} className="contents">
+          <MetricCard
+            title="Baseline Tools"
+            value={
+              toolsStatus
+                ? `${toolsStatus.filter((t) => t.status === 'installed').length}/${toolsStatus.length}`
+                : '—'
+            }
+            subtitle={
+              toolsStatus
+                ? toolsStatus.filter((t) => t.status !== 'installed').length === 0
+                  ? 'all installed'
+                  : `${toolsStatus.filter((t) => t.status !== 'installed').map((t) => t.slug).join(', ')} pending`
+                : undefined
+            }
+            icon={<Package className="h-4 w-4" />}
+            className="cursor-pointer hover:border-muted-foreground/50 transition-colors"
+          />
+        </Link>
+        <MetricCard
+          title="Agent"
+          value={cluster.agentVersion || '—'}
+          subtitle={
+            cluster.lastHeartbeat
+              ? `heartbeat ${formatRelativeTime(cluster.lastHeartbeat)}`
+              : 'never connected'
+          }
+          icon={<Activity className="h-4 w-4" />}
         />
       </div>
 
@@ -366,6 +472,13 @@ export default function ClusterDetailPage() {
           )}
         </div>
       </div>
+
+      {/* T7.2 — Anomaly baselines surface. The nightly
+          anomaly_baseline_recompute task fills these rows but no UI
+          surfaced them until now. Top 5 anomalies sorted by score so
+          the operator can sanity-check what the platform considers
+          "normal" for this cluster. */}
+      <AnomalyBaselinesPanel clusterId={clusterId} />
 
       {/* Registration Command — opens the wizard step 2 for this
           cluster, which renders the same install command + YAML
@@ -470,6 +583,31 @@ function ClusterConditionsBar({ conditions }: { conditions: ClusterCondition[] }
   );
 }
 
+// ClusterRemediationFooter — shows the most recent action the
+// cluster-condition reconciler took for this cluster. Hidden when
+// there's no history yet (the common case for green clusters).
+function ClusterRemediationFooter({ clusterId }: { clusterId: string }) {
+  const { data } = useClusterConditionRemediation(clusterId);
+  if (!data || data.length === 0) return null;
+  const latest = data[0];
+  const tone =
+    latest.outcome === 'success'
+      ? 'text-status-success'
+      : latest.outcome === 'failed'
+        ? 'text-status-danger'
+        : 'text-muted-foreground';
+  return (
+    <div
+      className="text-[11px] text-muted-foreground pt-1"
+      title={latest.error || latest.action}
+    >
+      Last remediation: <span className={tone}>{latest.action} — {latest.outcome}</span>
+      <span className="text-border"> · </span>
+      <span>{relativeAge(latest.attempted_at)} ago</span>
+    </div>
+  );
+}
+
 // MeshHeaderBadge — compact "Istio" / "Linkerd" / "—" pill rendered next
 // to the cluster status badge. Links to the per-cluster service-mesh
 // tab so a single click drills into the full tile. When the detector
@@ -543,5 +681,73 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
       <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
       {label}
     </Link>
+  );
+}
+
+// ── Anomaly baselines panel (T7.2) ───────────────────────────────────────
+//
+// The nightly anomaly_baseline_recompute task computes a per-metric
+// rolling mean + stddev per cluster. Until now those rows lived in
+// the DB with nothing rendering them. The panel surfaces the top 5
+// metrics by sample count (the most-observed → most-trustworthy)
+// with mean ± stddev so an operator can sanity-check what the
+// platform considers "normal" for the cluster. Read-only.
+function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
+  const { data, isLoading } = useAnomalyBaselines({ clusterId, limit: 5 });
+  if (isLoading) {
+    return (
+      <div>
+        <h3 className="text-sm font-medium text-muted-foreground mb-3">Anomaly Baselines</h3>
+        <div className="rounded-lg border border-border p-4 text-xs text-muted-foreground">
+          Loading baselines…
+        </div>
+      </div>
+    );
+  }
+  const rows = (data ?? []).slice(0, 5);
+  if (rows.length === 0) {
+    return (
+      <div>
+        <h3 className="text-sm font-medium text-muted-foreground mb-3">Anomaly Baselines</h3>
+        <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
+          No baselines computed yet. The nightly anomaly_baseline_recompute
+          task fills these in once the cluster has at least 24h of metric
+          samples.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-muted-foreground mb-3">Anomaly Baselines</h3>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/30 text-xs text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">Metric</th>
+              <th className="px-3 py-2 text-right font-medium">Mean</th>
+              <th className="px-3 py-2 text-right font-medium">Stddev</th>
+              <th className="px-3 py-2 text-right font-medium">Samples</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((b) => (
+              <tr key={b.id}>
+                <td className="px-3 py-2 font-mono text-xs text-foreground">{b.metric}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                  {b.mean.toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  ±{b.stddev.toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  {b.sampleCount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

@@ -191,8 +191,8 @@ func (q *Queries) ListExpiredKubectlSessions(ctx context.Context) ([]KubectlSess
 
 const setKubectlSessionStatus = `-- name: SetKubectlSessionStatus :exec
 UPDATE kubectl_sessions
-SET status = $2,
-    closed_at = CASE WHEN $2 IN ('closed','expired','failed') THEN now() ELSE closed_at END,
+SET status = $2::text,
+    closed_at = CASE WHEN $2::text IN ('closed','expired','failed') THEN now() ELSE closed_at END,
     last_error = COALESCE($3, last_error)
 WHERE id = $1`
 

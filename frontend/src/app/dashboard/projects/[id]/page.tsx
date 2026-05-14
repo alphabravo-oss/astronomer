@@ -45,7 +45,7 @@ export default function ProjectOverviewPage({ params }: OverviewPageProps) {
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard icon={Server} label="Clusters" value={project.clusterIds.length} />
+        <SummaryCard icon={Server} label="Clusters" value={(project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1} />
         <SummaryCard icon={Layers} label="Namespaces" value={project.namespaces.length} />
         <SummaryCard icon={Users} label="Members" value={project.members.length} />
 

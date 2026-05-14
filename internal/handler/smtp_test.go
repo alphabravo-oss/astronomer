@@ -71,6 +71,16 @@ func (f *smtpFakeQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.Use
 	return sqlc.User{}, pgx.ErrNoRows
 }
 
+// T6.064 — baseline-guard stubs. Default behaviour returns ErrNoRows
+// so existing tests run unchanged.
+func (f *smtpFakeQuerier) GetActiveComplianceBaselineApplication(_ context.Context) (sqlc.ComplianceBaselineApplication, error) {
+	return sqlc.ComplianceBaselineApplication{}, pgx.ErrNoRows
+}
+
+func (f *smtpFakeQuerier) GetComplianceBaseline(_ context.Context, _ uuid.UUID) (sqlc.ComplianceBaseline, error) {
+	return sqlc.ComplianceBaseline{}, pgx.ErrNoRows
+}
+
 func buildSuperuserCtx(t *testing.T, q *smtpFakeQuerier) (context.Context, uuid.UUID) {
 	t.Helper()
 	id := uuid.New()

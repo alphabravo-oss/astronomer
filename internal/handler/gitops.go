@@ -32,6 +32,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -82,10 +83,23 @@ func DefaultGitOpsSyncRunner() GitOpsSyncRunner { return defaultSyncRunner{} }
 
 // GitOpsHandler owns /api/v1/admin/gitops-sources/*. Superuser-gated.
 type GitOpsHandler struct {
-	queries GitOpsQuerier
-	runner  GitOpsSyncRunner
-	log     *slog.Logger
-	audit   AuthAuditWriter
+	queries   GitOpsQuerier
+	runner    GitOpsSyncRunner
+	log       *slog.Logger
+	audit     AuthAuditWriter
+	encryptor *auth.Encryptor
+}
+
+// SetEncryptor wires the Fernet encryptor for gitops auth blobs
+// (T6 item 060). When nil, auth_encrypted is stored in plaintext —
+// the column name is still appropriate because operators can layer
+// at-rest encryption at the storage tier, but if a Fernet key is
+// available we layer application-level encryption on top.
+func (h *GitOpsHandler) SetEncryptor(e *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = e
 }
 
 // NewGitOpsHandler builds a handler. runner may be nil — when nil, the
@@ -225,12 +239,22 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	// auth blob: the create path treats Auth as a verbatim token / key.
-	// Encryption is a v2 follow-up; the column is named auth_encrypted
-	// so we can wire Fernet later without a migration.
+	// auth blob: when a Fernet encryptor is wired (the production path),
+	// we wrap the raw token before writing it. The column stays named
+	// auth_encrypted; only the contents flip from plaintext to a
+	// Fernet token. Decrypt happens lazily inside the sync worker.
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
+	}
+	authBlob := req.Auth
+	if h.encryptor != nil && authBlob != "" {
+		ct, encErr := h.encryptor.Encrypt(authBlob)
+		if encErr != nil {
+			RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt gitops auth blob")
+			return
+		}
+		authBlob = ct
 	}
 	row, err := h.queries.CreateGitOpsSource(r.Context(), sqlc.CreateGitOpsSourceParams{
 		Name:                req.Name,
@@ -238,7 +262,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Branch:              gitopsDefaultString(req.Branch, "main"),
 		PathPrefix:          req.PathPrefix,
 		AuthMode:            gitopsDefaultString(req.AuthMode, "none"),
-		AuthEncrypted:       req.Auth,
+		AuthEncrypted:       authBlob,
 		SyncMode:            gitopsDefaultString(req.SyncMode, "interval"),
 		SyncIntervalSeconds: defaultIntervalSeconds(req.SyncIntervalSeconds),
 		OnDelete:            gitopsDefaultString(req.OnDelete, "log"),

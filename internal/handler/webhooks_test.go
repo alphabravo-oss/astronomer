@@ -52,6 +52,17 @@ func (f *fakeWebhookQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.
 	return u, nil
 }
 
+// T6.064 — baseline-guard surface stubs. Default behaviour returns
+// ErrNoRows so tests run without setting up an active baseline;
+// guard-specific tests can override the methods via embedding.
+func (f *fakeWebhookQuerier) GetActiveComplianceBaselineApplication(_ context.Context) (sqlc.ComplianceBaselineApplication, error) {
+	return sqlc.ComplianceBaselineApplication{}, pgx.ErrNoRows
+}
+
+func (f *fakeWebhookQuerier) GetComplianceBaseline(_ context.Context, _ uuid.UUID) (sqlc.ComplianceBaseline, error) {
+	return sqlc.ComplianceBaseline{}, pgx.ErrNoRows
+}
+
 func (f *fakeWebhookQuerier) ListWebhookSubscriptions(_ context.Context) ([]sqlc.WebhookSubscription, error) {
 	out := make([]sqlc.WebhookSubscription, 0, len(f.subsByID))
 	for _, v := range f.subsByID {

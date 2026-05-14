@@ -209,6 +209,38 @@ spec:
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/management-logging-down.md
         {{- end }}
 
+        # ── Cluster-side logging pipeline silent failure ───────────────
+        # T7.1 — fluent-bit on a managed cluster may stay "up" while
+        # its output plugin (loki/opensearch/cloudwatch/etc.) silently
+        # drops records: bad token, downstream rate-limit, network
+        # blackhole. The fluentbit_output_proc_records_total counter
+        # exposed by fluent-bit's prometheus endpoint is monotonic
+        # while the pipeline is healthy. A flatline for 5 minutes is
+        # the signal we want — `rate(...)` over 5m == 0 means zero
+        # progress across the window, not zero records seen.
+        - alert: AstronomerClusterLoggingFlatlined
+          expr: |
+            sum by (cluster, namespace, name) (
+              rate(fluentbit_output_proc_records_total[5m])
+            ) == 0
+            and on (cluster)
+            sum by (cluster) (up{job=~".*fluent-bit.*|.*fluentbit.*"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: observability
+          annotations:
+            summary: "Cluster log forwarder has processed zero records for 5 minutes"
+            description: |
+              fluent-bit pods on this cluster are running but the
+              output plugin has not processed a single record in 5
+              minutes. Logs are being lost. Common causes: downstream
+              auth failed, downstream rate-limited, network egress
+              blocked, or a malformed output filter. Inspect the
+              fluent-bit DaemonSet logs and the output-plugin error
+              metrics.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/logging-flatlined.md
+
         # ── Argo CD self-manage drift ───────────────────────────────────
         # FEATURES-051126 T26 — fires when the astronomer-self-manage
         # Application drifts. argocd_app_info is published by Argo CD's

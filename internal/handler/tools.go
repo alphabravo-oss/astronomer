@@ -233,9 +233,30 @@ func (h *ToolHandler) EnsureInstalled(ctx context.Context, clusterID uuid.UUID, 
 	chart := firstChart(charts)
 	namespace := chartNamespace(tool, chart)
 	if item, err := h.findInstalledTool(ctx, clusterID, slug); err == nil {
-		return item, nil
+		// Fast-path is only correct for already-successful installs.
+		// A row with status="failed" (e.g. a prior helm install
+		// failed mid-hook — cert-manager startupAPICheck is the
+		// canonical case) MUST trigger a re-install on the next
+		// apply, otherwise the operator is stuck with a stale failed
+		// row forever and the auto-recovery sweep can't make
+		// progress. Other terminal statuses (uninstalled, etc.) also
+		// fall through to re-install so apply is genuinely
+		// idempotent.
+		if !shouldReinstall(item.Status) {
+			return item, nil
+		}
 	} else if !errors.Is(err, errInstalledChartNotFound) {
 		return sqlc.InstalledChart{}, err
+	}
+
+	// When the caller passes a preset name but no explicit values YAML
+	// (the typical apply-from-template path), resolve the preset's
+	// values from cluster_tools.presets. Without this fallback the
+	// helm install runs with chart defaults — fine for most tools but
+	// fatal for charts whose default values are wrong for k3d / slow
+	// nodes (cert-manager's startupAPICheck is the canonical example).
+	if valuesYAML == "" && preset != "" {
+		valuesYAML = presetValuesYAML(tool.Presets, preset)
 	}
 
 	env := toolOperationEnvelope{
@@ -272,6 +293,19 @@ func (h *ToolHandler) EnsureInstalled(ctx context.Context, clusterID uuid.UUID, 
 		}); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				// Row already exists from a prior failed attempt. Update
+				// its status to reflect that the re-install succeeded —
+				// without this the stale `failed` status sticks and the
+				// next apply re-installs all over again on every drift
+				// sweep. The release_name + namespace are unchanged
+				// (helm targets the same release) so the unique key is
+				// preserved.
+				if existing, ferr := h.findInstalledTool(ctx, clusterID, slug); ferr == nil {
+					_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{
+						ID:     existing.ID,
+						Status: normalizeToolStatus(result.Status),
+					})
+				}
 				return h.findInstalledTool(ctx, clusterID, slug)
 			}
 			return sqlc.InstalledChart{}, err
@@ -974,6 +1008,22 @@ func chartNamespace(tool sqlc.ClusterTool, chart toolChart) string {
 	return tool.DefaultNamespace
 }
 
+// shouldReinstall returns true for installed_charts.status values that
+// the apply path should treat as "this needs a fresh helm install"
+// rather than fast-pathing to the cached row. Mirrors the Python
+// platform's set: any non-success terminal status (failed, uninstalled,
+// adoption-failed) is a re-install candidate. Successful statuses
+// (installed, adopted) short-circuit because re-running helm on an
+// already-good release is wasteful and risks transient failures
+// during a cluster-wide drift sweep.
+func shouldReinstall(status string) bool {
+	switch status {
+	case "failed", "uninstalled", "error", "":
+		return true
+	}
+	return false
+}
+
 func presetValuesYAML(raw json.RawMessage, preset string) string {
 	if preset == "" {
 		return ""
@@ -985,6 +1035,15 @@ func presetValuesYAML(raw json.RawMessage, preset string) string {
 	value, ok := presets[preset]
 	if !ok {
 		return ""
+	}
+	// A preset can be stored either as a raw YAML string (the seed-
+	// migration style — easier to author) or as a nested map (when
+	// operators edit it through the UI which posts structured JSON).
+	// yaml.Marshal'ing a string wraps it in quoted-string syntax which
+	// helm refuses ("cannot unmarshal string into map"), so pass string
+	// values through unchanged.
+	if s, isString := value.(string); isString {
+		return s
 	}
 	data, _ := yaml.Marshal(value)
 	return string(data)

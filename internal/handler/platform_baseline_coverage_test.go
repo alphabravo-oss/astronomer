@@ -77,11 +77,11 @@ func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 	q := &fakeCoverageQuerier{
 		user: sqlc.User{ID: callerID, IsSuperuser: true},
 		slugs: map[string]sqlc.ChartResolution{
-			"trivy-operator":     {ChartID: trivyID, Repository: "aqua"},
-			"kube-state-metrics": {ChartID: ksmID, Repository: "bitnami"},
-			"prometheus-node-exporter":      {ChartID: neID, Repository: "bitnami"},
-			"fluent-bit":         {ChartID: fbID, Repository: "bitnami"},
-			"cert-manager":       {ChartID: cmID, Repository: "jetstack"},
+			"trivy-operator":           {ChartID: trivyID, Repository: "aqua"},
+			"kube-state-metrics":       {ChartID: ksmID, Repository: "prometheus-community"},
+			"prometheus-node-exporter": {ChartID: neID, Repository: "prometheus-community"},
+			"fluent-bit":               {ChartID: fbID, Repository: "fluent"},
+			"cert-manager":             {ChartID: cmID, Repository: "jetstack"},
 		},
 	}
 	h := NewPlatformBaselineCoverageHandler(q)
@@ -128,7 +128,7 @@ func TestPlatformBaselineCoverage_SomeMissing(t *testing.T) {
 		user: sqlc.User{ID: callerID, IsSuperuser: true},
 		slugs: map[string]sqlc.ChartResolution{
 			"trivy-operator":     {ChartID: uuid.New(), Repository: "aqua"},
-			"kube-state-metrics": {ChartID: uuid.New(), Repository: "bitnami"},
+			"kube-state-metrics": {ChartID: uuid.New(), Repository: "prometheus-community"},
 			"cert-manager":       {ChartID: uuid.New(), Repository: "jetstack"},
 		},
 	}
@@ -207,10 +207,10 @@ func TestPlatformBaselineCoverage_LookupErrorTreatedAsMissing(t *testing.T) {
 	q := &fakeCoverageQuerier{
 		user: sqlc.User{ID: callerID, IsSuperuser: true},
 		slugs: map[string]sqlc.ChartResolution{
-			"trivy-operator":     {ChartID: uuid.New(), Repository: "aqua"},
-			"kube-state-metrics": {ChartID: uuid.New(), Repository: "bitnami"},
-			"prometheus-node-exporter":      {ChartID: uuid.New(), Repository: "bitnami"},
-			"cert-manager":       {ChartID: uuid.New(), Repository: "jetstack"},
+			"trivy-operator":           {ChartID: uuid.New(), Repository: "aqua"},
+			"kube-state-metrics":       {ChartID: uuid.New(), Repository: "prometheus-community"},
+			"prometheus-node-exporter": {ChartID: uuid.New(), Repository: "prometheus-community"},
+			"cert-manager":             {ChartID: uuid.New(), Repository: "jetstack"},
 		},
 		errSlugs: map[string]error{
 			"fluent-bit": errors.New("connection refused"),

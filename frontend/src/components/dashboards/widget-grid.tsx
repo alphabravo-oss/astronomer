@@ -27,7 +27,7 @@ import type { RenderedWidget } from '@/lib/api/dashboards';
 
 export type WidgetFetcher = () => Promise<RenderedWidget[]>;
 
-export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty }: { fetcher: WidgetFetcher; emptyHint?: string; hideWhenEmpty?: boolean }) {
+export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetcher: WidgetFetcher; emptyHint?: string; hideWhenEmpty?: boolean; title?: string }) {
   const [widgets, setWidgets] = useState<RenderedWidget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,7 +99,11 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty }: { fetcher: Wid
   }
 
   return (
-    <div className="grid grid-cols-12 gap-3 auto-rows-[80px]">
+    <section className="space-y-2">
+      {title ? (
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{title}</h3>
+      ) : null}
+      <div className="grid grid-cols-12 gap-3 auto-rows-[80px]">
       {widgets.map((w) => (
         <div
           key={w.id}
@@ -115,7 +119,8 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty }: { fetcher: Wid
           <WidgetBody widget={w} />
         </div>
       ))}
-    </div>
+      </div>
+    </section>
   );
 }
 

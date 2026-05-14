@@ -12,24 +12,31 @@
 
 import api from '../api';
 
+// camelCase to match the global axios response interceptor (frontend/src/lib/api.ts)
+// which transforms every snake_case key into camelCase before the
+// caller sees it. Until that interceptor was added this interface
+// used snake_case, which made every `session.cluster_id` read return
+// undefined at runtime — the WS URL ended up
+// `…/clusters/undefined/shell/…` and the terminal age/expires copy
+// rendered Invalid Date. Both bugs traced back to this mismatch.
 export interface ShellSession {
   id: string;
-  cluster_id: string;
-  user_id: string;
+  clusterId: string;
+  userId: string;
   status: 'starting' | 'active' | 'closed' | 'expired' | 'failed';
-  pod_name: string;
-  pod_namespace: string;
+  podName: string;
+  podNamespace: string;
   container: string;
-  started_at: string;
-  last_input_at: string;
-  expires_at: string;
-  idle_timeout_seconds: number;
-  command_count?: number;
+  startedAt: string;
+  lastInputAt: string;
+  expiresAt: string;
+  idleTimeoutSeconds: number;
+  commandCount?: number;
 }
 
 export interface RecordedCommand {
-  command_at: string;
-  command_line: string;
+  commandAt: string;
+  commandLine: string;
 }
 
 export async function openShellSession(clusterId: string): Promise<ShellSession> {

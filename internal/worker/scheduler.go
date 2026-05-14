@@ -41,6 +41,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		desc     string
 	}{
 		{"@every 60s", TypeHealthCheck, "cluster health check"},
+		// Sprint 086 — cluster-condition remediation reconciler. 30s
+		// cadence so a transient agent disconnect gets a re-pair token
+		// minted promptly; per-condition exponential backoff stops
+		// stuck clusters from tight-looping.
+		{"@every 30s", tasks.ClusterConditionReconcileType, "cluster-condition remediation"},
 		{"@every 60s", TypeAlertEvaluation, "alert rule evaluation"},
 		{"@every 6h", TypeCatalogSync, "catalog sync"},
 		{"@every 5m", TypeMetricsAggregation, "metrics aggregation"},
@@ -84,7 +89,8 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// the per-cluster drift check is cheap (two JSONB diffs against
 		// the snapshot) and the result feeds a UI badge, not an
 		// auto-correct path.
-		{"@every 1h", tasks.ClusterTemplateDriftCheckType, "cluster template drift sweep"},
+		// cluster_template:drift_check is registered separately below so
+		// it can route to the tunnel-only asynq queue.
 		// Migration 050: drift sweep for cluster registry configs.
 		// Re-applies every cluster_registry_configs row so a new
 		// project namespace, an accidental Secret deletion, or a
@@ -144,6 +150,8 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30m", tasks.NetworkPolicyDriftCheckType, "network policy drift sweep"},
 		// Sprint 069: CRD-mirror v2 stale-row prune.
 		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
+		// T6.069: CRD-mirror v2 gauge populator (every minute).
+		{"@every 1m", tasks.CrdMirrorGaugePopulateType, "CRD mirror v2 gauge populator"},
 		// Sprint 072: anomaly baseline recompute every 5m.
 		{"@every 5m", tasks.AnomalyBaselineRecomputeType, "anomaly baseline recompute"},
 		// Migration 070: apiserver allow-list reconciler. Every 15m
@@ -165,6 +173,20 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 			return err
 		}
 		s.log.Info("registered periodic task", "task", e.desc, "schedule", e.cron, "entry_id", entryID)
+	}
+
+	// Tunnel-routed periodic tasks. These must land on the server pod
+	// (where the tunnel hub lives) because their handler enqueues helm
+	// commands at the registered agent. Registered outside the loop so
+	// the entries struct stays a flat 3-field positional literal.
+	{
+		task := asynq.NewTask(tasks.ClusterTemplateDriftCheckType, nil)
+		entryID, err := s.scheduler.Register("@every 1h", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+		if err != nil {
+			s.log.Error("failed to register periodic task", "task", tasks.ClusterTemplateDriftCheckType, "error", err)
+			return err
+		}
+		s.log.Info("registered periodic task", "task", "cluster template drift sweep (tunnel queue)", "schedule", "@every 1h", "entry_id", entryID)
 	}
 
 	return nil

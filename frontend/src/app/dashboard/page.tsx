@@ -1,6 +1,7 @@
 'use client';
 
 import { useClusters, useActivityFeed, useAlertEvents, useTools, queryKeys } from '@/lib/hooks';
+import { useLatestBackupDrill } from '@/components/settings/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
@@ -28,6 +29,9 @@ export default function DashboardPage() {
   const { data: activityData, isLoading: activityLoading } = useActivityFeed(10);
   const { data: alertEventsData } = useAlertEvents({ status: 'firing' });
   const { data: toolsData } = useTools();
+  // T7.3 — backup-drill health row. The CronJob writes one row
+  // per drill run; useLatestBackupDrill returns the most recent.
+  const { data: latestDrill } = useLatestBackupDrill();
 
   useLiveQueryInvalidation(
     [
@@ -318,6 +322,26 @@ export default function DashboardPage() {
               value="—"
               tone="default"
               hint="not applied"
+            />
+            <HealthRow
+              href="/dashboard/settings/backup-drill"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              label="Backup restore drill"
+              value={latestDrill?.status ?? '—'}
+              tone={
+                latestDrill?.status === 'success'
+                  ? 'success'
+                  : latestDrill?.status === 'failure'
+                    ? 'error'
+                    : latestDrill?.status === 'partial'
+                      ? 'warning'
+                      : 'default'
+              }
+              hint={
+                latestDrill?.completedAt
+                  ? `last run ${formatRelativeTime(latestDrill.completedAt)}`
+                  : 'never run'
+              }
             />
           </div>
           <Link

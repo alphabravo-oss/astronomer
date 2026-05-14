@@ -126,7 +126,7 @@ function HeroCard({ detection, clusterId }: { detection: ServiceMeshDetection; c
         </div>
         {!isInstalled && (
           <Link
-            href={`/dashboard/catalog?tag=service-mesh&cluster_id=${clusterId}`}
+            href={`/dashboard/clusters/${clusterId}/apps?section=browse&install=istio-base`}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex-shrink-0"
           >

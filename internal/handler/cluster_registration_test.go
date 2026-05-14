@@ -66,6 +66,10 @@ func (f *fakeRegistrationQuerier) GetUserByID(ctx context.Context, id uuid.UUID)
 	return u, nil
 }
 
+func (f *fakeRegistrationQuerier) GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error) {
+	return sqlc.ClusterTemplate{ID: id, Spec: []byte(`{}`)}, nil
+}
+
 func (f *fakeRegistrationQuerier) UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -174,6 +178,10 @@ func (f *fakeRegistrationQuerier) GetClusterRegistrationStep(ctx context.Context
 		}
 	}
 	return sqlc.ClusterRegistrationStep{}, pgx.ErrNoRows
+}
+
+func (f *fakeRegistrationQuerier) CloseRunningStepsForCluster(ctx context.Context, arg sqlc.CloseRunningStepsForClusterParams) error {
+	return nil
 }
 
 func (f *fakeRegistrationQuerier) MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error) {

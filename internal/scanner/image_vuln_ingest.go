@@ -118,6 +118,11 @@ type TrivyCVE struct {
 // interface so tests can stub the DB without standing up Postgres.
 type Querier interface {
 	UpsertImageVulnerabilityReport(ctx context.Context, arg sqlc.UpsertImageVulnerabilityReportParams) (sqlc.ImageVulnerabilityReport, error)
+	// Sprint 081: history snapshot appended on every ingest so the
+	// dashboard can render trend lines + diff-vs-yesterday. The
+	// implementation upserts ON CONFLICT (report_id, scanned_at)
+	// DO NOTHING so a mirror-event replay doesn't duplicate.
+	InsertImageVulnerabilityReportSnapshot(ctx context.Context, arg sqlc.InsertImageVulnerabilityReportSnapshotParams) error
 	DeleteImageVulnerabilitiesByReport(ctx context.Context, reportID uuid.UUID) error
 	BatchInsertImageVulnerabilities(ctx context.Context, rows []sqlc.InsertImageVulnerabilityParams) error
 }
@@ -268,6 +273,30 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 		_ = rollback(ctx)
 		i.recordOutcome("error")
 		return fmt.Errorf("scanner: upsert report: %w", err)
+	}
+
+	// Append a history-snapshot row alongside the live upsert. The
+	// snapshot powers the trend sparkline + the "what changed since
+	// yesterday" diff card on the cluster's Image Scans tab.
+	// Sprint 081. ON CONFLICT (report_id, scanned_at) DO NOTHING in
+	// the SQL makes this idempotent against replay (the agent
+	// re-emits cached items on tunnel reconnect).
+	snapshotErr := q.InsertImageVulnerabilityReportSnapshot(ctx, sqlc.InsertImageVulnerabilityReportSnapshotParams{
+		ReportID:      report.ID,
+		ClusterID:     clusterID,
+		CriticalCount: int32(report.CriticalCount),
+		HighCount:     int32(report.HighCount),
+		MediumCount:   int32(report.MediumCount),
+		LowCount:      int32(report.LowCount),
+		UnknownCount:  int32(report.UnknownCount),
+		ScannedAt:     pgtype.Timestamptz{Time: upsertArgs.ScannedAt, Valid: true},
+	})
+	if snapshotErr != nil {
+		// History append is best-effort: a snapshot insert failure
+		// shouldn't abort the live ingest, because the live
+		// image_vulnerability_reports row is still the source of
+		// truth for the dashboard. Log + continue.
+		i.recordOutcome("snapshot_error")
 	}
 
 	if err := q.DeleteImageVulnerabilitiesByReport(ctx, report.ID); err != nil {

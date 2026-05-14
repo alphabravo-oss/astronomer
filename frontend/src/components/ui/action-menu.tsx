@@ -18,7 +18,10 @@ interface ActionMenuProps {
   items: ActionMenuItem[];
 }
 
-const MENU_WIDTH = 176; // matches w-44
+// 208px (w-52) gives multi-word labels like "Registration Command" room to sit
+// on a single line at text-xs; the previous w-44 (176px) was just narrow enough
+// to wrap, which looked broken next to the single-line items.
+const MENU_WIDTH = 208;
 const MENU_GAP = 4;
 const MENU_MIN_HEIGHT = 120;
 
@@ -116,7 +119,7 @@ export function ActionMenu({ items }: ActionMenuProps) {
                 }}
                 disabled={item.disabled}
                 className={cn(
-                  'w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-colors',
+                  'w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-colors whitespace-nowrap',
                   item.disabled && 'opacity-50 cursor-not-allowed',
                   item.variant === 'destructive'
                     ? 'text-status-error hover:bg-status-error/10'

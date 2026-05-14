@@ -243,7 +243,16 @@ export default function ClusterNetworkPoliciesPage() {
               {apps.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    No network policies applied. Click <em>Apply template</em> to start.
+                    <div className="space-y-3">
+                      <p>No network policies applied yet.</p>
+                      <p className="text-xs">
+                        Pick a curated template from the{' '}
+                        <a href="/dashboard/settings/platform" className="underline">
+                          platform network-policy templates
+                        </a>{' '}
+                        and click <em>Apply template</em> to roll one out.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}

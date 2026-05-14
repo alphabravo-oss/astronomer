@@ -1,19 +1,53 @@
 # GitHub Actions
 
-**Currently disabled during development.**
+## Active workflows
 
-The release workflow that builds + signs + attests container images lives at
-[`../workflows-disabled/release.yaml`](../workflows-disabled/release.yaml).
-GitHub Actions only auto-loads `.yml`/`.yaml` files from `.github/workflows/`,
-so files in `workflows-disabled/` are inert.
+### `release.yaml` — signed release pipeline (T12)
 
-To re-enable:
+Fires on `v*.*.*` tag push (also dispatchable manually for hotfix tags from
+non-tag commits). For each of the four chart-published components
+(`server`, `worker`, `agent`, `migrate`) it:
+
+1. Builds the image with `docker buildx` and pushes to
+   `ghcr.io/<owner>/astronomer-go-<component>:<tag>` plus `:latest`.
+2. Signs the image by **digest** (not tag — signing by mutable tag is a
+   forgery risk) with cosign keyless via the GitHub OIDC token →
+   Sigstore Fulcio short-lived cert → Rekor transparency log.
+3. Generates an [SPDX](https://spdx.dev/) SBOM with
+   [syft](https://github.com/anchore/syft).
+4. Attaches the SBOM with `cosign attest --type spdxjson` so consumers
+   can `cosign verify-attestation` to retrieve it.
+5. Uploads the SBOM as a workflow artifact (90-day retention) for
+   browsing without a registry pull.
+
+The verifier-side runbook at
+[`../../docs/verify-images.md`](../../docs/verify-images.md) documents how
+procurement / supply-chain teams reproduce the cosign + syft verification
+before pulling our images into an internal registry mirror.
+
+### `smoke-fresh-cluster.yaml` — fresh-cluster end-to-end smoke (T2.1)
+
+Drives the full operator-onboarding flow against a real k3d cluster on
+every PR to `main` and nightly: wizard registration → agent install →
+baseline operators → kubectl shell open → trivy vuln reports flowing.
+This catches the class of regression that the bitnami/kubectl:1.31
+404, the SQLSTATE 42P08 migration bug, the cert-manager unmarshal
+bug, and the phase-machine stuck-on-`failed` bug all share — nothing
+else in CI exercised the fresh-cluster registration path end-to-end,
+and each sat in `main` for at least a week before a human surfaced
+it manually.
+
+Hard cap: 25 minutes per run. The script's per-step timeouts add up
+to ~13 minutes worst case; the slack covers k3d provisioning + image
+pulls. On failure, the workflow uploads kubectl logs from the
+management cluster + the smoke cluster's agent pod as a `smoke-debug-*`
+artifact retained 7 days.
+
+## Disabled workflows
+
+`workflows-disabled/` holds workflows that are intentionally inert (GitHub
+Actions only auto-loads `.yml`/`.yaml` from `.github/workflows/`).
 
 ```bash
-mv .github/workflows-disabled/release.yaml .github/workflows/release.yaml
-git add .github/workflows
+mv .github/workflows-disabled/<name>.yaml .github/workflows/<name>.yaml
 ```
-
-The verifier-side runbook in [`../../docs/verify-images.md`](../../docs/verify-images.md)
-documents how to verify the signatures + SBOMs once the workflow is live and
-has published its first signed images.

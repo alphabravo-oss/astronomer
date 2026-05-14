@@ -57,6 +57,12 @@ type SupportBundleAsynqInspector interface {
 	Queues() ([]string, error)
 	GetQueueInfo(qname string) (*asynq.QueueInfo, error)
 	ListArchivedTasks(qname string, opts ...asynq.ListOption) ([]*asynq.TaskInfo, error)
+	// Mutating ops used by the Operations admin tab (T28b). The
+	// support-bundle code never calls these, but *asynq.Inspector
+	// satisfies them naturally; keeping a single interface avoids a
+	// parallel admin-only inspector type.
+	RunTask(qname, taskID string) error
+	DeleteTask(qname, taskID string) error
 }
 
 // SupportBundleDBPooler exposes the minimum surface needed to run the

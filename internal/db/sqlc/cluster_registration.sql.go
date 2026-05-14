@@ -326,3 +326,30 @@ func (q *Queries) MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUI
 	}
 	return n, err
 }
+
+const closeRunningStepsForCluster = `-- name: CloseRunningStepsForCluster :exec
+UPDATE cluster_registration_steps
+   SET status = 'failed',
+       completed_at = COALESCE(completed_at, now()),
+       error_message = CASE
+           WHEN error_message = '' THEN 'superseded by retry'
+           ELSE error_message
+       END
+ WHERE cluster_id = $1
+   AND step_name = $2
+   AND status = 'running'
+`
+
+// CloseRunningStepsForCluster marks any in-flight (`running`) step
+// rows for (cluster_id, step_name) as failed. Used by the orchestrator
+// before writing a fresh `template_applying` row on retry so the
+// Provisioning tab doesn't accumulate orphan "running" rows.
+type CloseRunningStepsForClusterParams struct {
+	ClusterID uuid.UUID
+	StepName  string
+}
+
+func (q *Queries) CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error {
+	_, err := q.db.Exec(ctx, closeRunningStepsForCluster, arg.ClusterID, arg.StepName)
+	return err
+}

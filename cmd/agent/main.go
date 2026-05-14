@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/dynamic"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
@@ -199,6 +200,40 @@ func runConnect(logger *slog.Logger) error {
 			}
 			subscriber := agent.NewStateSubscriber(client, tunnel, logger)
 			subscriber.Run(ctx)
+		}()
+
+		// CRD-mirror subscriber (sprint 069 + 062): IngressClass /
+		// GatewayClass / NetworkPolicy / ResourceQuota / LimitRange
+		// from the typed informer set, plus trivy-operator
+		// VulnerabilityReport from the dynamic informer. Runs in its
+		// own goroutine so the agent's hot path (tunnel reads, k8s
+		// proxy, exec/logs) doesn't share its cache-sync stall budget.
+		// The subscriber logs + skips kinds whose RBAC or CRD isn't
+		// present, so a cluster without trivy-operator still mirrors
+		// the other four GVKs.
+		go func() {
+			pollTicker := time.NewTicker(250 * time.Millisecond)
+			defer pollTicker.Stop()
+			for !tunnel.IsConnected() {
+				select {
+				case <-ctx.Done():
+					return
+				case <-pollTicker.C:
+				}
+			}
+			var dyn dynamic.Interface
+			if dc, dErr := dynamic.NewForConfig(restConfig); dErr == nil {
+				dyn = dc
+			} else {
+				logger.Warn("mirror subscriber: dynamic client init failed; GatewayClass + VulnerabilityReport mirror disabled", "error", dErr)
+			}
+			mirror := agent.NewMirrorSubscriber(client, dyn, tunnel, logger)
+			// Wire the tunnel as the connection watcher so the
+			// subscriber's replay loop re-emits cached mirror items on
+			// every WS reconnect (closes the "events lost during
+			// bootstrap" hole).
+			mirror.SetConnectionWatcher(tunnel)
+			mirror.Run(ctx)
 		}()
 
 		// Heartbeat + metrics tickers. Wait until the tunnel is connected so

@@ -79,6 +79,33 @@ func TestRegistrationWizard_IllegalTransitionsRejected(t *testing.T) {
 // TestRegistrationWizard_RetryFailedStep checks that the retry edge
 // rewinds from failed back to provisioning so the apply worker can
 // be re-invoked.
+// TestRegistrationWizard_SelfHealFromFailed covers the sprint-086
+// recovery edges out of `failed`. The orchestrator's auto-retry loop
+// can fire EventTemplateApplying or EventTemplateApplied directly
+// (without an explicit operator-driven Retry first); before the fix
+// these self-recovery signals were silently rejected and the cluster
+// stayed pinned on `failed` even after the tool eventually installed.
+func TestRegistrationWizard_SelfHealFromFailed(t *testing.T) {
+	cases := []struct {
+		ev   Event
+		want Phase
+	}{
+		{EventTemplateApplying, PhaseProvisioning},
+		{EventTemplateApplied, PhaseReady},
+		{EventAgentConnected, PhaseConnected},
+	}
+	for _, c := range cases {
+		got, err := Transition(PhaseFailed, c.ev, true)
+		if err != nil {
+			t.Errorf("failed+%s should self-heal, got err=%v", c.ev, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("failed+%s = %s, want %s", c.ev, got, c.want)
+		}
+	}
+}
+
 func TestRegistrationWizard_RetryFailedStep(t *testing.T) {
 	got, err := Transition(PhaseFailed, EventRetry, true)
 	if err != nil {

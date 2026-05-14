@@ -69,11 +69,16 @@ type MirrorQuerier interface {
 // GroupVersionKind shape) so the cardinality of the {kind=…} label is
 // fixed at compile time.
 const (
-	KindIngressClass   = "IngressClass"
-	KindGatewayClass   = "GatewayClass"
-	KindNetworkPolicy  = "NetworkPolicy"
-	KindResourceQuota  = "ResourceQuota"
-	KindLimitRange     = "LimitRange"
+	KindIngressClass        = "IngressClass"
+	KindGatewayClass        = "GatewayClass"
+	KindNetworkPolicy       = "NetworkPolicy"
+	KindResourceQuota       = "ResourceQuota"
+	KindLimitRange          = "LimitRange"
+	// Sprint 062 hooks into the same mirror channel: the agent forwards
+	// aquasecurity.github.io/v1alpha1 VulnerabilityReport CRs through
+	// MsgMirrorEvent with Kind=KindVulnerabilityReport; the server's
+	// MirrorRouter routes those into the typed scanner.Ingester.
+	KindVulnerabilityReport = "VulnerabilityReport"
 )
 
 // MirrorKinds is the fixed list of kinds the v2 path mirrors. Useful

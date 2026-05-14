@@ -72,6 +72,18 @@ func (q *projectAsyncQuerier) MarkProjectNamespaceReconciled(context.Context, sq
 	return nil
 }
 
+// RBAC-matrix surface — async tests don't hit this; satisfy the
+// interface with empty stubs.
+func (q *projectAsyncQuerier) ListProjectRoleBindingsByProject(context.Context, sqlc.ListProjectRoleBindingsByProjectParams) ([]sqlc.ProjectRoleBinding, error) {
+	return nil, nil
+}
+func (q *projectAsyncQuerier) GetProjectRoleByID(context.Context, uuid.UUID) (sqlc.ProjectRole, error) {
+	return sqlc.ProjectRole{}, nil
+}
+func (q *projectAsyncQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc.User, error) {
+	return sqlc.User{}, nil
+}
+
 type noopProjectRequester struct{}
 
 func (noopProjectRequester) Do(context.Context, string, string, string, []byte, map[string]string) (*protocol.K8sResponsePayload, error) {

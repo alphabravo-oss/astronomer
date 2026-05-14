@@ -45,6 +45,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +60,28 @@ import (
 // ClusterTemplateApplyType is the asynq task type. Re-exported via
 // worker.TypeClusterTemplateApply for the mux wiring.
 const ClusterTemplateApplyType = "cluster_template:apply"
+
+// isAgentNotConnectedErr returns true when an error originated from the
+// tunnel hub failing to find the agent on this pod. Multi-replica server
+// deployments terminate the agent's WS on exactly one pod, but the asynq
+// queue distributes tasks across all replicas — so a "not connected"
+// error from the wrong pod is recoverable by returning the task to the
+// queue (asynq retries with backoff and eventually the right pod grabs
+// it). Permanent agent-down still surfaces, just after MaxRetry.
+func isAgentNotConnectedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "cluster agent not connected")
+}
+
+// ClusterTemplateApplyQueueName is the dedicated asynq queue that both
+// the per-cluster apply task and the periodic drift sweep route through.
+// These tasks require the tunnel hub (which only lives in the server
+// pod) so they're processed by the server-embedded asynq.Server, not by
+// the standalone astronomer-worker pod whose tasks.ConfigureClusterTemplateApply
+// is intentionally unwired.
+const ClusterTemplateApplyQueueName = "tunnel"
 
 // ClusterTemplateDriftCheckType is the periodic drift sweep. Hourly
 // cadence; cooperative leader lease keeps multiple worker pods from
@@ -105,7 +128,35 @@ type ClusterTemplateApplyQuerier interface {
 	CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.Project, error)
 	UpsertClusterRegistrationPolicy(ctx context.Context, arg sqlc.UpsertClusterRegistrationPolicyParams) (sqlc.ClusterRegistrationPolicy, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg sqlc.ListInstalledChartsByClusterParams) ([]sqlc.InstalledChart, error)
+	// Used by the drift sweep's stuck-applying detection (T8.4). We
+	// upsert TemplateApplyStuck=True when an 'applying' row has sat
+	// past stuckApplyingThreshold, and clear it on the next tick if
+	// the row has moved off 'applying'.
+	UpsertClusterCondition(ctx context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error)
 }
+
+// ConditionTemplateApplyStuck names the condition emitted when a
+// cluster_template_applications row has been in 'applying' beyond
+// stuckApplyingThreshold. The cluster_condition_reconcile worker picks
+// this up and routes to a remedy (reset to 'failed' so the
+// failed-row recovery sweep re-enqueues).
+const ConditionTemplateApplyStuck = "TemplateApplyStuck"
+
+// stuckApplyingThreshold is the grace window before an 'applying' row
+// is treated as wedged. Long enough to cover normal tool-install times
+// + a sane post-install hook timeout; short enough that an operator
+// staring at the UI for "what's it doing?" gets an answer within a
+// reasonable on-call window.
+const stuckApplyingThreshold = 10 * time.Minute
+
+// failedApplyMinBackoff is the minimum age of a 'failed'
+// cluster_template_applications row before the hourly recovery sweep
+// re-enqueues it (T5.5). 15 minutes is long enough that an agent
+// reconnect window has resolved (the apply task itself returns to
+// 'pending' on agent-not-connected and asynq retries quickly), but
+// short enough that a slightly older failure still gets a retry on
+// the very next sweep.
+const failedApplyMinBackoff = 15 * time.Minute
 
 // ToolInstaller is the bridge to the existing tool-install flow. The
 // production *handler.ToolHandler implements this via its EnsureInstalled
@@ -269,6 +320,22 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		return nil
 	}
 	if err := applyTools(ctx, deps, clusterID, spec); err != nil {
+		// "cluster agent not connected" means the agent's WS terminates
+		// on a different server pod than the one this asynq worker is
+		// running in. Reset the row to pending and return the error to
+		// asynq so it gets re-enqueued; eventually the pod that holds
+		// the agent's WS connection will pick the task up. Same applies
+		// when the agent is mid-reconnect (server pod restart).
+		if isAgentNotConnectedErr(err) {
+			runtimeLogger().WarnContext(ctx, "apply deferred: agent not on this pod, returning task to queue",
+				"cluster_id", clusterID, "error", err)
+			_, _ = deps.Queries.MarkClusterTemplateApplicationStatus(ctx, sqlc.MarkClusterTemplateApplicationStatusParams{
+				ClusterID: clusterID,
+				Status:    "pending",
+				LastError: "deferred: agent connected on a sibling pod, retrying",
+			})
+			return err
+		}
 		persistApplyFailure(ctx, deps, clusterID, err.Error())
 		return nil
 	}
@@ -596,6 +663,110 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 			}
 		}
 		runtimeLogger().InfoContext(ctx, "cluster template drift sweep", "evaluated", len(apps), "drift", drift)
+		// Stuck-row recovery. A `failed` cluster_template_applications
+		// row should NOT need a manual reapply click — the operator has
+		// already opted in via install_baseline=true, and the failure is
+		// usually transient (agent reconnect window, helm post-install
+		// hook timeout, image pull race). Walk the failed rows and
+		// re-enqueue them; the apply task itself is idempotent and
+		// already handles agent-not-connected via asynq retry.
+		//
+		// Bounded by clusterTemplateDriftCheckLimit and rate-limited by
+		// the hourly sweep cadence so a permanently-broken cluster
+		// doesn't pin a worker burning retries — asynq's per-task
+		// MaxRetry caps that on the apply side.
+		if enqueuer := failedApplyEnqueuer; enqueuer != nil {
+			failed, ferr := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+				Status: "failed",
+				Limit:  int32(clusterTemplateDriftCheckLimit),
+			})
+			if ferr == nil {
+				// T5.5 — per-row time-based backoff. The hourly sweep
+				// cadence is already a coarse backoff, but it
+				// re-enqueues every cluster on every tick regardless
+				// of how recently it failed. A cluster whose helm
+				// pre-install hook fails consistently would pile a
+				// fresh failed-step row each hour. Skip rows whose
+				// updated_at is younger than failedApplyMinBackoff
+				// (15m) so a freshly-failed apply gets one fast
+				// retry from the agent reconnect path, then waits
+				// before the next attempt.
+				skipped := 0
+				enqueued := 0
+				for _, app := range failed {
+					if time.Since(app.UpdatedAt) < failedApplyMinBackoff {
+						skipped++
+						continue
+					}
+					task, terr := NewClusterTemplateApplyTask(app.ClusterID)
+					if terr != nil {
+						continue
+					}
+					_, _ = enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName))
+					enqueued++
+				}
+				if enqueued > 0 || skipped > 0 {
+					runtimeLogger().InfoContext(ctx, "cluster template recovery sweep",
+						"re_enqueued", enqueued, "skipped_backoff", skipped)
+				}
+			}
+		}
+
+		// T8.4 — stuck-applying detection. Walk 'applying' rows; any
+		// that have sat past stuckApplyingThreshold get a
+		// TemplateApplyStuck=True condition so the cluster-condition
+		// reconciler can route them to remediation, and the
+		// cluster-detail UI surfaces a red badge instead of leaving
+		// the user staring at a never-finishing spinner.
+		applying, aerr := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+			Status: "applying",
+			Limit:  int32(clusterTemplateDriftCheckLimit),
+		})
+		if aerr == nil {
+			stuck := 0
+			for _, app := range applying {
+				if time.Since(app.UpdatedAt) <= stuckApplyingThreshold {
+					continue
+				}
+				_, cerr := clusterTemplateApplyDeps.Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
+					ClusterID: app.ClusterID,
+					Type:      ConditionTemplateApplyStuck,
+					Status:    "True",
+					Reason:    "ApplyingOverThreshold",
+					Message: fmt.Sprintf(
+						"cluster_template_applications has been 'applying' for %s (last update %s) — exceeds %s",
+						time.Since(app.UpdatedAt).Round(time.Second),
+						app.UpdatedAt.UTC().Format(time.RFC3339),
+						stuckApplyingThreshold,
+					),
+				})
+				if cerr != nil {
+					runtimeLogger().WarnContext(ctx, "stuck-applying condition write failed",
+						"cluster_id", app.ClusterID, "error", cerr)
+					continue
+				}
+				stuck++
+			}
+			if stuck > 0 {
+				runtimeLogger().InfoContext(ctx, "cluster template stuck-applying sweep", "marked", stuck)
+			}
+		}
 		return nil
 	})
+}
+
+// FailedApplyEnqueuer is the slim asynq Client surface the recovery
+// sweep needs. Server-side glue passes the existing apply queue client.
+type FailedApplyEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
+var failedApplyEnqueuer FailedApplyEnqueuer
+
+// ConfigureFailedApplyEnqueuer wires the asynq client the drift sweep
+// uses to re-enqueue stuck `failed` rows. Optional — when unwired the
+// sweep continues to do its drift-detection work and just skips the
+// recovery step. nil-safe.
+func ConfigureFailedApplyEnqueuer(e FailedApplyEnqueuer) {
+	failedApplyEnqueuer = e
 }

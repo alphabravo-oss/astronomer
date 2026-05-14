@@ -91,6 +91,16 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Multi-replica WS hand-off. If the cluster's tunnel is owned by a
+	// sibling pod (the redis locator knows), forward the entire
+	// HTTP-Upgrade to that pod so the WS lands where the agent
+	// tunnel terminates. Without this the K8S_STREAM_FRAME replies
+	// arrive on the agent-owning pod, find no matching stream on this
+	// pod, and the WS dies with "no stream found for message".
+	if ForwardWSToOwnerPod(ec.hub, ec.log, w, r, clusterID) {
+		return
+	}
+
 	// Accept WebSocket from frontend client.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
@@ -101,13 +111,44 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "closed")
 
+	ec.ProxyToAgent(r.Context(), conn, clusterID, namespace, pod, container)
+}
+
+// ProxyToAgent runs the exec relay between an already-upgraded WebSocket
+// connection and the cluster agent. The caller is responsible for the WS
+// Accept handshake and for closing `conn` after this returns.
+//
+// This is the same code path HandleExec uses post-upgrade; it's exposed so
+// session-aware front-doors (e.g. the kubectl_shell WS handler, which needs
+// to validate a session row before bridging) can reuse the relay without
+// going through a 307 redirect onto /api/v1/ws/exec/. Browsers — Firefox in
+// particular — do not portably follow redirects on WS handshakes.
+func (ec *ExecConsumer) ProxyToAgent(ctx context.Context, conn *websocket.Conn, clusterID, namespace, pod, container string) {
+	ec.proxyToAgent(ctx, conn, clusterID, namespace, pod, container, nil)
+}
+
+// ProxyToAgentWithInputRecorder is the audited variant used by the
+// kubectl-shell front door. onInput receives the raw payload bytes of
+// each inbound frame (the JSON envelope from the browser) before the
+// relay forwards it. The callback runs synchronously in the read loop
+// — the kubectl_shell handler keeps it cheap (append to a line buffer,
+// fire-and-forget INSERT on newline) precisely because of that.
+//
+// When onInput is nil this behaves identically to ProxyToAgent.
+func (ec *ExecConsumer) ProxyToAgentWithInputRecorder(ctx context.Context, conn *websocket.Conn, clusterID, namespace, pod, container string, onInput func([]byte)) {
+	ec.proxyToAgent(ctx, conn, clusterID, namespace, pod, container, onInput)
+}
+
+// proxyToAgent is the unified relay implementation. The exported entry
+// points differ only in whether they pass a non-nil onInput callback.
+func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, clusterID, namespace, pod, container string, onInput func([]byte)) {
 	// Get agent connection from hub.
 	agent := ec.hub.GetAgent(clusterID)
 	if agent == nil {
 		ec.log.Warn("no agent connected for cluster", slog.String("cluster_id", clusterID))
 		// Best-effort error frame so the UI surfaces the problem instead of
 		// silently disconnecting.
-		_ = writeFrontendError(r.Context(), conn, "Cluster agent not connected")
+		_ = writeFrontendError(ctx, conn, "Cluster agent not connected")
 		conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
 		return
 	}
@@ -120,7 +161,7 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
-		_ = writeFrontendError(r.Context(), conn, "failed to create stream")
+		_ = writeFrontendError(ctx, conn, "failed to create stream")
 		conn.Close(websocket.StatusInternalError, "failed to create stream")
 		return
 	}
@@ -149,7 +190,7 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
-		_ = writeFrontendError(r.Context(), conn, "failed to start exec session")
+		_ = writeFrontendError(ctx, conn, "failed to start exec session")
 		conn.Close(websocket.StatusInternalError, "failed to start exec session")
 		return
 	}
@@ -159,7 +200,7 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 	// notices and unblocks. We use a derived context so the read loop (which
 	// blocks on conn.Read) and the write loop (which blocks on stream.DataCh)
 	// can both be unblocked when either side ends.
-	relayCtx, cancelRelay := context.WithCancel(r.Context())
+	relayCtx, cancelRelay := context.WithCancel(ctx)
 	defer cancelRelay()
 
 	writeDone := make(chan struct{})
@@ -206,6 +247,13 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Fire the audit hook before forwarding. Both the recorder
+			// and the relay see the same bytes; if the recorder is
+			// slow, the relay still ships the keystroke promptly
+			// because onInput is a cheap-by-contract callback.
+			if onInput != nil {
+				onInput(data)
+			}
 			tunnelMsg, skip := translateFromFrontend(data, streamID, clusterID)
 			if skip {
 				continue

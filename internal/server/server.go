@@ -34,6 +34,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
+	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
@@ -112,6 +113,12 @@ type Server struct {
 	// hub is the tunnel hub; nil in lightweight test servers. Held here
 	// so Shutdown can drain WS connections before tearing down HTTP.
 	hub *tunnel.Hub
+	// tunnelWorker is an in-process asynq.Server that drains the
+	// "tunnel" queue. Tasks on that queue (cluster_template:apply +
+	// drift_check) call into the ToolHandler.EnsureInstalled tunnel
+	// path, which only works on the pod that owns the WS terminations.
+	// Nil in lightweight test servers built via New().
+	tunnelWorker *worker.Worker
 	// Encryptor is the Fernet encryptor wired into handlers that surface
 	// encrypted columns (argocd auth tokens, sso client secrets, etc.).
 	Encryptor *auth.Encryptor
@@ -178,6 +185,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if err != nil {
 		return nil, err
 	}
+	// T8.1 — fail fast on a corrupt schema_migrations row set
+	// (multi-row drift or dirty=true). The .247 incident on 2026-05-13
+	// silently shipped {84 dirty=t, 86 clean} for hours; refusing to
+	// start surfaces it in the first CrashLoop instead of letting the
+	// pod serve traffic against an indeterminate schema.
+	if shErr := database.SchemaHealth(ctx); shErr != nil {
+		database.Close()
+		return nil, fmt.Errorf("schema health check failed: %w", shErr)
+	}
 
 	queries := sqlc.New(database.Pool())
 	jwtManager := auth.NewJWTManager(cfg.SecretKey, cfg.SessionTimeoutMinutes)
@@ -226,9 +242,33 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	bus := events.NewBus()
 	hub := tunnel.NewHubWithValidator(logger, queries)
 	hub.SetPublisher(busPublisherAdapter{bus: bus})
+	// Cross-pod tunnel proxy fallback. Each pod publishes "I own this
+	// cluster's WS" into redis on agent connect; sibling pods read that
+	// to reverse-proxy /k8s/* and kubectl-shell requests to the owner.
+	// Required for multi-replica server deployments — nginx upstream
+	// keep-alive pins user-facing requests to one upstream pod, so
+	// without the locator every cluster-shell/image-scan/k8s-proxy
+	// request that lands on the non-owning pod 503s.
+	if podIP := strings.TrimSpace(os.Getenv("ASTRONOMER_POD_IP")); podIP != "" && cfg.RedisURL != "" {
+		addr := podIP + ":8000"
+		if loc, lerr := tunnel.NewLocatorFromAsynqRedisURL(cfg.RedisURL, addr, logger); lerr != nil {
+			logger.Warn("tunnel locator init failed; cross-pod proxy disabled", "error", lerr)
+		} else {
+			hub.SetLocator(loc)
+			logger.Info("tunnel locator wired", "address", addr)
+		}
+	}
 	remoteServer := tunnel2.NewRemoteServer(logger, queries)
 	requester := handler.NewTunnelK8sRequester(hub)
+	// Cross-pod fallback for server-internal tunnel calls (shell open,
+	// project reconciler, etc.). Same PSK both sides — derived from the
+	// shared encryption key so all replicas agree without extra config.
+	requester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
 	helmRequester := handler.NewTunnelHelmRequester(hub)
+	// Same cross-pod PSK plumbing as the k8s requester: enables the
+	// helm op to reverse-proxy to whichever sibling owns the WS when
+	// the local hub doesn't (required for multi-replica catalog ops).
+	helmRequester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
 	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
 	monitoringHandler.SetLogger(logger)
 	argocdHandler := handler.NewArgoCDHandler(queries)
@@ -346,7 +386,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// install path so ${vault://...} markers in operator-supplied values
 	// blobs are substituted in-memory at install time.
 	vaultResolver := vault.NewResolver(queries, encryptor)
-	vaultResolver.SetObserver(vaultMetricsObserver{})
+	vaultResolver.SetObserver(newVaultMetricsObserver(queries))
 	vaultHandler := handler.NewVaultHandler(queries)
 	vaultHandler.SetAuditor(queries)
 	vaultHandler.SetEncryptor(encryptor)
@@ -379,6 +419,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Driver:  handler.NewVeleroDriverAdapter(requester),
 		Log:     logger,
 	})
+	// Migration 071 — service mesh detector. The handler's POST /detect/
+	// path delegates to tasks.DetectAndUpsert, so the deps need to be
+	// configured here in addition to the worker scheduler that fires the
+	// periodic sweep.
+	tasks.ConfigureMeshDetect(tasks.MeshDetectDeps{
+		Queries:   queries,
+		Requester: requester,
+	})
 	// Sprint 069: CRD-mirror v2 cluster-detail read surface + tunnel
 	// ingest router. The Hub routes MIRROR_EVENT frames into
 	// MirrorRouter, which upserts into the mirrored_* tables; the REST
@@ -386,6 +434,35 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// prune (every 30m) is wired via worker/scheduler.go.
 	clusterResourcesHandler := handler.NewClusterResourcesHandler(queries)
 	mirrorRouter := crd.NewMirrorRouter(queries)
+	// Sprint 062: wire the trivy VulnerabilityReport ingester into the
+	// same MirrorRouter the sprint-069 GVKs use. The agent emits trivy
+	// CRs via the same MIRROR_EVENT channel with Kind=VulnerabilityReport;
+	// the router dispatches them into scanner.Ingester which writes the
+	// image_vulnerability_reports + image_vulnerabilities tables that
+	// the Image Scans dashboard reads. Without this wiring trivy reports
+	// on the cluster are silently dropped (the router used to error on
+	// unknown kind; now it'd no-op without the ingester) — exactly the
+	// "image scan tab is empty even though trivy is running" symptom
+	// operators were seeing.
+	// T6.062 — wire the Ingester's audit hook to the audit writer
+	// so every successful Trivy ingest (and every delete that follows
+	// a stale-report prune) lands a `image_vulns.ingested` audit row.
+	// Was nil since the package landed; the hook surface existed but
+	// no caller plumbed it.
+	trivyAuditHook := scanner.AuditHook(func(ctx context.Context, clusterID uuid.UUID, reportName, action string) {
+		audit.Record(ctx, queries, audit.Event{
+			Source:       "crd_mirror",
+			Action:       "image_vulns." + action,
+			ResourceType: "image_vulnerability_report",
+			ResourceID:   reportName,
+			Detail: map[string]any{
+				"cluster_id":  clusterID.String(),
+				"report_name": reportName,
+			},
+		})
+	})
+	trivyIngester := scanner.NewIngester(queries, database.Pool(), nil, trivyAuditHook)
+	mirrorRouter.SetVulnIngester(crd.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
 	hub.SetMirrorIngester(mirrorRouter)
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
@@ -470,6 +547,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterRegistrationHandler := handler.NewClusterRegistrationHandler(queries, bus)
 	clusterRegistrationHandler.SetApplyQueue(queue)
 	clusterRegistrationHandler.Service().SetMetricsHook(observability.NewRegistrationMetricsHook())
+	// Wire the platform-default cluster_templates row as the wizard's
+	// auto-attach target. Without this lookup the operator's "install
+	// platform baseline" checkbox is silently ignored (the handler
+	// short-circuits when baselineTemplateID is uuid.Nil). The platform
+	// config row is the same source the legacy auto-attach reads.
+	if pcfg, pcfgErr := queries.GetPlatformConfig(ctx); pcfgErr == nil && pcfg.DefaultClusterTemplateID.Valid {
+		clusterRegistrationHandler.SetBaselineTemplateID(uuid.UUID(pcfg.DefaultClusterTemplateID.Bytes))
+	}
 	clusterHandler.SetRegistrationService(clusterRegistrationHandler.Service())
 	if hub != nil {
 		hub.SetRegistrationAdvancer(clusterRegistrationHandler.Service())
@@ -713,6 +798,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		ControlPlane: controlPlaneHandler,
 		Resources:    resourceHandler,
 		PlatformCharts: platformCharts,
+		Docs:           handler.NewDocsHandler(),
+		SSOPresets:     handler.NewSSOPresetsHandler(),
 		ResourcesSearch: func() *handler.ResourcesSearchHandler {
 			h := handler.NewResourcesSearchHandler(queries, requester)
 			h.SetAuthorization(rbacEngine, rbacQuerier)
@@ -720,7 +807,21 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		}(),
 		Readyz:        newReadinessHandler(database, queue, hub),
 		DexConfig:     dexHandler,
-		RBAC:          handler.NewRBACHandler(queries),
+		RBAC: func() *handler.RBACHandler {
+			h := handler.NewRBACHandler(queries)
+			// T1.1 — load the embedded role-templates catalog. We fail
+			// hard here because a busted template file means a buyer-
+			// facing endpoint silently returns no data; the loader's
+			// schema checks catch most authoring errors so the boot
+			// failure surfaces them immediately in CI.
+			cat, lerr := rbac.LoadCatalog()
+			if lerr != nil {
+				logger.Error("failed to load RBAC template catalog", "error", lerr)
+			} else {
+				h.SetTemplateCatalog(cat)
+			}
+			return h
+		}(),
 		RBACQueries:   rbacQuerier,
 		RBACEngine:    rbacEngine,
 		Security:      securityHandler,
@@ -735,6 +836,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Workloads:     workloadHandler,
 		Hub:           hub,
 		Proxy:         tunnel.NewProxyHandler(hub, logger),
+		InternalK8s:   tunnel.NewInternalK8sHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger),
+		InternalHelm:  tunnel.NewInternalHelmHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger),
 		Exec:          tunnel.NewExecConsumer(hub, logger),
 		Logs:          tunnel.NewLogsConsumer(hub, logger),
 		RemoteServer:  remoteServer,
@@ -802,7 +905,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// small ranges; enqueues onto the asynq `compliance:export`
 		// queue for ranges over ~100K audit rows. Superuser-gated
 		// inside the handler.
-		Compliance: handler.NewComplianceHandler(queries, queue),
+		Compliance:        handler.NewComplianceHandler(queries, queue),
+		CompliancePosture: handler.NewCompliancePostureHandler(queries, cfg.AuditLogRetentionMonths),
+		License:           handler.NewLicenseHandler(),
 		// Rancher-style global settings hub (migration 046). The
 		// SettingsCache is shared between the settings handler (PUT /
 		// DELETE invalidate) and the FeatureGate middleware (reads).
@@ -846,6 +951,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		GitOps: func() *handler.GitOpsHandler {
 			h := handler.NewGitOpsHandler(queries, handler.DefaultGitOpsSyncRunner(), logger)
 			h.SetAuditWriter(queries)
+			// T6 item 060 — wrap auth blobs with the Fernet encryptor
+			// when one is available. nil-safe: development / tests
+			// without an encryption key keep working but leave the
+			// blob plaintext.
+			h.SetEncryptor(encryptor)
 			return h
 		}(),
 		ProjectCatalogs: projectCatalogsHandler,
@@ -869,6 +979,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// Sprint 069: CRD-mirror v2 read endpoints (ingress-classes,
 		// gateway-classes, network-policies, resource-quotas, limit-ranges).
 		ClusterResources: clusterResourcesHandler,
+		// Migration 071 — service mesh tile on the cluster detail page.
+		// GET serves the cached row; the optional detector wires the
+		// POST /detect/ path. Detector is only wired when worker mesh-detect
+		// deps are configured upstream; the handler returns a 503 from
+		// POST otherwise. GET works regardless.
+		ServiceMesh: func() *handler.ServiceMeshHandler {
+			h := handler.NewServiceMeshHandler(queries)
+			h.SetRequester(requester)
+			h.SetAuditor(queries)
+			h.SetAuthorization(rbacEngine, rbacQuerier)
+			h.SetDetector(handler.MeshDetectorFunc(tasks.DetectAndUpsert))
+			return h
+		}(),
 	}
 	// Migration 063 — read-side audit. The PolicyEvaluator is shared
 	// between the middleware and the admin handler so policy writes
@@ -961,6 +1084,30 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// leak pod log contents to anyone who can reach the API.
 	if deps.Logs != nil {
 		deps.Logs.SetAuth(jwtManager, queries)
+	}
+
+	// Sprint 17+/082+: same fix for the kubectl-shell session-aware WS
+	// route. Without this the route 401s every browser handshake
+	// (the SPA passes `?token=` because WS can't set headers).
+	if deps.KubectlShell != nil {
+		deps.KubectlShell.SetStreamAuth(jwtManager, queries)
+		// v2 (Firefox-portable): bridge the inbound WS onto the cluster
+		// agent via the existing exec relay instead of 307-redirecting
+		// to /api/v1/ws/exec/. The shell handler validates the session
+		// row + ownership; the exec consumer owns the agent fan-out.
+		if deps.Exec != nil {
+			deps.KubectlShell.SetExecProxy(deps.Exec)
+		}
+		// Multi-replica WS hand-off. When the cluster's tunnel is held
+		// by a sibling pod, the shell handler forwards the HTTP-Upgrade
+		// to that sibling before websocket.Accept so K8S stream frames
+		// always flow on the pod that owns the agent. Mirrors the
+		// HTTP-side forwardToOwnerPod fallback. hub is the same
+		// *tunnel.Hub the HTTP proxy uses; in single-pod deploys the
+		// locator is nil and the closure returns false.
+		deps.KubectlShell.SetCrossPodWSForwarder(func(w http.ResponseWriter, r *http.Request, clusterID string) bool {
+			return tunnel.ForwardWSToOwnerPod(hub, logger, w, r, clusterID)
+		})
 	}
 
 	// ArgoCD UI reverse proxy. Defaults to the in-cluster service URL but
@@ -1069,6 +1216,27 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Installer:    toolHandler,
 		Registration: clusterRegistrationHandler.Service(),
 	})
+	// Recovery sweep: drift_check re-enqueues `failed` apply rows
+	// through the same tunnel queue used by the operator-initiated
+	// reapply path. Optional — drift_check still does its main job
+	// when this is unwired (single-binary tests without an asynq
+	// client).
+	tasks.ConfigureFailedApplyEnqueuer(queue)
+	// Spin up the tunnel-queue asynq Server inside the server pod. The
+	// apply path needs the WS-terminated tunnel hub (which lives only
+	// here, not in the standalone worker pod) to execute helm install /
+	// upgrade against the agent. The handler call above only wires the
+	// runtime deps; without this Server nothing actually drains tasks
+	// from the "tunnel" queue and apply rows would sit at pending.
+	if cfg.RedisURL != "" {
+		tw, twErr := worker.NewTunnelWorker(cfg.RedisURL, logger)
+		if twErr != nil {
+			logger.Error("failed to create tunnel-queue asynq server", "error", twErr)
+		} else {
+			tw.RegisterTunnelHandlers()
+			s.tunnelWorker = tw
+		}
+	}
 	// Cluster-registry apply worker (migration 050). Shares the
 	// ProjectK8sRequester adapter that the project reconciler already
 	// installs; the bridge decoder is in internal/handler/projects.go.
@@ -1234,6 +1402,13 @@ func (s *Server) Start(addr string) error {
 	if err != nil {
 		return err
 	}
+	if s.tunnelWorker != nil {
+		go func() {
+			if err := s.tunnelWorker.Start(); err != nil {
+				s.logger.Error("tunnel-queue asynq server exited", "error", err)
+			}
+		}()
+	}
 	s.logger.Info("server listening", "addr", addr)
 	return s.httpServer.Serve(ln)
 }
@@ -1257,6 +1432,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.hub != nil {
 		drained := s.hub.Drain()
 		s.logger.Info("tunnel hub drained", "agents_disconnected", drained)
+	}
+	if s.tunnelWorker != nil {
+		s.tunnelWorker.Shutdown()
 	}
 	err := s.httpServer.Shutdown(ctx)
 	if s.cancel != nil {

@@ -43,21 +43,30 @@ export function formatBytes(bytes: number, decimals: number = 1): string {
 }
 
 /**
- * Format CPU millicores to human-readable format
+ * Format CPU millicores to human-readable format.
+ *
+ * Inputs can be raw floats from prometheus (e.g. 118.99999999999999 from
+ * a rate() query that lost a hair of precision); the millicore branch
+ * rounds to an integer so the UI never renders a 15-digit tail. The
+ * cores branch caps at one decimal and strips trailing zeros so we get
+ * "2 cores" not "2.0 cores".
  */
 export function formatCPU(millicores: number): string {
+  if (millicores == null || isNaN(millicores)) return '—';
   if (millicores >= 1000) {
-    return `${(millicores / 1000).toFixed(1)} cores`;
+    return `${parseFloat((millicores / 1000).toFixed(1))} cores`;
   }
-  return `${millicores}m`;
+  return `${Math.round(millicores)}m`;
 }
 
 /**
- * Format a percentage value
+ * Format a percentage value. Returns "—" for null/undefined/NaN inputs so the
+ * caller can distinguish "no data" from a real 0%. Trailing zeros after the
+ * decimal point are stripped ("50%" not "50.0%").
  */
 export function formatPercentage(value: number | undefined | null, decimals: number = 1): string {
-  if (value == null || isNaN(value)) return '0%';
-  return `${value.toFixed(decimals)}%`;
+  if (value == null || isNaN(value)) return '—';
+  return `${parseFloat(value.toFixed(decimals))}%`;
 }
 
 /**

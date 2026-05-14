@@ -94,6 +94,27 @@ type Hub struct {
 	// mirrored_* DB tables. Optional; nil-safe so existing tests that
 	// don't wire CRD-mirror v2 stay green.
 	mirror MirrorIngester
+	// locator publishes the cluster_id → this-pod address mapping into
+	// redis on each accepted WS so sibling replicas can reverse-proxy
+	// to us. Optional: nil collapses to single-pod behavior (the proxy
+	// 503s when its local Hub doesn't hold the agent).
+	locator *Locator
+}
+
+// SetLocator wires the cross-pod agent locator (set once at startup).
+// nil-safe.
+func (h *Hub) SetLocator(l *Locator) {
+	h.mu.Lock()
+	h.locator = l
+	h.mu.Unlock()
+}
+
+// Locator returns the wired locator (or nil). ProxyHandler uses this
+// for the cross-pod fallback when its local Hub doesn't own the agent.
+func (h *Hub) Locator() *Locator {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.locator
 }
 
 // MirrorIngester is the narrow handler-side interface the Hub calls
@@ -327,6 +348,15 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	)
 	h.publish("cluster.connected", payload.ClusterID, sessionID, payload.AgentVersion)
 
+	// Cross-pod proxy fallback: publish "we own this cluster's WS" so
+	// sibling replicas can reverse-proxy inbound /k8s, kubectl shell,
+	// log-stream, and exec requests to us when their local Hub misses.
+	// nil-safe when the locator isn't wired (single-replica installs).
+	h.mu.RLock()
+	loc := h.locator
+	h.mu.RUnlock()
+	loc.Set(ctx, payload.ClusterID)
+
 	// Wizard phase advance — wired by cmd/server when the registration
 	// service is constructed. Best-effort: when the cluster wasn't
 	// in awaiting_agent (e.g. legacy non-wizard registration) the
@@ -375,6 +405,13 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	)
 	h.persistDisconnect(context.Background(), agent)
 	h.publish("cluster.disconnected", agent.ClusterID, agent.SessionID, agent.AgentVersion)
+
+	// Clear the locator entry so siblings stop forwarding to us.
+	// Best-effort; the TTL will reap stragglers if redis is down.
+	h.mu.RLock()
+	disconnectLoc := h.locator
+	h.mu.RUnlock()
+	disconnectLoc.Delete(context.Background(), agent.ClusterID)
 }
 
 // readPump reads messages from the WebSocket and dispatches them.
@@ -510,6 +547,17 @@ func (h *Hub) Drain() int {
 			a.cancel()
 			a.Streams.CloseAll()
 		}(agent)
+	}
+	// Wipe our locator entries so siblings stop forwarding to a pod
+	// that's about to terminate. Done synchronously so the entries are
+	// gone before the HTTP server's grace period elapses.
+	h.mu.RLock()
+	loc := h.locator
+	h.mu.RUnlock()
+	if loc != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		loc.Drain(ctx)
 	}
 	return len(snapshot)
 }

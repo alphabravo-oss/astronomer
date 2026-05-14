@@ -1,0 +1,30 @@
+name: cluster-operator
+display_name: Cluster Operator
+description: |
+  Operates a single cluster end-to-end: workloads, helm catalog,
+  monitoring, alerts, backups. Can run kubectl-shell sessions and view
+  the audit log for the cluster. Cannot decommission the cluster
+  itself; that's a platform-admin action.
+scope: cluster
+category: cluster
+rules:
+  - resource: clusters
+    verbs: [read, list, update]
+  - resource: workloads
+    verbs: [create, read, update, delete, list, scale, restart]
+  - resource: pods
+    verbs: [read, list, watch, logs, exec, proxy]
+  - resource: monitoring
+    verbs: [read, list, update]
+  - resource: alerts
+    verbs: [read, list, create, update]
+  - resource: catalog
+    verbs: [read, list, create, update, delete]
+  - resource: backups
+    verbs: [read, list, create, update, delete]
+  - resource: security
+    verbs: [read, list]
+  - resource: argocd
+    verbs: [read, list, sync]
+  - resource: audit_logs
+    verbs: [read, list]

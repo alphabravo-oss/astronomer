@@ -106,8 +106,8 @@ describe('formatCPU()', () => {
     expect(formatCPU(250)).toBe('250m');
   });
 
-  it('formats exactly 1000 millicores as cores', () => {
-    expect(formatCPU(1000)).toBe('1.0 cores');
+  it('formats exactly 1000 millicores as cores (trailing zero stripped)', () => {
+    expect(formatCPU(1000)).toBe('1 cores');
   });
 
   it('formats values above 1000 as cores', () => {
@@ -122,8 +122,28 @@ describe('formatCPU()', () => {
     expect(formatCPU(500)).toBe('500m');
   });
 
-  it('formats 4000 millicores as 4.0 cores', () => {
-    expect(formatCPU(4000)).toBe('4.0 cores');
+  it('formats 4000 millicores as 4 cores (trailing zero stripped)', () => {
+    expect(formatCPU(4000)).toBe('4 cores');
+  });
+
+  it('formats 2500 millicores as 2.5 cores', () => {
+    expect(formatCPU(2500)).toBe('2.5 cores');
+  });
+
+  // Regression: prometheus rate() queries can return 118.99999999999999
+  // for what should display as ~119m. The unrounded float used to bleed
+  // straight to the UI as "118.99999999999999m"; the rounder pins it.
+  it('rounds float-noisy millicores to an integer', () => {
+    expect(formatCPU(118.99999999999999)).toBe('119m');
+    expect(formatCPU(42.0000000001)).toBe('42m');
+  });
+
+  it('returns em-dash for null/undefined/NaN', () => {
+    // @ts-expect-error testing runtime guard
+    expect(formatCPU(null)).toBe('—');
+    // @ts-expect-error testing runtime guard
+    expect(formatCPU(undefined)).toBe('—');
+    expect(formatCPU(NaN)).toBe('—');
   });
 });
 
@@ -140,12 +160,20 @@ describe('formatPercentage()', () => {
     expect(formatPercentage(45.678, 2)).toBe('45.68%');
   });
 
-  it('formats zero percentage', () => {
-    expect(formatPercentage(0)).toBe('0.0%');
+  it('formats zero percentage without trailing zero', () => {
+    expect(formatPercentage(0)).toBe('0%');
   });
 
-  it('formats 100 percentage', () => {
-    expect(formatPercentage(100)).toBe('100.0%');
+  it('formats 100 percentage without trailing zero', () => {
+    expect(formatPercentage(100)).toBe('100%');
+  });
+
+  it('returns em-dash for null (no data)', () => {
+    expect(formatPercentage(null)).toBe('—');
+  });
+
+  it('returns em-dash for undefined (no data)', () => {
+    expect(formatPercentage(undefined)).toBe('—');
   });
 });
 

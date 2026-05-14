@@ -777,6 +777,14 @@ func (h *WorkloadHandler) listWorkloads(ctx context.Context, clusterID, namespac
 			return nil, err
 		}
 		for _, item := range wl.Items {
+			// Kubernetes List responses only stamp `kind` on the
+			// outer wrapper (e.g. "DeploymentList"); each item in
+			// `.items` arrives with kind="". Stamp it from the
+			// loop kind so workloadToMap + the frontend
+			// filter-by-kind both see the correct value.
+			if item.Kind == "" {
+				item.Kind = k
+			}
 			items = append(items, workloadToMap(clusterID, item))
 		}
 	}

@@ -94,11 +94,17 @@ type settingSpec struct {
 // is answered by `strings.HasPrefix(k, NamespaceBranding+".")` and
 // nothing else.
 const (
-	NamespaceBranding  = "branding"
-	NamespaceBanner    = "banner"
-	NamespaceFeature   = "feature"
-	NamespaceToken     = "token"
-	NamespaceTelemetry = "telemetry"
+	NamespaceBranding     = "branding"
+	NamespaceBanner       = "banner"
+	NamespaceFeature      = "feature"
+	NamespaceToken        = "token"
+	NamespaceTelemetry    = "telemetry"
+	// NamespaceRegistration carries the platform-TLS posture used to
+	// shape the `curl … | kubectl apply -f -` one-liner the cluster-
+	// registration wizard renders. Exposed pre-auth so an agent host
+	// can fetch the CA bundle (or learn it needs --insecure) without
+	// already having a session — matches Rancher's mental model.
+	NamespaceRegistration = "registration"
 )
 
 // settingsRegistry enumerates every legal key. Adding a new key to
@@ -128,6 +134,15 @@ var settingsRegistry = map[string]settingSpec{
 	// may point at. Empty (the default) blocks every iframe widget;
 	// the operator opts-in by populating the list.
 	"dashboard.allowed_iframe_hosts": {Type: typeString, Default: "", Description: "Comma-separated allow-list of hosts dashboard widgets may iframe (e.g. grafana.example.com,billing.example.com)"},
+	// Sprint 086 — Rancher-style three-mode TLS posture for the public
+	// /api/v1/register/<token>.yaml endpoint. `public_ca` means agents
+	// trust the platform cert via a public CA bundle and curl works
+	// without flags; `private_ca` means operators must --cacert against
+	// the bundle returned by /api/v1/register/ca.crt; `insecure` skips
+	// verification entirely (escape hatch for ops who haven't pinned a
+	// cert yet). The wizard branches the rendered curl on this key.
+	"registration.tls_mode":   {Type: typeEnum, Default: "public_ca", Description: "TLS posture surfaced by the cluster-registration wizard: public_ca | private_ca | insecure", Enum: []string{"public_ca", "private_ca", "insecure"}},
+	"registration.ca_bundle":  {Type: typeString, Default: "", Description: "PEM-encoded CA bundle returned by GET /api/v1/register/ca.crt for private_ca mode. Empty in public_ca / insecure modes"},
 }
 
 // preAuthAllowedNamespaces is the explicit allowlist for the public
@@ -136,8 +151,9 @@ var settingsRegistry = map[string]settingSpec{
 // must NEVER leak pre-auth (telemetry.endpoint is operator config,
 // feature.* tells an attacker which surfaces to probe).
 var preAuthAllowedNamespaces = map[string]string{
-	"branding": NamespaceBranding,
-	"banner":   NamespaceBanner,
+	"branding":     NamespaceBranding,
+	"banner":       NamespaceBanner,
+	"registration": NamespaceRegistration,
 }
 
 // PlatformSettingsHandler owns /api/v1/admin/settings/* + the two
@@ -348,6 +364,16 @@ func (h *PlatformSettingsHandler) PublicBranding(w http.ResponseWriter, r *http.
 // login banner is part of the same first-paint render as branding.
 func (h *PlatformSettingsHandler) PublicBanner(w http.ResponseWriter, r *http.Request) {
 	h.servePublicNamespace(w, r, NamespaceBanner)
+}
+
+// PublicRegistration handles GET /api/v1/settings/registration/. PRE-
+// AUTH — the cluster-registration wizard renders the curl one-liner
+// based on the operator's TLS posture (public_ca / private_ca /
+// insecure), and the agent host fetching the CA bundle won't have a
+// session. The CA bundle itself is in this namespace by design: it's
+// meant to be publicly fetchable so agents can pin it.
+func (h *PlatformSettingsHandler) PublicRegistration(w http.ResponseWriter, r *http.Request) {
+	h.servePublicNamespace(w, r, NamespaceRegistration)
 }
 
 // servePublicNamespace is the shared implementation for the pre-auth

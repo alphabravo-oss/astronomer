@@ -1,4 +1,25 @@
 ---
+# Source: astronomer/templates/frontend-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: release-name-astronomer-frontend
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: frontend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: frontend
+---
 # Source: astronomer/templates/server-pdb.yaml
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -41,11 +62,11 @@ spec:
       app.kubernetes.io/instance: release-name
       app.kubernetes.io/component: worker
 ---
-# Source: astronomer/templates/serviceaccount.yaml
+# Source: astronomer/templates/bootstrap-secret.yaml
 apiVersion: v1
-kind: ServiceAccount
+kind: Secret
 metadata:
-  name: release-name-astronomer
+  name: release-name-astronomer-bootstrap
   labels:
     helm.sh/chart: astronomer-0.1.0
     app.kubernetes.io/name: astronomer
@@ -53,6 +74,14 @@ metadata:
     app.kubernetes.io/version: "0.1.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: astronomer
+  annotations:
+    # Stop Helm from clobbering the secret on upgrade once the admin has
+    # already rotated the password — the value here is only meaningful on
+    # the first boot of an empty database.
+    "helm.sh/resource-policy": keep
+type: Opaque
+stringData:
+  password: "WtdSAkckV9V22bytDNo1a1OH"
 ---
 # Source: astronomer/templates/secret.yaml
 apiVersion: v1
@@ -71,13 +100,14 @@ stringData:
   SECRET_KEY: "local-dev-secret-key-change-in-production"
   # The Go config reads this with `mapstructure:"astronomer_encryption_key"`,
   # so the env var name must be ASTRONOMER_ENCRYPTION_KEY (not bare ENCRYPTION_KEY).
-  ASTRONOMER_ENCRYPTION_KEY: "local-dev-encryption-key-change-in-prod-32b"
+  ASTRONOMER_ENCRYPTION_KEY: "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
   GITHUB_CLIENT_ID: ""
   GITHUB_CLIENT_SECRET: ""
   GOOGLE_CLIENT_ID: ""
   GOOGLE_CLIENT_SECRET: ""
   OIDC_CLIENT_ID: ""
   OIDC_CLIENT_SECRET: ""
+  POSTGRES_PASSWORD: "astronomer"
 ---
 # Source: astronomer/templates/configmap.yaml
 apiVersion: v1
@@ -92,31 +122,47 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: astronomer
 data:
-  DATABASE_URL: "postgres://u:p@db.example:5432/app?sslmode=require"
-  REDIS_URL: "redis://redis.example:6379/0"
+  DATABASE_URL: "postgres://astronomer:astronomer@release-name-astronomer-postgres:5432/astronomer?sslmode=disable"
+  REDIS_URL: "redis://release-name-astronomer-redis:6379/0"
   ENV: "development"
   DEBUG: "true"
   LOG_LEVEL: "info"
   ALLOWED_HOSTS: "*"
   CORS_ALLOWED_ORIGINS: "http://astronomer.localtest.me"
+  # External URL of this install; seeds platform_configuration.server_url
+  # on first boot so the Argo self-management loop can render the right
+  # hostname on the self-manage HTTPRoute.
+  SERVER_URL: ""
   AGENT_IMAGE_REPOSITORY: "astronomer-go-agent"
   AGENT_IMAGE_TAG: "dev"
+  # Auth hardening (migration 039). Empty / unset == binary defaults
+  # (5 attempts / 15 minutes).
+  LOGIN_FAILURE_THRESHOLD: "5"
+  LOCKOUT_DURATION_MINUTES: "15"
+  # Migration 045 — Dex bootstrap. When dex.enabled=true the server's boot
+  # path auto-wires dex_settings to point at the in-chart Dex Deployment +
+  # ConfigMap so the first connector + Apply works without a manual settings
+  # step. Empty / unset == bootstrap skipped (legacy operator-managed Dex).
+  # 2FA / TOTP (migration 043). Empty issuer == binary default ("Astronomer").
+  # require=true makes 2FA mandatory for all local-password users.
+  TOTP_ISSUER: "Astronomer"
+  # In-browser kubectl shell (migration 065 / sprint 17). Disabled by
+  # default; flip on once audit-log retention is sized for the
+  # per-command rows. See docs/kubectl-shell.md.
+  KUBECTL_SHELL_ENABLED: "false"
+  KUBECTL_SHELL_IMAGE: "astronomer-shell:dev"
+  KUBECTL_SHELL_IDLE_TIMEOUT_MINUTES: "30"
+  KUBECTL_SHELL_SESSION_HARD_CAP_HOURS: "4"
+  # pgxpool tunables (FEATURES-051126 T21). Empty == binary default.
+  # T15 — distributed tracing. All four vars are no-ops when endpoint is
+  # empty (the InitTracing helper short-circuits), so this stays render-
+  # safe for installs that don't opt in.
 ---
-# Source: astronomer/templates/serviceaccount.yaml
-# ClusterRole granting the embedded local agent the same broad in-cluster
-# access an externally-installed astronomer-agent gets via its install
-# manifest. This is intentionally Rancher-style: the management cluster the
-# server runs in is treated as a fully managed cluster, so the server's
-# in-process agent goroutine needs full read/write across all API groups
-# (k8s proxy, exec, logs, RBAC sync, helm install/upgrade/uninstall).
-#
-# Scope is identical to a managed-cluster agent on purpose — narrowing this
-# would make the local cluster a second-class citizen in the UI (some
-# resources visible, others not).
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+# Source: astronomer/templates/frontend-deployment.yaml
+apiVersion: v1
+kind: Service
 metadata:
-  name: release-name-astronomer
+  name: release-name-astronomer-frontend
   labels:
     helm.sh/chart: astronomer-0.1.0
     app.kubernetes.io/name: astronomer
@@ -124,18 +170,24 @@ metadata:
     app.kubernetes.io/version: "0.1.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: astronomer
-rules:
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["*"]
-  - nonResourceURLs: ["*"]
-    verbs: ["*"]
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: frontend
 ---
-# Source: astronomer/templates/serviceaccount.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+# Source: astronomer/templates/postgres.yaml
+apiVersion: v1
+kind: Service
 metadata:
-  name: release-name-astronomer
+  name: release-name-astronomer-postgres
   labels:
     helm.sh/chart: astronomer-0.1.0
     app.kubernetes.io/name: astronomer
@@ -143,14 +195,68 @@ metadata:
     app.kubernetes.io/version: "0.1.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: astronomer
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: release-name-astronomer
-subjects:
-  - kind: ServiceAccount
-    name: release-name-astronomer
-    namespace: default
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: postgres
+---
+# Source: astronomer/templates/redis.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-astronomer-redis
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: redis
+---
+# Source: astronomer/templates/server-metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-astronomer-server-metrics
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: server
 ---
 # Source: astronomer/templates/server-service.yaml
 apiVersion: v1
@@ -176,6 +282,122 @@ spec:
     app.kubernetes.io/name: astronomer
     app.kubernetes.io/instance: release-name
     app.kubernetes.io/component: server
+---
+# Source: astronomer/templates/worker-metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-astronomer-worker-metrics
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: worker
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: worker
+---
+# Source: astronomer/templates/frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name-astronomer-frontend
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: frontend
+    spec:
+      affinity:
+        
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: astronomer
+                    app.kubernetes.io/instance: release-name
+                    app.kubernetes.io/component: frontend
+      topologySpreadConstraints:
+        
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: astronomer
+              app.kubernetes.io/instance: release-name
+              app.kubernetes.io/component: frontend
+      containers:
+        - name: frontend
+          image: "astronomer-frontend:dev"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "http://astronomer-server:8000"
+            - name: NEXT_PUBLIC_WS_URL
+              value: "ws://astronomer-server:8000/api/v1/ws"
+            - name: NEXT_TELEMETRY_DISABLED
+              value: "1"
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 50m
+              memory: 128Mi
 ---
 # Source: astronomer/templates/server-deployment.yaml
 apiVersion: apps/v1
@@ -214,11 +436,27 @@ spec:
         app.kubernetes.io/component: server
       annotations:
         prometheus.io/path: /metrics
-        prometheus.io/port: "8000"
+        prometheus.io/port: "9090"
         prometheus.io/scrape: "true"
     spec:
       serviceAccountName: release-name-astronomer
+      # FEATURES-051126 T14: graceful WS handover on rolling upgrades.
+      # The preStop hook below sleeps 10s so the Service load balancer
+      # has time to deregister this pod before SIGTERM lands. Combined
+      # with Hub.Drain() in the server's Shutdown path, agents observe
+      # a clean WS close and reconnect via the LB to a healthy sibling
+      # in ~1s instead of waiting 20s for the next WS ping to fail.
+      terminationGracePeriodSeconds: 60
       initContainers:
+        - name: wait-postgres
+          image: "busybox:1.36"
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for postgres..."
+              until nc -z release-name-astronomer-postgres 5432; do sleep 1; done
+              echo "postgres up"
         - name: migrate
           image: "astronomer-go-migrate:dev"
           imagePullPolicy: IfNotPresent
@@ -242,14 +480,29 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: release-name-astronomer-config
             - secretRef:
                 name: release-name-astronomer-secrets
           env:
-            - name: REDIS_URL
-              value: "redis://redis.example:6379/0"
+            # Pod IP is the address sibling replicas use to reverse-proxy
+            # tunnel-bound requests (kubectl shell, k8s passthrough, image
+            # scans) to whichever pod holds the agent's WebSocket. Without
+            # this the nginx-pinned upstream pod 503s every cross-pod
+            # request because the in-memory hub is single-replica.
+            - name: ASTRONOMER_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: ASTRONOMER_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: release-name-astronomer-bootstrap
+                  key: password
           livenessProbe:
             httpGet:
               path: /health/
@@ -260,7 +513,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health/
+              path: /readyz
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -273,6 +526,20 @@ spec:
             requests:
               cpu: 100m
               memory: 256Mi
+          # FEATURES-051126 T14: pre-stop drain. The kubelet runs this
+          # BEFORE delivering SIGTERM. Sleeping here gives the Service
+          # load balancer time to remove the pod from endpoints (kube-
+          # proxy iptables rules update on watch, typically <2s, but we
+          # budget more for slow CNIs / userspace LBs). When SIGTERM
+          # arrives the server's Shutdown() drains the tunnel hub so
+          # agents reconnect to a sibling that's already taking traffic.
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - "sleep 10"
       affinity:
         
         podAntiAffinity:
@@ -331,21 +598,44 @@ spec:
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/part-of: astronomer
         app.kubernetes.io/component: worker
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9090"
+        prometheus.io/scrape: "true"
     spec:
       serviceAccountName: release-name-astronomer
       initContainers:
+        - name: wait-postgres
+          image: "busybox:1.36"
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for postgres..."
+              until nc -z release-name-astronomer-postgres 5432; do sleep 1; done
+              echo "postgres up"
+        - name: wait-redis
+          image: "busybox:1.36"
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for redis..."
+              until nc -z release-name-astronomer-redis 6379; do sleep 1; done
+              echo "redis up"
       containers:
         - name: worker
           image: "astronomer-go-worker:dev"
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: release-name-astronomer-config
             - secretRef:
                 name: release-name-astronomer-secrets
-          env:
-            - name: REDIS_URL
-              value: "redis://redis.example:6379/0"
           resources:
             limits:
               cpu: 1000m
@@ -376,6 +666,139 @@ spec:
               app.kubernetes.io/instance: release-name
               app.kubernetes.io/component: worker
 ---
+# Source: astronomer/templates/postgres.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: release-name-astronomer-postgres
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: release-name-astronomer-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: "postgres:16-alpine"
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "astronomer"
+            - name: POSTGRES_DB
+              value: "astronomer"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: release-name-astronomer-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "astronomer"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "astronomer"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 8Gi
+---
+# Source: astronomer/templates/redis.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: release-name-astronomer-redis
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: release-name-astronomer-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: astronomer
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: astronomer-0.1.0
+        app.kubernetes.io/name: astronomer
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: astronomer
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: "redis:7-alpine"
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
 # Source: astronomer/templates/httproute.yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -399,7 +822,8 @@ spec:
           from: Same
 ---
 # Source: astronomer/templates/httproute.yaml
-# UI route — catches everything except /api/* and /health/* (those go to server)
+# UI route — catches everything except /api/*, /health/*, /readyz*, and
+# /metrics (those go to server)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -423,8 +847,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: release-name-astronomer-server
-          port: 8000
+        - name: release-name-astronomer-frontend
+          port: 3000
 ---
 # Source: astronomer/templates/httproute.yaml
 # API route — anything under /api/v1/ goes to the Go server, including the
@@ -458,8 +882,11 @@ spec:
             type: Exact
             value: /health
         - path:
+            type: PathPrefix
+            value: /readyz/
+        - path:
             type: Exact
-            value: /metrics
+            value: /readyz
         # The auth-gated reverse proxy that fronts the ArgoCD UI lives on
         # the Go server (internal/handler/argocd_ui_proxy.go), so route
         # /argocd/* to the same backend as /api/*. Enforces Astronomer auth
@@ -473,6 +900,89 @@ spec:
       backendRefs:
         - name: release-name-astronomer-server
           port: 8000
+---
+# Source: astronomer/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+  annotations:
+    # The preflight Job runs as this SA at hook-weight -5, so the SA + RBAC
+    # need to land first. helm.sh/hook-weight=-10 + hook-delete-policy
+    # before-hook-creation makes the SA install pre-install (and pre-upgrade)
+    # ahead of the preflight, then `keep` it on uninstall so the SA outlives
+    # the release (consumed by long-lived deployments).
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/resource-policy": keep
+---
+# Source: astronomer/templates/serviceaccount.yaml
+# ClusterRole granting the embedded local agent the same broad in-cluster
+# access an externally-installed astronomer-agent gets via its install
+# manifest. This is intentionally Rancher-style: the management cluster the
+# server runs in is treated as a fully managed cluster, so the server's
+# in-process agent goroutine needs full read/write across all API groups
+# (k8s proxy, exec, logs, RBAC sync, helm install/upgrade/uninstall).
+#
+# Scope is identical to a managed-cluster agent on purpose — narrowing this
+# would make the local cluster a second-class citizen in the UI (some
+# resources visible, others not).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/resource-policy": keep
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+---
+# Source: astronomer/templates/serviceaccount.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: release-name-astronomer
+  labels:
+    helm.sh/chart: astronomer-0.1.0
+    app.kubernetes.io/name: astronomer
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: astronomer
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/resource-policy": keep
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: release-name-astronomer
+subjects:
+  - kind: ServiceAccount
+    name: release-name-astronomer
+    namespace: default
 ---
 # Source: astronomer/templates/migrate-job.yaml
 apiVersion: batch/v1
@@ -508,6 +1018,22 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: release-name-astronomer
+      # Wait for the chart-bundled Postgres pod to accept connections
+      # before launching the migrate container. helm post-install hooks
+      # fire after the StatefulSet is *created* but not necessarily
+      # *ready*, so without this wait the migrate races against
+      # postgres startup and BackoffLimitExceeded'd within ~60s on
+      # fresh installs.
+      initContainers:
+        - name: wait-postgres
+          image: "busybox:1.36"
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for postgres..."
+              until nc -z release-name-astronomer-postgres 5432; do sleep 1; done
+              echo "postgres up"
       containers:
         - name: migrate
           image: "astronomer-go-migrate:dev"
@@ -546,7 +1072,7 @@ metadata:
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/component: preflight
   annotations:
-    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
@@ -565,15 +1091,62 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: release-name-astronomer
+      # initContainers run sequentially before the main `preflight` kubectl
+      # container. The DB-connect check runs here because it has different
+      # tool requirements (the migrate binary) than the CRD/Secret checks.
+      # Failure here fails the whole pod, which fails the helm hook, which
+      # fails the install — exactly the gate we want (FEATURES-051126 T13).
+      #
+      # IMPORTANT: this init container only runs when the operator points
+      # at an *external* Postgres. The chart-bundled Postgres
+      # StatefulSet is itself a regular release resource, so it doesn't
+      # exist at pre-install-hook time and the connectivity check would
+      # always fail. T13's value is gating production-mode installs
+      # against an unreachable / mis-configured external DB; that path
+      # is preserved here.
+      initContainers:
       containers:
         - name: preflight
-          image: "bitnami/kubectl:1.31.4"
+          image: "astronomer-shell:dev"
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -ec
             - |
-              if [ "false" = "true" ]; then
+              if [ "true" = "true" ]; then
+                if ! kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1; then
+                  echo "Refusing release: Gateway API CRD gateways.gateway.networking.k8s.io is missing."
+                  echo "Install Gateway API support and a compatible controller before installing this chart."
+                  exit 1
+                fi
+
+                if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
+                  echo "Refusing release: Gateway API CRD httproutes.gateway.networking.k8s.io is missing."
+                  echo "Install Gateway API support and a compatible controller before installing this chart."
+                  exit 1
+                fi
+
+                if ! kubectl get gatewayclass "nginx" >/dev/null 2>&1; then
+                  echo "Refusing release: GatewayClass nginx is missing."
+                  echo "Install a Gateway controller that provides that class before installing this chart."
+                  exit 1
+                fi
+
+                echo "Gateway API prerequisites found."
+              fi
+
+              # cert-manager preflight — only fires when the selected TLS mode
+              # actually needs the CRDs (selfSigned or letsEncrypt). source=secret
+              # is BYO and source=none is HTTP-only, so neither requires cert-manager.
+
+              # Validate additional-trusted-CAs Secret exists when referenced.
+
+              # Production Postgres DSN must use TLS. The inline-DSN case is
+              # caught at helm-render time by requireProductionInputs; this
+              # block covers the Secret-ref case where helm couldn't inspect
+              # the value (FEATURES-051126 T01).
+
+              if [ "true" = "true" ]; then
                 echo "Bundled Postgres remains enabled; preflight passes."
                 exit 0
               fi

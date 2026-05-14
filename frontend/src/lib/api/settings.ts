@@ -71,6 +71,13 @@ export interface PlatformSettingsGrouped {
     enabled: boolean;
     endpoint: string;
   };
+  // Registration TLS posture — controls which `curl …` variant the
+  // cluster-registration wizard renders. Three modes mirror Rancher:
+  // public_ca (curl -sfL), private_ca (--cacert), insecure (--insecure).
+  registration: {
+    tlsMode: 'public_ca' | 'private_ca' | 'insecure';
+    caBundle: string;
+  };
 }
 
 // ============================================================

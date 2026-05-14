@@ -245,7 +245,7 @@ export default function ClusterSnapshotsPage() {
             </p>
           </div>
           <Link
-            href={`/dashboard/catalog?search=velero`}
+            href={`/dashboard/clusters/${clusterId}/apps?section=browse&install=velero`}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex-shrink-0"
           >

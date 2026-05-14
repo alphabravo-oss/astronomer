@@ -158,6 +158,13 @@ var resourceDefs = map[string]resourceDef{
 	"networkpolicies":         {apiBase: "/apis/networking.k8s.io/v1", namespaced: true, plural: "networkpolicies"},
 	"storageclasses":          {apiBase: "/apis/storage.k8s.io/v1", namespaced: false, plural: "storageclasses"},
 	"replicasets":             {apiBase: "/apis/apps/v1", namespaced: true, plural: "replicasets"},
+	// apps/v1 workload kinds. Historically the sidebar drove these
+	// through the dedicated WorkloadHandler; the generic listing here
+	// was missing the three most common workload types, so the
+	// sidebar counts read 0 (or rendered "unknown") on every cluster.
+	"deployments":             {apiBase: "/apis/apps/v1", namespaced: true, plural: "deployments"},
+	"daemonsets":              {apiBase: "/apis/apps/v1", namespaced: true, plural: "daemonsets"},
+	"statefulsets":            {apiBase: "/apis/apps/v1", namespaced: true, plural: "statefulsets"},
 	"jobs":                    {apiBase: "/apis/batch/v1", namespaced: true, plural: "jobs"},
 	"cronjobs":                {apiBase: "/apis/batch/v1", namespaced: true, plural: "cronjobs"},
 	"hpa":                     {apiBase: "/apis/autoscaling/v2", namespaced: true, plural: "horizontalpodautoscalers"},

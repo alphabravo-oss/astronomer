@@ -142,6 +142,23 @@ func (f *fakeQuerier) GetClusterRegistrationStep(ctx context.Context, id uuid.UU
 	return sqlc.ClusterRegistrationStep{}, pgx.ErrNoRows
 }
 
+func (f *fakeQuerier) CloseRunningStepsForCluster(ctx context.Context, arg sqlc.CloseRunningStepsForClusterParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, s := range f.steps {
+		if s.ClusterID == arg.ClusterID && s.StepName == arg.StepName && s.Status == "running" {
+			f.steps[i].Status = "failed"
+			if !f.steps[i].CompletedAt.Valid {
+				f.steps[i].CompletedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+			}
+			if f.steps[i].ErrorMessage == "" {
+				f.steps[i].ErrorMessage = "superseded by retry"
+			}
+		}
+	}
+	return nil
+}
+
 func (f *fakeQuerier) MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

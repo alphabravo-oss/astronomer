@@ -27,6 +27,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -37,12 +38,29 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"nhooyr.io/websocket"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
+
+// ExecProxy is the slice of *tunnel.ExecConsumer this handler needs in
+// order to bridge an already-upgraded WebSocket onto a cluster agent's
+// exec stream. Defined as an interface so tests can substitute a fake
+// without pulling the entire tunnel package into the handler test
+// binary, and so the handler stays decoupled from tunnel internals.
+type ExecProxy interface {
+	ProxyToAgent(ctx context.Context, conn *websocket.Conn, clusterID, namespace, pod, container string)
+	// ProxyToAgentWithInputRecorder is the audited variant used by the
+	// kubectl-shell WS handler. onInput, if non-nil, receives each
+	// inbound stdin/input frame's payload bytes before the relay
+	// forwards them to the agent. The relay never blocks on the
+	// callback; runaway recorders cannot stall the shell.
+	ProxyToAgentWithInputRecorder(ctx context.Context, conn *websocket.Conn, clusterID, namespace, pod, container string, onInput func([]byte))
+}
 
 // KubectlShellQuerier is the slice of *sqlc.Queries the handler needs.
 type KubectlShellQuerier interface {
@@ -66,6 +84,71 @@ type KubectlShellHandler struct {
 	RBACEngine *rbac.Engine
 	Deps       kubectl.Deps
 	Log        *slog.Logger
+	// JWT is the manager used by HandleWS to authenticate the WebSocket
+	// upgrade request via a ?token= query param. Browsers cannot set
+	// Authorization headers on WS handshakes, so the SPA passes the JWT
+	// in the URL. Without this the route 401s — see the sibling
+	// /api/v1/ws/exec/ + /api/v1/ws/logs/ routes which solve the same
+	// problem the same way (via auth.AuthorizeStreamRequest).
+	JWT *auth.JWTManager
+	// TokenQueries lets AuthorizeStreamRequest verify api_token-style
+	// bearer tokens (astro_*) against the DB. Nil-safe: JWT-only mode
+	// works without it.
+	TokenQueries auth.TokenQuerier
+	// Exec is the cluster-agent exec relay HandleWS bridges onto after
+	// upgrading the inbound WebSocket. When nil the WS endpoint 503s —
+	// we still register the route so the SPA gets a stable error rather
+	// than a 404. Wired by the server boot path; tests can leave it nil
+	// (the non-WS endpoints don't need it).
+	Exec ExecProxy
+	// crossPodWSForwarder lets HandleWS hand off the WS upgrade to a
+	// sibling pod when the cluster's tunnel is held by a sibling
+	// replica. Mirrors the HTTP-side forwardToOwnerPod fallback in
+	// internal/tunnel/proxy.go. nil-safe: when unset the handler stays
+	// on the local-only path (single-pod deployments).
+	crossPodWSForwarder CrossPodWSForwarder
+}
+
+// CrossPodWSForwarder is the surface the shell handler uses to
+// reverse-proxy an HTTP-Upgrade WebSocket request to whichever
+// sibling pod owns the cluster's tunnel. Returns true when the
+// request was forwarded (the response has been written); false when
+// the caller should fall through to its existing local-handling
+// path. internal/tunnel.ForwardWSToOwnerPod (wired via a closure in
+// server wiring) is the production implementation.
+type CrossPodWSForwarder func(w http.ResponseWriter, r *http.Request, clusterID string) bool
+
+// SetCrossPodWSForwarder wires the WS reverse-proxy used by HandleWS
+// when the cluster's tunnel is held by a sibling pod. Optional;
+// single-pod deployments leave it nil.
+func (h *KubectlShellHandler) SetCrossPodWSForwarder(fn CrossPodWSForwarder) {
+	if h == nil {
+		return
+	}
+	h.crossPodWSForwarder = fn
+}
+
+// SetStreamAuth wires the JWT manager + token querier used to
+// authenticate WS upgrade requests via ?token=. Called from server
+// wiring after NewKubectlShellHandler so the constructor signature
+// doesn't have to grow.
+func (h *KubectlShellHandler) SetStreamAuth(jwt *auth.JWTManager, q auth.TokenQuerier) {
+	if h == nil {
+		return
+	}
+	h.JWT = jwt
+	h.TokenQueries = q
+}
+
+// SetExecProxy wires the relay used by HandleWS to bridge the inbound
+// WebSocket onto the cluster agent's exec stream. Mirrors SetStreamAuth
+// — called from server wiring so the constructor signature stays
+// stable across the v1→v2 (redirect→inline-proxy) migration.
+func (h *KubectlShellHandler) SetExecProxy(p ExecProxy) {
+	if h == nil {
+		return
+	}
+	h.Exec = p
 }
 
 // NewKubectlShellHandler builds a wired handler. Any nil dep degrades
@@ -315,18 +398,41 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 }
 
 // HandleWS handles GET /ws/clusters/{cluster_id}/shell/sessions/{id}/.
-// In v1 we don't multiplex the WS protocol ourselves — we redirect the
-// browser at the existing /api/v1/ws/exec/{cluster_id}/{ns}/{pod}/{container}/
-// endpoint. The session record carries the pod name we created in Open
-// and the WS handler validates the caller owns this row.
 //
-// This kept the wire surface narrow: the only NEW WS endpoint is this
-// session-aware redirect — the actual relay reuses the proven sprint-14
-// ExecConsumer.
+// Authenticates the upgrade request (token via header or ?token= since
+// browser WS handshakes can't carry custom Authorization headers),
+// validates the session row belongs to this cluster + caller, then
+// upgrades the WebSocket on the original route and proxies frames
+// inline to the agent via ExecProxy.
+//
+// Prior to sprint 17+/v2 this issued a 307 redirect at the existing
+// /api/v1/ws/exec/{cluster_id}/{ns}/{pod}/{container}/ relay. That
+// worked in Chromium but redirects on WS handshakes are not portable —
+// Firefox and a number of corporate proxies break. The in-handler
+// proxy reuses ExecConsumer.ProxyToAgent so there is exactly one
+// exec relay implementation; this path only adds the session lookup.
 func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
 		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
+	}
+	// WS upgrade requests come from browsers that can't set Authorization
+	// headers, so the JWT arrives as ?token=. AuthorizeStreamRequest
+	// accepts either the header or the query string. Mirror the
+	// /ws/exec/ + /ws/logs/ pattern.
+	if h.JWT != nil {
+		userID, ok := auth.AuthorizeStreamRequest(r, h.TokenQueries, h.JWT)
+		if !ok {
+			RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+			return
+		}
+		// Inject the resolved user into the request context so
+		// loadSessionForCluster's existing GetAuthenticatedUser lookup
+		// finds it (preserving the test fake's behavior).
+		r = r.WithContext(middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{
+			ID:         userID.String(),
+			AuthMethod: "jwt",
+		}))
 	}
 	row, ok := h.loadSessionForCluster(w, r)
 	if !ok {
@@ -338,16 +444,238 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	// Stamp last_input_at — even just opening the WS counts as "engaged".
 	_ = h.Queries.TouchKubectlSessionInput(r.Context(), row.ID)
-	// Build the redirect target. Preserve the caller's ?token=... query
-	// arg so the browser can pass auth via query param (WS can't set
-	// Authorization headers).
-	target := "/api/v1/ws/exec/" + row.ClusterID.String() + "/" + row.PodNamespace + "/" + row.PodName + "/" + kubectl.ContainerName + "/"
-	if q := r.URL.RawQuery; q != "" {
-		target += "?" + q
+
+	if h.Exec == nil {
+		// Boot ordering bug — the server wiring forgot to call
+		// SetExecProxy. Surface a clear 503 instead of silently 200ing
+		// a WS that goes nowhere.
+		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell exec proxy is not configured")
+		return
 	}
-	// 307 preserves the method (WS handshakes are GETs anyway). Browsers
-	// follow this transparently before the Upgrade handshake.
-	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+
+	// Cross-pod WS upgrade hand-off (multi-replica fix).
+	//
+	// Up until this point we've done session lookup + auth in the
+	// receiving pod's context. Now: if the cluster's tunnel is owned
+	// by a sibling pod (nginx pinned the WS to the wrong replica),
+	// forward the entire HTTP-Upgrade dance to the sibling. The
+	// sibling re-runs auth + session lookup and runs the exec relay
+	// from the pod that actually holds the agent's WS — so K8S
+	// stream frames never arrive on a pod that doesn't own the
+	// stream. Mirrors the HTTP path's forwardToOwnerPod fallback
+	// (internal/tunnel/proxy.go).
+	//
+	// We check *after* auth so a forged request can't reach the
+	// sibling at all, and *before* websocket.Accept so the upgrade
+	// itself lands on the right pod.
+	if h.crossPodWSForwarder != nil {
+		if forwarded := h.crossPodWSForwarder(w, r, row.ClusterID.String()); forwarded {
+			return
+		}
+	}
+
+	// Upgrade the inbound WS on the original route. We deliberately do
+	// NOT 307-redirect to /api/v1/ws/exec/: Chromium followed the
+	// redirect before the Upgrade handshake, Firefox does not, and
+	// several corporate proxies strip Upgrade headers across redirects.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		// Browser handshakes can't choose origins for us; the route is
+		// already gated by JWT/token auth above. Mirrors the
+		// /api/v1/ws/exec/ + /ws/logs/ Accept call.
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		h.logger().Error("kubectl shell websocket accept failed", slog.String("error", err.Error()))
+		return
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "closed")
+
+	// Wire the input-line recorder: assemble inbound stdin bytes into
+	// lines (terminated by \r or \n — the xterm TTY ships \r on Enter)
+	// and flush each line as one kubectl_session_commands row. Output
+	// bytes are never inspected; see docs/kubectl-shell.md §"Recording"
+	// for the audit contract.
+	recordCtx, cancelRecorder := context.WithCancel(context.Background())
+	defer cancelRecorder()
+	recordCh := make(chan string, 64)
+	go h.drainRecordedCommands(recordCtx, row.ID, recordCh)
+
+	var buf []byte
+	onInput := func(frame []byte) {
+		bytes, ok := extractStdinBytes(frame)
+		if !ok || len(bytes) == 0 {
+			return
+		}
+		buf = append(buf, bytes...)
+		for {
+			i := indexLineTerminator(buf)
+			if i < 0 {
+				break
+			}
+			// xterm.js mixes terminal-protocol replies into the same
+			// stdin stream as keystrokes — when the server prompt
+			// issues DSR (`\x1b[6n`, "report cursor position"), xterm
+			// answers `\x1b[<row>;<col>R` and that response sails back
+			// up the WS as if the user had typed it. Strip ANSI CSI
+			// escapes (and a small set of other terminal-protocol
+			// noise) before recording so the audit row reflects what
+			// the operator actually typed.
+			line := sanitizeRecordedLine(buf[:i])
+			buf = buf[i+1:]
+			if line == "" {
+				continue
+			}
+			// Cap to 1KB per docs/kubectl-shell.md.
+			if len(line) > 1024 {
+				line = line[:1024] + "...<truncated>"
+			}
+			select {
+			case recordCh <- line:
+			default:
+				// Recorder is behind. Dropping a row is preferable to
+				// stalling the operator's shell.
+			}
+		}
+	}
+
+	h.Exec.ProxyToAgentWithInputRecorder(r.Context(), conn, row.ClusterID.String(), row.PodNamespace, row.PodName, kubectl.ContainerName, onInput)
+}
+
+// drainRecordedCommands runs while the WS is open, inserting one
+// kubectl_session_commands row per inbound line. The channel decouples
+// the read loop (which must stay fast) from postgres latency.
+func (h *KubectlShellHandler) drainRecordedCommands(ctx context.Context, sessionID uuid.UUID, ch <-chan string) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case line, ok := <-ch:
+			if !ok {
+				return
+			}
+			if h.Queries == nil {
+				continue
+			}
+			// Best-effort insert. A db error shouldn't kill the shell.
+			if err := h.Queries.InsertKubectlSessionCommand(ctx, sqlc.InsertKubectlSessionCommandParams{
+				SessionID:   sessionID,
+				CommandLine: line,
+			}); err != nil {
+				h.logger().Warn("kubectl shell: failed to record command",
+					slog.String("session_id", sessionID.String()),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+	}
+}
+
+// indexLineTerminator returns the index of the first \r or \n in b, or
+// -1 if none. Used by the input recorder to slice keystroke buffers
+// into commands without dragging in bufio.Scanner (the data is
+// arbitrary-length, not line-buffered, and we don't want bufio's
+// MaxScanTokenSize gotcha on long pastes).
+func indexLineTerminator(b []byte) int {
+	for i, c := range b {
+		if c == '\r' || c == '\n' {
+			return i
+		}
+	}
+	return -1
+}
+
+// sanitizeRecordedLine strips terminal-protocol noise from an
+// otherwise-clean stdin line before it lands in the audit log.
+//
+// Two specific patterns matter for the kubectl-shell audit contract:
+//
+//  1. CSI escapes — `\x1b[ <params> <final>` (e.g. `\x1b[2;5R` cursor
+//     position reports, `\x1b[A` arrow keys, `\x1b[1;5C` ctrl+right,
+//     bracketed-paste markers like `\x1b[200~ … \x1b[201~`). These
+//     are part of the xterm.js ↔ shell terminal protocol; the
+//     operator never sees them as keystrokes.
+//
+//  2. C0 control characters other than tab — `\x00`-`\x1f` minus
+//     `\t` and the line terminators (which are removed before
+//     calling this fn). Backspace (`\x7f`) is also stripped because
+//     the resulting recorded line is the line AFTER editing
+//     (xterm.js handles the visible editing locally; only the final
+//     pre-Enter buffer is what we care about).
+//
+// We deliberately do NOT process OSC (`\x1b]`) or SS2/SS3 (`\x1bN`,
+// `\x1bO`) — they don't appear in stdin in any flow we ship today
+// and adding them would broaden the surface without a known need.
+func sanitizeRecordedLine(raw []byte) string {
+	out := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); {
+		c := raw[i]
+		// ESC (\x1b) starts a control sequence. Match CSI specifically:
+		// ESC [ <param-bytes 0x30-0x3F>* <intermediate 0x20-0x2F>* <final 0x40-0x7E>.
+		// Anything else after ESC we drop just the ESC and continue.
+		if c == 0x1b {
+			if i+1 < len(raw) && raw[i+1] == '[' {
+				j := i + 2
+				// Parameter + intermediate bytes.
+				for j < len(raw) {
+					b := raw[j]
+					if (b >= 0x30 && b <= 0x3f) || (b >= 0x20 && b <= 0x2f) {
+						j++
+						continue
+					}
+					break
+				}
+				// Final byte (0x40-0x7e). Consume it if present.
+				if j < len(raw) && raw[j] >= 0x40 && raw[j] <= 0x7e {
+					i = j + 1
+					continue
+				}
+				// Unterminated CSI — drop what we've seen and move on.
+				i = j
+				continue
+			}
+			// Lone ESC or non-CSI escape — drop the ESC only.
+			i++
+			continue
+		}
+		// Strip C0 controls (except tab) and DEL.
+		if (c < 0x20 && c != '\t') || c == 0x7f {
+			i++
+			continue
+		}
+		out = append(out, c)
+		i++
+	}
+	return strings.TrimRight(string(out), " \t")
+}
+
+// extractStdinBytes decodes one inbound WS frame into the raw stdin
+// bytes the operator typed (or pasted). The browser sends a JSON
+// envelope `{"type":"stdin"|"input","data":"…"}`; resize/auth frames
+// and anything malformed return ok=false so the recorder ignores them.
+func extractStdinBytes(frame []byte) ([]byte, bool) {
+	var env struct {
+		Type string `json:"type"`
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(frame, &env); err != nil {
+		return nil, false
+	}
+	if env.Type != "stdin" && env.Type != "input" {
+		return nil, false
+	}
+	return []byte(env.Data), true
+}
+
+// logger returns the handler's logger, falling back to slog.Default()
+// when the handler was constructed without one. HandleWS reaches for
+// this on the WS-accept failure path; the rest of the file uses h.Log
+// directly because those paths are guarded by NewKubectlShellHandler's
+// default.
+func (h *KubectlShellHandler) logger() *slog.Logger {
+	if h != nil && h.Log != nil {
+		return h.Log
+	}
+	return slog.Default()
 }
 
 // loadSessionForCluster pulls the {cluster_id}/{id} pair from chi and

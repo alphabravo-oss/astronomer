@@ -1,0 +1,82 @@
+# Astronomer in-browser kubectl shell pod image.
+#
+# This image is the runtime the platform spawns inside a managed cluster
+# whenever an operator opens a kubectl shell session from the dashboard.
+# It is the SHELL container the user is actually exec'd into — not the
+# Astronomer server / agent / worker code.
+#
+# Why we ship our own:
+#
+#   * The third-party shell images we used before (bitnami/kubectl,
+#     alpine/k8s, rancher/kubectl) each have problems:
+#       - bitnami/kubectl:1.31 was 404'd on docker.io during the 2026
+#         Bitnami retag, breaking every fresh-cluster shell open.
+#       - rancher/kubectl is distroless — no /bin/sh, so kubectl exec
+#         can't attach an interactive terminal to it at all.
+#       - alpine/k8s exists but pins to a release schedule we don't
+#         control; supply-chain transparency for a shell that runs with
+#         broad RBAC is something operators want us to control.
+#
+#   * Astronomer's shell pod has tight expectations:
+#       - kubectl on PATH with the exact server-side k8s minor.
+#       - /bin/sh + standard coreutils so the session is interactive.
+#       - Non-root user (UID 1001) matching the pod's securityContext.
+#       - Small enough that pulling on a fresh-cluster shell open is
+#         under the 30s readiness deadline on modest nodes.
+#
+# kubectl is fetched from dl.k8s.io — the Kubernetes Project's official
+# release CDN. We avoid Docker Hub entirely for this image so a future
+# Docker Hub rate-limit / outage / retag never breaks shell-open again.
+
+# syntax=docker/dockerfile:1.7
+
+FROM alpine:3.21 AS base
+
+# kubectl version is pinned in lockstep with the bundled control-plane
+# minor. Bump in the same commit that bumps the k8s.io/* dependencies
+# in go.mod so the shell's kubectl version never lags the cluster's
+# server version far enough to be in the "skew unsupported" zone.
+ARG KUBECTL_VERSION=v1.31.0
+ARG TARGETARCH=amd64
+
+RUN apk add --no-cache \
+        bash \
+        ca-certificates \
+        coreutils \
+        curl \
+        jq \
+        tini \
+    && curl -fsSL -o /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+    && chmod +x /usr/local/bin/kubectl \
+    # Sanity-check the binary is the version we asked for so a typo'd
+    # KUBECTL_VERSION fails the build instead of silently shipping
+    # whatever HTTP returned (e.g. a 404 HTML page).
+    && /usr/local/bin/kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
+
+# Drop a tiny .bashrc that gives the shell session a recognisable prompt
+# so operators know they're inside an Astronomer-managed pod (and not
+# their local terminal, in case the WS hand-off was confusing).
+RUN printf '%s\n' \
+        'export PS1="[\\u@\\h astronomer-shell:\\w]\\$ "' \
+        'export KUBECONFIG=/var/run/secrets/kubernetes.io/serviceaccount/kubeconfig' \
+        'alias k=kubectl' \
+        'echo "Astronomer kubectl shell — kubectl '"${KUBECTL_VERSION}"' on alpine $(cat /etc/alpine-release)"' \
+    > /etc/profile.d/astronomer.sh \
+    && chmod 0644 /etc/profile.d/astronomer.sh
+
+# Non-root UID matches the pod manifest's securityContext.runAsUser.
+# Group + home directory let bash/jq/kubectl write their config files
+# under /home/astronomer instead of failing on a read-only root.
+RUN addgroup -g 1001 -S astronomer \
+    && adduser -u 1001 -S -G astronomer -h /home/astronomer -s /bin/bash astronomer \
+    && mkdir -p /home/astronomer/.kube \
+    && chown -R astronomer:astronomer /home/astronomer
+
+USER 1001:1001
+WORKDIR /home/astronomer
+
+# tini reaps zombies so a long-lived shell session doesn't leak PIDs
+# when the operator backgrounds kubectl exec or interactive editors.
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/bin/sh", "-c", "sleep 14400"]

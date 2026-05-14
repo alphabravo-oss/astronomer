@@ -15,7 +15,8 @@ terminal inside the browser. No kubeconfig juggling, no port-forward.
      `kube-system`. Names are `astro-shell-<base32-uuid>` so they are
      DNS-1123 safe and unique across runs.
    - Creates a debug pod named `astro-shell-<base32-uuid>` running
-     `bitnami/kubectl:1.31` with `sleep 14400` as a placeholder
+     `astronomer-shell:dev` (built from `deploy/docker/Dockerfile.shell`)
+     with `sleep 14400` as a placeholder
      (`activeDeadlineSeconds=14400` so the pod auto-suicides at the hard cap).
    - Waits up to 60s for the pod to report `Ready=True`.
    - Flips the row to `status=active`.
@@ -57,7 +58,7 @@ v1 but writable, and the manifest builder is parameterized).
 | ---------------------------------- | ------- | ---------------------------------------- |
 | Idle timeout (no input)            | 30 min  | `kubectlShell.idleTimeoutMinutes`        |
 | Hard cap (since session opened)    | 4 hr    | `kubectlShell.sessionHardCapHours`       |
-| Debug pod image                    | `bitnami/kubectl:1.31` | `kubectlShell.image`           |
+| Debug pod image                    | `astronomer-shell:dev` | `kubectlShell.image`           |
 | Feature toggle                     | OFF     | `kubectlShell.enabled`                   |
 
 When disabled (the default), the HTTP routes are not registered and the

@@ -683,7 +683,7 @@ func (q *Queries) UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterH
 }
 
 const updateClusterStatus = `-- name: UpdateClusterStatus :exec
-UPDATE clusters SET status = $2 WHERE id = $1
+UPDATE clusters SET status = $2 WHERE id = $1 AND decommissioned_at IS NULL
 `
 
 type UpdateClusterStatusParams struct {

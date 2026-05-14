@@ -141,16 +141,29 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 				if !channel.Enabled {
 					continue
 				}
+				clusterStr := ""
+				if rule.ClusterID.Valid {
+					clusterStr = uuid.UUID(rule.ClusterID.Bytes).String()
+				}
 				task, err := NewNotificationSendTask(NotificationSendPayload{
 					Channel:    channel.ChannelType,
 					Subject:    "Astronomer alert: " + rule.Name,
 					Body:       message,
 					Recipients: notificationRecipients(channel),
+					// Plumb severity/cluster/rule through so the
+					// Slack / PagerDuty / Teams formatters can render
+					// colours + dedup keys + facts instead of just a
+					// dumb text dump.
+					Severity:  rule.Severity,
+					ClusterID: clusterStr,
+					RuleID:    rule.ID.String(),
 				})
 				if err == nil && task != nil {
 					runtimeLogger().InfoContext(ctx, "prepared alert notification",
 						"event_id", event.ID.String(),
 						"channel_id", channel.ID.String(),
+						"channel_type", channel.ChannelType,
+						"severity", rule.Severity,
 						"recipient_count", len(notificationRecipients(channel)))
 				}
 			}
@@ -560,12 +573,31 @@ func pgTime(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
+// notificationRecipients extracts destination addresses from a
+// channel's JSONB configuration. Each channel type stores the
+// destination under a slightly different conventional key — Slack
+// puts the webhook URL under `webhook_url`, PagerDuty under
+// `routing_key`, MS Teams under `webhook_url`, generic webhook under
+// `url`, email under `recipients` (array). We probe the keys in
+// preference order so an old row with `url` still works for any
+// channel type, and a new row with the canonical key works too.
+//
+// Order intentionally favors the type-specific key first so a misuse
+// (`url` field on a slack channel that should be webhook_url) doesn't
+// silently mask a misconfig.
 func notificationRecipients(channel sqlc.NotificationChannel) []string {
 	var cfg map[string]any
 	if err := json.Unmarshal(channel.Configuration, &cfg); err != nil {
 		return nil
 	}
-	for _, key := range []string{"url", "webhook_url", "address", "email"} {
+	// Type-aware probe order. Channel type lookup keys:
+	//   slack       -> webhook_url, url
+	//   pagerduty   -> routing_key, integration_key, key
+	//   msteams     -> webhook_url, url, workflow_url
+	//   webhook     -> url, webhook_url
+	//   email       -> recipients (array) or email/address (single)
+	keys := []string{"webhook_url", "routing_key", "integration_key", "key", "workflow_url", "url", "address", "email"}
+	for _, key := range keys {
 		if v, ok := cfg[key].(string); ok && v != "" {
 			return []string{v}
 		}

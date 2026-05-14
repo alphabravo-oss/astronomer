@@ -321,7 +321,7 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		if task, err := tasks.NewClusterTemplateApplyTask(cluster.ID); err == nil {
 			payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 			t := asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-			_, _ = h.queue.Enqueue(t)
+			_, _ = h.queue.Enqueue(t, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,14 @@ type ProjectQuerier interface {
 	// shape (one row per (cluster, namespace)). The full Cluster row is
 	// already loaded so we don't have to wedge a name-only query.
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+
+	// RBAC matrix: per-project bindings + role lookups for the
+	// /projects/{id}/rbac/ endpoint. Rancher's flagship "Project" UX
+	// is the multi-namespace abstraction + project-scoped RBAC; the
+	// matrix is what makes this concrete for operators.
+	ListProjectRoleBindingsByProject(ctx context.Context, arg sqlc.ListProjectRoleBindingsByProjectParams) ([]sqlc.ProjectRoleBinding, error)
+	GetProjectRoleByID(ctx context.Context, id uuid.UUID) (sqlc.ProjectRole, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
 // ProjectHandler handles project endpoints.
@@ -805,6 +814,69 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListByCluster handles GET /api/v1/clusters/{cluster_id}/projects/.
+// ListClusters handles GET /api/v1/projects/{id}/clusters/.
+//
+// T4.3 — the multi-cluster project view. Returns the distinct
+// clusters the project is materialised on, derived from the
+// project_namespaces rows. Each entry includes the cluster's display
+// name and a count of namespaces the project has on that cluster, so
+// the frontend can render a "this project lives on 3 clusters"
+// breakdown without N+1 lookups.
+func (h *ProjectHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
+	projectIDStr := chi.URLParam(r, "id")
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		return
+	}
+	rows, err := h.queries.ListProjectNamespaces(r.Context(), projectID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list project namespaces")
+		return
+	}
+	// Aggregate distinct cluster_ids with namespace counts.
+	type clusterEntry struct {
+		ClusterID      uuid.UUID `json:"cluster_id"`
+		ClusterName    string    `json:"cluster_name"`
+		NamespaceCount int       `json:"namespace_count"`
+	}
+	counts := map[uuid.UUID]int{}
+	for _, row := range rows {
+		counts[row.ClusterID]++
+	}
+	out := make([]clusterEntry, 0, len(counts))
+	for cid, n := range counts {
+		name := ""
+		if c, gerr := h.queries.GetClusterByID(r.Context(), cid); gerr == nil {
+			name = firstNonEmptyStr(c.DisplayName, c.Name)
+		}
+		out = append(out, clusterEntry{ClusterID: cid, ClusterName: name, NamespaceCount: n})
+	}
+	// Stable: alpha by name, falling back to id ordering when names tie.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].ClusterName != out[j].ClusterName {
+			return out[i].ClusterName < out[j].ClusterName
+		}
+		return out[i].ClusterID.String() < out[j].ClusterID.String()
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{
+		"project_id": projectID.String(),
+		"clusters":   out,
+		"count":      len(out),
+	})
+}
+
+// firstNonEmptyStr is a small helper for picking display fallback
+// strings.
+func firstNonEmptyStr(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 	clusterIDStr := chi.URLParam(r, "cluster_id")
 	clusterID, err := uuid.Parse(clusterIDStr)

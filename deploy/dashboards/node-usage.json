@@ -1,0 +1,31 @@
+{
+  "title": "Astronomer — Node Usage",
+  "uid": "astronomer-node-usage",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["astronomer", "nodes"],
+  "time": {"from": "now-3h", "to": "now"},
+  "templating": {"list": [
+    {"name": "cluster", "type": "query", "query": "label_values(node_uname_info, cluster)", "refresh": 2}
+  ]},
+  "panels": [
+    {
+      "title": "CPU usage by node",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
+      "targets": [{"expr": "sum by (instance) (rate(node_cpu_seconds_total{mode!=\"idle\", cluster=~\"$cluster\"}[5m]))", "refId": "A"}]
+    },
+    {
+      "title": "Memory usage by node",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
+      "targets": [{"expr": "node_memory_MemTotal_bytes{cluster=~\"$cluster\"} - node_memory_MemAvailable_bytes{cluster=~\"$cluster\"}", "refId": "A"}]
+    },
+    {
+      "title": "Disk usage by node (/)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+      "targets": [{"expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/\", cluster=~\"$cluster\"} / node_filesystem_size_bytes{mountpoint=\"/\", cluster=~\"$cluster\"})", "refId": "A"}]
+    }
+  ]
+}

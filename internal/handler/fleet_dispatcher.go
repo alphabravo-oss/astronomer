@@ -114,7 +114,7 @@ func (h *ClusterTemplateHandler) enqueueApplyForCluster(ctx context.Context, clu
 	}
 	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.queue.Enqueue(task)
+	_, _ = h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 }
 
 // EnqueueFleetSubOperation creates a tool_operations row of the

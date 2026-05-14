@@ -71,7 +71,12 @@ WHERE id = $1
 RETURNING *;
 
 -- name: UpdateClusterStatus :exec
-UPDATE clusters SET status = $2 WHERE id = $1;
+-- Guarded: never overwrite a cluster that has already been tombstoned.
+-- The decommission reconciler is the sole writer for decommissioned
+-- clusters; the health-check + metrics sweepers can race against it
+-- and would otherwise flip 'decommissioned' back to 'disconnected' or
+-- 'active', producing the half-deleted "ghost" rows observed on .247.
+UPDATE clusters SET status = $2 WHERE id = $1 AND decommissioned_at IS NULL;
 
 -- name: UpdateClusterHeartbeat :exec
 UPDATE clusters SET

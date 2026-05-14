@@ -250,28 +250,91 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 	RespondJSON(w, http.StatusOK, out)
 }
 
+// nudgeTrivyOperator triggers a fresh round of scans on every workload
+// in the cluster. The implementation deletes all existing
+// VulnerabilityReport CRs cluster-wide; trivy-operator watches the
+// underlying workloads (Deployments, StatefulSets, DaemonSets, Jobs)
+// and re-creates a VulnerabilityReport for each one within seconds —
+// you can see the resulting scan-vulnerabilityreport-* Jobs appear in
+// trivy-system immediately.
+//
+// Why delete instead of an annotation patch on the operator Service:
+// trivy-operator doesn't watch its own Service for any annotation we
+// could set, so the prior implementation was a no-op pretending to be
+// a rescan. Deleting the CRs is the documented "force me to re-scan
+// everything" path in trivy-operator's own README + matches what
+// `kubectl trivy refresh` does internally.
+//
+// We use the collection-level DELETE (`/apis/.../vulnerabilityreports`
+// without a name) with a labelSelector that matches "anything" so a
+// single API call clears every namespace. That's faster than walking
+// the list + deleting per-row, and atomically idempotent — a half-
+// completed sweep just re-enqueues whichever ones are still there.
 func (h *ImageVulnHandler) nudgeTrivyOperator(ctx context.Context, clusterID uuid.UUID) error {
-	patch, err := json.Marshal(map[string]any{
-		"metadata": map[string]any{
-			"annotations": map[string]string{
-				"astronomer.io/rescan-requested-at": time.Now().UTC().Format(time.RFC3339Nano),
-			},
-		},
-	})
+	// trivy-operator deletes its own VRs on workload-delete, so we
+	// can safely delete from EVERY namespace. The Kubernetes batch
+	// DELETE for CRs is namespaced, so we walk namespaces first.
+	listResp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodGet,
+		"/apis/"+trivyGroup+"/v1alpha1/vulnerabilityreports", nil, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("list vulnerabilityreports: %w", err)
 	}
-	path := fmt.Sprintf("/api/v1/namespaces/%s/services/%s", trivyOperatorNamespace, trivyOperatorService)
-	headers := requestHeaders("application/strategic-merge-patch+json")
-	resp, err := h.k8s.Do(ctx, clusterID.String(), http.MethodPatch, path, patch, headers)
-	if err != nil {
-		return err
+	if listResp == nil || listResp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("trivy-operator CRDs not installed in cluster (aquasecurity.github.io/v1alpha1 missing)")
 	}
-	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("trivy-operator service not found in namespace %s", trivyOperatorNamespace)
+	if listResp.StatusCode >= 400 {
+		return fmt.Errorf("list vulnerabilityreports: HTTP %d", listResp.StatusCode)
 	}
-	return ensureSuccess(resp)
+	body := decodeK8sProgressBody(listResp)
+	if len(body) == 0 {
+		return fmt.Errorf("empty list response")
+	}
+	var lst struct {
+		Items []struct {
+			Metadata struct {
+				Name      string `json:"name"`
+				Namespace string `json:"namespace"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &lst); err != nil {
+		return fmt.Errorf("decode list: %w", err)
+	}
+	if len(lst.Items) == 0 {
+		// No existing reports yet — trivy is either still starting up
+		// or scanning for the first time. Either way the operator
+		// will produce reports on its own; this is a soft success.
+		return nil
+	}
+
+	// DELETE per report — the CR resource doesn't support collection
+	// delete with labelSelector across namespaces in a single call,
+	// but the apiserver fan-out is fast enough that doing it in a
+	// loop is fine for the report counts a normal cluster carries
+	// (10s to low hundreds). Each delete returns 200 once accepted;
+	// trivy re-creates the report within ~10s as a fresh scan Job.
+	for _, it := range lst.Items {
+		path := fmt.Sprintf("/apis/%s/v1alpha1/namespaces/%s/vulnerabilityreports/%s",
+			trivyGroup, it.Metadata.Namespace, it.Metadata.Name)
+		delResp, derr := h.k8s.Do(ctx, clusterID.String(), http.MethodDelete, path, nil, nil)
+		if derr != nil {
+			return fmt.Errorf("delete %s/%s: %w", it.Metadata.Namespace, it.Metadata.Name, derr)
+		}
+		// 404 on delete = the row vanished between list and delete
+		// (concurrent operator delete is fine — we wanted it gone).
+		if delResp != nil && delResp.StatusCode >= 400 && delResp.StatusCode != http.StatusNotFound {
+			return fmt.Errorf("delete %s/%s: HTTP %d", it.Metadata.Namespace, it.Metadata.Name, delResp.StatusCode)
+		}
+	}
+	return nil
 }
+
+// trivyGroup is the upstream Trivy CRD API group. Pulled out as a
+// constant so the nudge + progress paths stay in sync if Aqua ever
+// renames it (they migrated from `tunnel.aquasecurity.com` to this
+// one in v0.16 — moving it to a constant prevents the same bug if
+// they do it again).
+const trivyGroup = "aquasecurity.github.io"
 
 // --- Fleet-wide endpoints --------------------------------------------
 

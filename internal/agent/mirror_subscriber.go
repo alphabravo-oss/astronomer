@@ -59,6 +59,17 @@ var gatewayClassGVR = schema.GroupVersionResource{
 	Resource: "gatewayclasses",
 }
 
+// vulnerabilityReportGVR is the upstream trivy-operator CRD shipped by
+// aquasecurity.github.io. Same shape rationale as gatewayClassGVR: we
+// string-pin the GVR so the agent builds and runs in clusters where
+// trivy-operator is not (yet) installed — the dynamic informer logs +
+// skips when the CRD is missing instead of crashing the subscriber.
+var vulnerabilityReportGVR = schema.GroupVersionResource{
+	Group:    "aquasecurity.github.io",
+	Version:  "v1alpha1",
+	Resource: "vulnerabilityreports",
+}
+
 // mirrorResyncPeriod is how often the SharedInformerFactory replays
 // every object as an Add. Resyncs serve two purposes:
 //   1. Drift detection — anything the agent missed gets re-emitted.
@@ -75,6 +86,13 @@ type MirrorSender interface {
 	Send(msg *protocol.Message) error
 }
 
+// MirrorConnectionWatcher is the narrow tunnel-state surface the
+// reconnect-replay goroutine polls. The agent's TunnelClient satisfies
+// it via IsConnected.
+type MirrorConnectionWatcher interface {
+	IsConnected() bool
+}
+
 // MirrorSubscriber owns the five informers and forwards events as
 // MsgMirrorEvent messages over the tunnel.
 type MirrorSubscriber struct {
@@ -86,6 +104,27 @@ type MirrorSubscriber struct {
 	readyCh   chan struct{}
 	once      sync.Once
 	startedAt time.Time
+
+	// stores holds the live informer caches so the reconnect-replay
+	// goroutine can iterate them on every tunnel reconnect. Keyed by
+	// kind (crd.KindIngressClass / KindVulnerabilityReport / …).
+	// Populated as each informer's cache syncs.
+	storeMu sync.RWMutex
+	stores  map[string]informerStoreEntry
+
+	// conn is the connection watcher whose IsConnected reading we
+	// poll for reconnect detection. nil-safe: when unwired (tests /
+	// older callers), we skip the replay goroutine.
+	conn MirrorConnectionWatcher
+}
+
+// informerStoreEntry pairs an informer store with the kind label that
+// dispatch uses. Lets replayAll fan out to dispatchUnstructured /
+// dispatchTyped without re-deriving the kind per item.
+type informerStoreEntry struct {
+	kind    string
+	store   cache.Store
+	dynamic bool // true → items are *unstructured.Unstructured already
 }
 
 // NewMirrorSubscriber constructs a MirrorSubscriber. dyn is the dynamic
@@ -103,7 +142,19 @@ func NewMirrorSubscriber(client kubernetes.Interface, dyn dynamic.Interface, sen
 		log:       log,
 		readyCh:   make(chan struct{}),
 		startedAt: time.Now(),
+		stores:    make(map[string]informerStoreEntry),
 	}
+}
+
+// SetConnectionWatcher wires the tunnel connection watcher so the
+// reconnect-replay loop can detect false→true transitions and re-emit
+// every cached mirror item to the (newly-reconnected) management
+// plane. Optional; nil = no replay goroutine.
+func (s *MirrorSubscriber) SetConnectionWatcher(c MirrorConnectionWatcher) {
+	if s == nil {
+		return
+	}
+	s.conn = c
 }
 
 // WaitReady blocks until the informer caches have synced, or until ctx
@@ -123,8 +174,10 @@ func (s *MirrorSubscriber) WaitReady(ctx context.Context) bool {
 	}
 }
 
-// Run blocks until ctx is cancelled. Sets up the five informers, waits
-// for initial cache sync, then returns once ctx fires.
+// Run blocks until ctx is cancelled. Sets up the typed informer set
+// (always present in any modern k8s), launches a per-GVR retry loop
+// for each dynamic CRD (gateway-api, trivy-operator) that retries on
+// missing-CRD until success, and starts the reconnect-replay loop.
 func (s *MirrorSubscriber) Run(ctx context.Context) {
 	if s.client == nil {
 		s.log.Warn("mirror subscriber: nil clientset, skipping")
@@ -136,45 +189,60 @@ func (s *MirrorSubscriber) Run(ctx context.Context) {
 	// IngressClass — networking.k8s.io/v1, cluster-scoped.
 	ic := factory.Networking().V1().IngressClasses().Informer()
 	s.attachIngressClass(ic)
+	s.recordStore(crd.KindIngressClass, ic.GetStore(), false)
 
 	// NetworkPolicy — networking.k8s.io/v1, namespace-scoped (all namespaces).
 	np := factory.Networking().V1().NetworkPolicies().Informer()
 	s.attachNetworkPolicy(np)
+	s.recordStore(crd.KindNetworkPolicy, np.GetStore(), false)
 
 	// ResourceQuota — core/v1.
 	rq := factory.Core().V1().ResourceQuotas().Informer()
 	s.attachResourceQuota(rq)
+	s.recordStore(crd.KindResourceQuota, rq.GetStore(), false)
 
 	// LimitRange — core/v1.
 	lr := factory.Core().V1().LimitRanges().Informer()
 	s.attachLimitRange(lr)
+	s.recordStore(crd.KindLimitRange, lr.GetStore(), false)
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 	factory.Start(stopCh)
 
-	// GatewayClass via dynamic factory (gateway-api may not be installed;
-	// failure to sync is treated as "no GatewayClasses in this cluster").
-	var dynFactory dynamicinformer.DynamicSharedInformerFactory
+	// Dynamic informers run in their own goroutines so a missing CRD
+	// for one GVR (e.g. gateway-api uninstalled) doesn't strand the
+	// other. Each goroutine retries every 60s until the CRD is
+	// installed, then attaches the informer and blocks until ctx done.
 	if s.dyn != nil {
-		dynFactory = dynamicinformer.NewDynamicSharedInformerFactory(s.dyn, mirrorResyncPeriod)
-		gc := dynFactory.ForResource(gatewayClassGVR).Informer()
-		s.attachGatewayClass(gc)
-		dynFactory.Start(stopCh)
+		go s.runDynamicGVR(ctx, gatewayClassGVR, crd.KindGatewayClass, stopCh, attachKind{
+			add: func(obj any) { s.dispatchUnstructured(protocol.MirrorOpAdded, crd.KindGatewayClass, obj) },
+			upd: func(_, n any) { s.dispatchUnstructured(protocol.MirrorOpModified, crd.KindGatewayClass, n) },
+			del: func(obj any) { s.dispatchDeleteUnstructured(crd.KindGatewayClass, obj) },
+		})
+		go s.runDynamicGVR(ctx, vulnerabilityReportGVR, crd.KindVulnerabilityReport, stopCh, attachKind{
+			add: func(obj any) { s.dispatchUnstructured(protocol.MirrorOpAdded, crd.KindVulnerabilityReport, obj) },
+			upd: func(_, n any) { s.dispatchUnstructured(protocol.MirrorOpModified, crd.KindVulnerabilityReport, n) },
+			del: func(obj any) { s.dispatchDeleteUnstructured(crd.KindVulnerabilityReport, obj) },
+		})
 	}
 
-	synced := factory.WaitForCacheSync(stopCh)
+	// Bounded wait for the typed factory only. The dynamic GVRs are
+	// off in their own loops and may take minutes to settle (operator
+	// hasn't installed trivy yet); we don't gate "subscriber ready" on
+	// them or events from the typed kinds would be delayed unfairly.
+	syncStop := make(chan struct{})
+	go func() {
+		select {
+		case <-stopCh:
+		case <-time.After(30 * time.Second):
+		}
+		close(syncStop)
+	}()
+	synced := factory.WaitForCacheSync(syncStop)
 	for typ, ok := range synced {
 		if !ok {
-			s.log.Warn("mirror subscriber: typed cache failed to sync (RBAC or CRD missing?)", "type", fmt.Sprintf("%T", typ))
-		}
-	}
-	if dynFactory != nil {
-		dynSynced := dynFactory.WaitForCacheSync(stopCh)
-		for gvr, ok := range dynSynced {
-			if !ok {
-				s.log.Warn("mirror subscriber: dynamic cache failed to sync", "gvr", gvr.String())
-			}
+			s.log.Warn("mirror subscriber: typed cache failed to sync (RBAC missing?)", "type", fmt.Sprintf("%T", typ))
 		}
 	}
 
@@ -182,7 +250,167 @@ func (s *MirrorSubscriber) Run(ctx context.Context) {
 	s.once.Do(func() { close(s.readyCh) })
 	s.log.Info("mirror subscriber started", "resync", mirrorResyncPeriod)
 
+	// Reconnect replay: on every tunnel false→true transition,
+	// re-emit every cached item so the management plane doesn't lose
+	// rows when the WS drops mid-bootstrap. Optional; only runs when
+	// the caller wired a connection watcher.
+	if s.conn != nil {
+		go s.runReconnectReplay(ctx)
+	}
+
 	<-ctx.Done()
+}
+
+// attachKind groups the three informer callbacks for a kind so the
+// per-GVR loop can register them once after the CRD becomes available
+// (or replace them if a future iteration of the retry rebuilds the
+// informer). Defined as a struct so adding a new kind doesn't grow
+// the signature of runDynamicGVR.
+type attachKind struct {
+	add func(obj any)
+	upd func(oldObj, newObj any)
+	del func(obj any)
+}
+
+// runDynamicGVR loops trying to bring up a dynamic informer for the
+// given GVR. Returns only when ctx is cancelled.
+//
+// The CRD may be installed on the cluster AFTER the agent starts (the
+// platform-baseline auto-attach installs trivy-operator post-agent-
+// boot in the common case). client-go's SharedInformerFactory has no
+// built-in retry for that — a missed initial list fails forever — so
+// this function owns the retry loop: build a tiny single-GVR factory,
+// wait briefly for sync, on success block until ctx, on failure sleep
+// and try again.
+func (s *MirrorSubscriber) runDynamicGVR(ctx context.Context, gvr schema.GroupVersionResource, kind string, parentStop <-chan struct{}, hooks attachKind) {
+	backoff := 30 * time.Second
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-parentStop:
+			return
+		default:
+		}
+
+		attempt := dynamicinformer.NewDynamicSharedInformerFactory(s.dyn, mirrorResyncPeriod)
+		inf := attempt.ForResource(gvr).Informer()
+		_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    hooks.add,
+			UpdateFunc: hooks.upd,
+			DeleteFunc: hooks.del,
+		})
+
+		innerStop := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-parentStop:
+			}
+			close(innerStop)
+		}()
+		attempt.Start(innerStop)
+
+		// 20s bounded wait per attempt — long enough for a healthy
+		// apiserver, short enough that an unbacked GVR retries
+		// promptly. We don't share the 30s typed-sync timeout because
+		// that one already elapsed by the time we get here.
+		syncStop := make(chan struct{})
+		go func() {
+			select {
+			case <-innerStop:
+			case <-time.After(20 * time.Second):
+			}
+			close(syncStop)
+		}()
+		syncMap := attempt.WaitForCacheSync(syncStop)
+		ok := false
+		for _, v := range syncMap {
+			ok = v
+			break
+		}
+		if ok {
+			s.log.Info("mirror subscriber: dynamic GVR online", "gvr", gvr.String(), "kind", kind)
+			s.recordStore(kind, inf.GetStore(), true)
+			// Block until shutdown — the informer is now running.
+			<-innerStop
+			return
+		}
+
+		close(innerStop)
+		s.log.Info("mirror subscriber: dynamic GVR not yet available, will retry",
+			"gvr", gvr.String(), "retry_in", backoff)
+		select {
+		case <-ctx.Done():
+			return
+		case <-parentStop:
+			return
+		case <-time.After(backoff):
+		}
+	}
+}
+
+// recordStore captures an informer's cache.Store so reconnect-replay
+// can iterate it later. Idempotent; replaces any prior entry for the
+// same kind so a CRD-retry-rebuild swaps the store cleanly.
+func (s *MirrorSubscriber) recordStore(kind string, store cache.Store, dynamic bool) {
+	s.storeMu.Lock()
+	defer s.storeMu.Unlock()
+	s.stores[kind] = informerStoreEntry{kind: kind, store: store, dynamic: dynamic}
+}
+
+// runReconnectReplay polls the tunnel state every 2s. On every
+// false→true transition (including the initial connect since we start
+// at "previous=false"), it walks every recorded informer store and
+// dispatches Add for every cached item. This makes the agent
+// idempotent across mid-bootstrap WS drops — the management plane
+// re-receives the full mirror inventory after each reconnect rather
+// than waiting for the next 10-minute resync.
+func (s *MirrorSubscriber) runReconnectReplay(ctx context.Context) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	prev := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		now := s.conn.IsConnected()
+		if now && !prev {
+			s.replayAll()
+		}
+		prev = now
+	}
+}
+
+// replayAll dispatches an Add for every cached item across every
+// recorded store. Cheap: each Add hits dispatchTyped or
+// dispatchUnstructured which marshals + queues onto the bounded send
+// channel; backpressure is the same as a regular informer Add storm.
+func (s *MirrorSubscriber) replayAll() {
+	s.storeMu.RLock()
+	entries := make([]informerStoreEntry, 0, len(s.stores))
+	for _, e := range s.stores {
+		entries = append(entries, e)
+	}
+	s.storeMu.RUnlock()
+
+	total := 0
+	for _, e := range entries {
+		items := e.store.List()
+		for _, obj := range items {
+			if e.dynamic {
+				s.dispatchUnstructured(protocol.MirrorOpAdded, e.kind, obj)
+			} else {
+				s.dispatchTyped(protocol.MirrorOpAdded, e.kind, obj)
+			}
+		}
+		total += len(items)
+	}
+	if total > 0 {
+		s.log.Info("mirror subscriber: replayed cached items after reconnect", "items", total)
+	}
 }
 
 // ---------------------------------------------------------------------
@@ -245,19 +473,9 @@ func (s *MirrorSubscriber) attachLimitRange(inf cache.SharedIndexInformer) {
 	})
 }
 
-func (s *MirrorSubscriber) attachGatewayClass(inf cache.SharedIndexInformer) {
-	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
-			s.dispatchUnstructured(protocol.MirrorOpAdded, crd.KindGatewayClass, obj)
-		},
-		UpdateFunc: func(_, newObj any) {
-			s.dispatchUnstructured(protocol.MirrorOpModified, crd.KindGatewayClass, newObj)
-		},
-		DeleteFunc: func(obj any) {
-			s.dispatchDeleteUnstructured(crd.KindGatewayClass, obj)
-		},
-	})
-}
+// attachGatewayClass / attachVulnerabilityReport are gone: dynamic
+// GVR handlers are now attached inline in runDynamicGVR (see Run)
+// because each retry-rebuild needs to bind a fresh informer instance.
 
 // ---------------------------------------------------------------------
 // Dispatch
@@ -266,12 +484,15 @@ func (s *MirrorSubscriber) attachGatewayClass(inf cache.SharedIndexInformer) {
 // dispatchTyped converts a typed informer object to unstructured, marshals
 // it, and queues a MirrorEvent. We never block on the send channel; on
 // overflow we drop and let the next resync catch up.
+//
+// Bootstrap behavior: the previous gate here dropped all events before
+// ready=true to avoid a "thundering reset on every reconnect", but
+// reconnects don't restart this goroutine — only an agent process
+// restart does. Suppressing bootstrap adds meant that a stable cluster
+// (no churn) never sent any mirror events to the server, leaving the
+// image_vulnerability_reports table permanently empty even when trivy
+// was producing reports. We now emit on bootstrap too.
 func (s *MirrorSubscriber) dispatchTyped(op protocol.MirrorEventOp, kind string, obj any) {
-	if !s.ready.Load() {
-		// Suppress bootstrap adds; the WaitReady gate prevents a thundering
-		// reset on every reconnect.
-		return
-	}
 	m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
 		s.log.Warn("mirror subscriber: convert to unstructured failed", "kind", kind, "error", err)
@@ -282,11 +503,10 @@ func (s *MirrorSubscriber) dispatchTyped(op protocol.MirrorEventOp, kind string,
 }
 
 // dispatchUnstructured is the variant for the dynamic-informer GatewayClass
-// path — the informer already hands back *unstructured.Unstructured.
+// + VulnerabilityReport paths — the informer already hands back
+// *unstructured.Unstructured. Bootstrap suppression dropped — see
+// dispatchTyped for the same rationale.
 func (s *MirrorSubscriber) dispatchUnstructured(op protocol.MirrorEventOp, kind string, obj any) {
-	if !s.ready.Load() {
-		return
-	}
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		s.log.Warn("mirror subscriber: dynamic informer returned non-unstructured", "kind", kind, "type", fmt.Sprintf("%T", obj))

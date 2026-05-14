@@ -1,0 +1,28 @@
+name: project-owner
+display_name: Project Owner
+description: |
+  Owns a project: full read/write across the project's workloads,
+  monitoring data, and ArgoCD sync, plus the ability to manage RBAC
+  bindings inside the project. Cannot create or delete the project
+  itself; that stays a platform-admin action.
+scope: project
+category: project
+rules:
+  - resource: projects
+    verbs: [read, list, update]
+  - resource: workloads
+    verbs: [create, read, update, delete, list, scale, restart]
+  - resource: pods
+    verbs: [read, list, watch, logs, exec, proxy]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: alerts
+    verbs: [read, list]
+  - resource: catalog
+    verbs: [read, list]
+  - resource: backups
+    verbs: [read, list, create]
+  - resource: argocd
+    verbs: [read, list, sync]
+  - resource: rbac
+    verbs: [read, list, create, update, delete]

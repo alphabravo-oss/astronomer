@@ -28,10 +28,10 @@ import (
 )
 
 // AdminQueuesQuerier is the slice of sqlc.Queries the handler needs.
-// One method — enough to drive the superuser gate, and the same shape
-// the rest of the handler package uses.
+// Superuser gate + audit writer for the mutating DLQ endpoints.
 type AdminQueuesQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
+	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
 // AdminQueuesHandler wraps GET /api/v1/admin/queues/*.
@@ -144,6 +144,65 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 		"dlq":   out,
 		"count": len(out),
 	})
+}
+
+// RetryDLQ handles POST /api/v1/admin/queues/{queue}/dlq/{id}/retry/.
+//
+// Moves an archived (DLQ) task back to the pending queue so asynq
+// re-attempts it. Wraps asynq.Inspector.RunTask — the upstream
+// guarantee is idempotent: a task that's already pending becomes a
+// no-op. Superuser-gated; emits an audit row.
+func (h *AdminQueuesHandler) RetryDLQ(w http.ResponseWriter, r *http.Request) {
+	if !h.gate(w, r) {
+		return
+	}
+	if h.inspector == nil {
+		RespondError(w, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		return
+	}
+	queue := chi.URLParam(r, "queue")
+	id := chi.URLParam(r, "id")
+	if queue == "" || id == "" {
+		RespondError(w, http.StatusBadRequest, "missing_params", "queue and id are required")
+		return
+	}
+	if err := h.inspector.RunTask(queue, id); err != nil {
+		RespondError(w, http.StatusBadGateway, "asynq_error", err.Error())
+		return
+	}
+	recordAudit(r, h.queries, "admin.queue.dlq_retried", "queue", queue, id, map[string]any{
+		"task_id": id,
+	})
+	RespondJSON(w, http.StatusAccepted, map[string]any{"queue": queue, "task_id": id, "retried": true})
+}
+
+// DiscardDLQ handles DELETE /api/v1/admin/queues/{queue}/dlq/{id}/.
+//
+// Removes an archived task from the DLQ entirely. Used to clear
+// permanently-broken jobs (poison messages, deleted clusters, etc.)
+// that retry would only repeat the failure on. Superuser-gated.
+func (h *AdminQueuesHandler) DiscardDLQ(w http.ResponseWriter, r *http.Request) {
+	if !h.gate(w, r) {
+		return
+	}
+	if h.inspector == nil {
+		RespondError(w, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		return
+	}
+	queue := chi.URLParam(r, "queue")
+	id := chi.URLParam(r, "id")
+	if queue == "" || id == "" {
+		RespondError(w, http.StatusBadRequest, "missing_params", "queue and id are required")
+		return
+	}
+	if err := h.inspector.DeleteTask(queue, id); err != nil {
+		RespondError(w, http.StatusBadGateway, "asynq_error", err.Error())
+		return
+	}
+	recordAudit(r, h.queries, "admin.queue.dlq_discarded", "queue", queue, id, map[string]any{
+		"task_id": id,
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{"queue": queue, "task_id": id, "discarded": true})
 }
 
 // gate enforces superuser-only access and emits the admin audit row.

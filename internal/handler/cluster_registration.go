@@ -38,7 +38,11 @@ type ClusterRegistrationQuerier interface {
 	registration.Querier
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
-	// Auto-attach for install_baseline=true at confirm time.
+	// Auto-attach for install_baseline=true at confirm time. We resolve
+	// the template's spec via GetClusterTemplateByID and materialize it
+	// into the cluster_template_applications row's snapshot column so
+	// later template edits don't retroactively rewrite what was applied.
+	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error)
 	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
 }
 
@@ -208,14 +212,20 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 	}
 
 	if record.InstallBaseline.Valid && record.InstallBaseline.Bool && h.baselineTemplateID != uuid.Nil {
-		// Auto-attach the platform-baseline template. Spec snapshot
-		// is empty here; the cluster_templates row contains the
-		// canonical spec and the apply worker reads it via the
-		// template_id FK.
+		// Auto-attach the platform-baseline template. The apply worker
+		// reads spec from the snapshot column, NOT from the template
+		// row (so a template edit doesn't retroactively change what
+		// was applied), so we must materialize the template's spec
+		// into the application row here. Mirrors the legacy
+		// ClusterHandler.autoAttachDefaultTemplate path.
+		spec := json.RawMessage(`{}`)
+		if tmpl, terr := h.queries.GetClusterTemplateByID(r.Context(), h.baselineTemplateID); terr == nil && len(tmpl.Spec) > 0 {
+			spec = tmpl.Spec
+		}
 		if _, err := h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
 			ClusterID:    id,
 			TemplateID:   h.baselineTemplateID,
-			SpecSnapshot: json.RawMessage(`{}`),
+			SpecSnapshot: spec,
 		}); err != nil {
 			RespondError(w, http.StatusInternalServerError, "attach_error", "Failed to attach platform baseline")
 			return
@@ -225,7 +235,7 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 		if h.applyQueue != nil {
 			task := asynq.NewTask("cluster_template:apply",
 				mustRegistrationJSON(map[string]any{"cluster_id": id.String()}))
-			_, _ = h.applyQueue.Enqueue(task)
+			_, _ = h.applyQueue.Enqueue(task, asynq.Queue("tunnel"))
 		}
 	}
 
@@ -276,7 +286,7 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 	if h.applyQueue != nil {
 		task := asynq.NewTask("cluster_template:apply",
 			mustRegistrationJSON(map[string]any{"cluster_id": id.String()}))
-		_, _ = h.applyQueue.Enqueue(task)
+		_, _ = h.applyQueue.Enqueue(task, asynq.Queue("tunnel"))
 	}
 	// Mark the failing step as `pending` again so the UI shows it
 	// as queued rather than the error remaining sticky.

@@ -1,0 +1,27 @@
+name: cluster-viewer
+display_name: Cluster Viewer
+description: |
+  Read-only access to a single cluster. Sees workloads, helm releases,
+  monitoring dashboards, alerts, and security posture. No exec, no
+  mutations, no audit log.
+scope: cluster
+category: cluster
+rules:
+  - resource: clusters
+    verbs: [read, list]
+  - resource: workloads
+    verbs: [read, list]
+  - resource: pods
+    verbs: [read, list, watch, logs]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: alerts
+    verbs: [read, list]
+  - resource: catalog
+    verbs: [read, list]
+  - resource: backups
+    verbs: [read, list]
+  - resource: security
+    verbs: [read, list]
+  - resource: argocd
+    verbs: [read, list]

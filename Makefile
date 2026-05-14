@@ -26,6 +26,10 @@ IMG_MIGRATE  = astronomer-go-migrate:$(IMG_TAG)
 # (deploy/chart/values.yaml -> frontend.image.repository). Build context is
 # astronomer-go's own frontend/ directory.
 IMG_FRONTEND = astronomer-frontend:$(IMG_TAG)
+# astronomer-shell is the in-browser kubectl shell pod image.
+# Owned end-to-end (alpine + kubectl from dl.k8s.io) so we don't depend
+# on a third-party registry whose tag schedule we can't control.
+IMG_SHELL    = astronomer-shell:$(IMG_TAG)
 
 # k3d cluster name (override on the command line: `make k3d-bootstrap CLUSTER=foo`).
 CLUSTER     ?= astronomer-mgmt
@@ -46,6 +50,7 @@ build: ## Build all binaries to bin/
 	go build -ldflags '$(LDFLAGS)' -o bin/server   ./cmd/server
 	go build -ldflags '$(LDFLAGS)' -o bin/worker   ./cmd/worker
 	go build -ldflags '$(LDFLAGS)' -o bin/agent    ./cmd/agent
+	go build -ldflags '$(LDFLAGS)' -o bin/astro    ./cmd/astro
 
 test: ## Run tests with race detector
 	go test -race -count=1 ./...
@@ -102,7 +107,10 @@ docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image
 docker-build-frontend: ## Build frontend (Next.js dashboard) image from frontend/
 	docker build -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
 
-docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend ## Build all images
+docker-build-shell: ## Build astronomer-shell (in-cluster kubectl shell pod) image
+	docker build -f deploy/docker/Dockerfile.shell -t $(IMG_SHELL) deploy/docker
+
+docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell ## Build all images
 
 # Backward-compat alias: `make docker-build` still builds the server image.
 docker-build: docker-build-server ## (alias) build server image
@@ -145,6 +153,9 @@ validate-live-cis: ## Validate live CIS scan + report ingestion flow (set AUTH_T
 
 validate-live-oci: ## Validate live OCI catalog create/sync/install flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-oci.sh
+
+smoke-fresh-cluster: ## Walk the full wizard against a fresh k3d cluster (requires ASTRO_PASSWORD)
+	./scripts/smoke-fresh-cluster.sh
 
 validate-live-projects: ## Validate live project enforcement + audit flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-projects.sh

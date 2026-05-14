@@ -1,0 +1,29 @@
+{
+  "title": "Astronomer — Baseline Tool Health",
+  "uid": "astronomer-baseline-tools",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["astronomer", "tools", "baseline"],
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "title": "Reconciler runs (success/failed/skipped)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
+      "targets": [{"expr": "sum by (status, job) (rate(astronomer_reconciler_runs_total[5m]))", "refId": "A"}]
+    },
+    {
+      "title": "Last success age (seconds)",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 6},
+      "targets": [{"expr": "time() - max by (job) (astronomer_reconciler_last_success_timestamp_seconds)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "title": "Worker leader holders",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 8},
+      "targets": [{"expr": "astronomer_worker_leader_held == 1", "refId": "A", "format": "table"}]
+    }
+  ]
+}

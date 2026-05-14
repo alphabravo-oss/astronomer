@@ -61,6 +61,15 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	// Get agent connection from hub.
 	agent := p.hub.GetAgent(clusterID)
 	if agent == nil {
+		// Cross-pod fallback: look up the sibling replica that holds
+		// this cluster's WS and reverse-proxy the request there. Without
+		// this the in-memory Hub's single-pod-per-cluster invariant
+		// means we 503 every request that nginx pinned to the wrong
+		// upstream pod (which, with nginx upstream keep-alive, is
+		// effectively all requests).
+		if p.forwardToOwnerPod(w, r, clusterID) {
+			return
+		}
 		http.Error(w, `{"error":"Cluster agent not connected"}`, http.StatusServiceUnavailable)
 		return
 	}
@@ -387,4 +396,93 @@ func writeK8sResponse(w http.ResponseWriter, resp *protocol.K8sResponsePayload) 
 	if len(bodyBytes) > 0 {
 		w.Write(bodyBytes)
 	}
+}
+
+// forwardToOwnerPod reverse-proxies r to whichever sibling pod owns the
+// cluster's WebSocket, per the redis-backed locator. Returns true when
+// the request was forwarded (the response was already written),
+// false when there was no locator, no entry, or the locator says we
+// are the owner (a stale entry from a prior life of this pod). The
+// caller then falls back to the original 503 path.
+//
+// We don't recurse: the forwarded request goes to the sibling's normal
+// /api/v1/clusters/{id}/k8s/* endpoint, which the sibling handles with
+// its local Hub.GetAgent — which (by construction of the locator)
+// succeeds. If the sibling's WS dropped between the lookup and the
+// forward, the sibling will return its own 503; we surface that to the
+// client without retrying so we don't bounce indefinitely.
+func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request, clusterID string) bool {
+	loc := p.hub.Locator()
+	if loc == nil {
+		return false
+	}
+	addr, err := loc.Lookup(r.Context(), clusterID)
+	if err != nil {
+		p.log.Warn("tunnel proxy: locator lookup failed",
+			slog.String("cluster_id", clusterID),
+			slog.String("error", err.Error()),
+		)
+		return false
+	}
+	if addr == "" {
+		return false
+	}
+	// Don't loop back to ourselves: an entry pointing at our own
+	// address means our Hub had the WS recently and lost it. Telling
+	// the caller "not forwarded" lets it return 503, which surfaces the
+	// real "agent disconnected" state instead of a request-forward
+	// flap.
+	if addr == loc.Address() {
+		return false
+	}
+
+	target := fmt.Sprintf("http://%s%s", addr, r.URL.RequestURI())
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	if err != nil {
+		p.log.Warn("tunnel proxy: build upstream request",
+			slog.String("cluster_id", clusterID),
+			slog.String("target", target),
+			slog.String("error", err.Error()),
+		)
+		return false
+	}
+	// Copy headers verbatim — the sibling handler does its own auth /
+	// RBAC check based on Authorization, so we mustn't strip it.
+	for k, v := range r.Header {
+		upstreamReq.Header[k] = v
+	}
+	// Hop-by-hop headers stripped per RFC 7230; keep this minimal.
+	upstreamReq.Header.Del("Connection")
+	upstreamReq.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
+
+	resp, err := proxyHTTPClient.Do(upstreamReq)
+	if err != nil {
+		p.log.Warn("tunnel proxy: forward to owner pod failed",
+			slog.String("cluster_id", clusterID),
+			slog.String("target", target),
+			slog.String("error", err.Error()),
+		)
+		return false
+	}
+	defer resp.Body.Close()
+	for k, v := range resp.Header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return true
+}
+
+// proxyHTTPClient is the client used for cross-pod request forwarding.
+// No global timeout because some forwarded requests (e.g. watches) are
+// long-lived; per-request context cancellation governs lifetime.
+var proxyHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:          16,
+		IdleConnTimeout:       60 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+	},
 }

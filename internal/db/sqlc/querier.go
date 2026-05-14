@@ -166,6 +166,7 @@ type Querier interface {
 	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error
 	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
+	DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteGlobalRole(ctx context.Context, id uuid.UUID) error
 	DeleteGlobalRoleBinding(ctx context.Context, id uuid.UUID) error
 	DeleteHelmChart(ctx context.Context, id uuid.UUID) error
@@ -245,6 +246,11 @@ type Querier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
 	GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
 	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterDecommission, error)
+	GetLatestClusterConditionRemediation(ctx context.Context, arg GetLatestClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
+	InsertClusterConditionRemediation(ctx context.Context, arg InsertClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
+	ListClusterConditionRemediationByCluster(ctx context.Context, clusterID uuid.UUID) ([]ClusterConditionRemediationAttempt, error)
+	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
+	ListClusterConditionsByStatus(ctx context.Context, status string) ([]ClusterCondition, error)
 	GetClusterByName(ctx context.Context, name string) (Cluster, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
 	GetClusterMonitoringConfig(ctx context.Context, clusterID uuid.UUID) (ClusterMonitoringConfig, error)

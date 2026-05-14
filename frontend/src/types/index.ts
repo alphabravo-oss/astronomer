@@ -97,6 +97,20 @@ export interface ClusterCondition {
   last_probe_time: string;
 }
 
+// Sprint 086 — entries the cluster-condition remediation reconciler
+// writes when it attempts to drive a False condition back to True.
+// Shown in the cluster header as "Last action: $action — $outcome".
+export interface ClusterConditionRemediationAttempt {
+  id: string;
+  cluster_id: string;
+  condition_type: string;
+  action: string;
+  outcome: 'success' | 'failed' | 'skipped';
+  error: string | null;
+  detail: Record<string, unknown> | null;
+  attempted_at: string;
+}
+
 export interface ClusterNode {
   name: string;
   status: 'Ready' | 'NotReady' | 'SchedulingDisabled';
@@ -341,7 +355,13 @@ export interface Project {
   name: string;
   displayName: string;
   description?: string;
-  clusterIds: string[];
+  // The Go backend models projects as cluster-scoped — one cluster per
+  // project — so the canonical key is `cluster_id` (singular). The
+  // old `clusterIds` array was a vestige from an earlier multi-cluster
+  // design; kept here as optional for backward compatibility with any
+  // legacy components that haven't been migrated yet.
+  clusterId?: string;
+  clusterIds?: string[];
   namespaces: string[];
   members: ProjectMember[];
   resourceQuota?: ResourceQuota;

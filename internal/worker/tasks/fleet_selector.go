@@ -37,6 +37,10 @@ import (
 type FleetSelector struct {
 	MatchLabels      map[string]string         `json:"matchLabels,omitempty"`
 	MatchExpressions []FleetSelectorExpression `json:"matchExpressions,omitempty"`
+	// MatchGroupIDs (T6.066) — cluster matches when its group
+	// membership intersects this list. Empty list contributes no
+	// constraint; nil and []string{} are equivalent.
+	MatchGroupIDs []string `json:"matchGroupIDs,omitempty"`
 }
 
 // FleetSelectorExpression is one row of the matchExpressions list.
@@ -49,11 +53,11 @@ type FleetSelectorExpression struct {
 }
 
 // IsEmpty returns true when the selector has neither matchLabels nor
-// matchExpressions set. Used by the handler validator to reject an
-// empty selector at create time (so an operator can never accidentally
-// fanout across the whole fleet).
+// matchExpressions nor matchGroupIDs set. Used by the handler
+// validator to reject an empty selector at create time (so an
+// operator can never accidentally fanout across the whole fleet).
 func (s FleetSelector) IsEmpty() bool {
-	return len(s.MatchLabels) == 0 && len(s.MatchExpressions) == 0
+	return len(s.MatchLabels) == 0 && len(s.MatchExpressions) == 0 && len(s.MatchGroupIDs) == 0
 }
 
 // ParseFleetSelector decodes the JSONB blob into the typed struct.
@@ -74,10 +78,16 @@ func ParseFleetSelector(raw json.RawMessage) (FleetSelector, error) {
 // evaluator needs. Mirrors ListClustersForSelectorEvaluationRow but
 // kept locally so the selector package doesn't import sqlc (which
 // would create a cycle for callers in the handler package).
+//
+// GroupIDs (T6.066) is the set of cluster_groups this cluster
+// belongs to; populated by the orchestrator before evaluation. Empty
+// is the historical baseline — the matchGroupIDs branch
+// then evaluates to "no group match" for every cluster.
 type FleetClusterCandidate struct {
-	ID     uuid.UUID
-	Name   string
-	Labels map[string]string
+	ID       uuid.UUID
+	Name     string
+	Labels   map[string]string
+	GroupIDs []string
 }
 
 // EvaluateFleetSelector returns the cluster IDs that match the
@@ -91,7 +101,7 @@ func EvaluateFleetSelector(sel FleetSelector, candidates []FleetClusterCandidate
 	}
 	out := make([]FleetClusterCandidate, 0, len(candidates))
 	for _, c := range candidates {
-		if matchesSelector(sel, c.Labels) {
+		if matchesSelector(sel, c) {
 			out = append(out, c)
 		}
 	}
@@ -99,20 +109,38 @@ func EvaluateFleetSelector(sel FleetSelector, candidates []FleetClusterCandidate
 }
 
 // matchesSelector is the per-cluster predicate. Implemented as the
-// AND of every matchLabel and every matchExpression — same semantics
-// as the upstream Kubernetes selector.
-func matchesSelector(sel FleetSelector, labels map[string]string) bool {
+// AND of every matchLabel, every matchExpression, and the group
+// branch — same semantics as the upstream Kubernetes selector.
+func matchesSelector(sel FleetSelector, c FleetClusterCandidate) bool {
 	for k, v := range sel.MatchLabels {
-		if labels[k] != v {
+		if c.Labels[k] != v {
 			return false
 		}
 	}
 	for _, expr := range sel.MatchExpressions {
-		if !matchesExpression(expr, labels) {
+		if !matchesExpression(expr, c.Labels) {
 			return false
 		}
 	}
+	if len(sel.MatchGroupIDs) > 0 && !intersects(sel.MatchGroupIDs, c.GroupIDs) {
+		return false
+	}
 	return true
+}
+
+// intersects reports whether any element of a is present in b.
+// Both lists are expected to be small (typical fleet group count is
+// < 20), so the O(n*m) compare is fine; sorted-and-linear would only
+// matter if a fleet operation listed hundreds of groups.
+func intersects(a, b []string) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if x == y {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // matchesExpression evaluates one matchExpressions entry. Unknown

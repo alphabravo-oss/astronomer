@@ -89,10 +89,26 @@ SELECT * FROM helm_chart_versions WHERE id = $1;
 SELECT * FROM helm_chart_versions WHERE chart_id = $1 AND version = $2;
 
 -- name: GetLatestChartVersion :one
-SELECT * FROM helm_chart_versions WHERE chart_id = $1 ORDER BY created_at DESC LIMIT 1;
+-- Orders by the upstream chart's publish time (the `created:` field
+-- in helm index.yaml, persisted to created_at_upstream during ingest)
+-- so the install modal's "default to latest" picks the actual newest
+-- version rather than whichever row happened to be inserted last
+-- during a backfill sync. Falls back to created_at DESC when the
+-- upstream timestamp is NULL (older catalog rows pre-dating the
+-- created_at_upstream column or OCI charts without a publish date).
+SELECT * FROM helm_chart_versions
+WHERE chart_id = $1
+ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
+LIMIT 1;
 
 -- name: ListChartVersions :many
-SELECT * FROM helm_chart_versions WHERE chart_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
+-- Same ordering rationale as GetLatestChartVersion — the version
+-- dropdown in the install/upgrade modal needs newest-first by upstream
+-- publish time, not by DB insert order.
+SELECT * FROM helm_chart_versions
+WHERE chart_id = $1
+ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
+LIMIT $2 OFFSET $3;
 
 -- name: CreateHelmChartVersion :one
 INSERT INTO helm_chart_versions (chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream)
@@ -156,3 +172,14 @@ SELECT count(*) FROM installed_charts;
 
 -- name: CountInstalledChartsByCluster :one
 SELECT count(*) FROM installed_charts WHERE cluster_id = $1;
+
+-- name: DeleteFailedInstallationsByCluster :execrows
+-- Hard-deletes installed_charts rows that are stuck in a failed_* state
+-- on the given cluster. Used by the Apps tab's "Delete failed installs"
+-- bulk action; mirrors Rancher's "Force Delete" affordance for orphaned
+-- helm release rows that didn't actually deploy (and therefore can't be
+-- uninstalled cleanly). Returns the affected-row count so the handler
+-- can include it in the response.
+DELETE FROM installed_charts
+WHERE cluster_id = $1
+  AND status IN ('failed_install', 'failed_uninstall');

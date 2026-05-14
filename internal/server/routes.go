@@ -121,6 +121,12 @@ type RouterDependencies struct {
 	ControlPlane *handler.ControlPlaneHandler
 	Resources    *handler.ResourceHandler
 	PlatformCharts *handler.PlatformChartRepoHandler
+	// Docs serves the embedded OpenAPI spec + Swagger UI at
+	// /api/v1/openapi.yaml + /api/v1/docs/. Public — no JWT required.
+	Docs           *handler.DocsHandler
+	// SSOPresets serves the canonical GitHub/Google/Azure AD/GitLab/
+	// Okta preset catalog at /api/v1/settings/sso/presets/.
+	SSOPresets     *handler.SSOPresetsHandler
 	RBAC         *handler.RBACHandler
 	RBACQueries  appmiddleware.RBACQuerier
 	RBACEngine   *rbac.Engine
@@ -129,6 +135,15 @@ type RouterDependencies struct {
 	Workloads    *handler.WorkloadHandler
 	Hub          *tunnel.Hub
 	Proxy        *tunnel.ProxyHandler
+	// InternalK8s receives cross-pod K8sRequest forwards from sibling
+	// server replicas. Mounted OUTSIDE the JWT auth middleware — it
+	// does its own PSK validation. Nil-safe; absent when no encryption
+	// key is configured (single-replica disables the fallback).
+	InternalK8s  *tunnel.InternalK8sHandler
+	// InternalHelm receives cross-pod HelmRequest forwards from sibling
+	// server replicas. Same PSK-auth contract as InternalK8s; mounted
+	// outside the JWT chain. Nil-safe.
+	InternalHelm *tunnel.InternalHelmHandler
 	Exec         *tunnel.ExecConsumer
 	Logs         *tunnel.LogsConsumer
 	// RemoteServer is the new remotedialer-based tunnel running alongside
@@ -160,6 +175,15 @@ type RouterDependencies struct {
 	// Compliance generates the SOC 2 / ISO 27001 audit-prep bundle
 	// for any date range. Superuser-gated inside the handler.
 	Compliance *handler.ComplianceHandler
+	// CompliancePosture (T1.2) is the CISO-facing fleet-wide score
+	// rollup: weighted combination of CIS, image-vulns, netpol
+	// coverage, and audit retention. Read-only.
+	CompliancePosture *handler.CompliancePostureHandler
+	// License (T7.4) is the read-only entitlement scaffold. Returns
+	// {state: "open-source", features_enabled: [...]}; ships now so
+	// future LicenseExpiringSoon condition wiring has a stable
+	// contract.
+	License *handler.LicenseHandler
 	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
 	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
 	PlatformSettings *handler.PlatformSettingsHandler
@@ -276,6 +300,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.Metrics)
+	// Normalise `/api/v1/foo` → `/api/v1/foo/` before chi matches so
+	// the frontend's no-trailing-slash REST calls hit the same route
+	// the trailing-slash form does. Without this, DELETE /clusters/{id}
+	// 404s because the route is mounted as /{id}/ — the user-facing
+	// symptom is "the cluster delete button in the UI silently fails."
+	// Scoped to /api/v1/* so static helm-repo / argocd assets aren't
+	// affected.
+	r.Use(appmiddleware.NormalizeAPITrailingSlash)
 	// Rename the otelhttp server span to use chi's route pattern
 	// once routing has run. otelhttp.NewHandler wraps the router with
 	// only the HTTP method as a placeholder span name; this middleware
@@ -312,6 +344,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		r.Get("/helm-repo/astronomer/"+deps.PlatformCharts.ArchiveName(), deps.PlatformCharts.ServeArchive)
 		r.Get("/helm-repo/astronomer-v2/index.yaml", deps.PlatformCharts.ServeIndex)
 		r.Get("/helm-repo/astronomer-v2/"+deps.PlatformCharts.ArchiveName(), deps.PlatformCharts.ServeArchive)
+	}
+	if deps.Docs != nil {
+		// Public OpenAPI + Swagger UI. Outside the JWT auth chain so
+		// operators can browse the API surface before they have a
+		// token (it's the entry point for figuring OUT how to get a
+		// token in the first place).
+		r.Get("/api/v1/openapi.yaml", deps.Docs.ServeOpenAPI)
+		r.Get("/api/v1/docs", deps.Docs.ServeSwaggerUI)
+		r.Get("/api/v1/docs/", deps.Docs.ServeSwaggerUI)
 	}
 	if deps.Readyz != nil {
 		r.Handle("/readyz", deps.Readyz)
@@ -407,6 +448,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 				r.Get("/sso/", deps.Resources.ListSSOProviders)
 				r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/sso/", deps.Resources.CreateSSOProvider)
 				r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/sso/{id}/", deps.Resources.DeleteSSOProvider)
+				// Preset catalog (GitHub / Google / Azure AD / GitLab /
+				// Okta). Public-readable so the login page can render
+				// branded buttons before the user is authenticated.
+				if deps.SSOPresets != nil {
+					r.Get("/sso/presets/", deps.SSOPresets.List)
+				}
 				r.Get("/audit-logs/", deps.Resources.ListAuditLogs)
 				if deps.Monitoring != nil {
 					r.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
@@ -449,6 +496,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// /support-bundle/ — gated on superuser inside the handler.
 		// The /export/ endpoint picks streaming vs async based on
 		// the audit-row count; /exports/{id}/ polls the async job.
+		if deps.CompliancePosture != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/compliance/posture/", deps.CompliancePosture.Get)
+		}
+		if deps.License != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/license/", deps.License.Get)
+		}
 		if deps.Compliance != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance/export/", deps.Compliance.Export)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/compliance/exports/{id}/", deps.Compliance.GetExportStatus)
@@ -489,6 +542,11 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.AdminQueues != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/", deps.AdminQueues.List)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/queues/{queue}/dlq/", deps.AdminQueues.DLQ)
+			// T28b — DLQ mutators. Retry moves an archived task back to
+			// pending; Discard removes it entirely. Both gated by the
+			// handler's own superuser check; audited.
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/queues/{queue}/dlq/{id}/retry/", deps.AdminQueues.RetryDLQ)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/queues/{queue}/dlq/{id}/", deps.AdminQueues.DiscardDLQ)
 		}
 
 		// Backup-restore drill viewer — surfaces rows that the weekly
@@ -613,6 +671,23 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// namespace allowlist (`branding`, `banner`).
 			r.Get("/settings/branding/", deps.PlatformSettings.PublicBranding)
 			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
+			r.Get("/settings/registration/", deps.PlatformSettings.PublicRegistration)
+		}
+
+		// Rancher-style one-liner manifest fetch. Unauthenticated by
+		// design: the token in the URL IS the credential, exactly
+		// like the agent token embedded in the manifest it returns.
+		// Lives outside the `authenticated` subrouter for the same
+		// reason as the pre-auth readers above. The `.yaml` suffix
+		// makes the trailing-slash middleware leave it alone, so
+		// `curl -sfL <server>/api/v1/register/<token>.yaml | kubectl
+		// apply -f -` works without redirect dance.
+		if deps.Clusters != nil {
+			r.Get("/register/{token}", deps.Clusters.GetManifestByToken)
+			// Companion endpoint for the `curl --cacert ca.crt …`
+			// variant; returns operator-uploaded PEM bundle when the
+			// platform runs behind a private CA. 404 when unset.
+			r.Get("/register/ca.crt", deps.Clusters.GetCABundle)
 		}
 
 		// Sprint 074 — platform-default cluster template. The
@@ -758,6 +833,19 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		r.With(rateLimit(appmiddleware.ClassK8sProxy)).
 			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
 	}
+	if deps.InternalK8s != nil {
+		// Cross-pod fallback for the server-internal K8sRequester.
+		// PSK-protected so non-sibling callers 403 — mounted outside the
+		// JWT auth chain because sibling pods don't carry user JWTs.
+		r.Post("/internal/tunnel/k8s/{cluster_id}", deps.InternalK8s.Handle)
+	}
+	if deps.InternalHelm != nil {
+		// Cross-pod fallback for the server-internal HelmRequester.
+		// Same PSK + outside-JWT-chain contract as the K8s counterpart.
+		// Required for catalog install/upgrade/uninstall to work when
+		// the request lands on a replica that doesn't own the WS.
+		r.Post("/internal/tunnel/helm/{cluster_id}", deps.InternalHelm.Handle)
+	}
 	if deps.Exec != nil {
 		// Exec session opens hold a goroutine + WS connection until the
 		// shell exits. Limit new-session opens so a misbehaving caller
@@ -770,11 +858,17 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", deps.Logs.HandleLogs)
 	}
 
-	// Kubectl shell WS handshake — session-aware redirect onto the
-	// existing /api/v1/ws/exec/{cluster_id}/{ns}/{pod}/{container}/ relay.
-	// The redirect target is what actually serves the WS handshake; this
-	// just translates a session_id (which the frontend has) into the
-	// pod+container coords the relay needs (which it does NOT have).
+	// Kubectl shell WS handshake — session-aware front door that
+	// validates the {id} row belongs to the caller, then upgrades the
+	// WebSocket on this route and proxies frames inline onto the
+	// cluster agent's exec relay (the same code path the
+	// /api/v1/ws/exec/ route runs post-upgrade).
+	//
+	// We used to 307-redirect at /api/v1/ws/exec/{cluster_id}/{ns}/
+	// {pod}/{container}/. Chromium followed the redirect transparently
+	// before the Upgrade handshake but Firefox does not, and several
+	// corporate proxies strip Upgrade headers across redirects, so the
+	// shell route now terminates the WS here.
 	if deps.KubectlShell != nil {
 		r.With(rateLimit(appmiddleware.ClassExecLogs)).
 			Get("/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/", deps.KubectlShell.HandleWS)
@@ -844,6 +938,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/decommission/", deps.Clusters.GetDecommission)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/health/", deps.Clusters.GetHealth)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/conditions/", deps.Clusters.ListConditions)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/condition-remediation/", deps.Clusters.ListConditionRemediation)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/register/", deps.Clusters.GenerateRegistrationToken)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/registry/", deps.Clusters.GetRegistryConfig)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/registry/", deps.Clusters.UpdateRegistryConfig)
@@ -1004,6 +1099,15 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			// projects:read is the right gate. Multi-cluster fanout surfaces
 			// per-cluster partial failures the way resources_search does.
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/quota-usage/", deps.Projects.QuotaUsage)
+			// Per-project RBAC matrix: who is bound to what role on this
+			// project. Read-only — bindings are created via the existing
+			// /resources/rbac/ surface; this is the operator-facing
+			// "members & roles" view.
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/rbac/", deps.Projects.RBACMatrix)
+			// T4.3 — distinct clusters the project is materialised on,
+			// derived from project_namespaces. Drives the
+			// frontend multi-cluster project view.
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/clusters/", deps.Projects.ListClusters)
 		})
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.Projects.ListByCluster)
 	}
@@ -1179,6 +1283,12 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			// Current user's effective roles + permission check.
 			r.Get("/my-roles/", deps.RBAC.MyRoles)
 			r.Get("/my-roles/check/", deps.RBAC.CheckMyRole)
+			// T1.1 — built-in role-templates catalog. Any authed user
+			// can read; no rbac:read needed because the catalog is
+			// static metadata about what the platform offers, not who
+			// has what.
+			r.Get("/templates/", deps.RBAC.ListTemplates)
+			r.Get("/templates/{name}/", deps.RBAC.GetTemplate)
 		})
 	}
 
@@ -1338,6 +1448,23 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
 			r.Get("/installed/{id}/values/", deps.Catalog.GetInstalledChartValues)
 		})
+
+		// Sprint 082 — per-cluster Apps tab. Lives outside the
+		// /catalog/ route group because the URL ("what's installed
+		// on this cluster") reads more naturally as a cluster
+		// concern, and the cluster-id is the natural RBAC anchor
+		// (cluster:read). Same underlying installed_charts table as
+		// the admin /catalog/installed/ endpoint, but the response
+		// shape is enriched with joined chart metadata so the UI
+		// can render the list with a single fetch.
+		appsClusterRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
+		r.With(appsClusterRead).Get("/clusters/{cluster_id}/apps/", deps.Catalog.ListClusterApps)
+		// Rancher-style bulk "Delete failed installs". Permission is
+		// catalog:delete (the per-row uninstall affordance) rather
+		// than clusters:update — the action only touches the
+		// installed_charts namespace for this cluster.
+		appsCatalogDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
+		r.With(appsCatalogDelete).Delete("/clusters/{cluster_id}/apps/failed/", deps.Catalog.DeleteFailedClusterApps)
 	}
 
 	if deps.ChartRatings != nil {
@@ -1474,6 +1601,20 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/images/", deps.ImageVulns.ClusterTopImages)
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/reports/{id}/", deps.ImageVulns.ClusterReportDetail)
 		r.With(ivClusterRead).Post("/clusters/{cluster_id}/vulnerabilities/rescan/", deps.ImageVulns.ClusterRescan)
+		// Sprint 081: scan history sparkline + latest-vs-prior diff +
+		// CSV download. All three are read-only and gated by the same
+		// cluster:read RBAC the rest of the vuln surface uses.
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/history/", deps.ImageVulns.ClusterHistory)
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/diff/", deps.ImageVulns.ClusterDiff)
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/export.csv", deps.ImageVulns.ClusterExportCSV)
+		// Per-image snapshot timeline — powers the drawer "scan history"
+		// panel so operators can see how a single workload's CVE counts
+		// have moved over time, not just the cluster-wide aggregate.
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history/", deps.ImageVulns.ReportHistory)
+		// Live scan-in-progress indicator: in-flight trivy Jobs +
+		// operator readiness via the k8s passthrough. The UI polls
+		// every 3s when scans are running, every 30s otherwise.
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/progress/", deps.ImageVulns.ClusterProgress)
 		r.With(ivSecurityRead).Get("/security/vulnerabilities/summary/", deps.ImageVulns.FleetSummary)
 		r.With(ivSecurityRead).Get("/security/vulnerabilities/top-clusters/", deps.ImageVulns.FleetTopClusters)
 	}

@@ -1,0 +1,105 @@
+# Fresh-cluster end-to-end smoke test.
+#
+# Walks the full operator-onboarding flow against a real k3d cluster:
+# wizard registration → agent install → baseline operators → kubectl
+# shell open → trivy vuln reports flowing. This catches the class of
+# regression that "bitnami/kubectl:1.31 404'd" + "SQLSTATE 42P08" hid
+# for months — nothing else in CI exercises this path.
+#
+# Lives in workflows-disabled/ during dev (see .github/workflows/README.md).
+# To activate: `mv` into workflows/.
+
+name: smoke-fresh-cluster
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # 06:00 UTC daily — catches upstream regressions (alpine base image
+    # security advisories, dl.k8s.io tag drift, helm-chart breakage)
+    # without waiting for a PR to surface them.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-22.04
+    # Hard cap so a stuck wait never burns a full job-timeout budget.
+    # The script's own per-step timeouts add up to ~13 minutes worst
+    # case; 25 leaves slack for k3d provisioning + image pulls.
+    timeout-minutes: 25
+
+    env:
+      CGO_ENABLED: "0"
+      DOCKER_BUILDKIT: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install k3d
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
+            | TAG=v5.7.4 bash
+
+      - name: Build server + agent + shell + migrate images
+        run: |
+          make docker-build-server  IMG_TAG=ci
+          make docker-build-agent   IMG_TAG=ci
+          make docker-build-worker  IMG_TAG=ci
+          make docker-build-migrate IMG_TAG=ci
+          make docker-build-shell   IMG_TAG=ci
+
+      - name: Bring up local Astronomer (k3d-bootstrap)
+        run: |
+          make k3d-bootstrap CLUSTER=astronomer-mgmt IMG_TAG=ci
+          # k3d-bootstrap waits for the helm install to finish; give
+          # the embedded local agent + chart-repo a few seconds to
+          # settle before driving the wizard.
+          sleep 10
+
+      - name: Resolve admin password
+        id: creds
+        run: |
+          password=$(kubectl --context k3d-astronomer-mgmt -n astronomer \
+            get secret astronomer-bootstrap -o jsonpath='{.data.password}' | base64 -d)
+          # Mask before any later step accidentally echos it.
+          echo "::add-mask::$password"
+          echo "password=$password" >> "$GITHUB_OUTPUT"
+
+      - name: Run smoke test
+        env:
+          ASTRO_URL: http://astronomer.localtest.me:8080
+          ASTRO_USERNAME: admin
+          ASTRO_PASSWORD: ${{ steps.creds.outputs.password }}
+          AGENT_IMAGE: astronomer-go-agent:ci
+          SHELL_IMAGE: astronomer-shell:ci
+        run: |
+          ./scripts/smoke-fresh-cluster.sh
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/smoke-artifacts
+          for ctx in $(kubectl config get-contexts -o name); do
+            kubectl --context "$ctx" get pods -A -o wide \
+              > "/tmp/smoke-artifacts/${ctx}-pods.txt" 2>&1 || true
+            kubectl --context "$ctx" -n astronomer-system logs \
+              --all-containers --tail=200 deploy/astronomer-agent \
+              > "/tmp/smoke-artifacts/${ctx}-agent.log" 2>&1 || true
+          done
+          kubectl --context k3d-astronomer-mgmt -n astronomer logs \
+            deploy/astronomer-server -c server --tail=400 \
+            > /tmp/smoke-artifacts/server.log 2>&1 || true
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-debug-${{ github.run_id }}
+          path: /tmp/smoke-artifacts/
+          retention-days: 7

@@ -30,12 +30,29 @@ import (
 // "no ingester wired" by the hub.
 type MirrorRouter struct {
 	Queries MirrorQuerier
+	// Vuln is the trivy-operator VulnerabilityReport ingester. Optional;
+	// when nil, VulnerabilityReport events are matched + dropped (so
+	// they don't fall into the unknown-kind error path that would
+	// noisy-log every report on every reconnect).
+	Vuln VulnIngester
 }
 
 // NewMirrorRouter constructs a router. q must not be nil; the hub-side
-// nil-safety gate fires before we get here.
+// nil-safety gate fires before we get here. vuln may be nil — see the
+// field doc on MirrorRouter.Vuln.
 func NewMirrorRouter(q MirrorQuerier) *MirrorRouter {
 	return &MirrorRouter{Queries: q}
+}
+
+// SetVulnIngester wires the trivy VulnerabilityReport ingester. Returns
+// the router so callers can chain it onto NewMirrorRouter in one
+// expression. Pass nil to disable VulnerabilityReport mirroring (the
+// kind will still match — events get dropped rather than erroring).
+func (r *MirrorRouter) SetVulnIngester(v VulnIngester) *MirrorRouter {
+	if r != nil {
+		r.Vuln = v
+	}
+	return r
 }
 
 // RouteMirrorEvent decodes a payload and dispatches to the right
@@ -84,6 +101,16 @@ func (r *MirrorRouter) RouteMirrorEvent(ctx context.Context, clusterID uuid.UUID
 	case KindLimitRange:
 		_, err := IngestLimitRange(ctx, r.Queries, clusterID, obj)
 		return err
+	case KindVulnerabilityReport:
+		if r.Vuln == nil {
+			// Trivy ingester not wired — drop the event quietly. The
+			// agent will keep emitting on every resync; logging every
+			// drop would flood the server log on clusters with a busy
+			// scanner. The "no reports in the dashboard" symptom is the
+			// signal for operators to wire the ingester at boot.
+			return nil
+		}
+		return r.Vuln.Ingest(ctx, clusterID, raw)
 	default:
 		return fmt.Errorf("mirror router: unknown kind %q", payload.Kind)
 	}

@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -31,6 +32,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/compliance"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 )
@@ -57,6 +59,11 @@ type WebhookQuerier interface {
 	InsertWebhookDelivery(ctx context.Context, arg sqlc.InsertWebhookDeliveryParams) (sqlc.WebhookDelivery, error)
 	RetryWebhookDelivery(ctx context.Context, arg sqlc.RetryWebhookDeliveryParams) error
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
+	// T6.064 — active-baseline lookup. Used to refuse delete when the
+	// subscription is listed in `required_webhooks` of the active
+	// compliance baseline. *sqlc.Queries satisfies this natively.
+	GetActiveComplianceBaselineApplication(ctx context.Context) (sqlc.ComplianceBaselineApplication, error)
+	GetComplianceBaseline(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaseline, error)
 }
 
 // WebhookTapInvalidator is the cache hook on the bus tap. Wired by the
@@ -350,6 +357,14 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
+		return
+	}
+	// T6.064 — refuse delete when the subscription is named in the
+	// active compliance baseline's required_webhooks. Operators must
+	// either revert the baseline or detach the requirement first.
+	if slug, required := activeBaselineRequiresWebhook(r.Context(), h.queries, existing.Name); required {
+		RespondError(w, http.StatusConflict, "baseline_required",
+			fmt.Sprintf("Webhook %q is required by the active compliance baseline %q.", existing.Name, slug))
 		return
 	}
 	if err := h.queries.DeleteWebhookSubscription(r.Context(), id); err != nil {
@@ -729,4 +744,56 @@ func parseUUIDParam(r *http.Request, name string) (uuid.UUID, bool) {
 
 func (h *WebhookHandler) requireSuperuser(r *http.Request) error {
 	return requireSuperuserFromContext(r, h.queries)
+}
+
+// activeBaselineQuerier is the narrow surface shared by the
+// webhook + SMTP handlers' baseline-guard check (T6.064). Defined
+// here next to the only caller so a future refactor can move it to
+// a dedicated package without disturbing handler imports.
+type activeBaselineQuerier interface {
+	GetActiveComplianceBaselineApplication(ctx context.Context) (sqlc.ComplianceBaselineApplication, error)
+	GetComplianceBaseline(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaseline, error)
+}
+
+// activeBaselineRequiresWebhook returns (slug, true) when the active
+// baseline lists the given webhook subscription name in its
+// required_webhooks set. (slug, false) when the name is not
+// required, or when there is no active baseline.
+//
+// Failures (DB error, unknown slug) degrade open — we return
+// (..., false) rather than block deletes when the lookup itself is
+// broken. Logging happens in the caller's audit row when applicable.
+func activeBaselineRequiresWebhook(ctx context.Context, q activeBaselineQuerier, name string) (string, bool) {
+	slug, spec, ok := loadActiveBaselineSpec(ctx, q)
+	if !ok {
+		return "", false
+	}
+	for _, w := range spec.RequiredWebhooks {
+		if w == name {
+			return slug, true
+		}
+	}
+	return "", false
+}
+
+// loadActiveBaselineSpec resolves the active baseline application to
+// its slug + populated spec. Returns (..., false) on any error so the
+// caller can decide whether to fail open or closed.
+func loadActiveBaselineSpec(ctx context.Context, q activeBaselineQuerier) (string, compliance.BaselineSpec, bool) {
+	if q == nil {
+		return "", compliance.BaselineSpec{}, false
+	}
+	app, err := q.GetActiveComplianceBaselineApplication(ctx)
+	if err != nil {
+		return "", compliance.BaselineSpec{}, false
+	}
+	base, err := q.GetComplianceBaseline(ctx, app.BaselineID)
+	if err != nil {
+		return "", compliance.BaselineSpec{}, false
+	}
+	b, ok := compliance.BySlug(base.Slug)
+	if !ok {
+		return "", compliance.BaselineSpec{}, false
+	}
+	return base.Slug, b.Spec, true
 }

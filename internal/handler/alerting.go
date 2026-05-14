@@ -15,7 +15,19 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
+
+// isSupportedChannelType is the create+update gate. Centralized here
+// so the handler doesn't drift from the dispatcher's switch list.
+func isSupportedChannelType(t string) bool {
+	for _, s := range tasks.SupportedNotificationChannels {
+		if t == s {
+			return true
+		}
+	}
+	return false
+}
 
 // AlertingQuerier abstracts the alerting-related database queries needed by AlertingHandler.
 type AlertingQuerier interface {
@@ -168,9 +180,20 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 	if configuration == nil {
 		configuration = json.RawMessage(`{}`)
 	}
-	channelType := req.ChannelType
+	channelType := strings.ToLower(strings.TrimSpace(req.ChannelType))
 	if channelType == "" {
-		channelType = req.Type
+		channelType = strings.ToLower(strings.TrimSpace(req.Type))
+	}
+	// Fail-fast on unknown channel types so operators can't store a
+	// row the dispatcher will reject at fire time (which would show up
+	// as silent "alert fires, nothing happens"). Supported list is the
+	// canonical one the dispatcher actually formats for —
+	// see internal/worker/tasks/notification_dispatch.go.
+	if !isSupportedChannelType(channelType) {
+		RespondError(w, http.StatusBadRequest, "validation_error",
+			fmt.Sprintf("Unsupported channel type %q; supported: %s",
+				channelType, strings.Join(tasks.SupportedNotificationChannels, ", ")))
+		return
 	}
 
 	channel, err := h.queries.CreateNotificationChannel(r.Context(), sqlc.CreateNotificationChannelParams{
@@ -239,11 +262,18 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 	if req.Name == "" {
 		req.Name = current.Name
 	}
+	req.ChannelType = strings.ToLower(strings.TrimSpace(req.ChannelType))
 	if req.ChannelType == "" {
-		req.ChannelType = req.Type
+		req.ChannelType = strings.ToLower(strings.TrimSpace(req.Type))
 	}
 	if req.ChannelType == "" {
 		req.ChannelType = current.ChannelType
+	}
+	if !isSupportedChannelType(req.ChannelType) {
+		RespondError(w, http.StatusBadRequest, "validation_error",
+			fmt.Sprintf("Unsupported channel type %q; supported: %s",
+				req.ChannelType, strings.Join(tasks.SupportedNotificationChannels, ", ")))
+		return
 	}
 
 	channel, err := h.queries.UpdateNotificationChannel(r.Context(), sqlc.UpdateNotificationChannelParams{

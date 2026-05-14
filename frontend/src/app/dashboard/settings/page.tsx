@@ -27,6 +27,7 @@ import {
   Network,
   FolderTree,
   KeyRound,
+  Activity,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -42,6 +43,12 @@ const CARDS: SettingsCard[] = [
     title: 'Platform',
     description: 'Branding, banners, feature flags, token TTL, telemetry.',
     icon: Palette,
+  },
+  {
+    href: '/dashboard/settings/operations',
+    title: 'Operations',
+    description: 'Worker queues + DLQ inspection with retry / discard actions.',
+    icon: Activity,
   },
   {
     href: '/dashboard/settings/smtp',

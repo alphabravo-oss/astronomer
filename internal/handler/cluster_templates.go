@@ -361,6 +361,13 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
 		return
 	}
+	// T6.074 — operators may not create a template with one of the
+	// reserved platform-baseline names; the platform owns those.
+	if isBuiltinTemplate(req.Name) {
+		RespondError(w, http.StatusForbidden, "builtin_template",
+			fmt.Sprintf("%q is a reserved platform-baseline template name.", req.Name))
+		return
+	}
 	spec := req.Spec
 	if len(spec) == 0 {
 		spec = json.RawMessage(`{}`)
@@ -399,6 +406,17 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
+	// T6.074 — refuse mutations to platform-baseline templates so an
+	// upgrade doesn't have to handle a half-renamed builtin. The row
+	// is loaded here (not inside UpdateClusterTemplate) so we can
+	// pre-empt the SQL UPDATE and return a clean 403.
+	if existing, gerr := h.queries.GetClusterTemplateByID(r.Context(), id); gerr == nil {
+		if isBuiltinTemplate(existing.Name) {
+			RespondError(w, http.StatusForbidden, "builtin_template",
+				fmt.Sprintf("%q is a platform-baseline template and cannot be edited.", existing.Name))
+			return
+		}
+	}
 	var req CreateClusterTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
@@ -406,6 +424,14 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 	}
 	if strings.TrimSpace(req.Name) == "" {
 		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
+		return
+	}
+	// Also refuse renaming AWAY from a builtin (defence in depth — the
+	// existing.Name check above catches renaming a builtin; this catches
+	// renaming a non-builtin TO a reserved name).
+	if isBuiltinTemplate(req.Name) {
+		RespondError(w, http.StatusForbidden, "builtin_template",
+			fmt.Sprintf("%q is a reserved platform-baseline template name.", req.Name))
 		return
 	}
 	spec := req.Spec
@@ -438,6 +464,20 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 	RespondJSON(w, http.StatusOK, templateToResponse(tmpl))
 }
 
+// isBuiltinTemplate returns true for the well-known templates the
+// platform ships and reconciles on its own. Operators are allowed to
+// reapply them, inspect them, and bind them to clusters — but Update
+// and Delete are refused so an upgrade doesn't have to deal with a
+// half-renamed or missing baseline template. The set is small and
+// closed; extending it requires a code change. (T6.074)
+func isBuiltinTemplate(name string) bool {
+	switch name {
+	case "platform-baseline", "platform-default":
+		return true
+	}
+	return false
+}
+
 // Delete handles DELETE /api/v1/cluster-templates/{id}/. Refuses to
 // remove a template that's still applied to at least one cluster — the
 // operator must detach those bindings first. We do the count-first check
@@ -452,6 +492,11 @@ func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) 
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), id)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		return
+	}
+	if isBuiltinTemplate(tmpl.Name) {
+		RespondError(w, http.StatusForbidden, "builtin_template",
+			fmt.Sprintf("%q is a platform-baseline template and cannot be deleted.", tmpl.Name))
 		return
 	}
 	count, err := h.queries.CountClusterTemplateApplicationsByTemplate(r.Context(), id)
@@ -662,7 +707,7 @@ func (h *ClusterTemplateHandler) enqueueApply(r *http.Request, clusterID uuid.UU
 	}
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.queue.Enqueue(task)
+	_, _ = h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 }
 
 // ────────────────────────────────────────────────────────────────────────

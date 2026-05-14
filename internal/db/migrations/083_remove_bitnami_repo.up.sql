@@ -1,0 +1,36 @@
+-- Sprint 082+ — remove the Bitnami helm repository.
+--
+-- Broadcom deprecated the public Bitnami catalog in August 2025:
+--   * docker.io/bitnami/* images moved to docker.io/bitnamilegacy
+--     (archived, unpatched).
+--   * docker.io/bitnamicharts/* OCI charts stopped receiving updates
+--     beyond a tiny free "Bitnami Secure Images" community tier.
+--   * The full BSI replacement is a paid Broadcom subscription
+--     (~$5k/mo, AWS Marketplace 12-mo min).
+--
+-- charts.bitnami.com/bitnami still returns 200 OK (the index.yaml
+-- mirror at repo.broadcom.com is updated daily), but `helm install
+-- bitnami/kube-state-metrics` now lands a workload pulling a stale
+-- legacy image with no security patches. That's worse than no
+-- catalog at all.
+--
+-- Operational impact on Astronomer: nil. Migration 077 added
+-- prometheus-community and migration 079 wired the platform-baseline
+-- tools (kube-state-metrics, prometheus-node-exporter, fluent-bit)
+-- away from bitnami long before this. The bitnami row was vestigial
+-- — still synced 88 chart entries that nobody should install.
+--
+-- Cleanup behaviour:
+--   * DELETE on helm_repositories cascades to helm_charts (FK ON
+--     DELETE CASCADE) and onward to helm_chart_versions.
+--   * installed_charts.chart_version_id is ON DELETE SET NULL, so
+--     any release whose ChartVersionID happened to point at a
+--     bitnami row keeps its installed_charts record but loses the
+--     chart_version_id link. The release_name + tool_slug + values
+--     are preserved; only the catalog backreference goes away.
+--
+-- Idempotent: re-running this on a DB where the row was already
+-- removed (or on a deploy where migration 075's bitnami insert was
+-- pre-empted) is a no-op.
+
+DELETE FROM helm_repositories WHERE name = 'bitnami';

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
@@ -70,6 +71,14 @@ type ClusterQuerier interface {
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error)
 	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
+	// Platform-TLS surface for the public CA-bundle endpoint
+	// (GET /api/v1/register/ca.crt) used by the Rancher-style
+	// `curl --cacert ca.crt -sfL …` registration variant.
+	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
+	// Sprint 086 — cluster-condition remediation history. Read by
+	// the cluster detail page so operators can see what the
+	// reconciler has done in response to red condition pills.
+	ListClusterConditionRemediationByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error)
 }
 
 // EventPublisher is the minimal contract ClusterHandler depends on for
@@ -580,7 +589,7 @@ func (h *ClusterHandler) enqueueTemplateApply(r *http.Request, clusterID uuid.UU
 	}
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.templateApplyQueue.Enqueue(task)
+	_, _ = h.templateApplyQueue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 }
 
 // Get handles GET /api/v1/clusters/{id}/.
@@ -1004,7 +1013,12 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a fresh registration token.
+	// Generate a fresh registration token. T6.078 — short TTL: the
+	// manifest is consumed by a single `kubectl apply` shortly after
+	// download, so a 1-hour window is plenty in normal operation. A
+	// stale token left in scrollback poses a smaller blast radius
+	// than the historical 24h. Operators who need a longer window
+	// can keep regenerating from the wizard.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		RespondError(w, http.StatusInternalServerError, "token_error", "Failed to generate registration token")
@@ -1014,7 +1028,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	token, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: id,
 		Token:     tokenStr,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+		ExpiresAt: time.Now().Add(1 * time.Hour),
 	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create registration token")
@@ -1027,11 +1041,111 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		"expires_at": token.ExpiresAt.UTC().Format(time.RFC3339),
 	})
 
-	manifest := h.renderAgentInstallManifest(cluster, token.Token, agentServerURL(r))
+	manifest := h.renderAgentInstallManifest(cluster, token.Token, agentServerURLFor(r.Context(), h.queries, r))
 
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="astronomer-agent-%s.yaml"`, cluster.Name))
+	// Expose the freshly-minted registration token via header so the
+	// wizard can render the Rancher-style one-liner without having
+	// to grep it back out of the YAML body. Token is short-lived (1h
+	// per T6.078) and the manifest body already contains it in
+	// plaintext, so this isn't widening the secret's exposure surface.
+	w.Header().Set("X-Astronomer-Registration-Token", token.Token)
+	w.Header().Set("Access-Control-Expose-Headers", "X-Astronomer-Registration-Token")
 	_, _ = w.Write([]byte(manifest))
+}
+
+// GetManifestByToken handles GET /api/v1/register/{token}.yaml.
+//
+// Public (unauthenticated) endpoint that returns the agent install
+// manifest for the cluster the token belongs to. The token IS the
+// credential — same trust model as the manifest itself, which embeds
+// the token in plaintext. This exists so operators can run the
+// Rancher-style one-liner:
+//
+//	curl -sfL https://<server>/api/v1/register/<token>.yaml | kubectl apply -f -
+//
+// rather than copy-paste a multi-kilobyte heredoc.
+func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Request) {
+	rawToken := chi.URLParam(r, "token")
+	tokenStr := strings.TrimSuffix(rawToken, ".yaml")
+	if tokenStr == "" {
+		RespondError(w, http.StatusBadRequest, "invalid_token", "Missing registration token")
+		return
+	}
+	token, err := h.queries.GetRegistrationTokenByToken(r.Context(), tokenStr)
+	if err != nil {
+		// GetRegistrationTokenByToken already filters expired rows
+		// (WHERE expires_at > now()), so any error here is "no such
+		// token". 404 keeps the response opaque.
+		RespondError(w, http.StatusNotFound, "not_found", "Registration token not found or expired")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), token.ClusterID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		return
+	}
+
+	manifest := h.renderAgentInstallManifest(cluster, token.Token, agentServerURLFor(r.Context(), h.queries, r))
+
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(manifest))
+}
+
+// ListConditionRemediation handles GET /api/v1/clusters/{id}/condition-remediation/.
+// Returns the 50 most recent remediation attempts (success / failed /
+// skipped) for the cluster, ordered newest-first. Read by the
+// cluster-detail page to show on-call "what did the controller do
+// when this condition went red?" — closes the loop the
+// cluster_conditions table opens.
+func (h *ClusterHandler) ListConditionRemediation(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		return
+	}
+	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
+		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		return
+	}
+	rows, err := h.queries.ListClusterConditionRemediationByCluster(r.Context(), id)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list remediation attempts")
+		return
+	}
+	RespondJSON(w, http.StatusOK, rows)
+}
+
+// GetCABundle handles GET /api/v1/register/ca.crt.
+//
+// Public (unauthenticated) endpoint that returns the operator-provided
+// PEM bundle from platform_settings["registration.ca_bundle"], so the
+// Rancher-style `curl --cacert /tmp/astronomer-ca.crt -sfL …` variant
+// of the registration one-liner works end-to-end. Returns 404 when no
+// bundle is configured (either because the platform runs on a public
+// CA or because the operator hasn't pasted one yet) — the wizard
+// guards the variant on `registration.tls_mode == "private_ca"` so a
+// 404 from here is the consistent "nothing to download" signal.
+func (h *ClusterHandler) GetCABundle(w http.ResponseWriter, r *http.Request) {
+	row, err := h.queries.GetPlatformSetting(r.Context(), "registration.ca_bundle")
+	var pem string
+	if err == nil && len(row.Value) > 0 {
+		// platform_settings.value is JSONB. The registry types this as
+		// a plain string, so the row carries a JSON-encoded string —
+		// strip the quotes via json.Unmarshal so curl gets raw PEM.
+		_ = json.Unmarshal(row.Value, &pem)
+	}
+	pem = strings.TrimSpace(pem)
+	if pem == "" {
+		RespondError(w, http.StatusNotFound, "not_found", "No CA bundle configured for cluster registration")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `inline; filename="astronomer-ca.crt"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(pem + "\n"))
 }
 
 // GetKubeconfig handles GET /api/v1/clusters/{id}/kubeconfig/.
@@ -1069,7 +1183,7 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
-	serverURL := agentServerURL(r)
+	serverURL := agentServerURLFor(r.Context(), h.queries, r)
 	userEmail := authenticatedEmail(r)
 	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL)
 	yamlBytes, err := yaml.Marshal(kubeconfig)
@@ -1095,7 +1209,7 @@ func (h *ClusterHandler) PreviewKubeconfig(w http.ResponseWriter, r *http.Reques
 		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
-	serverURL := agentServerURL(r)
+	serverURL := agentServerURLFor(r.Context(), h.queries, r)
 	userEmail := authenticatedEmail(r)
 	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL)
 	RespondJSON(w, http.StatusOK, kubeconfig)
@@ -1285,6 +1399,26 @@ func agentServerURL(r *http.Request) string {
 		host = forwarded
 	}
 	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+// agentServerURLFor prefers platform_configuration.server_url (the
+// operator-set authoritative public URL — includes any non-default port)
+// over the request-derived value. The nginx → traefik → server chain
+// strips the :8080 from the inbound Host header so the request-derived
+// URL drops the port and the agent can't connect back. The platform
+// config row is seeded at bootstrap from the Helm value so it always
+// carries the port.
+func agentServerURLFor(ctx context.Context, q interface {
+	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
+}, r *http.Request) string {
+	if q != nil {
+		if cfg, err := q.GetPlatformConfig(ctx); err == nil {
+			if u := strings.TrimSpace(cfg.ServerUrl); u != "" {
+				return strings.TrimRight(u, "/")
+			}
+		}
+	}
+	return agentServerURL(r)
 }
 
 func authenticatedEmail(r *http.Request) string {

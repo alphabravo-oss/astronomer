@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Astronomer API — interactive docs</title>
+    <!--
+      Swagger UI is loaded from unpkg.com's CDN against a pinned version.
+      No JS bundle ships in our binary; the UI is just an OpenAPI spec
+      renderer and we want the latest patch releases to flow without a
+      rebuild here. If air-gapped operators need this, the Dockerfile
+      can be extended to download the same assets at build time and the
+      <link>/<script> URLs swapped to relative paths.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css"
+    >
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; }
+      #swagger-ui { box-sizing: border-box; min-height: 100vh; }
+      .topbar { display: none !important; }
+      /* Astronomer accent — minimal so the Swagger defaults stay readable */
+      .swagger-ui .info .title { color: #1f2937; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        // Spec is embedded into the server binary and served on the
+        // same origin so CORS isn't an issue.
+        url: "/api/v1/openapi.yaml",
+        dom_id: "#swagger-ui",
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout",
+        // Try-it-out is on by default. Operators in the Swagger UI
+        // tab usually want to fire a request against the live API.
+        tryItOutEnabled: true,
+        // Pre-fill the bearer auth field once the operator pastes
+        // their token in. Persist across reloads via localStorage.
+        persistAuthorization: true,
+        defaultModelsExpandDepth: 0,
+        docExpansion: "none"
+      });
+    </script>
+  </body>
+</html>
