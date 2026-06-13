@@ -1,0 +1,18 @@
+name: logging-viewer
+display_name: Logging Viewer
+description: |
+  Read-only access to cluster and management-plane logging views. Does
+  not grant pod exec or configuration mutation.
+scope: global
+category: observability
+risk_level: low
+rules:
+  - resource: logging
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+  - resource: pods
+    verbs: [read, list, logs]
+

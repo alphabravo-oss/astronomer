@@ -19,6 +19,13 @@ curl -s -X POST http://localhost:8080/api/v1/auth/login/ \
   -d '{"email":"admin@example.com","password":"..."}' | jq -r .access_token > /tmp/jwt
 # 3. Run the harness:
 make load-test LOADTEST_TOKEN=/tmp/jwt LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
+
+# Or run a named Rancher-grade scale profile:
+go run ./scripts/loadtest \
+  -server http://localhost:8080 \
+  -token /tmp/jwt \
+  -profile scripts/loadtest/profiles/small.yaml \
+  -out loadtest-small.md
 ```
 
 Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
@@ -33,8 +40,26 @@ Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
 | `-duration` | `LOADTEST_DURATION` | `5m` | How long to drive load |
 | `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to a Bearer JWT (required for auth'd endpoints) |
 | `-out` | `LOADTEST_OUT` | `loadtest-report.md` | Markdown report path |
+| `-profile` | `LOADTEST_PROFILE` | _(empty)_ | YAML profile that sets clusters, RPS, duration, resource cardinality, reconnect storm, and drill labels |
 | `-verbose` | `LOADTEST_VERBOSE` | `false` | Debug-level log output |
 | `-skip-agents` | `LOADTEST_SKIP_AGENTS` | `false` | HTTP-only mode (skip WS dial) |
+
+## Scale profiles
+
+Profiles live in `scripts/loadtest/profiles/`:
+
+| Profile | Purpose | Target |
+|---|---|---|
+| `small.yaml` | CI/nightly smoke | 5 clusters, 500-ish resources, reconnect storm |
+| `medium.yaml` | Release candidate gate | 50 clusters, 25,000 resources, Argo fan-out and Redis/Postgres drills |
+| `large.yaml` | Rancher-grade readiness evidence | 250 clusters, 250,000 resources, HA leader-kill and browser-budget drills |
+| `extreme-lab.yaml` | Lab-only ceiling test | 1,000 simulated clusters |
+
+The harness executes the synthetic-agent and HTTP portions directly. Profile
+`day2FailureDrills` are emitted into the report as planned drill evidence so
+release runs have one place to attach manual/chaos validation results for
+ArgoCD fan-out, Redis outage recovery, Postgres failover, management-plane HA,
+and browser performance budgets.
 
 ### Threshold env vars
 

@@ -1,0 +1,20 @@
+name: backup-operator
+display_name: Backup Operator
+description: |
+  Manage backup storage, schedules, backup runs, and backup evidence
+  across the fleet. Restore execution is intentionally separated into
+  the Restore Operator template because restores can overwrite live
+  state.
+scope: global
+category: operations
+risk_level: high
+rules:
+  - resource: backups
+    verbs: [create, read, update, delete, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+  - resource: audit_logs
+    verbs: [read, list]
+

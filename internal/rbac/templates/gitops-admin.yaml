@@ -1,0 +1,19 @@
+name: gitops-admin
+display_name: GitOps Admin
+description: |
+  Full GitOps administration across ArgoCD instances, repositories,
+  projects, applications, ApplicationSets, and cluster registration.
+  Can trigger sync/prune actions.
+scope: global
+category: gitops
+risk_level: critical
+rules:
+  - resource: argocd
+    verbs: [create, read, update, delete, list, sync, manage]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+  - resource: audit_logs
+    verbs: [read, list]
+

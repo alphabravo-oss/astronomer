@@ -1,0 +1,18 @@
+name: config-manager
+display_name: Config Manager
+description: |
+  Manages non-secret configuration objects in a project scope. Secret
+  access remains separated into the Secret Manager template.
+scope: project
+category: project
+risk_level: medium
+rules:
+  - resource: projects
+    verbs: [read]
+  - resource: configmaps
+    verbs: [create, read, update, delete, list]
+  - resource: workloads
+    verbs: [read, list, restart]
+  - resource: pods
+    verbs: [read, list, logs]
+

@@ -1,0 +1,18 @@
+name: monitoring-admin
+display_name: Monitoring Admin
+description: |
+  Manages monitoring stack configuration, dashboards, rules, and alert
+  delivery policy across the fleet.
+scope: global
+category: observability
+risk_level: high
+rules:
+  - resource: monitoring
+    verbs: [create, read, update, delete, list]
+  - resource: alerts
+    verbs: [create, read, update, delete, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+

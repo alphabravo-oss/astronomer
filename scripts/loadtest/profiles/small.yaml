@@ -1,0 +1,20 @@
+name: small
+clusters: 5
+rps: 50
+duration: 10m
+agents:
+  mode: simulated
+  reconnectStorm:
+    enabled: true
+    at: 4m
+    batchPercent: 100
+    jitter: 20s
+resources:
+  podsPerCluster: 100
+  deploymentsPerCluster: 25
+  servicesPerCluster: 25
+eventsPerSecond: 50
+day2FailureDrills:
+  - agent_reconnect_storm
+  - argo_fanout_smoke
+  - redis_outage_outbox_recovery

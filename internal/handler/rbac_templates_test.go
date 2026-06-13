@@ -6,7 +6,7 @@ package handler
 // pinned in internal/server/routes.go and the integration tests under
 // internal/server/. What we pin at the handler level: a missing
 // catalog yields 503 (so a misconfigured deploy is loud), the list
-// endpoint returns the 8 shipped templates, and Get by-name produces
+// endpoint returns the shipped templates, and Get by-name produces
 // a 404 on an unknown slug.
 
 import (
@@ -32,7 +32,7 @@ func TestListTemplates_NoCatalog503(t *testing.T) {
 	}
 }
 
-func TestListTemplates_ReturnsEightInStableOrder(t *testing.T) {
+func TestListTemplates_ReturnsExpandedCatalogInStableOrder(t *testing.T) {
 	cat, err := rbac.LoadCatalog()
 	if err != nil {
 		t.Fatalf("LoadCatalog: %v", err)
@@ -56,24 +56,57 @@ func TestListTemplates_ReturnsEightInStableOrder(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	body := envelope.Data
-	if body.Count != 8 || len(body.Templates) != 8 {
-		t.Fatalf("count=%d len=%d, want 8/8", body.Count, len(body.Templates))
+	if body.Count != cat.Count() || len(body.Templates) != cat.Count() {
+		t.Fatalf("count=%d len=%d, want %d/%d", body.Count, len(body.Templates), cat.Count(), cat.Count())
 	}
 	// Pin the order so frontend snapshot tests don't churn.
 	want := []string{
+		"audit-viewer",
+		"backup-operator",
+		"catalog-admin",
 		"compliance-auditor",
+		"compliance-manager",
+		"gitops-admin",
+		"gitops-viewer",
+		"logging-viewer",
+		"monitoring-admin",
+		"monitoring-viewer",
 		"platform-admin",
+		"platform-operator",
+		"restore-operator",
+		"security-auditor",
+		"support-bundle-operator",
 		"support-engineer",
+		"catalog-installer",
+		"cluster-backup-operator",
+		"cluster-member",
 		"cluster-operator",
+		"cluster-owner",
 		"cluster-viewer",
+		"node-operator",
+		"service-mesh-operator",
+		"storage-manager",
+		"config-manager",
+		"gitops-deployer",
+		"namespace-operator",
 		"project-member",
 		"project-owner",
 		"project-viewer",
+		"secret-manager",
+		"service-ingress-manager",
+		"workload-deployer",
+		"workload-viewer",
+	}
+	if len(want) != cat.Count() {
+		t.Fatalf("test expected order len = %d, catalog count = %d", len(want), cat.Count())
 	}
 	for i, n := range want {
 		if body.Templates[i].Name != n {
 			t.Errorf("templates[%d] = %q, want %q", i, body.Templates[i].Name, n)
 		}
+	}
+	if body.Templates[0].RiskLevel == "" || !body.Templates[0].SystemManaged {
+		t.Fatalf("template metadata missing in response: %+v", body.Templates[0])
 	}
 }
 

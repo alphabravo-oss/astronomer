@@ -1,0 +1,12 @@
+name: cluster-owner
+display_name: Cluster Owner
+description: |
+  Full administrative access within a single adopted cluster scope.
+  Does not grant platform-wide user, SSO, or global setting changes.
+scope: cluster
+category: cluster
+risk_level: critical
+rules:
+  - resource: "*"
+    verbs: ["*"]
+

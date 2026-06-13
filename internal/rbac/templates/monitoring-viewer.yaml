@@ -1,0 +1,18 @@
+name: monitoring-viewer
+display_name: Monitoring Viewer
+description: |
+  Read-only access to metrics, dashboards, alert state, and cluster
+  health summaries.
+scope: global
+category: observability
+risk_level: low
+rules:
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: alerts
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+

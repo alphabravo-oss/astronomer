@@ -158,11 +158,20 @@ func (q *argoCDQueryRecorder) GetArgoCDManagedCluster(context.Context, sqlc.GetA
 func (q *argoCDQueryRecorder) ListArgoCDManagedClusters(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
 	return nil, nil
 }
+func (q *argoCDQueryRecorder) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
+	return nil, nil
+}
 func (q *argoCDQueryRecorder) DeleteArgoCDManagedCluster(context.Context, sqlc.DeleteArgoCDManagedClusterParams) error {
 	return nil
 }
 func (q *argoCDQueryRecorder) UpdateArgoCDManagedClusterLabels(context.Context, sqlc.UpdateArgoCDManagedClusterLabelsParams) (sqlc.ArgocdManagedCluster, error) {
 	return sqlc.ArgocdManagedCluster{}, nil
+}
+func (q *argoCDQueryRecorder) ListArgoCDBaselineOwnershipDecisions(context.Context, uuid.UUID) ([]sqlc.ArgocdBaselineOwnershipDecision, error) {
+	return nil, nil
+}
+func (q *argoCDQueryRecorder) UpsertArgoCDBaselineOwnershipDecision(context.Context, sqlc.UpsertArgoCDBaselineOwnershipDecisionParams) (sqlc.ArgocdBaselineOwnershipDecision, error) {
+	return sqlc.ArgocdBaselineOwnershipDecision{}, nil
 }
 
 // newArgoCDFixture wires a fake upstream ArgoCD HTTP server, a query

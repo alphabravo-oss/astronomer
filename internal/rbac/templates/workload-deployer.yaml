@@ -1,0 +1,20 @@
+name: workload-deployer
+display_name: Workload Deployer
+description: |
+  Creates, updates, scales, restarts, and observes workloads within a
+  project. Cannot delete workloads or read secrets.
+scope: project
+category: project
+risk_level: high
+rules:
+  - resource: projects
+    verbs: [read]
+  - resource: workloads
+    verbs: [create, read, update, list, scale, restart]
+  - resource: pods
+    verbs: [read, list, watch, logs]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: argocd
+    verbs: [read, list, sync]
+

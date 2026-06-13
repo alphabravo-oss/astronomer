@@ -60,10 +60,13 @@ func IsValidScope(s Scope) bool {
 // handler (default lowercase field names match the existing handler
 // conventions).
 type Template struct {
-	Name        string `yaml:"name" json:"name"`
-	DisplayName string `yaml:"display_name" json:"display_name"`
-	Description string `yaml:"description" json:"description"`
-	Scope       Scope  `yaml:"scope" json:"scope"`
+	Name          string   `yaml:"name" json:"name"`
+	DisplayName   string   `yaml:"display_name" json:"display_name"`
+	Description   string   `yaml:"description" json:"description"`
+	Scope         Scope    `yaml:"scope" json:"scope"`
+	RiskLevel     string   `yaml:"risk_level" json:"risk_level"`
+	Inherits      []string `yaml:"inherits" json:"inherits,omitempty"`
+	SystemManaged bool     `yaml:"system_managed" json:"system_managed"`
 	// Category is a free-form tag (admin/project/cluster/audit/support)
 	// the frontend uses for grouping. Not load-bearing for permission
 	// checks.
@@ -152,6 +155,16 @@ func loadCatalogFrom(fsys fs.FS, dir string) (*Catalog, error) {
 		if !IsValidScope(t.Scope) {
 			return nil, fmt.Errorf("%s: invalid scope %q (want global|cluster|project)", path, t.Scope)
 		}
+		if t.RiskLevel == "" {
+			t.RiskLevel = inferRiskLevel(t.Rules)
+		}
+		if !isValidRiskLevel(t.RiskLevel) {
+			return nil, fmt.Errorf("%s: invalid risk_level %q (want low|medium|high|critical)", path, t.RiskLevel)
+		}
+		// Embedded templates are platform-owned by default. If/when we add
+		// user-authored templates, they should flow through a separate storage
+		// path instead of this version-controlled catalog.
+		t.SystemManaged = true
 		if len(t.Rules) == 0 {
 			return nil, fmt.Errorf("%s: rules must contain at least one entry", path)
 		}
@@ -184,6 +197,73 @@ func loadCatalogFrom(fsys fs.FS, dir string) (*Catalog, error) {
 		return cat.ordered[i].Name < cat.ordered[j].Name
 	})
 	return cat, nil
+}
+
+func isValidRiskLevel(level string) bool {
+	switch level {
+	case "low", "medium", "high", "critical":
+		return true
+	default:
+		return false
+	}
+}
+
+// RiskLevelForRules returns the highest-risk category implied by a ruleset.
+// It is used by both the embedded catalog loader and permission-preview APIs.
+func RiskLevelForRules(rules []Rule) string {
+	return inferRiskLevel(rules)
+}
+
+func inferRiskLevel(rules []Rule) string {
+	highest := "low"
+	for _, rule := range rules {
+		for _, verb := range rule.Verbs {
+			if rule.Resource == "*" || verb == "*" {
+				return "critical"
+			}
+			if rule.Resource == string(ResourceSecrets) && (verb == string(VerbRead) || verb == string(VerbList)) {
+				highest = maxRisk(highest, "critical")
+				continue
+			}
+			if rule.Resource == string(ResourceBackups) && verb == string(VerbManage) {
+				highest = maxRisk(highest, "critical")
+				continue
+			}
+			if rule.Resource == string(ResourceNodes) && verb == string(VerbManage) {
+				highest = maxRisk(highest, "critical")
+				continue
+			}
+			switch verb {
+			case string(VerbDelete), string(VerbManage), string(VerbExec), string(VerbProxy), string(VerbSync):
+				highest = maxRisk(highest, "high")
+			case string(VerbCreate), string(VerbUpdate), string(VerbScale), string(VerbRestart):
+				highest = maxRisk(highest, "medium")
+			}
+		}
+	}
+	return highest
+}
+
+func maxRisk(a, b string) string {
+	if riskRank(b) > riskRank(a) {
+		return b
+	}
+	return a
+}
+
+func riskRank(level string) int {
+	switch level {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return 0
+	}
 }
 
 func scopeOrder(s Scope) int {

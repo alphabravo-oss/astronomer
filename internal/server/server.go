@@ -935,6 +935,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetAuthorization(rbacEngine, rbacQuerier)
 			return h
 		}(),
+		AgentFleet: func() *handler.AgentFleetHandler {
+			h := handler.NewAgentFleetHandler(queries)
+			h.SetAgentUpgradeTarget(cfg.AgentImageRepository, cfg.AgentImageTag)
+			h.SetK8sRequester(requester)
+			return h
+		}(),
 		Readyz:    newReadinessHandler(database, queue, hub),
 		DexConfig: dexHandler,
 		RBAC: func() *handler.RBACHandler {
@@ -1051,6 +1057,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// per-request feature check effectively free.
 		PlatformSettings: handler.NewPlatformSettingsHandler(queries),
 		SettingsCache:    handler.NewSettingsCache(queries, 30*time.Second),
+		Extensions: func() *handler.ExtensionHandler {
+			h := handler.NewExtensionHandler(queries)
+			h.SetAuditWriter(queries)
+			return h
+		}(),
 		// Sprint 074 — platform-default cluster template.
 		PlatformDefaultTemplate: func() *handler.PlatformDefaultTemplateHandler {
 			h := handler.NewPlatformDefaultTemplateHandler(queries)

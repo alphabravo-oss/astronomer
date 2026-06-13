@@ -27,6 +27,7 @@ type argocdManagedClusterQueryStub struct {
 	cluster  sqlc.Cluster
 	managed  sqlc.ArgocdManagedCluster
 
+	decisions   map[string]sqlc.ArgocdBaselineOwnershipDecision
 	createCalls []sqlc.CreateArgoCDManagedClusterParams
 	deleteCalls []sqlc.DeleteArgoCDManagedClusterParams
 	updateCalls []sqlc.UpdateArgoCDManagedClusterLabelsParams
@@ -141,6 +142,12 @@ func (q *argocdManagedClusterQueryStub) GetArgoCDManagedCluster(context.Context,
 func (q *argocdManagedClusterQueryStub) ListArgoCDManagedClusters(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
 	return []sqlc.ArgocdManagedCluster{q.managed}, nil
 }
+func (q *argocdManagedClusterQueryStub) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
+	if q.managed.ID == uuid.Nil && q.managed.ArgocdInstanceID == uuid.Nil {
+		return nil, nil
+	}
+	return []sqlc.ArgocdManagedCluster{q.managed}, nil
+}
 func (q *argocdManagedClusterQueryStub) DeleteArgoCDManagedCluster(_ context.Context, arg sqlc.DeleteArgoCDManagedClusterParams) error {
 	q.deleteCalls = append(q.deleteCalls, arg)
 	return nil
@@ -149,6 +156,31 @@ func (q *argocdManagedClusterQueryStub) UpdateArgoCDManagedClusterLabels(_ conte
 	q.updateCalls = append(q.updateCalls, arg)
 	q.managed.Labels = arg.Labels
 	return q.managed, nil
+}
+func (q *argocdManagedClusterQueryStub) ListArgoCDBaselineOwnershipDecisions(context.Context, uuid.UUID) ([]sqlc.ArgocdBaselineOwnershipDecision, error) {
+	out := make([]sqlc.ArgocdBaselineOwnershipDecision, 0, len(q.decisions))
+	for _, row := range q.decisions {
+		out = append(out, row)
+	}
+	return out, nil
+}
+func (q *argocdManagedClusterQueryStub) UpsertArgoCDBaselineOwnershipDecision(_ context.Context, arg sqlc.UpsertArgoCDBaselineOwnershipDecisionParams) (sqlc.ArgocdBaselineOwnershipDecision, error) {
+	if q.decisions == nil {
+		q.decisions = map[string]sqlc.ArgocdBaselineOwnershipDecision{}
+	}
+	row := sqlc.ArgocdBaselineOwnershipDecision{
+		ID:            uuid.New(),
+		ClusterID:     arg.ClusterID,
+		ComponentSlug: arg.ComponentSlug,
+		Decision:      arg.Decision,
+		Reason:        arg.Reason,
+		ExpiresAt:     arg.ExpiresAt,
+		DecidedByID:   arg.DecidedByID,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	q.decisions[arg.ComponentSlug] = row
+	return row, nil
 }
 
 func TestRegisterManagedClusterLocalAutoToken(t *testing.T) {

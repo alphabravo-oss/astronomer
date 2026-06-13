@@ -12,8 +12,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -133,6 +135,28 @@ func (stubSMRequester) Do(_ context.Context, _, _, path string, _ []byte, _ map[
 				},
 			},
 		}
+		raw, _ := json.Marshal(body)
+		return &protocol.K8sResponsePayload{
+			StatusCode: http.StatusOK,
+			Body:       base64.StdEncoding.EncodeToString(raw),
+		}, nil
+	}
+	return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+}
+
+type mapSMRequester struct {
+	responses map[string]map[string]any
+	statuses  map[string]int
+}
+
+func (m mapSMRequester) Do(_ context.Context, _, _, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+	if idx := strings.Index(path, "?"); idx >= 0 {
+		path = path[:idx]
+	}
+	if status := m.statuses[path]; status != 0 {
+		return &protocol.K8sResponsePayload{StatusCode: status}, nil
+	}
+	if body, ok := m.responses[path]; ok {
 		raw, _ := json.Marshal(body)
 		return &protocol.K8sResponsePayload{
 			StatusCode: http.StatusOK,
@@ -322,6 +346,118 @@ func TestServiceMeshHandler_MTLSPullsPerNamespaceWhenRequesterAvailable(t *testi
 	}
 }
 
+func TestServiceMeshHandler_InventoryListsIstioResourcesAndMarksArgoOwned(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeServiceMeshQuerier(clusterID, "c1")
+	q.rows[clusterID] = sqlc.ClusterServiceMesh{
+		ClusterID:       clusterID,
+		DetectedMesh:    "istio",
+		GatewayCount:    1,
+		MtlsCoveragePct: 80,
+	}
+	h := NewServiceMeshHandler(q)
+	h.SetRequester(mapSMRequester{responses: map[string]map[string]any{
+		"/apis/networking.istio.io/v1beta1/virtualservices": {
+			"items": []map[string]any{
+				{
+					"metadata": map[string]any{
+						"name":      "payments",
+						"namespace": "payments",
+						"annotations": map[string]any{
+							"argocd.argoproj.io/instance": "baseline-payments",
+						},
+					},
+				},
+				{
+					"metadata": map[string]any{
+						"name":      "checkout",
+						"namespace": "checkout",
+					},
+				},
+			},
+		},
+		"/apis/networking.istio.io/v1beta1/gateways": {
+			"items": []map[string]any{
+				{"metadata": map[string]any{"name": "public", "namespace": "istio-system"}},
+			},
+		},
+	}})
+
+	rr := httptest.NewRecorder()
+	h.Inventory(rr, smReq(t, http.MethodGet, "/", clusterID))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp ServiceMeshInventoryResponse
+	unwrapDataResp(t, rr, &resp)
+	if resp.TotalCount != 3 {
+		t.Fatalf("total_count=%d, want 3: %+v", resp.TotalCount, resp.Resources)
+	}
+	var found bool
+	for _, resource := range resp.Resources {
+		if resource.Kind != "VirtualService" {
+			continue
+		}
+		if resource.Count != 2 {
+			t.Fatalf("virtualservice count=%d, want 2", resource.Count)
+		}
+		for _, item := range resource.Items {
+			if item.Name == "payments" {
+				found = true
+				if !item.ReadOnly || item.ManagedBy != "argocd" {
+					t.Fatalf("payments ownership = managed_by=%q readonly=%v", item.ManagedBy, item.ReadOnly)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("Argo-owned payments VirtualService was not returned")
+	}
+}
+
+func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeServiceMeshQuerier(clusterID, "c1")
+	h := NewServiceMeshHandler(q)
+	body := `{
+		"apiVersion":"networking.istio.io/v1beta1",
+		"kind":"VirtualService",
+		"metadata":{
+			"name":"payments",
+			"namespace":"payments",
+			"labels":{"app.kubernetes.io/managed-by":"argocd"}
+		},
+		"spec":{
+			"hosts":["payments.example.com"],
+			"http":[{"route":[{"weight":90},{"weight":20}]}]
+		}
+	}`
+	req := smReq(t, http.MethodPost, "/", clusterID)
+	req.Body = io.NopCloser(strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.ValidatePolicy(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp ServiceMeshPolicyValidationResponse
+	unwrapDataResp(t, rr, &resp)
+	if resp.Valid {
+		t.Fatalf("valid=true, want false for bad weights")
+	}
+	if resp.ApplyAllowed {
+		t.Fatalf("apply_allowed=true, want false for invalid Argo-owned resource")
+	}
+	if !resp.ReadOnly || resp.ManagedBy != "argocd" {
+		t.Fatalf("ownership = managed_by=%q readonly=%v", resp.ManagedBy, resp.ReadOnly)
+	}
+	if len(resp.Errors) == 0 {
+		t.Fatalf("expected route weight error, got none")
+	}
+	if len(resp.Warnings) == 0 {
+		t.Fatalf("expected Argo ownership warning, got none")
+	}
+}
+
 func TestServiceMeshHandler_RequiresClusterRead(t *testing.T) {
 	// Wire a real RBAC engine + a bindings stub that grants no
 	// access to the target cluster. The handler must respond 403
@@ -347,6 +483,8 @@ func TestServiceMeshHandler_RequiresClusterRead(t *testing.T) {
 		{"Get", h.Get, http.MethodGet},
 		{"Detect", h.Detect, http.MethodPost},
 		{"MTLS", h.MTLS, http.MethodGet},
+		{"Inventory", h.Inventory, http.MethodGet},
+		{"ValidatePolicy", h.ValidatePolicy, http.MethodPost},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := smReq(t, tc.verb, "/", clusterID)

@@ -1,0 +1,28 @@
+name: platform-operator
+display_name: Platform Operator
+description: |
+  Operates day-2 platform workflows across adopted clusters without
+  granting full RBAC, user, SSO, or destructive platform administration.
+scope: global
+category: operations
+risk_level: high
+rules:
+  - resource: clusters
+    verbs: [create, read, update, list]
+  - resource: agents
+    verbs: [create, read, update, list]
+  - resource: projects
+    verbs: [create, read, update, list]
+  - resource: workloads
+    verbs: [read, list]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: alerts
+    verbs: [create, read, update, list]
+  - resource: catalog
+    verbs: [read, list]
+  - resource: backups
+    verbs: [create, read, update, list]
+  - resource: audit_logs
+    verbs: [read, list]
+

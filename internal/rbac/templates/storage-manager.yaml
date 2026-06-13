@@ -1,0 +1,18 @@
+name: storage-manager
+display_name: Storage Manager
+description: |
+  Manages persistent volume claims, storage classes, and storage health
+  for an adopted cluster.
+scope: cluster
+category: storage
+risk_level: high
+rules:
+  - resource: storage
+    verbs: [create, read, update, delete, list]
+  - resource: clusters
+    verbs: [read]
+  - resource: workloads
+    verbs: [read, list]
+  - resource: pods
+    verbs: [read, list]
+

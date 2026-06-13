@@ -168,6 +168,9 @@ type RouterDependencies struct {
 	// ResourcesSearch fans a single resource-list query out across every
 	// active cluster (Phase A3 of the Rancher-parity plan).
 	ResourcesSearch *handler.ResourcesSearchHandler
+	// AgentFleet exposes read-only fleet inventory for connected and
+	// disconnected adopted-cluster agents.
+	AgentFleet *handler.AgentFleetHandler
 	// Readyz exposes control-plane dependency readiness checks.
 	Readyz http.Handler
 	// DexConfig owns CRUD for Dex connectors / settings and renders the
@@ -195,6 +198,9 @@ type RouterDependencies struct {
 	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
 	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
 	PlatformSettings *handler.PlatformSettingsHandler
+	// Extensions owns /api/v1/extensions/* — manifest validation plus
+	// install/enable/disable controls for UI extension registry entries.
+	Extensions *handler.ExtensionHandler
 	// PlatformDefaultTemplate (sprint 074) owns
 	// /api/v1/admin/platform-settings/default-cluster-template/*.
 	PlatformDefaultTemplate *handler.PlatformDefaultTemplateHandler
@@ -1228,6 +1234,15 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		})
 	}
 
+	if deps.Extensions != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/", deps.Extensions.List)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/sample-manifest/", deps.Extensions.SampleManifest)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/validate/", deps.Extensions.Validate)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/", deps.Extensions.Install)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/{name}/enable/", deps.Extensions.Enable)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/{name}/disable/", deps.Extensions.Disable)
+	}
+
 	// Cluster templates (migration 049). Two mount points:
 	//   - /cluster-templates/* — CRUD on templates, gated on the new
 	//     cluster_templates resource so superusers and a dedicated
@@ -1334,6 +1349,8 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/", deps.ServiceMesh.Get)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/clusters/{cluster_id}/service-mesh/detect/", deps.ServiceMesh.Detect)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/mtls/", deps.ServiceMesh.MTLS)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceServiceMesh, rbac.VerbRead)).Get("/clusters/{cluster_id}/service-mesh/inventory/", deps.ServiceMesh.Inventory)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceServiceMesh, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/service-mesh/validate/", deps.ServiceMesh.ValidatePolicy)
 	}
 
 	if deps.Projects != nil {
@@ -1539,6 +1556,11 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			// Current user's effective roles + permission check.
 			r.Get("/my-roles/", deps.RBAC.MyRoles)
 			r.Get("/my-roles/check/", deps.RBAC.CheckMyRole)
+			r.Get("/my-permissions/", deps.RBAC.MyEffectivePermissions)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).
+				Get("/effective-permissions/{user_id}/", deps.RBAC.EffectivePermissionsForUser)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).
+				Post("/permission-preview/", deps.RBAC.PermissionPreview)
 			// T1.1 — built-in role-templates catalog. Any authed user
 			// can read; no rbac:read needed because the catalog is
 			// static metadata about what the platform offers, not who
@@ -1546,6 +1568,21 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Get("/templates/", deps.RBAC.ListTemplates)
 			r.Get("/templates/{name}/", deps.RBAC.GetTemplate)
 		})
+	}
+
+	if deps.AgentFleet != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
+			Get("/agents/fleet/", deps.AgentFleet.List)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
+			Get("/agents/fleet/{cluster_id}/diagnostics/", deps.AgentFleet.Diagnostics)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
+			Get("/agents/fleet/{cluster_id}/diagnostics/bundle/", deps.AgentFleet.DiagnosticsBundle)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
+			Get("/agents/fleet/{cluster_id}/operations/", deps.AgentFleet.Operations)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
+			Post("/agents/fleet/{cluster_id}/upgrade-plan/", deps.AgentFleet.UpgradePlan)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
+			Post("/agents/fleet/{cluster_id}/upgrade/", deps.AgentFleet.Upgrade)
 	}
 
 	if deps.Audit != nil {
@@ -1617,6 +1654,8 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Get("/applications/{id}/manifests/", deps.ArgoCD.AppManifests)
 			r.Post("/applications/{id}/refresh/", deps.ArgoCD.RefreshApp)
 			r.Post("/instances/{id}/applications/{name}/sync/", deps.ArgoCD.SyncAppByName)
+			r.Get("/clusters/{cluster_id}/ownership/", deps.ArgoCD.ClusterOwnership)
+			r.Post("/clusters/{cluster_id}/ownership/{component_slug}/decision/", deps.ArgoCD.SetClusterOwnershipDecision)
 
 			// Phase B1 — ArgoCD lifecycle additions.
 			// Application / AppProject / ApplicationSet CRUD, cluster
@@ -1801,10 +1840,16 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.Get("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.GetNamedResource)
 		r.Put("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.UpdateNamedResource)
 		r.Delete("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.DeleteNamedResourceREST)
-		// Node action endpoints (cordon/uncordon/drain).
+		// Node action endpoints (cordon/uncordon/drain/metadata/taints).
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/cordon/", deps.Resources.CordonNode)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/uncordon/", deps.Resources.UncordonNode)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/drain/", deps.Resources.DrainNode)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/", deps.Resources.SetNodeLabel)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/remove/", deps.Resources.RemoveNodeLabel)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/", deps.Resources.SetNodeAnnotation)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/remove/", deps.Resources.RemoveNodeAnnotation)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/", deps.Resources.AddNodeTaint)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/remove/", deps.Resources.RemoveNodeTaint)
 		// User CRUD (List/Get already wired above; add Create/Update/Delete + reset-password).
 		r.Post("/users/", deps.Resources.CreateUser)
 		r.Put("/users/{id}/", deps.Resources.UpdateUser)

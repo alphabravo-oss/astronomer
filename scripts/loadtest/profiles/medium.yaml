@@ -1,0 +1,22 @@
+name: medium
+clusters: 50
+rps: 500
+duration: 30m
+agents:
+  mode: simulated
+  reconnectStorm:
+    enabled: true
+    at: 10m
+    batchPercent: 100
+    jitter: 90s
+resources:
+  podsPerCluster: 250
+  deploymentsPerCluster: 50
+  servicesPerCluster: 75
+eventsPerSecond: 500
+day2FailureDrills:
+  - agent_reconnect_storm
+  - argo_applicationset_fanout
+  - postgres_pool_pressure
+  - redis_outage_outbox_recovery
+  - browser_resource_list_budget

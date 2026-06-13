@@ -1,0 +1,16 @@
+name: gitops-viewer
+display_name: GitOps Viewer
+description: |
+  Read-only visibility into GitOps instances, repositories,
+  Applications, ApplicationSets, sync status, and drift summaries.
+scope: global
+category: gitops
+risk_level: low
+rules:
+  - resource: argocd
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+

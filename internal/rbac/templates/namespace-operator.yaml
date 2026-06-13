@@ -1,0 +1,18 @@
+name: namespace-operator
+display_name: Namespace Operator
+description: |
+  Manages namespace-level labels, annotations, quotas, limit ranges, and
+  network-policy templates within a project.
+scope: project
+category: project
+risk_level: high
+rules:
+  - resource: projects
+    verbs: [read, update]
+  - resource: network_policies
+    verbs: [create, read, update, delete, list]
+  - resource: workloads
+    verbs: [read, list]
+  - resource: pods
+    verbs: [read, list]
+

@@ -4,23 +4,31 @@ package rbac
 type Resource string
 
 const (
-	ResourceClusters   Resource = "clusters"
-	ResourceProjects   Resource = "projects"
-	ResourceWorkloads  Resource = "workloads"
-	ResourcePods       Resource = "pods"
-	ResourceMonitoring Resource = "monitoring"
-	ResourceAlerts     Resource = "alerts"
-	ResourceCatalog    Resource = "catalog"
-	ResourceLogging    Resource = "logging"
-	ResourceBackups    Resource = "backups"
-	ResourceSecurity   Resource = "security"
-	ResourceRBAC       Resource = "rbac"
-	ResourceSettings   Resource = "settings"
-	ResourceArgoCD     Resource = "argocd"
-	ResourceSSO        Resource = "sso"
-	ResourceUsers      Resource = "users"
-	ResourceAuditLogs  Resource = "audit_logs"
-	ResourceAgents     Resource = "agents"
+	ResourceClusters       Resource = "clusters"
+	ResourceProjects       Resource = "projects"
+	ResourceWorkloads      Resource = "workloads"
+	ResourcePods           Resource = "pods"
+	ResourceMonitoring     Resource = "monitoring"
+	ResourceAlerts         Resource = "alerts"
+	ResourceCatalog        Resource = "catalog"
+	ResourceLogging        Resource = "logging"
+	ResourceBackups        Resource = "backups"
+	ResourceSecurity       Resource = "security"
+	ResourceRBAC           Resource = "rbac"
+	ResourceSettings       Resource = "settings"
+	ResourceArgoCD         Resource = "argocd"
+	ResourceSSO            Resource = "sso"
+	ResourceUsers          Resource = "users"
+	ResourceAuditLogs      Resource = "audit_logs"
+	ResourceAgents         Resource = "agents"
+	ResourceSecrets        Resource = "secrets"
+	ResourceConfigMaps     Resource = "configmaps"
+	ResourceServices       Resource = "services"
+	ResourceIngresses      Resource = "ingresses"
+	ResourceStorage        Resource = "storage"
+	ResourceNodes          Resource = "nodes"
+	ResourceServiceMesh    Resource = "service_mesh"
+	ResourceSupportBundles Resource = "support_bundles"
 	// ResourceClusterTemplates gates the /api/v1/cluster-templates/* CRUD
 	// (migration 049). The cluster bind/detach endpoints reuse
 	// ResourceClusters + VerbUpdate so an operator who can already update a
@@ -71,6 +79,10 @@ type RoleBinding struct {
 	UserID    string
 	Group     string
 	RoleRules []Rule
+	BindingID string
+	RoleID    string
+	RoleName  string
+	Scope     string
 	// Scope context
 	ClusterID string // empty for global
 	ProjectID string // empty for global/cluster

@@ -99,6 +99,14 @@ const (
 	MsgDecommission    MessageType = "DECOMMISSION"
 	MsgDecommissionAck MessageType = "DECOMMISSION_ACK"
 
+	// Agent lifecycle operations. The management plane records durable
+	// operation intent, then sends an AGENT_UPGRADE command to the connected
+	// agent. The agent patches its own Deployment image and replies with a
+	// terminal AGENT_UPGRADE_RESULT so the operation row is no longer just a
+	// queued advisory.
+	MsgAgentUpgrade       MessageType = "AGENT_UPGRADE"
+	MsgAgentUpgradeResult MessageType = "AGENT_UPGRADE_RESULT"
+
 	// MsgMirrorEvent is the sprint-069 CRD-mirror v2 wire format. Unlike
 	// MsgStateUpdate (which is a coarse invalidation hint), a MirrorEvent
 	// carries the full resource body for one of the five mirrored GVKs so
@@ -126,11 +134,11 @@ const (
 // (Velero Backup/Schedule CRs are filtered by this label so we don't wipe out
 // resources the cluster operator owns).
 type DecommissionPayload struct {
-	ClusterID            string `json:"cluster_id"`
-	RemoveLoggingStack   bool   `json:"remove_logging_stack"`
-	RemoveVeleroManaged  bool   `json:"remove_velero_managed"`
-	RemoveAgentDeployment bool  `json:"remove_agent_deployment"`
-	ManagedLabel         string `json:"managed_label,omitempty"`
+	ClusterID             string `json:"cluster_id"`
+	RemoveLoggingStack    bool   `json:"remove_logging_stack"`
+	RemoveVeleroManaged   bool   `json:"remove_velero_managed"`
+	RemoveAgentDeployment bool   `json:"remove_agent_deployment"`
+	ManagedLabel          string `json:"managed_label,omitempty"`
 	// DryRun, if true, the agent reports what it WOULD delete without
 	// touching the cluster. Used by the integration test path.
 	DryRun bool `json:"dry_run,omitempty"`
@@ -146,9 +154,9 @@ type DecommissionPayload struct {
 // per-phase status — the agent doesn't make policy decisions about overall
 // success/failure beyond "did the K8s API accept my delete?".
 type DecommissionAckPayload struct {
-	ClusterID string                  `json:"cluster_id"`
+	ClusterID string                   `json:"cluster_id"`
 	Steps     []DecommissionStepResult `json:"steps"`
-	DryRun    bool                    `json:"dry_run,omitempty"`
+	DryRun    bool                     `json:"dry_run,omitempty"`
 }
 
 // DecommissionStepResult is one row of the agent's per-resource cleanup
@@ -161,6 +169,30 @@ type DecommissionStepResult struct {
 	Removed int    `json:"removed"`
 	Error   string `json:"error,omitempty"`
 	Skipped bool   `json:"skipped,omitempty"`
+}
+
+// AgentUpgradePayload asks the agent to update its own Deployment image.
+// OperationID maps back to agent_lifecycle_operations.id.
+type AgentUpgradePayload struct {
+	OperationID     string `json:"operation_id"`
+	ClusterID       string `json:"cluster_id"`
+	TargetVersion   string `json:"target_version"`
+	TargetImage     string `json:"target_image"`
+	AgentNamespace  string `json:"agent_namespace,omitempty"`
+	AgentDeployment string `json:"agent_deployment,omitempty"`
+}
+
+// AgentUpgradeResultPayload reports whether the self-upgrade command was
+// accepted by the Kubernetes API. A successful result means the Deployment
+// was patched; rollout completion is confirmed by later heartbeats reporting
+// the target agent version.
+type AgentUpgradeResultPayload struct {
+	OperationID   string `json:"operation_id"`
+	ClusterID     string `json:"cluster_id"`
+	Success       bool   `json:"success"`
+	Message       string `json:"message,omitempty"`
+	Error         string `json:"error,omitempty"`
+	ObservedImage string `json:"observed_image,omitempty"`
 }
 
 // Message is the envelope for all tunnel communication.
@@ -453,10 +485,10 @@ const (
 // object on reconnect, so a row that hasn't been touched in >1h is
 // unambiguously gone.
 type MirrorEventPayload struct {
-	Op        MirrorEventOp   `json:"op"`
-	Kind      string          `json:"kind"`
-	Namespace string          `json:"namespace,omitempty"`
-	Name      string          `json:"name"`
+	Op        MirrorEventOp `json:"op"`
+	Kind      string        `json:"kind"`
+	Namespace string        `json:"namespace,omitempty"`
+	Name      string        `json:"name"`
 	// Object is the raw unstructured JSON body of the resource. Empty on
 	// delete events. The server passes this through to
 	// internal/crd.Ingest{Kind} via unstructured.Unstructured{Object: …}.

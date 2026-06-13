@@ -3,12 +3,14 @@ package tunnel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -62,6 +64,9 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 		// MsgDecommission. Routed back to the per-call stream the
 		// decommission reconciler set up before sending the request.
 		h.routeToStream(conn, msg)
+
+	case protocol.MsgAgentUpgradeResult:
+		h.handleAgentUpgradeResult(conn, msg)
 
 	case protocol.MsgStateUpdate:
 		h.handleStateUpdate(conn, msg)
@@ -130,9 +135,148 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		h.log.Warn("failed to upsert cluster health from heartbeat", slog.String("error", err.Error()))
 	}
 
+	h.reconcileAgentLifecycle(conn, clusterID, payload)
+
 	// Fan out a heartbeat tick so SSE subscribers can flip "Last heartbeat"
 	// timestamps and pulse status indicators without polling.
 	h.publishHeartbeat(conn.ClusterID, payload)
+}
+
+func (h *Hub) reconcileAgentLifecycle(conn *AgentConnection, clusterID uuid.UUID, payload protocol.HeartbeatPayload) {
+	if payload.AgentVersion != "" {
+		affected, err := h.validator.MarkRunningAgentUpgradeSucceededByVersion(context.Background(), sqlc.MarkRunningAgentUpgradeSucceededByVersionParams{
+			ClusterID:     clusterID,
+			TargetVersion: payload.AgentVersion,
+		})
+		if err != nil {
+			h.log.Warn("failed to reconcile agent upgrade version",
+				slog.String("cluster_id", conn.ClusterID),
+				slog.String("agent_version", payload.AgentVersion),
+				slog.String("error", err.Error()),
+			)
+		} else if affected > 0 {
+			h.log.Info("agent upgrade confirmed by heartbeat",
+				slog.String("cluster_id", conn.ClusterID),
+				slog.String("agent_version", payload.AgentVersion),
+				slog.Int64("operations", affected),
+			)
+		}
+	}
+
+	op, err := h.validator.ClaimPendingAgentLifecycleOperation(context.Background(), clusterID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			h.log.Warn("failed to claim pending agent lifecycle operation",
+				slog.String("cluster_id", conn.ClusterID),
+				slog.String("error", err.Error()),
+			)
+		}
+		return
+	}
+	h.dispatchAgentLifecycleOperation(conn, op)
+}
+
+func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.AgentLifecycleOperation) {
+	switch op.OperationType {
+	case "agent_upgrade":
+		payload := protocol.AgentUpgradePayload{
+			OperationID:   op.ID.String(),
+			ClusterID:     conn.ClusterID,
+			TargetVersion: op.TargetVersion,
+			TargetImage:   op.TargetImage,
+		}
+		body, err := json.Marshal(payload)
+		if err != nil {
+			h.completeAgentLifecycleOperation(op.ID, "failed", "failed to encode agent upgrade payload: "+err.Error())
+			return
+		}
+		msg := &protocol.Message{
+			Type:      protocol.MsgAgentUpgrade,
+			ClusterID: conn.ClusterID,
+			Timestamp: time.Now().UTC(),
+			Payload:   body,
+		}
+		if err := h.SendToAgent(conn.ClusterID, msg); err != nil {
+			h.completeAgentLifecycleOperation(op.ID, "failed", "failed to send agent upgrade command: "+err.Error())
+			return
+		}
+		h.log.Info("agent upgrade command sent",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("operation_id", op.ID.String()),
+			slog.String("target_version", op.TargetVersion),
+			slog.String("target_image", op.TargetImage),
+		)
+	default:
+		h.completeAgentLifecycleOperation(op.ID, "failed", "unsupported agent lifecycle operation type: "+op.OperationType)
+	}
+}
+
+func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Message) {
+	if h.validator == nil {
+		return
+	}
+	var payload protocol.AgentUpgradeResultPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		h.log.Warn("invalid AGENT_UPGRADE_RESULT payload",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	if payload.ClusterID != "" && payload.ClusterID != conn.ClusterID {
+		h.log.Warn("agent upgrade result cluster mismatch",
+			slog.String("connection_cluster_id", conn.ClusterID),
+			slog.String("payload_cluster_id", payload.ClusterID),
+		)
+		return
+	}
+	operationID, err := uuid.Parse(payload.OperationID)
+	if err != nil {
+		h.log.Warn("agent upgrade result has invalid operation id",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("operation_id", payload.OperationID),
+		)
+		return
+	}
+	if payload.Success {
+		h.completeAgentLifecycleOperation(operationID, "succeeded", "")
+		h.log.Info("agent upgrade command completed",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("operation_id", payload.OperationID),
+			slog.String("observed_image", payload.ObservedImage),
+		)
+		return
+	}
+	lastError := payload.Error
+	if lastError == "" {
+		lastError = payload.Message
+	}
+	if lastError == "" {
+		lastError = "agent upgrade command failed"
+	}
+	h.completeAgentLifecycleOperation(operationID, "failed", lastError)
+	h.log.Warn("agent upgrade command failed",
+		slog.String("cluster_id", conn.ClusterID),
+		slog.String("operation_id", payload.OperationID),
+		slog.String("error", lastError),
+	)
+}
+
+func (h *Hub) completeAgentLifecycleOperation(id uuid.UUID, status, lastError string) {
+	if h.validator == nil {
+		return
+	}
+	if _, err := h.validator.CompleteAgentLifecycleOperation(context.Background(), sqlc.CompleteAgentLifecycleOperationParams{
+		ID:        id,
+		Status:    status,
+		LastError: lastError,
+	}); err != nil {
+		h.log.Warn("failed to update agent lifecycle operation",
+			slog.String("operation_id", id.String()),
+			slog.String("status", status),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 // publishHeartbeat emits a cluster.heartbeat event to any attached publisher.

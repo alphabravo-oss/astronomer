@@ -1,0 +1,20 @@
+name: compliance-manager
+display_name: Compliance Manager
+description: |
+  Manages compliance baselines, exports, evidence collection, and
+  security posture workflows without broad platform administration.
+scope: global
+category: security
+risk_level: high
+rules:
+  - resource: security
+    verbs: [create, read, update, delete, list]
+  - resource: audit_logs
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+  - resource: rbac
+    verbs: [read, list]
+

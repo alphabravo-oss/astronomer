@@ -1,0 +1,24 @@
+name: cluster-member
+display_name: Cluster Member
+description: |
+  General cluster contributor. Can manage workloads and inspect logs,
+  metrics, alerts, and GitOps state without full cluster ownership.
+scope: cluster
+category: cluster
+risk_level: high
+rules:
+  - resource: clusters
+    verbs: [read]
+  - resource: projects
+    verbs: [read, list]
+  - resource: workloads
+    verbs: [create, read, update, delete, list, scale, restart]
+  - resource: pods
+    verbs: [read, list, watch, logs]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: alerts
+    verbs: [read, list]
+  - resource: argocd
+    verbs: [read, list]
+

@@ -758,6 +758,54 @@ export interface MTLSBreakdown {
   notice?: string;
 }
 
+export interface ServiceMeshInventoryItem {
+  name: string;
+  namespace?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+  managedBy?: string;
+  readOnly: boolean;
+  reason?: string;
+  createdAt?: string;
+}
+
+export interface ServiceMeshInventoryResource {
+  kind: string;
+  apiVersion: string;
+  plural: string;
+  count: number;
+  items: ServiceMeshInventoryItem[];
+  notice?: string;
+}
+
+export interface ServiceMeshInventory {
+  clusterId: string;
+  mesh: ServiceMeshKind;
+  resources: ServiceMeshInventoryResource[];
+  totalCount: number;
+  notice?: string;
+}
+
+export interface ServiceMeshPolicyValidationFinding {
+  field?: string;
+  severity: 'warning' | 'error' | string;
+  message: string;
+}
+
+export interface ServiceMeshPolicyValidation {
+  clusterId: string;
+  valid: boolean;
+  apiVersion?: string;
+  kind?: string;
+  name?: string;
+  namespace?: string;
+  managedBy?: string;
+  readOnly: boolean;
+  applyAllowed: boolean;
+  warnings: ServiceMeshPolicyValidationFinding[];
+  errors: ServiceMeshPolicyValidationFinding[];
+}
+
 export async function getServiceMeshDetection(
   clusterId: string,
 ): Promise<ServiceMeshDetection> {
@@ -781,6 +829,26 @@ export async function getServiceMeshMTLS(
 ): Promise<MTLSBreakdown> {
   const res = await api.get<APIResponse<MTLSBreakdown>>(
     `/clusters/${clusterId}/service-mesh/mtls/`,
+  );
+  return res.data.data;
+}
+
+export async function getServiceMeshInventory(
+  clusterId: string,
+): Promise<ServiceMeshInventory> {
+  const res = await api.get<APIResponse<ServiceMeshInventory>>(
+    `/clusters/${clusterId}/service-mesh/inventory/`,
+  );
+  return res.data.data;
+}
+
+export async function validateServiceMeshPolicy(
+  clusterId: string,
+  body: { yaml?: string; object?: unknown },
+): Promise<ServiceMeshPolicyValidation> {
+  const res = await api.post<APIResponse<ServiceMeshPolicyValidation>>(
+    `/clusters/${clusterId}/service-mesh/validate/`,
+    body,
   );
   return res.data.data;
 }

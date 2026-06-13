@@ -1,0 +1,24 @@
+name: extreme-lab
+clusters: 1000
+rps: 3000
+duration: 90m
+agents:
+  mode: simulated
+  reconnectStorm:
+    enabled: true
+    at: 30m
+    batchPercent: 100
+    jitter: 10m
+resources:
+  podsPerCluster: 1000
+  deploymentsPerCluster: 250
+  servicesPerCluster: 350
+eventsPerSecond: 5000
+day2FailureDrills:
+  - agent_reconnect_storm
+  - argo_applicationset_fanout
+  - postgres_failover_or_pool_exhaustion
+  - redis_outage_outbox_recovery
+  - management_plane_ha_leader_kill
+  - browser_resource_list_budget
+  - long_running_dashboard_memory_scan

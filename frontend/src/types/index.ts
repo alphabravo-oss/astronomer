@@ -85,6 +85,142 @@ export interface Cluster {
   argocd?: ClusterArgoCDSummary;
 }
 
+export type AgentFleetStatus = 'connected' | 'degraded' | 'disconnected';
+
+export interface AgentFleetSummary {
+  totalClusters: number;
+  connected: number;
+  degraded: number;
+  disconnected: number;
+  versions: Record<string, number>;
+  profiles: Record<string, number>;
+  statuses: Record<string, number>;
+  generatedAt: string;
+}
+
+export interface AgentFleetItem {
+  clusterId: string;
+  clusterName: string;
+  clusterDisplayName: string;
+  clusterStatus: string;
+  isLocal: boolean;
+  agentStatus: AgentFleetStatus;
+  agentId?: string;
+  sessionId?: string;
+  agentVersion?: string;
+  kubernetesVersion?: string;
+  distribution?: string;
+  nodeCount: number;
+  connectedAt?: string;
+  lastPing?: string;
+  lastHeartbeat?: string;
+  disconnectedAt?: string;
+  podName?: string;
+  nodeName?: string;
+  channelName?: string;
+  privilegeProfile: 'viewer' | 'operator' | 'admin' | string;
+  capabilities: Record<string, boolean>;
+  degradedReasons?: string[];
+  recommendedAction?: string;
+}
+
+export interface AgentFleetResponse {
+  summary: AgentFleetSummary;
+  items: AgentFleetItem[];
+  limit: number;
+  offset: number;
+}
+
+export interface AgentConnectionDiagnostic {
+  id: string;
+  agentId: string;
+  sessionId: string;
+  status: string;
+  agentVersion?: string;
+  connectedAt: string;
+  lastPing?: string;
+  disconnectedAt?: string;
+  podName?: string;
+  nodeName?: string;
+  channelName?: string;
+}
+
+export interface AgentClusterConditionDiagnostic {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime: string;
+  lastProbeTime?: string;
+}
+
+export interface AgentUpgradeRecommendation {
+  currentVersion?: string;
+  status: string;
+  message: string;
+}
+
+export interface AgentDiagnosticsResponse {
+  generatedAt: string;
+  agent: AgentFleetItem;
+  recentConnections: AgentConnectionDiagnostic[];
+  conditions: AgentClusterConditionDiagnostic[];
+  recommendations: string[];
+  redactions: string[];
+  upgradeRecommendation: AgentUpgradeRecommendation;
+}
+
+export interface AgentUpgradePlanRequest {
+  targetVersion?: string;
+  targetImage?: string;
+  strategy?: string;
+}
+
+export interface AgentUpgradePlanResponse {
+  clusterId: string;
+  clusterName: string;
+  currentVersion?: string;
+  targetVersion: string;
+  currentImage?: string;
+  targetImage: string;
+  privilegeProfile: string;
+  strategy: string;
+  ready: boolean;
+  blockers?: string[];
+  steps: string[];
+  validation: string[];
+  rollback: string[];
+}
+
+export interface AgentLifecycleOperation {
+  id: string;
+  clusterId: string;
+  operationType: 'agent_upgrade' | string;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | string;
+  targetVersion: string;
+  targetImage: string;
+  currentVersion?: string;
+  strategy: string;
+  operationSpec?: Record<string, unknown>;
+  requestedBy?: string;
+  startedAt?: string;
+  completedAt?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentLifecycleOperationsResponse {
+  items: AgentLifecycleOperation[];
+  limit: number;
+  offset: number;
+}
+
+export interface AgentUpgradeOperationResponse {
+  operation: AgentLifecycleOperation;
+  plan: AgentUpgradePlanResponse;
+}
+
 export interface ClusterArgoCDSummary {
   registered: boolean;
   instanceCount: number;
@@ -506,6 +642,75 @@ export interface RoleBindingSubject {
   namespace?: string;
 }
 
+export interface RBACEngineRule {
+  resource: string;
+  verbs: string[];
+}
+
+export interface EffectivePermissionSource {
+  scope: string;
+  bindingId?: string;
+  roleId?: string;
+  roleName?: string;
+  clusterId?: string;
+  projectId?: string;
+}
+
+export interface EffectivePermissionGrant {
+  resource: string;
+  verb: string;
+  sources: EffectivePermissionSource[];
+}
+
+export interface EffectivePermissionBinding {
+  scope: string;
+  bindingId?: string;
+  roleId?: string;
+  roleName?: string;
+  group?: string;
+  clusterId?: string;
+  projectId?: string;
+  rules: RBACEngineRule[];
+}
+
+export interface EffectivePermissionResponse {
+  subject: {
+    userId: string;
+    self: boolean;
+  };
+  bindings: EffectivePermissionBinding[];
+  permissions: EffectivePermissionGrant[];
+}
+
+export interface PermissionPreviewRequest {
+  scope: 'global' | 'cluster' | 'project';
+  roleId?: string;
+  templateName?: string;
+  rules?: RBACEngineRule[];
+  clusterId?: string;
+  projectId?: string;
+}
+
+export interface PermissionPreviewResponse {
+  scope: string;
+  roleId?: string;
+  roleName?: string;
+  templateName?: string;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical' | string;
+  warnings?: string[];
+  permissions: EffectivePermissionGrant[];
+  sensitiveFlags: {
+    wildcard: boolean;
+    canMutate: boolean;
+    canDelete: boolean;
+    canExec: boolean;
+    canProxy: boolean;
+    canReadSecrets: boolean;
+    canManageRbac: boolean;
+    canRestore: boolean;
+  };
+}
+
 // --- ArgoCD Types ---
 
 export type ArgoSyncStatus = 'Synced' | 'OutOfSync' | 'Unknown';
@@ -563,6 +768,50 @@ export interface ArgoSyncPolicy {
     selfHeal: boolean;
   };
   syncOptions?: string[];
+}
+
+export interface ArgoManagedClusterOwnershipSummary {
+  argocdInstanceId: string;
+  clusterSecretName: string;
+  serverUrl: string;
+  labels: Record<string, string>;
+  updatedAt: string;
+}
+
+export interface ArgoBaselineOwnershipDecision {
+  id: string;
+  decision: 'adopt' | 'leave_local' | 'replace' | string;
+  reason: string;
+  expiresAt?: string;
+  decidedById?: string;
+  updatedAt: string;
+}
+
+export interface ArgoBaselineComponentOwnership {
+  slug: string;
+  name: string;
+  namespace: string;
+  applicationSetName: string;
+  desiredOwner: string;
+  observedOwner: string;
+  state: 'argocd_owned' | 'legacy_helm' | 'local_manual' | 'external_argocd' | 'unmanaged' | 'migration_required' | string;
+  options: Array<'adopt' | 'leave_local' | 'replace' | string>;
+  decision?: ArgoBaselineOwnershipDecision;
+}
+
+export interface ArgoClusterOwnershipResponse {
+  clusterId: string;
+  clusterName: string;
+  registered: boolean;
+  managedClusters: ArgoManagedClusterOwnershipSummary[];
+  components: ArgoBaselineComponentOwnership[];
+  generatedAt: string;
+}
+
+export interface ArgoBaselineOwnershipDecisionRequest {
+  decision: 'adopt' | 'leave_local' | 'replace';
+  reason?: string;
+  expiresAt?: string;
 }
 
 // --- Metrics Types ---

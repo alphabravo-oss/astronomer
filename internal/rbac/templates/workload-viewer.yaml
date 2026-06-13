@@ -1,0 +1,19 @@
+name: workload-viewer
+display_name: Workload Viewer
+description: |
+  Read-only access to workloads, pods, logs, metrics, and GitOps state
+  within a project. No exec and no mutations.
+scope: project
+category: project
+risk_level: low
+rules:
+  - resource: projects
+    verbs: [read]
+  - resource: workloads
+    verbs: [read, list]
+  - resource: pods
+    verbs: [read, list, watch, logs]
+  - resource: monitoring
+    verbs: [read, list]
+  - resource: argocd
+    verbs: [read, list]

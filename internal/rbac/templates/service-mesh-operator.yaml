@@ -1,0 +1,20 @@
+name: service-mesh-operator
+display_name: Service Mesh Operator
+description: |
+  Manages service mesh traffic policy, mTLS policy, and mesh health
+  views for a cluster where mesh CRDs are installed.
+scope: cluster
+category: networking
+risk_level: high
+rules:
+  - resource: service_mesh
+    verbs: [create, read, update, delete, list]
+  - resource: services
+    verbs: [read, list]
+  - resource: ingresses
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read]
+  - resource: monitoring
+    verbs: [read, list]
+

@@ -15,15 +15,20 @@ import {
   useAnomalyBaselines,
   queryKeys,
 } from '@/lib/hooks';
+import {
+  getArgoClusterOwnership,
+  getRegistrationStatus,
+  setArgoClusterOwnershipDecision,
+  type RegistrationStatus,
+} from '@/lib/api';
 import { getImageVulnSummary } from '@/lib/api/cluster-detail';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { getServiceMeshDetection, type ServiceMeshKind } from '@/lib/api/cluster-detail';
-import { getRegistrationStatus, type RegistrationStatus } from '@/lib/api';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 // RegisterClusterModal removed in sprint 22 — the "show install command"
@@ -57,7 +62,8 @@ import {
   Package,
   GitBranch,
 } from 'lucide-react';
-import type { Cluster, ClusterCondition } from '@/types';
+import type { ArgoBaselineComponentOwnership, Cluster, ClusterCondition } from '@/types';
+import { toast } from 'sonner';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
 import { renderForCluster } from '@/lib/api/dashboards';
 
@@ -583,20 +589,51 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
 }
 
 function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
+  const queryClient = useQueryClient();
+  const ownershipQuery = useQuery({
+    queryKey: ['argocd', 'clusters', cluster.id, 'ownership'] as const,
+    queryFn: () => getArgoClusterOwnership(cluster.id),
+    enabled: !!cluster.id,
+    refetchInterval: 60_000,
+  });
+  const decisionMutation = useMutation({
+    mutationFn: ({ slug, decision, reason }: { slug: string; decision: 'adopt' | 'leave_local' | 'replace'; reason: string }) =>
+      setArgoClusterOwnershipDecision(cluster.id, slug, { decision, reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['argocd', 'clusters', cluster.id, 'ownership'] });
+      toast.success('Ownership decision recorded');
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to record ownership decision: ${err.message}`);
+    },
+  });
   const argo = cluster.argocd;
-  const owner = argo?.baselineManagedBy ?? 'unknown';
-  const components = argo?.baselineComponents ?? [];
-  const isArgoOwned = owner === 'argocd';
-  const isPending = owner === 'argocd_pending';
-  const isHelm = owner === 'helm';
+  const ownership = ownershipQuery.data;
+  const registered = ownership?.registered ?? argo?.registered ?? false;
+  const components: ArgoBaselineComponentOwnership[] = ownership?.components ?? (argo?.baselineComponents ?? []).map((component) => ({
+    slug: component.slug,
+    name: component.name,
+    namespace: component.namespace,
+    applicationSetName: component.applicationSetName,
+    desiredOwner: 'argocd',
+    observedOwner: component.managedBy,
+    state: component.managedBy === 'argocd' ? 'argocd_owned' : component.managedBy === 'argocd_pending' ? 'migration_required' : component.managedBy,
+    options: ['adopt', 'leave_local', 'replace'],
+  }));
+  const owner = ownership
+    ? summarizeOwnershipState(ownership.components)
+    : (argo?.baselineManagedBy ?? 'unknown');
+  const isArgoOwned = owner === 'argocd_owned' || owner === 'argocd';
+  const isPending = owner === 'migration_required' || owner === 'argocd_pending';
+  const isHelm = owner === 'legacy_helm' || owner === 'helm';
   const ownerLabel =
-    owner === 'argocd'
+    owner === 'argocd_owned' || owner === 'argocd'
       ? 'ArgoCD'
-      : owner === 'argocd_pending'
-        ? 'ArgoCD pending'
-        : owner === 'helm'
+      : owner === 'migration_required' || owner === 'argocd_pending'
+        ? 'Migration required'
+        : owner === 'legacy_helm' || owner === 'helm'
           ? 'Helm over tunnel'
-          : owner === 'local'
+          : owner === 'local_manual' || owner === 'local'
             ? 'Local cluster'
             : 'Unknown';
   const tone = isArgoOwned
@@ -623,9 +660,13 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>
-                Cluster registration: {argo?.registered ? `${argo.instanceCount} ArgoCD instance${argo.instanceCount === 1 ? '' : 's'}` : 'not registered'}
+                Cluster registration: {registered ? `${ownership?.managedClusters.length ?? argo?.instanceCount ?? 0} ArgoCD instance${(ownership?.managedClusters.length ?? argo?.instanceCount ?? 0) === 1 ? '' : 's'}` : 'not registered'}
               </span>
-              {argo?.clusterSecretNames?.length ? (
+              {ownership?.managedClusters?.length ? (
+                <span className="truncate">
+                  Secret: <code className="font-mono">{ownership.managedClusters.map((row) => row.clusterSecretName).filter(Boolean).join(', ')}</code>
+                </span>
+              ) : argo?.clusterSecretNames?.length ? (
                 <span className="truncate">
                   Secret: <code className="font-mono">{argo.clusterSecretNames.join(', ')}</code>
                 </span>
@@ -652,25 +693,25 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
       </div>
       {components.length > 0 ? (
         <div className="border-t border-border px-4 py-3">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             {components.map((component) => {
-              const componentOwner = component.managedBy ?? owner;
+              const componentState = component.state ?? owner;
               const componentTone =
-                componentOwner === 'argocd'
+                componentState === 'argocd_owned'
                   ? 'border-status-success/30 bg-status-success/10 text-status-success'
-                  : componentOwner === 'argocd_pending'
+                  : componentState === 'migration_required'
                     ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-                    : componentOwner === 'helm'
+                    : componentState === 'legacy_helm'
                       ? 'border-status-info/30 bg-status-info/10 text-status-info'
                       : 'border-border bg-muted/30 text-muted-foreground';
               const componentOwnerLabel =
-                componentOwner === 'argocd'
+                componentState === 'argocd_owned'
                   ? 'ArgoCD'
-                  : componentOwner === 'argocd_pending'
-                    ? 'Pending'
-                    : componentOwner === 'helm'
+                  : componentState === 'migration_required'
+                    ? 'Migrate'
+                    : componentState === 'legacy_helm'
                       ? 'Helm'
-                      : componentOwner === 'local'
+                      : componentState === 'local_manual'
                         ? 'Local'
                         : 'Unknown';
               return (
@@ -688,6 +729,33 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
                     {component.namespace}
                     {component.applicationSetName ? ` / ${component.applicationSetName}` : ''}
                   </div>
+                  {component.decision?.reason ? (
+                    <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                      {component.decision.reason}
+                    </div>
+                  ) : null}
+                  {ownership && component.options?.length ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {component.options.map((option) => (
+                        <button
+                          key={option}
+                          onClick={() => {
+                            const reason = window.prompt(`Reason for ${decisionLabel(option)} ${component.name}`);
+                            if (reason === null) return;
+                            decisionMutation.mutate({
+                              slug: component.slug,
+                              decision: option as 'adopt' | 'leave_local' | 'replace',
+                              reason,
+                            });
+                          }}
+                          disabled={decisionMutation.isPending}
+                          className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        >
+                          {decisionLabel(option)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -696,6 +764,19 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
       ) : null}
     </div>
   );
+}
+
+function summarizeOwnershipState(components: ArgoBaselineComponentOwnership[]): string {
+  if (components.length === 0) return 'unknown';
+  if (components.some((component) => component.state === 'migration_required')) return 'migration_required';
+  if (components.every((component) => component.state === 'argocd_owned')) return 'argocd_owned';
+  if (components.every((component) => component.state === 'local_manual')) return 'local_manual';
+  return 'mixed';
+}
+
+function decisionLabel(value: string): string {
+  if (value === 'leave_local') return 'Leave local';
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 // ── Cluster conditions ──────────────────────────────────────────────────────

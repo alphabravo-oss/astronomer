@@ -89,8 +89,11 @@ type ArgoCDQuerier interface {
 	CreateArgoCDManagedCluster(ctx context.Context, arg sqlc.CreateArgoCDManagedClusterParams) (sqlc.ArgocdManagedCluster, error)
 	GetArgoCDManagedCluster(ctx context.Context, arg sqlc.GetArgoCDManagedClusterParams) (sqlc.ArgocdManagedCluster, error)
 	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
+	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
 	DeleteArgoCDManagedCluster(ctx context.Context, arg sqlc.DeleteArgoCDManagedClusterParams) error
 	UpdateArgoCDManagedClusterLabels(ctx context.Context, arg sqlc.UpdateArgoCDManagedClusterLabelsParams) (sqlc.ArgocdManagedCluster, error)
+	ListArgoCDBaselineOwnershipDecisions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdBaselineOwnershipDecision, error)
+	UpsertArgoCDBaselineOwnershipDecision(ctx context.Context, arg sqlc.UpsertArgoCDBaselineOwnershipDecisionParams) (sqlc.ArgocdBaselineOwnershipDecision, error)
 }
 
 // ArgoCDHandler handles ArgoCD endpoints.

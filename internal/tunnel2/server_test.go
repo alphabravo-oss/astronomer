@@ -90,6 +90,18 @@ func (s *stubValidator) UpdateAgentConnectionPing(_ context.Context, _ uuid.UUID
 	return nil
 }
 
+func (s *stubValidator) ClaimPendingAgentLifecycleOperation(_ context.Context, _ uuid.UUID) (sqlc.AgentLifecycleOperation, error) {
+	return sqlc.AgentLifecycleOperation{}, errNotFound{}
+}
+
+func (s *stubValidator) CompleteAgentLifecycleOperation(_ context.Context, arg sqlc.CompleteAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error) {
+	return sqlc.AgentLifecycleOperation{ID: arg.ID, Status: arg.Status, LastError: arg.LastError}, nil
+}
+
+func (s *stubValidator) MarkRunningAgentUpgradeSucceededByVersion(_ context.Context, _ sqlc.MarkRunningAgentUpgradeSucceededByVersionParams) (int64, error) {
+	return 0, nil
+}
+
 type errNotFound struct{}
 
 func (errNotFound) Error() string { return "token not found" }

@@ -273,6 +273,332 @@ components:
         feature.security: { type: boolean }
         feature.backups: { type: boolean }
 
+    ExtensionManifest:
+      type: object
+      required: [apiVersion, name, version, compatibleAstronomer, entry, permissions, extensionPoints]
+      properties:
+        apiVersion: { type: string, enum: [extensions.astronomer.io/v1alpha1] }
+        name: { type: string }
+        displayName: { type: string }
+        version: { type: string }
+        compatibleAstronomer: { type: string }
+        entry: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+        extensionPoints:
+          type: object
+          additionalProperties: true
+
+    ExtensionValidation:
+      type: object
+      properties:
+        valid: { type: boolean }
+        compatibility_status: { type: string, enum: [compatible, incompatible, unknown] }
+        checksum: { type: string }
+        manifest: { $ref: "#/components/schemas/ExtensionManifest" }
+        warnings:
+          type: array
+          items: { type: object, additionalProperties: true }
+        errors:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    ExtensionRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        display_name: { type: string }
+        version: { type: string }
+        source: { type: string }
+        checksum: { type: string }
+        enabled: { type: boolean }
+        compatibility_status: { type: string }
+        manifest: { $ref: "#/components/schemas/ExtensionManifest" }
+        installed_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ServiceMeshInventory:
+      type: object
+      properties:
+        cluster_id: { type: string, format: uuid }
+        mesh: { type: string }
+        total_count: { type: integer }
+        notice: { type: string }
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string }
+              api_version: { type: string }
+              plural: { type: string }
+              count: { type: integer }
+              notice: { type: string }
+              items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    namespace: { type: string }
+                    managed_by: { type: string }
+                    read_only: { type: boolean }
+                    reason: { type: string }
+
+    ServiceMeshPolicyValidation:
+      type: object
+      properties:
+        cluster_id: { type: string, format: uuid }
+        valid: { type: boolean }
+        api_version: { type: string }
+        kind: { type: string }
+        name: { type: string }
+        namespace: { type: string }
+        managed_by: { type: string }
+        read_only: { type: boolean }
+        apply_allowed: { type: boolean }
+        warnings:
+          type: array
+          items: { type: object, additionalProperties: true }
+        errors:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    AgentFleetItem:
+      type: object
+      properties:
+        cluster_id: { type: string, format: uuid }
+        cluster_name: { type: string }
+        cluster_display_name: { type: string }
+        cluster_status: { type: string }
+        is_local: { type: boolean }
+        agent_status: { type: string, enum: [connected, degraded, disconnected] }
+        agent_id: { type: string }
+        session_id: { type: string }
+        agent_version: { type: string }
+        kubernetes_version: { type: string }
+        distribution: { type: string }
+        node_count: { type: integer }
+        connected_at: { type: string, format: date-time, nullable: true }
+        last_ping: { type: string, format: date-time, nullable: true }
+        last_heartbeat: { type: string, format: date-time, nullable: true }
+        disconnected_at: { type: string, format: date-time, nullable: true }
+        pod_name: { type: string }
+        node_name: { type: string }
+        channel_name: { type: string }
+        privilege_profile: { type: string, enum: [viewer, operator, admin] }
+        capabilities: { type: object, additionalProperties: { type: boolean } }
+        degraded_reasons:
+          type: array
+          items: { type: string }
+        recommended_action: { type: string }
+
+    AgentFleetResponse:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            total_clusters: { type: integer }
+            connected: { type: integer }
+            degraded: { type: integer }
+            disconnected: { type: integer }
+            versions: { type: object, additionalProperties: { type: integer } }
+            profiles: { type: object, additionalProperties: { type: integer } }
+            statuses: { type: object, additionalProperties: { type: integer } }
+            generated_at: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AgentFleetItem" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    AgentDiagnostics:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        agent: { $ref: "#/components/schemas/AgentFleetItem" }
+        recent_connections:
+          type: array
+          items: { type: object, additionalProperties: true }
+        conditions:
+          type: array
+          items: { type: object, additionalProperties: true }
+        live:
+          type: object
+          additionalProperties: true
+        recommendations:
+          type: array
+          items: { type: string }
+        redactions:
+          type: array
+          items: { type: string }
+        upgrade_recommendation:
+          type: object
+          additionalProperties: true
+
+    AgentDiagnosticsBundle:
+      type: object
+      properties:
+        version: { type: string }
+        generated_at: { type: string, format: date-time }
+        cluster_id: { type: string, format: uuid }
+        cluster_name: { type: string }
+        diagnostics: { $ref: "#/components/schemas/AgentDiagnostics" }
+        notes:
+          type: array
+          items: { type: string }
+
+    AgentUpgradePlanRequest:
+      type: object
+      properties:
+        target_version: { type: string }
+        target_image: { type: string }
+        strategy: { type: string, default: agent_self_rollout }
+
+    AgentUpgradePlan:
+      type: object
+      properties:
+        cluster_id: { type: string, format: uuid }
+        cluster_name: { type: string }
+        current_version: { type: string }
+        target_version: { type: string }
+        current_image: { type: string }
+        target_image: { type: string }
+        privilege_profile: { type: string }
+        strategy: { type: string, default: agent_self_rollout }
+        ready: { type: boolean }
+        blockers:
+          type: array
+          items: { type: string }
+        steps:
+          type: array
+          items: { type: string }
+        validation:
+          type: array
+          items: { type: string }
+        rollback:
+          type: array
+          items: { type: string }
+
+    AgentLifecycleOperation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cluster_id: { type: string, format: uuid }
+        operation_type: { type: string, enum: [agent_upgrade] }
+        status: { type: string, enum: [pending, running, succeeded, failed, cancelled] }
+        target_version: { type: string }
+        target_image: { type: string }
+        current_version: { type: string }
+        strategy: { type: string }
+        operation_spec: { type: object, additionalProperties: true }
+        requested_by: { type: string, format: uuid, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AgentLifecycleOperationsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AgentLifecycleOperation" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    AgentUpgradeOperationResponse:
+      type: object
+      properties:
+        operation: { $ref: "#/components/schemas/AgentLifecycleOperation" }
+        plan: { $ref: "#/components/schemas/AgentUpgradePlan" }
+
+    NodeDrainRequest:
+      type: object
+      properties:
+        ignore_daemonsets: { type: boolean, default: true }
+        delete_empty_dir_data: { type: boolean, default: false }
+        grace_period_seconds: { type: integer, format: int64 }
+        dry_run: { type: boolean, default: false }
+
+    NodeDrainPodRef:
+      type: object
+      properties:
+        namespace: { type: string }
+        name: { type: string }
+        reason: { type: string }
+
+    NodeDrainResponse:
+      type: object
+      properties:
+        node: { type: string }
+        status: { type: string, enum: [dry_run, draining, drained, blocked, partial] }
+        message: { type: string }
+        evicted:
+          type: array
+          items: { $ref: "#/components/schemas/NodeDrainPodRef" }
+        skipped:
+          type: array
+          items: { $ref: "#/components/schemas/NodeDrainPodRef" }
+        failed:
+          type: array
+          items: { $ref: "#/components/schemas/NodeDrainPodRef" }
+        blockers:
+          type: array
+          items: { type: string }
+
+    NodeKeyValueRequest:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+        value: { type: string }
+
+    NodeKeyRequest:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+
+    NodeTaintRequest:
+      type: object
+      required: [key, effect]
+      properties:
+        key: { type: string }
+        value: { type: string }
+        effect:
+          type: string
+          enum: [NoSchedule, PreferNoSchedule, NoExecute]
+
+    NodeTaintRemoveRequest:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+        effect:
+          type: string
+          enum: [NoSchedule, PreferNoSchedule, NoExecute]
+
+    NodeActionResponse:
+      type: object
+      properties:
+        node: { type: string }
+        status: { type: string }
+        key: { type: string }
+        value: { type: string }
+        removed: { type: boolean }
+
+    NodeTaintActionResponse:
+      type: object
+      properties:
+        node: { type: string }
+        status: { type: string }
+        taint: { $ref: "#/components/schemas/NodeTaintRequest" }
+
     PaginatedClusters:
       type: object
       properties:
@@ -312,12 +638,17 @@ tags:
   - { name: Auth, description: "Login, tokens, password reset" }
   - { name: Settings, description: "Authenticated runtime settings subsets" }
   - { name: Clusters, description: "Cluster CRUD + lookup" }
+  - { name: Agents, description: "Adopted-cluster agent inventory, diagnostics, and lifecycle intents" }
+  - { name: Nodes, description: "Imported-cluster node operations" }
   - { name: Registration, description: "Onboarding wizard phase machine" }
   - { name: Projects, description: "Project CRUD, namespace policy, and ownership" }
   - { name: Vulnerabilities, description: "Trivy image-scan results" }
   - { name: Shell, description: "In-browser kubectl shell sessions" }
   - { name: K8s, description: "Tunnel-passthrough to managed cluster's k8s API" }
   - { name: Tools, description: "Cluster tool catalog + installs" }
+  - { name: ArgoCD, description: "ArgoCD instances, applications, and cluster registration" }
+  - { name: Extensions, description: "UI extension manifest validation and registry controls" }
+  - { name: ServiceMesh, description: "Service mesh detection, inventory, and policy validation" }
   - { name: Alerting, description: "Alert rules + notification channels (Slack/PagerDuty/MS Teams/webhook/email)" }
 
 # ---------------------------------------------------------------------
@@ -371,20 +702,15 @@ paths:
   /api/v1/auth/logout/:
     post:
       tags: [Auth]
-      summary: Logout current browser session
+      summary: Logout current session
       responses:
         "200":
-          description: Session revoked
+          description: Session revoked or logout redirect returned
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  data:
-                    type: object
-                    additionalProperties: true
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                additionalProperties: true
 
   # -- Settings ----------------------------------------------------------
 
@@ -407,85 +733,28 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /api/v1/activity/:
-    get:
-      tags: [Activity]
-      summary: Recent activity feed
-      responses:
-        "200":
-          description: Activity events
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { type: object, additionalProperties: true }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /api/v1/alerting/events/:
-    get:
-      tags: [Alerting]
-      summary: Alert events
-      responses:
-        "200":
-          description: Alert events
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { type: object, additionalProperties: true }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /api/v1/tools/:
-    get:
-      tags: [Tools]
-      summary: Cluster tool catalog
-      responses:
-        "200":
-          description: Tool definitions
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { type: object, additionalProperties: true }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /api/v1/argocd/instances/:
-    get:
-      tags: [ArgoCD]
-      summary: Registered ArgoCD instances
-      responses:
-        "200":
-          description: ArgoCD instances
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { type: object, additionalProperties: true }
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
   /api/v1/admin/backup-drill/:
     get:
-      tags: [Admin]
-      summary: Latest backup restore drill result
+      tags: [Settings]
+      summary: Latest management-plane backup restore-drill result
       responses:
         "200":
-          description: Latest drill result
+          description: Backup drill status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  # -- Extensions --------------------------------------------------------
+
+  /api/v1/extensions/:
+    get:
+      tags: [Extensions]
+      summary: List installed UI extensions
+      responses:
+        "200":
+          description: Installed extension registry
           content:
             application/json:
               schema:
@@ -493,11 +762,355 @@ paths:
                 properties:
                   data:
                     type: object
-                    additionalProperties: true
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/ExtensionRecord" }
+                      sample_manifest: { $ref: "#/components/schemas/ExtensionManifest" }
+    post:
+      tags: [Extensions]
+      summary: Install or update a UI extension manifest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [manifest]
+              properties:
+                manifest: { $ref: "#/components/schemas/ExtensionManifest" }
+                source: { type: string }
+                enable: { type: boolean }
+      responses:
+        "200":
+          description: Installed extension
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ExtensionRecord" }
+
+  /api/v1/extensions/validate/:
+    post:
+      tags: [Extensions]
+      summary: Validate a UI extension manifest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                manifest: { $ref: "#/components/schemas/ExtensionManifest" }
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ExtensionValidation" }
+
+  /api/v1/extensions/sample-manifest/:
+    get:
+      tags: [Extensions]
+      summary: Return the starter UI extension manifest
+      responses:
+        "200":
+          description: Sample manifest
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ExtensionManifest" }
+
+  /api/v1/extensions/{name}/enable/:
+    post:
+      tags: [Extensions]
+      summary: Enable a compatible extension
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated extension
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ExtensionRecord" }
+
+  /api/v1/extensions/{name}/disable/:
+    post:
+      tags: [Extensions]
+      summary: Disable an extension
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated extension
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ExtensionRecord" }
+
+  # -- Service Mesh ------------------------------------------------------
+
+  /api/v1/clusters/{cluster_id}/service-mesh/inventory/:
+    get:
+      tags: [ServiceMesh]
+      summary: List Istio service-mesh resources for a cluster
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Mesh resource inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ServiceMeshInventory" }
+
+  /api/v1/clusters/{cluster_id}/service-mesh/validate/:
+    post:
+      tags: [ServiceMesh]
+      summary: Validate an Istio service-mesh policy object before apply
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    yaml: { type: string }
+                - type: object
+                  properties:
+                    object: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ServiceMeshPolicyValidation" }
+
+  # -- Agents -----------------------------------------------------------
+
+  /api/v1/agents/fleet/:
+    get:
+      tags: [Agents]
+      summary: List adopted-cluster agents
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 500 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Agent fleet summary and rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AgentFleetResponse" }
+
+  /api/v1/agents/fleet/{cluster_id}/diagnostics/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Agents]
+      summary: Agent diagnostics for one cluster
+      responses:
+        "200":
+          description: Redacted diagnostics payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AgentDiagnostics" }
         "404":
-          description: No backup drill has run yet
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agents/fleet/{cluster_id}/diagnostics/bundle/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Agents]
+      summary: Download redacted agent diagnostics bundle
+      responses:
+        "200":
+          description: JSON attachment suitable for support triage
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentDiagnosticsBundle" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/agents/fleet/{cluster_id}/operations/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Agents]
+      summary: List agent lifecycle operations for one cluster
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Lifecycle operation history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AgentLifecycleOperationsResponse" }
+
+  /api/v1/agents/fleet/{cluster_id}/upgrade-plan/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Agents]
+      summary: Build an agent upgrade plan
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentUpgradePlanRequest" }
+      responses:
+        "200":
+          description: Upgrade plan and validation gates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AgentUpgradePlan" }
+
+  /api/v1/agents/fleet/{cluster_id}/upgrade/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Agents]
+      summary: Queue an agent upgrade lifecycle operation
+      description: |
+        Persists operator-approved upgrade intent. The current implementation
+        records the lifecycle operation and audit event; execution is driven by
+        the configured manifest or future agent upgrade reconciler.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentUpgradePlanRequest" }
+      responses:
+        "202":
+          description: Upgrade lifecycle operation queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AgentUpgradeOperationResponse" }
+        "409":
+          description: Upgrade plan is blocked
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  # -- Activity ----------------------------------------------------------
+
+  /api/v1/activity/:
+    get:
+      tags: [Clusters]
+      summary: Recent platform activity
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  # -- Tools -------------------------------------------------------------
+
+  /api/v1/tools/:
+    get:
+      tags: [Tools]
+      summary: List available cluster tools
+      responses:
+        "200":
+          description: Tool catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  # -- ArgoCD ------------------------------------------------------------
+
+  /api/v1/argocd/instances/:
+    get:
+      tags: [ArgoCD]
+      summary: List configured ArgoCD instances
+      responses:
+        "200":
+          description: ArgoCD instances
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  # -- Alerting ----------------------------------------------------------
+
+  /api/v1/alerting/events/:
+    get:
+      tags: [Alerting]
+      summary: List alert events
+      responses:
+        "200":
+          description: Alert events
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 
   # -- Clusters ----------------------------------------------------------
 
@@ -660,6 +1273,202 @@ paths:
           content:
             text/yaml:
               schema: { type: string }
+
+  # -- Nodes -------------------------------------------------------------
+
+  /api/v1/nodes/{cluster_id}/{node_name}/cordon/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Cordon a node
+      responses:
+        "200":
+          description: Node marked unschedulable
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/v1/nodes/{cluster_id}/{node_name}/uncordon/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Uncordon a node
+      responses:
+        "200":
+          description: Node marked schedulable
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/v1/nodes/{cluster_id}/{node_name}/drain/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Cordon a node and evict eligible pods
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeDrainRequest" }
+      responses:
+        "200":
+          description: Dry-run, blocked, or no-op drain result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeDrainResponse" }
+        "202":
+          description: Drain started; pod evictions were requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeDrainResponse" }
+
+  /api/v1/nodes/{cluster_id}/{node_name}/labels/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Set a node label
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeKeyValueRequest" }
+      responses:
+        "200":
+          description: Label applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeActionResponse" }
+
+  /api/v1/nodes/{cluster_id}/{node_name}/labels/remove/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Remove a node label
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeKeyRequest" }
+      responses:
+        "200":
+          description: Label removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeActionResponse" }
+
+  /api/v1/nodes/{cluster_id}/{node_name}/annotations/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Set a node annotation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeKeyValueRequest" }
+      responses:
+        "200":
+          description: Annotation applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeActionResponse" }
+
+  /api/v1/nodes/{cluster_id}/{node_name}/annotations/remove/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Remove a node annotation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeKeyRequest" }
+      responses:
+        "200":
+          description: Annotation removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeActionResponse" }
+
+  /api/v1/nodes/{cluster_id}/{node_name}/taints/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Add or replace a node taint by key and effect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeTaintRequest" }
+      responses:
+        "200":
+          description: Taint applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeTaintActionResponse" }
+
+  /api/v1/nodes/{cluster_id}/{node_name}/taints/remove/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: node_name, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Nodes]
+      summary: Remove node taints by key and optional effect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NodeTaintRemoveRequest" }
+      responses:
+        "200":
+          description: Taint removal result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/NodeActionResponse" }
 
   # -- Registration wizard ----------------------------------------------
 

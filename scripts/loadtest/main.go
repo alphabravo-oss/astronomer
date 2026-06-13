@@ -46,14 +46,19 @@ const (
 )
 
 type config struct {
-	server     string
-	clusters   int
-	rps        int
-	duration   time.Duration
-	tokenPath  string
-	outPath    string
-	verbose    bool
-	skipAgents bool // dev convenience — disable WS dial entirely
+	server           string
+	clusters         int
+	rps              int
+	duration         time.Duration
+	tokenPath        string
+	outPath          string
+	verbose          bool
+	skipAgents       bool // dev convenience — disable WS dial entirely
+	profilePath      string
+	profileName      string
+	resources        scaleResources
+	reconnectStorm   reconnectStormConfig
+	day2FailureDrill []string
 }
 
 func main() {
@@ -82,9 +87,24 @@ func parseFlags() *config {
 	flag.DurationVar(&cfg.duration, "duration", envOrDuration("LOADTEST_DURATION", defaultDuration), "how long to run")
 	flag.StringVar(&cfg.tokenPath, "token", envOr("LOADTEST_TOKEN", ""), "path to a file holding an admin JWT (Bearer token)")
 	flag.StringVar(&cfg.outPath, "out", envOr("LOADTEST_OUT", defaultOut), "where to write the markdown report")
+	flag.StringVar(&cfg.profilePath, "profile", envOr("LOADTEST_PROFILE", ""), "optional YAML scale profile path")
 	flag.BoolVar(&cfg.verbose, "verbose", envOrBool("LOADTEST_VERBOSE", false), "log at debug level")
 	flag.BoolVar(&cfg.skipAgents, "skip-agents", envOrBool("LOADTEST_SKIP_AGENTS", false), "do not dial synthetic agent WS — HTTP workload only")
 	flag.Parse()
+	if cfg.profilePath != "" {
+		profile, err := loadScaleProfile(cfg.profilePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load profile: %v\n", err)
+			os.Exit(1)
+		}
+		if err := profile.apply(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "apply profile: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	if cfg.resources.PodsPerCluster == 0 {
+		cfg.resources = scaleResources{PodsPerCluster: 42, DeploymentsPerCluster: 10, ServicesPerCluster: 10}
+	}
 	return cfg
 }
 
@@ -139,6 +159,7 @@ func run(cfg *config, log *slog.Logger) error {
 		"clusters", cfg.clusters,
 		"rps", cfg.rps,
 		"duration", cfg.duration,
+		"profile", cfg.profileName,
 		"out", cfg.outPath,
 	)
 
@@ -191,7 +212,7 @@ func run(cfg *config, log *slog.Logger) error {
 		sem := make(chan struct{}, registrationConcur)
 		for i := 0; i < cfg.clusters; i++ {
 			i := i
-			agents[i] = newSyntheticAgent(cfg.server, token, log, rec)
+			agents[i] = newSyntheticAgent(cfg.server, token, log, rec, cfg.resources)
 			agentWG.Add(1)
 			go func() {
 				defer agentWG.Done()
@@ -201,6 +222,9 @@ func run(cfg *config, log *slog.Logger) error {
 			}()
 		}
 		log.Info("spawning synthetic agents", "count", cfg.clusters)
+		if cfg.reconnectStorm.Enabled {
+			go scheduleReconnectStorm(ctx, agents, cfg.reconnectStorm, cfg.duration, log)
+		}
 	}
 
 	// 4. Drive HTTP workload at the configured RPS.
@@ -317,12 +341,13 @@ type syntheticAgent struct {
 	agentID   string
 	log       *slog.Logger
 	rec       *recorder
+	resources scaleResources
 
 	mu   sync.Mutex
 	conn *websocket.Conn
 }
 
-func newSyntheticAgent(server, token string, log *slog.Logger, rec *recorder) *syntheticAgent {
+func newSyntheticAgent(server, token string, log *slog.Logger, rec *recorder, resources scaleResources) *syntheticAgent {
 	clusterID := uuid.NewString()
 	return &syntheticAgent{
 		server:    server,
@@ -331,6 +356,7 @@ func newSyntheticAgent(server, token string, log *slog.Logger, rec *recorder) *s
 		agentID:   "loadtest-" + clusterID[:8],
 		log:       log.With("cluster_id", clusterID),
 		rec:       rec,
+		resources: resources,
 	}
 }
 
@@ -369,6 +395,52 @@ func (sa *syntheticAgent) Run(ctx context.Context) {
 	}
 }
 
+func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm reconnectStormConfig, duration time.Duration, log *slog.Logger) {
+	at := storm.AtDuration
+	if at <= 0 {
+		at = duration / 3
+	}
+	if at <= 0 {
+		at = 30 * time.Second
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(at):
+	}
+
+	limit := len(agents)
+	if storm.BatchPercent > 0 && storm.BatchPercent < 100 {
+		limit = maxInt(1, len(agents)*storm.BatchPercent/100)
+	}
+	jitter := storm.JitterDuration
+	if jitter <= 0 {
+		jitter = 15 * time.Second
+	}
+	log.Warn("triggering reconnect storm", "agents", limit, "jitter", jitter)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < limit; i++ {
+		agent := agents[i]
+		delay := time.Duration(rng.Int63n(int64(jitter)))
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-time.After(delay):
+				agent.CloseForStorm()
+			}
+		}()
+	}
+}
+
+func (sa *syntheticAgent) CloseForStorm() {
+	sa.mu.Lock()
+	conn := sa.conn
+	sa.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close(websocket.StatusGoingAway, "loadtest reconnect storm")
+	}
+}
+
 // backoffWithJitter mirrors internal/agent/tunnel.go BackoffDurationWithJitter
 // to avoid synchronized reconnect storms.
 func backoffWithJitter(attempt, baseSec, maxSec int, rng *rand.Rand) time.Duration {
@@ -383,6 +455,13 @@ func backoffWithJitter(attempt, baseSec, maxSec int, rng *rand.Rand) time.Durati
 
 func minInt(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b
@@ -476,7 +555,7 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 				return fmt.Errorf("send PONG: %w", err)
 			}
 		case "K8S_REQUEST":
-			resp := canned200Response(msg)
+			resp := sa.canned200Response(msg)
 			if err := writeMsg(ctx, conn, resp); err != nil {
 				return fmt.Errorf("send K8S_RESPONSE: %w", err)
 			}
@@ -513,14 +592,14 @@ func (sa *syntheticAgent) heartbeatLoop(ctx context.Context) {
 
 func (sa *syntheticAgent) sendHeartbeat(ctx context.Context) {
 	payload, _ := json.Marshal(map[string]any{
-		"timestamp":           time.Now().UTC().Format(time.RFC3339),
-		"kubernetes_version":  "v1.30.0",
-		"distribution":        "loadtest",
-		"node_count":          3,
-		"pod_count":           42,
-		"cpu_usage_percent":   12.5,
+		"timestamp":            time.Now().UTC().Format(time.RFC3339),
+		"kubernetes_version":   "v1.30.0",
+		"distribution":         "loadtest",
+		"node_count":           3,
+		"pod_count":            42,
+		"cpu_usage_percent":    12.5,
 		"memory_usage_percent": 30.0,
-		"agent_version":       "loadtest",
+		"agent_version":        "loadtest",
 	})
 	msg := tunnelMessage{
 		Type:      "HEARTBEAT",
@@ -541,8 +620,8 @@ func (sa *syntheticAgent) sendHeartbeat(ctx context.Context) {
 
 // canned200Response builds a slim K8S_RESPONSE — the goal is to give the
 // server something realistic in shape, not to model a full pod list.
-func canned200Response(req *tunnelMessage) *tunnelMessage {
-	body := `{"kind":"PodList","apiVersion":"v1","items":[]}`
+func (sa *syntheticAgent) canned200Response(req *tunnelMessage) *tunnelMessage {
+	body := sa.cannedK8sBody()
 	payload, _ := json.Marshal(map[string]any{
 		"status_code": 200,
 		"headers":     map[string]string{"Content-Type": "application/json"},
@@ -555,6 +634,33 @@ func canned200Response(req *tunnelMessage) *tunnelMessage {
 		Timestamp: time.Now().UTC(),
 		Payload:   payload,
 	}
+}
+
+func (sa *syntheticAgent) cannedK8sBody() string {
+	pods := maxInt(0, sa.resources.PodsPerCluster)
+	if pods > 250 {
+		pods = 250
+	}
+	items := make([]map[string]any, 0, pods)
+	for i := 0; i < pods; i++ {
+		items = append(items, map[string]any{
+			"metadata": map[string]any{
+				"name":      fmt.Sprintf("pod-%04d", i),
+				"namespace": fmt.Sprintf("ns-%02d", i%10),
+				"labels": map[string]string{
+					"app":     fmt.Sprintf("app-%02d", i%50),
+					"profile": sa.resources.ProfileName,
+				},
+			},
+			"status": map[string]any{"phase": "Running"},
+		})
+	}
+	body, _ := json.Marshal(map[string]any{
+		"kind":       "PodList",
+		"apiVersion": "v1",
+		"items":      items,
+	})
+	return string(body)
 }
 
 func cannedStreamFrames(req *tunnelMessage) []*tunnelMessage {

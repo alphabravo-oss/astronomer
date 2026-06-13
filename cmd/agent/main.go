@@ -160,6 +160,9 @@ func runConnect(logger *slog.Logger) error {
 			tunnel.RegisterHandler(protocol.MsgDecommission, decomm.HandleDecommission)
 		}
 
+		selfUpgrade := agent.NewSelfUpgradeHandler(client, logger)
+		tunnel.RegisterHandler(protocol.MsgAgentUpgrade, selfUpgrade.HandleUpgrade)
+
 		// Health reporter (heartbeat + metrics tickers + JSON probes).
 		health := agent.NewHealthReporter(client, logger, cfg.HeartbeatInterval, cfg.MetricsInterval)
 		health.SetAgentVersion(version.Version)

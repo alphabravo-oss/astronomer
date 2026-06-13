@@ -1,0 +1,19 @@
+name: catalog-admin
+display_name: Catalog Admin
+description: |
+  Curates Helm/OCI repositories, chart metadata, ratings, and platform
+  tool catalog entries. Does not grant direct workload or cluster
+  mutation outside catalog-driven operations.
+scope: global
+category: catalog
+risk_level: high
+rules:
+  - resource: catalog
+    verbs: [create, read, update, delete, list]
+  - resource: cluster_templates
+    verbs: [create, read, update, delete, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: audit_logs
+    verbs: [read, list]
+

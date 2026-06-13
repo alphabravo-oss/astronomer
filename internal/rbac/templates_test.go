@@ -7,24 +7,50 @@ import (
 )
 
 // TestLoadCatalog_Embedded asserts the shipped catalog loads cleanly,
-// contains all 8 expected templates, and has stable ordering. This is
-// the boot-time contract from T1.1 acceptance criteria:
-// "All 8 templates load at startup without panic" and
-// "GET /rbac/templates/ returns 8 entries with stable order".
+// contains the Rancher-grade day-2 role template set, and has stable
+// ordering. This is the boot-time contract for the operator-facing
+// role-template catalog.
 func TestLoadCatalog_Embedded(t *testing.T) {
 	cat, err := LoadCatalog()
 	if err != nil {
 		t.Fatalf("LoadCatalog: %v", err)
 	}
 	want := []string{
-		"platform-admin",
+		"audit-viewer",
+		"backup-operator",
+		"catalog-admin",
 		"compliance-auditor",
+		"compliance-manager",
+		"gitops-admin",
+		"gitops-viewer",
+		"logging-viewer",
+		"monitoring-admin",
+		"monitoring-viewer",
+		"platform-admin",
+		"platform-operator",
+		"restore-operator",
+		"security-auditor",
+		"support-bundle-operator",
 		"support-engineer",
+		"catalog-installer",
+		"cluster-backup-operator",
+		"cluster-member",
 		"cluster-operator",
+		"cluster-owner",
 		"cluster-viewer",
+		"node-operator",
+		"service-mesh-operator",
+		"storage-manager",
+		"config-manager",
+		"gitops-deployer",
+		"namespace-operator",
 		"project-member",
 		"project-owner",
 		"project-viewer",
+		"secret-manager",
+		"service-ingress-manager",
+		"workload-deployer",
+		"workload-viewer",
 	}
 	if cat.Count() != len(want) {
 		t.Fatalf("Count() = %d, want %d", cat.Count(), len(want))
@@ -40,16 +66,43 @@ func TestLoadCatalog_Embedded(t *testing.T) {
 	// Stable order: global → cluster → project, alphabetical within.
 	expectedOrder := []string{
 		// global, alpha
+		"audit-viewer",
+		"backup-operator",
+		"catalog-admin",
 		"compliance-auditor",
+		"compliance-manager",
+		"gitops-admin",
+		"gitops-viewer",
+		"logging-viewer",
+		"monitoring-admin",
+		"monitoring-viewer",
 		"platform-admin",
+		"platform-operator",
+		"restore-operator",
+		"security-auditor",
+		"support-bundle-operator",
 		"support-engineer",
 		// cluster, alpha
+		"catalog-installer",
+		"cluster-backup-operator",
+		"cluster-member",
 		"cluster-operator",
+		"cluster-owner",
 		"cluster-viewer",
+		"node-operator",
+		"service-mesh-operator",
+		"storage-manager",
 		// project, alpha
+		"config-manager",
+		"gitops-deployer",
+		"namespace-operator",
 		"project-member",
 		"project-owner",
 		"project-viewer",
+		"secret-manager",
+		"service-ingress-manager",
+		"workload-deployer",
+		"workload-viewer",
 	}
 	if len(all) != len(expectedOrder) {
 		t.Fatalf("All() len = %d, want %d", len(all), len(expectedOrder))
@@ -58,6 +111,31 @@ func TestLoadCatalog_Embedded(t *testing.T) {
 		if all[i].Name != name {
 			t.Errorf("ordered[%d] = %q, want %q (full order: %v)", i, all[i].Name, name, namesOf(all))
 		}
+	}
+}
+
+func TestLoadCatalog_TemplateMetadata(t *testing.T) {
+	cat, err := LoadCatalog()
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	for _, tmpl := range cat.All() {
+		if tmpl.RiskLevel == "" {
+			t.Fatalf("%s risk_level empty", tmpl.Name)
+		}
+		if !isValidRiskLevel(tmpl.RiskLevel) {
+			t.Fatalf("%s risk_level = %q", tmpl.Name, tmpl.RiskLevel)
+		}
+		if !tmpl.SystemManaged {
+			t.Fatalf("%s SystemManaged = false, want true", tmpl.Name)
+		}
+	}
+	secretManager, ok := cat.Get("secret-manager")
+	if !ok {
+		t.Fatal("secret-manager missing")
+	}
+	if secretManager.RiskLevel != "critical" {
+		t.Fatalf("secret-manager risk_level = %q, want critical", secretManager.RiskLevel)
 	}
 }
 

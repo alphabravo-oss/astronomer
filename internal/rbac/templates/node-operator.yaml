@@ -1,0 +1,18 @@
+name: node-operator
+display_name: Node Operator
+description: |
+  Performs node maintenance in an adopted cluster: inspect pressure,
+  cordon, uncordon, drain, labels, annotations, and taints.
+scope: cluster
+category: operations
+risk_level: critical
+rules:
+  - resource: clusters
+    verbs: [read]
+  - resource: nodes
+    verbs: [read, list, update, manage]
+  - resource: pods
+    verbs: [read, list, watch]
+  - resource: workloads
+    verbs: [read, list]
+

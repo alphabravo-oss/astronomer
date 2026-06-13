@@ -735,27 +735,17 @@ function NodesTable({ clusterId }: { clusterId: string }) {
 
   const handleDrain = async (node: ClusterNode) => {
     try {
-      // First cordon
-      await apiClient.k8sPatch(clusterId, k8sResourcePath('nodes', node.name), { spec: { unschedulable: true } }, 'strategic-merge');
-      // Get pods on the node
-      const podsResult = await apiClient.k8sGet(clusterId, `api/v1/pods?fieldSelector=spec.nodeName=${node.name}`);
-      const pods = podsResult?.items || [];
-      // Evict each non-DaemonSet pod
-      for (const pod of pods) {
-        const ownerRefs = pod.metadata?.ownerReferences || [];
-        const isDaemonSet = ownerRefs.some((ref: { kind: string }) => ref.kind === 'DaemonSet');
-        if (isDaemonSet) continue;
-        try {
-          await apiClient.k8sCreate(
-            clusterId,
-            `api/v1/namespaces/${pod.metadata.namespace}/pods/${pod.metadata.name}/eviction`,
-            { apiVersion: 'policy/v1', kind: 'Eviction', metadata: { name: pod.metadata.name, namespace: pod.metadata.namespace } }
-          );
-        } catch {
-          // Some pods may fail eviction (e.g., PDB), continue
-        }
+      const result = await apiClient.drainNode(clusterId, node.name, {
+        ignore_daemonsets: true,
+        delete_empty_dir_data: false,
+      });
+      if (result.status === 'blocked') {
+        toast.warning(result.message);
+      } else if (result.status === 'partial') {
+        toast.warning(result.message);
+      } else {
+        toast.success(result.message || `Node ${node.name} drained`);
       }
-      toast.success(`Node ${node.name} drained`);
       setDrainTarget(null);
     } catch (error) {
       toast.error(`Failed to drain node: ${(error as Error).message}`);

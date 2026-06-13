@@ -1,0 +1,16 @@
+name: cluster-backup-operator
+display_name: Cluster Backup Operator
+description: |
+  Manages backup schedules and backup runs for a single cluster.
+  Restore execution remains a separate higher-risk global grant.
+scope: cluster
+category: operations
+risk_level: high
+rules:
+  - resource: clusters
+    verbs: [read]
+  - resource: backups
+    verbs: [create, read, update, delete, list]
+  - resource: projects
+    verbs: [read, list]
+

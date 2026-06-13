@@ -153,9 +153,24 @@ func (r *report) WriteFile(path string) error {
 	sb.WriteString("# Astronomer Go — load-test report\n\n")
 	sb.WriteString(fmt.Sprintf("- Generated: `%s`\n", time.Now().UTC().Format(time.RFC3339)))
 	sb.WriteString(fmt.Sprintf("- Server: `%s`\n", r.cfg.server))
+	if r.cfg.profileName != "" {
+		sb.WriteString(fmt.Sprintf("- Profile: `%s`\n", r.cfg.profileName))
+	}
 	sb.WriteString(fmt.Sprintf("- Clusters: `%d`\n", r.cfg.clusters))
 	sb.WriteString(fmt.Sprintf("- Target RPS: `%d`\n", r.cfg.rps))
 	sb.WriteString(fmt.Sprintf("- Configured duration: `%s`\n", r.cfg.duration))
+	sb.WriteString(fmt.Sprintf("- Resources per cluster: pods `%d`, deployments `%d`, services `%d`\n",
+		r.cfg.resources.PodsPerCluster,
+		r.cfg.resources.DeploymentsPerCluster,
+		r.cfg.resources.ServicesPerCluster,
+	))
+	if r.cfg.reconnectStorm.Enabled {
+		sb.WriteString(fmt.Sprintf("- Reconnect storm: `%d%%` of agents at `%s` with `%s` jitter\n",
+			r.cfg.reconnectStorm.BatchPercent,
+			r.cfg.reconnectStorm.AtDuration,
+			r.cfg.reconnectStorm.JitterDuration,
+		))
+	}
 	r.rec.mu.Lock()
 	if !r.rec.startedAt.IsZero() && !r.rec.endedAt.IsZero() {
 		sb.WriteString(fmt.Sprintf("- Observed run window: `%s` (%s → %s)\n",
@@ -175,6 +190,15 @@ func (r *report) WriteFile(path string) error {
 			sb.WriteString("- ")
 			sb.WriteString(reason)
 			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(r.cfg.day2FailureDrill) > 0 {
+		sb.WriteString("## Day-2 failure drills in profile\n\n")
+		sb.WriteString("| Drill | Status |\n|---|---|\n")
+		for _, drill := range r.cfg.day2FailureDrill {
+			sb.WriteString(fmt.Sprintf("| %s | planned |\n", drill))
 		}
 		sb.WriteString("\n")
 	}

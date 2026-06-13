@@ -195,6 +195,9 @@ type AgentTokenValidator interface {
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg sqlc.UpdateAgentConnectionStatusParams) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
+	ClaimPendingAgentLifecycleOperation(ctx context.Context, clusterID uuid.UUID) (sqlc.AgentLifecycleOperation, error)
+	CompleteAgentLifecycleOperation(ctx context.Context, arg sqlc.CompleteAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error)
+	MarkRunningAgentUpgradeSucceededByVersion(ctx context.Context, arg sqlc.MarkRunningAgentUpgradeSucceededByVersionParams) (int64, error)
 }
 
 // NewHub creates a new Hub.

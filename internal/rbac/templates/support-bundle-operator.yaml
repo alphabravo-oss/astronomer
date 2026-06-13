@@ -1,0 +1,18 @@
+name: support-bundle-operator
+display_name: Support Bundle Operator
+description: |
+  Generates redacted support bundles and inspects agent/platform health
+  data needed for support escalation.
+scope: global
+category: support
+risk_level: medium
+rules:
+  - resource: support_bundles
+    verbs: [create, read, list]
+  - resource: agents
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: audit_logs
+    verbs: [read, list]
+

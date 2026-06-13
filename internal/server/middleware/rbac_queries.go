@@ -135,6 +135,10 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 			UserID:    userID,
 			Group:     row.Group,
 			RoleRules: rules,
+			BindingID: row.BindingID.String(),
+			RoleID:    row.RoleID.String(),
+			RoleName:  row.RoleName,
+			Scope:     row.Scope,
 		}
 		switch row.Scope {
 		case "cluster":

@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useNodeDetail, useK8sPatch } from '@/lib/hooks';
+import { useNodeDetail } from '@/lib/hooks';
 import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -287,102 +287,147 @@ export default function NodeDetailPage() {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   const { data: node, isLoading, refetch } = useNodeDetail(clusterId, nodeName);
-  const k8sPatch = useK8sPatch();
   const [showYaml, setShowYaml] = useState(false);
   const [showDrain, setShowDrain] = useState(false);
   const [showAddTaint, setShowAddTaint] = useState(false);
   const [newTaint, setNewTaint] = useState({ key: '', value: '', effect: 'NoSchedule' });
   const [showAddLabel, setShowAddLabel] = useState(false);
   const [newLabel, setNewLabel] = useState({ key: '', value: '' });
+  const [showAddAnnotation, setShowAddAnnotation] = useState(false);
+  const [newAnnotation, setNewAnnotation] = useState({ key: '', value: '' });
+  const [nodeActionPending, setNodeActionPending] = useState(false);
 
-  const handleCordon = () => {
-    k8sPatch.mutate(
-      { clusterId, path: k8sResourcePath('nodes', nodeName), body: { spec: { unschedulable: true } }, patchType: 'strategic-merge' },
-      { onSuccess: () => { refetch(); toast.success('Node cordoned'); } }
-    );
+  const handleCordon = async () => {
+    setNodeActionPending(true);
+    try {
+      await apiClient.cordonNode(clusterId, nodeName);
+      refetch();
+      toast.success('Node cordoned');
+    } catch (error) {
+      toast.error(`Failed to cordon node: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
   };
 
-  const handleUncordon = () => {
-    k8sPatch.mutate(
-      { clusterId, path: k8sResourcePath('nodes', nodeName), body: { spec: { unschedulable: false } }, patchType: 'strategic-merge' },
-      { onSuccess: () => { refetch(); toast.success('Node uncordoned'); } }
-    );
+  const handleUncordon = async () => {
+    setNodeActionPending(true);
+    try {
+      await apiClient.uncordonNode(clusterId, nodeName);
+      refetch();
+      toast.success('Node uncordoned');
+    } catch (error) {
+      toast.error(`Failed to uncordon node: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
   };
 
   const handleDrain = async () => {
+    setNodeActionPending(true);
     try {
-      await apiClient.k8sPatch(clusterId, k8sResourcePath('nodes', nodeName), { spec: { unschedulable: true } }, 'strategic-merge');
-      const podsResult = await apiClient.k8sGet(clusterId, `api/v1/pods?fieldSelector=spec.nodeName=${nodeName}`);
-      const pods = podsResult?.items || [];
-      for (const pod of pods) {
-        const ownerRefs = pod.metadata?.ownerReferences || [];
-        const isDaemonSet = ownerRefs.some((ref: { kind: string }) => ref.kind === 'DaemonSet');
-        if (isDaemonSet) continue;
-        try {
-          await apiClient.k8sCreate(clusterId, `api/v1/namespaces/${pod.metadata.namespace}/pods/${pod.metadata.name}/eviction`,
-            { apiVersion: 'policy/v1', kind: 'Eviction', metadata: { name: pod.metadata.name, namespace: pod.metadata.namespace } });
-        } catch { /* continue eviction */ }
+      const result = await apiClient.drainNode(clusterId, nodeName);
+      if (result.status === 'blocked') {
+        toast.warning(result.message || `Drain blocked for ${nodeName}`);
+      } else if (result.status === 'partial') {
+        toast.warning(result.message || `Node ${nodeName} partially drained`);
+      } else {
+        toast.success(result.message || `Node ${nodeName} drained`);
       }
-      toast.success(`Node ${nodeName} drained`);
       setShowDrain(false);
       refetch();
     } catch (error) {
       toast.error(`Failed to drain: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
     }
   };
 
-  const handleAddTaint = () => {
+  const handleAddTaint = async () => {
     if (!newTaint.key) return;
-    const currentTaints = node?.taints || [];
-    k8sPatch.mutate(
-      {
-        clusterId,
-        path: k8sResourcePath('nodes', nodeName),
-        body: { spec: { taints: [...currentTaints, newTaint] } },
-        patchType: 'strategic-merge',
-      },
-      {
-        onSuccess: () => {
-          refetch();
-          setShowAddTaint(false);
-          setNewTaint({ key: '', value: '', effect: 'NoSchedule' });
-          toast.success('Taint added');
-        },
-      }
-    );
+    setNodeActionPending(true);
+    try {
+      await apiClient.addNodeTaint(clusterId, nodeName, newTaint);
+      refetch();
+      setShowAddTaint(false);
+      setNewTaint({ key: '', value: '', effect: 'NoSchedule' });
+      toast.success('Taint added');
+    } catch (error) {
+      toast.error(`Failed to add taint: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
   };
 
-  const handleRemoveTaint = (taint: NodeTaint) => {
-    const updatedTaints = (node?.taints || []).filter(
-      (t) => !(t.key === taint.key && t.effect === taint.effect)
-    );
-    k8sPatch.mutate(
-      { clusterId, path: k8sResourcePath('nodes', nodeName), body: { spec: { taints: updatedTaints.length > 0 ? updatedTaints : null } }, patchType: 'merge' },
-      { onSuccess: () => { refetch(); toast.success('Taint removed'); } }
-    );
+  const handleRemoveTaint = async (taint: NodeTaint) => {
+    setNodeActionPending(true);
+    try {
+      await apiClient.removeNodeTaint(clusterId, nodeName, { key: taint.key, effect: taint.effect });
+      refetch();
+      toast.success('Taint removed');
+    } catch (error) {
+      toast.error(`Failed to remove taint: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
   };
 
-  const handleAddLabel = () => {
+  const handleAddLabel = async () => {
     if (!newLabel.key) return;
-    k8sPatch.mutate(
-      { clusterId, path: k8sResourcePath('nodes', nodeName), body: { metadata: { labels: { [newLabel.key]: newLabel.value } } }, patchType: 'strategic-merge' },
-      {
-        onSuccess: () => {
-          refetch();
-          setShowAddLabel(false);
-          setNewLabel({ key: '', value: '' });
-          toast.success('Label added');
-        },
-      }
-    );
+    setNodeActionPending(true);
+    try {
+      await apiClient.setNodeLabel(clusterId, nodeName, newLabel);
+      refetch();
+      setShowAddLabel(false);
+      setNewLabel({ key: '', value: '' });
+      toast.success('Label added');
+    } catch (error) {
+      toast.error(`Failed to add label: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
   };
 
-  const handleRemoveLabel = (key: string) => {
-    // Use JSON Patch to remove a label
-    k8sPatch.mutate(
-      { clusterId, path: k8sResourcePath('nodes', nodeName), body: [{ op: 'remove', path: `/metadata/labels/${key.replace(/\//g, '~1')}` }], patchType: 'json' },
-      { onSuccess: () => { refetch(); toast.success('Label removed'); } }
-    );
+  const handleRemoveLabel = async (key: string) => {
+    setNodeActionPending(true);
+    try {
+      await apiClient.removeNodeLabel(clusterId, nodeName, { key });
+      refetch();
+      toast.success('Label removed');
+    } catch (error) {
+      toast.error(`Failed to remove label: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
+  };
+
+  const handleAddAnnotation = async () => {
+    if (!newAnnotation.key) return;
+    setNodeActionPending(true);
+    try {
+      await apiClient.setNodeAnnotation(clusterId, nodeName, newAnnotation);
+      refetch();
+      setShowAddAnnotation(false);
+      setNewAnnotation({ key: '', value: '' });
+      toast.success('Annotation added');
+    } catch (error) {
+      toast.error(`Failed to add annotation: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
+  };
+
+  const handleRemoveAnnotation = async (key: string) => {
+    setNodeActionPending(true);
+    try {
+      await apiClient.removeNodeAnnotation(clusterId, nodeName, { key });
+      refetch();
+      toast.success('Annotation removed');
+    } catch (error) {
+      toast.error(`Failed to remove annotation: ${(error as Error).message}`);
+    } finally {
+      setNodeActionPending(false);
+    }
   };
 
   if (isLoading) {
@@ -448,26 +493,27 @@ export default function NodeDetailPage() {
           {node.unschedulable ? (
             <button
               onClick={handleUncordon}
-              disabled={k8sPatch.isPending}
+              disabled={nodeActionPending}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-                border border-status-success/30 text-status-success hover:bg-status-success/10 transition-colors"
+                border border-status-success/30 text-status-success hover:bg-status-success/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> Uncordon
             </button>
           ) : (
             <button
               onClick={handleCordon}
-              disabled={k8sPatch.isPending}
+              disabled={nodeActionPending}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-                border border-status-warning/30 text-status-warning hover:bg-status-warning/10 transition-colors"
+                border border-status-warning/30 text-status-warning hover:bg-status-warning/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ShieldBan className="h-3.5 w-3.5" /> Cordon
             </button>
           )}
           <button
             onClick={() => setShowDrain(true)}
+            disabled={nodeActionPending}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-              border border-status-error/30 text-status-error hover:bg-status-error/10 transition-colors"
+              border border-status-error/30 text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Unplug className="h-3.5 w-3.5" /> Drain
           </button>
@@ -546,8 +592,9 @@ export default function NodeDetailPage() {
               </div>
               <button
                 onClick={() => setShowAddLabel(true)}
+                disabled={nodeActionPending}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
-                  text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" /> Add
               </button>
@@ -558,8 +605,43 @@ export default function NodeDetailPage() {
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
                   <button
+                    disabled={nodeActionPending}
                     onClick={() => handleRemoveLabel(k)}
-                    className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity"
+                    className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
+                  >
+                    <XCircle className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Annotations */}
+          <div className="bg-card border border-border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Code className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium text-foreground">Annotations</h3>
+                <span className="text-xs text-muted-foreground">({Object.keys(node.annotations).length})</span>
+              </div>
+              <button
+                onClick={() => setShowAddAnnotation(true)}
+                disabled={nodeActionPending}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
+                  text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" /> Add
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(node.annotations).map(([k, v]) => (
+                <span key={k} className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group">
+                  <span className="text-foreground">{k}</span>
+                  {v && <span>= {v}</span>}
+                  <button
+                    disabled={nodeActionPending}
+                    onClick={() => handleRemoveAnnotation(k)}
+                    className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
                   >
                     <XCircle className="h-3 w-3" />
                   </button>
@@ -620,8 +702,9 @@ export default function NodeDetailPage() {
           <div className="flex justify-end">
             <button
               onClick={() => setShowAddTaint(true)}
+              disabled={nodeActionPending}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-                bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" /> Add Taint
             </button>
@@ -636,7 +719,8 @@ export default function NodeDetailPage() {
                 accessor: (row) => (
                   <button
                     onClick={() => handleRemoveTaint(row)}
-                    className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+                    disabled={nodeActionPending}
+                    className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -691,6 +775,7 @@ export default function NodeDetailPage() {
         confirmValue={nodeName}
         confirmText="Drain"
         variant="destructive"
+        loading={nodeActionPending}
       />
 
       {/* Add Taint Dialog */}
@@ -727,7 +812,7 @@ export default function NodeDetailPage() {
                 className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                 Cancel
               </button>
-              <button onClick={handleAddTaint} disabled={!newTaint.key || k8sPatch.isPending}
+              <button onClick={handleAddTaint} disabled={!newTaint.key || nodeActionPending}
                 className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 Add Taint
@@ -762,10 +847,45 @@ export default function NodeDetailPage() {
                 className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                 Cancel
               </button>
-              <button onClick={handleAddLabel} disabled={!newLabel.key || k8sPatch.isPending}
+              <button onClick={handleAddLabel} disabled={!newLabel.key || nodeActionPending}
                 className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 Add Label
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Annotation Dialog */}
+      {showAddAnnotation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddAnnotation(false)} />
+          <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
+            <h3 className="text-base font-semibold text-foreground mb-4">Add Annotation</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Key</label>
+                <input type="text" value={newAnnotation.key} onChange={(e) => setNewAnnotation({ ...newAnnotation, key: e.target.value })}
+                  placeholder="example.com/owner" autoFocus
+                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Value</label>
+                <input type="text" value={newAnnotation.value} onChange={(e) => setNewAnnotation({ ...newAnnotation, value: e.target.value })}
+                  placeholder="platform"
+                  className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setShowAddAnnotation(false)}
+                className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleAddAnnotation} disabled={!newAnnotation.key || nodeActionPending}
+                className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Add Annotation
               </button>
             </div>
           </div>

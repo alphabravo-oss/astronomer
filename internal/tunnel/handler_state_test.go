@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -45,6 +46,10 @@ type recordingValidator struct {
 	upsertAgentArgs    []sqlc.UpsertClusterAgentTokenParams
 	touchedAgentIDs    []uuid.UUID
 	disconnectClusters []uuid.UUID
+	pendingOp          *sqlc.AgentLifecycleOperation
+	claimErr           error
+	completedOps       []sqlc.CompleteAgentLifecycleOperationParams
+	markSucceededArgs  []sqlc.MarkRunningAgentUpgradeSucceededByVersionParams
 }
 
 func (r *recordingValidator) GetRegistrationTokenByToken(context.Context, string) (sqlc.ClusterRegistrationToken, error) {
@@ -139,6 +144,34 @@ func (r *recordingValidator) UpdateAgentConnectionPing(_ context.Context, id uui
 	return nil
 }
 
+func (r *recordingValidator) ClaimPendingAgentLifecycleOperation(context.Context, uuid.UUID) (sqlc.AgentLifecycleOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.claimErr != nil {
+		return sqlc.AgentLifecycleOperation{}, r.claimErr
+	}
+	if r.pendingOp == nil {
+		return sqlc.AgentLifecycleOperation{}, pgx.ErrNoRows
+	}
+	op := *r.pendingOp
+	r.pendingOp = nil
+	return op, nil
+}
+
+func (r *recordingValidator) CompleteAgentLifecycleOperation(_ context.Context, arg sqlc.CompleteAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.completedOps = append(r.completedOps, arg)
+	return sqlc.AgentLifecycleOperation{ID: arg.ID, Status: arg.Status, LastError: arg.LastError}, nil
+}
+
+func (r *recordingValidator) MarkRunningAgentUpgradeSucceededByVersion(_ context.Context, arg sqlc.MarkRunningAgentUpgradeSucceededByVersionParams) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.markSucceededArgs = append(r.markSucceededArgs, arg)
+	return 0, nil
+}
+
 func (r *recordingValidator) SnapshotUpserts() []sqlc.UpsertClusterHealthStatusParams {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -187,6 +220,22 @@ func (r *recordingValidator) SnapshotDisconnectedClusters() []uuid.UUID {
 	return out
 }
 
+func (r *recordingValidator) SnapshotCompletedOps() []sqlc.CompleteAgentLifecycleOperationParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.CompleteAgentLifecycleOperationParams, len(r.completedOps))
+	copy(out, r.completedOps)
+	return out
+}
+
+func (r *recordingValidator) SnapshotMarkSucceededArgs() []sqlc.MarkRunningAgentUpgradeSucceededByVersionParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.MarkRunningAgentUpgradeSucceededByVersionParams, len(r.markSucceededArgs))
+	copy(out, r.markSucceededArgs)
+	return out
+}
+
 func (r *recordingPublisher) Publish(eventType string, data any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -199,6 +248,70 @@ func (r *recordingPublisher) Snapshot() []recordedEvent {
 	out := make([]recordedEvent, len(r.events))
 	copy(out, r.events)
 	return out
+}
+
+func TestHandleHeartbeatClaimsPendingAgentUpgrade(t *testing.T) {
+	clusterID := uuid.New()
+	opID := uuid.New()
+	validator := &recordingValidator{
+		pendingOp: &sqlc.AgentLifecycleOperation{
+			ID:            opID,
+			ClusterID:     clusterID,
+			OperationType: "agent_upgrade",
+			Status:        "running",
+			TargetVersion: "v1.2.3",
+			TargetImage:   "example.com/astronomer-agent:v1.2.3",
+		},
+	}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String(), sendCh: make(chan *protocol.Message, 1)}
+	h.agents.Set(clusterID.String(), conn)
+
+	body, _ := json.Marshal(protocol.HeartbeatPayload{AgentVersion: "v1.0.0"})
+	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: body})
+
+	select {
+	case msg := <-conn.sendCh:
+		if msg.Type != protocol.MsgAgentUpgrade {
+			t.Fatalf("message type = %s, want %s", msg.Type, protocol.MsgAgentUpgrade)
+		}
+		var payload protocol.AgentUpgradePayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			t.Fatalf("decode upgrade payload: %v", err)
+		}
+		if payload.OperationID != opID.String() || payload.TargetImage != "example.com/astronomer-agent:v1.2.3" {
+			t.Fatalf("upgrade payload = %+v", payload)
+		}
+	default:
+		t.Fatal("expected agent upgrade command")
+	}
+	if got := validator.SnapshotMarkSucceededArgs(); len(got) != 1 || got[0].TargetVersion != "v1.0.0" {
+		t.Fatalf("mark succeeded args = %+v", got)
+	}
+}
+
+func TestHandleAgentUpgradeResultCompletesOperation(t *testing.T) {
+	clusterID := uuid.New()
+	opID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String()}
+
+	body, _ := json.Marshal(protocol.AgentUpgradeResultPayload{
+		OperationID:   opID.String(),
+		ClusterID:     clusterID.String(),
+		Success:       true,
+		ObservedImage: "example.com/astronomer-agent:v1.2.3",
+	})
+	h.handleAgentUpgradeResult(conn, &protocol.Message{Type: protocol.MsgAgentUpgradeResult, Payload: body})
+
+	completed := validator.SnapshotCompletedOps()
+	if len(completed) != 1 {
+		t.Fatalf("completed ops = %+v", completed)
+	}
+	if completed[0].ID != opID || completed[0].Status != "succeeded" || completed[0].LastError != "" {
+		t.Fatalf("completion = %+v", completed[0])
+	}
 }
 
 // TestHandleStateUpdatePublishesK8sChanged verifies a STATE_UPDATE from the

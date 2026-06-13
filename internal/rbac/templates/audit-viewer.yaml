@@ -1,0 +1,21 @@
+name: audit-viewer
+display_name: Audit Viewer
+description: |
+  Read-only access to audit evidence and enough surrounding platform
+  metadata to interpret who changed what. Cannot inspect secrets, exec
+  into pods, or mutate any resource.
+scope: global
+category: audit
+risk_level: low
+rules:
+  - resource: audit_logs
+    verbs: [read, list]
+  - resource: users
+    verbs: [read, list]
+  - resource: rbac
+    verbs: [read, list]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+

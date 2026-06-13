@@ -2114,6 +2114,19 @@ export function useK8sApplyYaml() {
   });
 }
 
+export function useK8sDryRunYaml() {
+  return useMutation({
+    mutationFn: ({ clusterId, path, yaml }: { clusterId: string; path: string; yaml: string }) =>
+      apiClient.k8sDryRunYaml(clusterId, path, yaml),
+    onSuccess: () => {
+      toast.success('Dry run passed');
+    },
+    onError: (error: Error) => {
+      toast.error(`Dry run failed: ${error.message}`);
+    },
+  });
+}
+
 export function useK8sCreate() {
   const queryClient = useQueryClient();
   return useMutation({

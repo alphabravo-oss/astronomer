@@ -28,6 +28,7 @@ import {
   FolderTree,
   KeyRound,
   Activity,
+  Puzzle,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -109,6 +110,12 @@ const CARDS: SettingsCard[] = [
     title: 'Dashboard widgets',
     description: 'Prometheus sparklines, Grafana panels, and URL iframes pinned to dashboards.',
     icon: LayoutDashboard,
+  },
+  {
+    href: '/dashboard/extensions',
+    title: 'Extensions',
+    description: 'Manifest validation, permissions review, and enablement controls.',
+    icon: Puzzle,
   },
   {
     href: '/dashboard/settings/vault',

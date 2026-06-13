@@ -245,6 +245,55 @@ export async function getClusters(params?: {
   return res.data;
 }
 
+export async function getAgentFleet(params?: { limit?: number; offset?: number }) {
+  const res = await api.get<APIResponse<import('@/types').AgentFleetResponse>>('/agents/fleet', { params });
+  return res.data.data;
+}
+
+export async function getAgentDiagnostics(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').AgentDiagnosticsResponse>>(
+    `/agents/fleet/${clusterId}/diagnostics`,
+  );
+  return res.data.data;
+}
+
+export async function downloadAgentDiagnosticsBundle(clusterId: string): Promise<Blob> {
+  const res = await api.get<Blob>(`/agents/fleet/${clusterId}/diagnostics/bundle`, {
+    responseType: 'blob',
+  });
+  return res.data;
+}
+
+export async function createAgentUpgradePlan(
+  clusterId: string,
+  data: import('@/types').AgentUpgradePlanRequest = {},
+) {
+  const res = await api.post<APIResponse<import('@/types').AgentUpgradePlanResponse>>(
+    `/agents/fleet/${clusterId}/upgrade-plan`,
+    data,
+  );
+  return res.data.data;
+}
+
+export async function createAgentUpgradeOperation(
+  clusterId: string,
+  data: import('@/types').AgentUpgradePlanRequest = {},
+) {
+  const res = await api.post<APIResponse<import('@/types').AgentUpgradeOperationResponse>>(
+    `/agents/fleet/${clusterId}/upgrade`,
+    data,
+  );
+  return res.data.data;
+}
+
+export async function getAgentOperations(clusterId: string, params?: { limit?: number; offset?: number }) {
+  const res = await api.get<APIResponse<import('@/types').AgentLifecycleOperationsResponse>>(
+    `/agents/fleet/${clusterId}/operations`,
+    { params },
+  );
+  return res.data.data;
+}
+
 export async function getCluster(id: string) {
   const res = await api.get<APIResponse<import('@/types').Cluster>>(`/clusters/${id}`);
   return res.data.data;
@@ -402,6 +451,120 @@ export async function getClusterNodes(clusterId: string) {
 
 export async function getNodeDetail(clusterId: string, nodeName: string) {
   const res = await api.get<APIResponse<import('@/types').NodeDetail>>(`/clusters/${clusterId}/nodes/${nodeName}`);
+  return res.data.data;
+}
+
+export interface DrainNodeRequest {
+  ignore_daemonsets?: boolean;
+  delete_empty_dir_data?: boolean;
+  grace_period_seconds?: number;
+  dry_run?: boolean;
+}
+
+export interface DrainNodePodRef {
+  namespace: string;
+  name: string;
+  reason?: string;
+}
+
+export interface DrainNodeResponse {
+  node: string;
+  status: 'dry_run' | 'draining' | 'drained' | 'blocked' | 'partial' | string;
+  message: string;
+  evicted: DrainNodePodRef[];
+  skipped: DrainNodePodRef[];
+  failed: DrainNodePodRef[];
+  blockers?: string[];
+}
+
+export async function cordonNode(clusterId: string, nodeName: string) {
+  const res = await api.post<APIResponse<{ node: string; status: string }>>(
+    `/nodes/${encodeURIComponent(clusterId)}/${encodeURIComponent(nodeName)}/cordon`,
+  );
+  return res.data.data;
+}
+
+export async function uncordonNode(clusterId: string, nodeName: string) {
+  const res = await api.post<APIResponse<{ node: string; status: string }>>(
+    `/nodes/${encodeURIComponent(clusterId)}/${encodeURIComponent(nodeName)}/uncordon`,
+  );
+  return res.data.data;
+}
+
+export async function drainNode(clusterId: string, nodeName: string, data: DrainNodeRequest = {}) {
+  const res = await api.post<APIResponse<DrainNodeResponse>>(`/nodes/${encodeURIComponent(clusterId)}/${encodeURIComponent(nodeName)}/drain`, data);
+  return res.data.data;
+}
+
+export interface NodeKeyValueRequest {
+  key: string;
+  value: string;
+}
+
+export interface NodeKeyRequest {
+  key: string;
+}
+
+export interface NodeTaintRequest {
+  key: string;
+  value?: string;
+  effect: 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute' | string;
+}
+
+export interface NodeTaintRemoveRequest {
+  key: string;
+  effect?: 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute' | string;
+}
+
+function nodeActionPath(clusterId: string, nodeName: string, action: string) {
+  return `/nodes/${encodeURIComponent(clusterId)}/${encodeURIComponent(nodeName)}/${action}`;
+}
+
+export async function setNodeLabel(clusterId: string, nodeName: string, data: NodeKeyValueRequest) {
+  const res = await api.post<APIResponse<{ node: string; status: string; key: string; value: string }>>(
+    nodeActionPath(clusterId, nodeName, 'labels'),
+    data,
+  );
+  return res.data.data;
+}
+
+export async function removeNodeLabel(clusterId: string, nodeName: string, data: NodeKeyRequest) {
+  const res = await api.post<APIResponse<{ node: string; status: string; key: string }>>(
+    nodeActionPath(clusterId, nodeName, 'labels/remove'),
+    data,
+  );
+  return res.data.data;
+}
+
+export async function setNodeAnnotation(clusterId: string, nodeName: string, data: NodeKeyValueRequest) {
+  const res = await api.post<APIResponse<{ node: string; status: string; key: string; value: string }>>(
+    nodeActionPath(clusterId, nodeName, 'annotations'),
+    data,
+  );
+  return res.data.data;
+}
+
+export async function removeNodeAnnotation(clusterId: string, nodeName: string, data: NodeKeyRequest) {
+  const res = await api.post<APIResponse<{ node: string; status: string; key: string }>>(
+    nodeActionPath(clusterId, nodeName, 'annotations/remove'),
+    data,
+  );
+  return res.data.data;
+}
+
+export async function addNodeTaint(clusterId: string, nodeName: string, data: NodeTaintRequest) {
+  const res = await api.post<APIResponse<{ node: string; status: string; taint: NodeTaintRequest }>>(
+    nodeActionPath(clusterId, nodeName, 'taints'),
+    data,
+  );
+  return res.data.data;
+}
+
+export async function removeNodeTaint(clusterId: string, nodeName: string, data: NodeTaintRemoveRequest) {
+  const res = await api.post<APIResponse<{ node: string; status: string; removed: boolean }>>(
+    nodeActionPath(clusterId, nodeName, 'taints/remove'),
+    data,
+  );
   return res.data.data;
 }
 
@@ -704,6 +867,26 @@ export async function createRoleBinding(data: {
   scope?: { clusterId?: string; projectId?: string };
 }) {
   const res = await api.post<APIResponse<import('@/types').RoleBinding>>('/rbac/bindings', data);
+  return res.data.data;
+}
+
+export async function getMyEffectivePermissions() {
+  const res = await api.get<APIResponse<import('@/types').EffectivePermissionResponse>>('/rbac/my-permissions');
+  return res.data.data;
+}
+
+export async function getEffectivePermissionsForUser(userId: string) {
+  const res = await api.get<APIResponse<import('@/types').EffectivePermissionResponse>>(
+    `/rbac/effective-permissions/${userId}`,
+  );
+  return res.data.data;
+}
+
+export async function previewPermissions(data: import('@/types').PermissionPreviewRequest) {
+  const res = await api.post<APIResponse<import('@/types').PermissionPreviewResponse>>(
+    '/rbac/permission-preview',
+    data,
+  );
   return res.data.data;
 }
 
@@ -1639,6 +1822,17 @@ export async function k8sUpdate(clusterId: string, path: string, body: unknown) 
   return k8sProxy(clusterId, 'PUT', path, body);
 }
 
+export async function k8sDryRunYaml(clusterId: string, path: string, yamlStr: string) {
+  const yaml = await import('js-yaml');
+  const body = yaml.load(yamlStr);
+  const dryRunPath = appendK8sQuery(path, {
+    dryRun: 'All',
+    fieldManager: 'astronomer',
+    fieldValidation: 'Warn',
+  });
+  return k8sProxy(clusterId, 'PUT', dryRunPath, body);
+}
+
 export async function k8sPatch(
   clusterId: string,
   path: string,
@@ -1657,6 +1851,16 @@ export async function k8sPatch(
 
 export async function k8sDelete(clusterId: string, path: string) {
   return k8sProxy(clusterId, 'DELETE', path);
+}
+
+function appendK8sQuery(path: string, params: Record<string, string>): string {
+  const [base, rawQuery = ''] = path.split('?', 2);
+  const search = new URLSearchParams(rawQuery);
+  for (const [key, value] of Object.entries(params)) {
+    search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `${base}?${query}` : base;
 }
 
 /**
@@ -1918,6 +2122,25 @@ export async function refreshArgoManagedClusterLabels(instanceId: string, cluste
     `/argocd/instances/${instanceId}/clusters/${clusterId}/refresh-labels`,
   );
   return unwrapEnvelope<ArgoManagedCluster>(res.data);
+}
+
+export async function getArgoClusterOwnership(clusterId: string) {
+  const res = await api.get<APIResponse<import('@/types').ArgoClusterOwnershipResponse>>(
+    `/argocd/clusters/${clusterId}/ownership`,
+  );
+  return res.data.data;
+}
+
+export async function setArgoClusterOwnershipDecision(
+  clusterId: string,
+  componentSlug: string,
+  body: import('@/types').ArgoBaselineOwnershipDecisionRequest,
+) {
+  const res = await api.post<APIResponse<import('@/types').ArgoBaselineOwnershipDecision>>(
+    `/argocd/clusters/${clusterId}/ownership/${componentSlug}/decision`,
+    body,
+  );
+  return res.data.data;
 }
 
 // --- Repositories ---
@@ -2335,3 +2558,8 @@ export * from './api/account-security';
 // hierarchy over clusters. See lib/api/cluster-groups.ts.
 // ============================================================
 export * from './api/cluster-groups';
+
+// ============================================================
+// UI extensions — manifest validation and registry controls.
+// ============================================================
+export * from './api/extensions';

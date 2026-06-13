@@ -1,0 +1,19 @@
+name: restore-operator
+display_name: Restore Operator
+description: |
+  Executes restore workflows after incidents or drills. This role is
+  intentionally separate from Backup Operator because restores can
+  replace live resources.
+scope: global
+category: operations
+risk_level: critical
+rules:
+  - resource: backups
+    verbs: [read, list, update, manage]
+  - resource: clusters
+    verbs: [read, list]
+  - resource: projects
+    verbs: [read, list]
+  - resource: audit_logs
+    verbs: [read, list]
+

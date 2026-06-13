@@ -2,7 +2,7 @@
 
 import { useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Copy, Download, Save, Loader2 } from 'lucide-react';
+import { CheckCircle2, Copy, Download, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -20,7 +20,10 @@ interface YamlEditorProps {
   onChange?: (value: string) => void;
   readOnly?: boolean;
   onSave?: (value: string) => void;
+  onDryRun?: (value: string) => void;
   saving?: boolean;
+  dryRunning?: boolean;
+  saveBlocked?: boolean;
   height?: string;
   className?: string;
 }
@@ -30,7 +33,10 @@ export function YamlEditor({
   onChange,
   readOnly = false,
   onSave,
+  onDryRun,
   saving,
+  dryRunning,
+  saveBlocked,
   height = '100%',
   className,
 }: YamlEditorProps) {
@@ -63,6 +69,10 @@ export function YamlEditor({
     if (onSave) onSave(value);
   }, [onSave, value]);
 
+  const handleDryRun = useCallback(() => {
+    if (onDryRun) onDryRun(value);
+  }, [onDryRun, value]);
+
   return (
     <div className={cn('flex flex-col', className)}>
       {/* Toolbar */}
@@ -75,10 +85,23 @@ export function YamlEditor({
           <button onClick={handleDownload} className="p-1.5 rounded hover:bg-[#3c3c3c] text-[#cccccc]/80 hover:text-[#cccccc] transition-colors" title="Download">
             <Download className="h-3.5 w-3.5" />
           </button>
+          {!readOnly && onDryRun && (
+            <button
+              onClick={handleDryRun}
+              disabled={dryRunning || saving}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium
+                bg-[#3c3c3c] text-[#cccccc] hover:bg-[#4a4a4a] disabled:opacity-50 transition-colors ml-1"
+              title="Dry run"
+            >
+              {dryRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+              Dry run
+            </button>
+          )}
           {!readOnly && onSave && (
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || dryRunning}
+              title={saveBlocked ? 'Run dry run and review the diff before saving' : 'Save'}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium
                 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors ml-1"
             >

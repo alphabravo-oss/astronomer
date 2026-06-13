@@ -99,6 +99,7 @@ const globalNavGroups: NavGroup[] = [
     items: [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
+      { label: 'Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'agents', verb: 'read' } },
       { label: 'Cluster Templates', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
     ],
   },
@@ -115,6 +116,7 @@ const globalNavGroups: NavGroup[] = [
     items: [
       { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
       { label: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch, permission: { resource: 'argocd', verb: 'read' }, featureFlag: 'feature.argocd' },
+      { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' } },
     ],
   },
   {

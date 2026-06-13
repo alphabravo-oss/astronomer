@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -51,6 +52,85 @@ type ResourceHandler struct {
 	// rows" (the user's existing browsers redirect-loop on next
 	// request because the JWT cutoff was stamped).
 	ssoBackchannel SSOBackchannelClient
+}
+
+type drainNodeRequest struct {
+	IgnoreDaemonSets   *bool  `json:"ignore_daemonsets,omitempty"`
+	DeleteEmptyDirData bool   `json:"delete_empty_dir_data,omitempty"`
+	GracePeriodSeconds *int64 `json:"grace_period_seconds,omitempty"`
+	DryRun             bool   `json:"dry_run,omitempty"`
+}
+
+type drainNodePodRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type drainNodeResponse struct {
+	Node     string            `json:"node"`
+	Status   string            `json:"status"`
+	Message  string            `json:"message"`
+	Evicted  []drainNodePodRef `json:"evicted"`
+	Skipped  []drainNodePodRef `json:"skipped"`
+	Failed   []drainNodePodRef `json:"failed"`
+	Blockers []string          `json:"blockers,omitempty"`
+}
+
+type nodeKeyValueRequest struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type nodeKeyRequest struct {
+	Key string `json:"key"`
+}
+
+type nodeTaintRequest struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Effect string `json:"effect"`
+}
+
+type nodeTaintRemoveRequest struct {
+	Key    string `json:"key"`
+	Effect string `json:"effect"`
+}
+
+type drainPodList struct {
+	Items []drainPod `json:"items"`
+}
+
+type drainPod struct {
+	Metadata struct {
+		Name              string            `json:"name"`
+		Namespace         string            `json:"namespace"`
+		Annotations       map[string]string `json:"annotations"`
+		DeletionTimestamp string            `json:"deletionTimestamp"`
+		OwnerReferences   []struct {
+			Kind string `json:"kind"`
+			Name string `json:"name"`
+		} `json:"ownerReferences"`
+	} `json:"metadata"`
+	Spec struct {
+		Volumes []struct {
+			Name     string         `json:"name"`
+			EmptyDir map[string]any `json:"emptyDir,omitempty"`
+		} `json:"volumes"`
+	} `json:"spec"`
+	Status struct {
+		Phase string `json:"phase"`
+	} `json:"status"`
+}
+
+type nodeActionResource struct {
+	Metadata struct {
+		Labels      map[string]string `json:"labels"`
+		Annotations map[string]string `json:"annotations"`
+	} `json:"metadata"`
+	Spec struct {
+		Taints []nodeTaintRequest `json:"taints"`
+	} `json:"spec"`
 }
 
 // ResourceSSOSessionStore is the narrow sso_sessions surface the
@@ -856,6 +936,118 @@ func (h *ResourceHandler) UncordonNode(w http.ResponseWriter, r *http.Request) {
 	h.setNodeSchedulable(w, r, false)
 }
 
+func (h *ResourceHandler) SetNodeLabel(w http.ResponseWriter, r *http.Request) {
+	h.setNodeMetadataKey(w, r, "labels")
+}
+
+func (h *ResourceHandler) RemoveNodeLabel(w http.ResponseWriter, r *http.Request) {
+	h.removeNodeMetadataKey(w, r, "labels")
+}
+
+func (h *ResourceHandler) SetNodeAnnotation(w http.ResponseWriter, r *http.Request) {
+	h.setNodeMetadataKey(w, r, "annotations")
+}
+
+func (h *ResourceHandler) RemoveNodeAnnotation(w http.ResponseWriter, r *http.Request) {
+	h.removeNodeMetadataKey(w, r, "annotations")
+}
+
+func (h *ResourceHandler) AddNodeTaint(w http.ResponseWriter, r *http.Request) {
+	clusterID, nodeName, ok := nodeActionParams(w, r)
+	if !ok {
+		return
+	}
+	var req nodeTaintRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	req.Effect = strings.TrimSpace(req.Effect)
+	if req.Key == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_taint", "key is required")
+		return
+	}
+	if !validTaintEffect(req.Effect) {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_taint", "effect must be NoSchedule, PreferNoSchedule, or NoExecute")
+		return
+	}
+	current, err := h.getNodeActionResource(r.Context(), clusterID, nodeName)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	next := make([]nodeTaintRequest, 0, len(current.Spec.Taints)+1)
+	for _, existing := range current.Spec.Taints {
+		if existing.Key == req.Key && existing.Effect == req.Effect {
+			continue
+		}
+		next = append(next, existing)
+	}
+	next = append(next, req)
+	if err := h.patchNode(r.Context(), clusterID, nodeName, map[string]any{"spec": map[string]any{"taints": next}}, "application/merge-patch+json"); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	recordAudit(r, h.queries, "cluster.node.taint.added", "node", nodeName, nodeName, map[string]any{
+		"cluster_id": clusterID,
+		"key":        req.Key,
+		"effect":     req.Effect,
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{"node": nodeName, "status": "taint_added", "taint": req})
+}
+
+func (h *ResourceHandler) RemoveNodeTaint(w http.ResponseWriter, r *http.Request) {
+	clusterID, nodeName, ok := nodeActionParams(w, r)
+	if !ok {
+		return
+	}
+	var req nodeTaintRemoveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	req.Effect = strings.TrimSpace(req.Effect)
+	if req.Key == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_taint", "key is required")
+		return
+	}
+	if req.Effect != "" && !validTaintEffect(req.Effect) {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_taint", "effect must be NoSchedule, PreferNoSchedule, or NoExecute")
+		return
+	}
+	current, err := h.getNodeActionResource(r.Context(), clusterID, nodeName)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	next := make([]nodeTaintRequest, 0, len(current.Spec.Taints))
+	removed := false
+	for _, existing := range current.Spec.Taints {
+		if existing.Key == req.Key && (req.Effect == "" || existing.Effect == req.Effect) {
+			removed = true
+			continue
+		}
+		next = append(next, existing)
+	}
+	patchTaints := any(next)
+	if len(next) == 0 {
+		patchTaints = nil
+	}
+	if err := h.patchNode(r.Context(), clusterID, nodeName, map[string]any{"spec": map[string]any{"taints": patchTaints}}, "application/merge-patch+json"); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	recordAudit(r, h.queries, "cluster.node.taint.removed", "node", nodeName, nodeName, map[string]any{
+		"cluster_id": clusterID,
+		"key":        req.Key,
+		"effect":     req.Effect,
+		"removed":    removed,
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{"node": nodeName, "status": "taint_removed", "removed": removed})
+}
+
 func (h *ResourceHandler) setNodeSchedulable(w http.ResponseWriter, r *http.Request, unschedulable bool) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	nodeName := chi.URLParam(r, "node_name")
@@ -895,10 +1087,136 @@ func (h *ResourceHandler) setNodeSchedulable(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+func nodeActionParams(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	clusterID := chi.URLParam(r, "cluster_id")
+	nodeName := chi.URLParam(r, "node_name")
+	if clusterID == "" || nodeName == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", "cluster_id and node_name are required")
+		return "", "", false
+	}
+	return clusterID, nodeName, true
+}
+
+func validTaintEffect(effect string) bool {
+	switch effect {
+	case "NoSchedule", "PreferNoSchedule", "NoExecute":
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *ResourceHandler) getNodeActionResource(ctx context.Context, clusterID, nodeName string) (nodeActionResource, error) {
+	var out nodeActionResource
+	if h == nil || h.requester == nil {
+		return out, fmt.Errorf("cluster tunnel requester not configured")
+	}
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, fmt.Sprintf("/api/v1/nodes/%s", url.PathEscape(nodeName)), nil, requestHeaders(""))
+	if err != nil {
+		return out, err
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return out, err
+	}
+	if err := parseJSONResponse(resp, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (h *ResourceHandler) patchNode(ctx context.Context, clusterID, nodeName string, patch any, contentType string) error {
+	if h == nil || h.requester == nil {
+		return fmt.Errorf("cluster tunnel requester not configured")
+	}
+	body, err := json.Marshal(patch)
+	if err != nil {
+		return err
+	}
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/nodes/%s", url.PathEscape(nodeName)), body, requestHeaders(contentType))
+	if err != nil {
+		return err
+	}
+	return ensureSuccess(resp)
+}
+
+func (h *ResourceHandler) setNodeMetadataKey(w http.ResponseWriter, r *http.Request, field string) {
+	clusterID, nodeName, ok := nodeActionParams(w, r)
+	if !ok {
+		return
+	}
+	var req nodeKeyValueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	if req.Key == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_key", "key is required")
+		return
+	}
+	patch := map[string]any{"metadata": map[string]any{field: map[string]string{req.Key: req.Value}}}
+	if err := h.patchNode(r.Context(), clusterID, nodeName, patch, "application/merge-patch+json"); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	action := "cluster.node.label.set"
+	status := "label_set"
+	if field == "annotations" {
+		action = "cluster.node.annotation.set"
+		status = "annotation_set"
+	}
+	recordAudit(r, h.queries, action, "node", nodeName, nodeName, map[string]any{"cluster_id": clusterID, "key": req.Key})
+	RespondJSON(w, http.StatusOK, map[string]any{"node": nodeName, "status": status, "key": req.Key, "value": req.Value})
+}
+
+func (h *ResourceHandler) removeNodeMetadataKey(w http.ResponseWriter, r *http.Request, field string) {
+	clusterID, nodeName, ok := nodeActionParams(w, r)
+	if !ok {
+		return
+	}
+	var req nodeKeyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	if req.Key == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_key", "key is required")
+		return
+	}
+	current, err := h.getNodeActionResource(r.Context(), clusterID, nodeName)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	values := current.Metadata.Labels
+	if field == "annotations" {
+		values = current.Metadata.Annotations
+	}
+	if values == nil {
+		values = map[string]string{}
+	}
+	delete(values, req.Key)
+	patch := map[string]any{"metadata": map[string]any{field: values}}
+	if len(values) == 0 {
+		patch = map[string]any{"metadata": map[string]any{field: nil}}
+	}
+	if err := h.patchNode(r.Context(), clusterID, nodeName, patch, "application/merge-patch+json"); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+	action := "cluster.node.label.removed"
+	status := "label_removed"
+	if field == "annotations" {
+		action = "cluster.node.annotation.removed"
+		status = "annotation_removed"
+	}
+	recordAudit(r, h.queries, action, "node", nodeName, nodeName, map[string]any{"cluster_id": clusterID, "key": req.Key})
+	RespondJSON(w, http.StatusOK, map[string]any{"node": nodeName, "status": status, "key": req.Key})
+}
+
 // DrainNode handles POST /api/v1/nodes/{cluster_id}/{node_name}/drain/.
-// Cordons the node, then evicts all pods. The eviction loop is non-trivial,
-// so for now we cordon and return 501 indicating the eviction stage is not
-// yet implemented through the agent tunnel.
+// Cordons the node, then evicts eligible pods through policy/v1 Eviction.
 func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	nodeName := chi.URLParam(r, "node_name")
@@ -910,9 +1228,17 @@ func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotImplemented, "not_implemented", "Cluster tunnel requester not configured; drain requires agent connection")
 		return
 	}
-	// Cordon first.
-	patch, _ := json.Marshal(map[string]any{"spec": map[string]any{"unschedulable": true}})
-	resp, err := h.requester.Do(r.Context(), clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/nodes/%s", nodeName), patch, requestHeaders("application/strategic-merge-patch+json"))
+	var req drainNodeRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	ignoreDaemonSets := true
+	if req.IgnoreDaemonSets != nil {
+		ignoreDaemonSets = *req.IgnoreDaemonSets
+	}
+
+	listPath := "/api/v1/pods?fieldSelector=spec.nodeName=" + url.QueryEscape(nodeName)
+	resp, err := h.requester.Do(r.Context(), clusterID, http.MethodGet, listPath, nil, requestHeaders(""))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
@@ -921,15 +1247,151 @@ func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
 		return
 	}
-	// TODO: evict pods on the node. Requires iterating pods on the node and
-	// posting eviction requests to /api/v1/namespaces/{ns}/pods/{name}/eviction.
-	// Returning 202 Accepted with a clear message is preferable to 501 here so
-	// the UI shows the cordon succeeded.
-	RespondJSON(w, http.StatusAccepted, map[string]any{
-		"node":    nodeName,
-		"status":  "cordoned",
-		"message": "Node cordoned. Pod eviction is not yet implemented; pods must be drained manually.",
+	var pods drainPodList
+	if err := parseJSONResponse(resp, &pods); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", "Failed to parse pods on node")
+		return
+	}
+
+	candidates := make([]drainPod, 0, len(pods.Items))
+	out := drainNodeResponse{Node: nodeName, Status: "draining"}
+	for _, pod := range pods.Items {
+		ref := drainNodePodRef{Namespace: pod.Metadata.Namespace, Name: pod.Metadata.Name}
+		switch {
+		case pod.Metadata.Name == "":
+			continue
+		case pod.Metadata.DeletionTimestamp != "":
+			ref.Reason = "pod is already terminating"
+			out.Skipped = append(out.Skipped, ref)
+		case pod.Status.Phase == "Succeeded" || pod.Status.Phase == "Failed":
+			ref.Reason = "pod is already terminal"
+			out.Skipped = append(out.Skipped, ref)
+		case pod.Metadata.Annotations["kubernetes.io/config.mirror"] != "":
+			ref.Reason = "mirror pod cannot be evicted"
+			out.Skipped = append(out.Skipped, ref)
+		case drainPodOwnedByDaemonSet(pod):
+			if ignoreDaemonSets {
+				ref.Reason = "managed by DaemonSet"
+				out.Skipped = append(out.Skipped, ref)
+				continue
+			}
+			out.Blockers = append(out.Blockers, podRefString(ref)+": managed by DaemonSet")
+		case drainPodHasEmptyDir(pod) && !req.DeleteEmptyDirData:
+			out.Blockers = append(out.Blockers, podRefString(ref)+": uses emptyDir volume")
+		default:
+			candidates = append(candidates, pod)
+		}
+	}
+
+	if req.DryRun {
+		out.Status = "dry_run"
+		out.Message = fmt.Sprintf("Drain would evict %d pods and skip %d pods.", len(candidates), len(out.Skipped))
+		for _, pod := range candidates {
+			out.Evicted = append(out.Evicted, drainNodePodRef{Namespace: pod.Metadata.Namespace, Name: pod.Metadata.Name, Reason: "would evict"})
+		}
+		RespondJSON(w, http.StatusOK, out)
+		return
+	}
+
+	patch, _ := json.Marshal(map[string]any{"spec": map[string]any{"unschedulable": true}})
+	resp, err = h.requester.Do(r.Context(), clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/nodes/%s", url.PathEscape(nodeName)), patch, requestHeaders("application/strategic-merge-patch+json"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		return
+	}
+	if err := ensureSuccess(resp); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
+		return
+	}
+
+	if len(out.Blockers) > 0 {
+		out.Status = "blocked"
+		out.Message = "Node cordoned, but drain is blocked by pods that require explicit options."
+		recordAudit(r, h.queries, "cluster.node.drain_blocked", "node", nodeName, nodeName, map[string]any{
+			"cluster_id": clusterID,
+			"blockers":   out.Blockers,
+		})
+		RespondJSON(w, http.StatusOK, out)
+		return
+	}
+
+	for _, pod := range candidates {
+		ref := drainNodePodRef{Namespace: pod.Metadata.Namespace, Name: pod.Metadata.Name}
+		body, err := drainEvictionBody(pod, req.GracePeriodSeconds)
+		if err != nil {
+			ref.Reason = err.Error()
+			out.Failed = append(out.Failed, ref)
+			continue
+		}
+		evictPath := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/eviction", url.PathEscape(pod.Metadata.Namespace), url.PathEscape(pod.Metadata.Name))
+		resp, err := h.requester.Do(r.Context(), clusterID, http.MethodPost, evictPath, body, requestHeaders("application/json"))
+		if err != nil {
+			ref.Reason = err.Error()
+			out.Failed = append(out.Failed, ref)
+			continue
+		}
+		if err := ensureSuccess(resp); err != nil {
+			ref.Reason = err.Error()
+			out.Failed = append(out.Failed, ref)
+			continue
+		}
+		out.Evicted = append(out.Evicted, ref)
+	}
+
+	out.Status = "drained"
+	out.Message = fmt.Sprintf("Node cordoned and %d pods evicted.", len(out.Evicted))
+	status := http.StatusAccepted
+	if len(out.Failed) > 0 {
+		out.Status = "partial"
+		out.Message = fmt.Sprintf("Node cordoned; %d pods evicted and %d evictions failed.", len(out.Evicted), len(out.Failed))
+	}
+	recordAudit(r, h.queries, "cluster.node.drain", "node", nodeName, nodeName, map[string]any{
+		"cluster_id": clusterID,
+		"evicted":    len(out.Evicted),
+		"skipped":    len(out.Skipped),
+		"failed":     len(out.Failed),
 	})
+	RespondJSON(w, status, out)
+}
+
+func drainPodOwnedByDaemonSet(pod drainPod) bool {
+	for _, ref := range pod.Metadata.OwnerReferences {
+		if ref.Kind == "DaemonSet" {
+			return true
+		}
+	}
+	return false
+}
+
+func drainPodHasEmptyDir(pod drainPod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.EmptyDir != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func drainEvictionBody(pod drainPod, gracePeriodSeconds *int64) ([]byte, error) {
+	payload := map[string]any{
+		"apiVersion": "policy/v1",
+		"kind":       "Eviction",
+		"metadata": map[string]any{
+			"name":      pod.Metadata.Name,
+			"namespace": pod.Metadata.Namespace,
+		},
+	}
+	if gracePeriodSeconds != nil {
+		payload["deleteOptions"] = map[string]any{"gracePeriodSeconds": *gracePeriodSeconds}
+	}
+	return json.Marshal(payload)
+}
+
+func podRefString(ref drainNodePodRef) string {
+	if ref.Namespace == "" {
+		return ref.Name
+	}
+	return ref.Namespace + "/" + ref.Name
 }
 
 // GetNamedResource handles GET /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/.
