@@ -53,6 +53,25 @@ type ClusterResponse struct {
 	CPUPercentage    float64 `json:"cpu_percentage"`
 	MemoryPercentage float64 `json:"memory_percentage"`
 	PodCount         int     `json:"pod_count"`
+
+	AgentPrivilegeProfile string               `json:"agent_privilege_profile"`
+	ArgoCD                ClusterArgoCDSummary `json:"argocd"`
+}
+
+type ClusterArgoCDSummary struct {
+	Registered         bool                            `json:"registered"`
+	InstanceCount      int                             `json:"instance_count"`
+	ClusterSecretNames []string                        `json:"cluster_secret_names"`
+	BaselineManagedBy  string                          `json:"baseline_managed_by"`
+	BaselineComponents []ClusterBaselineComponentOwner `json:"baseline_components"`
+}
+
+type ClusterBaselineComponentOwner struct {
+	Slug               string `json:"slug"`
+	Name               string `json:"name"`
+	Namespace          string `json:"namespace"`
+	ApplicationSetName string `json:"application_set_name"`
+	ManagedBy          string `json:"managed_by"`
 }
 
 // clusterToResponse maps a sqlc.Cluster row into the explicit wire DTO.
@@ -60,25 +79,30 @@ type ClusterResponse struct {
 // overwrite them after the call.
 func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 	resp := ClusterResponse{
-		ID:                c.ID.String(),
-		Name:              c.Name,
-		DisplayName:       c.DisplayName,
-		Description:       c.Description,
-		Status:            c.Status,
-		ApiServerUrl:      c.ApiServerUrl,
-		CaCertificate:     c.CaCertificate,
-		Environment:       c.Environment,
-		Region:            c.Region,
-		Provider:          c.Provider,
-		Labels:            c.Labels,
-		Annotations:       c.Annotations,
-		Distribution:      c.Distribution,
-		AgentVersion:      c.AgentVersion,
-		KubernetesVersion: c.KubernetesVersion,
-		NodeCount:         c.NodeCount,
-		CreatedAt:         c.CreatedAt.Format(time.RFC3339Nano),
-		UpdatedAt:         c.UpdatedAt.Format(time.RFC3339Nano),
-		IsLocal:           c.IsLocal,
+		ID:                    c.ID.String(),
+		Name:                  c.Name,
+		DisplayName:           c.DisplayName,
+		Description:           c.Description,
+		Status:                c.Status,
+		ApiServerUrl:          c.ApiServerUrl,
+		CaCertificate:         c.CaCertificate,
+		Environment:           c.Environment,
+		Region:                c.Region,
+		Provider:              c.Provider,
+		Labels:                c.Labels,
+		Annotations:           c.Annotations,
+		Distribution:          c.Distribution,
+		AgentVersion:          c.AgentVersion,
+		KubernetesVersion:     c.KubernetesVersion,
+		NodeCount:             c.NodeCount,
+		CreatedAt:             c.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt:             c.UpdatedAt.Format(time.RFC3339Nano),
+		IsLocal:               c.IsLocal,
+		AgentPrivilegeProfile: clusterAgentPrivilegeProfile(c.Annotations),
+		ArgoCD: ClusterArgoCDSummary{
+			BaselineManagedBy:  "unknown",
+			BaselineComponents: baselineComponentOwnership("unknown"),
+		},
 	}
 	if c.LastHeartbeat.Valid {
 		s := c.LastHeartbeat.Time.Format(time.RFC3339Nano)

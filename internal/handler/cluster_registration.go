@@ -24,11 +24,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // ClusterRegistrationQuerier is the small DB surface the handler
@@ -46,6 +47,10 @@ type ClusterRegistrationQuerier interface {
 	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
 }
 
+type clusterRegistrationStepTaskOutboxQuerier interface {
+	UpdateClusterRegistrationStepWithTaskOutbox(ctx context.Context, arg sqlc.UpdateClusterRegistrationStepWithTaskOutboxParams) (sqlc.ClusterRegistrationStep, error)
+}
+
 // ClusterRegistrationHandler bundles the wizard endpoints.
 type ClusterRegistrationHandler struct {
 	queries ClusterRegistrationQuerier
@@ -56,6 +61,14 @@ type ClusterRegistrationHandler struct {
 	// when nil the row is still upserted but the worker picks it up
 	// only on the periodic sweep.
 	applyQueue ClusterDecommissionEnqueuer
+	// taskOutbox persists the apply task intent before Redis delivery.
+	// Optional; when nil the handler falls back to direct enqueue for
+	// compatibility with older tests and partial wiring.
+	taskOutbox tasks.TaskOutboxWriter
+	// argoCDAutoRegisterQueue enqueues argocd:auto_register_cluster when
+	// operators retry a failed ArgoCD adoption step from the timeline.
+	// Optional; taskOutbox is preferred when available.
+	argoCDAutoRegisterQueue ClusterDecommissionEnqueuer
 	// baselineTemplateID identifies the platform-baseline template
 	// row that the wizard auto-attaches when the operator opts in.
 	// Set via SetBaselineTemplateID; when uuid.Nil the auto-attach
@@ -114,6 +127,24 @@ func (h *ClusterRegistrationHandler) SetApplyQueue(q ClusterDecommissionEnqueuer
 	h.applyQueue = q
 }
 
+// SetTaskOutbox wires the durable task outbox used before direct Redis
+// enqueue. Optional / nil-safe.
+func (h *ClusterRegistrationHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
+	if h == nil {
+		return
+	}
+	h.taskOutbox = q
+}
+
+// SetArgoCDAutoRegisterQueue wires retry delivery for failed ArgoCD
+// auto-adoption timeline steps. Optional / nil-safe.
+func (h *ClusterRegistrationHandler) SetArgoCDAutoRegisterQueue(q ClusterDecommissionEnqueuer) {
+	if h == nil {
+		return
+	}
+	h.argoCDAutoRegisterQueue = q
+}
+
 // SetBaselineTemplateID records which cluster_templates row the
 // wizard auto-attaches when install_baseline=true. The wiring layer
 // looks it up by well-known name (e.g. "platform-baseline") at
@@ -133,16 +164,16 @@ func (h *ClusterRegistrationHandler) SetBaselineTemplateID(id uuid.UUID) {
 func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "load_error", "Failed to load registration status")
+		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load registration status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -153,26 +184,26 @@ func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Re
 func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	var req struct {
 		InstallBaseline *bool `json:"install_baseline"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.InstallBaseline == nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", "install_baseline is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "install_baseline is required")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	if _, err := h.service.SetInstallBaseline(r.Context(), id, *req.InstallBaseline); err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to record options")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to record options")
 		return
 	}
 	recordAudit(r, h.auditQueries, "cluster.registration.options", "cluster", id.String(), "", map[string]any{
@@ -180,7 +211,7 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 	})
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "load_error", "Failed to load status")
+		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -193,21 +224,21 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	record, advErr := h.service.Advance(r.Context(), id, registration.EventConfirm)
 	if advErr != nil {
 		if h.isIllegal(advErr) {
-			RespondError(w, http.StatusConflict, "illegal_transition", advErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, "illegal_transition", advErr.Error())
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "transition_error", advErr.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "transition_error", advErr.Error())
 		return
 	}
 
@@ -222,20 +253,31 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 		if tmpl, terr := h.queries.GetClusterTemplateByID(r.Context(), h.baselineTemplateID); terr == nil && len(tmpl.Spec) > 0 {
 			spec = tmpl.Spec
 		}
-		if _, err := h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
+		appParams := sqlc.UpsertClusterTemplateApplicationParams{
 			ClusterID:    id,
 			TemplateID:   h.baselineTemplateID,
 			SpecSnapshot: spec,
-		}); err != nil {
-			RespondError(w, http.StatusInternalServerError, "attach_error", "Failed to attach platform baseline")
+		}
+		dedupeKey := fmt.Sprintf("cluster_registration:confirm:cluster_template_apply:%s", id.String())
+		task := asynq.NewTask("cluster_template:apply", mustRegistrationJSON(map[string]any{"cluster_id": id.String()}))
+		_, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), h.queries, h.taskOutbox, appParams, task, tasks.TaskOutboxOptions{
+			DedupeKey:           dedupeKey,
+			QueueName:           "tunnel",
+			MaxRetry:            3,
+			MaxDeliveryAttempts: 20,
+		})
+		if err != nil {
+			h.recordTemplateAttachFailure(r.Context(), id, err)
+			RespondRequestError(w, r, http.StatusInternalServerError, "attach_error", "Failed to attach platform baseline")
 			return
 		}
-		// Enqueue the apply task. Best-effort: when the queue isn't
-		// wired the periodic sweep picks the row up.
-		if h.applyQueue != nil {
-			task := asynq.NewTask("cluster_template:apply",
-				mustRegistrationJSON(map[string]any{"cluster_id": id.String()}))
-			_, _ = h.applyQueue.Enqueue(task, asynq.Queue("tunnel"))
+		if !atomic {
+			if _, err := h.queries.UpsertClusterTemplateApplication(r.Context(), appParams); err != nil {
+				h.recordTemplateAttachFailure(r.Context(), id, err)
+				RespondRequestError(w, r, http.StatusInternalServerError, "attach_error", "Failed to attach platform baseline")
+				return
+			}
+			h.enqueueTemplateApply(r.Context(), id, dedupeKey)
 		}
 	}
 
@@ -253,48 +295,51 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_step", "Invalid step ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_step", "Invalid step ID")
 		return
 	}
 	step, err := h.queries.GetClusterRegistrationStep(r.Context(), stepID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Step not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Step not found")
 		return
 	}
 	if step.ClusterID != id {
-		RespondError(w, http.StatusBadRequest, "step_mismatch", "Step does not belong to cluster")
+		RespondRequestError(w, r, http.StatusBadRequest, "step_mismatch", "Step does not belong to cluster")
 		return
 	}
 	if step.Status != "failed" {
-		RespondError(w, http.StatusConflict, "not_failed", "Only failed steps can be retried")
+		RespondRequestError(w, r, http.StatusConflict, "not_failed", "Only failed steps can be retried")
 		return
 	}
 	// Advance back to provisioning so the timeline doesn't lie about
 	// being stuck at failed while the task is re-running.
 	if _, err := h.service.Advance(r.Context(), id, registration.EventRetry); err != nil {
-		RespondError(w, http.StatusConflict, "illegal_transition", err.Error())
+		RespondRequestError(w, r, http.StatusConflict, "illegal_transition", err.Error())
 		return
 	}
-	// Re-fire the underlying task. We only know how to retry the
-	// cluster_template apply at this layer; tool-specific retries
-	// just bounce the apply task — it's idempotent.
-	if h.applyQueue != nil {
-		task := asynq.NewTask("cluster_template:apply",
-			mustRegistrationJSON(map[string]any{"cluster_id": id.String()}))
-		_, _ = h.applyQueue.Enqueue(task, asynq.Queue("tunnel"))
+	task, queueName, maxRetry, dedupeKey := h.registrationRetryTask(id, stepID, step.StepName)
+	updatedStep, atomic, err := h.updateRetryStepWithTaskOutbox(r.Context(), stepID, task, dedupeKey, queueName, maxRetry)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to queue retry")
+		return
 	}
-	// Mark the failing step as `pending` again so the UI shows it
-	// as queued rather than the error remaining sticky.
-	_, _ = h.service.UpdateStep(r.Context(), registration.UpdateStepInput{
-		StepID:      stepID,
-		Status:      "pending",
-		ProgressPct: 0,
-	})
+	if atomic {
+		h.publishRegistrationStep(updatedStep)
+	} else {
+		h.enqueueRegistrationRetryTask(r.Context(), task, queueName, maxRetry, dedupeKey)
+		// Mark the failing step as `pending` again so the UI shows it
+		// as queued rather than the error remaining sticky.
+		_, _ = h.service.UpdateStep(r.Context(), registration.UpdateStepInput{
+			StepID:      stepID,
+			Status:      "pending",
+			ProgressPct: 0,
+		})
+	}
 	recordAudit(r, h.auditQueries, "cluster.registration.retry", "cluster", id.String(), "", map[string]any{
 		"step_id":   stepID.String(),
 		"step_name": step.StepName,
@@ -307,35 +352,22 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok || caller == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid caller ID")
-		return
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Cancel requires superuser")
+	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		InvalidUserMessage: "Invalid caller ID",
+		ForbiddenMessage:   "Cancel requires superuser",
+	}); !ok {
 		return
 	}
 	if _, err := h.service.Advance(r.Context(), id, registration.EventCancel,
 		registration.WithError("cancelled by superuser")); err != nil {
 		if h.isIllegal(err) {
-			RespondError(w, http.StatusConflict, "illegal_transition", err.Error())
+			RespondRequestError(w, r, http.StatusConflict, "illegal_transition", err.Error())
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "transition_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "transition_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditQueries, "cluster.registration.cancel", "cluster", id.String(), "", nil)
@@ -350,7 +382,7 @@ func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.R
 func (h *ClusterRegistrationHandler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if h.bus == nil {
@@ -445,6 +477,124 @@ func (h *ClusterRegistrationHandler) isIllegal(err error) bool {
 	}
 	s := err.Error()
 	return len(s) >= len("illegal phase transition") && s[:len("illegal phase transition")] == "illegal phase transition"
+}
+
+func (h *ClusterRegistrationHandler) enqueueTemplateApply(ctx context.Context, clusterID uuid.UUID, dedupeKey string) {
+	task := asynq.NewTask("cluster_template:apply",
+		mustRegistrationJSON(map[string]any{"cluster_id": clusterID.String()}))
+	if h.taskOutbox != nil {
+		if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
+			DedupeKey:           dedupeKey,
+			QueueName:           "tunnel",
+			MaxRetry:            3,
+			MaxDeliveryAttempts: 20,
+		}); err == nil {
+			return
+		}
+	}
+	if h.applyQueue != nil {
+		_, _ = h.applyQueue.Enqueue(task, asynq.Queue("tunnel"), asynq.MaxRetry(3))
+	}
+}
+
+func (h *ClusterRegistrationHandler) registrationRetryTask(clusterID, stepID uuid.UUID, stepName string) (*asynq.Task, string, int, string) {
+	if stepName == "argocd_registration_failed" {
+		task, err := tasks.NewArgoCDAutoRegisterClusterTask(clusterID)
+		if err == nil {
+			return task, "default", 5, fmt.Sprintf("cluster_registration:retry:argocd_auto_register:%s:%s", clusterID.String(), stepID.String())
+		}
+	}
+	return asynq.NewTask("cluster_template:apply", mustRegistrationJSON(map[string]any{"cluster_id": clusterID.String()})),
+		"tunnel",
+		3,
+		fmt.Sprintf("cluster_registration:retry:%s:%s", clusterID.String(), stepID.String())
+}
+
+func (h *ClusterRegistrationHandler) enqueueRegistrationRetryTask(ctx context.Context, task *asynq.Task, queueName string, maxRetry int, dedupeKey string) {
+	if task == nil {
+		return
+	}
+	if h.taskOutbox != nil {
+		if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
+			DedupeKey:           dedupeKey,
+			QueueName:           queueName,
+			MaxRetry:            maxRetry,
+			MaxDeliveryAttempts: 20,
+		}); err == nil {
+			return
+		}
+	}
+	switch task.Type() {
+	case tasks.ArgoCDAutoRegisterClusterType:
+		if h.argoCDAutoRegisterQueue != nil {
+			_, _ = h.argoCDAutoRegisterQueue.Enqueue(task, asynq.Queue(queueName), asynq.MaxRetry(maxRetry))
+		}
+	default:
+		if h.applyQueue != nil {
+			_, _ = h.applyQueue.Enqueue(task, asynq.Queue(queueName), asynq.MaxRetry(maxRetry))
+		}
+	}
+}
+
+func (h *ClusterRegistrationHandler) updateRetryStepWithTaskOutbox(ctx context.Context, stepID uuid.UUID, task *asynq.Task, dedupeKey, queueName string, maxRetry int) (sqlc.ClusterRegistrationStep, bool, error) {
+	atomicQ, ok := h.queries.(clusterRegistrationStepTaskOutboxQuerier)
+	if !ok || h.taskOutbox == nil || task == nil {
+		return sqlc.ClusterRegistrationStep{}, false, nil
+	}
+	step, err := atomicQ.UpdateClusterRegistrationStepWithTaskOutbox(ctx, sqlc.UpdateClusterRegistrationStepWithTaskOutboxParams{
+		ID:                  stepID,
+		Status:              "pending",
+		ProgressPct:         0,
+		DetailJSON:          nil,
+		StartedAt:           pgtype.Timestamptz{},
+		CompletedAt:         pgtype.Timestamptz{},
+		ErrorMessage:        "",
+		DedupeKey:           pgtype.Text{String: dedupeKey, Valid: true},
+		TaskType:            task.Type(),
+		Payload:             task.Payload(),
+		QueueName:           queueName,
+		MaxRetry:            int32(maxRetry),
+		MaxDeliveryAttempts: 20,
+		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	})
+	return step, true, err
+}
+
+func (h *ClusterRegistrationHandler) publishRegistrationStep(step sqlc.ClusterRegistrationStep) {
+	if h == nil || h.bus == nil {
+		return
+	}
+	payload := map[string]any{
+		"cluster_id": step.ClusterID,
+		"step_id":    step.ID,
+		"step_name":  step.StepName,
+		"label":      step.Label,
+		"status":     step.Status,
+		"progress":   int(step.ProgressPct),
+		"detail":     step.DetailJSON,
+		"error":      step.ErrorMessage,
+		"step_order": int(step.StepOrder),
+	}
+	if step.StartedAt.Valid {
+		payload["started_at"] = step.StartedAt.Time.UTC()
+	}
+	if step.CompletedAt.Valid {
+		payload["completed_at"] = step.CompletedAt.Time.UTC()
+	}
+	h.bus.Publish(events.Type("cluster.registration.step"), payload)
+}
+
+func (h *ClusterRegistrationHandler) recordTemplateAttachFailure(ctx context.Context, clusterID uuid.UUID, cause error) {
+	if h == nil || h.service == nil {
+		return
+	}
+	_, _ = h.service.WriteStep(ctx, clusterID, registration.StepInput{
+		StepName:      "template_failed",
+		Status:        "failed",
+		ProgressPct:   0,
+		ErrorMessage:  cause.Error(),
+		MarkCompleted: true,
+	})
 }
 
 func mustRegistrationJSON(v any) []byte {

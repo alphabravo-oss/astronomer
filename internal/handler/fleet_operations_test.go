@@ -24,14 +24,17 @@ import (
 type fakeFleetOperationQuerier struct {
 	mu sync.Mutex
 
-	operations map[uuid.UUID]sqlc.FleetOperation
-	targets    map[uuid.UUID]map[uuid.UUID]sqlc.FleetOperationTarget
+	operations     map[uuid.UUID]sqlc.FleetOperation
+	targets        map[uuid.UUID]map[uuid.UUID]sqlc.FleetOperationTarget
+	idemOperations []sqlc.CreateFleetOperationIdempotentParams
+	idemByKey      map[string]sqlc.FleetOperation
 }
 
 func newFakeFleetOperationQuerier() *fakeFleetOperationQuerier {
 	return &fakeFleetOperationQuerier{
 		operations: map[uuid.UUID]sqlc.FleetOperation{},
 		targets:    map[uuid.UUID]map[uuid.UUID]sqlc.FleetOperationTarget{},
+		idemByKey:  map[string]sqlc.FleetOperation{},
 	}
 }
 
@@ -56,6 +59,36 @@ func (f *fakeFleetOperationQuerier) CreateFleetOperation(_ context.Context, arg 
 		UpdatedAt:                 now,
 	}
 	f.operations[op.ID] = op
+	return op, nil
+}
+
+func (f *fakeFleetOperationQuerier) CreateFleetOperationIdempotent(_ context.Context, arg sqlc.CreateFleetOperationIdempotentParams) (sqlc.FleetOperation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.idemOperations = append(f.idemOperations, arg)
+	key := arg.Scope + "|" + arg.IdempotencyKey
+	if op, ok := f.idemByKey[key]; ok {
+		return op, nil
+	}
+	now := time.Now()
+	op := sqlc.FleetOperation{
+		ID:                        uuid.New(),
+		Name:                      arg.Name,
+		Description:               arg.Description,
+		OperationType:             arg.OperationType,
+		OperationSpec:             arg.OperationSpec,
+		Selector:                  arg.Selector,
+		Strategy:                  arg.Strategy,
+		MaxConcurrent:             arg.MaxConcurrent,
+		OnError:                   arg.OnError,
+		RespectMaintenanceWindows: arg.RespectMaintenanceWindows,
+		Status:                    "pending",
+		CreatedBy:                 arg.CreatedBy,
+		CreatedAt:                 now,
+		UpdatedAt:                 now,
+	}
+	f.operations[op.ID] = op
+	f.idemByKey[key] = op
 	return op, nil
 }
 
@@ -233,6 +266,45 @@ func TestFleetOperation_CRUD(t *testing.T) {
 	h.Get(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestFleetOperationCreateUsesIdempotencyKey(t *testing.T) {
+	q := newFakeFleetOperationQuerier()
+	h := NewFleetOperationHandler(q)
+	body := mustJSON(t, map[string]any{
+		"name":           "retryable-fleet-op",
+		"operation_type": "tool_upgrade",
+		"operation_spec": map[string]any{"slug": "cert-manager"},
+		"selector":       map[string]any{"matchLabels": map[string]string{"tier": "staging"}},
+	})
+
+	var firstID string
+	for i := 0; i < 2; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/fleet-operations/", bytes.NewReader(body))
+		req.Header.Set("Idempotency-Key", "fleet-retry-1")
+		h.Create(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %d: status=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Data FleetOperationResponse `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode %d: %v", i, err)
+		}
+		if i == 0 {
+			firstID = resp.Data.ID
+		} else if resp.Data.ID != firstID {
+			t.Fatalf("operation id = %s then %s, want replay to return original", firstID, resp.Data.ID)
+		}
+	}
+	if len(q.operations) != 1 {
+		t.Fatalf("operations = %d, want one durable row", len(q.operations))
+	}
+	if len(q.idemOperations) != 2 {
+		t.Fatalf("idempotent calls = %d, want 2", len(q.idemOperations))
 	}
 }
 

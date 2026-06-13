@@ -8,12 +8,13 @@
 //
 // Endpoints (all under /api/v1):
 //
-//   GET    /admin/settings/             — full list, merged with defaults
-//   GET    /admin/settings/{key}/       — one setting
-//   PUT    /admin/settings/{key}/       — update; body { "value": <any> }
-//   DELETE /admin/settings/{key}/       — reset to default
-//   GET    /settings/branding/          — PUBLIC: the branding.* subset
-//   GET    /settings/banner/            — PUBLIC: the banner.* subset
+//	GET    /admin/settings/             — full list, merged with defaults
+//	GET    /admin/settings/{key}/       — one setting
+//	PUT    /admin/settings/{key}/       — update; body { "value": <any> }
+//	DELETE /admin/settings/{key}/       — reset to default
+//	GET    /settings/branding/          — PUBLIC: the branding.* subset
+//	GET    /settings/banner/            — PUBLIC: the banner.* subset
+//	GET    /settings/features/          — AUTHENTICATED: feature.* booleans
 //
 // Admin endpoints are superuser-only (gated inside the handler so the
 // failure mode is a clean 403 instead of a generic permission middleware
@@ -47,7 +48,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // PlatformSettingsQuerier is the narrow DB surface this handler needs.
@@ -94,11 +94,11 @@ type settingSpec struct {
 // is answered by `strings.HasPrefix(k, NamespaceBranding+".")` and
 // nothing else.
 const (
-	NamespaceBranding     = "branding"
-	NamespaceBanner       = "banner"
-	NamespaceFeature      = "feature"
-	NamespaceToken        = "token"
-	NamespaceTelemetry    = "telemetry"
+	NamespaceBranding  = "branding"
+	NamespaceBanner    = "banner"
+	NamespaceFeature   = "feature"
+	NamespaceToken     = "token"
+	NamespaceTelemetry = "telemetry"
 	// NamespaceRegistration carries the platform-TLS posture used to
 	// shape the `curl … | kubectl apply -f -` one-liner the cluster-
 	// registration wizard renders. Exposed pre-auth so an agent host
@@ -111,24 +111,26 @@ const (
 // platform_settings means adding it here too — otherwise PUT will
 // reject it as `unknown_key` and reads will skip it.
 var settingsRegistry = map[string]settingSpec{
-	"branding.product_name":  {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
-	"branding.logo_url":      {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
-	"branding.primary_color": {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
-	"branding.support_url":   {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
-	"branding.copyright":     {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
-	"banner.login_text":      {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
-	"banner.global_text":     {Type: typeString, Default: "", Description: "Persistent in-app banner text; markdown supported. Empty = no banner"},
-	"banner.global_color":    {Type: typeEnum, Default: "info", Description: "Banner severity: info | warning | critical", Enum: []string{"info", "warning", "critical"}},
-	"feature.catalog":        {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
-	"feature.projects":       {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
-	"feature.monitoring":     {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
-	"feature.argocd":         {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
-	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
-	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
-	"token.default_ttl_min":  {Type: typeInt, Default: 60, Description: "API token default expiry in minutes; 0 = no expiry", MinInt: 0, MaxInt: 525600 * 10},
-	"token.max_ttl_min":      {Type: typeInt, Default: 525600, Description: "Maximum allowed API token expiry in minutes (1 year default)", MinInt: 1, MaxInt: 525600 * 10},
-	"telemetry.enabled":      {Type: typeBool, Default: false, Description: "Opt-in: send anonymized aggregate telemetry nightly"},
-	"telemetry.endpoint":     {Type: typeString, Default: "https://telemetry.alphabravo.io/astronomer", Description: "HTTPS endpoint that anonymized telemetry POSTs land at"},
+	"branding.product_name":           {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
+	"branding.logo_url":               {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
+	"branding.primary_color":          {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
+	"branding.support_url":            {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
+	"branding.copyright":              {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
+	"banner.login_text":               {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
+	"banner.global_text":              {Type: typeString, Default: "", Description: "Persistent in-app banner text; markdown supported. Empty = no banner"},
+	"banner.global_color":             {Type: typeEnum, Default: "info", Description: "Banner severity: info | warning | critical", Enum: []string{"info", "warning", "critical"}},
+	"feature.catalog":                 {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
+	"feature.projects":                {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
+	"feature.monitoring":              {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
+	"feature.argocd":                  {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
+	"feature.security":                {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
+	"feature.backups":                 {Type: typeBool, Default: true, Description: "Backup and restore tab"},
+	"argocd.auto_adopt_clusters":      {Type: typeBool, Default: true, Description: "Automatically register connected clusters into built-in/configured ArgoCD instances"},
+	"argocd.manage_platform_baseline": {Type: typeBool, Default: true, Description: "Use built-in ArgoCD ApplicationSets to reconcile platform baseline components on managed clusters"},
+	"token.default_ttl_min":           {Type: typeInt, Default: 60, Description: "API token default expiry in minutes; 0 = no expiry", MinInt: 0, MaxInt: 525600 * 10},
+	"token.max_ttl_min":               {Type: typeInt, Default: 525600, Description: "Maximum allowed API token expiry in minutes (1 year default)", MinInt: 1, MaxInt: 525600 * 10},
+	"telemetry.enabled":               {Type: typeBool, Default: false, Description: "Opt-in: send anonymized aggregate telemetry nightly"},
+	"telemetry.endpoint":              {Type: typeString, Default: "https://telemetry.alphabravo.io/astronomer", Description: "HTTPS endpoint that anonymized telemetry POSTs land at"},
 	// Migration 058 — dashboard widget iframe allow-list. Comma-
 	// separated list of hosts grafana_panel + url_iframe widget specs
 	// may point at. Empty (the default) blocks every iframe widget;
@@ -141,8 +143,8 @@ var settingsRegistry = map[string]settingSpec{
 	// the bundle returned by /api/v1/register/ca.crt; `insecure` skips
 	// verification entirely (escape hatch for ops who haven't pinned a
 	// cert yet). The wizard branches the rendered curl on this key.
-	"registration.tls_mode":   {Type: typeEnum, Default: "public_ca", Description: "TLS posture surfaced by the cluster-registration wizard: public_ca | private_ca | insecure", Enum: []string{"public_ca", "private_ca", "insecure"}},
-	"registration.ca_bundle":  {Type: typeString, Default: "", Description: "PEM-encoded CA bundle returned by GET /api/v1/register/ca.crt for private_ca mode. Empty in public_ca / insecure modes"},
+	"registration.tls_mode":  {Type: typeEnum, Default: "public_ca", Description: "TLS posture surfaced by the cluster-registration wizard: public_ca | private_ca | insecure", Enum: []string{"public_ca", "private_ca", "insecure"}},
+	"registration.ca_bundle": {Type: typeString, Default: "", Description: "PEM-encoded CA bundle returned by GET /api/v1/register/ca.crt for private_ca mode. Empty in public_ca / insecure modes"},
 }
 
 // preAuthAllowedNamespaces is the explicit allowlist for the public
@@ -198,12 +200,12 @@ func (h *PlatformSettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
 		return
 	}
 	rows, err := h.queries.ListPlatformSettings(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	rowByKey := make(map[string]sqlc.PlatformSetting, len(rows))
@@ -228,16 +230,16 @@ func (h *PlatformSettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondError(w, http.StatusNotFound, "unknown_key", "Unknown setting key")
+		RespondRequestError(w, r, http.StatusNotFound, "unknown_key", "Unknown setting key")
 		return
 	}
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
 		return
 	}
 	row, err := h.queries.GetPlatformSetting(r.Context(), key)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, buildResponse(key, spec, row))
@@ -261,24 +263,24 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondError(w, http.StatusNotFound, "unknown_key", "Unknown setting key")
+		RespondRequestError(w, r, http.StatusNotFound, "unknown_key", "Unknown setting key")
 		return
 	}
 	var req updateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if len(req.Value) == 0 {
-		RespondError(w, http.StatusBadRequest, "validation_error", "value is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "value is required")
 		return
 	}
 	if err := validateValue(spec, req.Value); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
 		return
 	}
 
@@ -288,7 +290,7 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	if prev, err := h.queries.GetPlatformSetting(r.Context(), key); err == nil {
 		oldValueJSON = prev.Value
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
@@ -299,7 +301,7 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 		UpdatedBy:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
@@ -327,11 +329,11 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondError(w, http.StatusNotFound, "unknown_key", "Unknown setting key")
+		RespondRequestError(w, r, http.StatusNotFound, "unknown_key", "Unknown setting key")
 		return
 	}
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
 		return
 	}
 	var oldValueJSON json.RawMessage
@@ -339,7 +341,7 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 		oldValueJSON = prev.Value
 	}
 	if err := h.queries.DeletePlatformSetting(r.Context(), key); err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	if h.cache != nil {
@@ -376,6 +378,23 @@ func (h *PlatformSettingsHandler) PublicRegistration(w http.ResponseWriter, r *h
 	h.servePublicNamespace(w, r, NamespaceRegistration)
 }
 
+// Features handles GET /api/v1/settings/features/. AUTHENTICATED by route
+// middleware. It exposes only feature.* booleans so the SPA can mirror backend
+// feature gates in navigation and disabled-page states without granting
+// non-admin users access to the full platform-settings registry.
+func (h *PlatformSettingsHandler) Features(w http.ResponseWriter, r *http.Request) {
+	if h.queries == nil {
+		RespondJSON(w, http.StatusOK, featureSubsetResponse(nil))
+		return
+	}
+	rows, err := h.queries.ListPlatformSettingsByPrefix(r.Context(), NamespaceFeature+".")
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, featureSubsetResponse(rows))
+}
+
 // servePublicNamespace is the shared implementation for the pre-auth
 // readers. The `canonical` argument is hardcoded by the caller (not
 // derived from a URL param) so an attacker can never pivot a public
@@ -385,7 +404,7 @@ func (h *PlatformSettingsHandler) servePublicNamespace(w http.ResponseWriter, r 
 	// check against the explicit allowlist so accidental additions to
 	// servePublicNamespace's callsites can't widen the exposure.
 	if _, ok := preAuthAllowedNamespaces[canonical]; !ok {
-		RespondError(w, http.StatusNotFound, "not_found", "Unknown public settings namespace")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Unknown public settings namespace")
 		return
 	}
 	if h.queries == nil {
@@ -396,7 +415,7 @@ func (h *PlatformSettingsHandler) servePublicNamespace(w http.ResponseWriter, r 
 	}
 	rows, err := h.queries.ListPlatformSettingsByPrefix(r.Context(), canonical+".")
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, publicSubsetResponse(canonical, rows))
@@ -431,33 +450,44 @@ func publicSubsetResponse(canonical string, rows []sqlc.PlatformSetting) map[str
 	return out
 }
 
+func featureSubsetResponse(rows []sqlc.PlatformSetting) map[string]bool {
+	rowByKey := make(map[string]sqlc.PlatformSetting, len(rows))
+	for _, r := range rows {
+		rowByKey[r.Key] = r
+	}
+	out := make(map[string]bool)
+	prefix := NamespaceFeature + "."
+	for key, spec := range settingsRegistry {
+		if !strings.HasPrefix(key, prefix) || spec.Type != typeBool {
+			continue
+		}
+		value := defaultBool(spec.Default)
+		if row, ok := rowByKey[key]; ok && len(row.Value) > 0 {
+			var parsed bool
+			if err := json.Unmarshal(row.Value, &parsed); err == nil {
+				value = parsed
+			}
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func defaultBool(v any) bool {
+	b, ok := v.(bool)
+	return ok && b
+}
+
 // gate enforces superuser-only access. Matches the admin_queues.go
 // pattern. Audits on success so a read attempt is logged.
 func (h *PlatformSettingsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "User store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Settings administration requires superuser privileges")
-		return false
-	}
-	return true
+	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableStatus:  http.StatusInternalServerError,
+		StoreUnavailableCode:    "internal_error",
+		StoreUnavailableMessage: "User store not configured",
+		ForbiddenMessage:        "Settings administration requires superuser privileges",
+	})
+	return ok
 }
 
 // --- helpers ---

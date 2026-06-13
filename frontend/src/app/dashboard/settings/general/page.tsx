@@ -270,8 +270,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border">
-        <nav className="flex gap-6">
+      <div className="border-b border-border overflow-x-auto">
+        <nav className="flex min-w-max gap-6">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -355,6 +355,7 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Platform Name</label>
                   <input
+                    aria-label="Platform Name"
                     type="text"
                     value={generalForm.platformName}
                     onChange={(e) => setGeneralForm((f) => ({ ...f, platformName: e.target.value }))}
@@ -366,6 +367,7 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Agent Heartbeat Interval</label>
                   <select
+                    aria-label="Agent Heartbeat Interval"
                     value={generalForm.agentHeartbeatInterval}
                     onChange={(e) => setGeneralForm((f) => ({ ...f, agentHeartbeatInterval: Number(e.target.value) }))}
                     className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
@@ -380,6 +382,7 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Default Session Timeout</label>
                   <select
+                    aria-label="Default Session Timeout"
                     value={generalForm.defaultSessionTimeout}
                     onChange={(e) => setGeneralForm((f) => ({ ...f, defaultSessionTimeout: Number(e.target.value) }))}
                     className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
@@ -398,6 +401,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground">Log all API actions for compliance</p>
                   </div>
                   <button
+                    aria-label="Enable Audit Logging"
                     onClick={() => setGeneralForm((f) => ({ ...f, enableAuditLogging: !f.enableAuditLogging }))}
                     className={cn(
                       'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
@@ -417,6 +421,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-muted-foreground">Collect and aggregate cluster metrics</p>
                   </div>
                   <button
+                    aria-label="Metrics Collection"
                     onClick={() => setGeneralForm((f) => ({ ...f, metricsCollection: !f.metricsCollection }))}
                     className={cn(
                       'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
@@ -517,7 +522,7 @@ export default function SettingsPage() {
       {showAddSSO && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddSSO(false)} />
-          <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
+          <div className="relative mx-4 w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-foreground">Add SSO Provider</h3>
               <button

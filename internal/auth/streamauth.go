@@ -37,8 +37,9 @@ func BearerFromHeader(headerVal string) string {
 }
 
 // AuthorizeStreamRequest authenticates a long-lived stream request (WebSocket
-// or SSE) by Authorization header OR `?token=` query parameter. Returns the
-// authenticated user ID and true on success.
+// or SSE) by Authorization header. Browser callers that cannot send headers
+// should use AuthorizeStreamRequestWithTickets with a one-use `?ticket=`.
+// Returns the authenticated user ID and true on success.
 //
 // The token may be either:
 //   - An API token (prefix `astro_`), looked up by sha256 hash in the
@@ -46,17 +47,24 @@ func BearerFromHeader(headerVal string) string {
 //     level. ExpiresAt is checked here. The owning user must be active.
 //   - A JWT, validated against the JWTManager's key set.
 //
-// Precedence: Authorization header is preferred over the query parameter,
-// matching the existing per-handler implementations this helper replaces.
-//
 // On any failure (missing/expired/revoked/inactive-user/bad-signature) returns
 // (uuid.Nil, false) so callers can write a uniform 401. When the JWTManager
 // is nil the request is allowed through with uuid.Nil so dev/test callers
 // that haven't wired auth continue to work; this mirrors the pre-existing
 // per-handler `if jwt == nil { return true }` short-circuit.
 func AuthorizeStreamRequest(r *http.Request, q TokenQuerier, j *JWTManager) (uuid.UUID, bool) {
+	return AuthorizeStreamRequestWithTickets(r, q, j, nil, "", uuid.Nil)
+}
+
+func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTManager, tickets *StreamTicketStore, kind string, clusterID uuid.UUID) (uuid.UUID, bool) {
 	if r == nil {
 		return uuid.Nil, false
+	}
+	if tickets != nil {
+		if raw := strings.TrimSpace(r.URL.Query().Get("ticket")); raw != "" {
+			userID, err := tickets.Validate(raw, kind, clusterID)
+			return userID, err == nil
+		}
 	}
 	if j == nil {
 		// No JWT manager wired → dev/test mode. Preserve the legacy behavior
@@ -65,9 +73,6 @@ func AuthorizeStreamRequest(r *http.Request, q TokenQuerier, j *JWTManager) (uui
 	}
 
 	token := BearerFromHeader(r.Header.Get("Authorization"))
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
 	if token == "" {
 		return uuid.Nil, false
 	}

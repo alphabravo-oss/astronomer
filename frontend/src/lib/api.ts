@@ -2,31 +2,38 @@ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'ax
 import type { APIResponse, PaginatedResponse } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const CSRF_COOKIE = 'astronomer_csrf';
+const CSRF_HEADER = 'X-CSRF-Token';
 
-// Cookie used by the /argocd/* reverse proxy on the Go backend. Top-level
-// browser navigation (an `<a target="_blank">` click) cannot attach a custom
-// Authorization header, so we mirror the JWT (the same value stored in
-// localStorage('astronomer_token')) into a same-host cookie. The proxy
-// auth middleware accepts either source.
-//
-// SameSite=Lax is correct here: the cookie should travel with normal
-// top-level navigation but not with cross-site iframe / form POST flows.
-// `Secure` is added when the page is served over HTTPS so we don't break
-// local dev (http://localhost) but still pass the cookie under TLS.
-const SESSION_COOKIE = 'astronomer_session';
-
-function setSessionCookie(token: string): void {
-  if (typeof document === 'undefined') return;
-  const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
-  document.cookie = `${SESSION_COOKIE}=${token}; Path=/; SameSite=Lax${secure}`;
+function clearLegacyTokenStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('astronomer_token');
+    localStorage.removeItem('astronomer_refresh');
+  } catch {
+    // Storage may be blocked in hardened browser profiles. Cookie auth still works.
+  }
 }
 
-function clearSessionCookie(): void {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const prefix = `${name}=`;
+  const found = document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  return found ? decodeURIComponent(found.slice(prefix.length)) : null;
 }
 
-export { setSessionCookie, clearSessionCookie };
+function isUnsafeMethod(method?: string): boolean {
+  const normalized = (method || 'get').toUpperCase();
+  return !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(normalized);
+}
+
+function csrfHeaders(): Record<string, string> {
+  const token = readCookie(CSRF_COOKIE);
+  return token ? { [CSRF_HEADER]: token } : {};
+}
 
 /**
  * Configured Axios instance for all API communication
@@ -34,24 +41,26 @@ export { setSessionCookie, clearSessionCookie };
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 /**
- * Request interceptor - attach JWT token and ensure trailing slash
+ * Request interceptor - ensure trailing slash
  */
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('astronomer_token');
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
+    clearLegacyTokenStorage();
+    if (isUnsafeMethod(config.method) && config.headers) {
+      const token = readCookie(CSRF_COOKIE);
+      if (token) {
+        config.headers.set(CSRF_HEADER, token);
       }
     }
-    // Ensure trailing slash to avoid Django APPEND_SLASH 301 redirects
-    // which lose the Authorization header. Skip for k8s proxy paths.
+    // Ensure trailing slash for route compatibility. Skip k8s proxy paths,
+    // where the suffix is an upstream Kubernetes API path.
     if (config.url && !config.url.endsWith('/') && !config.url.includes('?') && !config.url.includes('/k8s/')) {
       config.url += '/';
     }
@@ -64,21 +73,19 @@ api.interceptors.request.use(
  * Response interceptor - handle token refresh on 401, then redirect if still unauthorized
  */
 let isRefreshing = false;
-let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
+let failedQueue: Array<{ resolve: () => void; reject: (err: unknown) => void }> = [];
 
-function processQueue(error: unknown, token: string | null) {
+function processQueue(error: unknown, ok: boolean) {
   failedQueue.forEach((p) => {
-    if (token) p.resolve(token);
+    if (ok) p.resolve();
     else p.reject(error);
   });
   failedQueue = [];
 }
 
-// Recursively rewrite snake_case keys to camelCase. The Go API returns
-// snake_case (mirroring the original Django/DRF contract), but the frontend's
-// types are camelCase. Doing this at the axios layer keeps each call site
-// untouched and matches the original Python-server behaviour from the
-// frontend's perspective.
+// Recursively rewrite snake_case keys to camelCase. The API returns snake_case,
+// but the frontend's types are camelCase. Doing this at the axios layer keeps
+// each call site untouched.
 function snakeToCamel(s: string): string {
   return s.replace(/_([a-z0-9])/g, (_, ch) => ch.toUpperCase());
 }
@@ -111,24 +118,11 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      const refreshToken = localStorage.getItem('astronomer_refresh');
-      if (!refreshToken) {
-        localStorage.removeItem('astronomer_token');
-        clearSessionCookie();
-        if (!window.location.pathname.startsWith('/auth')) {
-          window.location.href = '/auth/login';
-        }
-        return Promise.reject(error);
-      }
-
       if (isRefreshing) {
         // Queue this request until refresh completes
-        return new Promise<string>((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
           failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-          }
+        }).then(() => {
           return api(originalRequest);
         });
       }
@@ -139,30 +133,21 @@ api.interceptors.response.use(
       try {
         const res = await axios.post(
           `${API_BASE_URL}/auth/refresh/`,
-          { refresh: refreshToken },
-          { headers: { 'Content-Type': 'application/json' } }
+          {},
+          { headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, withCredentials: true }
         );
         const data = res.data?.data || res.data;
-        const newToken = data.token;
-        const newRefresh = data.refresh;
-
-        localStorage.setItem('astronomer_token', newToken);
-        setSessionCookie(newToken);
-        if (newRefresh) {
-          localStorage.setItem('astronomer_refresh', newRefresh);
+        if (!data?.token) {
+          throw new Error('Refresh did not return an access token');
         }
 
-        processQueue(null, newToken);
+        processQueue(null, true);
 
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        }
         return api(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError, null);
+        processQueue(refreshError, false);
         localStorage.removeItem('astronomer_token');
         localStorage.removeItem('astronomer_refresh');
-        clearSessionCookie();
         if (!window.location.pathname.startsWith('/auth')) {
           window.location.href = '/auth/login';
         }
@@ -190,11 +175,6 @@ export async function loginWithCredentials(username: string, password: string) {
     username,
     password,
   });
-  // Mirror the JWT into a cookie so the /argocd/* reverse proxy can gate
-  // top-level browser navigation (which can't carry a Bearer header).
-  if (res.data?.data?.token) {
-    setSessionCookie(res.data.data.token);
-  }
   return res.data.data;
 }
 
@@ -210,9 +190,6 @@ export async function refreshAccessToken(refreshToken: string) {
   const res = await api.post<APIResponse<{ token: string; refresh?: string }>>('/auth/refresh', {
     refresh: refreshToken,
   });
-  if (res.data?.data?.token) {
-    setSessionCookie(res.data.data.token);
-  }
   return res.data.data;
 }
 
@@ -221,15 +198,37 @@ export async function loginWithSSO(provider: string, code: string) {
     provider,
     code,
   });
-  if (res.data?.data?.token) {
-    setSessionCookie(res.data.data.token);
-  }
   return res.data.data;
 }
 
 export async function getCurrentUser() {
   const res = await api.get<APIResponse<import('@/types').User>>('/auth/me');
   return res.data.data;
+}
+
+export type StreamTicketType = 'events' | 'registration' | 'logs' | 'exec' | 'shell';
+
+export async function createStreamTicket(streamType: StreamTicketType, clusterId?: string) {
+  const res = await api.post<APIResponse<{ ticket: string; expiresAt: string }>>('/streams/tickets', {
+    stream_type: streamType,
+    cluster_id: clusterId,
+  });
+  return res.data.data;
+}
+
+export type FeatureFlagKey =
+  | 'feature.catalog'
+  | 'feature.projects'
+  | 'feature.monitoring'
+  | 'feature.argocd'
+  | 'feature.security'
+  | 'feature.backups';
+
+export type FeatureFlags = Partial<Record<FeatureFlagKey, boolean>>;
+
+export async function getFeatureFlags(): Promise<FeatureFlags> {
+  const res = await api.get<APIResponse<FeatureFlags>>('/settings/features');
+  return res.data.data ?? {};
 }
 
 // --- Clusters ---
@@ -367,6 +366,17 @@ export async function updateCluster(id: string, data: Partial<import('@/types').
   return res.data.data;
 }
 
+export interface OwnershipTransferResult {
+  id: string;
+  managedBy: 'api' | 'ui' | 'crd' | 'system' | 'argocd';
+  transferred: boolean;
+}
+
+export async function takeoverClusterOwnership(id: string) {
+  const res = await api.post<APIResponse<OwnershipTransferResult>>(`/clusters/${id}/ownership/takeover`);
+  return res.data.data;
+}
+
 export async function deleteCluster(id: string) {
   await api.delete(`/clusters/${id}`);
 }
@@ -496,11 +506,9 @@ export async function getPodLogs(
 /**
  * Create a streaming connection for pod logs via WebSocket.
  *
- * Auth: browser `new WebSocket(...)` cannot set custom headers, so the JWT is
- * appended as `?token=<jwt>`. The backend (`internal/tunnel/logs_consumer.go`)
- * validates the same JWT it accepts in `Authorization: Bearer` everywhere
- * else. The token is intentionally NOT logged or stored in URL history beyond
- * the WS connect path.
+ * Auth: browser `new WebSocket(...)` cannot set custom headers, so the client
+ * first requests a one-use stream ticket and passes only that short-lived
+ * ticket in the URL.
  *
  * Options:
  *   - `follow` / `tailLines` / `sinceSeconds` are forwarded as query params
@@ -528,53 +536,60 @@ export function streamPodLogs(
   if (opts?.tailLines && opts.tailLines > 0) params.set('tail_lines', String(opts.tailLines));
   if (opts?.sinceSeconds && opts.sinceSeconds > 0)
     params.set('since_seconds', String(opts.sinceSeconds));
-  const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
-  if (token) params.set('token', token);
-
-  const wsUrl =
-    `${base}/logs/${clusterId}/${namespace}/${encodeURIComponent(pod)}/${encodeURIComponent(container)}/` +
-    (params.toString() ? `?${params.toString()}` : '');
 
   let closed = false;
-  const ws = new WebSocket(wsUrl);
+  let ws: WebSocket | null = null;
 
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      // Backend sends a structured error frame for non-fatal problems
-      // (e.g. agent disconnected) so the UI can surface them without
-      // dropping the connection.
-      if (data && data.type === 'error') {
-        onError?.({ code: data.code, message: data.message || 'log stream error' });
-        return;
-      }
-      onMessage(data);
-    } catch {
-      onMessage({ timestamp: new Date().toISOString(), message: event.data, container });
-    }
-  };
+  createStreamTicket('logs', clusterId)
+    .then(({ ticket }) => {
+      if (closed) return;
+      params.set('ticket', ticket);
+      const wsUrl =
+        `${base}/logs/${clusterId}/${namespace}/${encodeURIComponent(pod)}/${encodeURIComponent(container)}/` +
+        (params.toString() ? `?${params.toString()}` : '');
+      ws = new WebSocket(wsUrl);
 
-  ws.onerror = () => {
-    if (!closed) {
-      onError?.({ message: 'WebSocket connection error' });
-    }
-  };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Backend sends a structured error frame for non-fatal problems
+          // (e.g. agent disconnected) so the UI can surface them without
+          // dropping the connection.
+          if (data && data.type === 'error') {
+            onError?.({ code: data.code, message: data.message || 'log stream error' });
+            return;
+          }
+          onMessage(data);
+        } catch {
+          onMessage({ timestamp: new Date().toISOString(), message: event.data, container });
+        }
+      };
 
-  ws.onclose = (event) => {
-    // Surface unexpected closes (server-side errors / agent gone). 1000 =
-    // normal closure (cleanup on unmount), so don't toast on those.
-    if (!closed && event.code !== 1000 && event.code !== 1005) {
-      onError?.({
-        code: String(event.code),
-        message: event.reason || `log stream closed (code ${event.code})`,
-      });
-    }
-  };
+      ws.onerror = () => {
+        if (!closed) {
+          onError?.({ message: 'WebSocket connection error' });
+        }
+      };
+
+      ws.onclose = (event) => {
+        // Surface unexpected closes (server-side errors / agent gone). 1000 =
+        // normal closure (cleanup on unmount), so don't toast on those.
+        if (!closed && event.code !== 1000 && event.code !== 1005) {
+          onError?.({
+            code: String(event.code),
+            message: event.reason || `log stream closed (code ${event.code})`,
+          });
+        }
+      };
+    })
+    .catch((error: Error) => {
+      if (!closed) onError?.({ message: error.message || 'Failed to create log stream ticket' });
+    });
 
   return () => {
     closed = true;
     try {
-      ws.close(1000, 'client unmount');
+      ws?.close(1000, 'client unmount');
     } catch {
       /* ignore */
     }
@@ -1113,6 +1128,11 @@ export async function createProject(data: Partial<import('@/types').Project>) {
 
 export async function updateProject(id: string, data: Partial<import('@/types').Project>) {
   const res = await api.put<APIResponse<import('@/types').Project>>(`/projects/${id}`, data);
+  return res.data.data;
+}
+
+export async function takeoverProjectOwnership(id: string) {
+  const res = await api.post<APIResponse<OwnershipTransferResult>>(`/projects/${id}/ownership/takeover`);
   return res.data.data;
 }
 
@@ -1893,6 +1913,13 @@ export async function unregisterArgoManagedCluster(instanceId: string, clusterId
   );
 }
 
+export async function refreshArgoManagedClusterLabels(instanceId: string, clusterId: string) {
+  const res = await api.post<APIResponse<ArgoManagedCluster> | ArgoManagedCluster>(
+    `/argocd/instances/${instanceId}/clusters/${clusterId}/refresh-labels`,
+  );
+  return unwrapEnvelope<ArgoManagedCluster>(res.data);
+}
+
 // --- Repositories ---
 
 export async function listArgoRepos(instanceId: string) {
@@ -2111,7 +2138,7 @@ export async function createCISScan(payload: CISScanCreatePayload) {
 export function cisScanReportCSVUrl(id: string): string {
   // The interceptor appends a trailing slash via the request hook only on
   // axios-issued URLs. We're building this for an `<a>`, so do it ourselves
-  // to keep the same APPEND_SLASH-safe convention.
+  // to keep the same trailing-slash convention.
   return `${API_BASE_URL}/security/scans/${id}/report.csv`;
 }
 

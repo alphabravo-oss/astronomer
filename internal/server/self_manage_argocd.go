@@ -32,20 +32,20 @@ import (
 )
 
 const (
-	localArgoInstanceName        = "local"
-	localArgoReleaseName         = "argocd"
-	localArgoNamespace           = "argocd"
-	localArgoAPIURL              = "http://argocd-server.argocd.svc.cluster.local/argocd"
-	localArgoRepoSecretName      = "astronomer-self-repo"
-	localArgoClusterSecretName   = "astronomer-local-cluster"
-	localArgoApplicationName     = "astronomer-self-manage"
-	localArgoRepoURL             = "http://astronomer-server.astronomer.svc.cluster.local:8000/helm-repo/astronomer-v2"
-	localArgoAppControllerSA     = "argocd-application-controller"
-	localArgoAppControllerTTL    = 24 * time.Hour
-	localArgoBootstrapPeriod     = 30 * time.Second
-	localArgoBootstrapTimeout    = 15 * time.Second
-	localAstronomerReleaseName   = "astronomer"
-	localAstronomerNamespace     = "astronomer"
+	localArgoInstanceName      = "local"
+	localArgoReleaseName       = "argocd"
+	localArgoNamespace         = "argocd"
+	localArgoAPIURL            = "http://argocd-server.argocd.svc.cluster.local/argocd"
+	localArgoRepoSecretName    = "astronomer-self-repo"
+	localArgoClusterSecretName = "astronomer-local-cluster"
+	localArgoApplicationName   = "astronomer-self-manage"
+	localArgoRepoURL           = "http://astronomer-server.astronomer.svc.cluster.local:8000/helm-repo/astronomer-v2"
+	localArgoAppControllerSA   = "argocd-application-controller"
+	localArgoAppControllerTTL  = 24 * time.Hour
+	localArgoBootstrapPeriod   = 30 * time.Second
+	localArgoBootstrapTimeout  = 15 * time.Second
+	localAstronomerReleaseName = "astronomer"
+	localAstronomerNamespace   = "astronomer"
 )
 
 var argocdApplicationGVR = schema.GroupVersionResource{
@@ -119,6 +119,11 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	}
 	if err := ensureLocalArgoRepoSecret(ctx, k8s); err != nil {
 		return fmt.Errorf("ensure argocd repo secret: %w", err)
+	}
+	if argoCDManagePlatformBaselineEnabled(ctx, queries) {
+		if err := ensureBaselineApplicationSets(ctx, dyn, queries); err != nil {
+			return fmt.Errorf("ensure baseline applicationsets: %w", err)
+		}
 	}
 
 	platform, err := queries.GetPlatformConfig(ctx)
@@ -196,6 +201,9 @@ func ensureLocalManagedClusterRow(ctx context.Context, queries *sqlc.Queries, in
 	labels, _ := json.Marshal(map[string]string{
 		"astronomer.io/cluster-id":   cluster.ID.String(),
 		"astronomer.io/cluster-name": cluster.Name,
+		"astronomer.io/environment":  cluster.Environment,
+		argoCDManagedByLabelKey:      argoCDManagedByLabelValue,
+		argoCDIsLocalLabelKey:        "true",
 	})
 	_, err := queries.CreateArgoCDManagedCluster(ctx, sqlc.CreateArgoCDManagedClusterParams{
 		ArgocdInstanceID:  instanceID,
@@ -252,6 +260,9 @@ func ensureLocalArgoClusterSecret(ctx context.Context, k8s kubernetes.Interface,
 				"argocd.argoproj.io/secret-type": "cluster",
 				"astronomer.io/cluster-id":       cluster.ID.String(),
 				"astronomer.io/cluster-name":     cluster.Name,
+				"astronomer.io/environment":      cluster.Environment,
+				argoCDManagedByLabelKey:          argoCDManagedByLabelValue,
+				argoCDIsLocalLabelKey:            "true",
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -340,7 +351,7 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 			},
 		},
 		"config": map[string]any{
-			"corsAllowedOrigins": serverURL,
+			"corsAllowedOrigins":   serverURL,
 			"agentImageRepository": cfg.AgentImageRepository,
 			"agentImageTag":        cfg.AgentImageTag,
 		},

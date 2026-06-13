@@ -60,6 +60,53 @@ func TestUpdatePoolMetrics(t *testing.T) {
 	}
 }
 
+func TestUpdateDatabaseRuntimeMetrics(t *testing.T) {
+	dbDeadlocksTotal.Reset()
+	dbLongestTransactionSeconds.Reset()
+
+	updateDatabaseRuntimeMetrics(databaseRuntimeSnapshot{deadlocks: 3}, databaseRuntimeSnapshot{
+		deadlocks:                 5,
+		longestTransactionSeconds: 42.5,
+	})
+	updateDatabaseRuntimeMetrics(databaseRuntimeSnapshot{deadlocks: 5}, databaseRuntimeSnapshot{
+		deadlocks:                 4,
+		longestTransactionSeconds: 0,
+	})
+
+	if got := metricValue(t, dbDeadlocksTotal.WithLabelValues(observability.MetricValues()...)); got != 2 {
+		t.Fatalf("deadlocks counter = %v, want 2", got)
+	}
+	if got := metricValue(t, dbLongestTransactionSeconds.WithLabelValues(observability.MetricValues()...)); got != 0 {
+		t.Fatalf("longest transaction gauge = %v, want 0", got)
+	}
+}
+
+func TestUpdateTaskOutboxMetrics(t *testing.T) {
+	taskOutboxRows.Reset()
+	taskOutboxOldestDueSeconds.Reset()
+
+	updateTaskOutboxMetrics([]taskOutboxStatusSnapshot{
+		{status: "pending", rows: 3, oldestDueSeconds: 12.5},
+		{status: "dead", rows: 1, oldestDueSeconds: 300},
+	})
+	updateTaskOutboxMetrics([]taskOutboxStatusSnapshot{
+		{status: "failed", rows: 2, oldestDueSeconds: 8},
+	})
+
+	if got := metricValue(t, taskOutboxRows.WithLabelValues(observability.MetricValues("pending")...)); got != 0 {
+		t.Fatalf("pending rows = %v, want reset to 0", got)
+	}
+	if got := metricValue(t, taskOutboxRows.WithLabelValues(observability.MetricValues("failed")...)); got != 2 {
+		t.Fatalf("failed rows = %v, want 2", got)
+	}
+	if got := metricValue(t, taskOutboxRows.WithLabelValues(observability.MetricValues("dead")...)); got != 0 {
+		t.Fatalf("dead rows = %v, want reset to 0", got)
+	}
+	if got := metricValue(t, taskOutboxOldestDueSeconds.WithLabelValues(observability.MetricValues("failed")...)); got != 8 {
+		t.Fatalf("failed oldest due seconds = %v, want 8", got)
+	}
+}
+
 func TestClassifySQLOperation(t *testing.T) {
 	tests := map[string]string{
 		"SELECT 1":              "select",

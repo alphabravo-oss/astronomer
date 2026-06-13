@@ -56,7 +56,7 @@ func (h *ImageVulnHandler) ClusterHistory(w http.ResponseWriter, r *http.Request
 	}
 	q, ok := h.queries.(ImageVulnHistoryQuerier)
 	if !ok {
-		RespondError(w, http.StatusNotImplemented, "history_unavailable", "Snapshot store not wired on this build")
+		RespondRequestError(w, r, http.StatusNotImplemented, "history_unavailable", "Snapshot store not wired on this build")
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *ImageVulnHandler) ClusterHistory(w http.ResponseWriter, r *http.Request
 		Limit:     limit,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "history_error", "Failed to list scan history")
+		RespondRequestError(w, r, http.StatusInternalServerError, "history_error", "Failed to list scan history")
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *ImageVulnHandler) ClusterDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	q, ok := h.queries.(ImageVulnHistoryQuerier)
 	if !ok {
-		RespondError(w, http.StatusNotImplemented, "diff_unavailable", "Snapshot store not wired on this build")
+		RespondRequestError(w, r, http.StatusNotImplemented, "diff_unavailable", "Snapshot store not wired on this build")
 		return
 	}
 
@@ -196,7 +196,7 @@ func (h *ImageVulnHandler) ClusterExportCSV(w http.ResponseWriter, r *http.Reque
 		Offset:    0,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "export_error", "Failed to export scan results")
+		RespondRequestError(w, r, http.StatusInternalServerError, "export_error", "Failed to export scan results")
 		return
 	}
 
@@ -253,12 +253,12 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 	}
 	reportID, err := uuid.Parse(chi.URLParam(r, "report_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid report ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid report ID")
 		return
 	}
 	q, ok := h.queries.(ImageVulnHistoryQuerier)
 	if !ok {
-		RespondError(w, http.StatusNotImplemented, "history_unavailable", "Snapshot store not wired on this build")
+		RespondRequestError(w, r, http.StatusNotImplemented, "history_unavailable", "Snapshot store not wired on this build")
 		return
 	}
 
@@ -272,7 +272,7 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 		Limit:    limit,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "history_error", "Failed to list scan history")
+		RespondRequestError(w, r, http.StatusInternalServerError, "history_error", "Failed to list scan history")
 		return
 	}
 

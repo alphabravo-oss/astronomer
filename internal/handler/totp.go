@@ -161,12 +161,12 @@ type enrollChallengeClaims struct {
 func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
@@ -183,13 +183,13 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	secret, url, err := auth.GenerateSecret(account, h.issuer)
 	if err != nil {
 		h.log.Warn("totp generate secret failed", "user_id", userID.String(), "error", err)
-		RespondError(w, http.StatusInternalServerError, "totp_generate_failed", "Failed to generate TOTP secret")
+		RespondRequestError(w, r, http.StatusInternalServerError, "totp_generate_failed", "Failed to generate TOTP secret")
 		return
 	}
 	qrDataURL, err := auth.QRCodeDataURL(url)
 	if err != nil {
 		h.log.Warn("totp generate qr failed", "user_id", userID.String(), "error", err)
-		RespondError(w, http.StatusInternalServerError, "totp_generate_failed", "Failed to render QR code")
+		RespondRequestError(w, r, http.StatusInternalServerError, "totp_generate_failed", "Failed to render QR code")
 		return
 	}
 
@@ -199,12 +199,12 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	// With Fernet wrapping, only this server (or its rotation peers)
 	// can read it back during the confirm step.
 	if h.encryptor == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "TOTP is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "TOTP is not configured")
 		return
 	}
 	encryptedSecret, err := h.encryptor.Encrypt(secret)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "totp_encrypt_failed", "Failed to wrap TOTP secret")
+		RespondRequestError(w, r, http.StatusInternalServerError, "totp_encrypt_failed", "Failed to wrap TOTP secret")
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	// the regular auth middleware from accepting this as a session.
 	payload, err := json.Marshal(enrollChallengeClaims{Secret: encryptedSecret, Label: account})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Failed to marshal challenge")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Failed to marshal challenge")
 		return
 	}
 	// Wrap the JSON payload as a base64-url string and stuff it into a
@@ -228,7 +228,7 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	challenge := encodeTOTPChallenge(payload)
 	token, err := h.jwt.GeneratePurposeToken(userID, auth.PurposeTOTPChallenge, auth.TOTPChallengeTTL)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "token_error", "Failed to mint challenge token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to mint challenge token")
 		return
 	}
 
@@ -267,63 +267,63 @@ type enrollConfirmResponse struct {
 func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
 	var req enrollConfirmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.ChallengeToken == "" || req.Challenge == "" || req.Code == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "challenge_token, challenge and code are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "challenge_token, challenge and code are required")
 		return
 	}
 
 	claims, err := h.jwt.ValidateToken(req.ChallengeToken)
 	if err != nil || claims.TokenType != auth.PurposeToken || claims.Purpose != auth.PurposeTOTPChallenge {
-		RespondError(w, http.StatusUnauthorized, "invalid_challenge", "Challenge token is invalid or expired")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_challenge", "Challenge token is invalid or expired")
 		return
 	}
 	if claims.UserID != userID {
 		// The challenge MUST belong to the same user that's authenticated.
 		// Otherwise a holder of a leaked challenge could enroll on behalf
 		// of someone else.
-		RespondError(w, http.StatusUnauthorized, "invalid_challenge", "Challenge token does not match the authenticated user")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_challenge", "Challenge token does not match the authenticated user")
 		return
 	}
 
 	payload, err := decodeTOTPChallenge(req.Challenge)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_challenge", "Challenge payload is malformed")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_challenge", "Challenge payload is malformed")
 		return
 	}
 	var c enrollChallengeClaims
 	if err := json.Unmarshal(payload, &c); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_challenge", "Challenge payload is malformed")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_challenge", "Challenge payload is malformed")
 		return
 	}
 
 	if h.encryptor == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "TOTP is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "TOTP is not configured")
 		return
 	}
 	secret, err := h.encryptor.Decrypt(c.Secret)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_challenge", "Challenge payload could not be decrypted")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_challenge", "Challenge payload could not be decrypted")
 		return
 	}
 
 	ok2, err := auth.VerifyCode(secret, req.Code)
 	if err != nil {
 		h.log.Warn("totp verify failed during enroll", "user_id", userID.String(), "error", err)
-		RespondError(w, http.StatusBadRequest, "invalid_code", "TOTP code is invalid")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_code", "TOTP code is invalid")
 		return
 	}
 	if !ok2 {
@@ -331,7 +331,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 			"auth.totp.verify_failed", "user", userID.String(), authUser.Username, map[string]any{
 				"flow": "enroll_confirm",
 			})
-		RespondError(w, http.StatusBadRequest, "invalid_code", "TOTP code is invalid")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_code", "TOTP code is invalid")
 		return
 	}
 
@@ -344,7 +344,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 		ConfirmedAt:     time.Now(),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "persist_failed", "Failed to persist enrollment")
+		RespondRequestError(w, r, http.StatusInternalServerError, "persist_failed", "Failed to persist enrollment")
 		return
 	}
 
@@ -352,7 +352,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 	// the hashes are stored.
 	codes, hashes, err := auth.GenerateRecoveryCodes(auth.RecoveryCodeCount)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "recovery_failed", "Failed to generate recovery codes")
+		RespondRequestError(w, r, http.StatusInternalServerError, "recovery_failed", "Failed to generate recovery codes")
 		return
 	}
 	// Wipe any pre-existing codes (re-enroll path) before inserting new ones.
@@ -406,44 +406,44 @@ type disableRequest struct {
 func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
 	var req disableRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.Password == "" || req.Code == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "password and code are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "password and code are required")
 		return
 	}
 
 	dbUser, err := h.users.GetUserByID(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
 		return
 	}
 	verified, _, verr := auth.VerifyPassword(dbUser.Password, req.Password)
 	if verr != nil || !verified {
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Current password is incorrect")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Current password is incorrect")
 		return
 	}
 
 	enrollment, err := h.queries.GetUserTOTPEnrollment(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_enrolled", "TOTP is not currently enabled for this account")
+		RespondRequestError(w, r, http.StatusNotFound, "not_enrolled", "TOTP is not currently enabled for this account")
 		return
 	}
 	plaintextSecret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Stored TOTP secret could not be read")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Stored TOTP secret could not be read")
 		return
 	}
 	ok2, err := auth.VerifyCode(plaintextSecret, req.Code)
@@ -452,12 +452,12 @@ func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 			"auth.totp.verify_failed", "user", userID.String(), authUser.Username, map[string]any{
 				"flow": "disable",
 			})
-		RespondError(w, http.StatusUnauthorized, "invalid_code", "TOTP code is invalid")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_code", "TOTP code is invalid")
 		return
 	}
 
 	if err := h.queries.DeleteUserTOTPEnrollment(r.Context(), userID); err != nil {
-		RespondError(w, http.StatusInternalServerError, "persist_failed", "Failed to disable 2FA")
+		RespondRequestError(w, r, http.StatusInternalServerError, "persist_failed", "Failed to disable 2FA")
 		return
 	}
 	// Best-effort: wipe the recovery codes too. Leaving them behind on
@@ -494,12 +494,12 @@ type statusResponse struct {
 func (h *TOTPHandler) Status(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
@@ -537,48 +537,48 @@ type regenerateResponse struct {
 func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
 	var req regenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.Code == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "code is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "code is required")
 		return
 	}
 
 	enrollment, err := h.queries.GetUserTOTPEnrollment(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_enrolled", "TOTP is not enabled for this account")
+		RespondRequestError(w, r, http.StatusNotFound, "not_enrolled", "TOTP is not enabled for this account")
 		return
 	}
 	secret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Stored secret could not be read")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Stored secret could not be read")
 		return
 	}
 	ok2, err := auth.VerifyCode(secret, req.Code)
 	if err != nil || !ok2 {
-		RespondError(w, http.StatusUnauthorized, "invalid_code", "TOTP code is invalid")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_code", "TOTP code is invalid")
 		return
 	}
 
 	if err := h.queries.DeleteRecoveryCodesByUser(r.Context(), userID); err != nil {
-		RespondError(w, http.StatusInternalServerError, "persist_failed", "Failed to clear recovery codes")
+		RespondRequestError(w, r, http.StatusInternalServerError, "persist_failed", "Failed to clear recovery codes")
 		return
 	}
 	codes, hashes, err := auth.GenerateRecoveryCodes(auth.RecoveryCodeCount)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "recovery_failed", "Failed to generate recovery codes")
+		RespondRequestError(w, r, http.StatusInternalServerError, "recovery_failed", "Failed to generate recovery codes")
 		return
 	}
 	for _, hashed := range hashes {
@@ -632,11 +632,11 @@ type verifyRequest struct {
 func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	var req verifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.ChallengeToken == "" || req.Code == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "challenge_token and code are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "challenge_token and code are required")
 		return
 	}
 	claims, err := h.jwt.ValidateToken(req.ChallengeToken)
@@ -644,21 +644,21 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.totp.verify_failed", "user", "", "", map[string]any{
 			"reason": "invalid_challenge",
 		})
-		RespondError(w, http.StatusUnauthorized, "invalid_challenge", "Challenge token is invalid or expired")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_challenge", "Challenge token is invalid or expired")
 		return
 	}
 	if claims.TokenType != auth.PurposeToken || claims.Purpose != auth.PurposeTOTPChallenge {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.totp.verify_failed", "user", claims.UserID.String(), "", map[string]any{
 			"reason": "wrong_purpose",
 		})
-		RespondError(w, http.StatusUnauthorized, "invalid_challenge", "Challenge token is not a TOTP challenge")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_challenge", "Challenge token is not a TOTP challenge")
 		return
 	}
 	userID := claims.UserID
 
 	user, err := h.users.GetUserByID(r.Context(), userID)
 	if err != nil || !user.IsActive {
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		return
 	}
 
@@ -666,13 +666,13 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Race: user disabled TOTP after the challenge was issued.
 		// Reject — the client should restart the login.
-		RespondError(w, http.StatusUnauthorized, "not_enrolled", "TOTP is not enabled for this account")
+		RespondRequestError(w, r, http.StatusUnauthorized, "not_enrolled", "TOTP is not enabled for this account")
 		return
 	}
 	secret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
 	if err != nil {
 		h.log.Warn("totp decrypt failed", "user_id", userID.String(), "error", err)
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Stored secret could not be read")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Stored secret could not be read")
 		return
 	}
 
@@ -715,7 +715,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		// the lockout querier; we surface a simple 401 here and let
 		// the upstream metric pick up the failure.
 		auth.TOTPVerifiesTotal.WithLabelValues(observability.MetricValues("failed")...).Inc()
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid TOTP or recovery code")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Invalid TOTP or recovery code")
 		return
 	}
 
@@ -723,7 +723,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	// touch last_used_at.
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(userID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "token_error", "Failed to generate token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to generate token")
 		return
 	}
 	_ = h.queries.TouchUserTOTPLastUsed(r.Context(), sqlc.TouchUserTOTPLastUsedParams{
@@ -742,6 +742,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		action, "user", userID.String(), user.Username, nil)
 	auth.TOTPVerifiesTotal.WithLabelValues(observability.MetricValues(outcome)...).Inc()
 
+	setBrowserSessionCookies(w, r, accessToken, refreshToken)
 	RespondJSON(w, http.StatusOK, LoginResponse{
 		Token:   accessToken,
 		Refresh: refreshToken,
@@ -759,40 +760,29 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 // flag from the request context (via the auth middleware) + a fresh
 // DB lookup so the gate can't be spoofed by a stale claim.
 func (h *TOTPHandler) AdminForceDisable(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok || authUser == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+	adminUser, ok := requireSuperuser(w, r, h.users, superuserGateConfig{
+		InvalidUserMessage: "Invalid user ID",
+		ForbiddenMessage:   "Superuser required",
+	})
+	if !ok {
 		return
 	}
-	adminID, err := uuid.Parse(authUser.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return
-	}
-	// Superuser gate via fresh row read. Match the pattern used by
-	// UnlockUser / ForceLogoutUser elsewhere in this package so any
-	// future tightening (e.g. require staff + superuser) lands in
-	// one place.
-	adminUser, err := h.users.GetUserByID(r.Context(), adminID)
-	if err != nil || !adminUser.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Superuser required")
-		return
-	}
+	adminID := adminUser.ID
 
 	targetIDStr := chiURLParam(r, "id")
 	targetID, err := uuid.Parse(targetIDStr)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
 		return
 	}
 	target, err := h.users.GetUserByID(r.Context(), targetID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
 		return
 	}
 
 	if err := h.queries.DeleteUserTOTPEnrollment(r.Context(), targetID); err != nil {
-		RespondError(w, http.StatusInternalServerError, "persist_failed", "Failed to disable 2FA")
+		RespondRequestError(w, r, http.StatusInternalServerError, "persist_failed", "Failed to disable 2FA")
 		return
 	}
 	_ = h.queries.DeleteRecoveryCodesByUser(r.Context(), targetID)
@@ -816,4 +806,3 @@ func encodeTOTPChallenge(payload []byte) string {
 func decodeTOTPChallenge(s string) ([]byte, error) {
 	return base64URLEncoding.DecodeString(s)
 }
-

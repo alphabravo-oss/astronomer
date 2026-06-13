@@ -124,7 +124,7 @@ func EnforceMaintenanceWindow(
 	if len(specBytes) == 0 {
 		specBytes = []byte("{}")
 	}
-	row, err := gate.Queries.CreateDeferredOperation(r.Context(), sqlc.CreateDeferredOperationParams{
+	params := sqlc.CreateDeferredOperationParams{
 		WindowID:        win.ID,
 		OperationType:   opType,
 		OperationSpec:   specBytes,
@@ -133,15 +133,16 @@ func EnforceMaintenanceWindow(
 		DeferredUntil:   pgtype.Timestamptz{Time: deferredUntil, Valid: !deferredUntil.IsZero()},
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: !deferredUntil.IsZero()},
 		RequestedBy:     currentUserUUID(r),
-	})
+	}
+	row, err := createDeferredOperation(withOperationIdempotency(r, "deferred"), gate.Queries, params)
 	if err != nil {
 		// If we can't queue, refuse rather than silently letting the
 		// op through.
 		respondMaintenanceRefuse(w, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
-			"op_type":   opType,
-			"mode":      win.Mode,
-			"degraded":  "defer_insert_failed",
+			"op_type":    opType,
+			"mode":       win.Mode,
+			"degraded":   "defer_insert_failed",
 			"insert_err": err.Error(),
 		})
 		return true
@@ -154,15 +155,37 @@ func EnforceMaintenanceWindow(
 	})
 
 	RespondJSON(w, http.StatusAccepted, map[string]any{
-		"deferred_id":  row.ID.String(),
-		"window_id":    win.ID.String(),
-		"window_name":  win.Name,
-		"next_open":    deferredUntil.Format(time.RFC3339),
-		"expires_at":   expiresAt.Format(time.RFC3339),
-		"on_block":     win.OnBlock,
-		"message":      "Operation deferred until the next maintenance window open",
+		"deferred_id": row.ID.String(),
+		"window_id":   win.ID.String(),
+		"window_name": win.Name,
+		"next_open":   deferredUntil.Format(time.RFC3339),
+		"expires_at":  expiresAt.Format(time.RFC3339),
+		"on_block":    win.OnBlock,
+		"message":     "Operation deferred until the next maintenance window open",
 	})
 	return true
+}
+
+func createDeferredOperation(ctx context.Context, q GatedOpQuerier, params sqlc.CreateDeferredOperationParams) (sqlc.DeferredOperation, error) {
+	if idem, ok := operationIdempotencyFromContext(ctx); ok {
+		if creator, ok := q.(interface {
+			CreateDeferredOperationIdempotent(context.Context, sqlc.CreateDeferredOperationIdempotentParams) (sqlc.DeferredOperation, error)
+		}); ok {
+			return creator.CreateDeferredOperationIdempotent(ctx, sqlc.CreateDeferredOperationIdempotentParams{
+				Scope:           idem.scope,
+				IdempotencyKey:  idem.key,
+				WindowID:        params.WindowID,
+				OperationType:   params.OperationType,
+				OperationSpec:   params.OperationSpec,
+				TargetClusterID: params.TargetClusterID,
+				TargetProjectID: params.TargetProjectID,
+				DeferredUntil:   params.DeferredUntil,
+				ExpiresAt:       params.ExpiresAt,
+				RequestedBy:     params.RequestedBy,
+			})
+		}
+	}
+	return q.CreateDeferredOperation(ctx, params)
 }
 
 // respondMaintenanceRefuse writes the 409 body with the window
@@ -172,11 +195,11 @@ func respondMaintenanceRefuse(w http.ResponseWriter, win maintenance.Window, now
 	next := maintenance.NextOpen(win, now)
 	body := map[string]any{
 		"error": map[string]any{
-			"code":    "maintenance_window_active",
-			"message": "Operation blocked by maintenance window: " + win.Name,
-			"window_id": win.ID.String(),
+			"code":        "maintenance_window_active",
+			"message":     "Operation blocked by maintenance window: " + win.Name,
+			"window_id":   win.ID.String(),
 			"window_name": win.Name,
-			"mode":   win.Mode,
+			"mode":        win.Mode,
 		},
 	}
 	if win.Mode == maintenance.ModeBlackout {

@@ -86,7 +86,8 @@ type ClusterTemplateHandler struct {
 	// nil-safe so tests can drive the handler without a Redis-backed
 	// asynq.Client. When nil, the handler still upserts the application
 	// row but the worker only picks it up via the periodic sweep.
-	queue ClusterTemplateEnqueuer
+	queue      ClusterTemplateEnqueuer
+	taskOutbox tasks.TaskOutboxWriter
 	// maintenanceGate is the migration-057 hook on cluster_template.apply.
 	// Optional + nil-safe.
 	maintenanceGate *MaintenanceGate
@@ -119,6 +120,15 @@ func (h *ClusterTemplateHandler) SetQueue(q ClusterTemplateEnqueuer) {
 		return
 	}
 	h.queue = q
+}
+
+// SetTaskOutbox wires the durable task outbox used before direct Redis enqueue.
+// Optional and nil-safe.
+func (h *ClusterTemplateHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
+	if h == nil {
+		return
+	}
+	h.taskOutbox = q
 }
 
 // SetMaintenanceGate wires the migration-057 gate that refuses or
@@ -324,7 +334,7 @@ func (h *ClusterTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list cluster templates")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list cluster templates")
 		return
 	}
 	total, _ := h.queries.CountClusterTemplates(r.Context())
@@ -339,12 +349,12 @@ func (h *ClusterTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster template not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, templateToResponse(tmpl))
@@ -354,17 +364,17 @@ func (h *ClusterTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateClusterTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
 		return
 	}
 	// T6.074 — operators may not create a template with one of the
 	// reserved platform-baseline names; the platform owns those.
 	if isBuiltinTemplate(req.Name) {
-		RespondError(w, http.StatusForbidden, "builtin_template",
+		RespondRequestError(w, r, http.StatusForbidden, "builtin_template",
 			fmt.Sprintf("%q is a reserved platform-baseline template name.", req.Name))
 		return
 	}
@@ -373,7 +383,7 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 		spec = json.RawMessage(`{}`)
 	}
 	if err := validateTemplateSpec(spec); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 
@@ -387,10 +397,10 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 		// Unique-name conflict on cluster_templates_name_key bubbles up as
 		// a 23505. Translate so the UI sees a clean 409 rather than 500.
 		if isUniqueViolation(err) {
-			RespondError(w, http.StatusConflict, "duplicate_name", "A template with this name already exists")
+			RespondRequestError(w, r, http.StatusConflict, "duplicate_name", "A template with this name already exists")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create cluster template")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create cluster template")
 		return
 	}
 	recordAudit(r, h.queries, "admin.cluster_template.created", "cluster_template", tmpl.ID.String(), tmpl.Name, map[string]any{
@@ -403,7 +413,7 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
 	// T6.074 — refuse mutations to platform-baseline templates so an
@@ -412,25 +422,25 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 	// pre-empt the SQL UPDATE and return a clean 403.
 	if existing, gerr := h.queries.GetClusterTemplateByID(r.Context(), id); gerr == nil {
 		if isBuiltinTemplate(existing.Name) {
-			RespondError(w, http.StatusForbidden, "builtin_template",
+			RespondRequestError(w, r, http.StatusForbidden, "builtin_template",
 				fmt.Sprintf("%q is a platform-baseline template and cannot be edited.", existing.Name))
 			return
 		}
 	}
 	var req CreateClusterTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
 		return
 	}
 	// Also refuse renaming AWAY from a builtin (defence in depth — the
 	// existing.Name check above catches renaming a builtin; this catches
 	// renaming a non-builtin TO a reserved name).
 	if isBuiltinTemplate(req.Name) {
-		RespondError(w, http.StatusForbidden, "builtin_template",
+		RespondRequestError(w, r, http.StatusForbidden, "builtin_template",
 			fmt.Sprintf("%q is a reserved platform-baseline template name.", req.Name))
 		return
 	}
@@ -439,7 +449,7 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 		spec = json.RawMessage(`{}`)
 	}
 	if err := validateTemplateSpec(spec); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 	tmpl, err := h.queries.UpdateClusterTemplate(r.Context(), sqlc.UpdateClusterTemplateParams{
@@ -450,14 +460,14 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster template not found")
 			return
 		}
 		if isUniqueViolation(err) {
-			RespondError(w, http.StatusConflict, "duplicate_name", "A template with this name already exists")
+			RespondRequestError(w, r, http.StatusConflict, "duplicate_name", "A template with this name already exists")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update cluster template")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update cluster template")
 		return
 	}
 	recordAudit(r, h.queries, "admin.cluster_template.updated", "cluster_template", tmpl.ID.String(), tmpl.Name, nil)
@@ -486,26 +496,26 @@ func isBuiltinTemplate(name string) bool {
 func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster template not found")
 		return
 	}
 	if isBuiltinTemplate(tmpl.Name) {
-		RespondError(w, http.StatusForbidden, "builtin_template",
+		RespondRequestError(w, r, http.StatusForbidden, "builtin_template",
 			fmt.Sprintf("%q is a platform-baseline template and cannot be deleted.", tmpl.Name))
 		return
 	}
 	count, err := h.queries.CountClusterTemplateApplicationsByTemplate(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to count template applications")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to count template applications")
 		return
 	}
 	if count > 0 {
-		RespondError(w, http.StatusConflict, "template_in_use",
+		RespondRequestError(w, r, http.StatusConflict, "template_in_use",
 			fmt.Sprintf("Template is applied to %d cluster(s); detach it from those clusters before deleting.", count))
 		return
 	}
@@ -515,10 +525,10 @@ func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) 
 		// could insert a binding between count and delete. Treat the FK
 		// violation as the same 409.
 		if isFKRestrictViolation(err) {
-			RespondError(w, http.StatusConflict, "template_in_use", "Template is in use; detach from clusters first.")
+			RespondRequestError(w, r, http.StatusConflict, "template_in_use", "Template is in use; detach from clusters first.")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete cluster template")
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete cluster template")
 		return
 	}
 	recordAudit(r, h.queries, "admin.cluster_template.deleted", "cluster_template", tmpl.ID.String(), tmpl.Name, nil)
@@ -535,12 +545,12 @@ func (h *ClusterTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) 
 func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	// Migration 057: maintenance window gate on cluster_template.apply.
@@ -551,17 +561,17 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 	var req ApplyClusterTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	templateID, err := uuid.Parse(req.TemplateID)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Invalid template_id")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Invalid template_id")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), templateID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster template not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster template not found")
 		return
 	}
 
@@ -573,20 +583,19 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	// time. Cluster-scoped apply, no project context, so unqualified
 	// refs require the explicit ${vault://<connection>/...} form.
 	if _, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, string(tmpl.Spec)); vaultErr != nil {
-		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
 		return
 	}
 
-	app, err := h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
+	app, err := h.upsertApplicationAndEnqueue(r, sqlc.UpsertClusterTemplateApplicationParams{
 		ClusterID:    clusterID,
 		TemplateID:   tmpl.ID,
 		SpecSnapshot: tmpl.Spec,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "apply_error", "Failed to bind template to cluster")
+		RespondRequestError(w, r, http.StatusInternalServerError, "apply_error", "Failed to bind template to cluster")
 		return
 	}
-	h.enqueueApply(r, clusterID)
 
 	recordAudit(r, h.queries, "cluster.template_applied", "cluster", clusterID.String(), cluster.Name, map[string]any{
 		"template_id":   tmpl.ID.String(),
@@ -599,16 +608,16 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterTemplateHandler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	app, err := h.queries.GetClusterTemplateApplication(r.Context(), clusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "No template applied to this cluster")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "No template applied to this cluster")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to load template application")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to load template application")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), app.TemplateID)
@@ -626,38 +635,37 @@ func (h *ClusterTemplateHandler) GetApplication(w http.ResponseWriter, r *http.R
 func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	app, err := h.queries.GetClusterTemplateApplication(r.Context(), clusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "No template applied to this cluster")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "No template applied to this cluster")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to load template application")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to load template application")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), app.TemplateID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Template no longer exists")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Template no longer exists")
 		return
 	}
-	app, err = h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
+	app, err = h.upsertApplicationAndEnqueue(r, sqlc.UpsertClusterTemplateApplicationParams{
 		ClusterID:    clusterID,
 		TemplateID:   tmpl.ID,
 		SpecSnapshot: tmpl.Spec,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "apply_error", "Failed to reset template application")
+		RespondRequestError(w, r, http.StatusInternalServerError, "apply_error", "Failed to reset template application")
 		return
 	}
-	h.enqueueApply(r, clusterID)
 	recordAudit(r, h.queries, "cluster.template_reapplied", "cluster", clusterID.String(), cluster.Name, map[string]any{
 		"template_id":   tmpl.ID.String(),
 		"template_name": tmpl.Name,
@@ -674,16 +682,16 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	if err := h.queries.DeleteClusterTemplateApplication(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusInternalServerError, "detach_error", "Failed to detach template")
+		RespondRequestError(w, r, http.StatusInternalServerError, "detach_error", "Failed to detach template")
 		return
 	}
 	// Best-effort detach of the policy stamp. Errors here are non-fatal —
@@ -698,7 +706,7 @@ func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) 
 // nil-safe when no queue is wired, in which case the periodic sweep
 // will eventually pick up pending rows.
 func (h *ClusterTemplateHandler) enqueueApply(r *http.Request, clusterID uuid.UUID) {
-	if h == nil || h.queue == nil {
+	if h == nil || (h.queue == nil && h.taskOutbox == nil) {
 		return
 	}
 	task, err := tasks.NewClusterTemplateApplyTask(clusterID)
@@ -707,7 +715,36 @@ func (h *ClusterTemplateHandler) enqueueApply(r *http.Request, clusterID uuid.UU
 	}
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
-	_, _ = h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+	if enqueueClusterTemplateApplyOutbox(r.Context(), h.taskOutbox, task, clusterID) {
+		return
+	}
+	if h.queue != nil {
+		_, _ = h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+	}
+}
+
+func (h *ClusterTemplateHandler) upsertApplicationAndEnqueue(r *http.Request, params sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
+	if h != nil && h.taskOutbox != nil {
+		if task, err := tasks.NewClusterTemplateApplyTask(params.ClusterID); err == nil {
+			payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+			task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+			app, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), h.queries, h.taskOutbox, params, task, tasks.TaskOutboxOptions{
+				DedupeKey:           fmt.Sprintf("cluster_template_apply:%s", params.ClusterID.String()),
+				QueueName:           tasks.ClusterTemplateApplyQueueName,
+				MaxRetry:            3,
+				MaxDeliveryAttempts: 20,
+			})
+			if atomic {
+				return app, err
+			}
+		}
+	}
+	app, err := h.queries.UpsertClusterTemplateApplication(r.Context(), params)
+	if err != nil {
+		return sqlc.ClusterTemplateApplication{}, err
+	}
+	h.enqueueApply(r, params.ClusterID)
+	return app, nil
 }
 
 // ────────────────────────────────────────────────────────────────────────

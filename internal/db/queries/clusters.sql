@@ -109,8 +109,8 @@ ON CONFLICT (cluster_id) DO UPDATE SET
 RETURNING *;
 
 -- name: CreateClusterRegistrationToken :one
-INSERT INTO cluster_registration_tokens (cluster_id, token, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
+VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), $4)
 RETURNING *;
 
 -- name: GetRegistrationTokenByToken :one
@@ -118,7 +118,9 @@ RETURNING *;
 -- long-lived agent token in CONNECT_ACK, the same registration token is the
 -- only credential the agent has, and reconnect attempts must succeed up to
 -- expires_at. is_used remains a tracking column for the future flow.
-SELECT * FROM cluster_registration_tokens WHERE token = $1 AND expires_at > now();
+SELECT * FROM cluster_registration_tokens
+WHERE (token_hash = encode(digest($1, 'sha256'), 'hex') OR (token_hash = '' AND token = $1))
+  AND expires_at > now();
 
 -- name: MarkRegistrationTokenUsed :exec
 UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
@@ -127,13 +129,16 @@ UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
 SELECT * FROM cluster_agent_tokens WHERE cluster_id = $1;
 
 -- name: GetClusterAgentTokenByToken :one
-SELECT * FROM cluster_agent_tokens WHERE token = $1;
+SELECT * FROM cluster_agent_tokens
+WHERE token_hash = encode(digest($1, 'sha256'), 'hex')
+   OR (token_hash = '' AND token = $1);
 
 -- name: UpsertClusterAgentToken :one
-INSERT INTO cluster_agent_tokens (cluster_id, token, last_used_at)
-VALUES ($1, $2, now())
+INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
+VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), now())
 ON CONFLICT (cluster_id) DO UPDATE SET
     token = EXCLUDED.token,
+    token_hash = EXCLUDED.token_hash,
     last_used_at = now()
 RETURNING *;
 
@@ -147,12 +152,13 @@ DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = t
 SELECT * FROM cluster_registry_configs WHERE cluster_id = $1;
 
 -- name: UpsertClusterRegistryConfig :one
-INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (cluster_id) DO UPDATE SET
     private_registry_url = EXCLUDED.private_registry_url,
     registry_username = EXCLUDED.registry_username,
     registry_password = EXCLUDED.registry_password,
+    registry_password_encrypted = EXCLUDED.registry_password_encrypted,
     insecure = EXCLUDED.insecure,
     ca_bundle = EXCLUDED.ca_bundle
 RETURNING *;
@@ -184,13 +190,14 @@ INSERT INTO cluster_registry_configs (
     private_registry_url,
     registry_username,
     registry_password,
+    registry_password_encrypted,
     insecure,
     ca_bundle,
     namespaces,
     inject_default_sa,
     secret_name
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateClusterRegistryConfig :one
@@ -198,11 +205,12 @@ UPDATE cluster_registry_configs SET
     private_registry_url = $2,
     registry_username    = $3,
     registry_password    = $4,
-    insecure             = $5,
-    ca_bundle            = $6,
-    namespaces           = $7,
-    inject_default_sa    = $8,
-    secret_name          = $9,
+    registry_password_encrypted = $5,
+    insecure             = $6,
+    ca_bundle            = $7,
+    namespaces           = $8,
+    inject_default_sa    = $9,
+    secret_name          = $10,
     updated_at           = now()
 WHERE id = $1
 RETURNING *;

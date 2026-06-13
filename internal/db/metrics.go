@@ -92,6 +92,38 @@ var (
 		},
 		observability.MetricLabels("operation", "status"),
 	)
+	dbDeadlocksTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: dbMetricsNamespace,
+			Name:      "db_deadlocks_total",
+			Help:      "Total PostgreSQL deadlocks observed for the current database.",
+		},
+		observability.MetricLabels(),
+	)
+	dbLongestTransactionSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: dbMetricsNamespace,
+			Name:      "db_longest_transaction_seconds",
+			Help:      "Age in seconds of the longest currently open transaction in the current database.",
+		},
+		observability.MetricLabels(),
+	)
+	taskOutboxRows = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: dbMetricsNamespace,
+			Name:      "task_outbox_rows",
+			Help:      "Number of durable task outbox rows by delivery status.",
+		},
+		observability.MetricLabels("status"),
+	)
+	taskOutboxOldestDueSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: dbMetricsNamespace,
+			Name:      "task_outbox_oldest_due_seconds",
+			Help:      "Age in seconds of the oldest due durable task outbox row by delivery status.",
+		},
+		observability.MetricLabels("status"),
+	)
 )
 
 type poolMetricsSnapshot struct {
@@ -105,6 +137,19 @@ type poolMetricsSnapshot struct {
 	acquireDurationSeconds float64
 }
 
+type databaseRuntimeSnapshot struct {
+	deadlocks                 int64
+	longestTransactionSeconds float64
+}
+
+type taskOutboxStatusSnapshot struct {
+	status           string
+	rows             int64
+	oldestDueSeconds float64
+}
+
+var taskOutboxStatuses = []string{"pending", "delivering", "failed", "dead"}
+
 func registerDBMetrics() {
 	registerDBMetricsOnce.Do(func() {
 		prometheus.MustRegister(
@@ -117,6 +162,10 @@ func registerDBMetrics() {
 			dbPoolCanceledAcquireCountTotal,
 			dbPoolAcquireDurationSecondsTotal,
 			dbQueryDurationSeconds,
+			dbDeadlocksTotal,
+			dbLongestTransactionSeconds,
+			taskOutboxRows,
+			taskOutboxOldestDueSeconds,
 		)
 	})
 }
@@ -213,6 +262,71 @@ func updatePoolMetrics(prev, cur poolMetricsSnapshot) {
 	}
 }
 
+func updateDatabaseRuntimeMetrics(prev, cur databaseRuntimeSnapshot) {
+	labels := observability.MetricValues()
+	if delta := cur.deadlocks - prev.deadlocks; delta > 0 {
+		dbDeadlocksTotal.WithLabelValues(labels...).Add(float64(delta))
+	}
+	dbLongestTransactionSeconds.WithLabelValues(labels...).Set(cur.longestTransactionSeconds)
+}
+
+func updateTaskOutboxMetrics(rows []taskOutboxStatusSnapshot) {
+	byStatus := make(map[string]taskOutboxStatusSnapshot, len(rows))
+	for _, row := range rows {
+		byStatus[row.status] = row
+	}
+	for _, status := range taskOutboxStatuses {
+		row := byStatus[status]
+		labels := observability.MetricValues(status)
+		taskOutboxRows.WithLabelValues(labels...).Set(float64(row.rows))
+		taskOutboxOldestDueSeconds.WithLabelValues(labels...).Set(row.oldestDueSeconds)
+	}
+}
+
+func snapshotDatabaseRuntimeMetrics(ctx context.Context, pool *pgxpool.Pool) (databaseRuntimeSnapshot, error) {
+	var snap databaseRuntimeSnapshot
+	err := pool.QueryRow(ctx, `
+SELECT
+  COALESCE((SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()), 0)::bigint,
+  COALESCE((
+    SELECT EXTRACT(EPOCH FROM max(clock_timestamp() - xact_start))
+    FROM pg_stat_activity
+    WHERE datname = current_database()
+      AND xact_start IS NOT NULL
+  ), 0)::float8
+`).Scan(&snap.deadlocks, &snap.longestTransactionSeconds)
+	return snap, err
+}
+
+func snapshotTaskOutboxMetrics(ctx context.Context, pool *pgxpool.Pool) ([]taskOutboxStatusSnapshot, error) {
+	rows, err := pool.Query(ctx, `
+SELECT
+  status,
+  COUNT(*)::bigint,
+  COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - MIN(next_attempt_at)) FILTER (WHERE next_attempt_at <= clock_timestamp()), 0)::float8
+FROM task_outbox
+WHERE status IN ('pending', 'delivering', 'failed', 'dead')
+GROUP BY status
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []taskOutboxStatusSnapshot{}
+	for rows.Next() {
+		var snap taskOutboxStatusSnapshot
+		if err := rows.Scan(&snap.status, &snap.rows, &snap.oldestDueSeconds); err != nil {
+			return nil, err
+		}
+		out = append(out, snap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StartMetricsReporter publishes pgxpool statistics into Prometheus on a fixed
 // interval. Metrics are process-wide and safe to call once per process.
 func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) {
@@ -222,11 +336,35 @@ func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Log
 
 	registerDBMetrics()
 	prev := poolMetricsSnapshot{}
+	prevRuntime := databaseRuntimeSnapshot{}
 
 	record := func() {
 		cur := snapshotPoolMetrics(pool)
 		updatePoolMetrics(prev, cur)
 		prev = cur
+
+		runtimeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		curRuntime, err := snapshotDatabaseRuntimeMetrics(runtimeCtx, pool)
+		cancel()
+		if err != nil {
+			if log != nil {
+				log.DebugContext(ctx, "failed to collect database runtime metrics", "error", err)
+			}
+			return
+		}
+		updateDatabaseRuntimeMetrics(prevRuntime, curRuntime)
+		prevRuntime = curRuntime
+
+		outboxCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		outboxRows, err := snapshotTaskOutboxMetrics(outboxCtx, pool)
+		cancel()
+		if err != nil {
+			if log != nil {
+				log.DebugContext(ctx, "failed to collect task outbox metrics", "error", err)
+			}
+			return
+		}
+		updateTaskOutboxMetrics(outboxRows)
 	}
 
 	record()

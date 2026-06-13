@@ -410,6 +410,29 @@ your highest-priority post-incident action**.
 
 ---
 
+## Postgres and Kubernetes snapshot mismatch
+
+Postgres is the authoritative store for users, RBAC, audit history,
+credentials, cluster inventory, operation rows, and product metadata.
+Kubernetes/etcd is authoritative for live Kubernetes objects, controller-owned
+status, and ArgoCD reconciliation resources.
+
+When snapshots are from different points in time:
+
+| Scenario | Recovery rule |
+|----------|---------------|
+| Postgres is older than Kubernetes | Keep Postgres as the source for product state. Reconcile CRD-owned `Cluster` and `Project` objects by `external_ref_*`; import only rows that carry ownership proof or after an explicit operator import. |
+| Kubernetes is older than Postgres | Keep Postgres rows. Recreate missing ArgoCD cluster Secrets, ApplicationSets, and CRD status from DB-owned intent where encrypted credential material is available. |
+| ArgoCD cluster Secret exists but DB row is missing | Do not silently adopt it. Import only if Astronomer ownership labels match, otherwise leave unmanaged and surface drift. |
+| CRD exists but same-name DB row is UI/API-owned | Do not take ownership automatically. Resolve through an explicit ownership transfer/import procedure. |
+| Redis jobs are missing after restore | Treat Redis as ephemeral. Run recovery sweeps and retry idempotent operations from Postgres state instead of trying to restore queue contents. |
+
+After any mismatch recovery, run the drift/repair checks once they are
+available, then trigger an ad-hoc management backup so the new baseline is
+captured.
+
+---
+
 ## Limits
 
 | Metric | Value |

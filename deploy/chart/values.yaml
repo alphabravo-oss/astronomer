@@ -80,6 +80,19 @@ frontend:
   apiBaseUrl: "http://astronomer-server:8000"
   wsBaseUrl: "ws://astronomer-server:8000/api/v1/ws"
   hostAliases: []
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   resources:
     requests:
       cpu: 50m
@@ -122,6 +135,19 @@ server:
     prometheus.io/path: /metrics
     prometheus.io/port: "9090"
   env: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   # Liveness stays on the cheap process check; readiness uses dependency-aware /readyz.
   probes:
     enabled: true
@@ -162,6 +188,19 @@ worker:
   # env:
   #   AUDIT_LOG_RETENTION_MONTHS: "13"
   env: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
 
 # =============================================================================
 # Database / Cache
@@ -180,11 +219,43 @@ postgres:
   storage:
     size: 8Gi
     storageClassName: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
   external:
     dsn: ""
     dsnSecretRef:
       name: ""
       key: ""
+  # Production support contract. These values are documentation knobs used by
+  # operators and policy tooling; render-time and runtime enforcement live in
+  # the production preflight checks and server startup validation.
+  productionRequirements:
+    # Use a managed Postgres service or an HA Postgres operator with automated
+    # failover. The bundled StatefulSet is development/CI only.
+    externalManagedOrHA: true
+    # Production DSNs must include sslmode=require, verify-ca, or verify-full.
+    tlsRequired: true
+    # Use provider WAL/PITR where available. The managementBackup CronJob is a
+    # cold backup of last resort, not a substitute for WAL-based recovery.
+    pitrRequired: true
+    # Keep logical backups enabled and rehearse restore regularly.
+    logicalBackupsRequired: true
+    restoreDrillRequired: true
+    # Recommended minimums for operator runbooks and policy checks.
+    minimumDailyBackups: 30
+    minimumWeeklyBackups: 12
+    minimumMonthlyBackups: 6
   # pgxpool sizing for the server + worker processes (FEATURES-051126 T21).
   # Zero / unset = use the binary's defaults (MaxConns=25, MinConns=5,
   # MaxConnLifetime=30m, MaxConnIdleTime=5m, HealthCheckPeriod=30s).
@@ -212,6 +283,19 @@ redis:
   storage:
     size: 2Gi
     storageClassName: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
   external:
     address: ""
     passwordSecretRef:
@@ -331,6 +415,19 @@ dex:
   # Dex. Empty = use the chart's shipped weak default which production-mode
   # preflight refuses. Replace with a freshly-generated value in production.
   clientSecret: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   resources:
     requests:
       cpu: 50m
@@ -460,6 +557,23 @@ gateway:
   annotations: {}
   hosts:
     - astronomer.localtest.me
+
+# =============================================================================
+# Management-plane NetworkPolicies
+# =============================================================================
+networkPolicy:
+  enabled: true
+  # Gateway/Ingress controllers often run outside the release namespace and
+  # have no portable labels. Keep public listener ingress open by default, but
+  # only on the frontend/server/Dex HTTP ports selected below.
+  allowPublicIngress: true
+  # Prometheus may run in a separate namespace. This keeps /metrics reachable
+  # on the dedicated metrics ports without opening application ports.
+  allowMetricsIngress: true
+  # External dependencies and the Kubernetes API cannot be selected by pod
+  # labels. Restrict them by destination CIDR + port here.
+  externalEgressCIDRs:
+    - 0.0.0.0/0
 
 # =============================================================================
 # Metrics scraping

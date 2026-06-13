@@ -17,6 +17,10 @@ spec:
       labels:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "frontend") | nindent 8 }}
     spec:
+      {{- with .Values.frontend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -35,6 +39,10 @@ spec:
       {{- end }}
       containers:
         - name: frontend
+          {{- with .Values.frontend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.frontend.image.repository "tag" .Values.frontend.image.tag "registry" .Values.frontend.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:

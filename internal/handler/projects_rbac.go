@@ -69,8 +69,8 @@ type rbacBindingRow struct {
 }
 
 type rbacMatrixResponse struct {
-	ProjectID string           `json:"project_id"`
-	Bindings  []rbacBindingRow `json:"bindings"`
+	ProjectID string            `json:"project_id"`
+	Bindings  []rbacBindingRow  `json:"bindings"`
 	Summary   rbacMatrixSummary `json:"summary"`
 }
 
@@ -84,11 +84,11 @@ type rbacMatrixSummary struct {
 func (h *ProjectHandler) RBACMatrix(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *ProjectHandler) RBACMatrix(w http.ResponseWriter, r *http.Request) {
 		Offset:    0,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list bindings")
 		return
 	}
 

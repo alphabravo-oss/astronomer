@@ -35,7 +35,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // ManagementLogsQuerier is the slice of sqlc.Queries the handler reads
@@ -153,19 +152,19 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.k8s == nil || h.namespace == "" {
-		RespondError(w, http.StatusServiceUnavailable, "logs_unavailable",
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "logs_unavailable",
 			"management log tail is unavailable: the server has no in-cluster Kubernetes client")
 		return
 	}
 
 	component := strings.TrimSpace(r.URL.Query().Get("component"))
 	if component == "" {
-		RespondError(w, http.StatusBadRequest, "component_required",
+		RespondRequestError(w, r, http.StatusBadRequest, "component_required",
 			"the component query parameter is required (server | worker | agent)")
 		return
 	}
 	if !allowedComponents[component] {
-		RespondError(w, http.StatusBadRequest, "component_invalid",
+		RespondRequestError(w, r, http.StatusBadRequest, "component_invalid",
 			fmt.Sprintf("component must be one of: server, worker, agent (got %q)", component))
 		return
 	}
@@ -178,7 +177,7 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 			if t2, err2 := time.Parse(time.RFC3339Nano, s); err2 == nil {
 				t = t2
 			} else {
-				RespondError(w, http.StatusBadRequest, "since_invalid",
+				RespondRequestError(w, r, http.StatusBadRequest, "since_invalid",
 					"the since query parameter must be an RFC3339 timestamp")
 				return
 			}
@@ -201,7 +200,7 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 
 	pods, err := h.listComponentPods(ctx, component)
 	if err != nil {
-		RespondError(w, http.StatusBadGateway, "k8s_error",
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error",
 			fmt.Sprintf("failed to list pods for component %q: %v", component, err))
 		return
 	}
@@ -376,28 +375,10 @@ func (h *ManagementLogsHandler) listComponentPods(ctx context.Context, component
 // gate enforces superuser-only access and emits the audit row. Mirrors
 // the pattern in admin_drill.go / admin_queues.go.
 func (h *ManagementLogsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "store_unavailable", "Admin store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"Management log tail requires superuser privileges")
+	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "Admin store not configured",
+		ForbiddenMessage:        "Management log tail requires superuser privileges",
+	}); !ok {
 		return false
 	}
 	recordAudit(r, h.queries, "admin.management_logs.viewed", "platform", "", "management-logs", map[string]any{

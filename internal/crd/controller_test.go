@@ -22,11 +22,14 @@ import (
 // fakeClusterSync records the EnsureFromCRD / DeleteByName calls and returns
 // canned ClusterStatus values so we can assert what the reconciler patched.
 type fakeClusterSync struct {
-	mu        sync.Mutex
-	ensured   []ClusterSpec
-	deleted   []string
-	resp      ClusterStatus
-	ensureErr error
+	mu          sync.Mutex
+	ensured     []ClusterSpec
+	deleted     []string
+	ownership   []ObjectRef
+	resp        ClusterStatus
+	ensureErr   error
+	ownerErr    error
+	validateErr error
 	// deletePolicy gates the controller's finalizer behaviour:
 	//   "ok"          → DeleteByName returns nil immediately (finalizer drops)
 	//   "in_progress" → returns ErrInProgress on the first call, nil after
@@ -72,13 +75,30 @@ func (f *fakeClusterSync) DeleteByName(_ context.Context, name string) error {
 	}
 }
 
+func (f *fakeClusterSync) ValidateClusterOwnership(context.Context, ClusterSpec, ObjectRef) error {
+	return f.validateErr
+}
+
+func (f *fakeClusterSync) RecordClusterOwnership(_ context.Context, _ ClusterSpec, ref ObjectRef) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownerErr != nil {
+		return f.ownerErr
+	}
+	f.ownership = append(f.ownership, ref)
+	return nil
+}
+
 // fakeProjectSync mirrors fakeClusterSync for the Project CRD.
 type fakeProjectSync struct {
-	mu        sync.Mutex
-	ensured   []ProjectSpec
-	deleted   []string
-	resp      ProjectStatus
-	ensureErr error
+	mu          sync.Mutex
+	ensured     []ProjectSpec
+	deleted     []string
+	ownership   []ObjectRef
+	resp        ProjectStatus
+	ensureErr   error
+	ownerErr    error
+	validateErr error
 }
 
 func (f *fakeProjectSync) EnsureFromCRD(_ context.Context, spec ProjectSpec) (ProjectStatus, error) {
@@ -103,6 +123,20 @@ func (f *fakeProjectSync) DeleteByName(_ context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleted = append(f.deleted, name)
+	return nil
+}
+
+func (f *fakeProjectSync) ValidateProjectOwnership(context.Context, ProjectSpec, ObjectRef) error {
+	return f.validateErr
+}
+
+func (f *fakeProjectSync) RecordProjectOwnership(_ context.Context, _ ProjectSpec, ref ObjectRef) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownerErr != nil {
+		return f.ownerErr
+	}
+	f.ownership = append(f.ownership, ref)
 	return nil
 }
 
@@ -159,7 +193,7 @@ func newProjectReconciler(t *testing.T, sync ProjectSync, objs ...client.Object)
 
 func TestClusterCRD_ReconcileCreates(t *testing.T) {
 	cluster := &Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-us-east", Namespace: "astronomer-mgmt"},
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-us-east", Namespace: "astronomer-mgmt", Generation: 7},
 		Spec: ClusterSpec{
 			Name:        "prod-us-east",
 			Environment: "production",
@@ -180,6 +214,12 @@ func TestClusterCRD_ReconcileCreates(t *testing.T) {
 	}
 	if got := sync.ensured[0]; got.Name != "prod-us-east" || got.Environment != "production" {
 		t.Fatalf("unexpected spec passed: %+v", got)
+	}
+	if len(sync.ownership) != 1 {
+		t.Fatalf("expected 1 ownership call, got %d", len(sync.ownership))
+	}
+	if got := sync.ownership[0]; got.APIVersion != GroupVersion.String() || got.Kind != "Cluster" || got.Namespace != "astronomer-mgmt" || got.Name != "prod-us-east" || got.Generation != 7 {
+		t.Fatalf("unexpected ownership ref: %+v", got)
 	}
 }
 
@@ -216,6 +256,23 @@ func TestClusterCRD_ReconcileUpdates(t *testing.T) {
 	}
 	if got := sync.ensured[1]; got.Environment != "production" || got.Region != "us-east-1" {
 		t.Fatalf("update pass did not propagate spec change: %+v", got)
+	}
+}
+
+func TestClusterCRD_OwnershipValidationFailureStopsSync(t *testing.T) {
+	cluster := &Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-us-east", Namespace: "astronomer-mgmt"},
+		Spec:       ClusterSpec{Name: "prod-us-east"},
+	}
+	sync := &fakeClusterSync{validateErr: errors.New("takeover refused")}
+	r, _ := newClusterReconciler(t, sync, cluster)
+
+	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: "prod-us-east", Namespace: "astronomer-mgmt"}}
+	if _, err := r.Reconcile(context.Background(), req); err == nil {
+		t.Fatalf("expected ownership validation error")
+	}
+	if len(sync.ensured) != 0 {
+		t.Fatalf("EnsureFromCRD should not be called after validation failure")
 	}
 }
 
@@ -311,7 +368,7 @@ func TestClusterCRD_DeleteRequeuesWhileInProgress(t *testing.T) {
 
 func TestProjectCRD_ReconcileCreates(t *testing.T) {
 	project := &Project{
-		ObjectMeta: metav1.ObjectMeta{Name: "platform", Namespace: "astronomer-mgmt"},
+		ObjectMeta: metav1.ObjectMeta{Name: "platform", Namespace: "astronomer-mgmt", Generation: 11},
 		Spec: ProjectSpec{
 			Name:               "platform",
 			Description:        "Platform team",
@@ -341,6 +398,12 @@ func TestProjectCRD_ReconcileCreates(t *testing.T) {
 	}
 	if len(got.Clusters) != 1 || got.Clusters[0] != "prod-us-east" {
 		t.Fatalf("cluster ref not propagated: %+v", got.Clusters)
+	}
+	if len(sync.ownership) != 1 {
+		t.Fatalf("expected 1 ownership call, got %d", len(sync.ownership))
+	}
+	if got := sync.ownership[0]; got.APIVersion != GroupVersion.String() || got.Kind != "Project" || got.Namespace != "astronomer-mgmt" || got.Name != "platform" || got.Generation != 11 {
+		t.Fatalf("unexpected ownership ref: %+v", got)
 	}
 }
 
@@ -380,6 +443,23 @@ func TestProjectCRD_ReconcileUpdates(t *testing.T) {
 	}
 }
 
+func TestProjectCRD_OwnershipValidationFailureStopsSync(t *testing.T) {
+	project := &Project{
+		ObjectMeta: metav1.ObjectMeta{Name: "platform", Namespace: "astronomer-mgmt"},
+		Spec:       ProjectSpec{Name: "platform", Clusters: []string{"prod-us-east"}},
+	}
+	sync := &fakeProjectSync{validateErr: errors.New("takeover refused")}
+	r, _ := newProjectReconciler(t, sync, project)
+
+	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: "platform", Namespace: "astronomer-mgmt"}}
+	if _, err := r.Reconcile(context.Background(), req); err == nil {
+		t.Fatalf("expected ownership validation error")
+	}
+	if len(sync.ensured) != 0 {
+		t.Fatalf("EnsureFromCRD should not be called after validation failure")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Status patching.
 // ---------------------------------------------------------------------------
@@ -397,6 +477,10 @@ func TestCRDStatus_PatchesAfterReconcile(t *testing.T) {
 			ClusterID:    "abc",
 			Phase:        "registered",
 			AgentVersion: "v9.9.9",
+			ArgoCD: ClusterArgoCDStatus{
+				Phase:             "registered",
+				ClusterSecretName: "astronomer-prod-us-east",
+			},
 		},
 	}
 	r, c := newClusterReconciler(t, sync, cluster)
@@ -418,6 +502,12 @@ func TestCRDStatus_PatchesAfterReconcile(t *testing.T) {
 	}
 	if after.Status.AgentVersion != "v9.9.9" {
 		t.Fatalf("status.agentVersion not patched: %q", after.Status.AgentVersion)
+	}
+	if after.Status.ArgoCD.Phase != "registered" {
+		t.Fatalf("status.argocd.phase not patched: %q", after.Status.ArgoCD.Phase)
+	}
+	if after.Status.ArgoCD.ClusterSecretName != "astronomer-prod-us-east" {
+		t.Fatalf("status.argocd.clusterSecretName not patched: %q", after.Status.ArgoCD.ClusterSecretName)
 	}
 	if after.Status.LastReconciled.IsZero() {
 		t.Fatalf("status.lastReconciled was not stamped")

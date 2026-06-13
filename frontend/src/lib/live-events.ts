@@ -2,24 +2,23 @@
  * Live-event SSE plumbing for the Astronomer dashboard.
  *
  * The backend exposes a single Server-Sent Events stream at
- * `/api/v1/events/stream/?token=<jwt>`. This module owns one EventSource
+ * `/api/v1/events/stream/?ticket=<one-use-ticket>`. This module owns one EventSource
  * for the lifetime of the dashboard layout and fans incoming frames out
  * via a tiny EventTarget so any number of pages / hooks can subscribe
  * without each opening their own connection.
  *
  * Auth contract (also documented in
  * `internal/handler/events_stream.go`): EventSource cannot send custom
- * headers, so the JWT travels in the `?token=` query parameter on this
- * endpoint only. The token is short-lived; on 401 we drop the connection
- * and the page-level token-refresh interceptor (`lib/api.ts`) will refresh
- * it the next time a normal request is made — at which point the
- * EventSource reconnect cycle picks up the new token from localStorage.
+ * headers, so the frontend first requests a short-lived stream ticket using a
+ * normal authenticated XHR, then passes only that one-use ticket in the stream
+ * URL.
  */
 
 'use client';
 
 import { useEffect, useRef } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { createStreamTicket } from '@/lib/api';
 
 // --- Types ---
 
@@ -100,8 +99,8 @@ interface ConnectionState {
   retryCount: number;
   /** Pending reconnect timer so we can cancel during teardown. */
   reconnectTimer: ReturnType<typeof setTimeout> | null;
-  /** Token this connection was opened with — re-open if it changes. */
-  openedWithToken: string | null;
+  /** Ticket this connection was opened with. */
+  openedWithTicket: string | null;
   /** Reference count: how many `useLiveEvents()` mounts hold the connection. */
   refCount: number;
   /** Most recent status the SSE client sees. */
@@ -117,7 +116,7 @@ function ensureConnection(): ConnectionState {
       target: new EventTarget(),
       retryCount: 0,
       reconnectTimer: null,
-      openedWithToken: null,
+      openedWithTicket: null,
       refCount: 0,
       status: 'idle',
     };
@@ -125,18 +124,12 @@ function ensureConnection(): ConnectionState {
   return conn;
 }
 
-/** Build the stream URL with the current bearer token, if any. */
-function streamURL(token: string | null): string {
+/** Build the stream URL with a one-use stream ticket. */
+function streamURL(ticket: string): string {
   const base = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
   // Trailing slash matches the backend route registration.
   const url = `${base}/events/stream/`;
-  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
-}
-
-/** Read the JWT from localStorage. Stays in sync with `lib/api.ts`. */
-function currentToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem('astronomer_token');
+  return `${url}?ticket=${encodeURIComponent(ticket)}`;
 }
 
 /**
@@ -146,10 +139,8 @@ function currentToken(): string | null {
  * asked for.
  */
 function openSource(state: ConnectionState): void {
-  const token = currentToken();
   if (state.source) {
-    // Only reopen if the token rotated.
-    if (state.openedWithToken === token && state.status !== 'closed') return;
+    if (state.status !== 'closed') return;
     try {
       state.source.close();
     } catch {
@@ -161,56 +152,46 @@ function openSource(state: ConnectionState): void {
     clearTimeout(state.reconnectTimer);
     state.reconnectTimer = null;
   }
-  // No token? Don't try — server will 401 and EventSource will reconnect-storm.
-  // We'll be re-armed when the consumer remounts after login.
-  if (!token) {
-    state.status = 'idle';
-    return;
-  }
   state.status = 'connecting';
-  state.openedWithToken = token;
+  createStreamTicket('events')
+    .then(({ ticket }) => {
+      if (state.refCount === 0 || state.source) return;
+      state.openedWithTicket = ticket;
+      let es: EventSource;
+      try {
+        es = new EventSource(streamURL(ticket), { withCredentials: false });
+      } catch {
+        scheduleReconnect(state);
+        return;
+      }
+      state.source = es;
 
-  const url = streamURL(token);
-  let es: EventSource;
-  try {
-    es = new EventSource(url, { withCredentials: false });
-  } catch {
-    // Browser refused to construct (rare); schedule retry.
-    scheduleReconnect(state);
-    return;
-  }
-  state.source = es;
+      es.onopen = () => {
+        state.status = 'open';
+        state.retryCount = 0;
+      };
 
-  es.onopen = () => {
-    state.status = 'open';
-    state.retryCount = 0;
-  };
+      es.onmessage = (ev) => dispatch(state, 'message', ev);
 
-  // Generic "message" listener for events without an explicit `event:` field
-  // (the SSE spec defaults the type to "message"). Our backend always sets
-  // an event type so this rarely fires, but it keeps us robust.
-  es.onmessage = (ev) => dispatch(state, 'message', ev);
+      for (const t of KNOWN_EVENT_TYPES) {
+        es.addEventListener(t, (ev) => dispatch(state, t, ev as MessageEvent));
+      }
 
-  // The backend emits with `event: <type>` so we attach a per-type listener
-  // for every known type. Unknown types pass through onmessage.
-  for (const t of KNOWN_EVENT_TYPES) {
-    es.addEventListener(t, (ev) => dispatch(state, t, ev as MessageEvent));
-  }
-
-  es.onerror = () => {
-    // EventSource auto-reconnects on transient errors, but in some browsers
-    // (and in token-rotation scenarios) we need to force a fresh connection
-    // with a new URL. Treat any error as a hard reset: close, back off,
-    // reopen — this is also the path that picks up a refreshed JWT.
-    state.status = 'closed';
-    try {
-      es.close();
-    } catch {
-      /* ignore */
-    }
-    state.source = null;
-    scheduleReconnect(state);
-  };
+      es.onerror = () => {
+        state.status = 'closed';
+        try {
+          es.close();
+        } catch {
+          /* ignore */
+        }
+        state.source = null;
+        scheduleReconnect(state);
+      };
+    })
+    .catch(() => {
+      state.status = 'closed';
+      scheduleReconnect(state);
+    });
 }
 
 const KNOWN_EVENT_TYPES: LiveEventType[] = [
@@ -297,8 +278,7 @@ export function useLiveEvents(): LiveEventsAPI {
     // scenarios where the underlying TCP connection was reset by the OS.
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        const tok = currentToken();
-        if (state.openedWithToken !== tok || state.status === 'closed') {
+        if (state.status === 'closed') {
           openSource(state);
         }
       }

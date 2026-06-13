@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -48,5 +50,30 @@ func TestRenderAgentInstallManifestUsesTemplate(t *testing.T) {
 		if strings.Contains(manifest, unwanted) {
 			t.Fatalf("manifest still contains obsolete %q", unwanted)
 		}
+	}
+}
+
+func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T) {
+	h := NewClusterHandler(nil)
+	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
+
+	annotations, err := json.Marshal(map[string]string{
+		agenttemplate.PrivilegeProfileAnnotation: agenttemplate.PrivilegeProfileViewer,
+	})
+	if err != nil {
+		t.Fatalf("marshal annotations: %v", err)
+	}
+	cluster := sqlc.Cluster{
+		ID:          uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
+		Name:        "demo",
+		Annotations: annotations,
+	}
+
+	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	if !strings.Contains(manifest, `verbs: ["get", "list", "watch"]`) {
+		t.Fatalf("viewer RBAC not rendered:\n%s", manifest)
+	}
+	if strings.Contains(manifest, `resources: ["*"]`) || strings.Contains(manifest, `verbs: ["*"]`) {
+		t.Fatalf("viewer manifest rendered admin wildcard RBAC:\n%s", manifest)
 	}
 }

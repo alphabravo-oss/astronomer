@@ -106,20 +106,20 @@ func (h *WebhookHandler) SetTap(t WebhookTapInvalidator) { h.tap = t }
 // secret is always the sentinel — we NEVER leak the encrypted column
 // over the wire.
 type subscriptionResponse struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	URL             string            `json:"url"`
-	Secret          string            `json:"secret"` // sentinel
-	SecretConfigured bool             `json:"secret_configured"`
-	EventFilters    []string          `json:"event_filters"`
-	PayloadTemplate string            `json:"payload_template"`
-	ExtraHeaders    map[string]string `json:"extra_headers"`
-	Enabled         bool              `json:"enabled"`
-	MaxRetries      int               `json:"max_retries"`
-	TimeoutSeconds  int               `json:"timeout_seconds"`
-	CreatedBy       string            `json:"created_by,omitempty"`
-	CreatedAt       string            `json:"created_at"`
-	UpdatedAt       string            `json:"updated_at"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	URL              string            `json:"url"`
+	Secret           string            `json:"secret"` // sentinel
+	SecretConfigured bool              `json:"secret_configured"`
+	EventFilters     []string          `json:"event_filters"`
+	PayloadTemplate  string            `json:"payload_template"`
+	ExtraHeaders     map[string]string `json:"extra_headers"`
+	Enabled          bool              `json:"enabled"`
+	MaxRetries       int               `json:"max_retries"`
+	TimeoutSeconds   int               `json:"timeout_seconds"`
+	CreatedBy        string            `json:"created_by,omitempty"`
+	CreatedAt        string            `json:"created_at"`
+	UpdatedAt        string            `json:"updated_at"`
 }
 
 // subscriptionRequest is the POST/PUT body. Every field is a pointer so
@@ -140,12 +140,12 @@ type subscriptionRequest struct {
 // List handles GET /api/v1/admin/webhooks/.
 func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	rows, err := h.queries.ListWebhookSubscriptions(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to list webhook subscriptions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to list webhook subscriptions")
 		return
 	}
 	items := make([]subscriptionResponse, 0, len(rows))
@@ -161,47 +161,47 @@ func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/admin/webhooks/.
 func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	var req subscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	// Apply defaults for required fields.
 	if req.Name == nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
 		return
 	}
 	if req.URL == nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", "url is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "url is required")
 		return
 	}
 	if req.Secret == nil || strings.TrimSpace(*req.Secret) == "" || *req.Secret == SecretSentinel {
-		RespondError(w, http.StatusBadRequest, "validation_error", "secret is required on create")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "secret is required on create")
 		return
 	}
 	merged, vErr := h.mergeForCreate(req)
 	if vErr != "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", vErr)
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", vErr)
 		return
 	}
 	// Uniqueness check (the unique index would catch this too, but a
 	// pre-flight returns a friendlier error than the raw constraint
 	// violation).
 	if existing, err := h.queries.GetWebhookSubscriptionByName(r.Context(), merged.Name); err == nil && existing.ID != uuid.Nil {
-		RespondError(w, http.StatusConflict, "name_taken", "A webhook subscription with this name already exists")
+		RespondRequestError(w, r, http.StatusConflict, "name_taken", "A webhook subscription with this name already exists")
 		return
 	}
 
 	if h.encryptor == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Encryptor is not configured; cannot store webhook secret")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Encryptor is not configured; cannot store webhook secret")
 		return
 	}
 	secretEnc, err := h.encryptor.Encrypt(*req.Secret)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt webhook secret")
+		RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt webhook secret")
 		return
 	}
 
@@ -221,17 +221,17 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:       currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "write_error", "Failed to create webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to create webhook subscription")
 		return
 	}
 	if h.tap != nil {
 		h.tap.Invalidate()
 	}
 	recordAudit(r, h.audit, "admin.webhook.created", "webhook_subscription", saved.ID.String(), saved.Name, map[string]any{
-		"url":            saved.Url,
-		"event_filters":  merged.EventFilters,
-		"enabled":        saved.Enabled,
-		"max_retries":    saved.MaxRetries,
+		"url":           saved.Url,
+		"event_filters": merged.EventFilters,
+		"enabled":       saved.Enabled,
+		"max_retries":   saved.MaxRetries,
 	})
 	RespondJSON(w, http.StatusCreated, toSubscriptionResponse(saved))
 }
@@ -239,21 +239,21 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/admin/webhooks/{id}/.
 func (h *WebhookHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
 	row, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "not_found", "Webhook subscription not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toSubscriptionResponse(row))
@@ -262,31 +262,31 @@ func (h *WebhookHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Update handles PUT /api/v1/admin/webhooks/{id}/.
 func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
 	existing, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "not_found", "Webhook subscription not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
 		return
 	}
 	var req subscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	merged, vErr := h.mergeForUpdate(existing, req)
 	if vErr != "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", vErr)
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", vErr)
 		return
 	}
 	// Secret handling: SecretSentinel means "keep existing". Any other
@@ -294,16 +294,16 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	encryptedSecret := existing.SecretEncrypted
 	if req.Secret != nil && *req.Secret != SecretSentinel {
 		if strings.TrimSpace(*req.Secret) == "" {
-			RespondError(w, http.StatusBadRequest, "validation_error", "secret cannot be blanked; supply a new value or omit the field")
+			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "secret cannot be blanked; supply a new value or omit the field")
 			return
 		}
 		if h.encryptor == nil {
-			RespondError(w, http.StatusServiceUnavailable, "not_configured", "Encryptor unavailable")
+			RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Encryptor unavailable")
 			return
 		}
 		enc, encErr := h.encryptor.Encrypt(*req.Secret)
 		if encErr != nil {
-			RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt secret")
+			RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt secret")
 			return
 		}
 		encryptedSecret = enc
@@ -324,7 +324,7 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds:  int32(merged.TimeoutSeconds),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "write_error", "Failed to update webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to update webhook subscription")
 		return
 	}
 	if h.tap != nil {
@@ -342,33 +342,33 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 // webhook_deliveries means the delivery history is wiped automatically.
 func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
 	existing, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "not_found", "Webhook subscription not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
 		return
 	}
 	// T6.064 — refuse delete when the subscription is named in the
 	// active compliance baseline's required_webhooks. Operators must
 	// either revert the baseline or detach the requirement first.
 	if slug, required := activeBaselineRequiresWebhook(r.Context(), h.queries, existing.Name); required {
-		RespondError(w, http.StatusConflict, "baseline_required",
+		RespondRequestError(w, r, http.StatusConflict, "baseline_required",
 			fmt.Sprintf("Webhook %q is required by the active compliance baseline %q.", existing.Name, slug))
 		return
 	}
 	if err := h.queries.DeleteWebhookSubscription(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "write_error", "Failed to delete webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to delete webhook subscription")
 		return
 	}
 	if h.tap != nil {
@@ -384,21 +384,21 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // next tick.
 func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
 	sub, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "not_found", "Webhook subscription not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read webhook subscription")
 		return
 	}
 	now := time.Now().UTC()
@@ -421,7 +421,7 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 		NextAttemptAt:  pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "write_error", "Failed to enqueue test delivery")
+		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to enqueue test delivery")
 		return
 	}
 	RespondJSONUnwrapped(w, http.StatusAccepted, map[string]any{
@@ -451,12 +451,12 @@ type deliveryResponse struct {
 // Deliveries handles GET /api/v1/admin/webhooks/{id}/deliveries/.
 func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
 	limit := 50
@@ -480,7 +480,7 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 		Offset:         int32(offset),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read deliveries")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read deliveries")
 		return
 	}
 	total, _ := h.queries.CountWebhookDeliveriesBySubscription(r.Context(), id)
@@ -499,40 +499,40 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 // RetryDelivery handles POST /api/v1/admin/webhooks/{id}/deliveries/{delivery_id}/retry/.
 func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	subID, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
 	delID, ok := parseUUIDParam(r, "delivery_id")
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid delivery id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid delivery id")
 		return
 	}
 	row, err := h.queries.GetWebhookDelivery(r.Context(), delID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusNotFound, "not_found", "Delivery not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Delivery not found")
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read delivery")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read delivery")
 		return
 	}
 	if row.SubscriptionID != subID {
 		// Refuse cross-subscription retry — keeps the URL contract clean
 		// (the {id} in the path is load-bearing for the audit + RBAC
 		// view).
-		RespondError(w, http.StatusNotFound, "not_found", "Delivery does not belong to this subscription")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Delivery does not belong to this subscription")
 		return
 	}
 	if err := h.queries.RetryWebhookDelivery(r.Context(), sqlc.RetryWebhookDeliveryParams{
 		ID:            delID,
 		NextAttemptAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
 	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, "write_error", "Failed to mark delivery for retry")
+		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to mark delivery for retry")
 		return
 	}
 	RespondJSONUnwrapped(w, http.StatusAccepted, map[string]any{

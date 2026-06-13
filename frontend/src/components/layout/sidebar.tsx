@@ -49,7 +49,9 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useUIStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
+import { can, isSuperuser, type PermissionVerb } from '@/lib/permissions';
+import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import {
   useCluster,
   useClusterNodes,
@@ -66,6 +68,7 @@ import {
   usePersistentVolumeClaims,
   useStorageClasses,
   useGenericResources,
+  useFeatureFlags,
 } from '@/lib/hooks';
 
 type NavItem = {
@@ -74,6 +77,12 @@ type NavItem = {
   icon: typeof Box;
   exact?: boolean;
   countKey?: string;
+  permission?: {
+    resource: string;
+    verb: PermissionVerb | '*';
+  };
+  superuserOnly?: boolean;
+  featureFlag?: FeatureFlagKey;
 };
 
 type NavGroup = {
@@ -89,46 +98,42 @@ const globalNavGroups: NavGroup[] = [
     defaultOpen: true,
     items: [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Clusters', href: '/dashboard/clusters', icon: Server },
-      // Top-level cluster templates page lives next to Clusters since both
-      // are concerned with the cluster lifecycle. Read-gating is enforced
-      // inside the page itself; we keep the link unconditionally visible
-      // so the URL remains stable while RBAC is still being rolled out.
-      { label: 'Cluster Templates', href: '/dashboard/cluster-templates', icon: Layers },
+      { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
+      { label: 'Cluster Templates', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
     ],
   },
   {
     label: 'Observability',
     items: [
-      { label: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3 },
-      { label: 'Alerting', href: '/dashboard/alerting', icon: Bell },
-      { label: 'Logging', href: '/dashboard/logging', icon: ScrollText },
+      { label: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
+      { label: 'Alerting', href: '/dashboard/alerting', icon: Bell, permission: { resource: 'alerts', verb: 'read' } },
+      { label: 'Logging', href: '/dashboard/logging', icon: ScrollText, permission: { resource: 'logging', verb: 'read' } },
     ],
   },
   {
     label: 'Integrations',
     items: [
-      { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench },
-      { label: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch },
+      { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
+      { label: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch, permission: { resource: 'argocd', verb: 'read' }, featureFlag: 'feature.argocd' },
     ],
   },
   {
     label: 'Security',
     items: [
-      { label: 'Security Policies', href: '/dashboard/security', icon: ShieldCheck },
+      { label: 'Security Policies', href: '/dashboard/security', icon: ShieldCheck, permission: { resource: 'security', verb: 'read' }, featureFlag: 'feature.security' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { label: 'Projects', href: '/dashboard/projects', icon: FolderKanban },
-      { label: 'RBAC', href: '/dashboard/rbac', icon: Shield },
-      { label: 'Catalog', href: '/dashboard/catalog', icon: Package },
-      { label: 'Backups', href: '/dashboard/backups', icon: Archive },
-      { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound },
+      { label: 'Projects', href: '/dashboard/projects', icon: FolderKanban, permission: { resource: 'projects', verb: 'list' }, featureFlag: 'feature.projects' },
+      { label: 'RBAC', href: '/dashboard/rbac', icon: Shield, permission: { resource: 'rbac', verb: 'read' } },
+      { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
+      { label: 'Backups', href: '/dashboard/backups', icon: Archive, permission: { resource: 'backups', verb: 'read' }, featureFlag: 'feature.backups' },
+      { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound, superuserOnly: true },
       // Mark Settings as exact so /dashboard/settings/auth doesn't double-highlight
       // both rows (the active-route matcher otherwise prefix-matches both).
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true },
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true, permission: { resource: 'settings', verb: 'read' } },
     ],
   },
 ];
@@ -482,6 +487,8 @@ function SidebarGroup({
 export function Sidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+  const user = useAuthStore((s) => s.user);
+  const { data: featureFlags } = useFeatureFlags();
 
   // Detect cluster context from URL
   const clusterMatch = pathname.match(/^\/dashboard\/clusters\/([^/]+)/);
@@ -494,9 +501,13 @@ export function Sidebar() {
   // Fetch resource counts when in cluster context
   const counts = useResourceCounts(isClusterContext ? clusterId! : '');
 
-  const navGroups = isClusterContext
+  const navGroups = filterNavGroups(
+    isClusterContext
     ? getClusterNavGroups(clusterId!, { isLocal: cluster?.isLocal })
-    : globalNavGroups;
+      : globalNavGroups,
+    user,
+    featureFlags
+  );
 
   // Accordion state: only one group open at a time
   const [openGroup, setOpenGroup] = useState<string | null>('Cluster');
@@ -623,4 +634,22 @@ export function Sidebar() {
 
     </aside>
   );
+}
+
+function filterNavGroups(
+  groups: NavGroup[],
+  user: ReturnType<typeof useAuthStore.getState>['user'],
+  featureFlags?: FeatureFlags
+): NavGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (item.featureFlag && featureFlags?.[item.featureFlag] === false) return false;
+        if (item.superuserOnly) return isSuperuser(user);
+        if (!item.permission) return true;
+        return can(user, item.permission.resource, item.permission.verb);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 }

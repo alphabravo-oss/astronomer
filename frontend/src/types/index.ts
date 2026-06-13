@@ -81,6 +81,24 @@ export interface Cluster {
   // shell, image-scan rescan, etc. — are hidden / disabled for is_local
   // clusters because the in-cluster local-agent path is best-effort.
   isLocal?: boolean;
+  agentPrivilegeProfile?: 'viewer' | 'operator' | 'admin' | string;
+  argocd?: ClusterArgoCDSummary;
+}
+
+export interface ClusterArgoCDSummary {
+  registered: boolean;
+  instanceCount: number;
+  clusterSecretNames: string[];
+  baselineManagedBy: 'argocd' | 'argocd_pending' | 'helm' | 'local' | 'unknown' | string;
+  baselineComponents?: ClusterBaselineComponentOwner[];
+}
+
+export interface ClusterBaselineComponentOwner {
+  slug: string;
+  name: string;
+  namespace: string;
+  applicationSetName: string;
+  managedBy: 'argocd' | 'argocd_pending' | 'helm' | 'local' | 'unknown' | string;
 }
 
 // metav1.Condition-shaped row written by the health-check worker
@@ -392,6 +410,13 @@ export interface User {
   avatarUrl?: string;
   provider: 'local' | 'github' | 'google' | 'oidc' | 'saml';
   globalRoles: string[];
+  isSuperuser?: boolean;
+  is_superuser?: boolean;
+  roles?: {
+    global: UserRoleBinding[];
+    cluster: UserRoleBinding[];
+    project: UserRoleBinding[];
+  };
   enabled: boolean;
   lastLogin: string;
   createdAt: string;
@@ -401,6 +426,22 @@ export interface User {
   // emits the field as `must_change_password` (snake_case); the user object
   // is stored as-received, so callers read the snake_case key.
   must_change_password?: boolean;
+  mustChangePassword?: boolean;
+}
+
+export interface UserRoleBinding {
+  id: string;
+  roleId?: string;
+  role_id?: string;
+  roleName?: string;
+  role_name?: string;
+  roleRules?: Array<{ resource: string; verbs: string[] }>;
+  role_rules?: Array<{ resource: string; verbs: string[] }>;
+  group?: string;
+  clusterId?: string;
+  cluster_id?: string;
+  projectId?: string;
+  project_id?: string;
 }
 
 export interface GlobalRole {
@@ -1372,11 +1413,10 @@ export interface ActivityEvent {
 
 // === Phase B1: ArgoCD lifecycle ===
 //
-// Wire shapes for the upstream-backed ArgoCD endpoints. The Go backend
-// emits the same kebab/snake mix as the original Django server but the
-// axios interceptor camelizes incoming keys, so consumer code references
-// camelCase only — except for `apiUrl` (api_url -> apiUrl) which is the
-// instance's upstream API endpoint.
+// Wire shapes for the upstream-backed ArgoCD endpoints. The Go backend emits
+// a kebab/snake mix, and the axios interceptor camelizes incoming keys, so
+// consumer code references camelCase only except for `apiUrl`
+// (api_url -> apiUrl), the instance's upstream API endpoint.
 
 /** Augmented row returned by GET /argocd/instances/. */
 export interface ArgoInstanceB1 {
@@ -1717,10 +1757,10 @@ export interface DexRegisterAsSSOResponse {
 // === Phase B2: Velero backups ===
 //
 // Wire shapes for the Velero-backed endpoints under `/api/v1/backups/`. The
-// Go handler emits snake_case JSON (mirroring the legacy Django contract)
-// and the axios interceptor in `lib/api.ts::camelizeKeys` rewrites incoming
-// keys to camelCase, so the read-side shapes below use camelCase. Request
-// bodies stay snake_case to match the Go `json:` tags exactly.
+// Go handler emits snake_case JSON, and the axios interceptor in
+// `lib/api.ts::camelizeKeys` rewrites incoming keys to camelCase, so the
+// read-side shapes below use camelCase. Request bodies stay snake_case to
+// match the Go `json:` tags exactly.
 
 export type VeleroPhase =
   | 'New'

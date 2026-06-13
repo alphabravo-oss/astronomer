@@ -45,6 +45,9 @@ data:
   DEX_BUNDLED_CONFIGMAP_NAME: {{ printf "%s-dex-config" (include "astronomer.fullname" .) | quote }}
   DEX_BUNDLED_ISSUER_URL: {{ include "astronomer.dex.issuerURL" . | quote }}
   {{- end }}
+  {{- if and .Values.config.auth .Values.config.auth.localPasswordOnly }}
+  AUTH_LOCAL_PASSWORD_ONLY: "true"
+  {{- end }}
   # 2FA / TOTP (migration 043). Empty issuer == binary default ("Astronomer").
   # require=true makes 2FA mandatory for all local-password users.
   {{- with .Values.config.auth }}

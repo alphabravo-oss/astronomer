@@ -118,6 +118,47 @@ type ClusterSpec struct {
 	// linkage itself lives on the Project CR (ClusterID field) as that is
 	// the schema's source of truth.
 	ProjectRefs []string `json:"projectRefs,omitempty"`
+
+	// ArgoCD controls automatic registration into the built-in ArgoCD fleet.
+	ArgoCD ClusterArgoCDSpec `json:"argocd,omitempty"`
+
+	// Baseline selects the platform baseline profile ArgoCD should reconcile.
+	Baseline ClusterBaselineSpec `json:"baseline,omitempty"`
+
+	// Agent controls adopted-cluster agent behavior such as privilege profile.
+	Agent ClusterAgentSpec `json:"agent,omitempty"`
+
+	// AdoptionPolicy captures fleet-management policy that should travel with
+	// the cluster's declarative intent without introducing a separate CRD yet.
+	AdoptionPolicy ClusterAdoptionPolicySpec `json:"adoptionPolicy,omitempty"`
+}
+
+type ClusterArgoCDSpec struct {
+	// AutoAdopt controls whether the cluster should be registered into ArgoCD.
+	// Nil means use the platform default.
+	AutoAdopt *bool `json:"autoAdopt,omitempty"`
+
+	// InstanceRef optionally targets a named ArgoCD instance.
+	InstanceRef string `json:"instanceRef,omitempty"`
+}
+
+type ClusterBaselineSpec struct {
+	// Profile names the platform baseline profile. Empty means platform default.
+	Profile string `json:"profile,omitempty"`
+}
+
+type ClusterAgentSpec struct {
+	// PrivilegeProfile is viewer | operator | admin. Empty means platform default.
+	PrivilegeProfile string `json:"privilegeProfile,omitempty"`
+}
+
+type ClusterAdoptionPolicySpec struct {
+	// Mode is manual | auto. Empty means use the platform default.
+	Mode string `json:"mode,omitempty"`
+
+	// AllowedManagementModes constrains which deployment engines may own
+	// cluster components. Valid values are argocd, helm, and manual.
+	AllowedManagementModes []string `json:"allowedManagementModes,omitempty"`
 }
 
 // ClusterStatus is the controller-managed view of the DB-side cluster state.
@@ -142,8 +183,22 @@ type ClusterStatus struct {
 	// controller actually pick up", helpful when the spec was hand-edited.
 	ObservedProjectRefs []string `json:"observedProjectRefs,omitempty"`
 
+	// ArgoCD reports the adoption state for this cluster.
+	ArgoCD ClusterArgoCDStatus `json:"argocd,omitempty"`
+
 	// Conditions are standard-shape K8s conditions. Stored as raw entries so
 	// the controller can append without dragging in apimachinery validation.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+type ClusterArgoCDStatus struct {
+	// Phase is pending | registering | registered | failed | disabled.
+	Phase string `json:"phase,omitempty"`
+
+	// ClusterSecretName is the ArgoCD cluster Secret name when registered.
+	ClusterSecretName string `json:"clusterSecretName,omitempty"`
+
+	// Conditions explain adoption and baseline matching failures.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
@@ -232,6 +287,10 @@ func (in *ClusterList) DeepCopyObject() runtime.Object {
 // mutate the destination without aliasing the source.
 func (in *ClusterSpec) DeepCopyInto(out *ClusterSpec) {
 	*out = *in
+	if in.ArgoCD.AutoAdopt != nil {
+		v := *in.ArgoCD.AutoAdopt
+		out.ArgoCD.AutoAdopt = &v
+	}
 	if in.Labels != nil {
 		out.Labels = make(map[string]string, len(in.Labels))
 		for k, v := range in.Labels {
@@ -247,6 +306,9 @@ func (in *ClusterSpec) DeepCopyInto(out *ClusterSpec) {
 	if in.ProjectRefs != nil {
 		out.ProjectRefs = append([]string(nil), in.ProjectRefs...)
 	}
+	if in.AdoptionPolicy.AllowedManagementModes != nil {
+		out.AdoptionPolicy.AllowedManagementModes = append([]string(nil), in.AdoptionPolicy.AllowedManagementModes...)
+	}
 }
 
 // DeepCopyInto on ClusterStatus copies conditions + project refs defensively.
@@ -260,6 +322,12 @@ func (in *ClusterStatus) DeepCopyInto(out *ClusterStatus) {
 		out.Conditions = make([]metav1.Condition, len(in.Conditions))
 		for i := range in.Conditions {
 			in.Conditions[i].DeepCopyInto(&out.Conditions[i])
+		}
+	}
+	if in.ArgoCD.Conditions != nil {
+		out.ArgoCD.Conditions = make([]metav1.Condition, len(in.ArgoCD.Conditions))
+		for i := range in.ArgoCD.Conditions {
+			in.ArgoCD.Conditions[i].DeepCopyInto(&out.ArgoCD.Conditions[i])
 		}
 	}
 }

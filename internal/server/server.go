@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -18,27 +19,28 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
-	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
+	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
-	"github.com/alphabravocompany/astronomer-go/internal/scanner"
-	"github.com/alphabravocompany/astronomer-go/internal/siem"
-	"github.com/alphabravocompany/astronomer-go/internal/webhook"
-	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
+	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -82,6 +84,90 @@ func dsnEnforcesTLS(dsn string) bool {
 	return strings.Contains(d, "sslmode=require") ||
 		strings.Contains(d, "sslmode=verify-ca") ||
 		strings.Contains(d, "sslmode=verify-full")
+}
+
+const (
+	devSecretKey     = "local-dev-secret-key-change-in-production"
+	devEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+)
+
+func isProductionConfig(cfg *config.Config) bool {
+	if cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.Env), "production") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_ENV")), "production") {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("ENV")), "production")
+}
+
+func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryptor) error {
+	if !isProductionConfig(cfg) {
+		return nil
+	}
+	var errs []string
+	if cfg == nil {
+		errs = append(errs, "config is nil")
+	} else {
+		secretKey := strings.TrimSpace(cfg.SecretKey)
+		switch {
+		case secretKey == "":
+			errs = append(errs, "secret_key is empty")
+		case secretKey == devSecretKey:
+			errs = append(errs, "secret_key is still the known development value")
+		}
+		encryptionKey := strings.TrimSpace(cfg.EncryptionKey)
+		switch {
+		case encryptionKey == "":
+			errs = append(errs, "astronomer_encryption_key is empty")
+		case encryptionKey == devEncryptionKey:
+			errs = append(errs, "astronomer_encryption_key is still the known development value")
+		case encryptor == nil:
+			errs = append(errs, "astronomer_encryption_key could not initialize encryptor")
+		}
+		if !dsnEnforcesTLS(cfg.DatabaseURL) {
+			errs = append(errs, "database_url does not enforce TLS")
+		}
+		if !cfg.DexBundledEnabled && !cfg.AuthLocalPasswordOnly {
+			errs = append(errs, "dex_bundled_enabled is false and auth_local_password_only is not acknowledged")
+		}
+		serverURL := strings.TrimSpace(cfg.ServerURL)
+		if serverURL == "" {
+			errs = append(errs, "server_url is empty")
+		} else if u, err := url.Parse(serverURL); err != nil || u.Scheme != "https" || u.Host == "" {
+			errs = append(errs, "server_url must be an external https URL")
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("production security config invalid: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
+	if !isProductionConfig(cfg) {
+		return nil
+	}
+	var errs []string
+	if deps.JWT == nil {
+		errs = append(errs, "JWT manager is not wired")
+	}
+	if deps.AuthQueries == nil {
+		errs = append(errs, "auth queries are not wired")
+	}
+	if deps.RBACEngine == nil {
+		errs = append(errs, "RBAC engine is not wired")
+	}
+	if deps.RBACQueries == nil {
+		errs = append(errs, "RBAC queries are not wired")
+	}
+	if deps.Encryptor == nil {
+		errs = append(errs, "encryptor is not wired")
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("production security wiring invalid: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // resolveCallbackBaseURL builds the API base URL used when registering SSO
@@ -160,16 +246,9 @@ func New(cfg *config.Config, logger *slog.Logger) *Server {
 
 // NewApp creates a fully wired production server with database-backed handlers.
 func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Server, error) {
-	// Production posture guard: warn loudly when the DB DSN doesn't enforce
-	// TLS but config.env=production. The chart-level preflight already
-	// catches this for the helm-managed install path; this covers operators
-	// who bypass the chart and run the binary directly against a hand-rolled
-	// DATABASE_URL. Not fail-closed at the binary level — same reason the
-	// encryptor isn't — to keep dev/local stacks working unchanged.
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_ENV")), "production") &&
-		!dsnEnforcesTLS(cfg.DatabaseURL) {
+	if isProductionConfig(cfg) && !dsnEnforcesTLS(cfg.DatabaseURL) {
 		logger.Warn(
-			"DATABASE_URL does not enforce TLS but ASTRONOMER_ENV=production "+
+			"DATABASE_URL does not enforce TLS but production mode is enabled "+
 				"— production must use sslmode=require/verify-ca/verify-full",
 			"event", "production_dsn_tls_warning",
 		)
@@ -220,6 +299,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		}
 	} else {
 		logger.Warn("ASTRONOMER_ENCRYPTION_KEY is not set; encrypted columns will be returned as ciphertext and SSO is disabled")
+	}
+	if err := validateProductionSecurityConfig(cfg, encryptor); err != nil {
+		database.Close()
+		return nil, err
 	}
 
 	// Migration 045 — Dex consolidation.
@@ -328,6 +411,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// shared K8sRequester (for ResourceQuota / LimitRange / NetworkPolicy
 	// server-side apply through the tunnel).
 	projectHandler := handler.NewProjectHandler(queries)
+	projectHandler.SetEncryptor(encryptor)
 	projectHandler.SetTaskQueue(queue)
 	projectHandler.SetK8sRequester(requester)
 	projectHandler.SetLogger(logger)
@@ -337,6 +421,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// tasks land in the same queue as decommission/argocd-refresh.
 	clusterTemplateHandler := handler.NewClusterTemplateHandler(queries)
 	clusterTemplateHandler.SetQueue(queue)
+	clusterTemplateHandler.SetTaskOutbox(queries)
 	// Cluster registries (migration 050). Multi-registry-per-cluster admin
 	// UX. Apply queue uses the same asynq client; tunnel requester is
 	// shared with project enforcement so the /test/ endpoint can dial the
@@ -344,6 +429,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
 	clusterRegistriesHandler.SetApplyEnqueue(queue)
 	clusterRegistriesHandler.SetRequester(requester)
+	clusterRegistriesHandler.SetEncryptor(encryptor)
+	tasks.ConfigurePlaintextCredentialMigration(tasks.PlaintextCredentialMigrationDeps{
+		Queries:   queries,
+		Encryptor: encryptor,
+	})
 	// Network policy templates (migration 068). Sister of cluster
 	// templates but namespace-scoped: deny-all-ingress, project-isolated,
 	// namespace-only, allow-ingress-controllers. The reconciler shares
@@ -366,6 +456,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	cloudCredentialsHandler.SetAuditor(queries)
 	cloudCredentialsHandler.SetEncryptor(encryptor)
 	cloudCredentialsHandler.SetEnqueuer(queue)
+	cloudCredentialsHandler.SetTaskOutbox(queries)
 	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
 	// Dashboard widgets (migration 058). Admin CRUD over widget rows +
 	// datasource rows; render endpoints serve a per-scope widget grid.
@@ -535,6 +626,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	dexHandler.SetLogger(logger)
 
 	clusterHandler := handler.NewClusterHandler(queries)
+	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
@@ -546,6 +638,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// the cluster_template:apply task wiring below.
 	clusterRegistrationHandler := handler.NewClusterRegistrationHandler(queries, bus)
 	clusterRegistrationHandler.SetApplyQueue(queue)
+	clusterRegistrationHandler.SetTaskOutbox(queries)
+	clusterRegistrationHandler.SetArgoCDAutoRegisterQueue(queue)
 	clusterRegistrationHandler.Service().SetMetricsHook(observability.NewRegistrationMetricsHook())
 	// Wire the platform-default cluster_templates row as the wizard's
 	// auto-attach target. Without this lookup the operator's "install
@@ -557,12 +651,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	clusterHandler.SetRegistrationService(clusterRegistrationHandler.Service())
 	if hub != nil {
-		hub.SetRegistrationAdvancer(clusterRegistrationHandler.Service())
+		hub.SetRegistrationAdvancer(&argoCDAutoRegisterAdvancer{
+			base:       clusterRegistrationHandler.Service(),
+			queue:      queue,
+			taskOutbox: queries,
+			log:        logger,
+		})
 	}
 	// Wire the asynq client into the DELETE handler so the cluster
 	// decommission reconciler fires immediately on remove-cluster click.
 	// The periodic sweep is the safety net when redis is briefly down.
 	clusterHandler.SetDecommissionQueue(queue)
+	clusterHandler.SetTaskOutbox(queries)
 	// Same client wires the Update handler -> argocd refresh task so a
 	// labels mutation lands on every upstream ArgoCD cluster Secret without
 	// the operator re-registering.
@@ -579,6 +679,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// bundle handler; SetMetricsLocalClient / SetKubernetesClient consume
 	// localK8s too.
 	var localK8s kubernetes.Interface
+	var localDyn dynamic.Interface
 	if restCfg, err := rest.InClusterConfig(); err == nil {
 		if cs, err := kubernetes.NewForConfig(restCfg); err == nil {
 			localK8s = cs
@@ -592,13 +693,27 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				Queries: queries,
 				K8s:     cs,
 			})
+			tasks.ConfigureArgoCDAutoRegister(tasks.ArgoCDAutoRegisterDeps{
+				Queries:             queries,
+				Encryptor:           encryptor,
+				K8s:                 cs,
+				ClusterProxyBaseURL: cfg.ArgoCDClusterProxyBaseURL,
+				Registration:        clusterRegistrationHandler.Service(),
+			})
 			if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 				clusterHandler.SetMetricsLocalClient(cs, mc)
 			} else {
 				clusterHandler.SetMetricsLocalClient(cs, nil)
 			}
 		}
+		if dyn, err := dynamic.NewForConfig(restCfg); err == nil {
+			localDyn = dyn
+		}
 	}
+	tasks.ConfigureCRDOwnershipDrift(tasks.CRDOwnershipDriftDeps{
+		Queries: queries,
+		Dynamic: localDyn,
+	})
 	// Even when in-cluster config fails, configure the refresh task with the
 	// DB querier so the worker can at least report the no-k8s degradation
 	// path cleanly. The K8s field stays nil → refreshSingleManagedClusterSecret
@@ -607,6 +722,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		tasks.ConfigureArgoCDRefresh(tasks.ArgoCDRefreshDeps{
 			Queries: queries,
 			K8s:     nil,
+		})
+		tasks.ConfigureArgoCDAutoRegister(tasks.ArgoCDAutoRegisterDeps{
+			Queries:             queries,
+			Encryptor:           encryptor,
+			K8s:                 nil,
+			ClusterProxyBaseURL: cfg.ArgoCDClusterProxyBaseURL,
+			Registration:        clusterRegistrationHandler.Service(),
 		})
 	}
 	localNamespace := detectReleaseNamespace()
@@ -763,28 +885,36 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// choice, but it MUST be intentional.
 	maintenanceStartupWarn(ctx, queries, logger)
 
+	streamTickets := auth.NewStreamTicketStore(time.Minute)
+	streamTicketHandler := handler.NewStreamTicketHandler(streamTickets)
+	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
+
 	deps := RouterDependencies{
-		JWT:          jwtManager,
-		Encryptor:    encryptor,
-		AuthQueries:  queries,
-		Auth:         authHandler,
-		TOTP:         totpHandler,
-		SSO:          ssoHandler,
+		JWT:                 jwtManager,
+		Encryptor:           encryptor,
+		AuthQueries:         queries,
+		AuditWriter:         queries,
+		ArgoCDProxyTokens:   queries,
+		StreamTickets:       streamTicketHandler,
+		StreamTicketStore:   streamTickets,
+		Auth:                authHandler,
+		TOTP:                totpHandler,
+		SSO:                 ssoHandler,
 		Clusters:            clusterHandler,
 		ClusterTemplates:    clusterTemplateHandler,
 		ClusterRegistration: clusterRegistrationHandler,
-		ClusterRegistries: clusterRegistriesHandler,
-		NetworkPolicies:   networkPoliciesHandler,
-		ClusterSnapshots:  clusterSnapshotsHandler,
-		FleetOperations:   fleetOperationsHandler,
-		Projects:         projectHandler,
-		Tools:            toolHandler,
-		Audit:        handler.NewAuditHandler(queries),
-		Alerting:     handler.NewAlertingHandlerWithDeps(queries, requester),
-		Anomaly:      handler.NewAnomalyHandler(queries),
-		ArgoCD:       argocdHandler,
-		Backups:      backupHandler,
-		Catalog:      catalogHandler,
+		ClusterRegistries:   clusterRegistriesHandler,
+		NetworkPolicies:     networkPoliciesHandler,
+		ClusterSnapshots:    clusterSnapshotsHandler,
+		FleetOperations:     fleetOperationsHandler,
+		Projects:            projectHandler,
+		Tools:               toolHandler,
+		Audit:               handler.NewAuditHandler(queries),
+		Alerting:            handler.NewAlertingHandlerWithDeps(queries, requester),
+		Anomaly:             handler.NewAnomalyHandler(queries),
+		ArgoCD:              argocdHandler,
+		Backups:             backupHandler,
+		Catalog:             catalogHandler,
 		// Migration 055: chart-rating + recommendation surface. Bound
 		// to the same *sqlc.Queries used for the rest of the catalog
 		// so audit / superuser checks see the same row.
@@ -793,10 +923,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetLogger(logger)
 			return h
 		}(),
-		Logging:      loggingHandler,
-		Monitoring:   monitoringHandler,
-		ControlPlane: controlPlaneHandler,
-		Resources:    resourceHandler,
+		Logging:        loggingHandler,
+		Monitoring:     monitoringHandler,
+		ControlPlane:   controlPlaneHandler,
+		Resources:      resourceHandler,
 		PlatformCharts: platformCharts,
 		Docs:           handler.NewDocsHandler(),
 		SSOPresets:     handler.NewSSOPresetsHandler(),
@@ -805,8 +935,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetAuthorization(rbacEngine, rbacQuerier)
 			return h
 		}(),
-		Readyz:        newReadinessHandler(database, queue, hub),
-		DexConfig:     dexHandler,
+		Readyz:    newReadinessHandler(database, queue, hub),
+		DexConfig: dexHandler,
 		RBAC: func() *handler.RBACHandler {
 			h := handler.NewRBACHandler(queries)
 			// T1.1 — load the embedded role-templates catalog. We fail
@@ -822,9 +952,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 			return h
 		}(),
-		RBACQueries:   rbacQuerier,
-		RBACEngine:    rbacEngine,
-		Security:      securityHandler,
+		RBACQueries: rbacQuerier,
+		RBACEngine:  rbacEngine,
+		Security:    securityHandler,
 		ImageVulns: func() *handler.ImageVulnHandler {
 			h := handler.NewImageVulnHandler(queries)
 			h.SetK8sRequester(requester)
@@ -832,7 +962,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetLogger(logger)
 			return h
 		}(),
-		ServiceProxy:  handler.NewServiceProxyHandler(requester),
+		ServiceProxy: func() *handler.ServiceProxyHandler {
+			h := handler.NewServiceProxyHandler(requester)
+			h.SetToolQuerier(queries)
+			h.SetAuditWriter(queries)
+			return h
+		}(),
 		Workloads:     workloadHandler,
 		Hub:           hub,
 		Proxy:         tunnel.NewProxyHandler(hub, logger),
@@ -842,7 +977,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Logs:          tunnel.NewLogsConsumer(hub, logger),
 		RemoteServer:  remoteServer,
 		RemoteQueries: queries,
-		EventStream: handler.NewEventStreamHandler(bus),
+		EventStream:   handler.NewEventStreamHandler(bus),
 		// Top-of-dashboard health rollup.
 		PlatformHealth: func() *handler.PlatformHealthHandler {
 			h := handler.NewPlatformHealthHandler(database.Pool())
@@ -850,7 +985,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			return h
 		}(),
 		// Admin queue inspector.
-		AdminQueues: handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries),
+		AdminQueues:     handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries),
+		AdminTaskOutbox: handler.NewAdminTaskOutboxHandler(queries),
 		// Admin backup-restore drill viewer — reads rows that the
 		// management-plane-restore-drill CronJob writes to
 		// backup_drill_results. Superuser-gated inside the handler.
@@ -874,9 +1010,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// SMTP admin + email enqueuer (migration 047). Both are nil
 		// when the encryptor isn't configured; the router wiring is
 		// nil-safe.
-		SMTP:          smtpHandler,
-		EmailEnqueuer: emailEnqueuer,
-		Webhooks:      webhookHandler,
+		SMTP:           smtpHandler,
+		EmailEnqueuer:  emailEnqueuer,
+		Webhooks:       webhookHandler,
 		SIEMForwarders: siemHandler,
 		// Notification-template overrides (migration 059). Always
 		// non-nil — the table is unconditional. The wiring below
@@ -919,6 +1055,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		PlatformDefaultTemplate: func() *handler.PlatformDefaultTemplateHandler {
 			h := handler.NewPlatformDefaultTemplateHandler(queries)
 			h.SetApplyQueue(queue)
+			h.SetTaskOutbox(queries)
 			return h
 		}(),
 		// Sprint 075: slug-coverage endpoint for the platform-baseline.
@@ -1064,10 +1201,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Queries:   queries,
 		Replayers: map[string]tasks.DeferredReplayer{},
 	})
-	// EventSource cannot send Authorization headers, so the stream handler
-	// also accepts ?token=<jwt|api_token>. Wire it through the same JWT
-	// manager + token querier the rest of the API uses.
+	// EventSource cannot send Authorization headers. Wire both the legacy
+	// token fallback and the preferred one-use stream-ticket validator.
 	deps.EventStream.SetAuth(jwtManager, queries)
+	deps.EventStream.SetStreamTickets(deps.StreamTicketStore)
 	// Group-sync admin re-sync mutates the user's bindings; share the
 	// same RBAC cache invalidator the SSO + user handlers use so the
 	// effect is immediate on the next authenticated request.
@@ -1075,22 +1212,24 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		deps.GroupMappings.SetRBACCacheInvalidator(cache)
 	}
 	// Browser WebSocket clients can't set Authorization either; wire the
-	// same query-param auth fallback into the pod exec consumer.
+	// same stream-ticket and legacy query-param auth into pod exec.
 	deps.Exec.SetAuth(jwtManager, queries)
+	deps.Exec.SetStreamTickets(deps.StreamTicketStore)
 
 	// Browser `new WebSocket(...)` cannot set Authorization either — the pod
-	// logs WS handler accepts the same `?token=` fallback. Without this
-	// hook the route would accept unauthenticated connections, which would
-	// leak pod log contents to anyone who can reach the API.
+	// logs WS handler accepts one-use stream tickets and the legacy fallback.
+	// Without this hook the route would accept unauthenticated connections,
+	// which would leak pod log contents to anyone who can reach the API.
 	if deps.Logs != nil {
 		deps.Logs.SetAuth(jwtManager, queries)
+		deps.Logs.SetStreamTickets(deps.StreamTicketStore)
 	}
 
 	// Sprint 17+/082+: same fix for the kubectl-shell session-aware WS
-	// route. Without this the route 401s every browser handshake
-	// (the SPA passes `?token=` because WS can't set headers).
+	// route. Without this the route 401s every browser handshake.
 	if deps.KubectlShell != nil {
 		deps.KubectlShell.SetStreamAuth(jwtManager, queries)
+		deps.KubectlShell.SetStreamTickets(deps.StreamTicketStore)
 		// v2 (Firefox-portable): bridge the inbound WS onto the cluster
 		// agent via the existing exec relay instead of 307-redirecting
 		// to /api/v1/ws/exec/. The shell handler validates the session
@@ -1134,6 +1273,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			})
 		}
 		deps.ArgoCDUIProxy = argoUIProxy
+	}
+
+	if err := validateProductionSecurityWiring(cfg, deps); err != nil {
+		database.Close()
+		return nil, err
 	}
 
 	router := NewRouter(cfg, deps)
@@ -1197,6 +1341,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Leader:         leader.New(database.Pool(), logger),
 		K8s:            requester,
 	})
+	// Migration 092: durable task outbox dispatcher. Handlers can commit a
+	// task_outbox row in the same transaction as product state, and this
+	// leader-elected dispatcher retries Redis/Asynq delivery until the task
+	// is durably queued.
+	tasks.ConfigureTaskOutboxDispatch(tasks.TaskOutboxDispatchDeps{
+		Queries:  queries,
+		Enqueuer: queue,
+	})
 	// Cluster decommission reconciler: needs DB + the tunnel hub for both
 	// MsgDecommission RPC and forced Disconnect after token revoke. When the
 	// hub is unavailable (worker-only process), pass nil — the reconciler
@@ -1204,6 +1356,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
 		Queries: queries,
 		Tunnel:  hub,
+		K8s:     localK8s,
 		// Bulk-deleting cluster_role_bindings during decommission strands
 		// stale per-user entries in the middleware RBAC cache; flush them.
 		RBACCache: rbacQuerier.Cache(),
@@ -1258,9 +1411,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// cache lives under /tmp/gitops/<source_id>; subsequent ticks fetch
 	// instead of cloning, so worker restart is idempotent.
 	tasks.ConfigureGitOps(tasks.GitOpsDeps{
-		Queries:  queries,
-		Enqueuer: queue,
-		Log:      logger,
+		Queries:    queries,
+		Enqueuer:   queue,
+		TaskOutbox: queries,
+		Log:        logger,
 	})
 	// Phase B3 — periodic project enforcement sweep (5-min cadence; cooperative
 	// DB lease handles multiple worker pods racing on the same row).
@@ -1305,10 +1459,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 
 	// CRD-mirror controller (Rancher-style "kubectl get clusters.management
 	// .astronomer.io"). Off by default; the chart wires CRD_ENABLED=true
-	// when crds.enabled=true. Failures are warned but never fatal — the REST
-	// path keeps running so the dashboard stays available even if the
-	// controller can't dial the API server.
-	startCRDController(reconcileCtx, logger, queries, queue)
+	// when crds.enabled=true. In production an explicitly-enabled CRD API
+	// must start successfully, otherwise the install would advertise a
+	// declarative surface that is not reconciling.
+	if err := startCRDController(reconcileCtx, logger, cfg, queries); err != nil {
+		return nil, err
+	}
 
 	// Sprint 075: kick a first-boot catalog sync if the catalog is empty.
 	// Migration 075 seeds three well-known helm_repositories rows; without
@@ -1547,6 +1703,60 @@ func kubectlShellHandler(
 	// the asynq scheduler entry is registered in worker/runtime.go.
 	tasks.ConfigureKubectlSessionReap(tasks.KubectlSessionReapDeps{Deps: deps})
 	return handler.NewKubectlShellHandler(queries, rbacQuerier, rbacEngine, deps)
+}
+
+type registrationAdvancer interface {
+	OnAgentConnected(ctx context.Context, clusterID uuid.UUID, agentVersion string) error
+}
+
+type argoCDAutoRegisterAdvancer struct {
+	base       registrationAdvancer
+	queue      *asynq.Client
+	taskOutbox tasks.TaskOutboxWriter
+	log        *slog.Logger
+}
+
+func (a *argoCDAutoRegisterAdvancer) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, agentVersion string) error {
+	if a == nil {
+		return nil
+	}
+	if a.base != nil {
+		if err := a.base.OnAgentConnected(ctx, clusterID, agentVersion); err != nil {
+			return err
+		}
+	}
+	if a.queue == nil && a.taskOutbox == nil {
+		return nil
+	}
+	task, err := tasks.NewArgoCDAutoRegisterClusterTask(clusterID)
+	if err != nil {
+		return err
+	}
+	if a.taskOutbox != nil {
+		if _, err := tasks.EnqueueTaskOutbox(ctx, a.taskOutbox, task, tasks.TaskOutboxOptions{
+			QueueName:           "default",
+			MaxRetry:            5,
+			Unique:              10 * time.Minute,
+			MaxDeliveryAttempts: 20,
+		}); err == nil {
+			return nil
+		} else if a.log != nil {
+			a.log.Warn("failed to write argocd auto-registration task to outbox, falling back to direct enqueue",
+				"cluster_id", clusterID.String(),
+				"error", err,
+			)
+		}
+	}
+	if a.queue == nil {
+		return nil
+	}
+	if _, err := a.queue.EnqueueContext(ctx, task); err != nil && a.log != nil {
+		a.log.Warn("failed to enqueue argocd auto-registration after agent connect",
+			"cluster_id", clusterID.String(),
+			"error", err,
+		)
+	}
+	return nil
 }
 
 // detectReleaseNamespace returns the namespace this server pod is running

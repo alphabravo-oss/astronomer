@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // RespondJSON writes a JSON response wrapped in {"data": payload}.
@@ -30,6 +32,21 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 		},
 	}
 	writeJSON(w, status, resp)
+}
+
+// RespondRequestError writes a JSON error response that includes the request
+// correlation identifier when RequestID middleware has populated one.
+func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	errObj := map[string]string{
+		"code":    code,
+		"message": message,
+	}
+	if r != nil {
+		if requestID := middleware.GetRequestID(r.Context()); requestID != "" {
+			errObj["request_id"] = requestID
+		}
+	}
+	writeJSON(w, status, map[string]any{"error": errObj})
 }
 
 // RespondPaginated writes a paginated JSON response matching DRF list format.
@@ -75,8 +92,8 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 }
 
 type paginatedResponse struct {
-	Data     any    `json:"data"`
-	Count    int64  `json:"count"`
+	Data     any     `json:"data"`
+	Count    int64   `json:"count"`
 	Next     *string `json:"next"`
 	Previous *string `json:"previous"`
 }

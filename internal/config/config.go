@@ -15,11 +15,11 @@ type Config struct {
 	// pgxpool sizing — operator-tunable via the chart's `database.*`
 	// values. Zero values fall through to the
 	// defaults in internal/db/db.go so existing installs see no change.
-	DBMaxConns        int32 `mapstructure:"db_max_conns"`
-	DBMinConns        int32 `mapstructure:"db_min_conns"`
-	DBMaxConnLifetimeMin int `mapstructure:"db_max_conn_lifetime_minutes"`
-	DBMaxConnIdleMin     int `mapstructure:"db_max_conn_idle_minutes"`
-	DBHealthCheckPeriodSec int `mapstructure:"db_health_check_period_seconds"`
+	DBMaxConns             int32 `mapstructure:"db_max_conns"`
+	DBMinConns             int32 `mapstructure:"db_min_conns"`
+	DBMaxConnLifetimeMin   int   `mapstructure:"db_max_conn_lifetime_minutes"`
+	DBMaxConnIdleMin       int   `mapstructure:"db_max_conn_idle_minutes"`
+	DBHealthCheckPeriodSec int   `mapstructure:"db_health_check_period_seconds"`
 
 	SecretKey string `mapstructure:"secret_key"`
 	Env       string `mapstructure:"env"`
@@ -54,7 +54,7 @@ type Config struct {
 
 	LogLevel string `mapstructure:"log_level"`
 
-	AuditLogRetentionMonths int `mapstructure:"audit_log_retention_months"`
+	AuditLogRetentionMonths int    `mapstructure:"audit_log_retention_months"`
 	ServerMetricsAddr       string `mapstructure:"server_metrics_addr"`
 	WorkerMetricsAddr       string `mapstructure:"worker_metrics_addr"`
 
@@ -79,10 +79,10 @@ type Config struct {
 	// false — operators flip this on per-install once their audit-log
 	// retention is sized for the kubectl_session_commands rows. When
 	// disabled the handler is not wired and the routes return 404.
-	KubectlShellEnabled            bool   `mapstructure:"kubectl_shell_enabled"`
-	KubectlShellImage              string `mapstructure:"kubectl_shell_image"`
-	KubectlShellIdleTimeoutMinutes int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
-	KubectlShellSessionHardCapHours int   `mapstructure:"kubectl_shell_session_hard_cap_hours"`
+	KubectlShellEnabled             bool   `mapstructure:"kubectl_shell_enabled"`
+	KubectlShellImage               string `mapstructure:"kubectl_shell_image"`
+	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
+	KubectlShellSessionHardCapHours int    `mapstructure:"kubectl_shell_session_hard_cap_hours"`
 
 	// ArgoCDUIUpstream is the in-cluster URL of argocd-server. The /argocd/*
 	// reverse proxy mounted on the public Astronomer router forwards browser
@@ -95,6 +95,12 @@ type Config struct {
 	// when talking to Astronomer-managed remote clusters through the tunnel
 	// proxy. The registration handler appends /api/v1/clusters/{id}/k8s.
 	ArgoCDClusterProxyBaseURL string `mapstructure:"argocd_cluster_proxy_base_url"`
+
+	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
+	// AuthLocalPasswordOnly is the production acknowledgement required when no
+	// bundled Dex is deployed.
+	DexBundledEnabled     bool `mapstructure:"dex_bundled_enabled"`
+	AuthLocalPasswordOnly bool `mapstructure:"auth_local_password_only"`
 }
 
 // CORSOrigins returns the allowed origins as a slice.
@@ -163,6 +169,10 @@ func Load() (*Config, error) {
 	v.SetDefault("argocd_cluster_proxy_base_url", "http://astronomer-server.astronomer.svc.cluster.local:8000")
 	v.BindEnv("argocd_ui_upstream")
 	v.BindEnv("argocd_cluster_proxy_base_url")
+	v.SetDefault("dex_bundled_enabled", false)
+	v.SetDefault("auth_local_password_only", false)
+	v.BindEnv("dex_bundled_enabled")
+	v.BindEnv("auth_local_password_only")
 
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {

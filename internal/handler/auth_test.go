@@ -217,6 +217,15 @@ func TestLogin(t *testing.T) {
 			if data["refresh"] == nil || data["refresh"] == "" {
 				t.Fatal("expected non-empty refresh token")
 			}
+			if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
+				t.Fatalf("expected HttpOnly %s cookie", middleware.SessionCookieName)
+			}
+			if !responseHasCookie(w.Result(), middleware.RefreshCookieName, true) {
+				t.Fatalf("expected HttpOnly %s cookie", middleware.RefreshCookieName)
+			}
+			if !responseHasCookie(w.Result(), middleware.CSRFCookieName, false) {
+				t.Fatalf("expected readable %s cookie", middleware.CSRFCookieName)
+			}
 
 			user, ok := data["user"].(map[string]any)
 			if !ok {
@@ -274,6 +283,53 @@ func TestRefresh(t *testing.T) {
 		if auditWriter.rows[0].ResourceID != user.ID.String() {
 			t.Fatalf("resource_id = %q, want %q", auditWriter.rows[0].ResourceID, user.ID.String())
 		}
+		if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
+			t.Fatalf("expected refreshed %s cookie", middleware.SessionCookieName)
+		}
+		if !responseHasCookie(w.Result(), middleware.RefreshCookieName, true) {
+			t.Fatalf("expected refreshed %s cookie", middleware.RefreshCookieName)
+		}
+	})
+
+	t.Run("successful refresh can use HttpOnly refresh cookie", func(t *testing.T) {
+		_, refreshToken, err := jwtMgr.GenerateTokenPair(user.ID)
+		if err != nil {
+			t.Fatalf("generate token pair: %v", err)
+		}
+
+		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: middleware.RefreshCookieName, Value: refreshToken})
+		req.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
+
+		w := httptest.NewRecorder()
+		handler.Refresh(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d; body: %s", w.Code, w.Body.String())
+		}
+		if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
+			t.Fatalf("expected refreshed %s cookie", middleware.SessionCookieName)
+		}
+	})
+
+	t.Run("refresh cookie requires csrf", func(t *testing.T) {
+		_, refreshToken, err := jwtMgr.GenerateTokenPair(user.ID)
+		if err != nil {
+			t.Fatalf("generate token pair: %v", err)
+		}
+
+		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: middleware.RefreshCookieName, Value: refreshToken})
+
+		w := httptest.NewRecorder()
+		handler.Refresh(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("expected status 401, got %d; body: %s", w.Code, w.Body.String())
+		}
 	})
 
 	t.Run("invalid refresh token writes failure audit", func(t *testing.T) {
@@ -297,6 +353,15 @@ func TestRefresh(t *testing.T) {
 			t.Fatalf("action = %q, want auth.refresh_failed", auditWriter.rows[0].Action)
 		}
 	})
+}
+
+func responseHasCookie(resp *http.Response, name string, httpOnly bool) bool {
+	for _, c := range resp.Cookies() {
+		if c.Name == name && c.Value != "" && c.HttpOnly == httpOnly {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Token CRUD Tests ---

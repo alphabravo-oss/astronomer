@@ -25,6 +25,7 @@ import {
   type ShellSession,
   type RecordedCommand,
 } from '@/lib/api/kubectl-shell';
+import { createStreamTicket } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type Status = 'idle' | 'opening' | 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -135,44 +136,50 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
     const apiBase = (process.env.NEXT_PUBLIC_API_URL || '/api/v1').replace(/\/$/, '');
     const wsHost = apiBase.startsWith('/') ? `${proto}//${window.location.host}${apiBase}` : apiBase.replace(/^https?:/, proto);
     const wsHostNoTrail = wsHost.replace(/\/$/, '');
-    const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
-    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-    const wsUrl = `${wsHostNoTrail}/ws/clusters/${info.clusterId}/shell/sessions/${info.id}/${tokenQuery}`;
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      setStatus('connected');
-      ws.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
-    };
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data?.type === 'output' || data?.type === 'stdout' || data?.type === 'stderr') {
-          write(data.data ?? '');
-          return;
-        }
-        if (data?.type === 'error') {
-          write(`\r\n\x1b[31mError: ${data.message ?? 'unknown'}\x1b[0m\r\n`);
-          return;
-        }
-        if (data?.type === 'end') {
-          write(`\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ''}\x1b[0m\r\n`);
-          return;
-        }
-        if (typeof data?.data === 'string') write(data.data);
-      } catch {
-        write(event.data);
-      }
-    };
-    ws.onerror = () => {
-      setStatus('error');
-      setErrorMsg('WebSocket error');
-    };
-    ws.onclose = () => {
-      setStatus('disconnected');
-      write('\r\n\x1b[33mConnection closed\x1b[0m\r\n');
-    };
+    createStreamTicket('shell', info.clusterId)
+      .then(({ ticket }) => {
+        const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
+        const wsUrl = `${wsHostNoTrail}/ws/clusters/${info.clusterId}/shell/sessions/${info.id}/${ticketQuery}`;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        ws.onopen = () => {
+          setStatus('connected');
+          ws.send(JSON.stringify({ type: 'resize', cols: 80, rows: 24 }));
+        };
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data?.type === 'output' || data?.type === 'stdout' || data?.type === 'stderr') {
+              write(data.data ?? '');
+              return;
+            }
+            if (data?.type === 'error') {
+              write(`\r\n\x1b[31mError: ${data.message ?? 'unknown'}\x1b[0m\r\n`);
+              return;
+            }
+            if (data?.type === 'end') {
+              write(`\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ''}\x1b[0m\r\n`);
+              return;
+            }
+            if (typeof data?.data === 'string') write(data.data);
+          } catch {
+            write(event.data);
+          }
+        };
+        ws.onerror = () => {
+          setStatus('error');
+          setErrorMsg('WebSocket error');
+        };
+        ws.onclose = () => {
+          setStatus('disconnected');
+          write('\r\n\x1b[33mConnection closed\x1b[0m\r\n');
+        };
+      })
+      .catch((error: Error) => {
+        setStatus('error');
+        setErrorMsg(error.message || 'Failed to create stream ticket');
+      });
   }, [write]);
 
   // Fires once wterm's WASM core is initialized and ready to accept writes.

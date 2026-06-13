@@ -24,6 +24,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Database,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -33,13 +34,18 @@ import {
   listDLQ,
   retryDLQTask,
   discardDLQTask,
+  listTaskOutbox,
+  retryTaskOutbox,
   type QueueSummary,
   type DLQEntry,
+  type TaskOutboxEntry,
+  type TaskOutboxStatus,
 } from '@/lib/api/admin-operations';
 
 const qk = {
   queues: () => ['admin', 'queues'] as const,
   dlq: (q: string) => ['admin', 'queues', q, 'dlq'] as const,
+  outbox: (status: TaskOutboxStatus | '') => ['admin', 'task-outbox', status] as const,
 };
 
 function OperationsBody() {
@@ -62,11 +68,18 @@ function OperationsBody() {
   }, [queues.data, queueNames]);
   const [selectedQueue, setSelectedQueue] = useState<string>('');
   const activeQueue = selectedQueue || defaultDLQ;
+  const [outboxStatus, setOutboxStatus] = useState<TaskOutboxStatus | ''>('dead');
 
   const dlq = useQuery({
     queryKey: qk.dlq(activeQueue),
     queryFn: () => listDLQ(activeQueue),
     enabled: !!activeQueue,
+    refetchInterval: 10_000,
+  });
+
+  const outbox = useQuery({
+    queryKey: qk.outbox(outboxStatus),
+    queryFn: () => listTaskOutbox(outboxStatus),
     refetchInterval: 10_000,
   });
 
@@ -87,6 +100,14 @@ function OperationsBody() {
       qc.invalidateQueries({ queryKey: qk.queues() });
     },
     onError: (e) => toast.error(`Discard failed: ${(e as Error).message}`),
+  });
+  const retryOutbox = useMutation({
+    mutationFn: retryTaskOutbox,
+    onSuccess: (row) => {
+      toast.success(`Task outbox row queued (${row.id.slice(0, 8)}…)`);
+      qc.invalidateQueries({ queryKey: qk.outbox(outboxStatus) });
+    },
+    onError: (e) => toast.error(`Outbox retry failed: ${(e as Error).message}`),
   });
 
   return (
@@ -154,6 +175,50 @@ function OperationsBody() {
           onDiscard={(id) => discard.mutate({ queue: activeQueue, id })}
           pendingRetry={retry.isPending}
           pendingDiscard={discard.isPending}
+        />
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-foreground inline-flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Task outbox
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Durable DB task intents waiting for Redis delivery or operator retry.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={outboxStatus}
+              onChange={(e) => setOutboxStatus(e.target.value as TaskOutboxStatus | '')}
+              className="h-8 rounded border border-border bg-background px-2 text-xs"
+              title="Filter task outbox rows"
+            >
+              <option value="dead">Dead</option>
+              <option value="failed">Failed</option>
+              <option value="pending">Pending</option>
+              <option value="delivering">Delivering</option>
+              <option value="delivered">Delivered</option>
+              <option value="">All</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => outbox.refetch()}
+              className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent"
+              title="Refresh task outbox"
+            >
+              <RefreshCw className={`h-3 w-3 ${outbox.isFetching ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+        </div>
+        <TaskOutboxTable
+          loading={outbox.isLoading}
+          rows={outbox.data?.data ?? []}
+          status={outboxStatus}
+          onRetry={(id) => retryOutbox.mutate(id)}
+          pendingRetry={retryOutbox.isPending}
         />
       </section>
     </div>
@@ -339,6 +404,105 @@ function DLQTable({
       </table>
     </div>
   );
+}
+
+function TaskOutboxTable({
+  loading,
+  rows,
+  status,
+  onRetry,
+  pendingRetry,
+}: {
+  loading: boolean;
+  rows: TaskOutboxEntry[];
+  status: TaskOutboxStatus | '';
+  onRetry: (id: string) => void;
+  pendingRetry: boolean;
+}) {
+  if (loading && rows.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-24 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading task outbox…
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        No {status || 'matching'} task outbox rows.
+      </div>
+    );
+  }
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+          <tr>
+            <th className="px-3 py-2">Task type</th>
+            <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2">Queue</th>
+            <th className="px-3 py-2 text-right">Attempts</th>
+            <th className="px-3 py-2">Next attempt</th>
+            <th className="px-3 py-2">Last error</th>
+            <th className="px-3 py-2 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
+              <td className="px-3 py-2">
+                <div className="font-mono text-xs">{row.task_type}</div>
+                {row.dedupe_key && (
+                  <div className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground" title={row.dedupe_key}>
+                    {row.dedupe_key}
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2">
+                <span className={taskOutboxStatusClass(row.status)}>{row.status}</span>
+              </td>
+              <td className="px-3 py-2 font-mono text-xs">{row.queue_name}</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {row.attempt_count}/{row.max_delivery_attempts}
+              </td>
+              <td className="px-3 py-2 text-xs text-muted-foreground">
+                {row.next_attempt_at ? new Date(row.next_attempt_at).toLocaleString() : '—'}
+              </td>
+              <td className="px-3 py-2 max-w-md truncate text-xs text-red-600" title={row.last_error || ''}>
+                {row.last_error || '—'}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <button
+                  onClick={() => onRetry(row.id)}
+                  disabled={pendingRetry || row.status === 'delivered'}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted disabled:opacity-50"
+                  title="Move this task outbox row back to pending"
+                >
+                  <RotateCw className="h-3 w-3" /> Retry
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function taskOutboxStatusClass(status: TaskOutboxStatus) {
+  const base = 'inline-flex rounded px-1.5 py-0.5 text-xs font-medium';
+  switch (status) {
+    case 'dead':
+      return `${base} bg-red-500/10 text-red-600`;
+    case 'failed':
+      return `${base} bg-amber-500/10 text-amber-600`;
+    case 'delivered':
+      return `${base} bg-emerald-500/10 text-emerald-600`;
+    case 'delivering':
+      return `${base} bg-blue-500/10 text-blue-600`;
+    default:
+      return `${base} bg-muted text-muted-foreground`;
+  }
 }
 
 export default function OperationsPage() {

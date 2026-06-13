@@ -24,7 +24,7 @@ import (
 //	frontend → consumer (JSON text frames):
 //	  {"type":"stdin",  "data": "<utf-8 keystrokes>"}
 //	  {"type":"resize", "cols": <int>, "rows": <int>}
-//	  {"type":"auth",   "token": "<jwt-or-api-token>"}      // accepted but no-op; prefer ?token=
+//	  {"type":"auth",   "token": "<jwt-or-api-token>"}      // accepted but no-op; prefer ?ticket=
 //
 //	consumer → frontend (JSON text frames):
 //	  {"type":"output", "data": "<stdout/stderr chunk>"}
@@ -41,6 +41,7 @@ type ExecConsumer struct {
 	log     *slog.Logger
 	jwt     *iauth.JWTManager
 	queries appmiddleware.TokenUserQuerier
+	tickets *iauth.StreamTicketStore
 }
 
 // NewExecConsumer creates a new ExecConsumer.
@@ -52,10 +53,11 @@ func NewExecConsumer(hub *Hub, log *slog.Logger) *ExecConsumer {
 }
 
 // SetAuth wires the JWT manager + token querier so the handler can validate
-// the `?token=` query parameter. Browser WebSocket clients cannot set custom
-// Authorization headers, so query-param auth is the only viable scheme for
-// this endpoint. Both arguments are optional; when nil the handler accepts
-// unauthenticated connections (used by tests / dev runs without auth wired).
+// stream authentication. Browser WebSocket clients cannot set custom
+// Authorization headers, so the preferred browser path is a short-lived
+// ?ticket= query parameter. Both arguments are optional; when nil the handler
+// accepts unauthenticated connections (used by tests / dev runs without auth
+// wired).
 func (ec *ExecConsumer) SetAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) {
 	if ec == nil {
 		return
@@ -64,12 +66,20 @@ func (ec *ExecConsumer) SetAuth(jwt *iauth.JWTManager, queries appmiddleware.Tok
 	ec.queries = queries
 }
 
-// authenticate validates the request via Authorization header (preferred) or
-// `?token=` query parameter (browser WebSocket fallback). Returns true if
-// authenticated, or if no JWT manager is wired (dev/test mode). Delegates to
-// the shared auth.AuthorizeStreamRequest helper.
+func (ec *ExecConsumer) SetStreamTickets(tickets *iauth.StreamTicketStore) {
+	if ec == nil {
+		return
+	}
+	ec.tickets = tickets
+}
+
+// authenticate validates the request via a one-use stream ticket or
+// Authorization header. Returns true if authenticated, or if no JWT manager is
+// wired (dev/test mode). Delegates to the shared auth.AuthorizeStreamRequest
+// helper.
 func (ec *ExecConsumer) authenticate(r *http.Request) bool {
-	_, ok := iauth.AuthorizeStreamRequest(r, ec.queries, ec.jwt)
+	clusterID, _ := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	_, ok := iauth.AuthorizeStreamRequestWithTickets(r, ec.queries, ec.jwt, ec.tickets, iauth.StreamKindExec, clusterID)
 	return ok
 }
 
@@ -335,8 +345,8 @@ func translateFromFrontend(data []byte, streamID, clusterID string) (*protocol.M
 				Payload:   payload,
 			}, false
 		case "auth":
-			// Auth is handled at the HTTP upgrade via Authorization header /
-			// ?token=. Inline auth frames are accepted for backwards-compat
+			// Auth is handled at the HTTP upgrade via ticket/query/header.
+			// Inline auth frames are accepted for backwards-compat
 			// with the old frontend but are not validated here.
 			return nil, true
 		case "end", "close":

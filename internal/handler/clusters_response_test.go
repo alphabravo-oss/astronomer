@@ -105,6 +105,14 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal legacy: %v", err)
 			}
+			var legacyMap map[string]any
+			if err := json.Unmarshal(legacyJSON, &legacyMap); err != nil {
+				t.Fatalf("unmarshal legacy: %v", err)
+			}
+			legacyJSON, err = json.Marshal(legacyMap)
+			if err != nil {
+				t.Fatalf("remarshal legacy: %v", err)
+			}
 
 			resp := clusterToResponse(tc.cluster)
 			resp.CPUPercentage = tc.cpu
@@ -114,6 +122,16 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal dto: %v", err)
 			}
+			var dtoMap map[string]any
+			if err := json.Unmarshal(dtoJSON, &dtoMap); err != nil {
+				t.Fatalf("unmarshal dto: %v", err)
+			}
+			delete(dtoMap, "argocd")
+			delete(dtoMap, "agent_privilege_profile")
+			dtoJSON, err = json.Marshal(dtoMap)
+			if err != nil {
+				t.Fatalf("remarshal dto: %v", err)
+			}
 
 			if !bytes.Equal(legacyJSON, dtoJSON) {
 				t.Fatalf("wire mismatch:\n legacy: %s\n dto:    %s", legacyJSON, dtoJSON)
@@ -122,3 +140,43 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 	}
 }
 
+func TestClusterResponseIncludesAgentPrivilegeProfile(t *testing.T) {
+	cluster := fixtureCluster(t, false)
+	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"operator"}`)
+
+	resp := clusterToResponse(cluster)
+	if resp.AgentPrivilegeProfile != "operator" {
+		t.Fatalf("agent privilege profile = %q, want operator", resp.AgentPrivilegeProfile)
+	}
+
+	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"invalid"}`)
+	resp = clusterToResponse(cluster)
+	if resp.AgentPrivilegeProfile != "admin" {
+		t.Fatalf("invalid profile = %q, want admin fallback", resp.AgentPrivilegeProfile)
+	}
+}
+
+func TestClusterResponseIncludesBaselineComponentOwnership(t *testing.T) {
+	resp := clusterToResponse(fixtureCluster(t, false))
+	if len(resp.ArgoCD.BaselineComponents) != 5 {
+		t.Fatalf("baseline component count = %d, want 5", len(resp.ArgoCD.BaselineComponents))
+	}
+	for _, component := range resp.ArgoCD.BaselineComponents {
+		if component.ManagedBy != "unknown" {
+			t.Fatalf("component %s managed_by = %q, want unknown", component.Slug, component.ManagedBy)
+		}
+		if component.ApplicationSetName == "" {
+			t.Fatalf("component %s missing application set name", component.Slug)
+		}
+	}
+
+	components := baselineComponentOwnership("argocd")
+	if len(components) != 5 {
+		t.Fatalf("argocd component count = %d, want 5", len(components))
+	}
+	for _, component := range components {
+		if component.ManagedBy != "argocd" {
+			t.Fatalf("component %s managed_by = %q, want argocd", component.Slug, component.ManagedBy)
+		}
+	}
+}

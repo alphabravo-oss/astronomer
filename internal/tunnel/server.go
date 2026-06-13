@@ -38,6 +38,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -750,7 +751,7 @@ func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UU
 				slog.String("error", err.Error()),
 			)
 		}
-		return "agent", agentToken.Token, nil
+		return "agent", payload.Token, nil
 	}
 
 	return "", "", fmt.Errorf("invalid registration token")
@@ -773,10 +774,13 @@ func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) 
 	token := base64.URLEncoding.EncodeToString(b)
 	row, err := h.validator.UpsertClusterAgentToken(ctx, sqlc.UpsertClusterAgentTokenParams{
 		ClusterID: clusterID,
-		Token:     token,
+		TokenHash: auth.HashOpaqueToken(token),
 	})
 	if err != nil {
 		return "", err
 	}
-	return row.Token, nil
+	if row.Token != "" {
+		return row.Token, nil
+	}
+	return token, nil
 }

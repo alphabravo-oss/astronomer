@@ -15,9 +15,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Eye, Loader2, RotateCcw, Save } from 'lucide-react';
+import { ArrowLeft, Eye, FileText, Loader2, RotateCcw, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   getNotificationTemplate,
   previewNotificationTemplate,
@@ -154,7 +155,15 @@ function NotificationTemplateEditor() {
     );
   }
   if (!detail) {
-    return <div className="text-sm text-destructive">Template not found.</div>;
+    return (
+      <EmptyState
+        icon={FileText}
+        title="Template not found"
+        description="The notification template key may be invalid or no longer available."
+        actionLabel="Back to templates"
+        actionHref="/dashboard/settings/templates"
+      />
+    );
   }
 
   return (

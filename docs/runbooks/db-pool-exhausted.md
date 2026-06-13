@@ -6,7 +6,7 @@
 
 ## Symptoms
 
-- PrometheusRule expr: `rate(db_pool_empty_acquire_count_total[5m]) > 0` for 5m
+- PrometheusRule expr: `rate(astronomer_db_pool_empty_acquire_count_total[5m]) > 0` for 5m
 - HTTP requests slow / time out at the chi handler boundary
 - `astronomer_db_query_duration_seconds` p99 climbs disproportionately
   to query plan changes (the gap is wait-for-conn, not query time)
@@ -18,8 +18,8 @@
 
 1. **How big is the gap?**
    ```promql
-   astronomer_db_pool_total - astronomer_db_pool_idle
-   astronomer_db_pool_acquired_count_total[5m] vs maxConns
+   astronomer_db_pool_total_connections - astronomer_db_pool_idle_connections
+   rate(astronomer_db_pool_empty_acquire_count_total[5m])
    ```
    - All conns held with active queries → real load; bump `postgres.pool.maxConns` (chart) and roll.
    - Active conns << maxConns but acquires still blocking → leaked
@@ -75,7 +75,7 @@ Use this only if (a) you can't identify a single stuck conn and
 
 ## Verify
 
-- `rate(db_pool_empty_acquire_count_total[5m])` returns to 0
+- `rate(astronomer_db_pool_empty_acquire_count_total[5m])` returns to 0
 - `/readyz` clears the database-saturation 503
 - `AstronomerDBPoolExhausted` alert clears
 

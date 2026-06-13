@@ -32,8 +32,16 @@ spec:
       labels:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 8 }}
     spec:
+      {{- with .Values.redis.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: redis
+          {{- with .Values.redis.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
           args: ["redis-server", "--appendonly", "yes"]
           ports:

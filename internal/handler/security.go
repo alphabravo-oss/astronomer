@@ -131,7 +131,7 @@ func (h *SecurityHandler) SetLogger(log *slog.Logger) {
 func (h *SecurityHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "status_error", "Failed to load security templates")
+		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load security templates")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -233,13 +233,13 @@ func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 		Offset: offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list security templates")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list security templates")
 		return
 	}
 
 	total, err := h.queries.CountPodSecurityTemplates(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count security templates")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count security templates")
 		return
 	}
 
@@ -250,12 +250,12 @@ func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var req CreateTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Template name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Template name is required")
 		return
 	}
 
@@ -288,7 +288,7 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 		CreatedByID:          currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create security template")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create security template")
 		return
 	}
 
@@ -306,13 +306,13 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 func (h *SecurityHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
 
 	template, err := h.queries.GetPodSecurityTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security template not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security template not found")
 		return
 	}
 
@@ -323,7 +323,7 @@ func (h *SecurityHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
 
@@ -332,7 +332,7 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 		templateName = existing.Name
 	}
 	if err := h.queries.DeletePodSecurityTemplate(r.Context(), id); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security template not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security template not found")
 		return
 	}
 	recordAudit(r, h.queries, "security.template.delete", "pod_security_template", id.String(), templateName, nil)
@@ -344,12 +344,12 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid template ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid template ID")
 		return
 	}
 	var req CreateTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	template, err := h.queries.UpdatePodSecurityTemplate(r.Context(), sqlc.UpdatePodSecurityTemplateParams{
@@ -368,7 +368,7 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 		ExemptNamespaces:     req.ExemptNamespaces,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update security template")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update security template")
 		return
 	}
 	recordAudit(r, h.queries, "security.template.update", "pod_security_template", template.ID.String(), template.Name, map[string]any{
@@ -382,13 +382,13 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 func (h *SecurityHandler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 
 	policy, err := h.queries.GetPolicyByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security policy not found for cluster")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security policy not found for cluster")
 		return
 	}
 
@@ -399,7 +399,7 @@ func (h *SecurityHandler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 
@@ -412,13 +412,13 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list security scans")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list security scans")
 		return
 	}
 
 	total, err := h.queries.CountSecurityScanResults(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count security scans")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count security scans")
 		return
 	}
 
@@ -429,13 +429,13 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) GetScan(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
 		return
 	}
 
 	scan, err := h.queries.GetSecurityScanResultByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security scan not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security scan not found")
 		return
 	}
 
@@ -449,12 +449,12 @@ func (h *SecurityHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list security policies")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list security policies")
 		return
 	}
 	total, err := h.queries.CountClusterSecurityPolicies(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count security policies")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count security policies")
 		return
 	}
 	RespondPaginated(w, r, policies, total)
@@ -467,7 +467,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		TemplateID uuid.UUID `json:"template_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	policy, err := h.queries.CreateClusterSecurityPolicy(r.Context(), sqlc.CreateClusterSecurityPolicyParams{
@@ -476,7 +476,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		SyncStatus: "pending",
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create security policy")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create security policy")
 		return
 	}
 	recordAudit(r, h.queries, "security.policy.create", "cluster_security_policy", policy.ID.String(), "", map[string]any{
@@ -490,15 +490,15 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid policy ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid policy ID")
 		return
 	}
 	if _, err := h.queries.GetClusterSecurityPolicyByID(r.Context(), id); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security policy not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security policy not found")
 		return
 	}
 	if err := h.queries.UpdateClusterSecurityPolicyApplied(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "apply_error", "Failed to apply security policy")
+		RespondRequestError(w, r, http.StatusInternalServerError, "apply_error", "Failed to apply security policy")
 		return
 	}
 	policy, _ := h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
@@ -513,7 +513,7 @@ func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid policy ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid policy ID")
 		return
 	}
 	clusterID := ""
@@ -521,7 +521,7 @@ func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 		clusterID = existing.ClusterID.String()
 	}
 	if err := h.queries.DeleteClusterSecurityPolicy(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete security policy")
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete security policy")
 		return
 	}
 	recordAudit(r, h.queries, "security.policy.delete", "cluster_security_policy", id.String(), "", map[string]any{
@@ -537,12 +537,12 @@ func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list security scans")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list security scans")
 		return
 	}
 	total, err := h.queries.CountSecurityScanResults(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count security scans")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count security scans")
 		return
 	}
 	RespondPaginated(w, r, scans, total)
@@ -569,11 +569,11 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		ScanType string `json:"scan_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.ClusterID == uuid.Nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", "cluster_id is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "cluster_id is required")
 		return
 	}
 
@@ -612,7 +612,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 	if h.k8s != nil {
 		if err := h.createClusterScanCR(r.Context(), req.ClusterID, scanName, profile); err != nil {
 			h.log.Warn("create ClusterScan CR failed", "cluster_id", req.ClusterID.String(), "error", err)
-			RespondError(w, http.StatusBadGateway, "cr_create_error", err.Error())
+			RespondRequestError(w, r, http.StatusBadGateway, "cr_create_error", err.Error())
 			return
 		}
 	}
@@ -627,7 +627,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		InitiatedByID:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create security scan")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create security scan")
 		return
 	}
 
@@ -821,12 +821,12 @@ func (h *SecurityHandler) findClusterScanReportNameByOwner(ctx context.Context, 
 func (h *SecurityHandler) GetScanFull(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
 		return
 	}
 	scan, err := h.queries.GetSecurityScanResultByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security scan not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security scan not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, scanWithFindings(scan))
@@ -838,12 +838,12 @@ func (h *SecurityHandler) GetScanFull(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) ExportScanCSV(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid scan ID")
 		return
 	}
 	scan, err := h.queries.GetSecurityScanResultByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Security scan not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Security scan not found")
 		return
 	}
 	findings, _ := parseCISFindings(scan.Findings)
@@ -864,12 +864,12 @@ func (h *SecurityHandler) ExportScanCSV(w http.ResponseWriter, r *http.Request) 
 func (h *SecurityHandler) ListProfiles(w http.ResponseWriter, r *http.Request) {
 	clusterIDStr := r.URL.Query().Get("cluster_id")
 	if clusterIDStr == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "cluster_id query parameter is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "cluster_id query parameter is required")
 		return
 	}
 	clusterID, err := uuid.Parse(clusterIDStr)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if h.k8s == nil {
@@ -911,7 +911,7 @@ func (h *SecurityHandler) ListProfiles(w http.ResponseWriter, r *http.Request) {
 		} `json:"items"`
 	}
 	if err := parseJSONResponse(resp, &list); err != nil {
-		RespondError(w, http.StatusBadGateway, "decode_error", "Failed to decode ClusterScanProfile list")
+		RespondRequestError(w, r, http.StatusBadGateway, "decode_error", "Failed to decode ClusterScanProfile list")
 		return
 	}
 	items := make([]map[string]any, 0, len(list.Items))

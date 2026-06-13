@@ -8,13 +8,13 @@
 // Endpoints (all superuser-gated inside the handler — same pattern as
 // admin_drill.go / admin_queues.go / platform_settings.go):
 //
-//   GET    /admin/compliance-baselines/                           — list (joined with registry)
-//   GET    /admin/compliance-baselines/{id}/                      — single baseline
-//   GET    /admin/compliance-baselines/{id}/diff/                 — current-vs-target preview
-//   POST   /admin/compliance-baselines/{id}/apply/                — apply
-//   GET    /admin/compliance-baselines/active/                    — most-recent applied
-//   GET    /admin/compliance-baseline-applications/               — history
-//   POST   /admin/compliance-baseline-applications/{id}/revert/   — revert
+//	GET    /admin/compliance-baselines/                           — list (joined with registry)
+//	GET    /admin/compliance-baselines/{id}/                      — single baseline
+//	GET    /admin/compliance-baselines/{id}/diff/                 — current-vs-target preview
+//	POST   /admin/compliance-baselines/{id}/apply/                — apply
+//	GET    /admin/compliance-baselines/active/                    — most-recent applied
+//	GET    /admin/compliance-baseline-applications/               — history
+//	POST   /admin/compliance-baseline-applications/{id}/revert/   — revert
 //
 // Audit events: compliance.baseline.{viewed,applied,reverted}.
 //
@@ -147,28 +147,28 @@ func NewComplianceBaselinesHandlerFromPool(pool *pgxpool.Pool, logger *slog.Logg
 // registry. The DB carries only the slug + display fields; the
 // `spec` field below is the rich registry view the operator sees.
 type baselineResponse struct {
-	ID          uuid.UUID            `json:"id"`
-	Slug        string               `json:"slug"`
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Version     string               `json:"version"`
-	Enabled     bool                 `json:"enabled"`
+	ID          uuid.UUID               `json:"id"`
+	Slug        string                  `json:"slug"`
+	Name        string                  `json:"name"`
+	Description string                  `json:"description"`
+	Version     string                  `json:"version"`
+	Enabled     bool                    `json:"enabled"`
 	Spec        compliance.BaselineSpec `json:"spec"`
-	Active      bool                 `json:"active"`
+	Active      bool                    `json:"active"`
 }
 
 type applicationResponse struct {
-	ID            uuid.UUID            `json:"id"`
-	BaselineID    uuid.UUID            `json:"baseline_id"`
-	BaselineSlug  string               `json:"baseline_slug"`
-	BaselineName  string               `json:"baseline_name"`
-	AppliedBy     *string              `json:"applied_by,omitempty"`
-	AppliedAt     string               `json:"applied_at"`
-	Status        string               `json:"status"`
-	RevertedAt    *string              `json:"reverted_at,omitempty"`
-	RevertedBy    *string              `json:"reverted_by,omitempty"`
-	Notes         string               `json:"notes"`
-	PreviousState json.RawMessage      `json:"previous_state,omitempty"`
+	ID            uuid.UUID       `json:"id"`
+	BaselineID    uuid.UUID       `json:"baseline_id"`
+	BaselineSlug  string          `json:"baseline_slug"`
+	BaselineName  string          `json:"baseline_name"`
+	AppliedBy     *string         `json:"applied_by,omitempty"`
+	AppliedAt     string          `json:"applied_at"`
+	Status        string          `json:"status"`
+	RevertedAt    *string         `json:"reverted_at,omitempty"`
+	RevertedBy    *string         `json:"reverted_by,omitempty"`
+	Notes         string          `json:"notes"`
+	PreviousState json.RawMessage `json:"previous_state,omitempty"`
 }
 
 // ── endpoints ─────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ func (h *ComplianceBaselinesHandler) List(w http.ResponseWriter, r *http.Request
 	}
 	rows, err := h.reader.ListComplianceBaselines(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	activeSlug := ""
@@ -211,10 +211,10 @@ func (h *ComplianceBaselinesHandler) Get(w http.ResponseWriter, r *http.Request)
 	row, err := h.reader.GetComplianceBaseline(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Baseline not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Baseline not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	activeSlug := ""
@@ -240,10 +240,10 @@ func (h *ComplianceBaselinesHandler) Diff(w http.ResponseWriter, r *http.Request
 	res, err := compliance.Diff(r.Context(), readerAsQuerier{h.reader}, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Baseline not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Baseline not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "diff_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "diff_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, res)
@@ -260,7 +260,7 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if h.runTx == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Compliance apply not wired (no tx pool)")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Compliance apply not wired (no tx pool)")
 		return
 	}
 	id, ok := parseUUID(w, r)
@@ -270,7 +270,7 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 	var req ApplyRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 			return
 		}
 	}
@@ -292,18 +292,18 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 	})
 	if txErr != nil {
 		if errors.Is(txErr, compliance.ErrAuditRetentionDowngrade) {
-			RespondError(w, http.StatusConflict, "audit_retention_downgrade", txErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, "audit_retention_downgrade", txErr.Error())
 			return
 		}
 		if errors.Is(txErr, compliance.ErrBaselineDisabled) {
-			RespondError(w, http.StatusConflict, "baseline_disabled", txErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, "baseline_disabled", txErr.Error())
 			return
 		}
 		if errors.Is(txErr, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Baseline not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Baseline not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "apply_error", txErr.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "apply_error", txErr.Error())
 		return
 	}
 
@@ -335,7 +335,7 @@ func (h *ComplianceBaselinesHandler) Active(w http.ResponseWriter, r *http.Reque
 			RespondJSON(w, http.StatusOK, map[string]any{"active": nil})
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	base, _ := h.reader.GetComplianceBaseline(r.Context(), app.BaselineID)
@@ -351,7 +351,7 @@ func (h *ComplianceBaselinesHandler) History(w http.ResponseWriter, r *http.Requ
 	}
 	rows, err := h.reader.ListComplianceBaselineApplications(r.Context(), 100)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]applicationResponse, 0, len(rows))
@@ -368,7 +368,7 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if h.runTx == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Compliance revert not wired (no tx pool)")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Compliance revert not wired (no tx pool)")
 		return
 	}
 	id, ok := parseUUID(w, r)
@@ -382,14 +382,14 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 	})
 	if txErr != nil {
 		if errors.Is(txErr, compliance.ErrNewerApplicationExists) {
-			RespondError(w, http.StatusConflict, "newer_application_exists", txErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, "newer_application_exists", txErr.Error())
 			return
 		}
 		if errors.Is(txErr, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Application not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Application not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "revert_error", txErr.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "revert_error", txErr.Error())
 		return
 	}
 
@@ -416,30 +416,12 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 // ── helpers ───────────────────────────────────────────────────────────
 
 func (h *ComplianceBaselinesHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.reader == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Baseline store not configured")
-		return false
-	}
-	user, err := h.reader.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Compliance baselines require superuser privileges")
-		return false
-	}
-	return true
+	_, ok := requireSuperuser(w, r, h.reader, superuserGateConfig{
+		StoreUnavailableCode:    "not_configured",
+		StoreUnavailableMessage: "Baseline store not configured",
+		ForbiddenMessage:        "Compliance baselines require superuser privileges",
+	})
+	return ok
 }
 
 func (h *ComplianceBaselinesHandler) updateActiveGauge(activeSlug string) {
@@ -457,7 +439,7 @@ func parseUUID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid UUID")
 		return uuid.Nil, false
 	}
 	return id, true

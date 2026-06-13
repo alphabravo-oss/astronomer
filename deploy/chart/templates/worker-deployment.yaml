@@ -21,6 +21,10 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      {{- with .Values.worker.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -28,6 +32,10 @@ spec:
       initContainers:
         {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
         - name: wait-postgres
+          {{- with .Values.worker.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           command:
             - sh
@@ -39,6 +47,10 @@ spec:
         {{- end }}
         {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
         - name: wait-redis
+          {{- with .Values.worker.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           command:
             - sh
@@ -50,6 +62,10 @@ spec:
         {{- end }}
       containers:
         - name: worker
+          {{- with .Values.worker.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.image" (dict "context" . "component" "worker") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:

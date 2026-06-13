@@ -364,6 +364,7 @@ type ClusterAgentToken struct {
 	ID         uuid.UUID          `json:"id"`
 	ClusterID  uuid.UUID          `json:"cluster_id"`
 	Token      string             `json:"token"`
+	TokenHash  string             `json:"token_hash"`
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt  time.Time          `json:"created_at"`
 	UpdatedAt  time.Time          `json:"updated_at"`
@@ -484,20 +485,21 @@ type ClusterTemplateApplication struct {
 }
 
 type ClusterRegistryConfig struct {
-	ID                 uuid.UUID          `json:"id"`
-	ClusterID          uuid.UUID          `json:"cluster_id"`
-	PrivateRegistryUrl string             `json:"private_registry_url"`
-	RegistryUsername   string             `json:"registry_username"`
-	RegistryPassword   string             `json:"registry_password"`
-	Insecure           bool               `json:"insecure"`
-	CaBundle           string             `json:"ca_bundle"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
-	Namespaces         json.RawMessage    `json:"namespaces"`
-	InjectDefaultSa    bool               `json:"inject_default_sa"`
-	SecretName         string             `json:"secret_name"`
-	LastAppliedAt      pgtype.Timestamptz `json:"last_applied_at"`
-	LastApplyError     string             `json:"last_apply_error"`
+	ID                        uuid.UUID          `json:"id"`
+	ClusterID                 uuid.UUID          `json:"cluster_id"`
+	PrivateRegistryUrl        string             `json:"private_registry_url"`
+	RegistryUsername          string             `json:"registry_username"`
+	RegistryPassword          string             `json:"registry_password"`
+	RegistryPasswordEncrypted string             `json:"registry_password_encrypted"`
+	Insecure                  bool               `json:"insecure"`
+	CaBundle                  string             `json:"ca_bundle"`
+	CreatedAt                 time.Time          `json:"created_at"`
+	UpdatedAt                 time.Time          `json:"updated_at"`
+	Namespaces                json.RawMessage    `json:"namespaces"`
+	InjectDefaultSa           bool               `json:"inject_default_sa"`
+	SecretName                string             `json:"secret_name"`
+	LastAppliedAt             pgtype.Timestamptz `json:"last_applied_at"`
+	LastApplyError            string             `json:"last_apply_error"`
 }
 
 type ClusterRole struct {

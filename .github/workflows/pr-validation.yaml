@@ -1,0 +1,152 @@
+name: pr-validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Migration safety check
+        run: ./scripts/check-migrations.sh
+
+      - name: Go tests
+        run: go test ./...
+
+      - name: Route security tests
+        run: go test ./internal/server -run 'Test(AdminRouteRegistrationsAreAuthProtected|HighRiskRoutesDenyUnauthenticatedRequests|K8sProxy|ServiceProxy|RegistrationEvents|ArgoCDInternalK8sProxy)' -count=1
+
+  frontend:
+    name: frontend tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm test -- --runInBand
+
+      - name: Dependency vulnerability scan
+        run: npm audit --audit-level=moderate
+
+  helm:
+    name: helm validation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint deploy/chart
+
+      - name: Render development values
+        run: |
+          helm template astronomer deploy/chart \
+            --set frontend.enabled=true \
+            --set dex.enabled=true \
+            --set config.env=development \
+            >/tmp/astronomer-dev.yaml
+
+      - name: Render production values
+        run: |
+          helm template astronomer deploy/chart \
+            -f deploy/chart/values-production.yaml \
+            --set config.serverURL=https://astronomer.example.com \
+            --set 'gateway.hosts={astronomer.example.com}' \
+            --set gateway.tls.secretName=astronomer-tls \
+            --set postgres.external.dsn='postgres://astronomer:secret@postgres.example.com:5432/astronomer?sslmode=require' \
+            --set redis.external.address=redis.example.com:6379 \
+            --set secrets.secretKey=prod-secret-key \
+            --set secrets.encryptionKey='prod-encryption-key-prod-encryption-key12' \
+            --set dex.clientSecret=prod-dex-client-secret \
+            --set managementBackup.s3.bucket=astronomer-backups \
+            --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
+            >/tmp/astronomer-prod.yaml
+
+  container-supply-chain:
+    name: image scan and sbom
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - { name: server, dockerfile: deploy/docker/Dockerfile.server, image: astronomer-go-server }
+          - { name: worker, dockerfile: deploy/docker/Dockerfile.worker, image: astronomer-go-worker }
+          - { name: agent, dockerfile: deploy/docker/Dockerfile.agent, image: astronomer-go-agent }
+          - { name: migrate, dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
+          - { name: shell, dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.component.dockerfile }}
+          load: true
+          tags: ${{ matrix.component.image }}:ci
+          provenance: false
+          sbom: false
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ matrix.component.image }}:ci
+          format: table
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: "v1.16.0"
+
+      - name: Generate SBOM
+        run: |
+          syft ${{ matrix.component.image }}:ci \
+            -o spdx-json \
+            > sbom-${{ matrix.component.name }}.spdx.json
+          test -s sbom-${{ matrix.component.name }}.spdx.json
+          python3 -c "import json; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component.name }}-${{ github.sha }}
+          path: sbom-${{ matrix.component.name }}.spdx.json
+          retention-days: 30

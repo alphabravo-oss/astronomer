@@ -43,6 +43,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -50,7 +51,7 @@ import (
 // Task type identifiers. Exported so the worker mux + scheduler can
 // register them, and so the handler can construct asynq.Task{Type}.
 const (
-	ClusterApplyRegistrySecretType   = "cluster:apply_registry_secret"
+	ClusterApplyRegistrySecretType    = "cluster:apply_registry_secret"
 	ClusterRegistryDriftReconcileType = "cluster:registry_drift_reconcile"
 )
 
@@ -117,6 +118,7 @@ type ClusterRegistryApplyQuerier interface {
 type ClusterRegistryApplyDeps struct {
 	Queries   ClusterRegistryApplyQuerier
 	Requester ProjectK8sRequester
+	Encryptor *auth.Encryptor
 }
 
 var clusterRegistryApplyDeps ClusterRegistryApplyDeps
@@ -240,6 +242,11 @@ func runApply(ctx context.Context, registryID, clusterID uuid.UUID) error {
 		// asynq retries-then-dlqs rather than apply the wrong cluster.
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
 		return fmt.Errorf("registry %s does not belong to cluster %s", registryID, clusterID)
+	}
+	if err := materializeClusterRegistryPassword(&cfg); err != nil {
+		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
+		_ = markRegistryError(ctx, cfg.ID, fmt.Sprintf("decrypt registry password: %v", err))
+		return err
 	}
 	secretName := strings.TrimSpace(cfg.SecretName)
 	if secretName == "" {
@@ -390,8 +397,8 @@ func applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, s
 			"name":      secretName,
 			"namespace": namespace,
 			"labels": map[string]any{
-				"app.kubernetes.io/managed-by":    clusterRegistryFieldManager,
-				"astronomer.io/registry-config":   cfg.ID.String(),
+				"app.kubernetes.io/managed-by":  clusterRegistryFieldManager,
+				"astronomer.io/registry-config": cfg.ID.String(),
 			},
 		},
 		"type": "kubernetes.io/dockerconfigjson",
@@ -429,6 +436,21 @@ func buildDockerConfigJSON(cfg sqlc.ClusterRegistryConfig) map[string]any {
 			},
 		},
 	}
+}
+
+func materializeClusterRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
+	if cfg == nil || strings.TrimSpace(cfg.RegistryPasswordEncrypted) == "" {
+		return nil
+	}
+	if clusterRegistryApplyDeps.Encryptor == nil {
+		return fmt.Errorf("encrypted registry password present but encryptor is not configured")
+	}
+	password, err := clusterRegistryApplyDeps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
+	if err != nil {
+		return err
+	}
+	cfg.RegistryPassword = password
+	return nil
 }
 
 // canonicalRegistryHost strips any scheme + trailing slash so the

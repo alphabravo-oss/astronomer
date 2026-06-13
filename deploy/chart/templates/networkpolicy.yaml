@@ -1,0 +1,309 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $externalCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) -}}
+{{- if .Values.frontend.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-frontend
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "frontend") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "frontend") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.allowPublicIngress }}
+    - ports:
+        - protocol: TCP
+          port: 3000
+    {{- end }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.server.service.port }}
+    {{- range $cidr := $externalCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    {{- end }}
+---
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-server
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "server") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.allowPublicIngress }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.server.service.port }}
+    {{- end }}
+    {{- if .Values.frontend.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "frontend") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.server.service.port }}
+    {{- end }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.server.service.port }}
+    {{- if .Values.networkPolicy.allowMetricsIngress }}
+    - ports:
+        - protocol: TCP
+          port: 9090
+    {{- end }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.server.service.port }}
+    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.port }}
+    {{- end }}
+    {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+    {{- end }}
+    {{- if .Values.dex.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 5556
+    {{- end }}
+    {{- range $cidr := $externalCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-worker
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "worker") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.allowMetricsIngress }}
+    - ports:
+        - protocol: TCP
+          port: 9090
+    {{- end }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.port }}
+    {{- end }}
+    {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+    {{- end }}
+    {{- range $cidr := $externalCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+{{- if .Values.dex.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.allowPublicIngress }}
+    - ports:
+        - protocol: TCP
+          port: 5556
+    {{- end }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 5556
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- range $cidr := $externalCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 389
+        - protocol: TCP
+          port: 636
+    {{- end }}
+{{- end }}
+{{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-postgres
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.port }}
+  egress: []
+{{- end }}
+{{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+  egress: []
+{{- end }}
+{{- end }}

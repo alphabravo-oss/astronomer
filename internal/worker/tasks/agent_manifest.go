@@ -12,10 +12,11 @@ import (
 
 // AgentManifestPayload contains parameters for generating an agent manifest.
 type AgentManifestPayload struct {
-	ClusterID       string `json:"cluster_id"`
-	AgentToken      string `json:"agent_token"`
-	ImageRepository string `json:"image_repository,omitempty"`
-	ImageTag        string `json:"image_tag,omitempty"`
+	ClusterID        string `json:"cluster_id"`
+	AgentToken       string `json:"agent_token"`
+	ImageRepository  string `json:"image_repository,omitempty"`
+	ImageTag         string `json:"image_tag,omitempty"`
+	PrivilegeProfile string `json:"privilege_profile,omitempty"`
 }
 
 // NewAgentManifestTask creates a new agent manifest generation task.
@@ -42,20 +43,23 @@ func HandleAgentManifest(ctx context.Context, t *asynq.Task) error {
 		"cluster_id", p.ClusterID,
 		"image_repository", p.ImageRepository,
 		"image_tag", p.ImageTag,
+		"privilege_profile", agenttemplate.NormalizePrivilegeProfile(p.PrivilegeProfile),
 	)
 
 	data := struct {
-		ClusterID       string
-		AgentToken      string
-		ImageRepository string
-		ImageTag        string
-		ServerURL       string
+		ClusterID        string
+		AgentToken       string
+		ImageRepository  string
+		ImageTag         string
+		ServerURL        string
+		PrivilegeProfile string
 	}{
-		ClusterID:       p.ClusterID,
-		AgentToken:      p.AgentToken,
-		ImageRepository: p.ImageRepository,
-		ImageTag:        p.ImageTag,
-		ServerURL:       runtimeDeps.ServerURL,
+		ClusterID:        p.ClusterID,
+		AgentToken:       p.AgentToken,
+		ImageRepository:  p.ImageRepository,
+		ImageTag:         p.ImageTag,
+		ServerURL:        runtimeDeps.ServerURL,
+		PrivilegeProfile: p.PrivilegeProfile,
 	}
 	if data.ImageRepository == "" {
 		data.ImageRepository = runtimeDeps.AgentImageRepo
@@ -63,18 +67,23 @@ func HandleAgentManifest(ctx context.Context, t *asynq.Task) error {
 	if data.ImageTag == "" {
 		data.ImageTag = runtimeDeps.AgentImageTag
 	}
-	rendered := renderAgentManifest(data.ClusterID, data.AgentToken, data.ServerURL, data.ImageRepository, data.ImageTag)
+	rendered := renderAgentManifest(data.ClusterID, data.AgentToken, data.ServerURL, data.ImageRepository, data.ImageTag, data.PrivilegeProfile)
 
 	slog.InfoContext(ctx, "agent manifest generated", "cluster_id", p.ClusterID, "manifest_bytes", len(rendered))
 	return nil
 }
 
-func renderAgentManifest(clusterID, agentToken, serverURL, imageRepository, imageTag string) string {
+func renderAgentManifest(clusterID, agentToken, serverURL, imageRepository, imageTag string, privilegeProfile ...string) string {
+	profile := ""
+	if len(privilegeProfile) > 0 {
+		profile = privilegeProfile[0]
+	}
 	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
 		ServerURL:         serverURL,
 		ClusterID:         clusterID,
 		RegistrationToken: agentToken,
 		CACert:            "",
 		AgentImage:        imageRepository + ":" + imageTag,
+		PrivilegeProfile:  profile,
 	})
 }

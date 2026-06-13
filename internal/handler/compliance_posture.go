@@ -7,36 +7,36 @@
 //
 // Composite score (0–100):
 //
-//   posture = CIS    × 0.30
-//           + Vulns  × 0.30
-//           + NetPol × 0.25
-//           + Audit  × 0.15
+//	posture = CIS    × 0.30
+//	        + Vulns  × 0.30
+//	        + NetPol × 0.25
+//	        + Audit  × 0.15
 //
 // Sub-score computation (each clamped to [0, 100]):
 //
-//   CIS    — per-cluster: 100 × passed / (passed + failed) on the
-//            latest cis_scan in security_scan_results; if a cluster
-//            has no CIS scan in the last 30 days the cluster's
-//            sub-score is 50 (informational "unknown") so a fleet of
-//            unsanned clusters still reads as half-ready rather than
-//            artificially high or zero. Fleet sub-score = unweighted
-//            mean over clusters.
+//	CIS    — per-cluster: 100 × passed / (passed + failed) on the
+//	         latest cis_scan in security_scan_results; if a cluster
+//	         has no CIS scan in the last 30 days the cluster's
+//	         sub-score is 50 (informational "unknown") so a fleet of
+//	         unsanned clusters still reads as half-ready rather than
+//	         artificially high or zero. Fleet sub-score = unweighted
+//	         mean over clusters.
 //
-//   Vulns  — per-cluster: 100 - clamp(critical × 5 + high × 1, 0, 100).
-//            Reflects the "1 critical is roughly as bad as 5 highs"
-//            heuristic Rancher uses on their fleet score. Fleet
-//            sub-score = unweighted mean.
+//	Vulns  — per-cluster: 100 - clamp(critical × 5 + high × 1, 0, 100).
+//	         Reflects the "1 critical is roughly as bad as 5 highs"
+//	         heuristic Rancher uses on their fleet score. Fleet
+//	         sub-score = unweighted mean.
 //
-//   NetPol — per-cluster: 100 if the cluster has at least one
-//            cluster_security_policies row attached (sprint-set
-//            netpol baseline applied), 0 otherwise. Coarse but
-//            deterministic, and matches Rancher's "applied / not
-//            applied" gate.
+//	NetPol — per-cluster: 100 if the cluster has at least one
+//	         cluster_security_policies row attached (sprint-set
+//	         netpol baseline applied), 0 otherwise. Coarse but
+//	         deterministic, and matches Rancher's "applied / not
+//	         applied" gate.
 //
-//   Audit  — fleet-level boolean: 100 if AuditRetentionMonths >= 12
-//            (the SOC 2 prep floor), else 60. The retention sentinel
-//            lives in RuntimeDependencies.AuditLogRetentionMonths so
-//            we don't need a DB hit per request.
+//	Audit  — fleet-level boolean: 100 if AuditRetentionMonths >= 12
+//	         (the SOC 2 prep floor), else 60. The retention sentinel
+//	         lives in RuntimeDependencies.AuditLogRetentionMonths so
+//	         we don't need a DB hit per request.
 //
 // Determinism: scoring is a pure function of the (clusters, scans,
 // vulns, policies, audit-retention) snapshot. A unit test pins this
@@ -59,16 +59,16 @@ import (
 
 // PostureScores is the API response shape.
 type PostureScores struct {
-	OverallScore     float64                  `json:"overall_score"`
-	CISScore         float64                  `json:"cis_score"`
-	VulnsScore       float64                  `json:"vulns_score"`
-	NetPolScore      float64                  `json:"netpol_score"`
-	AuditScore       float64                  `json:"audit_score"`
-	ClusterCount     int                      `json:"cluster_count"`
-	Clusters         []ClusterPosture         `json:"clusters"`
-	TopIssues        []PostureIssue           `json:"top_issues"`
-	ComputedAt       time.Time                `json:"computed_at"`
-	RetentionMonths  int                      `json:"audit_retention_months"`
+	OverallScore    float64          `json:"overall_score"`
+	CISScore        float64          `json:"cis_score"`
+	VulnsScore      float64          `json:"vulns_score"`
+	NetPolScore     float64          `json:"netpol_score"`
+	AuditScore      float64          `json:"audit_score"`
+	ClusterCount    int              `json:"cluster_count"`
+	Clusters        []ClusterPosture `json:"clusters"`
+	TopIssues       []PostureIssue   `json:"top_issues"`
+	ComputedAt      time.Time        `json:"computed_at"`
+	RetentionMonths int              `json:"audit_retention_months"`
 }
 
 // ClusterPosture is the per-cluster breakdown used by the per-row
@@ -84,11 +84,11 @@ type ClusterPosture struct {
 
 // PostureIssue is one top-issue surfaced to the operator.
 type PostureIssue struct {
-	ClusterID    uuid.UUID `json:"cluster_id"`
-	ClusterName  string    `json:"cluster_name"`
-	Severity     string    `json:"severity"`
-	Category     string    `json:"category"`
-	Message      string    `json:"message"`
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	ClusterName string    `json:"cluster_name"`
+	Severity    string    `json:"severity"`
+	Category    string    `json:"category"`
+	Message     string    `json:"message"`
 }
 
 // CompliancePostureQuerier is the slice of *sqlc.Queries the handler
@@ -130,7 +130,7 @@ func (h *CompliancePostureHandler) withNow(fn func() time.Time) *CompliancePostu
 func (h *CompliancePostureHandler) Get(w http.ResponseWriter, r *http.Request) {
 	clusters, err := h.q.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: 500, Offset: 0})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list clusters")
 		return
 	}
 	out := h.compute(r.Context(), clusters)

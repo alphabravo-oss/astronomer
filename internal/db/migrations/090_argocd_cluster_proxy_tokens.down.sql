@@ -1,0 +1,4 @@
+DROP TRIGGER IF EXISTS set_updated_at_argocd_cluster_proxy_tokens ON argocd_cluster_proxy_tokens;
+DROP INDEX IF EXISTS idx_argocd_cluster_proxy_tokens_hash;
+DROP INDEX IF EXISTS idx_argocd_cluster_proxy_tokens_cluster;
+DROP TABLE IF EXISTS argocd_cluster_proxy_tokens;

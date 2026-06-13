@@ -8,9 +8,8 @@ import type { User } from '@/types';
 
 interface AuthState {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
+  login: (user: User) => void;
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
 }
@@ -19,26 +18,19 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      token: null,
       isAuthenticated: false,
-      login: (user, token) =>
+      login: (user) =>
         set({
           user,
-          token,
           isAuthenticated: true,
         }),
       logout: () => {
+        // Migration cleanup for pre-HttpOnly-cookie builds. The active
+        // browser session is cleared by POST /auth/logout on the backend.
         localStorage.removeItem('astronomer_token');
         localStorage.removeItem('astronomer_refresh');
-        // Clear the session cookie so the /argocd/* reverse proxy stops
-        // accepting this user. Inline so we don't drag api.ts (and its
-        // axios import) into the store bundle.
-        if (typeof document !== 'undefined') {
-          document.cookie = 'astronomer_session=; Path=/; Max-Age=0; SameSite=Lax';
-        }
         set({
           user: null,
-          token: null,
           isAuthenticated: false,
         });
       },
@@ -49,10 +41,16 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'astronomer-auth',
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted) => {
+        if (!persisted || typeof persisted !== 'object') return persisted;
+        const state = persisted as Partial<AuthState> & { token?: string | null };
+        const { token: _legacyToken, ...rest } = state;
+        return rest;
+      },
       partialize: (state) => ({
         user: state.user,
-        token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
     }

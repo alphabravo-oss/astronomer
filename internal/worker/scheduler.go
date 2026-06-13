@@ -66,6 +66,10 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// up rows whose worker process crashed mid-phase (status=running)
 		// and rows that failed and need a retry (status=failed→running).
 		{"@every 1m", TypeClusterDecommissionAll, "cluster decommission sweep"},
+		// ArgoCD auto-adoption sweep. Agent connect enqueues the per-cluster
+		// task immediately; this sweep repairs missed enqueue, worker crash,
+		// or an ArgoCD cluster Secret deleted out-of-band.
+		{"@every 5m", tasks.ArgoCDAutoRegisterClusterType, "argocd managed-cluster auto-adoption sweep"},
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
@@ -109,6 +113,7 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Secret SSA is idempotent so converged rows fast-fail through
 		// the apply path without a wire write.
 		{"@every 30m", tasks.CloudCredentialDriftReconcileType, "cloud credentials drift reconcile"},
+		{"@every 6h", tasks.PlaintextCredentialMigrationType, "plaintext credential migration"},
 		// Migration 055: SIEM forwarder dispatch + retention.
 		//   - Dispatch: every 2s drains every enabled forwarder's queue
 		//     into the configured transport. The 2s cadence is the SLA
@@ -128,6 +133,10 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// has elapsed and re-fires the queued operation through the
 		// per-op-type replayer registered at server start.
 		{"@every 60s", tasks.DispatchDeferredType, "maintenance dispatch deferred operations"},
+		// Migration 092: durable task outbox dispatcher. Drains committed
+		// Postgres task intents into Redis/Asynq and retries transient Redis
+		// delivery failures with DB-backed state.
+		{"@every 15s", tasks.TaskOutboxDispatchType, "task outbox dispatch"},
 		// Migration 060: GitOps cluster registration sync. 60s cadence
 		// matches the schema default sync_interval_seconds; per-source
 		// last_synced_at gates whether each row actually executes on
@@ -152,6 +161,9 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30m", tasks.CrdMirrorPruneStaleType, "CRD mirror v2 stale-row prune"},
 		// T6.069: CRD-mirror v2 gauge populator (every minute).
 		{"@every 1m", tasks.CrdMirrorGaugePopulateType, "CRD mirror v2 gauge populator"},
+		// CRD ownership drift check. Surfaces CRD-owned DB rows whose
+		// Kubernetes external_ref disappeared after a restore or manual delete.
+		{"@every 5m", tasks.CRDOwnershipDriftCheckType, "CRD ownership drift check"},
 		// Sprint 072: anomaly baseline recompute every 5m.
 		{"@every 5m", tasks.AnomalyBaselineRecomputeType, "anomaly baseline recompute"},
 		// Migration 070: apiserver allow-list reconciler. Every 15m

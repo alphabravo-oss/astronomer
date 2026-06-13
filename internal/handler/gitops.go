@@ -34,7 +34,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -181,31 +180,11 @@ type gitopsSourceRequest struct {
 
 // gate enforces superuser. Same shape as the SIEM / admin handlers.
 func (h *GitOpsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "store_unavailable", "GitOps store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"GitOps administration requires superuser privileges")
-		return false
-	}
-	return true
+	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "GitOps store not configured",
+		ForbiddenMessage:        "GitOps administration requires superuser privileges",
+	})
+	return ok
 }
 
 // List handles GET /api/v1/admin/gitops-sources/.
@@ -215,7 +194,7 @@ func (h *GitOpsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListGitOpsSources(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list gitops sources")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list gitops sources")
 		return
 	}
 	out := make([]gitopsSourceResponse, 0, len(rows))
@@ -232,11 +211,11 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	var req gitopsSourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if err := validateGitOpsRequest(&req, true); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 	// auth blob: when a Fernet encryptor is wired (the production path),
@@ -251,7 +230,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if h.encryptor != nil && authBlob != "" {
 		ct, encErr := h.encryptor.Encrypt(authBlob)
 		if encErr != nil {
-			RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt gitops auth blob")
+			RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt gitops auth blob")
 			return
 		}
 		authBlob = ct
@@ -270,7 +249,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:           currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create gitops source")
 		return
 	}
 	h.warnLargeBlastRadius(r.Context(), row)
@@ -289,16 +268,16 @@ func (h *GitOpsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid source ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid source ID")
 		return
 	}
 	row, err := h.queries.GetGitOpsSource(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "GitOps source not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "GitOps source not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toGitOpsSourceResponse(row))
@@ -311,25 +290,25 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid source ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid source ID")
 		return
 	}
 	existing, err := h.queries.GetGitOpsSource(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "GitOps source not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "GitOps source not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
 		return
 	}
 	var req gitopsSourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if err := validateGitOpsRequest(&req, false); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 	auth := req.Auth
@@ -354,7 +333,7 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Enabled:             enabled,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update gitops source")
 		return
 	}
 	h.warnLargeBlastRadius(r.Context(), row)
@@ -373,20 +352,20 @@ func (h *GitOpsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid source ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid source ID")
 		return
 	}
 	existing, err := h.queries.GetGitOpsSource(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "GitOps source not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "GitOps source not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
 		return
 	}
 	if err := h.queries.DeleteGitOpsSource(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete gitops source")
 		return
 	}
 	recordAudit(r, h.queries, "admin.gitops_source.deleted", "gitops_source", id.String(), existing.Name, map[string]any{
@@ -402,24 +381,24 @@ func (h *GitOpsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid source ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid source ID")
 		return
 	}
 	if h.runner == nil {
-		RespondError(w, http.StatusServiceUnavailable, "runner_unwired", "GitOps sync runner not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "runner_unwired", "GitOps sync runner not configured")
 		return
 	}
 	row, err := h.queries.GetGitOpsSource(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "GitOps source not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "GitOps source not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
+		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to load gitops source")
 		return
 	}
 	if err := h.runner.SyncSource(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "sync_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.gitops_source.synced", "gitops_source", id.String(), row.Name, map[string]any{
@@ -435,16 +414,16 @@ func (h *GitOpsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid source ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid source ID")
 		return
 	}
 	if h.runner == nil {
-		RespondError(w, http.StatusServiceUnavailable, "runner_unwired", "GitOps sync runner not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "runner_unwired", "GitOps sync runner not configured")
 		return
 	}
 	res, err := h.runner.PreviewSource(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "preview_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "preview_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, res)
@@ -457,12 +436,12 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid source ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid source ID")
 		return
 	}
 	rows, err := h.queries.ListGitOpsRegisteredClustersBySource(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list clusters")
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))

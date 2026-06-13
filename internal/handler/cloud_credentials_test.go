@@ -20,6 +20,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // fakeCloudCredQuerier is a minimal in-memory store for the
@@ -206,6 +207,45 @@ func (f *fakeCloudCredEnqueuer) all() []*asynq.Task {
 	out := make([]*asynq.Task, len(f.tasks))
 	copy(out, f.tasks)
 	return out
+}
+
+func TestCloudCredentialsMaterializeWritesTaskOutbox(t *testing.T) {
+	credentialID := uuid.New()
+	clusterID := uuid.New()
+	outbox := &fakeRegistrationTaskOutbox{}
+	enq := &fakeCloudCredEnqueuer{}
+	h := NewCloudCredentialHandler(nil)
+	h.SetEnqueuer(enq)
+	h.SetTaskOutbox(outbox)
+	ref := TargetRef{ClusterID: clusterID, Namespace: "apps", SecretName: "aws-prod"}
+
+	h.enqueueMaterialize(context.Background(), sqlc.CloudCredential{ID: credentialID}, []TargetRef{ref}, "apply")
+
+	if got := len(enq.all()); got != 0 {
+		t.Fatalf("direct enqueues = %d, want 0 when outbox succeeds", got)
+	}
+	args := outbox.all()
+	if len(args) != 1 {
+		t.Fatalf("outbox writes = %d, want 1", len(args))
+	}
+	arg := args[0]
+	if arg.TaskType != tasks.CloudCredentialMaterializeType {
+		t.Fatalf("task type = %q, want %q", arg.TaskType, tasks.CloudCredentialMaterializeType)
+	}
+	wantDedupe := "cloud_credential_materialize:" + credentialID.String() + ":" + clusterID.String() + ":apps:aws-prod:apply"
+	if !arg.DedupeKey.Valid || arg.DedupeKey.String != wantDedupe {
+		t.Fatalf("dedupe key = %+v, want %s", arg.DedupeKey, wantDedupe)
+	}
+	if arg.QueueName != "default" || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
+	}
+	var payload tasks.CloudCredentialMaterializePayload
+	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.CredentialID != credentialID.String() || payload.ClusterID != clusterID.String() || payload.Namespace != "apps" || payload.SecretName != "aws-prod" || payload.Op != "apply" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
 }
 
 // fakeTester is the in-memory CloudTester used by the test endpoint

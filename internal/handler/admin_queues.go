@@ -7,8 +7,8 @@
 //
 // Two surfaces:
 //
-//   GET /api/v1/admin/queues/                     — summary across queues
-//   GET /api/v1/admin/queues/{queue}/dlq/         — recent DLQ entries
+//	GET /api/v1/admin/queues/                     — summary across queues
+//	GET /api/v1/admin/queues/{queue}/dlq/         — recent DLQ entries
 //
 // The handler uses the same SupportBundleAsynqInspector interface the
 // support-bundle code added; it's the smallest dependency that *asynq.Inspector satisfies.
@@ -24,7 +24,6 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // AdminQueuesQuerier is the slice of sqlc.Queries the handler needs.
@@ -66,12 +65,12 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondError(w, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
 		return
 	}
 	queues, err := h.inspector.Queues()
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "asynq_error", err.Error())
 		return
 	}
 	now := time.Now().UTC()
@@ -114,19 +113,19 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondError(w, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
 		return
 	}
 	queueName := chi.URLParam(r, "queue")
 	if queueName == "" {
-		RespondError(w, http.StatusBadRequest, "queue_required", "queue name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "queue_required", "queue name is required")
 		return
 	}
 	// Page size of 100 — big enough to spot patterns, small enough to
 	// keep the response under a scrolled UI panel.
 	archived, err := h.inspector.ListArchivedTasks(queueName, asynq.PageSize(100))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "asynq_error", err.Error())
 		return
 	}
 	out := make([]DLQEntry, 0, len(archived))
@@ -157,17 +156,17 @@ func (h *AdminQueuesHandler) RetryDLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondError(w, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
 		return
 	}
 	queue := chi.URLParam(r, "queue")
 	id := chi.URLParam(r, "id")
 	if queue == "" || id == "" {
-		RespondError(w, http.StatusBadRequest, "missing_params", "queue and id are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "missing_params", "queue and id are required")
 		return
 	}
 	if err := h.inspector.RunTask(queue, id); err != nil {
-		RespondError(w, http.StatusBadGateway, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "asynq_error", err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.queue.dlq_retried", "queue", queue, id, map[string]any{
@@ -186,17 +185,17 @@ func (h *AdminQueuesHandler) DiscardDLQ(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.inspector == nil {
-		RespondError(w, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
 		return
 	}
 	queue := chi.URLParam(r, "queue")
 	id := chi.URLParam(r, "id")
 	if queue == "" || id == "" {
-		RespondError(w, http.StatusBadRequest, "missing_params", "queue and id are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "missing_params", "queue and id are required")
 		return
 	}
 	if err := h.inspector.DeleteTask(queue, id); err != nil {
-		RespondError(w, http.StatusBadGateway, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "asynq_error", err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.queue.dlq_discarded", "queue", queue, id, map[string]any{
@@ -208,28 +207,12 @@ func (h *AdminQueuesHandler) DiscardDLQ(w http.ResponseWriter, r *http.Request) 
 // gate enforces superuser-only access and emits the admin audit row.
 // Returns true if the request may proceed; emits 401/403 otherwise.
 func (h *AdminQueuesHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "User store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"Queue inspector requires superuser privileges")
+	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableStatus:  http.StatusInternalServerError,
+		StoreUnavailableCode:    "internal_error",
+		StoreUnavailableMessage: "User store not configured",
+		ForbiddenMessage:        "Queue inspector requires superuser privileges",
+	}); !ok {
 		return false
 	}
 	// Audit trail — same pattern as key-status + support-bundle.

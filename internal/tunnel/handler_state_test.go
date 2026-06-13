@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -78,7 +79,7 @@ func (r *recordingValidator) GetClusterAgentTokenByToken(_ context.Context, toke
 	if r.clusterAgentErr != nil {
 		return sqlc.ClusterAgentToken{}, r.clusterAgentErr
 	}
-	if r.clusterAgentToken.Token == token && token != "" {
+	if token != "" && (r.clusterAgentToken.Token == token || r.clusterAgentToken.TokenHash == auth.HashOpaqueToken(token)) {
 		return r.clusterAgentToken, nil
 	}
 	return sqlc.ClusterAgentToken{}, errors.New("not found")
@@ -88,7 +89,7 @@ func (r *recordingValidator) UpsertClusterAgentToken(_ context.Context, arg sqlc
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.upsertAgentArgs = append(r.upsertAgentArgs, arg)
-	r.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: arg.ClusterID, Token: arg.Token}
+	r.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: arg.ClusterID, Token: arg.Token, TokenHash: arg.TokenHash}
 	return r.clusterAgentToken, nil
 }
 

@@ -5,23 +5,23 @@
 // to one of three scopes: `global`, `cluster`, `project`. This file
 // owns the REST surface:
 //
-//   Admin (superuser):
-//     GET    /api/v1/admin/dashboard-widgets/
-//     POST   /api/v1/admin/dashboard-widgets/
-//     GET    /api/v1/admin/dashboard-widgets/{id}/
-//     PUT    /api/v1/admin/dashboard-widgets/{id}/
-//     DELETE /api/v1/admin/dashboard-widgets/{id}/
-//     GET    /api/v1/admin/prometheus-datasources/
-//     POST   /api/v1/admin/prometheus-datasources/
-//     PUT    /api/v1/admin/prometheus-datasources/{id}/
-//     DELETE /api/v1/admin/prometheus-datasources/{id}/
-//     POST   /api/v1/admin/prometheus-datasources/{id}/test/
+//	Admin (superuser):
+//	  GET    /api/v1/admin/dashboard-widgets/
+//	  POST   /api/v1/admin/dashboard-widgets/
+//	  GET    /api/v1/admin/dashboard-widgets/{id}/
+//	  PUT    /api/v1/admin/dashboard-widgets/{id}/
+//	  DELETE /api/v1/admin/dashboard-widgets/{id}/
+//	  GET    /api/v1/admin/prometheus-datasources/
+//	  POST   /api/v1/admin/prometheus-datasources/
+//	  PUT    /api/v1/admin/prometheus-datasources/{id}/
+//	  DELETE /api/v1/admin/prometheus-datasources/{id}/
+//	  POST   /api/v1/admin/prometheus-datasources/{id}/test/
 //
-//   Public render (cluster:read scoped — wired through the route
-//   layer's RequirePermission middleware):
-//     GET /api/v1/dashboards/global/
-//     GET /api/v1/dashboards/clusters/{id}/
-//     GET /api/v1/dashboards/projects/{id}/
+//	Public render (cluster:read scoped — wired through the route
+//	layer's RequirePermission middleware):
+//	  GET /api/v1/dashboards/global/
+//	  GET /api/v1/dashboards/clusters/{id}/
+//	  GET /api/v1/dashboards/projects/{id}/
 //
 // Render semantics:
 //   - Grafana panel widgets DO NOT fetch data server-side. The iframe
@@ -66,7 +66,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // DashboardQuerier is the narrow DB surface the handler reads + writes.
@@ -208,30 +207,12 @@ func dashPromDuration(datasource string) prometheus.Observer {
 // gate is the superuser gate used by every /admin/* endpoint, mirroring
 // platform_settings.gate / quotas.gate.
 func (h *DashboardHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok || caller == nil {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Dashboard administration requires superuser privileges")
-		return false
-	}
-	return true
+	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableCode:    "not_configured",
+		StoreUnavailableMessage: "Dashboard store not configured",
+		ForbiddenMessage:        "Dashboard administration requires superuser privileges",
+	})
+	return ok
 }
 
 // ── Wire DTOs ─────────────────────────────────────────────────────────
@@ -307,13 +288,13 @@ type WidgetData struct {
 // endpoints. Auth is split into Basic vs Bearer; an empty Auth section
 // means "no auth".
 type DatasourceRequest struct {
-	Name           string `json:"name"`
-	URL            string `json:"url"`
-	BasicAuthUser  string `json:"basic_auth_user,omitempty"`
-	BasicAuthPass  string `json:"basic_auth_pass,omitempty"`
-	BearerToken    string `json:"bearer_token,omitempty"`
-	TLSSkipVerify  bool   `json:"tls_skip_verify"`
-	Enabled        *bool  `json:"enabled,omitempty"`
+	Name          string `json:"name"`
+	URL           string `json:"url"`
+	BasicAuthUser string `json:"basic_auth_user,omitempty"`
+	BasicAuthPass string `json:"basic_auth_pass,omitempty"`
+	BearerToken   string `json:"bearer_token,omitempty"`
+	TLSSkipVerify bool   `json:"tls_skip_verify"`
+	Enabled       *bool  `json:"enabled,omitempty"`
 }
 
 // DatasourceResponse omits the secret material entirely — the handler
@@ -347,7 +328,7 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListDashboardWidgets(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]WidgetResponse, 0, len(rows))
@@ -364,16 +345,16 @@ func (h *DashboardHandler) AdminGet(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid widget ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid widget ID")
 		return
 	}
 	row, err := h.queries.GetDashboardWidgetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Widget not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Widget not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, widgetToResponse(row))
@@ -386,11 +367,11 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var req WidgetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", err.Error())
 		return
 	}
 	if err := h.validateWidgetRequest(r.Context(), req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	enabled := true
@@ -417,7 +398,7 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:      currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditor, "admin.dashboard_widget.created", "dashboard_widget", row.ID.String(), row.Name, map[string]any{
@@ -434,16 +415,16 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid widget ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid widget ID")
 		return
 	}
 	var req WidgetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", err.Error())
 		return
 	}
 	if err := h.validateWidgetRequest(r.Context(), req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	enabled := true
@@ -471,10 +452,10 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Widget not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Widget not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditor, "admin.dashboard_widget.updated", "dashboard_widget", row.ID.String(), row.Name, map[string]any{
@@ -491,20 +472,20 @@ func (h *DashboardHandler) AdminDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid widget ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid widget ID")
 		return
 	}
 	row, err := h.queries.GetDashboardWidgetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Widget not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Widget not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	if err := h.queries.DeleteDashboardWidget(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditor, "admin.dashboard_widget.deleted", "dashboard_widget", id.String(), row.Name, nil)
@@ -520,7 +501,7 @@ func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.R
 	}
 	rows, err := h.queries.ListPrometheusDatasources(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]DatasourceResponse, 0, len(rows))
@@ -537,16 +518,16 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 	}
 	var req DatasourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", err.Error())
 		return
 	}
 	if err := validateDatasourceRequest(req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	encrypted, err := h.sealAuth(req)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", err.Error())
 		return
 	}
 	enabled := true
@@ -561,7 +542,7 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 		Enabled:       enabled,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditor, "admin.prometheus_datasource.created", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
@@ -577,21 +558,21 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid datasource ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid datasource ID")
 		return
 	}
 	existing, err := h.queries.GetPrometheusDatasourceByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Datasource not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Datasource not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	var req DatasourceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", err.Error())
 		return
 	}
 	// PUT may carry empty auth fields meaning "preserve" — encode that
@@ -600,13 +581,13 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 	if req.BasicAuthUser != "" || req.BasicAuthPass != "" || req.BearerToken != "" {
 		enc, err := h.sealAuth(req)
 		if err != nil {
-			RespondError(w, http.StatusServiceUnavailable, "not_configured", err.Error())
+			RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", err.Error())
 			return
 		}
 		encrypted = enc
 	}
 	if err := validateDatasourceRequest(req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	enabled := existing.Enabled
@@ -621,7 +602,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		Enabled:       enabled,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditor, "admin.prometheus_datasource.updated", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
@@ -637,20 +618,20 @@ func (h *DashboardHandler) AdminDeleteDatasource(w http.ResponseWriter, r *http.
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid datasource ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid datasource ID")
 		return
 	}
 	row, err := h.queries.GetPrometheusDatasourceByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Datasource not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Datasource not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	if err := h.queries.DeletePrometheusDatasource(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	recordAudit(r, h.auditor, "admin.prometheus_datasource.deleted", "prometheus_datasource", id.String(), row.Name, nil)
@@ -668,21 +649,21 @@ func (h *DashboardHandler) AdminTestDatasource(w http.ResponseWriter, r *http.Re
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid datasource ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid datasource ID")
 		return
 	}
 	row, err := h.queries.GetPrometheusDatasourceByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Datasource not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Datasource not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	ds, err := h.resolveDatasource(row)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", err.Error())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -700,7 +681,7 @@ func (h *DashboardHandler) AdminTestDatasource(w http.ResponseWriter, r *http.Re
 // RenderGlobal handles GET /api/v1/dashboards/global/.
 func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
@@ -708,7 +689,7 @@ func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) 
 		ScopeID: uuid.Nil,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := h.renderRows(r.Context(), rows, map[string]string{})
@@ -718,21 +699,21 @@ func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) 
 // RenderCluster handles GET /api/v1/dashboards/clusters/{id}/.
 func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	clusterUID, err := h.queries.GetClusterUIDForID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
@@ -740,7 +721,7 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 		ScopeID: id,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := h.renderRows(r.Context(), rows, map[string]string{
@@ -753,12 +734,12 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 // RenderProject handles GET /api/v1/dashboards/projects/{id}/.
 func (h *DashboardHandler) RenderProject(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Dashboard store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
@@ -766,7 +747,7 @@ func (h *DashboardHandler) RenderProject(w http.ResponseWriter, r *http.Request)
 		ScopeID: id,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := h.renderRows(r.Context(), rows, map[string]string{

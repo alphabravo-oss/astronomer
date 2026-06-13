@@ -43,6 +43,19 @@ exposed by `astronomer-go`.
 - `astronomer_db_pool_canceled_acquire_count_total{astronomer_instance_id}`
 - `astronomer_db_pool_acquire_duration_seconds_total{astronomer_instance_id}`
 - `astronomer_db_query_duration_seconds_bucket{astronomer_instance_id,operation,status}`
+- `astronomer_db_deadlocks_total{astronomer_instance_id}`
+- `astronomer_db_longest_transaction_seconds{astronomer_instance_id}`
+- `astronomer_task_outbox_rows{astronomer_instance_id,status}`
+- `astronomer_task_outbox_oldest_due_seconds{astronomer_instance_id,status}`
+
+Chart-shipped Prometheus rules also consume Kubernetes/Postgres exporter
+metrics when available:
+
+- `kube_job_status_start_time{job_name=~".*-migrate.*"}` and `kube_job_status_completion_time{job_name=~".*-migrate.*"}` for migration duration.
+- `kube_job_status_failed{job_name=~".*-migrate.*"}` for migration failures.
+- `kube_job_status_completion_time{job_name=~".*-management-backup-.*"}` and `kube_job_status_succeeded{job_name=~".*-management-backup-.*"}` for backup age.
+- `kube_job_status_failed{job_name=~".*-management-backup-.*"}` for backup failures.
+- `pg_replication_lag_seconds` for optional external Postgres replication lag alerting.
 
 ## Agent / Tunnel Metrics
 

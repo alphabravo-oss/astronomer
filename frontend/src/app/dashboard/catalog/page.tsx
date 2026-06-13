@@ -17,6 +17,7 @@ import {
   useClusters,
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-state';
 import { HelmValuesForm } from '@/components/catalog/helm-values-form';
 import { SuggestedCatalogs } from '@/components/catalog/suggested-catalogs';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -354,8 +355,8 @@ export default function CatalogPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border">
-        <nav className="flex gap-6">
+      <div className="border-b border-border overflow-x-auto">
+        <nav className="flex min-w-max gap-6">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -447,11 +448,11 @@ export default function CatalogPage() {
                 ))}
               </div>
             ) : (charts || []).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <Package className="h-10 w-10 mb-3" />
-                <p className="text-sm">No charts found</p>
-                <p className="text-xs mt-1">Try adjusting your search or category filter</p>
-              </div>
+              <EmptyState
+                icon={Package}
+                title="No charts found"
+                description="Try adjusting your search or category filter."
+              />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {(charts || []).map((chart) => (
@@ -577,7 +578,7 @@ function ChartDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
+      <div className="relative mx-4 w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
@@ -776,7 +777,7 @@ function InstallChartModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
+      <div className="relative mx-4 w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-foreground">
@@ -793,6 +794,7 @@ function InstallChartModal({
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Target Cluster</label>
             <select
+              aria-label="Target Cluster"
               value={form.clusterId}
               onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
               className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
@@ -810,6 +812,7 @@ function InstallChartModal({
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Release Name</label>
             <input
+              aria-label="Release Name"
               type="text"
               value={form.releaseName}
               onChange={(e) => setForm((f) => ({ ...f, releaseName: e.target.value }))}
@@ -822,6 +825,7 @@ function InstallChartModal({
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Namespace</label>
             <input
+              aria-label="Namespace"
               type="text"
               value={form.namespace}
               onChange={(e) => setForm((f) => ({ ...f, namespace: e.target.value }))}
@@ -874,6 +878,7 @@ function InstallChartModal({
             ) : (
               <div className="space-y-2">
                 <textarea
+                  aria-label="Values Override"
                   value={form.valuesOverride}
                   onChange={(e) => handleYAMLChange(e.target.value)}
                   placeholder="# Override default values here..."

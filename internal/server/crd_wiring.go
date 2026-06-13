@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	ctrlrt "sigs.k8s.io/controller-runtime"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -22,7 +25,7 @@ import (
 )
 
 // crdClusterAdapter implements crd.ClusterSync against the existing sqlc
-// queries + the asynq queue used by the REST handler. We deliberately do not
+// queries used by the REST handler. We deliberately do not
 // import internal/handler here — the controller talks to the DB directly so
 // the dependency graph stays:
 //
@@ -33,7 +36,6 @@ import (
 // dragging the entire server graph along.
 type crdClusterAdapter struct {
 	queries *sqlc.Queries
-	queue   *asynq.Client
 	log     *slog.Logger
 }
 
@@ -82,22 +84,23 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 			return crd.ClusterStatus{}, fmt.Errorf("create cluster: %w", cerr)
 		}
 		existing = created
-	} else {
-		labels, annotations := marshalStringMap(spec.Labels), marshalStringMap(spec.Annotations)
-		updated, uerr := a.queries.UpdateCluster(ctx, sqlc.UpdateClusterParams{
-			ID:          existing.ID,
-			DisplayName: spec.DisplayName,
-			Description: spec.Description,
-			Environment: envVal,
-			Region:      spec.Region,
-			Labels:      labels,
-			Annotations: annotations,
-		})
-		if uerr != nil {
-			return crd.ClusterStatus{}, fmt.Errorf("update cluster: %w", uerr)
-		}
-		existing = updated
 	}
+
+	labels := marshalStringMap(spec.Labels)
+	annotations := marshalStringMap(clusterAnnotationsWithAgentProfile(spec))
+	updated, uerr := a.queries.UpdateCluster(ctx, sqlc.UpdateClusterParams{
+		ID:          existing.ID,
+		DisplayName: spec.DisplayName,
+		Description: spec.Description,
+		Environment: envVal,
+		Region:      spec.Region,
+		Labels:      labels,
+		Annotations: annotations,
+	})
+	if uerr != nil {
+		return crd.ClusterStatus{}, fmt.Errorf("update cluster: %w", uerr)
+	}
+	existing = updated
 
 	phase := "pending"
 	switch {
@@ -107,11 +110,82 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 		phase = "registered"
 	}
 
-	return crd.ClusterStatus{
+	status := crd.ClusterStatus{
 		ClusterID:    existing.ID.String(),
 		Phase:        phase,
 		AgentVersion: existing.AgentVersion,
-	}, nil
+	}
+	if spec.ArgoCD.AutoAdopt != nil && !*spec.ArgoCD.AutoAdopt {
+		status.ArgoCD.Phase = "disabled"
+		return status, nil
+	}
+	if managed, merr := a.queries.ListArgoCDManagedClustersByCluster(ctx, existing.ID); merr == nil && len(managed) > 0 {
+		status.ArgoCD.Phase = "registered"
+		status.ArgoCD.ClusterSecretName = managed[0].ClusterSecretName
+	} else {
+		if merr != nil && a.log != nil {
+			a.log.Warn("failed to load ArgoCD managed cluster status", "cluster_id", existing.ID.String(), "error", merr)
+		}
+		status.ArgoCD.Phase = "pending"
+	}
+	return status, nil
+}
+
+// ValidateClusterOwnership prevents a CR from silently claiming a row that was
+// created through REST/UI/API ownership. The transfer path must be explicit.
+func (a *crdClusterAdapter) ValidateClusterOwnership(ctx context.Context, spec crd.ClusterSpec, ref crd.ObjectRef) error {
+	if a == nil || a.queries == nil {
+		return errors.New("crdClusterAdapter: queries not wired")
+	}
+	if strings.TrimSpace(spec.Name) == "" {
+		return errors.New("ClusterSpec.name is required")
+	}
+	cluster, err := a.queries.GetClusterByName(ctx, spec.Name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lookup cluster for ownership validation: %w", err)
+	}
+	ownership, err := a.queries.GetClusterOwnership(ctx, cluster.ID)
+	if err != nil {
+		return fmt.Errorf("load cluster ownership: %w", err)
+	}
+	if ownership.ManagedBy == "crd" && ownershipMatchesRef(ownership, ref) {
+		return nil
+	}
+	return fmt.Errorf("cluster %q already exists and is managed_by=%q; refusing implicit CRD takeover", spec.Name, ownership.ManagedBy)
+}
+
+// RecordClusterOwnership marks the DB row as CRD-owned after a successful
+// spec sync. This gives REST/UI paths a durable way to detect ownership
+// conflicts and gives restore/repair jobs a stable Kubernetes external ref.
+func (a *crdClusterAdapter) RecordClusterOwnership(ctx context.Context, spec crd.ClusterSpec, ref crd.ObjectRef) error {
+	if a == nil || a.queries == nil {
+		return errors.New("crdClusterAdapter: queries not wired")
+	}
+	if strings.TrimSpace(spec.Name) == "" {
+		return errors.New("ClusterSpec.name is required")
+	}
+	if strings.TrimSpace(ref.Namespace) == "" || strings.TrimSpace(ref.Name) == "" {
+		return errors.New("cluster CR external ref requires namespace and name")
+	}
+	cluster, err := a.queries.GetClusterByName(ctx, spec.Name)
+	if err != nil {
+		return fmt.Errorf("lookup cluster for ownership: %w", err)
+	}
+	if _, err := a.queries.SetClusterOwnership(ctx, sqlc.SetClusterOwnershipParams{
+		ID:                    cluster.ID,
+		ManagedBy:             "crd",
+		ExternalRefApiVersion: ref.APIVersion,
+		ExternalRefKind:       ref.Kind,
+		ExternalRefNamespace:  ref.Namespace,
+		ExternalRefName:       ref.Name,
+		ObservedGeneration:    ref.Generation,
+	}); err != nil {
+		return fmt.Errorf("set cluster ownership: %w", err)
+	}
+	return nil
 }
 
 // DeleteByName starts the decommission flow. The REST DELETE handler does
@@ -156,22 +230,32 @@ func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error
 		}
 	}
 
-	row, err := a.queries.CreateClusterDecommission(ctx, sqlc.CreateClusterDecommissionParams{
-		ClusterID:     cluster.ID,
-		ClusterName:   cluster.Name,
-		RequestedByID: pgtype.UUID{},
-	})
+	_, err = a.createDecommissionWithOutbox(ctx, cluster)
 	if err != nil {
 		return fmt.Errorf("create decommission: %w", err)
 	}
-	// Best-effort enqueue — the periodic sweep will pick the row up if redis
-	// is briefly unavailable.
-	if a.queue != nil {
-		if task, terr := tasks.NewClusterDecommissionTask(row.ID); terr == nil {
-			_, _ = a.queue.Enqueue(task)
-		}
-	}
 	return crd.ErrInProgress
+}
+
+func (a *crdClusterAdapter) createDecommissionWithOutbox(ctx context.Context, cluster sqlc.Cluster) (sqlc.ClusterDecommission, error) {
+	decommissionID := uuid.New()
+	task, err := tasks.NewClusterDecommissionTask(decommissionID)
+	if err != nil {
+		return sqlc.ClusterDecommission{}, err
+	}
+	return a.queries.CreateClusterDecommissionWithTaskOutbox(ctx, sqlc.CreateClusterDecommissionWithTaskOutboxParams{
+		ID:                  decommissionID,
+		ClusterID:           cluster.ID,
+		ClusterName:         cluster.Name,
+		RequestedByID:       pgtype.UUID{},
+		DedupeKey:           pgtype.Text{String: fmt.Sprintf("cluster_decommission:%s", decommissionID.String()), Valid: true},
+		TaskType:            task.Type(),
+		Payload:             task.Payload(),
+		QueueName:           "default",
+		MaxRetry:            3,
+		MaxDeliveryAttempts: 20,
+		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	})
 }
 
 // crdProjectAdapter implements crd.ProjectSync.
@@ -269,6 +353,86 @@ func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectS
 	}, nil
 }
 
+// ValidateProjectOwnership prevents a Project CR from silently claiming an
+// existing UI/API-owned project row.
+func (a *crdProjectAdapter) ValidateProjectOwnership(ctx context.Context, spec crd.ProjectSpec, ref crd.ObjectRef) error {
+	if a == nil || a.queries == nil {
+		return errors.New("crdProjectAdapter: queries not wired")
+	}
+	if strings.TrimSpace(spec.Name) == "" {
+		return errors.New("ProjectSpec.name is required")
+	}
+	if len(spec.Clusters) == 0 {
+		return nil
+	}
+	cluster, err := a.queries.GetClusterByName(ctx, spec.Clusters[0])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lookup project cluster for ownership validation: %w", err)
+	}
+	project, err := a.queries.GetProjectByNameAndCluster(ctx, sqlc.GetProjectByNameAndClusterParams{
+		Name:      spec.Name,
+		ClusterID: cluster.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lookup project for ownership validation: %w", err)
+	}
+	ownership, err := a.queries.GetProjectOwnership(ctx, project.ID)
+	if err != nil {
+		return fmt.Errorf("load project ownership: %w", err)
+	}
+	if ownership.ManagedBy == "crd" && ownershipMatchesRef(ownership, ref) {
+		return nil
+	}
+	return fmt.Errorf("project %q already exists and is managed_by=%q; refusing implicit CRD takeover", spec.Name, ownership.ManagedBy)
+}
+
+// RecordProjectOwnership marks a project row as CRD-owned after a successful
+// spec sync. Project names are unique per cluster, so the first cluster ref in
+// spec.clusters is resolved the same way EnsureFromCRD resolves it.
+func (a *crdProjectAdapter) RecordProjectOwnership(ctx context.Context, spec crd.ProjectSpec, ref crd.ObjectRef) error {
+	if a == nil || a.queries == nil {
+		return errors.New("crdProjectAdapter: queries not wired")
+	}
+	if strings.TrimSpace(spec.Name) == "" {
+		return errors.New("ProjectSpec.name is required")
+	}
+	if len(spec.Clusters) == 0 {
+		return errors.New("ProjectSpec.clusters must list at least one cluster name")
+	}
+	if strings.TrimSpace(ref.Namespace) == "" || strings.TrimSpace(ref.Name) == "" {
+		return errors.New("project CR external ref requires namespace and name")
+	}
+	cluster, err := a.queries.GetClusterByName(ctx, spec.Clusters[0])
+	if err != nil {
+		return fmt.Errorf("lookup project cluster for ownership: %w", err)
+	}
+	project, err := a.queries.GetProjectByNameAndCluster(ctx, sqlc.GetProjectByNameAndClusterParams{
+		Name:      spec.Name,
+		ClusterID: cluster.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("lookup project for ownership: %w", err)
+	}
+	if _, err := a.queries.SetProjectOwnership(ctx, sqlc.SetProjectOwnershipParams{
+		ID:                    project.ID,
+		ManagedBy:             "crd",
+		ExternalRefApiVersion: ref.APIVersion,
+		ExternalRefKind:       ref.Kind,
+		ExternalRefNamespace:  ref.Namespace,
+		ExternalRefName:       ref.Name,
+		ObservedGeneration:    ref.Generation,
+	}); err != nil {
+		return fmt.Errorf("set project ownership: %w", err)
+	}
+	return nil
+}
+
 // DeleteByName drops the project row identified by spec.Name. The CRD path
 // does not currently resolve cluster context for delete — the projects table
 // permits the same project name across clusters, so the controller picks the
@@ -317,6 +481,36 @@ func marshalStringMap(m map[string]string) json.RawMessage {
 	return b
 }
 
+func clusterAnnotationsWithAgentProfile(spec crd.ClusterSpec) map[string]string {
+	annotations := make(map[string]string, len(spec.Annotations)+3)
+	for k, v := range spec.Annotations {
+		annotations[k] = v
+	}
+	profile := agenttemplate.NormalizePrivilegeProfile(spec.Agent.PrivilegeProfile)
+	if strings.TrimSpace(spec.Agent.PrivilegeProfile) != "" {
+		annotations[agenttemplate.PrivilegeProfileAnnotation] = profile
+	}
+	if mode := strings.TrimSpace(spec.AdoptionPolicy.Mode); mode != "" {
+		annotations["management.astronomer.io/adoption-policy-mode"] = mode
+	}
+	if len(spec.AdoptionPolicy.AllowedManagementModes) > 0 {
+		modes := make([]string, 0, len(spec.AdoptionPolicy.AllowedManagementModes))
+		for _, mode := range spec.AdoptionPolicy.AllowedManagementModes {
+			mode = strings.TrimSpace(mode)
+			if mode == "" {
+				continue
+			}
+			modes = append(modes, mode)
+		}
+		if len(modes) == 0 {
+			return annotations
+		}
+		sort.Strings(modes)
+		annotations["management.astronomer.io/allowed-management-modes"] = strings.Join(modes, ",")
+	}
+	return annotations
+}
+
 // projectResourceQuotaJSON encodes the structured quota into the JSONB column
 // alongside the flat ResourceQuotaCpuLimit / MemoryLimit / PodCount columns.
 // The structured form is what the REST handler also writes, so the two paths
@@ -334,17 +528,23 @@ func projectResourceQuotaJSON(q crd.ProjectResourceQuota) json.RawMessage {
 	return b
 }
 
+func ownershipMatchesRef(ownership sqlc.FleetOwnership, ref crd.ObjectRef) bool {
+	return ownership.ExternalRefApiVersion == ref.APIVersion &&
+		ownership.ExternalRefKind == ref.Kind &&
+		ownership.ExternalRefNamespace == ref.Namespace &&
+		ownership.ExternalRefName == ref.Name
+}
+
 // startCRDController boots the controller-runtime manager when CRD_ENABLED
-// is true. Failures here are warned (not fatal) so the REST API path is not
-// blocked by a CRD wiring regression — the operator can leave crds.enabled=false
-// to disable the path entirely.
+// is true. The manager uses controller-runtime leader election so HA server
+// replicas do not all reconcile the same management CRDs.
 //
-// The returned function blocks until the manager has shut down; callers wire
-// it onto reconcileCtx so server.Shutdown drains the manager before the DB
-// pool is closed.
-func startCRDController(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, queue *asynq.Client) {
+// Initial bootstrap failures are fatal in production when CRD_ENABLED=true.
+// Dev/test keeps the previous warn-and-disable behavior so local binaries can
+// run without a kubeconfig.
+func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries) error {
 	if !crdEnabled() {
-		return
+		return nil
 	}
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {
@@ -353,24 +553,34 @@ func startCRDController(ctx context.Context, logger *slog.Logger, queries *sqlc.
 		// flag on. When neither works we log and disable.
 		fallback, ferr := ctrlrt.GetConfig()
 		if ferr != nil {
-			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "in_cluster_error", err.Error(), "fallback_error", ferr.Error())
-			return
+			err := fmt.Errorf("CRD controller enabled but no Kubernetes config is available: in-cluster=%v; fallback=%v", err, ferr)
+			if isProductionConfig(cfg) {
+				return err
+			}
+			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "error", err.Error())
+			return nil
 		}
 		restCfg = fallback
 	}
-	cAdapter := &crdClusterAdapter{queries: queries, queue: queue, log: logger}
+	cAdapter := &crdClusterAdapter{queries: queries, log: logger}
 	pAdapter := &crdProjectAdapter{queries: queries, log: logger}
 
 	mgr, err := crd.New(crd.ControllerConfig{
-		K8sConfig:      restCfg,
-		WatchNamespace: crdWatchNamespace(),
-		ClusterHandler: cAdapter,
-		ProjectHandler: pAdapter,
-		Log:            logger,
+		K8sConfig:               restCfg,
+		WatchNamespace:          crdWatchNamespace(),
+		LeaderElection:          true,
+		LeaderElectionNamespace: crdWatchNamespace(),
+		ClusterHandler:          cAdapter,
+		ProjectHandler:          pAdapter,
+		Log:                     logger,
 	})
 	if err != nil {
+		err := fmt.Errorf("build CRD controller manager: %w", err)
+		if isProductionConfig(cfg) {
+			return err
+		}
 		logger.Warn("crd_controller_disabled", "reason", "build_manager_failed", "error", err.Error())
-		return
+		return nil
 	}
 
 	go func() {
@@ -381,6 +591,7 @@ func startCRDController(ctx context.Context, logger *slog.Logger, queries *sqlc.
 		}
 		logger.Info("crd_controller_stopped")
 	}()
+	return nil
 }
 
 // crdEnabled reads CRD_ENABLED. The chart sets the env from crds.enabled

@@ -285,11 +285,15 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 // browser should be stripped before forwarding the request to the kubernetes
 // API. Authorization is the most important one — see buildK8sRequestPayload.
 func isClientOnlyHeader(name string) bool {
-	switch strings.ToLower(name) {
+	lower := strings.ToLower(name)
+	switch lower {
 	case "authorization", "cookie", "host":
 		return true
 	}
-	if strings.HasPrefix(strings.ToLower(name), "x-forwarded-") {
+	if strings.HasPrefix(lower, "x-forwarded-") {
+		return true
+	}
+	if strings.HasPrefix(lower, "impersonate-") {
 		return true
 	}
 	return false
@@ -322,6 +326,9 @@ func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error
 	//     agent's SA token is bypassed and k8s returns 401.
 	//   - Cookie / Host / X-Forwarded-* : browser/proxy headers that are
 	//     either wrong (Host) or noise at the upstream.
+	//   - Impersonate-* : user-controlled Kubernetes impersonation headers.
+	//     If we add impersonation later, the server must derive those values
+	//     from Astronomer RBAC, not trust inbound client headers.
 	headers := make(map[string]string)
 	for key, values := range r.Header {
 		if len(values) == 0 {

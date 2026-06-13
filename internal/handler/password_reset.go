@@ -44,11 +44,11 @@ type PasswordResetComplete struct {
 //
 // If the email matches a user AND the auth handler has a reset store
 // AND an email notifier, we:
-//   1. generate a 32-byte random token, hex-encoded
-//   2. persist hex(sha256(token)) + a snapshot of the user's current
-//      password hash; a password change before consume invalidates
-//      this token
-//   3. enqueue a `password_reset` email with the reset URL
+//  1. generate a 32-byte random token, hex-encoded
+//  2. persist hex(sha256(token)) + a snapshot of the user's current
+//     password hash; a password change before consume invalidates
+//     this token
+//  3. enqueue a `password_reset` email with the reset URL
 //
 // On any internal failure we still return 202 — the alternative is
 // surfacing the enumeration vector through a status-code split.
@@ -136,15 +136,15 @@ func (h *AuthHandler) PasswordResetRequest(w http.ResponseWriter, r *http.Reques
 func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Request) {
 	var req PasswordResetComplete
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.Token == "" || req.NewPassword == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "token and new_password are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "token and new_password are required")
 		return
 	}
 	if h.passwordResets == nil || h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Password reset is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Password reset is not configured")
 		return
 	}
 	// Minimum complexity: mirror the implicit constraint
@@ -152,11 +152,11 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 	// > 72 bytes at hash time; we reject < 8 bytes up front so a
 	// reset can't downgrade the account's password strength).
 	if len(req.NewPassword) < 8 {
-		RespondError(w, http.StatusBadRequest, "validation_error", "new_password must be at least 8 characters")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "new_password must be at least 8 characters")
 		return
 	}
 	if len(req.NewPassword) > 72 {
-		RespondError(w, http.StatusBadRequest, "validation_error", "new_password must be at most 72 characters")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "new_password must be at most 72 characters")
 		return
 	}
 
@@ -164,36 +164,36 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 	row, err := h.passwordResets.GetPasswordResetTokenByHash(r.Context(), tokenHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusBadRequest, "invalid_token", "Reset token is invalid or expired")
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Reset token is invalid or expired")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to verify token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to verify token")
 		return
 	}
 	if row.UsedAt.Valid {
-		RespondError(w, http.StatusBadRequest, "invalid_token", "Reset token has already been used")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Reset token has already been used")
 		return
 	}
 	if time.Now().After(row.ExpiresAt) {
-		RespondError(w, http.StatusBadRequest, "invalid_token", "Reset token has expired")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Reset token has expired")
 		return
 	}
 	user, err := h.queries.GetUserByID(r.Context(), row.UserID)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_token", "Reset token is invalid")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Reset token is invalid")
 		return
 	}
 	// Snapshot check: if the password has changed since the token
 	// was issued, refuse — that handles "user changed password
 	// already, the link in the old email is stale".
 	if user.Password != row.PasswordHashAtIssue {
-		RespondError(w, http.StatusBadRequest, "invalid_token", "Reset token is no longer valid")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Reset token is no longer valid")
 		return
 	}
 
 	newHash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "hash_error", "Failed to hash password")
+		RespondRequestError(w, r, http.StatusInternalServerError, "hash_error", "Failed to hash password")
 		return
 	}
 
@@ -205,14 +205,14 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 		UsedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	if err != nil || rows == 0 {
-		RespondError(w, http.StatusBadRequest, "invalid_token", "Reset token has already been used")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Reset token has already been used")
 		return
 	}
 	if err := h.passwordResets.UpdateUserPassword(r.Context(), sqlc.UpdateUserPasswordParams{
 		ID:       user.ID,
 		Password: newHash,
 	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update password")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update password")
 		return
 	}
 	// Wipe every other outstanding reset token for the user so an
@@ -276,4 +276,3 @@ func buildResetURL(r *http.Request, token string) string {
 	}
 	return scheme + "://" + host + "/reset-password?token=" + token
 }
-

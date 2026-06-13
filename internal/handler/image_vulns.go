@@ -98,7 +98,7 @@ func (h *ImageVulnHandler) ClusterSummary(w http.ResponseWriter, r *http.Request
 	}
 	agg, err := h.queries.AggregateClusterVulnerabilities(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "aggregate_error", "Failed to aggregate cluster vulnerabilities")
+		RespondRequestError(w, r, http.StatusInternalServerError, "aggregate_error", "Failed to aggregate cluster vulnerabilities")
 		return
 	}
 	RespondJSON(w, http.StatusOK, renderClusterAggregate(agg))
@@ -134,13 +134,13 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 		})
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list vulnerable images")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list vulnerable images")
 		return
 	}
 
 	total, err := h.queries.CountVulnerableImagesForCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count vulnerable images")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count vulnerable images")
 		return
 	}
 
@@ -160,19 +160,19 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 	}
 	reportID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid report ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid report ID")
 		return
 	}
 	report, err := h.queries.GetImageVulnerabilityReportByID(r.Context(), reportID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Vulnerability report not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Vulnerability report not found")
 		return
 	}
 	// Cross-tenant guard. The URL carries cluster_id; the row's
 	// cluster_id MUST match to avoid leaking a report from cluster A
 	// to a session scoped on cluster B.
 	if report.ClusterID != clusterID {
-		RespondError(w, http.StatusNotFound, "not_found", "Vulnerability report not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Vulnerability report not found")
 		return
 	}
 	severity := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("severity")))
@@ -189,24 +189,24 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 		ReportID: reportID, SeverityFilter: severity, Limit: limit, Offset: offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_cve_error", "Failed to list vulnerabilities")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_cve_error", "Failed to list vulnerabilities")
 		return
 	}
 	total, err := h.queries.CountVulnerabilitiesForReport(r.Context(), sqlc.CountVulnerabilitiesForReportParams{
 		ReportID: reportID, SeverityFilter: severity,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_cve_error", "Failed to count vulnerabilities")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_cve_error", "Failed to count vulnerabilities")
 		return
 	}
 
 	out := map[string]any{
-		"report":            renderReport(report),
-		"vulnerabilities":   renderVulnList(cves),
+		"report":              renderReport(report),
+		"vulnerabilities":     renderVulnList(cves),
 		"vulnerability_total": total,
-		"severity_filter":   severity,
-		"limit":             limit,
-		"offset":            offset,
+		"severity_filter":     severity,
+		"limit":               limit,
+		"offset":              offset,
 	}
 	RespondJSON(w, http.StatusOK, out)
 }
@@ -224,7 +224,7 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	out := map[string]any{
-		"cluster_id": clusterID.String(),
+		"cluster_id":   clusterID.String(),
 		"requested_at": time.Now().UTC().Format(time.RFC3339),
 	}
 	if h.k8s == nil {
@@ -343,7 +343,7 @@ const trivyGroup = "aquasecurity.github.io"
 func (h *ImageVulnHandler) FleetSummary(w http.ResponseWriter, r *http.Request) {
 	agg, err := h.queries.AggregateFleetVulnerabilities(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "aggregate_error", "Failed to aggregate fleet vulnerabilities")
+		RespondRequestError(w, r, http.StatusInternalServerError, "aggregate_error", "Failed to aggregate fleet vulnerabilities")
 		return
 	}
 	RespondJSON(w, http.StatusOK, renderFleetAggregate(agg))
@@ -358,7 +358,7 @@ func (h *ImageVulnHandler) FleetTopClusters(w http.ResponseWriter, r *http.Reque
 	}
 	rows, err := h.queries.TopClustersByVulnerability(r.Context(), limit)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list top clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list top clusters")
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -473,7 +473,7 @@ func renderVulnList(cves []sqlc.ImageVulnerability) []map[string]any {
 func parseClusterID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return uuid.Nil, false
 	}
 	return id, true

@@ -16,6 +16,7 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -157,7 +158,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	}
 	if _, err := queries.CreateClusterRegistrationToken(ctx, sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: clusterID,
-		Token:     tokenStr,
+		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().Add(localRegistrationTokenTTL),
 	}); err != nil {
 		return fmt.Errorf("persist local agent registration token: %w", err)

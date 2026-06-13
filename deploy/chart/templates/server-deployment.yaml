@@ -21,6 +21,10 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      {{- with .Values.server.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       # FEATURES-051126 T14: graceful WS handover on rolling upgrades.
       # The preStop hook below sleeps 10s so the Service load balancer
       # has time to deregister this pod before SIGTERM lands. Combined
@@ -35,6 +39,10 @@ spec:
       initContainers:
         {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
         - name: wait-postgres
+          {{- with .Values.server.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
           command:
             - sh
@@ -45,6 +53,10 @@ spec:
               echo "postgres up"
         {{- end }}
         - name: migrate
+          {{- with .Values.server.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
@@ -69,6 +81,10 @@ spec:
             {{- end }}
       containers:
         - name: server
+          {{- with .Values.server.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.image" (dict "context" . "component" "server") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:

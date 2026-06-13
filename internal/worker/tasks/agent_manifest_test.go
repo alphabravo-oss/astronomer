@@ -41,3 +41,26 @@ func TestRenderAgentManifestUsesSharedTemplate(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
+	manifest := renderAgentManifest(
+		"550e8400-e29b-41d4-a716-446655440000",
+		"reg-token",
+		"https://astro.example.com",
+		"example.com/astronomer-agent",
+		"v1.2.3",
+		"operator",
+	)
+	for _, want := range []string{
+		"pods/exec",
+		`resources: ["roles", "rolebindings"]`,
+		`verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("operator manifest missing %q", want)
+		}
+	}
+	if strings.Contains(manifest, `resources: ["*"]`) || strings.Contains(manifest, `verbs: ["*"]`) {
+		t.Fatalf("operator manifest rendered admin wildcard RBAC:\n%s", manifest)
+	}
+}

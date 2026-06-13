@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
@@ -336,7 +336,7 @@ func (h *ToolHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list tools")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list tools")
 		return
 	}
 	total, _ := h.queries.CountClusterTools(r.Context())
@@ -363,7 +363,7 @@ func (h *ToolHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	tool, err := h.queries.GetToolBySlug(r.Context(), slug)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Tool not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toolToResponse(tool))
@@ -373,10 +373,10 @@ func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	tool, req, chart, valuesYAML, err := h.resolveAction(r)
 	if err != nil {
 		if errors.Is(err, errToolNotFound) {
-			RespondError(w, http.StatusNotFound, "not_found", "Tool not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool not found")
 			return
 		}
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -394,15 +394,15 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	tool, req, chart, valuesYAML, err := h.resolveAction(r)
 	if err != nil {
 		if errors.Is(err, errToolNotFound) {
-			RespondError(w, http.StatusNotFound, "not_found", "Tool not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool not found")
 			return
 		}
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
@@ -418,14 +418,14 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		releaseName = tool.Slug
 	}
 	if _, err := h.findInstalledTool(r.Context(), clusterID, tool.Slug); err == nil {
-		RespondError(w, http.StatusConflict, "already_installed", "Tool is already installed on cluster")
+		RespondRequestError(w, r, http.StatusConflict, "already_installed", "Tool is already installed on cluster")
 		return
 	} else if !errors.Is(err, errInstalledChartNotFound) {
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to lookup installed tool")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to lookup installed tool")
 		return
 	}
 	if msg, ok := h.checkToolScope(r.Context(), tool.Slug, clusterID); !ok {
-		RespondError(w, http.StatusBadRequest, "wrong_cluster_scope", msg)
+		RespondRequestError(w, r, http.StatusBadRequest, "wrong_cluster_scope", msg)
 		return
 	}
 	// Migration 067 — resolve ${vault://...} markers in the values
@@ -436,10 +436,10 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	// require the explicit "${vault://<connection>/...}" form.
 	resolvedYAML, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, valuesYAML)
 	if vaultErr != nil {
-		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "tool_installation", operationTargetKey(clusterID, tool.Slug), "install", toolOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, tool.Slug), "install", toolOperationEnvelope{
 		ClusterID:   req.ClusterID,
 		ToolSlug:    tool.Slug,
 		ReleaseName: releaseName,
@@ -451,7 +451,7 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		Version:     tool.VersionConstraint,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool installation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool installation")
 		return
 	}
 	recordAudit(r, h.queries, "tool.install", "tool", tool.ID.String(), tool.Slug, map[string]any{
@@ -469,15 +469,15 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	tool, req, chart, valuesYAML, err := h.resolveAction(r)
 	if err != nil {
 		if errors.Is(err, errToolNotFound) {
-			RespondError(w, http.StatusNotFound, "not_found", "Tool not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool not found")
 			return
 		}
-		RespondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -490,10 +490,10 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.findInstalledTool(r.Context(), clusterID, tool.Slug)
 	if err != nil {
 		if errors.Is(err, errInstalledChartNotFound) {
-			RespondError(w, http.StatusNotFound, "not_found", "Installed tool not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Installed tool not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to lookup installed tool")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to lookup installed tool")
 		return
 	}
 	releaseName := existing.ReleaseName
@@ -502,10 +502,10 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	// as the Install path: original blob persists, resolved blob ships.
 	resolvedYAML, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, valuesYAML)
 	if vaultErr != nil {
-		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "tool_installation", operationTargetKey(clusterID, tool.Slug), "upgrade", toolOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, tool.Slug), "upgrade", toolOperationEnvelope{
 		ClusterID:      req.ClusterID,
 		ToolSlug:       tool.Slug,
 		ReleaseName:    releaseName,
@@ -518,7 +518,7 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		InstalledChart: &chartID,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool upgrade")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool upgrade")
 		return
 	}
 	recordAudit(r, h.queries, "tool.upgrade", "tool", tool.ID.String(), tool.Slug, map[string]any{
@@ -536,17 +536,17 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	_, err := h.queries.GetToolBySlug(r.Context(), slug)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Tool not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool not found")
 		return
 	}
 	var req toolActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
@@ -559,14 +559,14 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.findInstalledTool(r.Context(), clusterID, slug)
 	if err != nil {
 		if errors.Is(err, errInstalledChartNotFound) {
-			RespondError(w, http.StatusNotFound, "not_found", "Installed tool not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Installed tool not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to lookup installed tool")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to lookup installed tool")
 		return
 	}
 	chartID := existing.ID
-	op, err := h.enqueueOperation(r.Context(), "tool_installation", operationTargetKey(clusterID, slug), "uninstall", toolOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, slug), "uninstall", toolOperationEnvelope{
 		ClusterID:      req.ClusterID,
 		ToolSlug:       slug,
 		ReleaseName:    existing.ReleaseName,
@@ -574,7 +574,7 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 		InstalledChart: &chartID,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool uninstall")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool uninstall")
 		return
 	}
 	recordAudit(r, h.queries, "tool.uninstall", "tool", existing.ID.String(), slug, map[string]any{
@@ -590,17 +590,17 @@ func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	tool, err := h.queries.GetToolBySlug(r.Context(), slug)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Tool not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool not found")
 		return
 	}
 	var req toolActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
@@ -611,14 +611,14 @@ func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
 	}
 	charts, _ := parseToolCharts(tool.Charts)
 	chart := firstChart(charts)
-	op, err := h.enqueueOperation(r.Context(), "tool_installation", operationTargetKey(clusterID, slug), "adopt", toolOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, slug), "adopt", toolOperationEnvelope{
 		ClusterID:   req.ClusterID,
 		ToolSlug:    slug,
 		ReleaseName: req.ReleaseName,
 		Namespace:   chartNamespace(tool, chart),
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool adoption")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue tool adoption")
 		return
 	}
 	recordAudit(r, h.queries, "tool.adopt", "tool", tool.ID.String(), slug, map[string]any{
@@ -633,12 +633,12 @@ func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
 func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	tools, err := h.queries.ListEnabledTools(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list tools")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list tools")
 		return
 	}
 	installed, _ := h.queries.ListInstalledChartsByCluster(r.Context(), sqlc.ListInstalledChartsByClusterParams{
@@ -726,12 +726,12 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	}
 	ops, err := h.queries.ListToolOperations(r.Context(), arg)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list tool operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list tool operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
 		return
 	}
 	items := make([]map[string]any, 0, len(ops))
@@ -750,17 +750,17 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 func (h *ToolHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetToolOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Tool operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool operation not found")
 		return
 	}
 	clusterID, err := toolOperationClusterID(op)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve tool operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve tool operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -776,21 +776,20 @@ func (h *ToolHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetToolOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Tool operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Tool operation not found")
 		return
 	}
-	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
-		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
+	if !requireRetryableOperation(w, r, op.Status) {
 		return
 	}
 	clusterID, err := toolOperationClusterID(op)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve tool operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve tool operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -798,7 +797,7 @@ func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	requeued, err := h.queries.RequeueToolOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "retry_error", "Failed to retry tool operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to retry tool operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -820,7 +819,7 @@ func toolOperationClusterID(op sqlc.ToolOperation) (uuid.UUID, error) {
 func (h *ToolHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "status_error", "Failed to load tool operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load tool operations")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -835,41 +834,26 @@ func (h *ToolHandler) controllerSummary(ctx context.Context) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
-	counts := map[string]int{}
-	staleRunning := 0
-	recent := make([]map[string]any, 0, min(len(ops), 5))
-	var latestFailure map[string]any
-	recentFailureCount := 0
-	for _, op := range ops {
-		if restricted {
-			clusterID, err := toolOperationClusterID(op)
-			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
-				continue
+	opSummary := summarizeOperations(ctx, ops, operationStatusSummaryConfig[sqlc.ToolOperation]{
+		Status:    func(op sqlc.ToolOperation) string { return op.Status },
+		CreatedAt: func(op sqlc.ToolOperation) time.Time { return op.CreatedAt },
+		IsStaleRunning: func(op sqlc.ToolOperation, now time.Time) bool {
+			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) > time.Minute
+		},
+		Include: func(_ context.Context, op sqlc.ToolOperation) bool {
+			if !restricted {
+				return true
 			}
-		}
-		counts[op.Status]++
-		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
-			staleRunning++
-		}
-		if len(recent) < 5 {
-			recent = append(recent, h.operationPreview(ctx, op))
-		}
-		if (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) && time.Since(op.CreatedAt) <= 30*time.Minute {
-			recentFailureCount++
-		}
-		if latestFailure == nil && (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) {
-			latestFailure = h.operationPreview(ctx, op)
-		}
-	}
+			clusterID, err := toolOperationClusterID(op)
+			return err == nil && h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead)
+		},
+		Preview:               func(ctx context.Context, op sqlc.ToolOperation) map[string]any { return h.operationPreview(ctx, op) },
+		StaleThresholdSeconds: 60,
+	})
 	toolCount, _ := h.queries.CountClusterTools(ctx)
 	installedCount, _ := h.queries.CountInstalledCharts(ctx)
 	return map[string]any{
-		"reconciler": map[string]any{
-			"enabled":              true,
-			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
-			"staleRunningCount":    staleRunning,
-			"staleThresholdSecond": 60,
-		},
+		"reconciler": opSummary.reconcilerMap(),
 		"tools": map[string]any{
 			"catalogCount": toolCount,
 			"installedCount": func() any {
@@ -879,10 +863,10 @@ func (h *ToolHandler) controllerSummary(ctx context.Context) (map[string]any, er
 				return installedCount
 			}(),
 		},
-		"operations":         counts,
-		"recentFailureCount": recentFailureCount,
-		"recentOperations":   recent,
-		"latestFailure":      latestFailure,
+		"operations":         opSummary.Counts,
+		"recentFailureCount": opSummary.RecentFailures,
+		"recentOperations":   opSummary.Recent,
+		"latestFailure":      opSummary.LatestFailure,
 	}, nil
 }
 
@@ -1099,14 +1083,34 @@ func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKe
 	if err != nil {
 		return sqlc.ToolOperation{}, err
 	}
-	op, err := h.queries.CreateToolOperation(ctx, sqlc.CreateToolOperationParams{
+	params := sqlc.CreateToolOperationParams{
 		TargetType:    targetType,
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
 		Status:        OpStatusPending,
 		CreatedByID:   userID,
-	})
+	}
+	var op sqlc.ToolOperation
+	if idem, ok := operationIdempotencyFromContext(ctx); ok {
+		if creator, ok := h.queries.(interface {
+			CreateToolOperationIdempotent(context.Context, sqlc.CreateToolOperationIdempotentParams) (sqlc.ToolOperation, error)
+		}); ok {
+			op, err = creator.CreateToolOperationIdempotent(ctx, sqlc.CreateToolOperationIdempotentParams{
+				Scope:          idem.scope,
+				IdempotencyKey: idem.key,
+				TargetType:     params.TargetType,
+				TargetKey:      params.TargetKey,
+				OperationType:  params.OperationType,
+				Payload:        params.Payload,
+				Status:         params.Status,
+				CreatedByID:    params.CreatedByID,
+			})
+		}
+	}
+	if op.ID == uuid.Nil && err == nil {
+		op, err = h.queries.CreateToolOperation(ctx, params)
+	}
 	if err == nil {
 		h.TriggerReconcile()
 	}
@@ -1177,62 +1181,59 @@ func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []claimedO
 	if err != nil {
 		return nil
 	}
-	latestByTarget := map[string]uuid.UUID{}
-	for i := len(ops) - 1; i >= 0; i-- {
-		key := ops[i].TargetType + ":" + ops[i].TargetKey
-		if _, ok := latestByTarget[key]; !ok {
-			latestByTarget[key] = ops[i].ID
-		}
-	}
-	claimed := make([]claimedOp, 0, len(ops))
-	for _, op := range ops {
-		key := op.TargetType + ":" + op.TargetKey
-		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
+	return claimLatestOperations(ctx, ops, operationRunnerConfig[sqlc.ToolOperation]{
+		ID:        func(op sqlc.ToolOperation) uuid.UUID { return op.ID },
+		TargetKey: func(op sqlc.ToolOperation) string { return op.TargetType + ":" + op.TargetKey },
+		Status:    func(op sqlc.ToolOperation) string { return op.Status },
+		IsFreshRunning: func(op sqlc.ToolOperation, now time.Time) bool {
+			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) < time.Minute
+		},
+		Supersede: func(ctx context.Context, op sqlc.ToolOperation) {
 			h.recordToolOperationEvent(ctx, op.ID, "info", "queue", "operation superseded by newer desired state", map[string]any{
 				"targetType": op.TargetType,
 				"targetKey":  op.TargetKey,
 			})
 			_, _ = h.queries.MarkToolOperationSuperseded(ctx, sqlc.MarkToolOperationSupersededParams{
 				ID:           op.ID,
-				ErrorMessage: "superseded by newer operation for target",
+				ErrorMessage: operationSupersededMessage,
 			})
-			continue
-		}
-		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
-			continue
-		}
-		running, err := h.queries.MarkToolOperationRunning(ctx, op.ID)
-		if err != nil {
-			continue
-		}
-		h.recordToolOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{
-			"operationType": running.OperationType,
-			"targetType":    running.TargetType,
-			"targetKey":     running.TargetKey,
-			"attemptCount":  running.AttemptCount,
-		})
-		claimed = append(claimed, claimedOp{
-			ID: running.ID,
-			Run: func(ctx context.Context) error {
-				return h.executeOperation(ctx, running)
-			},
-			OnComplete: func(ctx context.Context) {
-				h.recordToolOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-				_, _ = h.queries.MarkToolOperationCompleted(ctx, running.ID)
-			},
-			OnFailure: func(ctx context.Context, err error) {
-				h.recordToolOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-				_, _ = h.queries.MarkToolOperationFailed(ctx, sqlc.MarkToolOperationFailedParams{
-					ID:           running.ID,
-					ErrorMessage: err.Error(),
-				})
-				if h.log != nil {
-					h.log.Warn("tool operation failed", "id", running.ID.String(), "error", err)
-				}
-			},
-		})
-	}
-	return claimed
+		},
+		MarkRunning: func(ctx context.Context, op sqlc.ToolOperation) (sqlc.ToolOperation, error) {
+			running, err := h.queries.MarkToolOperationRunning(ctx, op.ID)
+			if err != nil {
+				return sqlc.ToolOperation{}, err
+			}
+			h.recordToolOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{
+				"operationType": running.OperationType,
+				"targetType":    running.TargetType,
+				"targetKey":     running.TargetKey,
+				"attemptCount":  running.AttemptCount,
+			})
+			return running, nil
+		},
+		Claimed: func(running sqlc.ToolOperation) claimedOp {
+			return claimedOp{
+				ID: running.ID,
+				Run: func(ctx context.Context) error {
+					return h.executeOperation(ctx, running)
+				},
+				OnComplete: func(ctx context.Context) {
+					h.recordToolOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
+					_, _ = h.queries.MarkToolOperationCompleted(ctx, running.ID)
+				},
+				OnFailure: func(ctx context.Context, err error) {
+					h.recordToolOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+					_, _ = h.queries.MarkToolOperationFailed(ctx, sqlc.MarkToolOperationFailedParams{
+						ID:           running.ID,
+						ErrorMessage: err.Error(),
+					})
+					if h.log != nil {
+						h.log.Warn("tool operation failed", "id", running.ID.String(), "error", err)
+					}
+				},
+			}
+		},
+	})
 }
 
 func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperation) error {

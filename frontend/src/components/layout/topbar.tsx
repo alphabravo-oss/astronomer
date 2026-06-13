@@ -166,7 +166,8 @@ export function Topbar() {
     else setTheme('light');
   };
 
-  const ThemeIcon = !mounted ? Monitor : theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
+  const visibleTheme = mounted ? (theme || 'system') : 'dark';
+  const ThemeIcon = !mounted ? Moon : visibleTheme === 'dark' ? Moon : visibleTheme === 'light' ? Sun : Monitor;
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-6 border-b border-border bg-background/80 backdrop-blur-lg">
@@ -211,7 +212,7 @@ export function Topbar() {
           onClick={cycleTheme}
           className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title={`Theme: ${theme || 'system'}`}
+          title={`Theme: ${visibleTheme}`}
         >
           <ThemeIcon className="h-4 w-4" />
         </button>
@@ -289,6 +290,7 @@ export function Topbar() {
         <div ref={userRef} className="relative">
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
+            aria-label="User menu"
             className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors"
           >
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">

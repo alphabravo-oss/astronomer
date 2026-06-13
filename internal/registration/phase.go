@@ -9,21 +9,21 @@
 //
 // Phase graph:
 //
-//	    created
-//	       |  POST /confirm/  (operator clicks "I've run it")
-//	       v
-//	  awaiting_agent
-//	       |  first agent.connected heartbeat
-//	       v
-//	    connected
-//	       |
-//	       +-- install_baseline=false ---> ready
-//	       |
-//	       +-- install_baseline=true  ---> provisioning
-//	                                          |
-//	                                          +-- all tools applied --> ready
-//	                                          |
-//	                                          +-- all retries spent  --> failed
+//	  created
+//	     |  POST /confirm/  (operator clicks "I've run it")
+//	     v
+//	awaiting_agent
+//	     |  first agent.connected heartbeat
+//	     v
+//	  connected
+//	     |
+//	     +-- install_baseline=false ---> ready
+//	     |
+//	     +-- install_baseline=true  ---> provisioning
+//	                                        |
+//	                                        +-- all tools applied --> ready
+//	                                        |
+//	                                        +-- all retries spent  --> failed
 //
 // Any retry-exhausted failure → failed; the operator can manually retry
 // the failing step via POST /retry/.
@@ -52,14 +52,14 @@ const (
 type Event string
 
 const (
-	EventConfirm           Event = "confirm"             // POST /registration/confirm/
-	EventAgentConnected    Event = "agent_connected"     // first heartbeat
-	EventTemplateApplying  Event = "template_applying"   // cluster_template:apply task started
-	EventTemplateApplied   Event = "template_applied"    // task completed clean
-	EventTemplateFailed    Event = "template_failed"     // task ran out of retries
-	EventNoProvisioning    Event = "no_provisioning"     // connected w/ install_baseline=false
-	EventCancel            Event = "cancel"              // superuser abort
-	EventRetry             Event = "retry"               // operator clicked retry on a failed step
+	EventConfirm          Event = "confirm"           // POST /registration/confirm/
+	EventAgentConnected   Event = "agent_connected"   // first heartbeat
+	EventTemplateApplying Event = "template_applying" // cluster_template:apply task started
+	EventTemplateApplied  Event = "template_applied"  // task completed clean
+	EventTemplateFailed   Event = "template_failed"   // task ran out of retries
+	EventNoProvisioning   Event = "no_provisioning"   // connected w/ install_baseline=false
+	EventCancel           Event = "cancel"            // superuser abort
+	EventRetry            Event = "retry"             // operator clicked retry on a failed step
 )
 
 // ErrIllegalTransition is returned by Transition when the (current,event)
@@ -200,6 +200,14 @@ func StepLabel(stepName string) string {
 		return "Platform Baseline applied"
 	case "template_failed":
 		return "Platform Baseline failed"
+	case "argocd_registering":
+		return "Registering cluster in ArgoCD"
+	case "argocd_registered":
+		return "Cluster registered in ArgoCD"
+	case "argocd_registration_failed":
+		return "ArgoCD registration failed"
+	case "baseline_appsets_matched":
+		return "Baseline ApplicationSets matched"
 	case "no_provisioning":
 		return "Skipped Platform Baseline (operator opted out)"
 	case "cancelled":

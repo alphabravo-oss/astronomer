@@ -10,11 +10,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // fakeAutoAttachClusterQuerier is the minimal ClusterQuerier used by
@@ -36,10 +39,21 @@ type fakeAutoAttachClusterQuerier struct {
 	upsertErr    error
 	createCalled int
 	auditOps     []string
+
+	clusters         map[uuid.UUID]sqlc.Cluster
+	latestDecoms     map[uuid.UUID]sqlc.ClusterDecommission
+	createDecomID    uuid.UUID
+	createDecoms     []sqlc.CreateClusterDecommissionParams
+	createdDecomRows []sqlc.ClusterDecommission
 }
 
 func newFakeAutoAttachClusterQuerier() *fakeAutoAttachClusterQuerier {
-	return &fakeAutoAttachClusterQuerier{templates: map[uuid.UUID]sqlc.ClusterTemplate{}}
+	return &fakeAutoAttachClusterQuerier{
+		templates:     map[uuid.UUID]sqlc.ClusterTemplate{},
+		clusters:      map[uuid.UUID]sqlc.Cluster{},
+		latestDecoms:  map[uuid.UUID]sqlc.ClusterDecommission{},
+		createDecomID: uuid.Nil,
+	}
 }
 
 func (q *fakeAutoAttachClusterQuerier) GetPlatformConfig(context.Context) (sqlc.PlatformConfiguration, error) {
@@ -109,8 +123,14 @@ func (q *fakeAutoAttachClusterQuerier) CreateAuditLogV1(_ context.Context, arg s
 }
 
 // Remaining ClusterQuerier methods — boilerplate zero returns.
-func (q *fakeAutoAttachClusterQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {
-	return sqlc.Cluster{}, pgx.ErrNoRows
+func (q *fakeAutoAttachClusterQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	row, ok := q.clusters[id]
+	if !ok {
+		return sqlc.Cluster{}, pgx.ErrNoRows
+	}
+	return row, nil
 }
 func (q *fakeAutoAttachClusterQuerier) GetClusterByName(context.Context, string) (sqlc.Cluster, error) {
 	return sqlc.Cluster{}, pgx.ErrNoRows
@@ -125,11 +145,35 @@ func (q *fakeAutoAttachClusterQuerier) DeleteCluster(context.Context, uuid.UUID)
 	return nil
 }
 func (q *fakeAutoAttachClusterQuerier) CountClusters(context.Context) (int64, error) { return 0, nil }
-func (q *fakeAutoAttachClusterQuerier) CreateClusterDecommission(context.Context, sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error) {
-	return sqlc.ClusterDecommission{}, nil
+func (q *fakeAutoAttachClusterQuerier) CreateClusterDecommission(_ context.Context, arg sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	id := q.createDecomID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	row := sqlc.ClusterDecommission{
+		ID:            id,
+		ClusterID:     arg.ClusterID,
+		RequestedByID: arg.RequestedByID,
+		ClusterName:   arg.ClusterName,
+		Status:        "pending",
+		Attempts:      0,
+		Phases:        json.RawMessage(`{}`),
+	}
+	q.createDecoms = append(q.createDecoms, arg)
+	q.createdDecomRows = append(q.createdDecomRows, row)
+	q.latestDecoms[arg.ClusterID] = row
+	return row, nil
 }
-func (q *fakeAutoAttachClusterQuerier) GetLatestClusterDecommissionByCluster(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
-	return sqlc.ClusterDecommission{}, nil
+func (q *fakeAutoAttachClusterQuerier) GetLatestClusterDecommissionByCluster(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterDecommission, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	row, ok := q.latestDecoms[clusterID]
+	if !ok {
+		return sqlc.ClusterDecommission{}, pgx.ErrNoRows
+	}
+	return row, nil
 }
 func (q *fakeAutoAttachClusterQuerier) GetClusterHealthStatus(context.Context, uuid.UUID) (sqlc.ClusterHealthStatus, error) {
 	return sqlc.ClusterHealthStatus{}, nil
@@ -158,8 +202,34 @@ func (q *fakeAutoAttachClusterQuerier) DeleteClusterRegistryConfig(context.Conte
 func (q *fakeAutoAttachClusterQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
 	return sqlc.PlatformSetting{}, pgx.ErrNoRows
 }
+func (q *fakeAutoAttachClusterQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
+	return nil, nil
+}
 func (q *fakeAutoAttachClusterQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
 	return nil, nil
+}
+
+type fakeAtomicDecommissionQuerier struct {
+	*fakeAutoAttachClusterQuerier
+	atomicDecoms []sqlc.CreateClusterDecommissionWithTaskOutboxParams
+}
+
+func (q *fakeAtomicDecommissionQuerier) CreateClusterDecommissionWithTaskOutbox(_ context.Context, arg sqlc.CreateClusterDecommissionWithTaskOutboxParams) (sqlc.ClusterDecommission, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	row := sqlc.ClusterDecommission{
+		ID:            arg.ID,
+		ClusterID:     arg.ClusterID,
+		RequestedByID: arg.RequestedByID,
+		ClusterName:   arg.ClusterName,
+		Status:        "pending",
+		Attempts:      0,
+		Phases:        json.RawMessage(`{}`),
+	}
+	q.atomicDecoms = append(q.atomicDecoms, arg)
+	q.createdDecomRows = append(q.createdDecomRows, row)
+	q.latestDecoms[arg.ClusterID] = row
+	return row, nil
 }
 
 // createReq builds a minimal POST body. The Create handler validates
@@ -209,7 +279,7 @@ func TestPlatformDefaultTemplate_ClusterCreateAutoAttachesDefault(t *testing.T) 
 	// Audit trail must show both the cluster.create and the template
 	// auto-attach actions. Order is create-first, attach-second.
 	wantActions := map[string]bool{
-		"cluster.create":                false,
+		"cluster.create":                 false,
 		"cluster.template.auto_attached": false,
 	}
 	for _, a := range q.auditOps {
@@ -221,6 +291,180 @@ func TestPlatformDefaultTemplate_ClusterCreateAutoAttachesDefault(t *testing.T) 
 		if !seen {
 			t.Errorf("audit trail missing action %q (saw %v)", action, q.auditOps)
 		}
+	}
+}
+
+func TestClusterDeleteWritesDecommissionToTaskOutbox(t *testing.T) {
+	clusterID := uuid.New()
+	userID := uuid.New()
+	decommissionID := uuid.New()
+	q := newFakeAutoAttachClusterQuerier()
+	q.createDecomID = decommissionID
+	q.clusters[clusterID] = sqlc.Cluster{
+		ID:          clusterID,
+		Name:        "prod-1",
+		DisplayName: "Production 1",
+		Status:      "connected",
+		IsLocal:     false,
+	}
+	outbox := &fakeRegistrationTaskOutbox{}
+	h := NewClusterHandler(q)
+	h.SetTaskOutbox(outbox)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		ID:         userID.String(),
+		AuthMethod: "jwt",
+	}))
+	w := httptest.NewRecorder()
+
+	h.Delete(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("Delete status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(q.createDecoms) != 1 {
+		t.Fatalf("CreateClusterDecommission calls = %d, want 1", len(q.createDecoms))
+	}
+	if q.createDecoms[0].RequestedByID.Bytes != userID || !q.createDecoms[0].RequestedByID.Valid {
+		t.Fatalf("RequestedByID = %+v, want %s", q.createDecoms[0].RequestedByID, userID)
+	}
+	args := outbox.all()
+	if len(args) != 1 {
+		t.Fatalf("outbox writes = %d, want 1", len(args))
+	}
+	got := args[0]
+	if got.TaskType != tasks.ClusterDecommissionType {
+		t.Fatalf("TaskType = %q, want %q", got.TaskType, tasks.ClusterDecommissionType)
+	}
+	if !got.DedupeKey.Valid || got.DedupeKey.String != "cluster_decommission:"+decommissionID.String() {
+		t.Fatalf("DedupeKey = %+v", got.DedupeKey)
+	}
+	if got.QueueName != "default" {
+		t.Fatalf("QueueName = %q, want default", got.QueueName)
+	}
+	if got.MaxRetry != 3 {
+		t.Fatalf("MaxRetry = %d, want 3", got.MaxRetry)
+	}
+	if got.MaxDeliveryAttempts != 20 {
+		t.Fatalf("MaxDeliveryAttempts = %d, want 20", got.MaxDeliveryAttempts)
+	}
+	var payload tasks.ClusterDecommissionPayload
+	if err := json.Unmarshal(got.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.DecommissionID != decommissionID.String() {
+		t.Fatalf("payload decommission_id = %q, want %s", payload.DecommissionID, decommissionID)
+	}
+}
+
+func TestClusterDeleteCreatesDecommissionAndTaskOutboxAtomically(t *testing.T) {
+	clusterID := uuid.New()
+	userID := uuid.New()
+	base := newFakeAutoAttachClusterQuerier()
+	base.clusters[clusterID] = sqlc.Cluster{
+		ID:      clusterID,
+		Name:    "prod-atomic",
+		Status:  "connected",
+		IsLocal: false,
+	}
+	q := &fakeAtomicDecommissionQuerier{fakeAutoAttachClusterQuerier: base}
+	outbox := &fakeRegistrationTaskOutbox{}
+	h := NewClusterHandler(q)
+	h.SetTaskOutbox(outbox)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		ID:         userID.String(),
+		AuthMethod: "jwt",
+	}))
+	w := httptest.NewRecorder()
+
+	h.Delete(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("Delete status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(q.atomicDecoms) != 1 {
+		t.Fatalf("atomic decommission writes = %d, want 1", len(q.atomicDecoms))
+	}
+	if len(q.createDecoms) != 0 {
+		t.Fatalf("non-atomic decommission writes = %d, want 0", len(q.createDecoms))
+	}
+	if len(outbox.all()) != 0 {
+		t.Fatalf("separate outbox writes = %d, want 0", len(outbox.all()))
+	}
+	arg := q.atomicDecoms[0]
+	if arg.ID == uuid.Nil {
+		t.Fatalf("atomic decommission id is nil")
+	}
+	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_decommission:"+arg.ID.String() {
+		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
+	}
+	if arg.TaskType != tasks.ClusterDecommissionType || arg.QueueName != "default" || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+		t.Fatalf("task metadata = %s/%s/%d/%d", arg.TaskType, arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
+	}
+	var payload tasks.ClusterDecommissionPayload
+	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.DecommissionID != arg.ID.String() {
+		t.Fatalf("payload decommission_id = %q, want %s", payload.DecommissionID, arg.ID)
+	}
+}
+
+func TestPlatformDefaultTemplate_ClusterCreateAutoAttachWritesTaskOutbox(t *testing.T) {
+	templateID := uuid.New()
+	q := newFakeAutoAttachClusterQuerier()
+	q.config = sqlc.PlatformConfiguration{
+		ID:                       1,
+		DefaultClusterTemplateID: pgtype.UUID{Bytes: templateID, Valid: true},
+	}
+	q.templates[templateID] = sqlc.ClusterTemplate{
+		ID:   templateID,
+		Name: "Platform baseline",
+		Spec: json.RawMessage(`{"tools":[{"slug":"trivy-operator"}]}`),
+	}
+	outbox := &fakeRegistrationTaskOutbox{}
+	h := NewClusterHandler(q)
+	h.SetTaskOutbox(outbox)
+
+	w := httptest.NewRecorder()
+	h.Create(w, createReq(t, "prod-apply"))
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Create status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(q.upserts) != 1 {
+		t.Fatalf("auto-attach upserts = %d, want 1", len(q.upserts))
+	}
+	clusterID := q.upserts[0].ClusterID
+	args := outbox.all()
+	if len(args) != 1 {
+		t.Fatalf("outbox writes = %d, want 1", len(args))
+	}
+	arg := args[0]
+	if arg.TaskType != tasks.ClusterTemplateApplyType {
+		t.Fatalf("TaskType = %q, want %q", arg.TaskType, tasks.ClusterTemplateApplyType)
+	}
+	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_template_apply:"+clusterID.String() {
+		t.Fatalf("DedupeKey = %+v", arg.DedupeKey)
+	}
+	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
+	}
+	var payload tasks.ClusterTemplateApplyPayload
+	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.ClusterID != clusterID.String() {
+		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,12 +30,15 @@ import (
 
 // RouterDependencies contains the optional dependencies used to register API routes.
 type RouterDependencies struct {
-	JWT            *iauth.JWTManager
-	Encryptor      *iauth.Encryptor
-	AuthQueries    appmiddleware.TokenUserQuerier
-	PlatformHealth *handler.PlatformHealthHandler
-	AdminQueues    *handler.AdminQueuesHandler
-	AdminDrill     *handler.AdminDrillHandler
+	JWT               *iauth.JWTManager
+	Encryptor         *iauth.Encryptor
+	AuthQueries       appmiddleware.TokenUserQuerier
+	AuditWriter       any
+	ArgoCDProxyTokens ArgoCDClusterProxyTokenQuerier
+	PlatformHealth    *handler.PlatformHealthHandler
+	AdminQueues       *handler.AdminQueuesHandler
+	AdminTaskOutbox   *handler.AdminTaskOutboxHandler
+	AdminDrill        *handler.AdminDrillHandler
 	// ManagementLogs is the read-side complement of the chart-side
 	// Fluent Bit DaemonSet — GET /api/v1/admin/management-logs/.
 	// Superuser-gated inside the handler. Nil-safe: omitted from the
@@ -66,15 +70,15 @@ type RouterDependencies struct {
 	// built-in registry in internal/notify; the email + webhook
 	// dispatchers consume the overrides via SetOverrideLookup.
 	NotificationTemplates *handler.NotificationTemplateHandler
-	Auth           *handler.AuthHandler
+	Auth                  *handler.AuthHandler
 	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
 	// + Queries by cmd/server before NewRouter runs. When nil (test
 	// fakes, pre-encryption-key bootstrap), the TOTP routes are
 	// omitted and Login continues to behave as the legacy password
 	// flow.
-	TOTP         *handler.TOTPHandler
-	SSO          *handler.SSOHandler
-	Clusters     *handler.ClusterHandler
+	TOTP     *handler.TOTPHandler
+	SSO      *handler.SSOHandler
+	Clusters *handler.ClusterHandler
 	// ClusterTemplates owns /api/v1/cluster-templates/* (CRUD) and the
 	// per-cluster /api/v1/clusters/{cluster_id}/template/* bind/apply
 	// surface. Migration 049. Nil-safe: omitted from the router when
@@ -102,31 +106,31 @@ type RouterDependencies struct {
 	// and /api/v1/clusters/{cluster_id}/network-policies/applications/*
 	// (per-cluster apply/list/delete) — migration 068. Nil-safe.
 	NetworkPolicies *handler.NetworkPolicyHandler
-	Projects         *handler.ProjectHandler
-	Tools            *handler.ToolHandler
-	Audit        *handler.AuditHandler
-	Alerting     *handler.AlertingHandler
-	Anomaly      *handler.AnomalyHandler
-	ArgoCD       *handler.ArgoCDHandler
-	Backups      *handler.BackupHandler
-	Catalog      *handler.CatalogHandler
+	Projects        *handler.ProjectHandler
+	Tools           *handler.ToolHandler
+	Audit           *handler.AuditHandler
+	Alerting        *handler.AlertingHandler
+	Anomaly         *handler.AnomalyHandler
+	ArgoCD          *handler.ArgoCDHandler
+	Backups         *handler.BackupHandler
+	Catalog         *handler.CatalogHandler
 	// ChartRatings owns /api/v1/charts/{chart_id}/ratings/* and
 	// /api/v1/catalog/recommendations/{popular,similar}/* — the
 	// migration-055 catalog rating surface. Nil-safe: routes are
 	// only mounted when this field is non-nil so tests that don't
 	// need the surface (and don't supply the querier) keep building.
-	ChartRatings *handler.ChartRatingsHandler
-	Logging      *handler.LoggingHandler
-	Monitoring   *handler.MonitoringHandler
-	ControlPlane *handler.ControlPlaneHandler
-	Resources    *handler.ResourceHandler
+	ChartRatings   *handler.ChartRatingsHandler
+	Logging        *handler.LoggingHandler
+	Monitoring     *handler.MonitoringHandler
+	ControlPlane   *handler.ControlPlaneHandler
+	Resources      *handler.ResourceHandler
 	PlatformCharts *handler.PlatformChartRepoHandler
 	// Docs serves the embedded OpenAPI spec + Swagger UI at
 	// /api/v1/openapi.yaml + /api/v1/docs/. Public — no JWT required.
-	Docs           *handler.DocsHandler
+	Docs *handler.DocsHandler
 	// SSOPresets serves the canonical GitHub/Google/Azure AD/GitLab/
 	// Okta preset catalog at /api/v1/settings/sso/presets/.
-	SSOPresets     *handler.SSOPresetsHandler
+	SSOPresets   *handler.SSOPresetsHandler
 	RBAC         *handler.RBACHandler
 	RBACQueries  appmiddleware.RBACQuerier
 	RBACEngine   *rbac.Engine
@@ -139,7 +143,7 @@ type RouterDependencies struct {
 	// server replicas. Mounted OUTSIDE the JWT auth middleware — it
 	// does its own PSK validation. Nil-safe; absent when no encryption
 	// key is configured (single-replica disables the fallback).
-	InternalK8s  *tunnel.InternalK8sHandler
+	InternalK8s *tunnel.InternalK8sHandler
 	// InternalHelm receives cross-pod HelmRequest forwards from sibling
 	// server replicas. Same PSK-auth contract as InternalK8s; mounted
 	// outside the JWT chain. Nil-safe.
@@ -152,6 +156,10 @@ type RouterDependencies struct {
 	// EventStream serves Server-Sent Events for live UI updates (cluster
 	// connect/disconnect, heartbeats). Optional; nil-safe.
 	EventStream *handler.EventStreamHandler
+	// StreamTickets issues short-lived one-use credentials for browser
+	// EventSource/WebSocket connections, avoiding long-lived JWTs in URLs.
+	StreamTickets     *handler.StreamTicketHandler
+	StreamTicketStore *iauth.StreamTicketStore
 	// RemoteQueries is wired into the v2 demonstration handlers below — it's
 	// the same *sqlc.Queries the rest of the app uses, exposed under a
 	// distinct field so the migration code can resolve cluster rows directly
@@ -280,6 +288,11 @@ type RouterDependencies struct {
 	ServiceMesh *handler.ServiceMeshHandler
 }
 
+type ArgoCDClusterProxyTokenQuerier interface {
+	GetArgoCDClusterProxyTokenByHash(ctx context.Context, tokenHash string) (sqlc.ArgocdClusterProxyToken, error)
+	TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error
+}
+
 // NewRouter builds and returns the Chi router with all routes and middleware.
 func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
@@ -297,6 +310,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	// Middleware
 	r.Use(appmiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
+	r.Use(appmiddleware.SecurityHeaders)
 	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.Metrics)
@@ -484,6 +498,9 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/settings/tokens/", deps.Auth.CreateToken)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/settings/tokens/{id}/", deps.Auth.RevokeToken)
 		}
+		if deps.StreamTickets != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/streams/tickets/", deps.StreamTickets.Create)
+		}
 
 		if deps.SupportBundle != nil {
 			// Authenticated; the handler enforces superuser gating itself so
@@ -547,6 +564,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// handler's own superuser check; audited.
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/queues/{queue}/dlq/{id}/retry/", deps.AdminQueues.RetryDLQ)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/queues/{queue}/dlq/{id}/", deps.AdminQueues.DiscardDLQ)
+		}
+
+		// Durable task-outbox inspector — committed DB task intents that
+		// have not yet made it to Redis/Asynq. Superuser-gated inside the
+		// handler; retry moves non-delivered rows back to pending for the
+		// dispatcher to send again.
+		if deps.AdminTaskOutbox != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/task-outbox/", deps.AdminTaskOutbox.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/task-outbox/{id}/retry/", deps.AdminTaskOutbox.Retry)
 		}
 
 		// Backup-restore drill viewer — surfaces rows that the weekly
@@ -668,10 +694,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// `authenticated` subrouter mounted below) so the chi
 			// dispatch hits these before falling through to the auth
 			// middleware. The handler's PublicSubset enforces the
-			// namespace allowlist (`branding`, `banner`).
+			// namespace allowlist (`branding`, `banner`,
+			// `registration`). Feature flags are authenticated below.
 			r.Get("/settings/branding/", deps.PlatformSettings.PublicBranding)
 			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
 			r.Get("/settings/registration/", deps.PlatformSettings.PublicRegistration)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/settings/features/", deps.PlatformSettings.Features)
 		}
 
 		// Rancher-style one-liner manifest fetch. Unauthenticated by
@@ -810,8 +838,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	if deps.ClusterRegistration != nil {
 		// Per-cluster wizard SSE stream — same long-lived contract as
 		// the global stream above, registered outside the timeout group
-		// for the same reason.
-		r.Get("/api/v1/clusters/{id}/registration/events/", deps.ClusterRegistration.StreamEvents)
+		// for the same reason. It still carries the same auth/RBAC
+		// protection as the registration status route mounted inside
+		// /api/v1 above.
+		r.With(
+			requireStreamTicketOrAuth(deps.JWT, deps.AuthQueries, deps.StreamTicketStore, iauth.StreamKindRegistration, "id"),
+			requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
+		).Get("/api/v1/clusters/{id}/registration/events/", deps.ClusterRegistration.StreamEvents)
 	}
 	if deps.RemoteServer != nil {
 		// remotedialer hijacks the connection for a WS upgrade, so this MUST
@@ -822,16 +855,40 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// Demonstration endpoint — proves the new tunnel works end-to-end by
 		// listing pods through a stock client-go clientset whose transport is
 		// dialed through remotedialer. Real handlers will follow once the
-		// migration is verified.
-		r.Get("/api/v1/clusters/{id}/v2/pods/", remoteV2PodsHandler(deps))
+		// migration is verified. Keep it out of production so demo-only
+		// cluster data surfaces cannot linger as a supported API.
+		if !isProductionConfig(cfg) {
+			r.With(
+				requireAuth(deps.JWT, deps.AuthQueries),
+				requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
+			).Get("/api/v1/clusters/{id}/v2/pods/", remoteV2PodsHandler(deps))
+		}
 	}
 	if deps.Proxy != nil {
 		// k8s passthrough is the most common loop-DoS target — any
 		// authenticated user can fire arbitrary list calls. Token bucket
 		// is sized so a normal UI burst (clicking through tabs) passes;
 		// a runaway loop trips within ~20 requests.
-		r.With(rateLimit(appmiddleware.ClassK8sProxy)).
+		r.With(
+			rateLimit(appmiddleware.ClassK8sProxy),
+			requireAuth(deps.JWT, deps.AuthQueries),
+			requireK8sProxyScope(),
+			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries),
+			auditK8sProxyMutations(deps.AuditWriter),
+		).
 			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
+		if deps.ArgoCDProxyTokens != nil {
+			// Dedicated machine-to-machine front door for built-in ArgoCD.
+			// It deliberately does not accept user JWTs or user API tokens:
+			// the bearer token is cluster-scoped and validated by hash
+			// against argocd_cluster_proxy_tokens before the shared tunnel
+			// proxy sees the request.
+			r.With(
+				rateLimit(appmiddleware.ClassK8sProxy),
+				requireArgoCDClusterProxyToken(deps.ArgoCDProxyTokens),
+			).
+				HandleFunc("/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
+		}
 	}
 	if deps.InternalK8s != nil {
 		// Cross-pod fallback for the server-internal K8sRequester.
@@ -915,6 +972,203 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 	return appmiddleware.RequirePermission(engine, querier, resource, verb)
 }
 
+func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isHighRiskPodProxySubresource(r.URL.Path) {
+				requirePermission(engine, querier, rbac.ResourcePods, rbac.VerbExec)(next).ServeHTTP(w, r)
+				return
+			}
+			verb := rbac.VerbRead
+			if isMutatingK8sProxyMethod(r.Method) {
+				verb = rbac.VerbUpdate
+			}
+			requirePermission(engine, querier, rbac.ResourceClusters, verb)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+func requireK8sProxyScope() func(http.Handler) http.Handler {
+	writeClusters := requireScope(iauth.ScopeWriteClusters)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !isMutatingK8sProxyMethod(r.Method) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeClusters(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+func auditK8sProxyMutations(auditWriter any) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isMutatingK8sProxyMethod(r.Method) {
+				clusterID := chi.URLParam(r, "cluster_id")
+				k8sPath := "/" + strings.TrimPrefix(chi.URLParam(r, "*"), "/")
+				detail := map[string]any{
+					"method":   r.Method,
+					"k8s_path": k8sPath,
+				}
+				if ref := parseK8sProxyObjectRef(k8sPath); len(ref) > 0 {
+					for k, v := range ref {
+						detail[k] = v
+					}
+				}
+				handler.RecordAuditFromRequest(r, auditWriter, "cluster.k8s_proxy.forwarded", "cluster", clusterID, k8sPath, detail)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func parseK8sProxyObjectRef(k8sPath string) map[string]string {
+	parts := strings.Split(strings.Trim(k8sPath, "/"), "/")
+	if len(parts) < 3 {
+		return nil
+	}
+	out := map[string]string{}
+	idx := 0
+	switch {
+	case len(parts) >= 3 && parts[0] == "api":
+		out["api_version"] = parts[1]
+		idx = 2
+	case len(parts) >= 4 && parts[0] == "apis":
+		out["api_group"] = parts[1]
+		out["api_version"] = parts[2]
+		idx = 3
+	default:
+		return nil
+	}
+	if idx < len(parts) && parts[idx] == "namespaces" && idx+1 < len(parts) {
+		out["namespace"] = parts[idx+1]
+		idx += 2
+	}
+	if idx < len(parts) {
+		out["resource"] = parts[idx]
+	}
+	if idx+1 < len(parts) {
+		out["name"] = parts[idx+1]
+	}
+	return out
+}
+
+func requireServiceProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			verb := rbac.VerbRead
+			if isMutatingK8sProxyMethod(r.Method) {
+				verb = rbac.VerbUpdate
+			}
+			requirePermission(engine, querier, rbac.ResourceClusters, verb)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+func requireServiceProxyScope() func(http.Handler) http.Handler {
+	return requireK8sProxyScope()
+}
+
+func requireArgoCDClusterProxyToken(queries ArgoCDClusterProxyTokenQuerier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if queries == nil {
+				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "ArgoCD cluster proxy authentication is not configured")
+				return
+			}
+			clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+			if err != nil {
+				writeRouteAuthError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+				return
+			}
+			token, ok := bearerToken(r)
+			if !ok || !strings.HasPrefix(token, iauth.ArgoCDClusterProxyTokenPrefix) {
+				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Valid ArgoCD cluster proxy token is required")
+				return
+			}
+			row, err := queries.GetArgoCDClusterProxyTokenByHash(r.Context(), iauth.HashArgoCDClusterProxyToken(token))
+			if err != nil || row.ClusterID != clusterID {
+				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Invalid ArgoCD cluster proxy token")
+				return
+			}
+			_ = queries.TouchArgoCDClusterProxyToken(r.Context(), row.ID)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var clusterID uuid.UUID
+			if strings.TrimSpace(clusterParam) != "" {
+				var err error
+				clusterID, err = uuid.Parse(chi.URLParam(r, clusterParam))
+				if err != nil {
+					writeRouteAuthError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+					return
+				}
+			}
+			userID, ok := iauth.AuthorizeStreamRequestWithTickets(r, queries, jwt, tickets, kind, clusterID)
+			if !ok {
+				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+				return
+			}
+			if userID != uuid.Nil {
+				r = r.WithContext(appmiddleware.SetAuthenticatedUserForTest(r.Context(), &appmiddleware.AuthenticatedUser{
+					ID:         userID.String(),
+					AuthMethod: "stream_ticket",
+				}))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func bearerToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Authorization")
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(parts[1]), true
+}
+
+func writeRouteAuthError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+	})
+}
+
+func isMutatingK8sProxyMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+func isHighRiskPodProxySubresource(path string) bool {
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	for i := 0; i+6 < len(segments); i++ {
+		if segments[i] != "api" || segments[i+1] != "v1" || segments[i+2] != "namespaces" || segments[i+4] != "pods" {
+			continue
+		}
+		switch segments[i+6] {
+		case "exec", "attach", "portforward":
+			return i+7 == len(segments)
+		}
+	}
+	return false
+}
+
 func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies, rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler) {
 	// Migration-044 API-token scope-enforcement middleware. JWT
 	// sessions and legacy (pre-044, empty-`scopes`) tokens bypass;
@@ -930,6 +1184,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/", deps.Clusters.Get)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/", deps.Clusters.Update)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Patch("/{id}/", deps.Clusters.Update)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/ownership/takeover/", deps.Clusters.TakeoverOwnership)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbDelete)).Delete("/{id}/", deps.Clusters.Delete)
 			// Cluster decommission status — poll endpoint paired with the
 			// DELETE handler's 202 Accepted response. Returns the latest
@@ -1088,6 +1343,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/", deps.Projects.Get)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/{id}/", deps.Projects.Update)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/", deps.Projects.Update)
+			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/ownership/takeover/", deps.Projects.TakeoverOwnership)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/{id}/", deps.Projects.Delete)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/add-namespace/", deps.Projects.AddNamespace)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/remove-namespace/", deps.Projects.RemoveNamespace)
@@ -1379,6 +1635,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Delete("/instances/{id}/applicationsets/{name}/", deps.ArgoCD.DeleteApplicationSet)
 			r.Get("/instances/{id}/clusters/", deps.ArgoCD.ListManagedClusters)
 			r.Post("/instances/{id}/clusters/{cluster_id}/register/", deps.ArgoCD.RegisterManagedCluster)
+			r.Post("/instances/{id}/clusters/{cluster_id}/refresh-labels/", deps.ArgoCD.RefreshManagedClusterLabels)
 			r.Delete("/instances/{id}/clusters/{cluster_id}/register/", deps.ArgoCD.UnregisterManagedCluster)
 			r.Get("/instances/{id}/repos/", deps.ArgoCD.ListRepos)
 			r.Post("/instances/{id}/repos/", deps.ArgoCD.CreateRepo)
@@ -1640,8 +1897,14 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.ServiceProxy != nil {
-		r.Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/", deps.ServiceProxy)
-		r.Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", deps.ServiceProxy)
+		r.With(
+			requireServiceProxyScope(),
+			requireServiceProxyPermission(deps.RBACEngine, deps.RBACQueries),
+		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/", deps.ServiceProxy)
+		r.With(
+			requireServiceProxyScope(),
+			requireServiceProxyPermission(deps.RBACEngine, deps.RBACQueries),
+		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", deps.ServiceProxy)
 	}
 
 	// --- Phase A3: cross-cluster resource search ---------------------------
@@ -1777,28 +2040,12 @@ func remoteV2PodsHandler(deps RouterDependencies) http.HandlerFunc {
 // population.
 func keyStatusHandler(deps RouterDependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		caller, ok := appmiddleware.GetAuthenticatedUser(r.Context())
-		if !ok {
-			handler.RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-			return
-		}
-		callerID, err := uuid.Parse(caller.ID)
-		if err != nil {
-			handler.RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-			return
-		}
-		if deps.AuthQueries == nil {
-			handler.RespondError(w, http.StatusInternalServerError, "internal_error", "User store not configured")
-			return
-		}
-		dbUser, err := deps.AuthQueries.GetUserByID(r.Context(), callerID)
-		if err != nil {
-			handler.RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-			return
-		}
-		if !dbUser.IsSuperuser {
-			handler.RespondError(w, http.StatusForbidden, "forbidden",
-				"Key status requires superuser privileges")
+		if _, ok := handler.RequireSuperuser(w, r, deps.AuthQueries, handler.SuperuserGateConfig{
+			StoreUnavailableStatus:  http.StatusInternalServerError,
+			StoreUnavailableCode:    "internal_error",
+			StoreUnavailableMessage: "User store not configured",
+			ForbiddenMessage:        "Key status requires superuser privileges",
+		}); !ok {
 			return
 		}
 

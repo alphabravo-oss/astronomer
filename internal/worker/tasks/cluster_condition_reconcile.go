@@ -9,29 +9,29 @@
 // cluster_conditions row in status='False', and for the known remediable
 // types it attempts the appropriate remedy:
 //
-//   * Connected=False  → mint a fresh registration token, emit an SSE
-//                         event so the wizard can offer "repair this
-//                         cluster" without an operator round-trip
-//                         through the API console.
+//   - Connected=False  → mint a fresh registration token, emit an SSE
+//     event so the wizard can offer "repair this
+//     cluster" without an operator round-trip
+//     through the API console.
 //
 // Future condition types (AgentVersionSkew, CACertificateExpiring) plug
 // into the same dispatch table without touching the scaffolding.
 //
 // Safety:
 //
-//   * Per-(cluster, condition_type) exponential backoff (60s → 64m capped
+//   - Per-(cluster, condition_type) exponential backoff (60s → 64m capped
 //     at the next attempt). Reads the latest row from
 //     cluster_condition_remediation_attempts to compute the delay.
 //
-//   * Per-condition-type daily cap (12 non-skipped attempts per cluster
+//   - Per-condition-type daily cap (12 non-skipped attempts per cluster
 //     per condition per 24h). A permanently-broken cluster can't drive
 //     unbounded token reissuance or audit-log growth.
 //
-//   * Every attempt — success, failure, OR skip (in-backoff) — lands a
+//   - Every attempt — success, failure, OR skip (in-backoff) — lands a
 //     row in cluster_condition_remediation_attempts. The skip rows are
 //     filtered out of the daily cap so they don't poison the gate.
 //
-//   * Audit trail: every non-skipped attempt emits a
+//   - Audit trail: every non-skipped attempt emits a
 //     cluster.condition.remediation_attempted audit row through the
 //     existing audit writer.
 package tasks
@@ -49,6 +49,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -61,13 +62,13 @@ const ClusterConditionReconcileType = "cluster_condition:reconcile"
 // health_check task use so logs across the codebase agree on
 // vocabulary.
 const (
-	ccrStatusFalse   = "False"
-	ccrOutcomeOk     = "success"
-	ccrOutcomeFail   = "failed"
-	ccrOutcomeSkip   = "skipped"
-	ccrActionNoopBO  = "noop_in_backoff"
-	ccrActionNoopCap = "noop_daily_cap"
-	ccrActionTokenReissued     = "registration_token_reissued"
+	ccrStatusFalse              = "False"
+	ccrOutcomeOk                = "success"
+	ccrOutcomeFail              = "failed"
+	ccrOutcomeSkip              = "skipped"
+	ccrActionNoopBO             = "noop_in_backoff"
+	ccrActionNoopCap            = "noop_daily_cap"
+	ccrActionTokenReissued      = "registration_token_reissued"
 	ccrActionApplyResetToFailed = "template_apply_reset_to_failed"
 )
 
@@ -136,10 +137,10 @@ func reconcileOneCondition(ctx context.Context, row sqlc.ClusterCondition) error
 	}
 	if count >= ccrDailyCap {
 		return insertAttempt(ctx, row, ccrActionNoopCap, ccrOutcomeSkip, "", map[string]any{
-			"reason":        "daily_cap_reached",
-			"cap":           ccrDailyCap,
-			"recent_count":  count,
-			"window_hours":  24,
+			"reason":       "daily_cap_reached",
+			"cap":          ccrDailyCap,
+			"recent_count": count,
+			"window_hours": 24,
 		})
 	}
 
@@ -277,7 +278,7 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 
 	token, err := runtimeDeps.Queries.CreateClusterRegistrationToken(ctx, sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: row.ClusterID,
-		Token:     tokenStr,
+		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().UTC().Add(24 * time.Hour),
 	})
 	if err != nil {

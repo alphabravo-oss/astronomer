@@ -49,6 +49,38 @@ func TestAuthBrowserOrBearer(t *testing.T) {
 		}
 	})
 
+	t.Run("cookie post requires csrf", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/argocd/api/applications", nil)
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: validToken})
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("got %d, want 401; body=%s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("cookie post with csrf passes", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/argocd/api/applications", nil)
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: validToken})
+		req.AddCookie(&http.Cookie{Name: CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200; body=%s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("bearer post does not require csrf", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/argocd/api/applications", nil)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200; body=%s", rr.Code, rr.Body.String())
+		}
+	})
+
 	t.Run("missing creds on browser nav redirects to login", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/argocd/applications", nil)
 		req.Header.Set("Accept", "text/html")

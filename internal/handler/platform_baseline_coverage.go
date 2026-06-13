@@ -34,7 +34,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // defaultBaselineSlugs is the canonical list of chart names the
@@ -136,28 +135,11 @@ func (h *PlatformBaselineCoverageHandler) Coverage(w http.ResponseWriter, r *htt
 // gate enforces superuser-only access. Matches the
 // platform_settings.go pattern so the failure mode is a clean 403.
 func (h *PlatformBaselineCoverageHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "User store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Platform-baseline coverage requires superuser privileges")
-		return false
-	}
-	return true
+	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableStatus:  http.StatusInternalServerError,
+		StoreUnavailableCode:    "internal_error",
+		StoreUnavailableMessage: "User store not configured",
+		ForbiddenMessage:        "Platform-baseline coverage requires superuser privileges",
+	})
+	return ok
 }

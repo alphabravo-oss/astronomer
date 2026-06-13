@@ -420,6 +420,12 @@ func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 	if data["token"] == nil || data["token"] == "" {
 		t.Error("missing session token after verify")
 	}
+	if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
+		t.Fatalf("expected HttpOnly %s cookie after verify", middleware.SessionCookieName)
+	}
+	if !responseHasCookie(w.Result(), middleware.RefreshCookieName, true) {
+		t.Fatalf("expected HttpOnly %s cookie after verify", middleware.RefreshCookieName)
+	}
 }
 
 func TestLogin_TOTPChallengeWithRecoveryCode(t *testing.T) {
@@ -608,4 +614,3 @@ func newAdminTOTPRequest(method string, targetID uuid.UUID, actor sqlc.User) *ht
 	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, rctx)
 	return r.WithContext(ctx)
 }
-

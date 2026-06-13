@@ -147,17 +147,17 @@ type resourceDef struct {
 }
 
 var resourceDefs = map[string]resourceDef{
-	"services":                {apiBase: "/api/v1", namespaced: true, plural: "services"},
-	"configmaps":              {apiBase: "/api/v1", namespaced: true, plural: "configmaps"},
-	"secrets":                 {apiBase: "/api/v1", namespaced: true, plural: "secrets"},
-	"serviceaccounts":         {apiBase: "/api/v1", namespaced: true, plural: "serviceaccounts"},
-	"endpoints":               {apiBase: "/api/v1", namespaced: true, plural: "endpoints"},
-	"persistentvolumes":       {apiBase: "/api/v1", namespaced: false, plural: "persistentvolumes"},
-	"persistentvolumeclaims":  {apiBase: "/api/v1", namespaced: true, plural: "persistentvolumeclaims"},
-	"ingresses":               {apiBase: "/apis/networking.k8s.io/v1", namespaced: true, plural: "ingresses"},
-	"networkpolicies":         {apiBase: "/apis/networking.k8s.io/v1", namespaced: true, plural: "networkpolicies"},
-	"storageclasses":          {apiBase: "/apis/storage.k8s.io/v1", namespaced: false, plural: "storageclasses"},
-	"replicasets":             {apiBase: "/apis/apps/v1", namespaced: true, plural: "replicasets"},
+	"services":               {apiBase: "/api/v1", namespaced: true, plural: "services"},
+	"configmaps":             {apiBase: "/api/v1", namespaced: true, plural: "configmaps"},
+	"secrets":                {apiBase: "/api/v1", namespaced: true, plural: "secrets"},
+	"serviceaccounts":        {apiBase: "/api/v1", namespaced: true, plural: "serviceaccounts"},
+	"endpoints":              {apiBase: "/api/v1", namespaced: true, plural: "endpoints"},
+	"persistentvolumes":      {apiBase: "/api/v1", namespaced: false, plural: "persistentvolumes"},
+	"persistentvolumeclaims": {apiBase: "/api/v1", namespaced: true, plural: "persistentvolumeclaims"},
+	"ingresses":              {apiBase: "/apis/networking.k8s.io/v1", namespaced: true, plural: "ingresses"},
+	"networkpolicies":        {apiBase: "/apis/networking.k8s.io/v1", namespaced: true, plural: "networkpolicies"},
+	"storageclasses":         {apiBase: "/apis/storage.k8s.io/v1", namespaced: false, plural: "storageclasses"},
+	"replicasets":            {apiBase: "/apis/apps/v1", namespaced: true, plural: "replicasets"},
 	// apps/v1 workload kinds. Historically the sidebar drove these
 	// through the dedicated WorkloadHandler; the generic listing here
 	// was missing the three most common workload types, so the
@@ -250,11 +250,11 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 	namespace := r.URL.Query().Get("namespace")
 	path, err := listPath(resourceType, namespace)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	if h.requester == nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", "tunnel requester not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", "tunnel requester not configured")
 		return
 	}
 	// Bypass h.do so we can treat 404 as "CRD not installed" and return [].
@@ -263,11 +263,11 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 	// show "No resources found", not surface a 503.
 	rawResp, err := h.requester.Do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	if rawResp == nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", "empty response")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", "empty response")
 		return
 	}
 	if rawResp.StatusCode == http.StatusNotFound {
@@ -275,12 +275,12 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := ensureSuccess(rawResp); err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	var resp map[string]any
 	if err := parseJSONResponse(rawResp, &resp); err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	items := flattenNamedResources(clusterID, resourceType, resp)
@@ -293,12 +293,12 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 	namespace := r.URL.Query().Get("namespace")
 	path, err := listPath(resourceType, namespace)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	resp, err := h.do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	items := flattenGenericResources(clusterID, resourceType, resp)
@@ -310,17 +310,17 @@ func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Req
 	resourceType := chi.URLParam(r, "resource_type")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Failed to read request body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Failed to read request body")
 		return
 	}
 	namespace, err := resourceNamespace(body)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Unable to determine namespace")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Unable to determine namespace")
 		return
 	}
 	path, err := listPath(resourceType, namespace)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	// We record the management-plane audit row even though the actual k8s
@@ -341,7 +341,7 @@ func (h *ResourceHandler) DeleteNamedResource(w http.ResponseWriter, r *http.Req
 	namespace := chi.URLParam(r, "namespace")
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "cluster.resource.delete", resourceType, "", name, map[string]any{
@@ -364,7 +364,7 @@ func (h *ResourceHandler) GetGeneralSettings(w http.ResponseWriter, r *http.Requ
 	}
 	cfg, err := h.queries.GetPlatformConfig(r.Context())
 	if err != nil && err != pgx.ErrNoRows {
-		RespondError(w, http.StatusInternalServerError, "settings_error", "Failed to load platform settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, "settings_error", "Failed to load platform settings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -395,7 +395,7 @@ type UpdateGeneralSettingsRequest struct {
 func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.Request) {
 	var req UpdateGeneralSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
@@ -427,7 +427,7 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 	}
 
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "settings_error", "settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "settings_error", "settings store not configured")
 		return
 	}
 	cfg, err := h.queries.UpsertPlatformConfig(r.Context(), sqlc.UpsertPlatformConfigParams{
@@ -438,7 +438,7 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 		InstanceID:       instanceID,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "settings_error", "Failed to update platform settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, "settings_error", "Failed to update platform settings")
 		return
 	}
 	recordAudit(r, h.queries, "settings.general.update", "platform_settings", fmt.Sprintf("%d", cfg.ID), cfg.PlatformName, map[string]any{
@@ -559,7 +559,7 @@ func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := h.sso.GetEnabledSSOProviders(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "sso_error", "Failed to load SSO providers")
+		RespondRequestError(w, r, http.StatusInternalServerError, "sso_error", "Failed to load SSO providers")
 		return
 	}
 	items := make([]SSOProviderResponse, 0, len(rows))
@@ -598,36 +598,36 @@ type SSOProviderResponse struct {
 // CreateSSOProvider handles POST /api/v1/settings/sso/.
 func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Request) {
 	if h.sso == nil || h.encryptor == nil || h.ssoMgr == nil {
-		RespondError(w, http.StatusServiceUnavailable, "sso_unavailable", "SSO provider management is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "sso_unavailable", "SSO provider management is not configured")
 		return
 	}
 	var req SSOProviderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Provider name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Provider name is required")
 		return
 	}
 	switch req.Type {
 	case "github", "google", "oidc":
 	default:
-		RespondError(w, http.StatusBadRequest, "unsupported_provider", "Supported provider types are github, google, and oidc")
+		RespondRequestError(w, r, http.StatusBadRequest, "unsupported_provider", "Supported provider types are github, google, and oidc")
 		return
 	}
 	if strings.TrimSpace(req.Config.ClientID) == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Client ID is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Client ID is required")
 		return
 	}
 	if strings.TrimSpace(req.Config.ClientSecret) == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Client secret is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Client secret is required")
 		return
 	}
 	if req.Type == "oidc" && strings.TrimSpace(req.Config.MetadataURL) == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "metadata_url is required for OIDC providers")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "metadata_url is required for OIDC providers")
 		return
 	}
 
@@ -635,12 +635,12 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 	if req.Type == "oidc" {
 		providerKey = ssoProviderKeyFromName(req.Name)
 		if providerKey == "" {
-			RespondError(w, http.StatusBadRequest, "validation_error", "Provider name must contain letters or numbers")
+			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Provider name must contain letters or numbers")
 			return
 		}
 	}
 	if _, err := h.sso.GetSSOConfigurationByProvider(r.Context(), providerKey); err == nil {
-		RespondError(w, http.StatusConflict, "provider_exists", "An SSO provider with this key already exists")
+		RespondRequestError(w, r, http.StatusConflict, "provider_exists", "An SSO provider with this key already exists")
 		return
 	}
 
@@ -651,12 +651,12 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 	}
 	configJSON, err := json.Marshal(config)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "encode_error", "Failed to encode SSO config")
+		RespondRequestError(w, r, http.StatusInternalServerError, "encode_error", "Failed to encode SSO config")
 		return
 	}
 	secretEncrypted, err := h.encryptor.Encrypt(req.Config.ClientSecret)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt SSO client secret")
+		RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt SSO client secret")
 		return
 	}
 
@@ -672,7 +672,7 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 
 	if enabled {
 		if err := h.registerSSOProvider(r.Context(), providerKey, req.Type, config, req.Config.ClientID, secretEncrypted); err != nil {
-			RespondError(w, http.StatusBadRequest, "registration_error", err.Error())
+			RespondRequestError(w, r, http.StatusBadRequest, "registration_error", err.Error())
 			return
 		}
 	}
@@ -690,7 +690,7 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 		DefaultGlobalRoleID:   pgtype.UUID{},
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create SSO provider")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create SSO provider")
 		return
 	}
 
@@ -705,21 +705,21 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 // DeleteSSOProvider handles DELETE /api/v1/settings/sso/{id}/.
 func (h *ResourceHandler) DeleteSSOProvider(w http.ResponseWriter, r *http.Request) {
 	if h.sso == nil {
-		RespondError(w, http.StatusServiceUnavailable, "sso_unavailable", "SSO provider management is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "sso_unavailable", "SSO provider management is not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid SSO provider ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid SSO provider ID")
 		return
 	}
 	existing, err := h.sso.GetSSOConfigurationByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "SSO provider not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "SSO provider not found")
 		return
 	}
 	if err := h.sso.DeleteSSOConfiguration(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete SSO provider")
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete SSO provider")
 		return
 	}
 	if h.ssoMgr != nil {
@@ -742,7 +742,7 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 		Offset: 0,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "activity_error", "Failed to load activity feed")
+		RespondRequestError(w, r, http.StatusInternalServerError, "activity_error", "Failed to load activity feed")
 		return
 	}
 	items := make([]map[string]any, 0, len(logs))
@@ -769,7 +769,7 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "audit_error", "Failed to load audit logs")
+		RespondRequestError(w, r, http.StatusInternalServerError, "audit_error", "Failed to load audit logs")
 		return
 	}
 	total, _ := countAuditLogsForResource(r.Context(), h.queries)
@@ -815,7 +815,7 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "users_error", "Failed to load users")
+		RespondRequestError(w, r, http.StatusInternalServerError, "users_error", "Failed to load users")
 		return
 	}
 	total, _ := h.queries.CountUsers(r.Context())
@@ -828,17 +828,17 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 func (h *ResourceHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
 		return
 	}
 	user, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, mapUser(user))
@@ -860,29 +860,29 @@ func (h *ResourceHandler) setNodeSchedulable(w http.ResponseWriter, r *http.Requ
 	clusterID := chi.URLParam(r, "cluster_id")
 	nodeName := chi.URLParam(r, "node_name")
 	if clusterID == "" || nodeName == "" {
-		RespondError(w, http.StatusBadRequest, "invalid_request", "cluster_id and node_name are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", "cluster_id and node_name are required")
 		return
 	}
 	patch, err := json.Marshal(map[string]any{
 		"spec": map[string]any{"unschedulable": unschedulable},
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "marshal_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "marshal_error", err.Error())
 		return
 	}
 	path := fmt.Sprintf("/api/v1/nodes/%s", nodeName)
 	headers := requestHeaders("application/strategic-merge-patch+json")
 	if h.requester == nil {
-		RespondError(w, http.StatusNotImplemented, "not_implemented", "Cluster tunnel requester not configured; cordon/uncordon requires agent connection")
+		RespondRequestError(w, r, http.StatusNotImplemented, "not_implemented", "Cluster tunnel requester not configured; cordon/uncordon requires agent connection")
 		return
 	}
 	resp, err := h.requester.Do(r.Context(), clusterID, http.MethodPatch, path, patch, headers)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	if err := ensureSuccess(resp); err != nil {
-		RespondError(w, http.StatusBadGateway, "k8s_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
 		return
 	}
 	action := "uncordoned"
@@ -903,22 +903,22 @@ func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	nodeName := chi.URLParam(r, "node_name")
 	if clusterID == "" || nodeName == "" {
-		RespondError(w, http.StatusBadRequest, "invalid_request", "cluster_id and node_name are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", "cluster_id and node_name are required")
 		return
 	}
 	if h.requester == nil {
-		RespondError(w, http.StatusNotImplemented, "not_implemented", "Cluster tunnel requester not configured; drain requires agent connection")
+		RespondRequestError(w, r, http.StatusNotImplemented, "not_implemented", "Cluster tunnel requester not configured; drain requires agent connection")
 		return
 	}
 	// Cordon first.
 	patch, _ := json.Marshal(map[string]any{"spec": map[string]any{"unschedulable": true}})
 	resp, err := h.requester.Do(r.Context(), clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/nodes/%s", nodeName), patch, requestHeaders("application/strategic-merge-patch+json"))
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	if err := ensureSuccess(resp); err != nil {
-		RespondError(w, http.StatusBadGateway, "k8s_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error", err.Error())
 		return
 	}
 	// TODO: evict pods on the node. Requires iterating pods on the node and
@@ -941,7 +941,7 @@ func (h *ResourceHandler) GetNamedResource(w http.ResponseWriter, r *http.Reques
 func (h *ResourceHandler) UpdateNamedResource(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Failed to read request body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Failed to read request body")
 		return
 	}
 	h.namedResourceRequest(w, r, http.MethodPut, body)
@@ -958,12 +958,12 @@ func (h *ResourceHandler) namedResourceRequest(w http.ResponseWriter, r *http.Re
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 	if clusterID == "" || resourceType == "" || name == "" {
-		RespondError(w, http.StatusBadRequest, "invalid_request", "cluster_id, type and name are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", "cluster_id, type and name are required")
 		return
 	}
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_resource", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_resource", err.Error())
 		return
 	}
 	headers := requestHeaders("")
@@ -1005,7 +1005,7 @@ func (h *ResourceHandler) do(ctx context.Context, clusterID, method, path string
 func (h *ResourceHandler) proxyJSON(w http.ResponseWriter, r *http.Request, clusterID, method, path string, body []byte, headers map[string]string) {
 	resp, err := h.do(r.Context(), clusterID, method, path, body, headers)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)

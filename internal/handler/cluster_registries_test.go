@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -34,9 +35,9 @@ type fakeRegistryQuerier struct {
 	// applied/applyError record the most recent worker stamps; the tests
 	// don't always exercise the worker path, but when they do the rows
 	// + stamps are useful assertions.
-	applied      map[uuid.UUID]bool
-	applyErrors  map[uuid.UUID]string
-	projectNS    []sqlc.ProjectNamespace
+	applied     map[uuid.UUID]bool
+	applyErrors map[uuid.UUID]string
+	projectNS   []sqlc.ProjectNamespace
 }
 
 func newFakeRegistryQuerier(clusterID uuid.UUID) *fakeRegistryQuerier {
@@ -94,16 +95,17 @@ func (f *fakeRegistryQuerier) CreateClusterRegistryConfig(_ context.Context, arg
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	row := sqlc.ClusterRegistryConfig{
-		ID:                 uuid.New(),
-		ClusterID:          arg.ClusterID,
-		PrivateRegistryUrl: arg.PrivateRegistryUrl,
-		RegistryUsername:   arg.RegistryUsername,
-		RegistryPassword:   arg.RegistryPassword,
-		Insecure:           arg.Insecure,
-		CaBundle:           arg.CaBundle,
-		Namespaces:         arg.Namespaces,
-		InjectDefaultSa:    arg.InjectDefaultSa,
-		SecretName:         arg.SecretName,
+		ID:                        uuid.New(),
+		ClusterID:                 arg.ClusterID,
+		PrivateRegistryUrl:        arg.PrivateRegistryUrl,
+		RegistryUsername:          arg.RegistryUsername,
+		RegistryPassword:          arg.RegistryPassword,
+		RegistryPasswordEncrypted: arg.RegistryPasswordEncrypted,
+		Insecure:                  arg.Insecure,
+		CaBundle:                  arg.CaBundle,
+		Namespaces:                arg.Namespaces,
+		InjectDefaultSa:           arg.InjectDefaultSa,
+		SecretName:                arg.SecretName,
 	}
 	if len(row.Namespaces) == 0 {
 		row.Namespaces = json.RawMessage(`[]`)
@@ -122,6 +124,7 @@ func (f *fakeRegistryQuerier) UpdateClusterRegistryConfig(_ context.Context, arg
 	row.PrivateRegistryUrl = arg.PrivateRegistryUrl
 	row.RegistryUsername = arg.RegistryUsername
 	row.RegistryPassword = arg.RegistryPassword
+	row.RegistryPasswordEncrypted = arg.RegistryPasswordEncrypted
 	row.Insecure = arg.Insecure
 	row.CaBundle = arg.CaBundle
 	row.Namespaces = arg.Namespaces
@@ -353,6 +356,54 @@ func TestRegistry_CRUD(t *testing.T) {
 	q.mu.Unlock()
 	if stillThere {
 		t.Fatalf("Delete did not remove row")
+	}
+}
+
+func TestRegistry_CreateEncryptsPasswordWhenEncryptorConfigured(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeRegistryQuerier(clusterID)
+	h := NewClusterRegistriesHandler(q)
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	enc, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	h.SetEncryptor(enc)
+
+	body, _ := json.Marshal(ClusterRegistryRequest{
+		PrivateRegistryUrl: "https://registry.example.com",
+		RegistryUsername:   "alice",
+		RegistryPassword:   "s3cr3t",
+	})
+	req := requestWithChiParams(t, http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/registries/", body, map[string]string{"cluster_id": clusterID.String()})
+	rr := httptest.NewRecorder()
+	h.Create(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("Create status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	created := decodeRegistryResp(t, rr)
+	if created.RegistryPassword != RegistryPasswordSentinel {
+		t.Fatalf("Create response did not redact encrypted password: %q", created.RegistryPassword)
+	}
+
+	q.mu.Lock()
+	row := q.rows[created.ID]
+	q.mu.Unlock()
+	if row.RegistryPassword != "" {
+		t.Fatalf("expected plaintext registry password column to be blank, got %q", row.RegistryPassword)
+	}
+	if row.RegistryPasswordEncrypted == "" {
+		t.Fatal("expected encrypted registry password to be stored")
+	}
+	plain, err := enc.Decrypt(row.RegistryPasswordEncrypted)
+	if err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	if plain != "s3cr3t" {
+		t.Fatalf("expected decrypted password s3cr3t, got %q", plain)
 	}
 }
 

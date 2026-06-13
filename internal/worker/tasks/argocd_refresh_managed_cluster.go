@@ -55,6 +55,7 @@ const astronomerManagedByLabelValue = "astronomer"
 const astronomerClusterIDLabelKey = "astronomer.io/cluster-id"
 const astronomerClusterNameLabelKey = "astronomer.io/cluster-name"
 const astronomerEnvironmentLabelKey = "astronomer.io/environment"
+const astronomerIsLocalLabelKey = "astronomer.io/is-local"
 
 // maxLabelKeyLen is the Kubernetes-enforced maximum for the *name* portion of
 // a label key (the part after the optional prefix/). Mirrors the constant in
@@ -318,6 +319,7 @@ func managedClusterArgoLabels(cluster sqlc.Cluster) map[string]string {
 		astronomerManagedByLabelKey:   astronomerManagedByLabelValue,
 		astronomerClusterIDLabelKey:   cluster.ID.String(),
 		astronomerClusterNameLabelKey: cluster.Name,
+		astronomerIsLocalLabelKey:     fmt.Sprintf("%t", cluster.IsLocal),
 	}
 	if cluster.Environment != "" {
 		labels[astronomerEnvironmentLabelKey] = cluster.Environment

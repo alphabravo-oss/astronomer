@@ -24,7 +24,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const clusterRegistryConfigSelectColumns = `id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error`
+const clusterRegistryConfigSelectColumns = `id, cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error`
 
 func scanClusterRegistryConfigRow(row interface {
 	Scan(dest ...any) error
@@ -36,6 +36,7 @@ func scanClusterRegistryConfigRow(row interface {
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
 		&i.RegistryPassword,
+		&i.RegistryPasswordEncrypted,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -115,25 +116,27 @@ INSERT INTO cluster_registry_configs (
     private_registry_url,
     registry_username,
     registry_password,
+    registry_password_encrypted,
     insecure,
     ca_bundle,
     namespaces,
     inject_default_sa,
     secret_name
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING ` + clusterRegistryConfigSelectColumns
 
 type CreateClusterRegistryConfigParams struct {
-	ClusterID          uuid.UUID       `json:"cluster_id"`
-	PrivateRegistryUrl string          `json:"private_registry_url"`
-	RegistryUsername   string          `json:"registry_username"`
-	RegistryPassword   string          `json:"registry_password"`
-	Insecure           bool            `json:"insecure"`
-	CaBundle           string          `json:"ca_bundle"`
-	Namespaces         json.RawMessage `json:"namespaces"`
-	InjectDefaultSa    bool            `json:"inject_default_sa"`
-	SecretName         string          `json:"secret_name"`
+	ClusterID                 uuid.UUID       `json:"cluster_id"`
+	PrivateRegistryUrl        string          `json:"private_registry_url"`
+	RegistryUsername          string          `json:"registry_username"`
+	RegistryPassword          string          `json:"registry_password"`
+	RegistryPasswordEncrypted string          `json:"registry_password_encrypted"`
+	Insecure                  bool            `json:"insecure"`
+	CaBundle                  string          `json:"ca_bundle"`
+	Namespaces                json.RawMessage `json:"namespaces"`
+	InjectDefaultSa           bool            `json:"inject_default_sa"`
+	SecretName                string          `json:"secret_name"`
 }
 
 func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
@@ -142,6 +145,7 @@ func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClu
 		arg.PrivateRegistryUrl,
 		arg.RegistryUsername,
 		arg.RegistryPassword,
+		arg.RegistryPasswordEncrypted,
 		arg.Insecure,
 		arg.CaBundle,
 		arg.Namespaces,
@@ -156,25 +160,27 @@ UPDATE cluster_registry_configs SET
     private_registry_url = $2,
     registry_username    = $3,
     registry_password    = $4,
-    insecure             = $5,
-    ca_bundle            = $6,
-    namespaces           = $7,
-    inject_default_sa    = $8,
-    secret_name          = $9,
+    registry_password_encrypted = $5,
+    insecure             = $6,
+    ca_bundle            = $7,
+    namespaces           = $8,
+    inject_default_sa    = $9,
+    secret_name          = $10,
     updated_at           = now()
 WHERE id = $1
 RETURNING ` + clusterRegistryConfigSelectColumns
 
 type UpdateClusterRegistryConfigParams struct {
-	ID                 uuid.UUID       `json:"id"`
-	PrivateRegistryUrl string          `json:"private_registry_url"`
-	RegistryUsername   string          `json:"registry_username"`
-	RegistryPassword   string          `json:"registry_password"`
-	Insecure           bool            `json:"insecure"`
-	CaBundle           string          `json:"ca_bundle"`
-	Namespaces         json.RawMessage `json:"namespaces"`
-	InjectDefaultSa    bool            `json:"inject_default_sa"`
-	SecretName         string          `json:"secret_name"`
+	ID                        uuid.UUID       `json:"id"`
+	PrivateRegistryUrl        string          `json:"private_registry_url"`
+	RegistryUsername          string          `json:"registry_username"`
+	RegistryPassword          string          `json:"registry_password"`
+	RegistryPasswordEncrypted string          `json:"registry_password_encrypted"`
+	Insecure                  bool            `json:"insecure"`
+	CaBundle                  string          `json:"ca_bundle"`
+	Namespaces                json.RawMessage `json:"namespaces"`
+	InjectDefaultSa           bool            `json:"inject_default_sa"`
+	SecretName                string          `json:"secret_name"`
 }
 
 func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
@@ -183,6 +189,7 @@ func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClu
 		arg.PrivateRegistryUrl,
 		arg.RegistryUsername,
 		arg.RegistryPassword,
+		arg.RegistryPasswordEncrypted,
 		arg.Insecure,
 		arg.CaBundle,
 		arg.Namespaces,

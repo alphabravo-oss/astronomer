@@ -45,6 +45,10 @@ const (
 	// keys on every upstream ArgoCD cluster Secret this cluster is registered
 	// into. Idempotent — skips the PATCH when the desired labels already match.
 	TypeArgoCDRefreshManagedClusterLabels = tasks.ArgoCDRefreshManagedClusterLabelsType
+	// ArgoCD auto-adoption. Enqueued when an agent connects and swept
+	// periodically so every live Astronomer-managed cluster is present in
+	// built-in ArgoCD with a cluster-scoped proxy credential.
+	TypeArgoCDAutoRegisterCluster = tasks.ArgoCDAutoRegisterClusterType
 	// Telemetry sender — opt-in nightly POST. Migration 046.
 	TypeTelemetrySend = tasks.TelemetrySendType
 	// Migration 047: SMTP email dispatch + retention.
@@ -75,6 +79,7 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
+	TypePlaintextCredentialMigration  = tasks.PlaintextCredentialMigrationType
 	// Migration 055: SIEM forwarder dispatch + retention sweep. The
 	// dispatcher drains every enabled forwarder's queue every 2s; the
 	// cleanup task prunes queue rows older than 7 days regardless of
@@ -91,6 +96,9 @@ const (
 	TypeFleetOrchestrate = tasks.FleetOrchestrateType
 	// Migration 057: maintenance window deferred-op dispatcher.
 	TypeDispatchDeferred = tasks.DispatchDeferredType
+	// Migration 092: durable Postgres task outbox dispatcher. This is the
+	// retry bridge from committed DB task intents into Redis/Asynq.
+	TypeTaskOutboxDispatch = tasks.TaskOutboxDispatchType
 	// Migration 065 / sprint 17: in-browser kubectl shell reaper.
 	// 60s cadence — see internal/worker/tasks/kubectl_session_reap.go.
 	TypeKubectlSessionReap = tasks.KubectlSessionReapType
@@ -105,6 +113,10 @@ const (
 	TypeCrdMirrorPruneStale = tasks.CrdMirrorPruneStaleType
 	// T6.069: gauge populator for astronomer_crd_mirror_rows.
 	TypeCrdMirrorGaugePopulate = tasks.CrdMirrorGaugePopulateType
+	// CRD ownership drift check. Compares CRD-owned Postgres rows against
+	// their stored Kubernetes external refs and surfaces missing CRs via
+	// cluster_conditions.
+	TypeCRDOwnershipDriftCheck = tasks.CRDOwnershipDriftCheckType
 	// Migration 070: apiserver allow-list reconciler. Three task types
 	// share one querier + registry wiring; see
 	// tasks.ConfigureApiserverAllowlistReconcile.
@@ -224,6 +236,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
 	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
 	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
+	w.mux.HandleFunc(TypeArgoCDAutoRegisterCluster, instrumentTask(TypeArgoCDAutoRegisterCluster, tasks.HandleArgoCDAutoRegisterCluster))
 	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))
 	w.mux.HandleFunc(TypeTelemetrySend, instrumentTask(TypeTelemetrySend, tasks.HandleTelemetrySend))
 	w.mux.HandleFunc(TypeEmailDispatch, instrumentTask(TypeEmailDispatch, tasks.HandleEmailDispatch))
@@ -239,10 +252,12 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
+	w.mux.HandleFunc(TypePlaintextCredentialMigration, instrumentTask(TypePlaintextCredentialMigration, tasks.HandlePlaintextCredentialMigration))
 	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
 	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
 	w.mux.HandleFunc(TypeFleetOrchestrate, instrumentTask(TypeFleetOrchestrate, tasks.HandleFleetOrchestrate))
 	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
+	w.mux.HandleFunc(TypeTaskOutboxDispatch, instrumentTask(TypeTaskOutboxDispatch, tasks.HandleTaskOutboxDispatch))
 	// Migration 060: GitOps cluster registration sync.
 	w.mux.HandleFunc(tasks.GitOpsSyncType, instrumentTask(tasks.GitOpsSyncType, tasks.HandleGitOpsSync))
 	w.mux.HandleFunc(TypeKubectlSessionReap, instrumentTask(TypeKubectlSessionReap, tasks.HandleKubectlSessionReap))
@@ -251,6 +266,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeNetworkPolicyDriftCheck, instrumentTask(TypeNetworkPolicyDriftCheck, tasks.HandleNetworkPolicyDriftCheck))
 	w.mux.HandleFunc(TypeCrdMirrorPruneStale, instrumentTask(TypeCrdMirrorPruneStale, tasks.HandleCrdMirrorPruneStale))
 	w.mux.HandleFunc(TypeCrdMirrorGaugePopulate, instrumentTask(TypeCrdMirrorGaugePopulate, tasks.HandleCrdMirrorGaugePopulate))
+	w.mux.HandleFunc(TypeCRDOwnershipDriftCheck, instrumentTask(TypeCRDOwnershipDriftCheck, tasks.HandleCRDOwnershipDriftCheck))
 	// Migration 070: apiserver allow-list reconciler.
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcile, instrumentTask(TypeApiserverAllowlistReconcile, tasks.HandleApiserverAllowlistReconcile))
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcileAll, instrumentTask(TypeApiserverAllowlistReconcileAll, tasks.HandleApiserverAllowlistReconcileAll))

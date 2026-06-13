@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func TestRespondJSON(t *testing.T) {
@@ -60,6 +62,32 @@ func TestRespondError(t *testing.T) {
 	}
 	if errObj["message"] != "field is required" {
 		t.Fatalf("expected message='field is required', got %v", errObj["message"])
+	}
+}
+
+func TestRespondRequestErrorIncludesRequestID(t *testing.T) {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Request-ID", "req-123")
+
+	handler := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		RespondRequestError(w, r, http.StatusForbidden, "permission_denied", "not allowed")
+	}))
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", w.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	errObj, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'error' wrapper object, got %#v", body)
+	}
+	if errObj["request_id"] != "req-123" {
+		t.Fatalf("expected request_id=req-123, got %v", errObj["request_id"])
 	}
 }
 

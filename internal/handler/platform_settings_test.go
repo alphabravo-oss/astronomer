@@ -358,6 +358,47 @@ func TestSettings_PublicBannerStripsTelemetry(t *testing.T) {
 	}
 }
 
+func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: false})
+	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: []byte(`false`)}
+	q.rows["feature.argocd"] = sqlc.PlatformSetting{Key: "feature.argocd", Value: []byte(`true`)}
+	q.rows["telemetry.endpoint"] = sqlc.PlatformSetting{Key: "telemetry.endpoint", Value: []byte(`"https://telemetry.example"`)}
+	q.rows["branding.product_name"] = sqlc.PlatformSetting{Key: "branding.product_name", Value: []byte(`"Megacorp"`)}
+	h := NewPlatformSettingsHandler(q)
+
+	req := authedRequest(http.MethodGet, "/api/v1/settings/features/", callerID, nil)
+	w := httptest.NewRecorder()
+	h.Features(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	var flags map[string]bool
+	if err := json.Unmarshal(envelope["data"], &flags); err != nil {
+		t.Fatalf("decode feature flags: %v", err)
+	}
+	if flags["feature.catalog"] {
+		t.Fatalf("feature.catalog = true, want false")
+	}
+	if !flags["feature.argocd"] {
+		t.Fatalf("feature.argocd = false, want true")
+	}
+	if !flags["feature.projects"] {
+		t.Fatalf("feature.projects default = false, want true")
+	}
+	if _, ok := flags["telemetry.endpoint"]; ok {
+		t.Fatalf("features leaked telemetry row: %+v", flags)
+	}
+	if _, ok := flags["branding.product_name"]; ok {
+		t.Fatalf("features leaked branding row: %+v", flags)
+	}
+}
+
 // --- FeatureGate tests ---
 
 func TestFeatureGate_404sWhenDisabled(t *testing.T) {

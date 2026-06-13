@@ -41,7 +41,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // MaintenanceQuerier is the slice of *sqlc.Queries the handler needs.
@@ -98,8 +97,8 @@ type MaintenanceWindowResponse struct {
 // computed open/close timestamps for the operator dashboard widget.
 type ActiveMaintenanceWindowResponse struct {
 	MaintenanceWindowResponse
-	Active   bool      `json:"active"`
-	NextOpen time.Time `json:"next_open"`
+	Active    bool      `json:"active"`
+	NextOpen  time.Time `json:"next_open"`
 	NextClose time.Time `json:"next_close,omitempty"`
 }
 
@@ -143,7 +142,7 @@ func (h *MaintenanceHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListMaintenanceWindows(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]MaintenanceWindowResponse, 0, len(rows))
@@ -160,16 +159,16 @@ func (h *MaintenanceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid window ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid window ID")
 		return
 	}
 	row, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Window not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Window not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, windowToWire(row))
@@ -182,16 +181,16 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	var req MaintenanceWindowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	req = applyRequestDefaults(req)
 	if msg, ok := validateRequest(req); !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_request", msg)
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", msg)
 		return
 	}
 	if _, err := h.queries.GetMaintenanceWindowByName(r.Context(), req.Name); err == nil {
-		RespondError(w, http.StatusConflict, "name_taken", "A window with that name already exists")
+		RespondRequestError(w, r, http.StatusConflict, "name_taken", "A window with that name already exists")
 		return
 	}
 	sel, _ := json.Marshal(req.ClusterSelector)
@@ -220,7 +219,7 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:       currentUserUUID(r),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_failed", err.Error())
 		return
 	}
 	h.invalidate()
@@ -239,31 +238,31 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid window ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid window ID")
 		return
 	}
 	existing, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Window not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Window not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	var req MaintenanceWindowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	req = applyRequestDefaults(req)
 	if msg, ok := validateRequest(req); !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_request", msg)
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", msg)
 		return
 	}
 	if req.Name != existing.Name {
 		if other, err := h.queries.GetMaintenanceWindowByName(r.Context(), req.Name); err == nil && other.ID != id {
-			RespondError(w, http.StatusConflict, "name_taken", "A different window already uses that name")
+			RespondRequestError(w, r, http.StatusConflict, "name_taken", "A different window already uses that name")
 			return
 		}
 	}
@@ -293,7 +292,7 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Enabled:         enabled,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_failed", err.Error())
 		return
 	}
 	h.invalidate()
@@ -312,20 +311,20 @@ func (h *MaintenanceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid window ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid window ID")
 		return
 	}
 	existing, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Window not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Window not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	if err := h.queries.DeleteMaintenanceWindow(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_failed", err.Error())
 		return
 	}
 	h.invalidate()
@@ -342,7 +341,7 @@ func (h *MaintenanceHandler) ListActive(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := h.queries.ListMaintenanceWindows(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	now := time.Now().UTC()
@@ -391,12 +390,12 @@ func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	total, err := h.queries.CountDeferredOperations(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]DeferredOperationResponse, 0, len(rows))
@@ -413,20 +412,20 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid deferred-operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid deferred-operation ID")
 		return
 	}
 	row, err := h.queries.GetDeferredOperation(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Deferred operation not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Deferred operation not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	if row.Status != "pending" {
-		RespondError(w, http.StatusConflict, "not_cancellable",
+		RespondRequestError(w, r, http.StatusConflict, "not_cancellable",
 			"Only pending operations can be cancelled; this one is "+row.Status)
 		return
 	}
@@ -434,7 +433,7 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 		ID:        id,
 		LastError: "cancelled by operator",
 	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, "cancel_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "cancel_failed", err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.deferred_operation.cancelled", "deferred_operation", id.String(), row.OperationType, map[string]any{
@@ -446,31 +445,11 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 // gate enforces superuser-only access. Returns true if the request may
 // proceed; emits 401/403 otherwise. Same pattern as admin_queues.go.
 func (h *MaintenanceHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "store_unavailable", "Maintenance store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"Maintenance windows require superuser privileges")
-		return false
-	}
-	return true
+	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "Maintenance store not configured",
+		ForbiddenMessage:        "Maintenance windows require superuser privileges",
+	})
+	return ok
 }
 
 func (h *MaintenanceHandler) invalidate() {

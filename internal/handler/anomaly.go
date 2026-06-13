@@ -46,18 +46,18 @@ func NewAnomalyHandler(queries AnomalyBaselineQuerier) *AnomalyHandler {
 // default is all baselines, sorted by most-recently-updated.
 func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "unavailable", "anomaly baseline querier not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "unavailable", "anomaly baseline querier not configured")
 		return
 	}
 	if clusterIDRaw := r.URL.Query().Get("clusterId"); clusterIDRaw != "" {
 		clusterID, err := uuid.Parse(clusterIDRaw)
 		if err != nil {
-			RespondError(w, http.StatusBadRequest, "invalid_cluster", "Invalid clusterId")
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster", "Invalid clusterId")
 			return
 		}
 		rows, err := h.queries.ListAnomalyBaselinesByCluster(r.Context(), clusterID)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list anomaly baselines")
+			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list anomaly baselines")
 			return
 		}
 		items := make([]map[string]any, 0, len(rows))
@@ -74,7 +74,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list anomaly baselines")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list anomaly baselines")
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
@@ -87,17 +87,17 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/anomaly-baselines/{id}/.
 func (h *AnomalyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "unavailable", "anomaly baseline querier not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "unavailable", "anomaly baseline querier not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid baseline ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid baseline ID")
 		return
 	}
 	row, err := h.queries.GetAnomalyBaselineByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Anomaly baseline not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Anomaly baseline not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, anomalyBaselineResponse(row))

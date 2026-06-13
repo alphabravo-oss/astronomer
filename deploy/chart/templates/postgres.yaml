@@ -32,8 +32,16 @@ spec:
       labels:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "postgres") | nindent 8 }}
     spec:
+      {{- with .Values.postgres.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: postgres
+          {{- with .Values.postgres.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
           ports:
             - name: postgres

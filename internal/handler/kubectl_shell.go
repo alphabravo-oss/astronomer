@@ -85,7 +85,7 @@ type KubectlShellHandler struct {
 	Deps       kubectl.Deps
 	Log        *slog.Logger
 	// JWT is the manager used by HandleWS to authenticate the WebSocket
-	// upgrade request via a ?token= query param. Browsers cannot set
+	// upgrade request via ticket/query/header auth. Browsers cannot set
 	// Authorization headers on WS handshakes, so the SPA passes the JWT
 	// in the URL. Without this the route 401s — see the sibling
 	// /api/v1/ws/exec/ + /api/v1/ws/logs/ routes which solve the same
@@ -94,7 +94,8 @@ type KubectlShellHandler struct {
 	// TokenQueries lets AuthorizeStreamRequest verify api_token-style
 	// bearer tokens (astro_*) against the DB. Nil-safe: JWT-only mode
 	// works without it.
-	TokenQueries auth.TokenQuerier
+	TokenQueries  auth.TokenQuerier
+	StreamTickets *auth.StreamTicketStore
 	// Exec is the cluster-agent exec relay HandleWS bridges onto after
 	// upgrading the inbound WebSocket. When nil the WS endpoint 503s —
 	// we still register the route so the SPA gets a stable error rather
@@ -129,7 +130,7 @@ func (h *KubectlShellHandler) SetCrossPodWSForwarder(fn CrossPodWSForwarder) {
 }
 
 // SetStreamAuth wires the JWT manager + token querier used to
-// authenticate WS upgrade requests via ?token=. Called from server
+// authenticate WS upgrade requests via ?ticket= or Authorization header. Called from server
 // wiring after NewKubectlShellHandler so the constructor signature
 // doesn't have to grow.
 func (h *KubectlShellHandler) SetStreamAuth(jwt *auth.JWTManager, q auth.TokenQuerier) {
@@ -138,6 +139,13 @@ func (h *KubectlShellHandler) SetStreamAuth(jwt *auth.JWTManager, q auth.TokenQu
 	}
 	h.JWT = jwt
 	h.TokenQueries = q
+}
+
+func (h *KubectlShellHandler) SetStreamTickets(tickets *auth.StreamTicketStore) {
+	if h == nil {
+		return
+	}
+	h.StreamTickets = tickets
 }
 
 // SetExecProxy wires the relay used by HandleWS to bridge the inbound
@@ -195,25 +203,25 @@ func (h *KubectlShellHandler) effectiveVerbsFor(r *http.Request, userID string, 
 // Open handles POST /clusters/{cluster_id}/shell/sessions/.
 func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil || h.Deps.Requester == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
 	}
 	clusterID, ok := parseShellClusterID(r)
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
 		return
 	}
 	userID, ok := shellCallerUUID(r)
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	if _, err := h.Queries.GetClusterByID(r.Context(), clusterID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "cluster_not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, "cluster_not_found", "Cluster not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
@@ -227,13 +235,13 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 		UserAgent: r.UserAgent(),
 	})
 	if err != nil {
-		RespondError(w, http.StatusBadGateway, "shell_open_failed", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "shell_open_failed", err.Error())
 		return
 	}
 	recordAudit(r, h.Queries, "kubectl.session.opened", "cluster", clusterID.String(), "", map[string]any{
-		"session_id":    info.ID.String(),
-		"superuser":     verbs.Superuser,
-		"verbs":         verbs.Verbs(),
+		"session_id": info.ID.String(),
+		"superuser":  verbs.Superuser,
+		"verbs":      verbs.Verbs(),
 	})
 	RespondJSON(w, http.StatusCreated, info)
 }
@@ -241,17 +249,17 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 // List handles GET /clusters/{cluster_id}/shell/sessions/.
 func (h *KubectlShellHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
 	}
 	clusterID, ok := parseShellClusterID(r)
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
 		return
 	}
 	rows, err := h.Queries.ListActiveKubectlSessionsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]kubectl.SessionInfo, 0, len(rows))
@@ -265,7 +273,7 @@ func (h *KubectlShellHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /clusters/{cluster_id}/shell/sessions/{id}/.
 func (h *KubectlShellHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
 	}
 	row, ok := h.loadSessionForCluster(w, r)
@@ -279,7 +287,7 @@ func (h *KubectlShellHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Close handles POST /clusters/{cluster_id}/shell/sessions/{id}/close/.
 func (h *KubectlShellHandler) Close(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
 	}
 	row, ok := h.loadSessionForCluster(w, r)
@@ -287,11 +295,11 @@ func (h *KubectlShellHandler) Close(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := kubectl.Close(r.Context(), h.Deps, row.ID); err != nil {
-		RespondError(w, http.StatusBadGateway, "shell_close_failed", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "shell_close_failed", err.Error())
 		return
 	}
 	recordAudit(r, h.Queries, "kubectl.session.closed", "cluster", row.ClusterID.String(), "", map[string]any{
-		"session_id": row.ID.String(),
+		"session_id":       row.ID.String(),
 		"duration_seconds": int64(time.Since(row.StartedAt).Seconds()),
 	})
 	RespondJSON(w, http.StatusOK, map[string]string{"status": "closed"})
@@ -300,7 +308,7 @@ func (h *KubectlShellHandler) Close(w http.ResponseWriter, r *http.Request) {
 // Commands handles GET /clusters/{cluster_id}/shell/sessions/{id}/commands/.
 func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
 	}
 	row, ok := h.loadSessionForCluster(w, r)
@@ -324,7 +332,7 @@ func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
 		Offset:    int32(offset),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	total, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
@@ -346,7 +354,7 @@ func (h *KubectlShellHandler) AdminListAll(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := h.Queries.ListAllActiveKubectlSessions(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	out := make([]kubectl.SessionInfo, 0, len(rows))
@@ -366,23 +374,23 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 	idStr := chi.URLParam(r, "id")
 	sessionID, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
 		return
 	}
 	row, err := h.Queries.GetKubectlSessionByID(r.Context(), sessionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "session_not_found", "Session not found")
+			RespondRequestError(w, r, http.StatusNotFound, "session_not_found", "Session not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	rows, err := h.Queries.ListKubectlSessionCommands(r.Context(), sqlc.ListKubectlSessionCommandsParams{
 		SessionID: row.ID, Limit: 1000, Offset: 0,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	total, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
@@ -399,7 +407,7 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 
 // HandleWS handles GET /ws/clusters/{cluster_id}/shell/sessions/{id}/.
 //
-// Authenticates the upgrade request (token via header or ?token= since
+// Authenticates the upgrade request (ticket or token via query/header since
 // browser WS handshakes can't carry custom Authorization headers),
 // validates the session row belongs to this cluster + caller, then
 // upgrades the WebSocket on the original route and proxies frames
@@ -413,17 +421,16 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 // exec relay implementation; this path only adds the session lookup.
 func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return
 	}
 	// WS upgrade requests come from browsers that can't set Authorization
-	// headers, so the JWT arrives as ?token=. AuthorizeStreamRequest
-	// accepts either the header or the query string. Mirror the
-	// /ws/exec/ + /ws/logs/ pattern.
+	// headers, so the browser path is a short-lived ?ticket=.
 	if h.JWT != nil {
-		userID, ok := auth.AuthorizeStreamRequest(r, h.TokenQueries, h.JWT)
+		clusterID, _ := uuid.Parse(chi.URLParam(r, "cluster_id"))
+		userID, ok := auth.AuthorizeStreamRequestWithTickets(r, h.TokenQueries, h.JWT, h.StreamTickets, auth.StreamKindShell, clusterID)
 		if !ok {
-			RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+			RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 			return
 		}
 		// Inject the resolved user into the request context so
@@ -439,7 +446,7 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row.Status != "active" {
-		RespondError(w, http.StatusConflict, "session_not_active", "Session is not active")
+		RespondRequestError(w, r, http.StatusConflict, "session_not_active", "Session is not active")
 		return
 	}
 	// Stamp last_input_at — even just opening the WS counts as "engaged".
@@ -449,7 +456,7 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		// Boot ordering bug — the server wiring forgot to call
 		// SetExecProxy. Surface a clear 503 instead of silently 200ing
 		// a WS that goes nowhere.
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell exec proxy is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell exec proxy is not configured")
 		return
 	}
 
@@ -685,35 +692,35 @@ func (h *KubectlShellHandler) logger() *slog.Logger {
 func (h *KubectlShellHandler) loadSessionForCluster(w http.ResponseWriter, r *http.Request) (sqlc.KubectlSession, bool) {
 	clusterID, ok := parseShellClusterID(r)
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
 		return sqlc.KubectlSession{}, false
 	}
 	idStr := chi.URLParam(r, "id")
 	sessionID, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_session_id", "Invalid session id")
 		return sqlc.KubectlSession{}, false
 	}
 	row, err := h.Queries.GetKubectlSessionByID(r.Context(), sessionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "session_not_found", "Session not found")
+			RespondRequestError(w, r, http.StatusNotFound, "session_not_found", "Session not found")
 			return sqlc.KubectlSession{}, false
 		}
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return sqlc.KubectlSession{}, false
 	}
 	if row.ClusterID != clusterID {
-		RespondError(w, http.StatusNotFound, "session_not_found", "Session not found in this cluster")
+		RespondRequestError(w, r, http.StatusNotFound, "session_not_found", "Session not found in this cluster")
 		return sqlc.KubectlSession{}, false
 	}
 	callerID, ok := shellCallerUUID(r)
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return sqlc.KubectlSession{}, false
 	}
 	if row.UserID != callerID && !h.callerIsSuperuser(r, callerID) {
-		RespondError(w, http.StatusForbidden, "session_not_owned", "Session belongs to another operator")
+		RespondRequestError(w, r, http.StatusForbidden, "session_not_owned", "Session belongs to another operator")
 		return sqlc.KubectlSession{}, false
 	}
 	return row, true
@@ -733,20 +740,20 @@ func (h *KubectlShellHandler) callerIsSuperuser(r *http.Request, callerID uuid.U
 func (h *KubectlShellHandler) gateSuperuser(w http.ResponseWriter, r *http.Request) bool {
 	callerID, ok := shellCallerUUID(r)
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return false
 	}
 	if h.Queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "shell_unavailable", "Kubectl shell is not configured")
 		return false
 	}
 	user, err := h.Queries.GetUserByID(r.Context(), callerID)
 	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "Caller not found")
 		return false
 	}
 	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "Kubectl shell admin views require superuser privileges")
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "Kubectl shell admin views require superuser privileges")
 		return false
 	}
 	return true

@@ -103,17 +103,17 @@ type TokenQuerier interface {
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	queries     UserQuerier
-	tokens      TokenQuerier
-	rehasher    PasswordRehasher
-	roles       RoleBindingsQuerier
-	audit       AuthAuditWriter
-	lockout     LockoutQuerier
-	revocation  RevocationQuerier
-	jwt         *auth.JWTManager
-	log         *slog.Logger
-	lockoutDur  time.Duration
-	failThresh  int
+	queries    UserQuerier
+	tokens     TokenQuerier
+	rehasher   PasswordRehasher
+	roles      RoleBindingsQuerier
+	audit      AuthAuditWriter
+	lockout    LockoutQuerier
+	revocation RevocationQuerier
+	jwt        *auth.JWTManager
+	log        *slog.Logger
+	lockoutDur time.Duration
+	failThresh int
 
 	// totpGate is the optional 2FA enrollment lookup. When wired,
 	// Login switches to the challenge-token flow whenever the user
@@ -121,8 +121,8 @@ type AuthHandler struct {
 	// password-only path stands. Separate from totpRequireAll so
 	// the test fakes can attach the gate without flipping the
 	// global enforcement bit.
-	totpGate        TOTPEnrollmentGate
-	totpRequireAll  bool
+	totpGate       TOTPEnrollmentGate
+	totpRequireAll bool
 
 	// emails is the optional email-enqueue hook used by the
 	// lockout + token-created hot paths. Optional and best-effort:
@@ -371,6 +371,76 @@ type LoginResponse struct {
 	User    UserResponse `json:"user"`
 }
 
+const browserRefreshCookieMaxAge = int((7 * 24 * time.Hour) / time.Second)
+
+func setBrowserSessionCookies(w http.ResponseWriter, r *http.Request, accessToken, refreshToken string) {
+	secure := requestIsHTTPS(r)
+	if csrfToken, err := newBrowserCSRFToken(); err == nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     middleware.CSRFCookieName,
+			Value:    csrfToken,
+			Path:     "/",
+			HttpOnly: false,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+	if accessToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     middleware.SessionCookieName,
+			Value:    accessToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+	if refreshToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     middleware.RefreshCookieName,
+			Value:    refreshToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   browserRefreshCookieMaxAge,
+		})
+	}
+}
+
+func clearBrowserSessionCookies(w http.ResponseWriter, r *http.Request) {
+	secure := requestIsHTTPS(r)
+	for _, name := range []string{middleware.SessionCookieName, middleware.RefreshCookieName, middleware.CSRFCookieName} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   -1,
+		})
+	}
+}
+
+func requestIsHTTPS(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func newBrowserCSRFToken() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
+}
+
 type refreshRequest struct {
 	Refresh string `json:"refresh"`
 }
@@ -402,17 +472,17 @@ func userToResponse(user sqlc.User) UserResponse {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
 	if req.Email == "" && req.Username == "" {
-		RespondError(w, http.StatusBadRequest, "missing_credentials", "Email or username is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "missing_credentials", "Email or username is required")
 		return
 	}
 
 	if req.Password == "" {
-		RespondError(w, http.StatusBadRequest, "missing_credentials", "Password is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "missing_credentials", "Password is required")
 		return
 	}
 
@@ -447,7 +517,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.login_failed", "user", "", identifier, map[string]any{
 			"reason": "user_not_found",
 		})
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		return
 	}
 
@@ -458,14 +528,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if user.LockedUntil.Valid && user.LockedUntil.Time.After(time.Now()) {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 			"auth.login_locked", "user", user.ID.String(), user.Username, map[string]any{
-				"reason":       "account_locked",
-				"locked_until": user.LockedUntil.Time.UTC().Format(time.RFC3339),
+				"reason":        "account_locked",
+				"locked_until":  user.LockedUntil.Time.UTC().Format(time.RFC3339),
 				"locked_reason": user.LockedReason,
 			})
 		// 423 Locked is the RFC 4918 status that fits best; we keep
 		// the JSON error envelope shape unchanged so the frontend
 		// can surface "account_locked" without parsing the status.
-		RespondError(w, http.StatusLocked, "account_locked", "Account is temporarily locked. Try again later or contact an administrator.")
+		RespondRequestError(w, r, http.StatusLocked, "account_locked", "Account is temporarily locked. Try again later or contact an administrator.")
 		return
 	}
 
@@ -477,12 +547,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			h.log.Warn("password verification error", "user_id", user.ID.String(), "error", verifyErr)
 		}
 		h.handleFailedAttempt(ctx, r, user, "verify_error")
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		return
 	}
 	if !ok {
 		h.handleFailedAttempt(ctx, r, user, "bad_password")
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		return
 	}
 
@@ -490,7 +560,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.login_failed", "user", user.ID.String(), user.Username, map[string]any{
 			"reason": "account_disabled",
 		})
-		RespondError(w, http.StatusForbidden, "account_disabled", "Account is disabled")
+		RespondRequestError(w, r, http.StatusForbidden, "account_disabled", "Account is disabled")
 		return
 	}
 
@@ -526,7 +596,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if h.totpGate != nil && h.totpGate.IsEnrolled(ctx, user.ID) {
 		challenge, gerr := h.jwt.GeneratePurposeToken(user.ID, auth.PurposeTOTPChallenge, auth.TOTPChallengeTTL)
 		if gerr != nil {
-			RespondError(w, http.StatusInternalServerError, "token_error", "Failed to mint TOTP challenge")
+			RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to mint TOTP challenge")
 			return
 		}
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
@@ -546,7 +616,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if h.totpRequireAll && h.totpGate != nil && !h.totpGate.IsEnrolled(ctx, user.ID) {
 		enrollChallenge, gerr := h.jwt.GeneratePurposeToken(user.ID, auth.PurposeTOTPEnrollOnly, auth.TOTPChallengeTTL)
 		if gerr != nil {
-			RespondError(w, http.StatusInternalServerError, "token_error", "Failed to mint enrollment challenge")
+			RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to mint enrollment challenge")
 			return
 		}
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
@@ -560,7 +630,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "token_error", "Failed to generate token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to generate token")
 		return
 	}
 
@@ -579,6 +649,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
+	setBrowserSessionCookies(w, r, accessToken, refreshToken)
 	RespondJSON(w, http.StatusOK, resp)
 }
 
@@ -608,9 +679,9 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 	// downstream consumers don't have to special-case the new
 	// columns.
 	auditDetail := map[string]any{
-		"reason":               reason,
-		"failed_login_count":   int(user.FailedLoginCount) + 1, // optimistic — DB roundtrip below
-		"lockout_threshold":    threshold,
+		"reason":             reason,
+		"failed_login_count": int(user.FailedLoginCount) + 1, // optimistic — DB roundtrip below
+		"lockout_threshold":  threshold,
 	}
 
 	if h.lockout != nil {
@@ -669,8 +740,23 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 // Refresh handles POST /api/v1/auth/refresh/.
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+			return
+		}
+	}
+	if strings.TrimSpace(req.Refresh) == "" {
+		if c, err := r.Cookie(middleware.RefreshCookieName); err == nil {
+			if !middleware.ValidateCSRF(r) {
+				RespondRequestError(w, r, http.StatusUnauthorized, "csrf_required", "CSRF token is required")
+				return
+			}
+			req.Refresh = c.Value
+		}
+	}
+	if strings.TrimSpace(req.Refresh) == "" {
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
 		return
 	}
 
@@ -679,14 +765,14 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
 			"reason": "invalid_token",
 		})
-		RespondError(w, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
 		return
 	}
 	if claims.TokenType != auth.RefreshToken {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.refresh_failed", "user", claims.UserID.String(), "", map[string]any{
 			"reason": "wrong_token_type",
 		})
-		RespondError(w, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
 		return
 	}
 
@@ -695,18 +781,19 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.refresh_failed", "user", claims.UserID.String(), "", map[string]any{
 			"reason": "user_not_active",
 		})
-		RespondError(w, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_token", "Invalid refresh token")
 		return
 	}
 
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "token_error", "Failed to generate token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to generate token")
 		return
 	}
 
 	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.refresh", "user", user.ID.String(), user.Username, nil)
 
+	setBrowserSessionCookies(w, r, accessToken, refreshToken)
 	RespondJSON(w, http.StatusOK, map[string]string{
 		"token":   accessToken,
 		"refresh": refreshToken,
@@ -803,6 +890,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if redirectURL != "" {
 		resp["redirect_url"] = redirectURL
 	}
+	clearBrowserSessionCookies(w, r)
 	RespondJSONUnwrapped(w, http.StatusOK, resp)
 }
 
@@ -885,15 +973,15 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, auditD
 //
 //   - id_token_hint           — the upstream id_token (required)
 //   - post_logout_redirect_uri — where the IdP bounces back to after
-//                                tearing down its session (optional;
-//                                omitted when empty so a strict IdP
-//                                that doesn't have it registered
-//                                doesn't 400)
+//     tearing down its session (optional;
+//     omitted when empty so a strict IdP
+//     that doesn't have it registered
+//     doesn't 400)
 //   - state                   — opaque round-tripped value (best-
-//                                effort CSRF marker; the landing
-//                                handler doesn't validate it because
-//                                /logout-done has no privileged
-//                                action to gate)
+//     effort CSRF marker; the landing
+//     handler doesn't validate it because
+//     /logout-done has no privileged
+//     action to gate)
 func buildEndSessionURL(endpoint, idToken, postLogoutRedirectURI string) (string, error) {
 	if endpoint == "" {
 		return "", errEmptyEndSessionEndpoint
@@ -975,6 +1063,9 @@ func (h *AuthHandler) LogoutDone(w http.ResponseWriter, r *http.Request) {
 func bearerTokenFromRequest(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if header == "" {
+		if c, err := r.Cookie(middleware.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+			return c.Value
+		}
 		return ""
 	}
 	parts := strings.SplitN(header, " ", 2)
@@ -998,52 +1089,52 @@ type ChangePasswordRequest struct {
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
 	var req ChangePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.CurrentPassword == "" || req.NewPassword == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "current_password and new_password are required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "current_password and new_password are required")
 		return
 	}
 
 	dbUser, err := h.queries.GetUserByID(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
 		return
 	}
 
 	verified, _, verifyErr := auth.VerifyPassword(dbUser.Password, req.CurrentPassword)
 	if verifyErr != nil || !verified {
-		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "Current password is incorrect")
+		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Current password is incorrect")
 		return
 	}
 
 	newHash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "hash_error", "Failed to hash new password")
+		RespondRequestError(w, r, http.StatusInternalServerError, "hash_error", "Failed to hash new password")
 		return
 	}
 
 	if h.rehasher == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "Password updates are not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Password updates are not configured")
 		return
 	}
 	if err := h.rehasher.UpdateUserPasswordHash(r.Context(), sqlc.UpdateUserPasswordHashParams{
 		ID:       userID,
 		Password: newHash,
 	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update password")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update password")
 		return
 	}
 
@@ -1070,19 +1161,19 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) CurrentUser(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
 	dbUser, err := h.queries.GetUserByID(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
 		return
 	}
 
@@ -1228,35 +1319,35 @@ func generateAPIToken() (plaintext, hash, prefix string, err error) {
 func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 
 	if h.tokens == nil {
-		RespondError(w, http.StatusInternalServerError, "not_configured", "Token management is not configured")
+		RespondRequestError(w, r, http.StatusInternalServerError, "not_configured", "Token management is not configured")
 		return
 	}
 
 	var req CreateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Token name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Token name is required")
 		return
 	}
 
 	plaintext, tokenHash, prefix, err := generateAPIToken()
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "token_generation_error", "Failed to generate token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "token_generation_error", "Failed to generate token")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
@@ -1268,7 +1359,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 				WriteQuotaExceeded(w, qe)
 				return
 			}
-			RespondError(w, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate token quota")
+			RespondRequestError(w, r, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate token quota")
 			return
 		}
 	}
@@ -1295,7 +1386,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	allowedCIDRs := strings.TrimSpace(req.AllowedCIDRs)
 	if allowedCIDRs != "" {
 		if _, perr := auth.ParseAllowedCIDRs(allowedCIDRs); perr != nil {
-			RespondError(w, http.StatusBadRequest, "validation_error",
+			RespondRequestError(w, r, http.StatusBadRequest, "validation_error",
 				"allowed_cidrs must be a comma-separated list of valid CIDR ranges or IP addresses")
 			return
 		}
@@ -1311,7 +1402,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		AllowedCidrs: allowedCIDRs,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create token")
 		return
 	}
 
@@ -1376,18 +1467,18 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 
 	if h.tokens == nil {
-		RespondError(w, http.StatusInternalServerError, "not_configured", "Token management is not configured")
+		RespondRequestError(w, r, http.StatusInternalServerError, "not_configured", "Token management is not configured")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
@@ -1400,13 +1491,13 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list tokens")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list tokens")
 		return
 	}
 
 	total, err := h.tokens.CountTokensByUser(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count tokens")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count tokens")
 		return
 	}
 
@@ -1444,42 +1535,42 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 
 	if h.tokens == nil {
-		RespondError(w, http.StatusInternalServerError, "not_configured", "Token management is not configured")
+		RespondRequestError(w, r, http.StatusInternalServerError, "not_configured", "Token management is not configured")
 		return
 	}
 
 	tokenIDStr := chi.URLParam(r, "id")
 	tokenID, err := uuid.Parse(tokenIDStr)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid token ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid token ID")
 		return
 	}
 
 	// Verify the token belongs to the authenticated user.
 	token, err := h.tokens.GetAPITokenByID(r.Context(), tokenID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Token not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Token not found")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 
 	if token.UserID != userID {
-		RespondError(w, http.StatusNotFound, "not_found", "Token not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Token not found")
 		return
 	}
 
 	if err := h.tokens.RevokeAPIToken(r.Context(), tokenID); err != nil {
-		RespondError(w, http.StatusInternalServerError, "revoke_error", "Failed to revoke token")
+		RespondRequestError(w, r, http.StatusInternalServerError, "revoke_error", "Failed to revoke token")
 		return
 	}
 

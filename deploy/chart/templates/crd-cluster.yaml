@@ -79,6 +79,47 @@ spec:
                   type: array
                   items:
                     type: string
+                argocd:
+                  type: object
+                  properties:
+                    autoAdopt:
+                      type: boolean
+                    instanceRef:
+                      type: string
+                baseline:
+                  type: object
+                  properties:
+                    profile:
+                      type: string
+                      enum:
+                        - default
+                        - minimal
+                        - none
+                agent:
+                  type: object
+                  properties:
+                    privilegeProfile:
+                      type: string
+                      enum:
+                        - viewer
+                        - operator
+                        - admin
+                adoptionPolicy:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - manual
+                        - auto
+                    allowedManagementModes:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - argocd
+                          - helm
+                          - manual
             status:
               type: object
               properties:
@@ -95,11 +136,71 @@ spec:
                   type: array
                   items:
                     type: string
+                argocd:
+                  type: object
+                  properties:
+                    phase:
+                      type: string
+                      enum:
+                        - pending
+                        - registering
+                        - registered
+                        - failed
+                        - disabled
+                    clusterSecretName:
+                      type: string
+                    conditions:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - type
+                          - status
+                        properties:
+                          type:
+                            type: string
+                          status:
+                            type: string
+                            enum:
+                              - "True"
+                              - "False"
+                              - Unknown
+                          reason:
+                            type: string
+                          message:
+                            type: string
+                          observedGeneration:
+                            type: integer
+                            format: int64
+                          lastTransitionTime:
+                            type: string
+                            format: date-time
                 conditions:
                   type: array
                   items:
                     type: object
-                    x-kubernetes-preserve-unknown-fields: true
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
       additionalPrinterColumns:
         - name: Environment
           type: string
@@ -107,6 +208,12 @@ spec:
         - name: Phase
           type: string
           jsonPath: .status.phase
+        - name: ArgoCD
+          type: string
+          jsonPath: .status.argocd.phase
+        - name: ClusterID
+          type: string
+          jsonPath: .status.clusterId
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp

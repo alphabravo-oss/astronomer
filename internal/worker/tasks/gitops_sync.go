@@ -133,10 +133,11 @@ type GitOpsEnqueuer interface {
 // GitOpsDeps wires the worker. Set once at server startup via
 // ConfigureGitOps; tests can supply a fake. Log is optional.
 type GitOpsDeps struct {
-	Queries   GitOpsQuerier
-	Enqueuer  GitOpsEnqueuer
-	Log       *slog.Logger
-	CloneRoot string // overrides GitOpsCloneRoot when non-empty
+	Queries    GitOpsQuerier
+	Enqueuer   GitOpsEnqueuer
+	TaskOutbox TaskOutboxWriter
+	Log        *slog.Logger
+	CloneRoot  string // overrides GitOpsCloneRoot when non-empty
 	// Now is the clock function. Defaults to time.Now. Tests override
 	// to drive the tombstone-grace boundary without sleeping.
 	Now func() time.Time
@@ -405,12 +406,22 @@ func enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName s
 	if err != nil {
 		return fmt.Errorf("create cluster_decommission: %w", err)
 	}
-	if gitopsDeps.Enqueuer == nil {
-		return nil
-	}
 	task, err := NewClusterDecommissionTask(decom.ID)
 	if err != nil {
 		return fmt.Errorf("build task: %w", err)
+	}
+	if gitopsDeps.TaskOutbox != nil {
+		if _, err := EnqueueTaskOutbox(ctx, gitopsDeps.TaskOutbox, task, TaskOutboxOptions{
+			DedupeKey:           fmt.Sprintf("cluster_decommission:%s", decom.ID.String()),
+			QueueName:           "default",
+			MaxRetry:            3,
+			MaxDeliveryAttempts: 20,
+		}); err == nil {
+			return nil
+		}
+	}
+	if gitopsDeps.Enqueuer == nil {
+		return nil
 	}
 	if _, err := gitopsDeps.Enqueuer.Enqueue(task); err != nil {
 		return fmt.Errorf("enqueue decommission: %w", err)

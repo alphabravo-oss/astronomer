@@ -132,6 +132,13 @@ Disable the bundled Postgres StatefulSet and provide either a literal DSN or a
 secret-backed DSN. The chart no longer supports the old `postgres.enabled`
 alias; use `postgres.bundled.enabled`.
 
+Production installs must use an external managed Postgres service or an HA
+Postgres operator with automated failover. The bundled StatefulSet is intended
+for development, CI, and single-node smoke tests only. Production DSNs must use
+TLS with `sslmode=require`, `sslmode=verify-ca`, or `sslmode=verify-full`; the
+chart's production preflight checks both inline DSNs and secret-backed DSNs,
+and the server also rejects non-TLS external Postgres in production.
+
 ```yaml
 postgres:
   bundled:
@@ -163,6 +170,26 @@ type: Opaque
 stringData:
   DATABASE_URL: postgres://astronomer:secret@my-rds.cluster-xyz.us-east-1.rds.amazonaws.com:5432/astronomer?sslmode=require
 ```
+
+### Production Postgres Contract
+
+Postgres is Astronomer's durable control-plane store. Kubernetes/etcd is the
+reconciliation substrate, not the product database. For production:
+
+| Requirement | Expected posture |
+|-------------|------------------|
+| Availability | Managed Postgres or HA Postgres with automated failover. |
+| Transport security | TLS required; DSN uses `sslmode=require`, `verify-ca`, or `verify-full`. |
+| Pool sizing | Tune `postgres.pool` for server + worker replica count and managed-cluster load. Defaults are conservative; 50+ managed clusters should raise `maxConns`. |
+| Backup | Enable `managementBackup` for logical S3 dumps and retain at least 30 daily, 12 weekly, and 6 monthly backups. |
+| PITR | Use provider WAL/PITR for tighter RPO. Logical dumps are the cold-backup fallback, not a WAL substitute. |
+| Restore proof | Enable `managementRestoreDrill` or run the drill manually on a schedule. A backup that is never restored is not considered valid. |
+| Runbook | Follow `docs/management-plane-dr-runbook.md`, including the encryption-key preservation step. |
+
+The declarative knobs under `postgres.productionRequirements` in
+`values.yaml` document this contract for policy tooling. Enforcement is split
+between Helm preflight, server startup validation, backup CronJobs, and the
+restore drill.
 
 ## External Redis
 

@@ -25,7 +25,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // AdminDrillQuerier is the slice of sqlc.Queries the handler needs.
@@ -70,9 +69,9 @@ type BackupDrillResult struct {
 // drill; the dashboard banner shows red when it exceeds the Prometheus
 // staleness threshold (14d). NULL when no successful drill has ever run.
 type BackupDrillLatestResponse struct {
-	Latest             *BackupDrillResult `json:"latest"`
-	LatestSuccess      *BackupDrillResult `json:"latest_success"`
-	LatestSuccessAgeSeconds *float64       `json:"latest_success_age_seconds"`
+	Latest                  *BackupDrillResult `json:"latest"`
+	LatestSuccess           *BackupDrillResult `json:"latest_success"`
+	LatestSuccessAgeSeconds *float64           `json:"latest_success_age_seconds"`
 }
 
 // GetLatest handles GET /api/v1/admin/backup-drill/.
@@ -93,7 +92,7 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		// don't 500. The dashboard will show "never run" and the
 		// staleness alert will fire on the metric side.
 	default:
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
@@ -107,7 +106,7 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pgx.ErrNoRows):
 		// No successful drill yet.
 	default:
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
@@ -137,13 +136,13 @@ func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) 
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
 	total, err := h.queries.CountBackupDrillResults(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 
@@ -180,28 +179,10 @@ func toWireResult(row sqlc.BackupDrillResult) BackupDrillResult {
 // Mirrors the pattern in admin_queues.go so behaviour is identical
 // (401 unauth → 403 not-superuser → audit row on success).
 func (h *AdminDrillHandler) gate(w http.ResponseWriter, r *http.Request) bool {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "store_unavailable", "Admin store not configured")
-		return false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"Backup drill view requires superuser privileges")
+	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "Admin store not configured",
+		ForbiddenMessage:        "Backup drill view requires superuser privileges",
+	}); !ok {
 		return false
 	}
 	recordAudit(r, h.queries, "admin.backup_drill.viewed", "platform", "", "backup_drill", map[string]any{

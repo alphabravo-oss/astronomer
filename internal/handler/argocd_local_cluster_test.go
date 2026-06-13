@@ -15,8 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	k8stesting "k8s.io/client-go/testing"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
@@ -29,6 +29,7 @@ type argocdManagedClusterQueryStub struct {
 
 	createCalls []sqlc.CreateArgoCDManagedClusterParams
 	deleteCalls []sqlc.DeleteArgoCDManagedClusterParams
+	updateCalls []sqlc.UpdateArgoCDManagedClusterLabelsParams
 }
 
 func (q *argocdManagedClusterQueryStub) GetArgoCDInstanceByID(context.Context, uuid.UUID) (sqlc.ArgocdInstance, error) {
@@ -52,8 +53,12 @@ func (q *argocdManagedClusterQueryStub) UpdateArgoCDInstance(context.Context, sq
 func (q *argocdManagedClusterQueryStub) UpdateArgoCDInstanceHealth(context.Context, sqlc.UpdateArgoCDInstanceHealthParams) error {
 	return nil
 }
-func (q *argocdManagedClusterQueryStub) DeleteArgoCDInstance(context.Context, uuid.UUID) error { return nil }
-func (q *argocdManagedClusterQueryStub) CountArgoCDInstances(context.Context) (int64, error)   { return 0, nil }
+func (q *argocdManagedClusterQueryStub) DeleteArgoCDInstance(context.Context, uuid.UUID) error {
+	return nil
+}
+func (q *argocdManagedClusterQueryStub) CountArgoCDInstances(context.Context) (int64, error) {
+	return 0, nil
+}
 func (q *argocdManagedClusterQueryStub) ListArgoCDApplications(context.Context, sqlc.ListArgoCDApplicationsParams) ([]sqlc.ArgocdApplication, error) {
 	return nil, nil
 }
@@ -140,7 +145,9 @@ func (q *argocdManagedClusterQueryStub) DeleteArgoCDManagedCluster(_ context.Con
 	q.deleteCalls = append(q.deleteCalls, arg)
 	return nil
 }
-func (q *argocdManagedClusterQueryStub) UpdateArgoCDManagedClusterLabels(context.Context, sqlc.UpdateArgoCDManagedClusterLabelsParams) (sqlc.ArgocdManagedCluster, error) {
+func (q *argocdManagedClusterQueryStub) UpdateArgoCDManagedClusterLabels(_ context.Context, arg sqlc.UpdateArgoCDManagedClusterLabelsParams) (sqlc.ArgocdManagedCluster, error) {
+	q.updateCalls = append(q.updateCalls, arg)
+	q.managed.Labels = arg.Labels
 	return q.managed, nil
 }
 
@@ -151,8 +158,8 @@ func TestRegisterManagedClusterLocalAutoToken(t *testing.T) {
 	secretName := "cluster-10.43.0.1-1704193794"
 	queries := &argocdManagedClusterQueryStub{
 		instance: sqlc.ArgocdInstance{ID: instanceID, ApiUrl: "http://argocd.example.test", AuthTokenEncrypted: "upstream-token"},
-		cluster: sqlc.Cluster{ID: clusterID, Name: "local", ApiServerUrl: clusterServer, CaCertificate: "ca-bytes", Environment: "production", IsLocal: true},
-		managed: sqlc.ArgocdManagedCluster{ArgocdInstanceID: instanceID, ClusterID: clusterID},
+		cluster:  sqlc.Cluster{ID: clusterID, Name: "local", ApiServerUrl: clusterServer, CaCertificate: "ca-bytes", Environment: "production", IsLocal: true},
+		managed:  sqlc.ArgocdManagedCluster{ArgocdInstanceID: instanceID, ClusterID: clusterID},
 	}
 
 	var seen struct {
@@ -243,8 +250,8 @@ func TestRegisterManagedClusterRemoteDefaultsToTunnelProxyURL(t *testing.T) {
 	expectedServer := "http://astronomer-server.astronomer.svc.cluster.local:8000/api/v1/clusters/" + clusterID.String() + "/k8s"
 	queries := &argocdManagedClusterQueryStub{
 		instance: sqlc.ArgocdInstance{ID: instanceID, ApiUrl: "http://argocd.example.test", AuthTokenEncrypted: "upstream-token"},
-		cluster: sqlc.Cluster{ID: clusterID, Name: "dev", CaCertificate: "ca-bytes", Environment: "dev", IsLocal: false},
-		managed: sqlc.ArgocdManagedCluster{ArgocdInstanceID: instanceID, ClusterID: clusterID},
+		cluster:  sqlc.Cluster{ID: clusterID, Name: "dev", CaCertificate: "ca-bytes", Environment: "dev", IsLocal: false},
+		managed:  sqlc.ArgocdManagedCluster{ArgocdInstanceID: instanceID, ClusterID: clusterID},
 	}
 
 	var seen struct {
@@ -303,6 +310,97 @@ func TestRegisterManagedClusterRemoteDefaultsToTunnelProxyURL(t *testing.T) {
 	}
 	if seen.BearerToken != "remote-token" {
 		t.Fatalf("bearer token = %q", seen.BearerToken)
+	}
+}
+
+func TestRefreshManagedClusterLabelsRestampsSecretAndDB(t *testing.T) {
+	instanceID := uuid.New()
+	clusterID := uuid.New()
+	server := "https://k8s.example.test:6443"
+	secretName := "cluster-k8s.example.test"
+	queries := &argocdManagedClusterQueryStub{
+		instance: sqlc.ArgocdInstance{ID: instanceID, ApiUrl: "http://argocd.example.test", AuthTokenEncrypted: "upstream-token"},
+		cluster: sqlc.Cluster{
+			ID:          clusterID,
+			Name:        "prod-1",
+			Environment: "production",
+			Labels:      json.RawMessage(`{"tier":"prod","Team Name":"platform"}`),
+		},
+		managed: sqlc.ArgocdManagedCluster{
+			ID:                uuid.New(),
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: secretName,
+			ServerUrl:         server,
+			Labels:            []byte(`{"astronomer.io/label-tier":"old"}`),
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
+		},
+	}
+	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: argocdNamespace,
+			Labels: map[string]string{
+				argocdClusterSecretTypeLabelKey: argocdClusterSecretTypeLabelValue,
+				"owner":                         "platform",
+				"astronomer.io/cluster-name":    "stale-name",
+				"astronomer.io/label-tier":      "old",
+				"astronomer.io/label-obsolete":  "remove-me",
+			},
+		},
+		Data: map[string][]byte{"server": []byte(server)},
+	})
+	h := NewArgoCDHandler(queries)
+	h.SetKubernetesClient(k8s)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/argocd/instances/"+instanceID.String()+"/clusters/"+clusterID.String()+"/refresh-labels/", nil)
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", instanceID.String())
+	routeCtx.URLParams.Add("cluster_id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	rr := httptest.NewRecorder()
+
+	h.RefreshManagedClusterLabels(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	secret, err := k8s.CoreV1().Secrets(argocdNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get patched secret: %v", err)
+	}
+	want := map[string]string{
+		"owner":                         "platform",
+		argocdClusterSecretTypeLabelKey: argocdClusterSecretTypeLabelValue,
+		"astronomer.io/managed-by":      "astronomer",
+		"astronomer.io/cluster-id":      clusterID.String(),
+		"astronomer.io/cluster-name":    "prod-1",
+		"astronomer.io/is-local":        "false",
+		"astronomer.io/environment":     "production",
+		"astronomer.io/label-tier":      "prod",
+		"astronomer.io/label-team-name": "platform",
+	}
+	for k, v := range want {
+		if got := secret.Labels[k]; got != v {
+			t.Errorf("secret labels[%q] = %q, want %q (full: %v)", k, got, v, secret.Labels)
+		}
+	}
+	if _, exists := secret.Labels["astronomer.io/label-obsolete"]; exists {
+		t.Errorf("stale Astronomer label was not removed: %v", secret.Labels)
+	}
+	if len(queries.updateCalls) != 1 {
+		t.Fatalf("want 1 DB label update, got %d", len(queries.updateCalls))
+	}
+	var dbLabels map[string]string
+	if err := json.Unmarshal(queries.updateCalls[0].Labels, &dbLabels); err != nil {
+		t.Fatalf("unmarshal updated labels: %v", err)
+	}
+	if got := dbLabels["astronomer.io/label-tier"]; got != "prod" {
+		t.Fatalf("db label tier = %q, want prod (full: %v)", got, dbLabels)
+	}
+	if _, exists := dbLabels["owner"]; exists {
+		t.Fatalf("non-Astronomer Secret label leaked into DB labels: %v", dbLabels)
 	}
 }
 

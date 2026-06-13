@@ -89,10 +89,10 @@ type SMTPHandler struct {
 	// provider is the cache-invalidation hook into the Sender's
 	// SettingsProvider. Optional — when nil, settings changes pick
 	// up on the next TTL expiry rather than immediately.
-	provider     *email.SQLSettingsProvider
+	provider      *email.SQLSettingsProvider
 	newTestSender func(cfg email.Settings) SMTPTestSender
-	log          *slog.Logger
-	audit        AuthAuditWriter
+	log           *slog.Logger
+	audit         AuthAuditWriter
 }
 
 // NewSMTPHandler wires the production handler.
@@ -157,7 +157,7 @@ type smtpSettingsResponse struct {
 // configured (PasswordConfigured carries that bit).
 func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
@@ -176,7 +176,7 @@ func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read SMTP settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read SMTP settings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, smtpSettingsResponse{
@@ -217,12 +217,12 @@ type smtpSettingsUpdate struct {
 // Update handles PUT /api/v1/admin/smtp/.
 func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	var req smtpSettingsUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
@@ -230,13 +230,13 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// below is straightforward.
 	existing, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read SMTP settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read SMTP settings")
 		return
 	}
 
 	merged := h.mergeUpdate(existing, req)
 	if vErr := h.validate(merged); vErr != "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", vErr)
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", vErr)
 		return
 	}
 	// T6.064 — refuse to disable SMTP (or blank the host) when the
@@ -245,7 +245,7 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// mailer; we treat either as the disable signal.
 	if !merged.Enabled || merged.Host == "" {
 		if slug, required := activeBaselineRequiresSMTP(r.Context(), h.queries); required {
-			RespondError(w, http.StatusConflict, "baseline_required",
+			RespondRequestError(w, r, http.StatusConflict, "baseline_required",
 				fmt.Sprintf("SMTP is required by the active compliance baseline %q; cannot disable.", slug))
 			return
 		}
@@ -259,12 +259,12 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 			encryptedPassword = ""
 		} else {
 			if h.encryptor == nil {
-				RespondError(w, http.StatusServiceUnavailable, "not_configured", "Encryptor is not configured; cannot store SMTP password")
+				RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Encryptor is not configured; cannot store SMTP password")
 				return
 			}
 			enc, err := h.encryptor.Encrypt(*req.Password)
 			if err != nil {
-				RespondError(w, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt password")
+				RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt password")
 				return
 			}
 			encryptedPassword = enc
@@ -286,7 +286,7 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds:    merged.TimeoutSeconds,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "write_error", "Failed to save SMTP settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to save SMTP settings")
 		return
 	}
 	if h.provider != nil {
@@ -298,11 +298,11 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// the log surface. We DO persist the enabled flag because it
 	// changes runtime behaviour for everyone.
 	recordAudit(r, h.audit, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", map[string]any{
-		"enabled":         saved.Enabled,
-		"password_set":    saved.PasswordEncrypted != "",
-		"auth_mechanism":  saved.AuthMechanism,
-		"encryption":      saved.Encryption,
-		"require_tls":     saved.RequireTls,
+		"enabled":        saved.Enabled,
+		"password_set":   saved.PasswordEncrypted != "",
+		"auth_mechanism": saved.AuthMechanism,
+		"encryption":     saved.Encryption,
+		"require_tls":    saved.RequireTls,
 	})
 
 	h.writeResponseFromRow(w, saved)
@@ -433,31 +433,31 @@ type TestRequest struct {
 // from doing the same thing) and send a templated test message.
 func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	var req TestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	recipient := strings.TrimSpace(req.Recipient)
 	if recipient == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "recipient is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "recipient is required")
 		return
 	}
 	if _, err := mail.ParseAddress(recipient); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", "recipient is not a valid email address")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "recipient is not a valid email address")
 		return
 	}
 
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_configured", "SMTP settings are not configured yet")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "SMTP settings are not configured yet")
 		return
 	}
 	if !row.Enabled {
-		RespondError(w, http.StatusBadRequest, "smtp_disabled", "SMTP is disabled; enable it before sending a test message")
+		RespondRequestError(w, r, http.StatusBadRequest, "smtp_disabled", "SMTP is disabled; enable it before sending a test message")
 		return
 	}
 
@@ -476,7 +476,7 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if row.PasswordEncrypted != "" && h.encryptor != nil {
 		plain, err := h.encryptor.Decrypt(row.PasswordEncrypted)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "decrypt_error", "Failed to decrypt stored SMTP password")
+			RespondRequestError(w, r, http.StatusInternalServerError, "decrypt_error", "Failed to decrypt stored SMTP password")
 			return
 		}
 		cfg.Password = plain
@@ -495,7 +495,7 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 		recordAudit(r, h.audit, "admin.smtp.test_failed", "smtp", row.ID.String(), recipient, map[string]any{
 			"error": err.Error(),
 		})
-		RespondError(w, http.StatusBadGateway, "test_failed", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "test_failed", err.Error())
 		return
 	}
 	recordAudit(r, h.audit, "admin.smtp.test", "smtp", row.ID.String(), recipient, nil)
@@ -509,23 +509,23 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 // are NOT included — the admin view only needs the metadata; the
 // body could leak a reset link or a recovery-code-regen FYI.
 type emailListItem struct {
-	ID         string  `json:"id"`
-	ToAddress  string  `json:"to_address"`
-	Subject    string  `json:"subject"`
-	Template   string  `json:"template"`
-	Status     string  `json:"status"`
-	Attempts   int     `json:"attempts"`
-	LastError  string  `json:"last_error"`
-	SentAt     *string `json:"sent_at"`
-	CreatedAt  string  `json:"created_at"`
-	UserID     *string `json:"user_id"`
+	ID        string  `json:"id"`
+	ToAddress string  `json:"to_address"`
+	Subject   string  `json:"subject"`
+	Template  string  `json:"template"`
+	Status    string  `json:"status"`
+	Attempts  int     `json:"attempts"`
+	LastError string  `json:"last_error"`
+	SentAt    *string `json:"sent_at"`
+	CreatedAt string  `json:"created_at"`
+	UserID    *string `json:"user_id"`
 }
 
 // List handles GET /api/v1/admin/emails/. Paginated; default 50 per
 // page, max 200.
 func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
 	limit := 50
@@ -549,7 +549,7 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "read_error", "Failed to read email messages")
+		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read email messages")
 		return
 	}
 	total, _ := h.queries.CountEmailMessages(r.Context())
@@ -580,9 +580,9 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"items": items,
-		"total": total,
-		"limit": limit,
+		"items":  items,
+		"total":  total,
+		"limit":  limit,
 		"offset": offset,
 	})
 }

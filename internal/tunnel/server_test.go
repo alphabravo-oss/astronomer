@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -322,8 +323,11 @@ func TestConnectAckRotatesToDurableAgentToken(t *testing.T) {
 	if upserts[0].ClusterID.String() != clusterID {
 		t.Fatalf("expected cluster id %s, got %s", clusterID, upserts[0].ClusterID)
 	}
-	if upserts[0].Token != ack.AgentToken {
-		t.Fatalf("expected ack token to match persisted token")
+	if upserts[0].Token != "" {
+		t.Fatalf("expected durable token plaintext not to be persisted")
+	}
+	if upserts[0].TokenHash != auth.HashOpaqueToken(ack.AgentToken) {
+		t.Fatalf("expected persisted token hash to match ack token")
 	}
 
 	conn.Close(websocket.StatusNormalClosure, "done")

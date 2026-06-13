@@ -172,19 +172,19 @@ type searchClusterError struct {
 //	} }
 func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil || h.requester == nil {
-		RespondError(w, http.StatusServiceUnavailable, "search_unavailable", "Cross-cluster search is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "search_unavailable", "Cross-cluster search is not configured")
 		return
 	}
 
 	q := r.URL.Query()
 	resourceType := strings.ToLower(strings.TrimSpace(q.Get("type")))
 	if resourceType == "" {
-		RespondError(w, http.StatusBadRequest, "invalid_request", "type query parameter is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", "type query parameter is required")
 		return
 	}
 	def, ok := searchResourceDefs[resourceType]
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "unsupported_type", fmt.Sprintf("unsupported resource type %q", resourceType))
+		RespondRequestError(w, r, http.StatusBadRequest, "unsupported_type", fmt.Sprintf("unsupported resource type %q", resourceType))
 		return
 	}
 
@@ -210,16 +210,16 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 		QueryLimit:  1000,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_clusters_failed", "Failed to list active clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_clusters_failed", "Failed to list active clusters")
 		return
 	}
 	clusters, authErr := h.authorizedSearchClusters(r.Context(), clusters, def.rbacResource)
 	if authErr != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
 		return
 	}
 	if len(clusters) == 0 {
-		RespondError(w, http.StatusForbidden, "permission_denied", "You do not have permission to search this resource type")
+		RespondRequestError(w, r, http.StatusForbidden, "permission_denied", "You do not have permission to search this resource type")
 		return
 	}
 

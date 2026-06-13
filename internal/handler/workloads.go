@@ -318,7 +318,7 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workloads, err := h.listWorkloads(r.Context(), clusterID, namespace, kind)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 
@@ -340,7 +340,7 @@ func (h *WorkloadHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resource, err := h.getWorkload(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, resource)
@@ -352,14 +352,14 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		Replicas int32 `json:"replicas"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if _, err := scalePath(kind, namespace, name); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_kind", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_kind", err.Error())
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "workload", workloadTargetKey(clusterID, kind, namespace, name), "scale", workloadOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "workloads"), "workload", workloadTargetKey(clusterID, kind, namespace, name), "scale", workloadOperationEnvelope{
 		ClusterID: clusterID,
 		Kind:      kind,
 		Namespace: namespace,
@@ -367,7 +367,7 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		Replicas:  req.Replicas,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload scale")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload scale")
 		return
 	}
 	h.recordWorkloadAudit(r, "workload.scale", kind, namespace, name, map[string]any{"clusterId": clusterID, "replicas": req.Replicas})
@@ -389,17 +389,17 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = patch
 	if _, err := workloadPath(kind, namespace, name); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_kind", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_kind", err.Error())
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "workload", workloadTargetKey(clusterID, kind, namespace, name), "restart", workloadOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "workloads"), "workload", workloadTargetKey(clusterID, kind, namespace, name), "restart", workloadOperationEnvelope{
 		ClusterID: clusterID,
 		Kind:      kind,
 		Namespace: namespace,
 		Name:      name,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload restart")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload restart")
 		return
 	}
 	h.recordWorkloadAudit(r, "workload.restart", kind, namespace, name, map[string]any{"clusterId": clusterID})
@@ -409,17 +409,17 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	clusterID, kind, namespace, name := chi.URLParam(r, "cluster_id"), chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	if _, err := workloadPath(kind, namespace, name); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_kind", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_kind", err.Error())
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "workload", workloadTargetKey(clusterID, kind, namespace, name), "delete", workloadOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "workloads"), "workload", workloadTargetKey(clusterID, kind, namespace, name), "delete", workloadOperationEnvelope{
 		ClusterID: clusterID,
 		Kind:      kind,
 		Namespace: namespace,
 		Name:      name,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload delete")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload delete")
 		return
 	}
 	h.recordWorkloadAudit(r, "workload.delete", kind, namespace, name, map[string]any{"clusterId": clusterID})
@@ -428,7 +428,7 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "workload_error", "workload store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "workload_error", "workload store not configured")
 		return
 	}
 	arg := sqlc.ListWorkloadOperationsParams{
@@ -446,12 +446,12 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 	}
 	ops, err := h.queries.ListWorkloadOperations(r.Context(), arg)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "workload_error", "Failed to list workload operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "workload_error", "Failed to list workload operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
 		return
 	}
 	resp := make([]map[string]any, 0, len(ops))
@@ -470,17 +470,17 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 func (h *WorkloadHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Workload operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Workload operation not found")
 		return
 	}
 	clusterID, err := workloadOperationClusterID(op)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve workload operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve workload operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -496,21 +496,28 @@ func (h *WorkloadHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Workload operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Workload operation not found")
 		return
 	}
-	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
-		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
+	if !requireRetryableOperation(w, r, op.Status) {
+		return
+	}
+	clusterID, err := workloadOperationClusterID(op)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve workload operation target")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
 		return
 	}
 	requeued, err := h.queries.RequeueWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "retry_error", "Failed to retry workload operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to retry workload operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -528,36 +535,35 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 	}
 	ops, err := h.queries.ListWorkloadOperations(r.Context(), sqlc.ListWorkloadOperationsParams{Limit: 1000, Offset: 0})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "status_error", "Failed to load workload controller status")
+		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load workload controller status")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
 		return
 	}
-	counts := map[string]int{}
-	staleRunning := 0
-	for _, op := range ops {
-		if restricted {
-			clusterID, err := workloadOperationClusterID(op)
-			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
-				continue
-			}
-		}
-		counts[op.Status]++
-		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
-			staleRunning++
-		}
-	}
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"reconciler": map[string]any{
-			"enabled":              true,
-			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
-			"staleRunningCount":    staleRunning,
-			"staleThresholdSecond": 60,
+	opSummary := summarizeOperations(r.Context(), ops, operationStatusSummaryConfig[sqlc.WorkloadOperation]{
+		Status:    func(op sqlc.WorkloadOperation) string { return op.Status },
+		CreatedAt: func(op sqlc.WorkloadOperation) time.Time { return op.CreatedAt },
+		IsStaleRunning: func(op sqlc.WorkloadOperation, now time.Time) bool {
+			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) > time.Minute
 		},
-		"operations": counts,
+		Include: func(_ context.Context, op sqlc.WorkloadOperation) bool {
+			if !restricted {
+				return true
+			}
+			clusterID, err := workloadOperationClusterID(op)
+			return err == nil && h.authz.allowsCluster(bindings, clusterID, rbac.ResourceWorkloads, rbac.VerbRead)
+		},
+		Preview: func(_ context.Context, op sqlc.WorkloadOperation) map[string]any {
+			return workloadOperationResponse(op)
+		},
+		StaleThresholdSeconds: 60,
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{
+		"reconciler": opSummary.reconcilerMap(),
+		"operations": opSummary.Counts,
 	})
 }
 
@@ -573,7 +579,7 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 	clusterID := chi.URLParam(r, "cluster_id")
 	var namespaces namespaceList
 	if err := h.getJSON(r.Context(), clusterID, "/api/v1/namespaces", &namespaces); err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	var pods podList
@@ -606,7 +612,7 @@ func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	nodes, err := h.getNodes(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, nodes)
@@ -617,7 +623,7 @@ func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 	nodeName := chi.URLParam(r, "node_name")
 	detail, err := h.getNodeDetail(r.Context(), clusterID, nodeName)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, detail)
@@ -631,7 +637,7 @@ func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		path += "?limit=" + url.QueryEscape(limit)
 	}
 	if err := h.getJSON(r.Context(), clusterID, path, &events); err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	items := make([]map[string]any, 0, len(events.Items))
@@ -659,7 +665,7 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 	namespace := r.URL.Query().Get("namespace")
 	pods, err := h.listPods(r.Context(), clusterID, namespace, "")
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, pods)
@@ -669,13 +675,13 @@ func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Reques
 	clusterID, kind, namespace, name := chi.URLParam(r, "cluster_id"), chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	resource, err := h.fetchWorkloadResource(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	selector := labelSelector(resource.Spec.Selector.MatchLabels)
 	pods, err := h.listPods(r.Context(), clusterID, namespace, selector)
 	if err != nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, pods)
@@ -688,7 +694,7 @@ func (h *WorkloadHandler) DeletePod(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -728,7 +734,7 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 	body, _ := decodeResponseBody(resp)
@@ -1089,14 +1095,34 @@ func (h *WorkloadHandler) enqueueOperation(ctx context.Context, targetType, targ
 	if err != nil {
 		return sqlc.WorkloadOperation{}, err
 	}
-	op, err := h.queries.CreateWorkloadOperation(ctx, sqlc.CreateWorkloadOperationParams{
+	params := sqlc.CreateWorkloadOperationParams{
 		TargetType:    targetType,
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
 		Status:        OpStatusPending,
 		CreatedByID:   userID,
-	})
+	}
+	var op sqlc.WorkloadOperation
+	if idem, ok := operationIdempotencyFromContext(ctx); ok {
+		if creator, ok := h.queries.(interface {
+			CreateWorkloadOperationIdempotent(context.Context, sqlc.CreateWorkloadOperationIdempotentParams) (sqlc.WorkloadOperation, error)
+		}); ok {
+			op, err = creator.CreateWorkloadOperationIdempotent(ctx, sqlc.CreateWorkloadOperationIdempotentParams{
+				Scope:          idem.scope,
+				IdempotencyKey: idem.key,
+				TargetType:     params.TargetType,
+				TargetKey:      params.TargetKey,
+				OperationType:  params.OperationType,
+				Payload:        params.Payload,
+				Status:         params.Status,
+				CreatedByID:    params.CreatedByID,
+			})
+		}
+	}
+	if op.ID == uuid.Nil && err == nil {
+		op, err = h.queries.CreateWorkloadOperation(ctx, params)
+	}
 	if err == nil {
 		h.TriggerReconcile()
 	}
@@ -1148,45 +1174,42 @@ func (h *WorkloadHandler) claimPendingWorkloadOperations(ctx context.Context) []
 	if err != nil {
 		return nil
 	}
-	latestByTarget := map[string]uuid.UUID{}
-	for i := len(ops) - 1; i >= 0; i-- {
-		key := ops[i].TargetType + ":" + ops[i].TargetKey
-		if _, ok := latestByTarget[key]; !ok {
-			latestByTarget[key] = ops[i].ID
-		}
-	}
-	claimed := make([]claimedOp, 0, len(ops))
-	for _, op := range ops {
-		key := op.TargetType + ":" + op.TargetKey
-		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
+	return claimLatestOperations(ctx, ops, operationRunnerConfig[sqlc.WorkloadOperation]{
+		ID:        func(op sqlc.WorkloadOperation) uuid.UUID { return op.ID },
+		TargetKey: func(op sqlc.WorkloadOperation) string { return op.TargetType + ":" + op.TargetKey },
+		Status:    func(op sqlc.WorkloadOperation) string { return op.Status },
+		IsFreshRunning: func(op sqlc.WorkloadOperation, now time.Time) bool {
+			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) < time.Minute
+		},
+		Supersede: func(ctx context.Context, op sqlc.WorkloadOperation) {
 			h.recordOperationEvent(ctx, op.ID, "info", "queue", "operation superseded by newer desired state", map[string]any{"targetKey": op.TargetKey})
-			_, _ = h.queries.MarkWorkloadOperationSuperseded(ctx, sqlc.MarkWorkloadOperationSupersededParams{ID: op.ID, ErrorMessage: "superseded by newer operation for target"})
-			continue
-		}
-		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
-			continue
-		}
-		running, err := h.queries.MarkWorkloadOperationRunning(ctx, op.ID)
-		if err != nil {
-			continue
-		}
-		h.recordOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{"operationType": running.OperationType, "targetKey": running.TargetKey})
-		claimed = append(claimed, claimedOp{
-			ID: running.ID,
-			Run: func(ctx context.Context) error {
-				return h.executeOperation(ctx, running)
-			},
-			OnComplete: func(ctx context.Context) {
-				h.recordOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-				_, _ = h.queries.MarkWorkloadOperationCompleted(ctx, running.ID)
-			},
-			OnFailure: func(ctx context.Context, err error) {
-				h.recordOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-				_, _ = h.queries.MarkWorkloadOperationFailed(ctx, sqlc.MarkWorkloadOperationFailedParams{ID: running.ID, ErrorMessage: err.Error()})
-			},
-		})
-	}
-	return claimed
+			_, _ = h.queries.MarkWorkloadOperationSuperseded(ctx, sqlc.MarkWorkloadOperationSupersededParams{ID: op.ID, ErrorMessage: operationSupersededMessage})
+		},
+		MarkRunning: func(ctx context.Context, op sqlc.WorkloadOperation) (sqlc.WorkloadOperation, error) {
+			running, err := h.queries.MarkWorkloadOperationRunning(ctx, op.ID)
+			if err != nil {
+				return sqlc.WorkloadOperation{}, err
+			}
+			h.recordOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{"operationType": running.OperationType, "targetKey": running.TargetKey})
+			return running, nil
+		},
+		Claimed: func(running sqlc.WorkloadOperation) claimedOp {
+			return claimedOp{
+				ID: running.ID,
+				Run: func(ctx context.Context) error {
+					return h.executeOperation(ctx, running)
+				},
+				OnComplete: func(ctx context.Context) {
+					h.recordOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
+					_, _ = h.queries.MarkWorkloadOperationCompleted(ctx, running.ID)
+				},
+				OnFailure: func(ctx context.Context, err error) {
+					h.recordOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+					_, _ = h.queries.MarkWorkloadOperationFailed(ctx, sqlc.MarkWorkloadOperationFailedParams{ID: running.ID, ErrorMessage: err.Error()})
+				},
+			}
+		},
+	})
 }
 
 func (h *WorkloadHandler) executeOperation(ctx context.Context, op sqlc.WorkloadOperation) error {

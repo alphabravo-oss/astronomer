@@ -107,7 +107,7 @@ func TestAuthorizeStreamRequest_HeaderJWT_OK(t *testing.T) {
 	}
 }
 
-func TestAuthorizeStreamRequest_QueryJWT_OK(t *testing.T) {
+func TestAuthorizeStreamRequest_QueryJWT_Rejects(t *testing.T) {
 	jwt := NewJWTManager("secret", 60)
 	userID := uuid.New()
 	tok, err := jwt.GenerateAccessToken(userID)
@@ -116,16 +116,12 @@ func TestAuthorizeStreamRequest_QueryJWT_OK(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/api/v1/events/stream/?token="+tok, nil)
 
-	got, ok := AuthorizeStreamRequest(req, nil, jwt)
-	if !ok {
-		t.Fatal("expected ok=true for valid query JWT")
-	}
-	if got != userID {
-		t.Errorf("uid = %v, want %v", got, userID)
+	if got, ok := AuthorizeStreamRequest(req, nil, jwt); ok || got != uuid.Nil {
+		t.Fatalf("query JWT should be rejected, got uid=%s ok=%v", got, ok)
 	}
 }
 
-func TestAuthorizeStreamRequest_HeaderPreferredOverQuery(t *testing.T) {
+func TestAuthorizeStreamRequest_HeaderIgnoresQueryToken(t *testing.T) {
 	jwt := NewJWTManager("secret", 60)
 	headerUser := uuid.New()
 	queryUser := uuid.New()
@@ -183,7 +179,8 @@ func TestAuthorizeStreamRequest_APIToken_OK(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/events/stream/?token="+rawToken, nil)
+	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
 	got, ok := AuthorizeStreamRequest(req, q, jwt)
 	if !ok {
 		t.Fatal("expected ok=true for valid api token")
@@ -195,7 +192,8 @@ func TestAuthorizeStreamRequest_APIToken_OK(t *testing.T) {
 
 func TestAuthorizeStreamRequest_APIToken_NoQuerier_Rejects(t *testing.T) {
 	jwt := NewJWTManager("secret", 60)
-	req := httptest.NewRequest("GET", "/api/v1/events/stream/?token=astro_xyz", nil)
+	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer astro_xyz")
 	if _, ok := AuthorizeStreamRequest(req, nil, jwt); ok {
 		t.Fatal("expected rejection: api token presented but no querier wired")
 	}
@@ -220,7 +218,8 @@ func TestAuthorizeStreamRequest_APIToken_Revoked_Rejects(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/events/stream/?token="+rawToken, nil)
+	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
 	if _, ok := AuthorizeStreamRequest(req, q, jwt); ok {
 		t.Fatal("expected rejection for revoked api token")
 	}
@@ -246,7 +245,8 @@ func TestAuthorizeStreamRequest_APIToken_Expired_Rejects(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/events/stream/?token="+rawToken, nil)
+	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
 	if _, ok := AuthorizeStreamRequest(req, q, jwt); ok {
 		t.Fatal("expected rejection for expired api token")
 	}
@@ -268,7 +268,8 @@ func TestAuthorizeStreamRequest_APIToken_InactiveUser_Rejects(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/events/stream/?token="+rawToken, nil)
+	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
 	if _, ok := AuthorizeStreamRequest(req, q, jwt); ok {
 		t.Fatal("expected rejection for inactive user")
 	}

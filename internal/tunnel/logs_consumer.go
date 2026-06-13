@@ -27,16 +27,16 @@ import (
 //
 // — or, because browser `new WebSocket(...)` cannot set custom headers —
 //
-//	?token=<jwt-or-api-token>                  (browser fallback)
+//	?ticket=<short-lived-ticket>               (browser path)
 //
-// Either path is validated against the same JWTManager and TokenUserQuerier
-// the rest of the API uses. Without `SetAuth`, the handler accepts
-// unauthenticated connections (dev/test mode).
+// Without `SetAuth`, the handler accepts unauthenticated connections
+// (dev/test mode).
 type LogsConsumer struct {
 	hub     *Hub
 	log     *slog.Logger
 	jwt     *auth.JWTManager
 	queries middleware.TokenUserQuerier
+	tickets *auth.StreamTicketStore
 }
 
 // NewLogsConsumer creates a new LogsConsumer.
@@ -58,12 +58,19 @@ func (lc *LogsConsumer) SetAuth(jwt *auth.JWTManager, queries middleware.TokenUs
 	lc.queries = queries
 }
 
-// authenticate validates the request via Authorization header (preferred)
-// or `?token=` query parameter (browser-WS fallback). Delegates to the
-// shared auth.AuthorizeStreamRequest helper so the three long-lived stream
-// endpoints (WS logs, WS exec, SSE events) share a single validation path.
+func (lc *LogsConsumer) SetStreamTickets(tickets *auth.StreamTicketStore) {
+	if lc == nil {
+		return
+	}
+	lc.tickets = tickets
+}
+
+// authenticate validates the request via a one-use stream ticket or
+// Authorization header. Delegates to the shared auth.AuthorizeStreamRequest
+// helper so the long-lived stream endpoints share a single validation path.
 func (lc *LogsConsumer) authenticate(r *http.Request) bool {
-	_, ok := auth.AuthorizeStreamRequest(r, lc.queries, lc.jwt)
+	clusterID, _ := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	_, ok := auth.AuthorizeStreamRequestWithTickets(r, lc.queries, lc.jwt, lc.tickets, auth.StreamKindLogs, clusterID)
 	return ok
 }
 

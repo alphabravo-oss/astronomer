@@ -31,6 +31,7 @@ import {
   Loader2,
   Plus,
   Rocket,
+  RotateCcw,
   Server,
   Trash2,
   XCircle,
@@ -50,6 +51,7 @@ import api, {
   deleteArgoApplicationSet,
   deleteArgoProject,
   deleteArgoRepo,
+  refreshArgoManagedClusterLabels,
   unregisterArgoManagedCluster,
 } from '@/lib/api';
 import { useClusters } from '@/lib/hooks';
@@ -58,6 +60,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ActionMenu } from '@/components/ui/action-menu';
+import { EmptyState } from '@/components/ui/empty-state';
 import { SyncStatusBadge, HealthStatusBadge } from '@/components/argocd/sync-status-badge';
 import { CreateApplicationDialog } from '@/components/argocd/create-application-dialog';
 import { CreateProjectDialog } from '@/components/argocd/create-project-dialog';
@@ -130,10 +133,13 @@ export default function InstanceDetailPage() {
   }
   if (!instance) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <GitBranch className="h-8 w-8 mb-3" />
-        <p>Instance not found</p>
-      </div>
+      <EmptyState
+        icon={GitBranch}
+        title="ArgoCD instance not found"
+        description="The instance may have been removed or you may not have access to it."
+        actionLabel="Back to ArgoCD"
+        actionHref="/dashboard/argocd"
+      />
     );
   }
 
@@ -713,6 +719,15 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
     onError: (err: Error) => toast.error(`Unregister failed: ${err.message}`),
   });
 
+  const refreshLabels = useMutation({
+    mutationFn: (row: ArgoManagedCluster) => refreshArgoManagedClusterLabels(instanceId, row.clusterId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['argocd', 'managed-clusters', instanceId] });
+      toast.success('Cluster labels refreshed');
+    },
+    onError: (err: Error) => toast.error(`Refresh labels failed: ${err.message}`),
+  });
+
   const managedById = new Map(managed.map((m) => [m.clusterId, m]));
   const all = allClusters?.data ?? [];
 
@@ -778,6 +793,23 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
               accessor: (row) => (
                 <ActionMenu
                   items={[
+                    {
+                      label: 'Refresh labels',
+                      icon: <RefreshCw className="h-3.5 w-3.5" />,
+                      onClick: () => refreshLabels.mutate(row),
+                    },
+                    {
+                      label: 'Re-register',
+                      icon: <RotateCcw className="h-3.5 w-3.5" />,
+                      onClick: () => {
+                        const cluster = all.find((c) => c.id === row.clusterId);
+                        if (cluster) {
+                          setRegisterCluster(cluster);
+                        } else {
+                          toast.error('Cluster row is no longer available');
+                        }
+                      },
+                    },
                     {
                       label: 'Unregister',
                       icon: <Trash2 className="h-3.5 w-3.5" />,

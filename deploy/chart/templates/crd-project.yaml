@@ -98,7 +98,28 @@ spec:
                   type: array
                   items:
                     type: object
-                    x-kubernetes-preserve-unknown-fields: true
+                    required:
+                      - type
+                      - status
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
       additionalPrinterColumns:
         - name: Cluster
           type: string
@@ -106,6 +127,9 @@ spec:
         - name: Phase
           type: string
           jsonPath: .status.phase
+        - name: ProjectID
+          type: string
+          jsonPath: .status.projectId
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp

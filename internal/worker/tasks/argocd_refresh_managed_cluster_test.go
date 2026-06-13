@@ -116,14 +116,14 @@ func TestRefreshManagedClusterLabels_UpdatesSecret(t *testing.T) {
 			Name:      secretName,
 			Namespace: argoCDNamespace,
 			Labels: map[string]string{
-				argoCDClusterSecretTypeLabel:     argoCDClusterSecretTypeValue,
-				"astronomer.io/managed-by":       "astronomer",
-				"astronomer.io/cluster-id":       clusterID.String(),
-				"astronomer.io/cluster-name":     "prod-east",
-				"astronomer.io/environment":      "staging", // stale, should flip to "production"
-				"astronomer.io/label-tier":       "dev",     // stale, should flip to "prod"
-				"astronomer.io/label-zone":       "us-west", // stale, should be REMOVED
-				"unrelated.example.com/keep-me":  "yes",     // preserved
+				argoCDClusterSecretTypeLabel:    argoCDClusterSecretTypeValue,
+				"astronomer.io/managed-by":      "astronomer",
+				"astronomer.io/cluster-id":      clusterID.String(),
+				"astronomer.io/cluster-name":    "prod-east",
+				"astronomer.io/environment":     "staging", // stale, should flip to "production"
+				"astronomer.io/label-tier":      "dev",     // stale, should flip to "prod"
+				"astronomer.io/label-zone":      "us-west", // stale, should be REMOVED
+				"unrelated.example.com/keep-me": "yes",     // preserved
 			},
 		},
 		Data: map[string][]byte{"server": []byte("https://k8s.example.test:6443")},
@@ -146,6 +146,7 @@ func TestRefreshManagedClusterLabels_UpdatesSecret(t *testing.T) {
 		"astronomer.io/cluster-id":       clusterID.String(),
 		"astronomer.io/cluster-name":     "prod-east",
 		"astronomer.io/environment":      "production",
+		"astronomer.io/is-local":         "false",
 		"astronomer.io/label-tier":       "prod",
 		"astronomer.io/label-region":     "us-east",
 		"unrelated.example.com/keep-me":  "yes",
@@ -288,12 +289,13 @@ func TestRefreshManagedClusterLabels_NoChangeNoPatch(t *testing.T) {
 			Name:      secretName,
 			Namespace: argoCDNamespace,
 			Labels: map[string]string{
-				argoCDClusterSecretTypeLabel:    argoCDClusterSecretTypeValue,
-				"astronomer.io/managed-by":      "astronomer",
-				"astronomer.io/cluster-id":      clusterID.String(),
-				"astronomer.io/cluster-name":    "noop",
-				"astronomer.io/environment":     "prod",
-				"astronomer.io/label-tier":      "prod",
+				argoCDClusterSecretTypeLabel: argoCDClusterSecretTypeValue,
+				"astronomer.io/managed-by":   "astronomer",
+				"astronomer.io/cluster-id":   clusterID.String(),
+				"astronomer.io/cluster-name": "noop",
+				"astronomer.io/environment":  "prod",
+				"astronomer.io/is-local":     "false",
+				"astronomer.io/label-tier":   "prod",
 			},
 		},
 	})

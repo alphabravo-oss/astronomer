@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -15,18 +17,14 @@ import (
 //
 // Auth contract:
 //
-//	GET /api/v1/events/stream/?token=<jwt-or-api-token>
+//	GET /api/v1/events/stream/?ticket=<short-lived-ticket>
 //
-// EventSource cannot set custom headers, so the JWT is accepted via the
-// `?token=` query parameter ONLY on this endpoint. The token is validated
-// via the same JWTManager used by the rest of the API; api_token-style
-// (astro_*) tokens are also accepted via SHA-256 hash lookup. No other
-// route accepts query-string auth — the loosened contract is scoped to
-// the one handler that needs it.
+// EventSource cannot set custom headers, so browsers should first POST to
+// /api/v1/streams/tickets/ and pass the one-use ticket in the stream URL.
 //
 // Frontend usage:
 //
-//	const es = new EventSource('/api/v1/events/stream/?token=' + jwt);
+//	const es = new EventSource('/api/v1/events/stream/?ticket=' + ticket);
 //	es.addEventListener('cluster.connected', e => { ... });
 //
 // The bus only emits resource-lifecycle events that mirror existing readable
@@ -36,6 +34,7 @@ type EventStreamHandler struct {
 	bus     *events.Bus
 	jwt     *auth.JWTManager
 	queries middleware.TokenUserQuerier
+	tickets *auth.StreamTicketStore
 }
 
 // NewEventStreamHandler wraps a bus.
@@ -43,10 +42,9 @@ func NewEventStreamHandler(bus *events.Bus) *EventStreamHandler {
 	return &EventStreamHandler{bus: bus}
 }
 
-// SetAuth wires the JWT manager + token querier so the handler can validate
-// the `?token=` query parameter (EventSource cannot set Authorization).
-// Both arguments are optional; when nil the handler accepts unauthenticated
-// connections (used by tests / dev runs without auth wired).
+// SetAuth wires the JWT manager + token querier for legacy query/header
+// stream auth. Both arguments are optional; when nil the handler accepts
+// unauthenticated connections (used by tests / dev runs without auth wired).
 func (h *EventStreamHandler) SetAuth(jwt *auth.JWTManager, queries middleware.TokenUserQuerier) {
 	if h == nil {
 		return
@@ -55,12 +53,18 @@ func (h *EventStreamHandler) SetAuth(jwt *auth.JWTManager, queries middleware.To
 	h.queries = queries
 }
 
-// authenticateRequest validates the request via Authorization header (preferred)
-// or `?token=` query parameter (EventSource fallback). Returns true if either
-// path succeeded, or if no JWT manager is wired (dev/test mode). Delegates to
-// the shared auth.AuthorizeStreamRequest helper.
+func (h *EventStreamHandler) SetStreamTickets(tickets *auth.StreamTicketStore) {
+	if h == nil {
+		return
+	}
+	h.tickets = tickets
+}
+
+// authenticateRequest validates the request via a one-use stream ticket or
+// Authorization header. Returns true if either path succeeded, or if no JWT
+// manager is wired (dev/test mode).
 func (h *EventStreamHandler) authenticateRequest(r *http.Request) bool {
-	_, ok := auth.AuthorizeStreamRequest(r, h.queries, h.jwt)
+	_, ok := auth.AuthorizeStreamRequestWithTickets(r, h.queries, h.jwt, h.tickets, auth.StreamKindEvents, uuid.Nil)
 	return ok
 }
 

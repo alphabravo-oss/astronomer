@@ -220,12 +220,12 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
 		pid, err := uuid.Parse(pidRaw)
 		if err != nil {
-			RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project_id query param")
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project_id query param")
 			return
 		}
 		rows, err := h.queries.ListCatalogsForProject(r.Context(), pid)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list project catalogs")
+			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list project catalogs")
 			return
 		}
 		RespondJSON(w, http.StatusOK, rows)
@@ -238,12 +238,12 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list catalogs")
+			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list catalogs")
 			return
 		}
 		total, err := h.queries.CountHelmRepositories(r.Context())
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count repositories")
+			RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count repositories")
 			return
 		}
 		RespondPaginated(w, r, rows, total)
@@ -260,7 +260,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		Offset: 0,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list repositories")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list repositories")
 		return
 	}
 
@@ -296,7 +296,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 
 	total, err := h.queries.CountHelmRepositories(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count repositories")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count repositories")
 		return
 	}
 
@@ -319,16 +319,16 @@ type CreateRepoRequest struct {
 func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	var req CreateRepoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Repository name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Repository name is required")
 		return
 	}
 	if req.URL == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Repository URL is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Repository URL is required")
 		return
 	}
 
@@ -354,7 +354,7 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		Enabled:     req.Enabled,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create repository")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create repository")
 		return
 	}
 
@@ -371,13 +371,13 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) GetRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
 		return
 	}
 
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Repository not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Repository not found")
 		return
 	}
 
@@ -400,13 +400,13 @@ type UpdateRepoRequest struct {
 func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
 		return
 	}
 
 	var req UpdateRepoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
@@ -426,7 +426,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 		Enabled:     req.Enabled,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update repository")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update repository")
 		return
 	}
 
@@ -443,7 +443,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
 		return
 	}
 
@@ -452,7 +452,7 @@ func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		repoName = existing.Name
 	}
 	if err := h.queries.DeleteHelmRepository(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete repository")
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete repository")
 		return
 	}
 
@@ -471,12 +471,12 @@ func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
 		return
 	}
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Repository not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Repository not found")
 		return
 	}
 	var chartCount, versionCount int
@@ -487,11 +487,11 @@ func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		h.log.Warn("catalog sync failed", "repo", repo.Url, "error", err)
-		RespondError(w, http.StatusBadGateway, "sync_error", fmt.Sprintf("Failed to sync repository: %v", err))
+		RespondRequestError(w, r, http.StatusBadGateway, "sync_error", fmt.Sprintf("Failed to sync repository: %v", err))
 		return
 	}
 	if err := h.queries.UpdateHelmRepositoryLastSynced(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "sync_error", "Failed to update repository sync timestamp")
+		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", "Failed to update repository sync timestamp")
 		return
 	}
 	recordAudit(r, h.queries, "catalog.repo.sync", "helm_repository", repo.ID.String(), repo.Name, map[string]any{
@@ -510,22 +510,22 @@ func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 // our own minimal struct rather than helm.sh/helm/v3/pkg/repo to keep this
 // handler decoupled from the worker package.
 type helmIndexFile struct {
-	APIVersion string                          `json:"apiVersion"`
+	APIVersion string                         `json:"apiVersion"`
 	Entries    map[string][]helmIndexChartVer `json:"entries"`
 }
 
 type helmIndexChartVer struct {
-	Name        string                  `json:"name"`
-	Version     string                  `json:"version"`
-	AppVersion  string                  `json:"appVersion"`
-	Description string                  `json:"description"`
-	Icon        string                  `json:"icon"`
-	Home        string                  `json:"home"`
-	Digest      string                  `json:"digest"`
-	URLs        []string                `json:"urls"`
-	Keywords    []string                `json:"keywords"`
-	Maintainers []helmIndexChartMaint   `json:"maintainers"`
-	Created     time.Time               `json:"created"`
+	Name        string                `json:"name"`
+	Version     string                `json:"version"`
+	AppVersion  string                `json:"appVersion"`
+	Description string                `json:"description"`
+	Icon        string                `json:"icon"`
+	Home        string                `json:"home"`
+	Digest      string                `json:"digest"`
+	URLs        []string              `json:"urls"`
+	Keywords    []string              `json:"keywords"`
+	Maintainers []helmIndexChartMaint `json:"maintainers"`
+	Created     time.Time             `json:"created"`
 }
 
 type helmIndexChartMaint struct {
@@ -676,12 +676,12 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list charts by tag")
+			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list charts by tag")
 			return
 		}
 		total, err := h.queries.CountHelmChartsByTag(r.Context(), tag)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count charts by tag")
+			RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count charts by tag")
 			return
 		}
 		RespondPaginated(w, r, charts, total)
@@ -691,12 +691,12 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
 		pid, err := uuid.Parse(pidRaw)
 		if err != nil {
-			RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid project_id query param")
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project_id query param")
 			return
 		}
 		visibleCatalogs, err := h.queries.ListCatalogsForProject(r.Context(), pid)
 		if err != nil {
-			RespondError(w, http.StatusInternalServerError, "list_error", "Failed to resolve project catalogs")
+			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to resolve project catalogs")
 			return
 		}
 		// Fan out per-catalog. The repo count per project is small
@@ -734,13 +734,13 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list charts")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list charts")
 		return
 	}
 
 	total, err := h.queries.CountHelmCharts(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count charts")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count charts")
 		return
 	}
 
@@ -751,13 +751,13 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
 		return
 	}
 
 	chart, err := h.queries.GetHelmChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Chart not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Chart not found")
 		return
 	}
 
@@ -768,7 +768,7 @@ func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
 		return
 	}
 	versions, err := h.queries.ListChartVersions(r.Context(), sqlc.ListChartVersionsParams{
@@ -777,7 +777,7 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 		Offset:  int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list chart versions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list chart versions")
 		return
 	}
 	RespondJSON(w, http.StatusOK, versions)
@@ -789,7 +789,7 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 
@@ -802,13 +802,13 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list installations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list installations")
 		return
 	}
 
 	total, err := h.queries.CountInstalledChartsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count installations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count installations")
 		return
 	}
 
@@ -844,7 +844,7 @@ type catalogOperationEnvelope struct {
 func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
@@ -858,16 +858,16 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 
 	var req CreateInstallationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 
 	if req.ReleaseName == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Release name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Release name is required")
 		return
 	}
 	if req.Namespace == "" {
-		RespondError(w, http.StatusBadRequest, "validation_error", "Namespace is required")
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Namespace is required")
 		return
 	}
 
@@ -888,23 +888,23 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	if req.ChartVersionID != "" {
 		cvID, err := uuid.Parse(req.ChartVersionID)
 		if err != nil {
-			RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid chart version ID")
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid chart version ID")
 			return
 		}
 		params.ChartVersionID = pgtype.UUID{Bytes: cvID, Valid: true}
 		version, err = h.queries.GetHelmChartVersionByID(r.Context(), cvID)
 		if err != nil {
-			RespondError(w, http.StatusNotFound, "not_found", "Chart version not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Chart version not found")
 			return
 		}
 		chart, err = h.queries.GetHelmChartByID(r.Context(), version.ChartID)
 		if err != nil {
-			RespondError(w, http.StatusNotFound, "not_found", "Chart not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Chart not found")
 			return
 		}
 		repo, err = h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
 		if err != nil {
-			RespondError(w, http.StatusNotFound, "not_found", "Repository not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Repository not found")
 			return
 		}
 	}
@@ -918,7 +918,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 
 	installation, err := h.queries.CreateInstalledChart(r.Context(), params)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create installation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create installation")
 		return
 	}
 	// Migration 067 — resolve ${vault://...} markers in the values blob
@@ -931,10 +931,10 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	// clear when a reference is unresolvable.
 	resolvedValues, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, installation.ValuesOverride)
 	if vaultErr != nil {
-		RespondError(w, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "vault_resolve_failed", vaultErr.Error())
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
 		InstalledChartID: installation.ID.String(),
 		ClusterID:        clusterID.String(),
 		ReleaseName:      installation.ReleaseName,
@@ -949,7 +949,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		Notes:          installation.Notes,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installation")
 		return
 	}
 	recordAudit(r, h.queries, "catalog.installation.create", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
@@ -971,12 +971,12 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 func (h *CatalogHandler) DeleteInstallation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid installation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid installation ID")
 		return
 	}
 	installation, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Installation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Installation not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installation.ClusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
@@ -991,17 +991,17 @@ func (h *CatalogHandler) DeleteInstallation(w http.ResponseWriter, r *http.Reque
 		Status:   "pending_uninstall",
 		Revision: installation.Revision,
 	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to mark installation for deletion")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to mark installation for deletion")
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "installed_chart", installation.ID.String(), "uninstall", catalogOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installation.ID.String(), "uninstall", catalogOperationEnvelope{
 		InstalledChartID: installation.ID.String(),
 		ClusterID:        installation.ClusterID.String(),
 		ReleaseName:      installation.ReleaseName,
 		Namespace:        installation.Namespace,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue uninstall")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue uninstall")
 		return
 	}
 	recordAudit(r, h.queries, "catalog.installation.delete", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
@@ -1027,12 +1027,12 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list installed charts")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list installed charts")
 		return
 	}
 	total, err := h.queries.CountInstalledCharts(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count installed charts")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count installed charts")
 		return
 	}
 	RespondPaginated(w, r, items, total)
@@ -1045,7 +1045,7 @@ func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Req
 		CreateInstallationRequest
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	ctx := chi.NewRouteContext()
@@ -1059,7 +1059,7 @@ func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Req
 func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid installed chart ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid installed chart ID")
 		return
 	}
 	var req struct {
@@ -1068,7 +1068,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Installed chart not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -1076,7 +1076,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 	}
 	version, chart, repo, err := h.resolveInstalledChartRelease(r.Context(), installed)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve installed chart release")
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve installed chart release")
 		return
 	}
 	updated, err := h.queries.UpdateInstalledChartValues(r.Context(), sqlc.UpdateInstalledChartValuesParams{
@@ -1085,10 +1085,10 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		Status:         "pending_upgrade",
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to stage installed chart upgrade")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to stage installed chart upgrade")
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "installed_chart", installed.ID.String(), "upgrade", catalogOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installed.ID.String(), "upgrade", catalogOperationEnvelope{
 		InstalledChartID: installed.ID.String(),
 		ClusterID:        installed.ClusterID.String(),
 		ReleaseName:      installed.ReleaseName,
@@ -1101,7 +1101,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		Notes:            installed.Notes,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installed chart upgrade")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue installed chart upgrade")
 		return
 	}
 	recordAudit(r, h.queries, "catalog.installation.upgrade", "installed_chart", installed.ID.String(), installed.ReleaseName, map[string]any{
@@ -1122,12 +1122,12 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid installed chart ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid installed chart ID")
 		return
 	}
 	current, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Installed chart not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -1138,10 +1138,10 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 		Status:   "pending_rollback",
 		Revision: current.Revision,
 	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, "rollback_error", "Failed to rollback installed chart")
+		RespondRequestError(w, r, http.StatusInternalServerError, "rollback_error", "Failed to rollback installed chart")
 		return
 	}
-	op, err := h.enqueueOperation(r.Context(), "installed_chart", current.ID.String(), "rollback", catalogOperationEnvelope{
+	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", current.ID.String(), "rollback", catalogOperationEnvelope{
 		InstalledChartID: current.ID.String(),
 		ClusterID:        current.ClusterID.String(),
 		ReleaseName:      current.ReleaseName,
@@ -1149,7 +1149,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 		RollbackRevision: int(max(current.Revision-1, 1)),
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue rollback")
+		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue rollback")
 		return
 	}
 	recordAudit(r, h.queries, "catalog.installation.rollback", "installed_chart", current.ID.String(), current.ReleaseName, map[string]any{
@@ -1171,12 +1171,12 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid repository ID")
 		return
 	}
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Repository not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Repository not found")
 		return
 	}
 	if isOCIRepoSpec(repo) {
@@ -1192,7 +1192,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		client := &http.Client{Timeout: 10 * time.Second}
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, pingURL, nil)
 		if err != nil {
-			RespondError(w, http.StatusBadRequest, "invalid_url", err.Error())
+			RespondRequestError(w, r, http.StatusBadRequest, "invalid_url", err.Error())
 			return
 		}
 		cfg := parseOCIAuthConfig(repo.AuthConfig)
@@ -1216,7 +1216,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_url", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_url", err.Error())
 		return
 	}
 	resp, err := client.Do(req)
@@ -1250,17 +1250,17 @@ func isOCIRepoSpec(repo sqlc.HelmRepository) bool {
 func (h *CatalogHandler) GetChartReadme(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
 		return
 	}
 	chart, err := h.queries.GetHelmChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Chart not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Chart not found")
 		return
 	}
 	version, err := h.resolveChartVersion(r, chart)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "No versions found for this chart.")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "No versions found for this chart.")
 		return
 	}
 	// Sprint 082: catalog sync stores empty README/default_values to
@@ -1286,17 +1286,17 @@ func (h *CatalogHandler) GetChartReadme(w http.ResponseWriter, r *http.Request) 
 func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid chart ID")
 		return
 	}
 	chart, err := h.queries.GetHelmChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Chart not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Chart not found")
 		return
 	}
 	version, err := h.resolveChartVersion(r, chart)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "No versions found for this chart.")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "No versions found for this chart.")
 		return
 	}
 	// Sprint 082: lazy hydrate default_values + README on cache miss
@@ -1323,12 +1323,12 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 func (h *CatalogHandler) GetInstalledChartValues(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid release ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid release ID")
 		return
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Installed chart not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Installed chart not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -1374,12 +1374,12 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	}
 	ops, err := h.queries.ListCatalogOperations(r.Context(), arg)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list catalog operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list catalog operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
 		return
 	}
 	items := make([]map[string]any, 0, len(ops))
@@ -1398,17 +1398,17 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetCatalogOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Catalog operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Catalog operation not found")
 		return
 	}
 	clusterID, err := catalogOperationClusterID(op)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve catalog operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve catalog operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -1424,21 +1424,20 @@ func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetCatalogOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Catalog operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Catalog operation not found")
 		return
 	}
-	if op.Status != OpStatusFailed && op.Status != OpStatusSuperseded {
-		RespondError(w, http.StatusConflict, "invalid_state", "Only failed or superseded operations can be retried")
+	if !requireRetryableOperation(w, r, op.Status) {
 		return
 	}
 	clusterID, err := catalogOperationClusterID(op)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "resolve_error", "Failed to resolve catalog operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve catalog operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -1446,7 +1445,7 @@ func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	}
 	requeued, err := h.queries.RequeueCatalogOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "retry_error", "Failed to retry catalog operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to retry catalog operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -1468,7 +1467,7 @@ func catalogOperationClusterID(op sqlc.CatalogOperation) (uuid.UUID, error) {
 func (h *CatalogHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "status_error", "Failed to load catalog operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load catalog operations")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -1483,41 +1482,26 @@ func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	counts := map[string]int{}
-	staleRunning := 0
-	recent := make([]map[string]any, 0, min(len(ops), 5))
-	var latestFailure map[string]any
-	recentFailureCount := 0
-	for _, op := range ops {
-		if restricted {
-			clusterID, err := catalogOperationClusterID(op)
-			if err != nil || !h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
-				continue
+	opSummary := summarizeOperations(ctx, ops, operationStatusSummaryConfig[sqlc.CatalogOperation]{
+		Status:    func(op sqlc.CatalogOperation) string { return op.Status },
+		CreatedAt: func(op sqlc.CatalogOperation) time.Time { return op.CreatedAt },
+		IsStaleRunning: func(op sqlc.CatalogOperation, now time.Time) bool {
+			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) > time.Minute
+		},
+		Include: func(_ context.Context, op sqlc.CatalogOperation) bool {
+			if !restricted {
+				return true
 			}
-		}
-		counts[op.Status]++
-		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) > time.Minute {
-			staleRunning++
-		}
-		if len(recent) < 5 {
-			recent = append(recent, h.operationPreview(ctx, op))
-		}
-		if (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) && time.Since(op.CreatedAt) <= 30*time.Minute {
-			recentFailureCount++
-		}
-		if latestFailure == nil && (op.Status == OpStatusFailed || op.Status == OpStatusSuperseded) {
-			latestFailure = h.operationPreview(ctx, op)
-		}
-	}
+			clusterID, err := catalogOperationClusterID(op)
+			return err == nil && h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead)
+		},
+		Preview:               func(ctx context.Context, op sqlc.CatalogOperation) map[string]any { return h.operationPreview(ctx, op) },
+		StaleThresholdSeconds: 60,
+	})
 	charts, _ := h.queries.CountHelmCharts(ctx)
 	installed, _ := h.queries.CountInstalledCharts(ctx)
 	return map[string]any{
-		"reconciler": map[string]any{
-			"enabled":              true,
-			"queueDepth":           counts[OpStatusPending] + counts[OpStatusRunning],
-			"staleRunningCount":    staleRunning,
-			"staleThresholdSecond": 60,
-		},
+		"reconciler": opSummary.reconcilerMap(),
 		"catalog": map[string]any{
 			"chartCount": charts,
 			"installedCount": func() any {
@@ -1527,10 +1511,10 @@ func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any,
 				return installed
 			}(),
 		},
-		"operations":         counts,
-		"recentFailureCount": recentFailureCount,
-		"recentOperations":   recent,
-		"latestFailure":      latestFailure,
+		"operations":         opSummary.Counts,
+		"recentFailureCount": opSummary.RecentFailures,
+		"recentOperations":   opSummary.Recent,
+		"latestFailure":      opSummary.LatestFailure,
 	}, nil
 }
 
@@ -1539,14 +1523,34 @@ func (h *CatalogHandler) enqueueOperation(ctx context.Context, targetType, targe
 	if err != nil {
 		return sqlc.CatalogOperation{}, err
 	}
-	op, err := h.queries.CreateCatalogOperation(ctx, sqlc.CreateCatalogOperationParams{
+	params := sqlc.CreateCatalogOperationParams{
 		TargetType:    targetType,
 		TargetKey:     targetKey,
 		OperationType: operationType,
 		Payload:       payload,
 		Status:        OpStatusPending,
 		CreatedByID:   userID,
-	})
+	}
+	var op sqlc.CatalogOperation
+	if idem, ok := operationIdempotencyFromContext(ctx); ok {
+		if creator, ok := h.queries.(interface {
+			CreateCatalogOperationIdempotent(context.Context, sqlc.CreateCatalogOperationIdempotentParams) (sqlc.CatalogOperation, error)
+		}); ok {
+			op, err = creator.CreateCatalogOperationIdempotent(ctx, sqlc.CreateCatalogOperationIdempotentParams{
+				Scope:          idem.scope,
+				IdempotencyKey: idem.key,
+				TargetType:     params.TargetType,
+				TargetKey:      params.TargetKey,
+				OperationType:  params.OperationType,
+				Payload:        params.Payload,
+				Status:         params.Status,
+				CreatedByID:    params.CreatedByID,
+			})
+		}
+	}
+	if op.ID == uuid.Nil && err == nil {
+		op, err = h.queries.CreateCatalogOperation(ctx, params)
+	}
 	if err == nil {
 		h.TriggerReconcile()
 	}
@@ -1617,62 +1621,59 @@ func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []cl
 	if err != nil {
 		return nil
 	}
-	latestByTarget := map[string]uuid.UUID{}
-	for i := len(ops) - 1; i >= 0; i-- {
-		key := ops[i].TargetType + ":" + ops[i].TargetKey
-		if _, ok := latestByTarget[key]; !ok {
-			latestByTarget[key] = ops[i].ID
-		}
-	}
-	claimed := make([]claimedOp, 0, len(ops))
-	for _, op := range ops {
-		key := op.TargetType + ":" + op.TargetKey
-		if latestID, ok := latestByTarget[key]; ok && latestID != op.ID {
+	return claimLatestOperations(ctx, ops, operationRunnerConfig[sqlc.CatalogOperation]{
+		ID:        func(op sqlc.CatalogOperation) uuid.UUID { return op.ID },
+		TargetKey: func(op sqlc.CatalogOperation) string { return op.TargetType + ":" + op.TargetKey },
+		Status:    func(op sqlc.CatalogOperation) string { return op.Status },
+		IsFreshRunning: func(op sqlc.CatalogOperation, now time.Time) bool {
+			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) < time.Minute
+		},
+		Supersede: func(ctx context.Context, op sqlc.CatalogOperation) {
 			h.recordCatalogOperationEvent(ctx, op.ID, "info", "queue", "operation superseded by newer desired state", map[string]any{
 				"targetType": op.TargetType,
 				"targetKey":  op.TargetKey,
 			})
 			_, _ = h.queries.MarkCatalogOperationSuperseded(ctx, sqlc.MarkCatalogOperationSupersededParams{
 				ID:           op.ID,
-				ErrorMessage: "superseded by newer operation for target",
+				ErrorMessage: operationSupersededMessage,
 			})
-			continue
-		}
-		if op.Status == OpStatusRunning && op.StartedAt.Valid && time.Since(op.StartedAt.Time) < time.Minute {
-			continue
-		}
-		running, err := h.queries.MarkCatalogOperationRunning(ctx, op.ID)
-		if err != nil {
-			continue
-		}
-		h.recordCatalogOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{
-			"operationType": running.OperationType,
-			"targetType":    running.TargetType,
-			"targetKey":     running.TargetKey,
-			"attemptCount":  running.AttemptCount,
-		})
-		claimed = append(claimed, claimedOp{
-			ID: running.ID,
-			Run: func(ctx context.Context) error {
-				return h.executeOperation(ctx, running)
-			},
-			OnComplete: func(ctx context.Context) {
-				h.recordCatalogOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-				_, _ = h.queries.MarkCatalogOperationCompleted(ctx, running.ID)
-			},
-			OnFailure: func(ctx context.Context, err error) {
-				h.recordCatalogOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-				_, _ = h.queries.MarkCatalogOperationFailed(ctx, sqlc.MarkCatalogOperationFailedParams{
-					ID:           running.ID,
-					ErrorMessage: err.Error(),
-				})
-				if h.log != nil {
-					h.log.Warn("catalog operation failed", "id", running.ID.String(), "error", err)
-				}
-			},
-		})
-	}
-	return claimed
+		},
+		MarkRunning: func(ctx context.Context, op sqlc.CatalogOperation) (sqlc.CatalogOperation, error) {
+			running, err := h.queries.MarkCatalogOperationRunning(ctx, op.ID)
+			if err != nil {
+				return sqlc.CatalogOperation{}, err
+			}
+			h.recordCatalogOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{
+				"operationType": running.OperationType,
+				"targetType":    running.TargetType,
+				"targetKey":     running.TargetKey,
+				"attemptCount":  running.AttemptCount,
+			})
+			return running, nil
+		},
+		Claimed: func(running sqlc.CatalogOperation) claimedOp {
+			return claimedOp{
+				ID: running.ID,
+				Run: func(ctx context.Context) error {
+					return h.executeOperation(ctx, running)
+				},
+				OnComplete: func(ctx context.Context) {
+					h.recordCatalogOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
+					_, _ = h.queries.MarkCatalogOperationCompleted(ctx, running.ID)
+				},
+				OnFailure: func(ctx context.Context, err error) {
+					h.recordCatalogOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+					_, _ = h.queries.MarkCatalogOperationFailed(ctx, sqlc.MarkCatalogOperationFailedParams{
+						ID:           running.ID,
+						ErrorMessage: err.Error(),
+					})
+					if h.log != nil {
+						h.log.Warn("catalog operation failed", "id", running.ID.String(), "error", err)
+					}
+				},
+			}
+		},
+	})
 }
 
 func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOperation) error {

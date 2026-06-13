@@ -4,6 +4,7 @@
 // own auth gate fans the 403s into a friendlier "you need admin" notice.
 
 import api from '../api';
+import type { APIResponse, PaginatedResponse } from '@/types';
 
 export interface QueueSummary {
   name: string;
@@ -26,6 +27,28 @@ export interface DLQEntry {
   last_failed_at: string;
 }
 
+export type TaskOutboxStatus = 'pending' | 'delivering' | 'failed' | 'delivered' | 'dead';
+
+export interface TaskOutboxEntry {
+  id: string;
+  dedupe_key?: string;
+  task_type: string;
+  queue_name: string;
+  max_retry: number;
+  timeout_seconds: number;
+  unique_seconds: number;
+  max_delivery_attempts: number;
+  status: TaskOutboxStatus;
+  attempt_count: number;
+  next_attempt_at?: string;
+  locked_until?: string;
+  delivered_at?: string;
+  last_error?: string;
+  payload_size: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export async function listQueues(): Promise<QueueSummary[]> {
   const res = await api.get<QueueSummary[]>('/admin/queues/');
   return res.data ?? [];
@@ -42,4 +65,16 @@ export async function retryDLQTask(queue: string, id: string): Promise<void> {
 
 export async function discardDLQTask(queue: string, id: string): Promise<void> {
   await api.delete(`/admin/queues/${encodeURIComponent(queue)}/dlq/${encodeURIComponent(id)}/`);
+}
+
+export async function listTaskOutbox(status: TaskOutboxStatus | '' = 'dead'): Promise<PaginatedResponse<TaskOutboxEntry>> {
+  const res = await api.get<PaginatedResponse<TaskOutboxEntry>>('/admin/task-outbox/', {
+    params: { status, limit: 100 },
+  });
+  return res.data;
+}
+
+export async function retryTaskOutbox(id: string): Promise<TaskOutboxEntry> {
+  const res = await api.post<APIResponse<TaskOutboxEntry>>(`/admin/task-outbox/${encodeURIComponent(id)}/retry/`);
+  return res.data.data;
 }

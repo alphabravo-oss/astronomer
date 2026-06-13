@@ -12,6 +12,7 @@ import { Terminal as TerminalIcon, RefreshCw, X, ChevronDown } from 'lucide-reac
 import { Terminal, useTerminal } from '@wterm/react';
 import '@wterm/react/css';
 import { cn } from '@/lib/utils';
+import { createStreamTicket } from '@/lib/api';
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -70,61 +71,67 @@ export function PodTerminal({
   const connectWebSocket = useCallback(() => {
     const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = process.env.NEXT_PUBLIC_WS_URL || `${wsProtocol}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('astronomer_token') : null;
-    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-    const wsUrl = `${wsHost}/exec/${clusterId}/${namespace}/${pod}/${selectedContainer}/${tokenQuery}`;
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
     setStatus('connecting');
+    createStreamTicket('exec', clusterId)
+      .then(({ ticket }) => {
+        const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
+        const wsUrl = `${wsHost}/exec/${clusterId}/${namespace}/${pod}/${selectedContainer}/${ticketQuery}`;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-    ws.onopen = () => {
-      setStatus('connected');
-      ws.send(JSON.stringify({ type: 'resize', cols: sizeRef.current.cols, rows: sizeRef.current.rows }));
-    };
+        ws.onopen = () => {
+          setStatus('connected');
+          ws.send(JSON.stringify({ type: 'resize', cols: sizeRef.current.cols, rows: sizeRef.current.rows }));
+        };
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data && typeof data === 'object') {
-          if (data.type === 'output' || data.type === 'stdout' || data.type === 'stderr') {
-            write(data.data ?? '');
-            return;
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && typeof data === 'object') {
+              if (data.type === 'output' || data.type === 'stdout' || data.type === 'stderr') {
+                write(data.data ?? '');
+                return;
+              }
+              if (data.type === 'error') {
+                write(`\r\n\x1b[31mError: ${data.message ?? 'unknown error'}\x1b[0m\r\n`);
+                return;
+              }
+              if (data.type === 'end') {
+                write(`\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ''}\x1b[0m\r\n`);
+                return;
+              }
+              if (typeof data.data === 'string') {
+                write(data.data);
+                return;
+              }
+            }
+            if (typeof data === 'string') {
+              write(data);
+            }
+          } catch {
+            write(event.data);
           }
-          if (data.type === 'error') {
-            write(`\r\n\x1b[31mError: ${data.message ?? 'unknown error'}\x1b[0m\r\n`);
-            return;
-          }
-          if (data.type === 'end') {
-            write(`\r\n\x1b[33mSession ended${data.reason ? `: ${data.reason}` : ''}\x1b[0m\r\n`);
-            return;
-          }
-          if (typeof data.data === 'string') {
-            write(data.data);
-            return;
-          }
-        }
-        if (typeof data === 'string') {
-          write(data);
-        }
-      } catch {
-        write(event.data);
-      }
-    };
+        };
 
-    ws.onerror = () => {
-      setStatus('error');
-      write('\r\n\x1b[31mWebSocket connection error\x1b[0m\r\n');
-    };
+        ws.onerror = () => {
+          setStatus('error');
+          write('\r\n\x1b[31mWebSocket connection error\x1b[0m\r\n');
+        };
 
-    ws.onclose = (event) => {
-      setStatus('disconnected');
-      const reason = event.reason || (event.code === 1006 ? 'connection lost' : '');
-      write(`\r\n\x1b[33mConnection closed${reason ? `: ${reason}` : ''}\x1b[0m\r\n`);
-      write('\x1b[33mPress the reconnect button to try again\x1b[0m\r\n');
-    };
+        ws.onclose = (event) => {
+          setStatus('disconnected');
+          const reason = event.reason || (event.code === 1006 ? 'connection lost' : '');
+          write(`\r\n\x1b[33mConnection closed${reason ? `: ${reason}` : ''}\x1b[0m\r\n`);
+          write('\x1b[33mPress the reconnect button to try again\x1b[0m\r\n');
+        };
+      })
+      .catch((error: Error) => {
+        setStatus('error');
+        write(`\r\n\x1b[31mFailed to create stream ticket: ${error.message}\x1b[0m\r\n`);
+      });
 
-    return ws;
+    return wsRef.current;
   }, [clusterId, namespace, pod, selectedContainer, write]);
 
   // Fires once the wterm WASM core is up.

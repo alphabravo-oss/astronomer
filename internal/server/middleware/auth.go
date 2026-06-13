@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -82,6 +83,36 @@ func authError(w http.ResponseWriter, code, message string) {
 	json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
+func isSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateCSRF checks the browser double-submit token. It is intentionally
+// exported so public cookie-consuming handlers such as /auth/refresh can apply
+// the same rule even though they are not behind AuthWithQueries.
+func ValidateCSRF(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	header := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	if header == "" {
+		return false
+	}
+	cookie, err := r.Cookie(CSRFCookieName)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		return false
+	}
+	if len(header) != len(cookie.Value) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(header), []byte(cookie.Value)) == 1
+}
+
 // Auth creates middleware that authenticates requests via JWT or API token.
 //
 // Check order:
@@ -92,13 +123,26 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 	return AuthWithQueries(jwtManager, nil)
 }
 
-// AuthWithQueries authenticates requests via JWT or API token, using DB lookups when provided.
+// AuthWithQueries authenticates requests via JWT, API token, or the browser
+// HttpOnly session cookie, using DB lookups when provided. Authorization
+// headers take precedence so headless API-token callers are unaffected even
+// when a browser cookie is also present.
 func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
+			usedSessionCookie := false
 			if header == "" {
-				authError(w, "authentication_required", "Authorization header is required")
+				if c, err := r.Cookie(SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+					header = "Bearer " + c.Value
+					usedSessionCookie = true
+				} else {
+					authError(w, "authentication_required", "Authorization header or session cookie is required")
+					return
+				}
+			}
+			if usedSessionCookie && !isSafeMethod(r.Method) && !ValidateCSRF(r) {
+				authError(w, "csrf_required", "CSRF token is required")
 				return
 			}
 

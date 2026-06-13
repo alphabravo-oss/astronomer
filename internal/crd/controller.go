@@ -61,6 +61,28 @@ type ProjectSync interface {
 	DeleteByName(ctx context.Context, name string) error
 }
 
+// ObjectRef identifies the Kubernetes object currently driving a DB row.
+type ObjectRef struct {
+	APIVersion string
+	Kind       string
+	Namespace  string
+	Name       string
+	Generation int64
+}
+
+// ClusterOwnershipSync is an optional extension implemented by production
+// sync adapters that can stamp DB ownership metadata after a successful sync.
+type ClusterOwnershipSync interface {
+	ValidateClusterOwnership(ctx context.Context, spec ClusterSpec, ref ObjectRef) error
+	RecordClusterOwnership(ctx context.Context, spec ClusterSpec, ref ObjectRef) error
+}
+
+// ProjectOwnershipSync is the project-side ownership metadata hook.
+type ProjectOwnershipSync interface {
+	ValidateProjectOwnership(ctx context.Context, spec ProjectSpec, ref ObjectRef) error
+	RecordProjectOwnership(ctx context.Context, spec ProjectSpec, ref ObjectRef) error
+}
+
 // ErrInProgress is the sentinel a Sync implementation can return when the
 // delete work has been enqueued but is not yet complete. The controller
 // requeues without removing the finalizer when it sees this error.
@@ -97,6 +119,16 @@ type ControllerConfig struct {
 	// to pick up DB-side drift. Defaults to 60s when zero — see the spec's
 	// "polling reconcile every 60s" guidance.
 	PollPeriod time.Duration
+
+	// LeaderElection enables controller-runtime lease coordination. Enable this
+	// whenever the controller runs embedded in a Deployment with more than one
+	// server replica, otherwise every server pod reconciles the same CRs.
+	LeaderElection bool
+
+	// LeaderElectionNamespace is where the Lease object is stored. Defaults to
+	// WatchNamespace when empty. Required by controller-runtime for in-cluster
+	// workloads that cannot infer a namespace.
+	LeaderElectionNamespace string
 }
 
 // defaultPollPeriod is the fallback for ControllerConfig.PollPeriod.
@@ -143,11 +175,16 @@ func New(cfg ControllerConfig) (manager.Manager, error) {
 		// Health-probe HTTP server is also unused: the server pod has its
 		// own /health endpoint handled by chi. Empty BindAddress = disabled.
 		HealthProbeBindAddress: "0",
-		// Leader election is disabled. The controller runs co-resident with
-		// the server pod, which already coordinates exclusive work through
-		// the worker.leader lease. Wiring a second lease for the CRD path
-		// would double-book the same role.
-		LeaderElection: false,
+		LeaderElection:         cfg.LeaderElection,
+	}
+	if cfg.LeaderElection {
+		leaderNamespace := cfg.LeaderElectionNamespace
+		if leaderNamespace == "" {
+			leaderNamespace = cfg.WatchNamespace
+		}
+		mgrOpts.LeaderElectionNamespace = leaderNamespace
+		mgrOpts.LeaderElectionID = "astronomer-management-crd-controller"
+		mgrOpts.LeaderElectionResourceLock = "leases"
 	}
 	if ns := cfg.WatchNamespace; ns != "" {
 		mgrOpts.Cache = cache.Options{DefaultNamespaces: map[string]cache.Config{ns: {}}}
@@ -266,11 +303,30 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req reconcile.Request
 		}
 	}
 
+	ref := ObjectRef{
+		APIVersion: GroupVersion.String(),
+		Kind:       "Cluster",
+		Namespace:  obj.Namespace,
+		Name:       obj.Name,
+		Generation: obj.Generation,
+	}
+	if ownershipSync, ok := r.Sync.(ClusterOwnershipSync); ok {
+		if err := ownershipSync.ValidateClusterOwnership(ctx, obj.Spec, ref); err != nil {
+			log.Warn("crd_cluster_ownership_invalid", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
 	status, err := r.Sync.EnsureFromCRD(ctx, obj.Spec)
 	if err != nil {
 		log.Warn("crd_cluster_sync_failed", "error", err)
 		// Don't burn the queue on hard sync failures — exponential backoff.
 		return reconcile.Result{}, err
+	}
+	if ownershipSync, ok := r.Sync.(ClusterOwnershipSync); ok {
+		if err := ownershipSync.RecordClusterOwnership(ctx, obj.Spec, ref); err != nil {
+			log.Warn("crd_cluster_ownership_failed", "error", err)
+			return reconcile.Result{}, err
+		}
 	}
 	if status.LastReconciled.IsZero() {
 		status.LastReconciled = metav1.Time{Time: time.Now().UTC()}
@@ -363,10 +419,29 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req reconcile.Request
 		}
 	}
 
+	ref := ObjectRef{
+		APIVersion: GroupVersion.String(),
+		Kind:       "Project",
+		Namespace:  obj.Namespace,
+		Name:       obj.Name,
+		Generation: obj.Generation,
+	}
+	if ownershipSync, ok := r.Sync.(ProjectOwnershipSync); ok {
+		if err := ownershipSync.ValidateProjectOwnership(ctx, obj.Spec, ref); err != nil {
+			log.Warn("crd_project_ownership_invalid", "error", err)
+			return reconcile.Result{}, err
+		}
+	}
 	status, err := r.Sync.EnsureFromCRD(ctx, obj.Spec)
 	if err != nil {
 		log.Warn("crd_project_sync_failed", "error", err)
 		return reconcile.Result{}, err
+	}
+	if ownershipSync, ok := r.Sync.(ProjectOwnershipSync); ok {
+		if err := ownershipSync.RecordProjectOwnership(ctx, obj.Spec, ref); err != nil {
+			log.Warn("crd_project_ownership_failed", "error", err)
+			return reconcile.Result{}, err
+		}
 	}
 	if status.LastReconciled.IsZero() {
 		status.LastReconciled = metav1.Time{Time: time.Now().UTC()}

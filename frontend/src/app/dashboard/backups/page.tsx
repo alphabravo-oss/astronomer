@@ -36,6 +36,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { PhaseBadge } from '@/components/backups/phase-badge';
 import { RestoreModal } from '@/components/backups/restore-modal';
@@ -483,6 +484,7 @@ export default function BackupsPage() {
               title="No storage locations yet"
               description="Add a Velero BackupStorageLocation pointing at S3, GCS, Azure, or any S3-compatible bucket to capture cluster state."
               actionLabel="Add Storage"
+              actionIcon={Plus}
               onAction={() => router.push('/dashboard/backups/storage/new')}
             />
           ) : (
@@ -502,6 +504,7 @@ export default function BackupsPage() {
               title="No schedules configured"
               description="Schedules emit Velero Backup CRs on a cron expression. You'll need at least one storage location first."
               actionLabel="Create Schedule"
+              actionIcon={Plus}
               onAction={() => router.push('/dashboard/backups/schedules/new')}
               disabled={(storageQ.data?.data ?? []).length === 0}
             />
@@ -570,40 +573,6 @@ export default function BackupsPage() {
         variant="destructive"
         loading={deleteScheduleMu.isPending}
       />
-    </div>
-  );
-}
-
-interface EmptyStateProps {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  disabled?: boolean;
-}
-
-function EmptyState({ icon: Icon, title, description, actionLabel, onAction, disabled }: EmptyStateProps) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-        <Icon className="h-6 w-6 text-muted-foreground" />
-      </div>
-      <div>
-        <p className="text-base font-medium text-foreground">{title}</p>
-        <p className="text-sm text-muted-foreground max-w-md mt-1">{description}</p>
-      </div>
-      {actionLabel && onAction && (
-        <button
-          onClick={onAction}
-          disabled={disabled}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
-          {actionLabel}
-        </button>
-      )}
     </div>
   );
 }

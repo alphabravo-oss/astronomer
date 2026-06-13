@@ -30,7 +30,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -115,24 +114,10 @@ func NewSupportBundleHandler(queries SupportBundleQuerier, k8sClient kubernetes.
 // surfaces audit-log entries and platform internals that aren't safe to
 // share with non-admins.
 func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return
-	}
-	dbUser, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return
-	}
-	if !dbUser.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"Support bundle download requires superuser privileges")
+	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "Support bundle store not configured",
+		ForbiddenMessage:        "Support bundle download requires superuser privileges",
+	}); !ok {
 		return
 	}
 
@@ -313,10 +298,10 @@ func (h *SupportBundleHandler) writePods(ctx context.Context, zw *zip.Writer, lo
 	out := make([]map[string]any, 0, len(pods.Items))
 	for _, p := range pods.Items {
 		out = append(out, map[string]any{
-			"name":              p.Name,
-			"phase":             string(p.Status.Phase),
-			"node":              p.Spec.NodeName,
-			"start_time":        p.Status.StartTime,
+			"name":               p.Name,
+			"phase":              string(p.Status.Phase),
+			"node":               p.Spec.NodeName,
+			"start_time":         p.Status.StartTime,
 			"container_statuses": summarizeContainers(p.Status.ContainerStatuses),
 			"creation_timestamp": p.CreationTimestamp,
 		})
@@ -419,10 +404,10 @@ func (h *SupportBundleHandler) writeHelmRelease(ctx context.Context, zw *zip.Wri
 	out := make([]map[string]any, 0, len(secrets.Items))
 	for _, s := range secrets.Items {
 		entry := map[string]any{
-			"name":              s.Name,
-			"created":           s.CreationTimestamp,
-			"labels":            s.Labels,
-			"data_size_bytes":   sumSecretBytes(s),
+			"name":            s.Name,
+			"created":         s.CreationTimestamp,
+			"labels":          s.Labels,
+			"data_size_bytes": sumSecretBytes(s),
 		}
 		out = append(out, entry)
 	}
@@ -486,10 +471,10 @@ func (h *SupportBundleHandler) writeAsynqQueues(ctx context.Context, zw *zip.Wri
 			dlq := make([]map[string]any, 0, len(archived))
 			for _, t := range archived {
 				dlq = append(dlq, map[string]any{
-					"id":         t.ID,
-					"type":       t.Type,
-					"retried":    t.Retried,
-					"last_err":   t.LastErr,
+					"id":             t.ID,
+					"type":           t.Type,
+					"retried":        t.Retried,
+					"last_err":       t.LastErr,
 					"last_failed_at": t.LastFailedAt,
 				})
 			}

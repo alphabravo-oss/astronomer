@@ -48,6 +48,7 @@ import { toast } from 'sonner';
 // ============================================================
 
 export const queryKeys = {
+  featureFlags: ['settings', 'features'] as const,
   clusters: {
     all: ['clusters'] as const,
     list: (params?: Record<string, unknown>) => ['clusters', 'list', params] as const,
@@ -166,6 +167,14 @@ export const queryKeys = {
       ['generic', clusterId, resourceType] as const,
   },
 };
+
+export function useFeatureFlags() {
+  return useQuery({
+    queryKey: queryKeys.featureFlags,
+    queryFn: () => apiClient.getFeatureFlags(),
+    staleTime: 30_000,
+  });
+}
 
 // ============================================================
 // Cluster Hooks
@@ -289,6 +298,21 @@ export function useUpdateCluster() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to update cluster: ${error.message}`);
+    },
+  });
+}
+
+export function useTakeoverClusterOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.takeoverClusterOwnership(id),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.detail(id) });
+      toast.success('Cluster ownership transferred');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to transfer cluster ownership: ${error.message}`);
     },
   });
 }
@@ -1393,6 +1417,21 @@ export function useDeleteProject() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to delete project: ${error.message}`);
+    },
+  });
+}
+
+export function useTakeoverProjectOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.takeoverProjectOwnership(id),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(id) });
+      toast.success('Project ownership transferred');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to transfer project ownership: ${error.message}`);
     },
   });
 }

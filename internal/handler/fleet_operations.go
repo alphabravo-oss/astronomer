@@ -351,7 +351,7 @@ func (h *FleetOperationHandler) List(w http.ResponseWriter, r *http.Request) {
 		QueryOffset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list fleet operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list fleet operations")
 		return
 	}
 	total, _ := h.queries.CountFleetOperations(r.Context(), status)
@@ -366,12 +366,12 @@ func (h *FleetOperationHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *FleetOperationHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
 		return
 	}
 	op, err := h.queries.GetFleetOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Fleet operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Fleet operation not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, fleetOperationToResponse(op))
@@ -384,18 +384,18 @@ func (h *FleetOperationHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *FleetOperationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateFleetOperationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if err := validateFleetOperation(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
 	respectMW := true
 	if req.RespectMaintenanceWindows != nil {
 		respectMW = *req.RespectMaintenanceWindows
 	}
-	op, err := h.queries.CreateFleetOperation(r.Context(), sqlc.CreateFleetOperationParams{
+	params := sqlc.CreateFleetOperationParams{
 		Name:                      req.Name,
 		Description:               req.Description,
 		OperationType:             req.OperationType,
@@ -406,9 +406,10 @@ func (h *FleetOperationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		OnError:                   req.OnError,
 		RespectMaintenanceWindows: respectMW,
 		CreatedBy:                 currentUserUUID(r),
-	})
+	}
+	op, err := h.createFleetOperation(withOperationIdempotency(r, "fleet"), params)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "create_error", "Failed to create fleet operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create fleet operation")
 		return
 	}
 	recordAudit(r, h.queries, "fleet.operation.created", "fleet_operation", op.ID.String(), op.Name, map[string]any{
@@ -421,17 +422,41 @@ func (h *FleetOperationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusCreated, fleetOperationToResponse(op))
 }
 
+func (h *FleetOperationHandler) createFleetOperation(ctx context.Context, params sqlc.CreateFleetOperationParams) (sqlc.FleetOperation, error) {
+	if idem, ok := operationIdempotencyFromContext(ctx); ok {
+		if creator, ok := h.queries.(interface {
+			CreateFleetOperationIdempotent(context.Context, sqlc.CreateFleetOperationIdempotentParams) (sqlc.FleetOperation, error)
+		}); ok {
+			return creator.CreateFleetOperationIdempotent(ctx, sqlc.CreateFleetOperationIdempotentParams{
+				Scope:                     idem.scope,
+				IdempotencyKey:            idem.key,
+				Name:                      params.Name,
+				Description:               params.Description,
+				OperationType:             params.OperationType,
+				OperationSpec:             params.OperationSpec,
+				Selector:                  params.Selector,
+				Strategy:                  params.Strategy,
+				MaxConcurrent:             params.MaxConcurrent,
+				OnError:                   params.OnError,
+				RespectMaintenanceWindows: params.RespectMaintenanceWindows,
+				CreatedBy:                 params.CreatedBy,
+			})
+		}
+	}
+	return h.queries.CreateFleetOperation(ctx, params)
+}
+
 // ListTargets handles GET /api/v1/fleet-operations/{id}/targets/.
 func (h *FleetOperationHandler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
 		return
 	}
 	// Ensure the operation exists so we 404 cleanly rather than
 	// returning an empty list for a typo.
 	if _, err := h.queries.GetFleetOperation(r.Context(), id); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Fleet operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Fleet operation not found")
 		return
 	}
 	items, err := h.queries.ListFleetOperationTargets(r.Context(), sqlc.ListFleetOperationTargetsParams{
@@ -440,7 +465,7 @@ func (h *FleetOperationHandler) ListTargets(w http.ResponseWriter, r *http.Reque
 		QueryOffset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list fleet targets")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list fleet targets")
 		return
 	}
 	total, _ := h.queries.CountFleetOperationTargets(r.Context(), id)
@@ -486,16 +511,16 @@ func (h *FleetOperationHandler) Abort(w http.ResponseWriter, r *http.Request) {
 func (h *FleetOperationHandler) RetryFailed(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
 		return
 	}
 	op, err := h.queries.GetFleetOperation(r.Context(), id)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Fleet operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Fleet operation not found")
 		return
 	}
 	if err := h.queries.RequeueFailedTargets(r.Context(), id); err != nil {
-		RespondError(w, http.StatusInternalServerError, "retry_error", "Failed to requeue failed targets")
+		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to requeue failed targets")
 		return
 	}
 	// When the parent is in a terminal state because of those failures
@@ -508,7 +533,7 @@ func (h *FleetOperationHandler) RetryFailed(w http.ResponseWriter, r *http.Reque
 			Status:    tasks.FleetOpStatusRunning,
 			LastError: "",
 		}); err != nil {
-			RespondError(w, http.StatusInternalServerError, "retry_error", "Failed to reset operation status")
+			RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to reset operation status")
 			return
 		}
 	}
@@ -524,20 +549,20 @@ func (h *FleetOperationHandler) RetryFailed(w http.ResponseWriter, r *http.Reque
 func (h *FleetOperationHandler) transitionStatus(w http.ResponseWriter, r *http.Request, allowedFrom []string, to, lastErr, auditAction string) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid fleet operation ID")
 		return
 	}
 	op, err := h.queries.GetFleetOperation(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "Fleet operation not found")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Fleet operation not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_error", "Failed to load fleet operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to load fleet operation")
 		return
 	}
 	if !fleetContainsString(allowedFrom, op.Status) {
-		RespondError(w, http.StatusConflict, "invalid_transition",
+		RespondRequestError(w, r, http.StatusConflict, "invalid_transition",
 			fmt.Sprintf("Cannot transition from %q to %q", op.Status, to))
 		return
 	}
@@ -547,7 +572,7 @@ func (h *FleetOperationHandler) transitionStatus(w http.ResponseWriter, r *http.
 		LastError: lastErr,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to transition status")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to transition status")
 		return
 	}
 	recordAudit(r, h.queries, auditAction, "fleet_operation", id.String(), op.Name, map[string]any{

@@ -146,7 +146,7 @@ export async function loginWithCredentialsChallengeAware(
     const res = await axios.post<APIResponse<VerifiedLogin> | VerifiedLogin>(
       `${API_BASE_URL}/auth/login/`,
       { username, password },
-      { headers: { 'Content-Type': 'application/json' } },
+      { headers: { 'Content-Type': 'application/json' }, withCredentials: true },
     );
     const raw = camelize(res.data) as { data?: VerifiedLogin } | VerifiedLogin;
     const body = ('data' in raw && raw.data ? raw.data : (raw as VerifiedLogin));

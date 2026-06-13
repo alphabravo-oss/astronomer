@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   useDeleteQuotaPlan,
@@ -217,9 +218,13 @@ function QuotaPlanInner() {
   if (error || !data) {
     toast.error('Failed to load quota plan');
     return (
-      <div className="rounded-xl border border-border bg-card p-6">
-        <p className="text-sm text-status-error">Quota plan not found.</p>
-      </div>
+      <EmptyState
+        icon={Gauge}
+        title="Quota plan not found"
+        description="The quota plan may have been deleted or renamed."
+        actionLabel="Back to quotas"
+        actionHref="/dashboard/settings/quotas"
+      />
     );
   }
   return <QuotaPlanForm initial={data} />;

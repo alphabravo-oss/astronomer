@@ -170,7 +170,7 @@ func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *h
 	}
 	rows, err := h.queries.ListMirroredIngressClasses(r.Context(), cid)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	out := make([]ClusterMirroredIngressClassDTO, 0, len(rows))
@@ -198,7 +198,7 @@ func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *h
 	}
 	rows, err := h.queries.ListMirroredGatewayClasses(r.Context(), cid)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	out := make([]ClusterMirroredGatewayClassDTO, 0, len(rows))
@@ -237,7 +237,7 @@ func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *
 		rows, err = h.queries.ListMirroredNetworkPolicies(r.Context(), cid)
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	out := make([]ClusterMirroredNetworkPolicyDTO, 0, len(rows))
@@ -278,7 +278,7 @@ func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *h
 		rows, err = h.queries.ListMirroredResourceQuotas(r.Context(), cid)
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	out := make([]ClusterMirroredResourceQuotaDTO, 0, len(rows))
@@ -317,7 +317,7 @@ func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http
 		rows, err = h.queries.ListMirroredLimitRanges(r.Context(), cid)
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	out := make([]ClusterMirroredLimitRangeDTO, 0, len(rows))
@@ -347,21 +347,21 @@ func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http
 // wiring hasn't completed yet (test fakes, pre-migration boots).
 func (h *ClusterResourcesHandler) resolveCluster(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	if h == nil || h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "not_wired", "cluster resources handler not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_wired", "cluster resources handler not wired")
 		return uuid.Nil, false
 	}
 	raw := chi.URLParam(r, "cluster_id")
 	cid, err := uuid.Parse(raw)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_cluster_id", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", err.Error())
 		return uuid.Nil, false
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), cid); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "cluster_not_found", "cluster does not exist")
+			RespondRequestError(w, r, http.StatusNotFound, "cluster_not_found", "cluster does not exist")
 			return uuid.Nil, false
 		}
-		RespondError(w, http.StatusInternalServerError, "cluster_lookup_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "cluster_lookup_failed", err.Error())
 		return uuid.Nil, false
 	}
 	return cid, true

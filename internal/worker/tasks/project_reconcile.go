@@ -32,6 +32,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -124,6 +125,7 @@ type ProjectK8sResponse struct {
 type ProjectReconcileDeps struct {
 	Queries   ProjectReconcileQuerier
 	Requester ProjectK8sRequester
+	Encryptor *auth.Encryptor
 }
 
 var projectDeps ProjectReconcileDeps
@@ -435,6 +437,9 @@ func reconcileProjectRegistryAccess(ctx context.Context, q ProjectReconcileQueri
 		}
 		return err
 	}
+	if err := materializeProjectRegistryPassword(&cfg); err != nil {
+		return err
+	}
 	if !hasUsableRegistryConfig(cfg) {
 		return removeProjectRegistryAccess(ctx, requester, clusterID.String(), namespace)
 	}
@@ -455,6 +460,21 @@ func hasUsableRegistryConfig(cfg sqlc.ClusterRegistryConfig) bool {
 	return strings.TrimSpace(cfg.PrivateRegistryUrl) != "" &&
 		strings.TrimSpace(cfg.RegistryUsername) != "" &&
 		strings.TrimSpace(cfg.RegistryPassword) != ""
+}
+
+func materializeProjectRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
+	if cfg == nil || strings.TrimSpace(cfg.RegistryPasswordEncrypted) == "" {
+		return nil
+	}
+	if projectDeps.Encryptor == nil {
+		return fmt.Errorf("encrypted registry password present but encryptor is not configured")
+	}
+	password, err := projectDeps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
+	if err != nil {
+		return err
+	}
+	cfg.RegistryPassword = password
+	return nil
 }
 
 func applyRegistrySecret(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, cfg sqlc.ClusterRegistryConfig) error {

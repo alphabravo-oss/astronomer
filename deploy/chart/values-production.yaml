@@ -111,6 +111,15 @@ postgres:
     dsnSecretRef:
       name: ""
       key: dsn
+  productionRequirements:
+    externalManagedOrHA: true
+    tlsRequired: true
+    pitrRequired: true
+    logicalBackupsRequired: true
+    restoreDrillRequired: true
+    minimumDailyBackups: 30
+    minimumWeeklyBackups: 12
+    minimumMonthlyBackups: 6
 
 redis:
   bundled:

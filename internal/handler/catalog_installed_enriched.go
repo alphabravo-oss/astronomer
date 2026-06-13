@@ -49,13 +49,13 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list cluster apps")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list cluster apps")
 		return
 	}
 
 	total, err := h.queries.CountInstalledChartsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_error", "Failed to count cluster apps")
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count cluster apps")
 		return
 	}
 
@@ -94,7 +94,7 @@ func (h *CatalogHandler) DeleteFailedClusterApps(w http.ResponseWriter, r *http.
 	}
 	rows, err := h.queries.DeleteFailedInstallationsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_error", "Failed to delete failed installations")
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete failed installations")
 		return
 	}
 	recordAudit(r, h.queries, "catalog.installations.delete_failed", "cluster", clusterID.String(), "", map[string]any{

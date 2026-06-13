@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { WindowManager } from '@/components/window-manager/window-manager';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useUIStore, useAuthStore } from '@/lib/store';
+import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
+import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
 import { cn } from '@/lib/utils';
+import { Lock } from 'lucide-react';
 
 export default function DashboardLayout({
   children,
@@ -17,7 +21,20 @@ export default function DashboardLayout({
 }) {
   const { sidebarCollapsed } = useUIStore();
   const router = useRouter();
-  const mustChangePassword = useAuthStore((s) => s.user?.must_change_password);
+  const pathname = usePathname();
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const storedUser = useAuthStore((s) => s.user);
+  const { data: currentUser } = useCurrentUser();
+  const { data: featureFlags } = useFeatureFlags();
+  const effectiveUser = currentUser ?? storedUser;
+  const mustChangePassword = effectiveUser?.mustChangePassword || effectiveUser?.must_change_password;
+  const disabledFeature = disabledFeatureForPath(pathname, featureFlags);
+
+  useEffect(() => {
+    if (currentUser) {
+      updateUser(currentUser);
+    }
+  }, [currentUser, updateUser]);
 
   // Bootstrap admin / any user flagged must_change_password: kick them out
   // to the forced-rotation screen before any dashboard data starts loading.
@@ -45,7 +62,7 @@ export default function DashboardLayout({
         <Topbar />
         <main className="flex-1 min-h-0 overflow-y-auto">
           <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
-            {children}
+            {disabledFeature ? <FeatureDisabledState /> : children}
           </div>
         </main>
         <div id="bottom-panel-root" />
@@ -58,5 +75,33 @@ export default function DashboardLayout({
       */}
       <WindowManager />
     </div>
+  );
+}
+
+const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
+  { prefix: '/dashboard/projects', flag: 'feature.projects' },
+  { prefix: '/dashboard/argocd', flag: 'feature.argocd' },
+  { prefix: '/dashboard/backups', flag: 'feature.backups' },
+  { prefix: '/dashboard/catalog', flag: 'feature.catalog' },
+  { prefix: '/dashboard/tools', flag: 'feature.catalog' },
+  { prefix: '/dashboard/monitoring', flag: 'feature.monitoring' },
+  { prefix: '/dashboard/security', flag: 'feature.security' },
+];
+
+function disabledFeatureForPath(pathname: string, flags?: FeatureFlags): FeatureFlagKey | null {
+  if (!flags) return null;
+  const match = featurePathPrefixes.find(({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  if (!match) return null;
+  return flags[match.flag] === false ? match.flag : null;
+}
+
+function FeatureDisabledState() {
+  return (
+    <EmptyState
+      icon={Lock}
+      title="Section disabled"
+      description="This section is disabled by platform settings."
+      className="rounded-lg border border-border bg-card p-8"
+    />
   );
 }

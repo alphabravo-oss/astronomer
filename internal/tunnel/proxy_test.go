@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +44,9 @@ func TestBuildK8sRequestPayload(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/cluster-1/k8s/api/v1/namespaces/default/pods?pretty=true", strings.NewReader(bodyContent))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Impersonate-User", "system:admin")
+	req.Header.Set("Impersonate-Group", "system:masters")
+	req.Header.Set("Impersonate-Extra-Scopes", "danger")
 
 	payload, err := buildK8sRequestPayload(req)
 	if err != nil {
@@ -63,6 +67,11 @@ func TestBuildK8sRequestPayload(t *testing.T) {
 
 	if payload.Headers["Content-Type"] != "application/json" {
 		t.Fatalf("expected Content-Type header, got %v", payload.Headers)
+	}
+	for _, header := range []string{"Authorization", "Impersonate-User", "Impersonate-Group", "Impersonate-Extra-Scopes"} {
+		if _, ok := payload.Headers[header]; ok {
+			t.Fatalf("expected %s to be stripped, headers=%v", header, payload.Headers)
+		}
 	}
 
 	// Verify body is base64-encoded.
@@ -121,9 +130,8 @@ func TestHandleK8sProxy_Timeout(t *testing.T) {
 		sendCh:    make(chan *protocol.Message, sendChannelSize),
 		cancel:    func() {},
 	}
-	
+
 	hub.agents.Set("cluster-timeout", agent)
-	
 
 	proxy := NewProxyHandler(hub, slog.Default())
 
@@ -157,9 +165,8 @@ func TestHandleK8sProxy_SuccessfulResponse(t *testing.T) {
 		sendCh:    make(chan *protocol.Message, sendChannelSize),
 		cancel:    func() {},
 	}
-	
+
 	hub.agents.Set("cluster-ok", agent)
-	
 
 	proxy := NewProxyHandler(hub, slog.Default())
 
@@ -201,6 +208,158 @@ func TestHandleK8sProxy_SuccessfulResponse(t *testing.T) {
 
 	if body := w.Body.String(); body != `{"items":[]}` {
 		t.Fatalf("expected body {\"items\":[]}, got %q", body)
+	}
+}
+
+func TestHandleK8sProxy_ForwardsNamedK8sOperations(t *testing.T) {
+	tests := []struct {
+		name        string
+		method      string
+		target      string
+		body        string
+		contentType string
+		wantType    protocol.MessageType
+		wantPath    string
+		wantBody    string
+		wantWatch   string
+	}{
+		{
+			name:     "GET pods",
+			method:   http.MethodGet,
+			target:   "/api/v1/clusters/%s/k8s/api/v1/pods",
+			wantType: protocol.MsgK8sRequest,
+			wantPath: "/api/v1/pods",
+		},
+		{
+			name:        "PATCH deployment",
+			method:      http.MethodPatch,
+			target:      "/api/v1/clusters/%s/k8s/apis/apps/v1/namespaces/default/deployments/web",
+			body:        `{"spec":{"replicas":3}}`,
+			contentType: "application/merge-patch+json",
+			wantType:    protocol.MsgK8sRequest,
+			wantPath:    "/apis/apps/v1/namespaces/default/deployments/web",
+			wantBody:    `{"spec":{"replicas":3}}`,
+		},
+		{
+			name:     "DELETE pod",
+			method:   http.MethodDelete,
+			target:   "/api/v1/clusters/%s/k8s/api/v1/namespaces/default/pods/web-0",
+			wantType: protocol.MsgK8sRequest,
+			wantPath: "/api/v1/namespaces/default/pods/web-0",
+		},
+		{
+			name:      "WATCH pods",
+			method:    http.MethodGet,
+			target:    "/api/v1/clusters/%s/k8s/api/v1/pods?watch=true&resourceVersion=42",
+			wantType:  protocol.MsgK8sStreamRequest,
+			wantPath:  "/api/v1/pods?watch=true&resourceVersion=42",
+			wantWatch: `"type":"ADDED"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clusterID := "cluster-" + strings.NewReplacer(" ", "-", "_", "-").Replace(strings.ToLower(tt.name))
+			hub := NewHub(slog.Default())
+			agent := &AgentConnection{
+				ClusterID: clusterID,
+				Streams:   NewStreamManager(256),
+				sendCh:    make(chan *protocol.Message, sendChannelSize),
+				cancel:    func() {},
+			}
+			hub.agents.Set(clusterID, agent)
+
+			proxy := NewProxyHandler(hub, slog.Default())
+			router := chi.NewRouter()
+			router.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxy.HandleK8sProxy)
+
+			observed := make(chan protocol.K8sRequestPayload, 1)
+			errCh := make(chan error, 1)
+			go func() {
+				msg := <-agent.sendCh
+				if msg.Type != tt.wantType {
+					errCh <- fmt.Errorf("message type = %s, want %s", msg.Type, tt.wantType)
+					return
+				}
+				var payload protocol.K8sRequestPayload
+				if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+					errCh <- fmt.Errorf("unmarshal request payload: %w", err)
+					return
+				}
+				observed <- payload
+
+				stream, ok := agent.Streams.GetStream(msg.StreamID)
+				if !ok {
+					errCh <- fmt.Errorf("stream %q not found", msg.StreamID)
+					return
+				}
+				if tt.wantType == protocol.MsgK8sStreamRequest {
+					header, _ := json.Marshal(protocol.K8sStreamFrame{
+						Kind:       protocol.K8sStreamFrameHeader,
+						StatusCode: http.StatusOK,
+						Headers:    map[string]string{"Content-Type": "application/json"},
+					})
+					data, _ := json.Marshal(protocol.K8sStreamFrame{
+						Kind: protocol.K8sStreamFrameData,
+						Body: base64.StdEncoding.EncodeToString([]byte(`{"type":"ADDED","object":{"kind":"Pod","metadata":{"name":"web-0"}}}` + "\n")),
+					})
+					end, _ := json.Marshal(protocol.K8sStreamFrame{Kind: protocol.K8sStreamFrameEnd})
+					stream.DataCh <- header
+					stream.DataCh <- data
+					stream.DataCh <- end
+					errCh <- nil
+					return
+				}
+
+				resp, _ := json.Marshal(protocol.K8sResponsePayload{
+					StatusCode: http.StatusOK,
+					Headers:    map[string]string{"Content-Type": "application/json"},
+					Body:       base64.StdEncoding.EncodeToString([]byte(`{"ok":true}`)),
+				})
+				stream.DataCh <- resp
+				errCh <- nil
+			}()
+
+			req := httptest.NewRequest(tt.method, fmt.Sprintf(tt.target, clusterID), strings.NewReader(tt.body))
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+			}
+			if err := <-errCh; err != nil {
+				t.Fatal(err)
+			}
+			got := <-observed
+			if got.Method != tt.method {
+				t.Fatalf("method = %s, want %s", got.Method, tt.method)
+			}
+			if got.Path != tt.wantPath {
+				t.Fatalf("path = %q, want %q", got.Path, tt.wantPath)
+			}
+			if tt.contentType != "" && got.Headers["Content-Type"] != tt.contentType {
+				t.Fatalf("Content-Type = %q, want %q", got.Headers["Content-Type"], tt.contentType)
+			}
+			if tt.wantBody == "" {
+				if got.Body != "" {
+					t.Fatalf("body = %q, want empty", got.Body)
+				}
+			} else {
+				decoded, err := base64.StdEncoding.DecodeString(got.Body)
+				if err != nil {
+					t.Fatalf("decode body: %v", err)
+				}
+				if string(decoded) != tt.wantBody {
+					t.Fatalf("body = %q, want %q", string(decoded), tt.wantBody)
+				}
+			}
+			if tt.wantWatch != "" && !strings.Contains(rec.Body.String(), tt.wantWatch) {
+				t.Fatalf("watch response missing %s: %s", tt.wantWatch, rec.Body.String())
+			}
+		})
 	}
 }
 

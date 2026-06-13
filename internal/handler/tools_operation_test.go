@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -41,6 +44,9 @@ type toolQueryRecorder struct {
 	created         []sqlc.CreateInstalledChartParams
 	adopted         []sqlc.AdoptInstalledChartByReleaseParams
 	events          []sqlc.CreateToolOperationEventParams
+	operations      []sqlc.CreateToolOperationParams
+	idemOperations  []sqlc.CreateToolOperationIdempotentParams
+	idemByKey       map[string]sqlc.ToolOperation
 }
 
 func newToolQueryRecorder(clusterID uuid.UUID) *toolQueryRecorder {
@@ -48,6 +54,7 @@ func newToolQueryRecorder(clusterID uuid.UUID) *toolQueryRecorder {
 		clusterID:       clusterID,
 		installedBySlug: map[string]sqlc.InstalledChart{},
 		installedByRef:  map[string]sqlc.InstalledChart{},
+		idemByKey:       map[string]sqlc.ToolOperation{},
 	}
 }
 
@@ -132,8 +139,37 @@ func (q *toolQueryRecorder) UpdateInstalledChartValues(context.Context, sqlc.Upd
 	return sqlc.InstalledChart{}, nil
 }
 func (q *toolQueryRecorder) DeleteInstalledChart(context.Context, uuid.UUID) error { return nil }
-func (q *toolQueryRecorder) CreateToolOperation(context.Context, sqlc.CreateToolOperationParams) (sqlc.ToolOperation, error) {
-	return sqlc.ToolOperation{}, nil
+func (q *toolQueryRecorder) CreateToolOperation(_ context.Context, arg sqlc.CreateToolOperationParams) (sqlc.ToolOperation, error) {
+	q.operations = append(q.operations, arg)
+	return sqlc.ToolOperation{
+		ID:            uuid.New(),
+		TargetType:    arg.TargetType,
+		TargetKey:     arg.TargetKey,
+		OperationType: arg.OperationType,
+		Status:        arg.Status,
+		CreatedByID:   arg.CreatedByID,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}, nil
+}
+func (q *toolQueryRecorder) CreateToolOperationIdempotent(_ context.Context, arg sqlc.CreateToolOperationIdempotentParams) (sqlc.ToolOperation, error) {
+	q.idemOperations = append(q.idemOperations, arg)
+	key := arg.Scope + "|" + arg.IdempotencyKey
+	if op, ok := q.idemByKey[key]; ok {
+		return op, nil
+	}
+	op := sqlc.ToolOperation{
+		ID:            uuid.New(),
+		TargetType:    arg.TargetType,
+		TargetKey:     arg.TargetKey,
+		OperationType: arg.OperationType,
+		Status:        arg.Status,
+		CreatedByID:   arg.CreatedByID,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	q.idemByKey[key] = op
+	return op, nil
 }
 func (q *toolQueryRecorder) GetToolOperation(context.Context, uuid.UUID) (sqlc.ToolOperation, error) {
 	return sqlc.ToolOperation{}, nil
@@ -302,5 +338,40 @@ func TestAdoptExistingToolReleaseUpdatesExistingRow(t *testing.T) {
 }
 
 var _ ToolQuerier = (*toolQueryRecorder)(nil)
+
+func TestToolEnqueueOperationUsesIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	userID := uuid.New()
+	q := newToolQueryRecorder(uuid.New())
+	h := NewToolHandler(q)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools/install", nil)
+	req.Header.Set("Idempotency-Key", "retry-1")
+	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID.String()}))
+	ctx := withOperationIdempotency(req, "tools")
+	env := toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "prometheus"}
+
+	first, err := h.enqueueOperation(ctx, "tool_installation", "cluster/prometheus", "install", env, currentUserUUID(req))
+	if err != nil {
+		t.Fatalf("first enqueue: %v", err)
+	}
+	second, err := h.enqueueOperation(ctx, "tool_installation", "cluster/prometheus", "install", env, currentUserUUID(req))
+	if err != nil {
+		t.Fatalf("second enqueue: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("operation id = %s then %s, want replay to return original operation", first.ID, second.ID)
+	}
+	if len(q.operations) != 0 {
+		t.Fatalf("plain operations = %d, want idempotent path only", len(q.operations))
+	}
+	if len(q.idemOperations) != 2 {
+		t.Fatalf("idempotent operations = %d, want 2 calls", len(q.idemOperations))
+	}
+	if q.idemOperations[0].Scope == "" || q.idemOperations[0].IdempotencyKey != "retry-1" {
+		t.Fatalf("idempotency params = %+v", q.idemOperations[0])
+	}
+}
+
 var _ HelmRequester = (*toolHelmStub)(nil)
 var _ = pgtype.Text{}

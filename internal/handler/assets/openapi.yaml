@@ -131,9 +131,23 @@ components:
         last_heartbeat: { type: string, format: date-time, nullable: true }
         is_local: { type: boolean }
         decommissioned_at: { type: string, format: date-time, nullable: true }
+        agent_privilege_profile:
+          type: string
+          enum: [viewer, operator, admin]
         cpu_percentage: { type: number }
         memory_percentage: { type: number }
         pod_count: { type: integer }
+        argocd:
+          type: object
+          properties:
+            registered: { type: boolean }
+            instance_count: { type: integer }
+            cluster_secret_names:
+              type: array
+              items: { type: string }
+            baseline_managed_by:
+              type: string
+              enum: [argocd, argocd_pending, helm, local, unknown]
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -239,6 +253,26 @@ components:
         expires_at: { type: string, format: date-time }
         idle_timeout_seconds: { type: integer }
 
+    OwnershipTransferResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        managed_by:
+          type: string
+          enum: [api, ui, crd, system, argocd]
+        transferred: { type: boolean }
+
+    FeatureFlags:
+      type: object
+      additionalProperties: false
+      properties:
+        feature.catalog: { type: boolean }
+        feature.projects: { type: boolean }
+        feature.monitoring: { type: boolean }
+        feature.argocd: { type: boolean }
+        feature.security: { type: boolean }
+        feature.backups: { type: boolean }
+
     PaginatedClusters:
       type: object
       properties:
@@ -276,8 +310,10 @@ security:
 
 tags:
   - { name: Auth, description: "Login, tokens, password reset" }
+  - { name: Settings, description: "Authenticated runtime settings subsets" }
   - { name: Clusters, description: "Cluster CRUD + lookup" }
   - { name: Registration, description: "Onboarding wizard phase machine" }
+  - { name: Projects, description: "Project CRUD, namespace policy, and ownership" }
   - { name: Vulnerabilities, description: "Trivy image-scan results" }
   - { name: Shell, description: "In-browser kubectl shell sessions" }
   - { name: K8s, description: "Tunnel-passthrough to managed cluster's k8s API" }
@@ -329,6 +365,27 @@ paths:
                 type: object
                 properties:
                   data: { $ref: "#/components/schemas/User" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # -- Settings ----------------------------------------------------------
+
+  /api/v1/settings/features/:
+    get:
+      tags: [Settings]
+      summary: Authenticated feature flag snapshot
+      description: |
+        Returns only feature.* booleans so the SPA can mirror backend
+        feature gates without exposing the full admin settings registry.
+      responses:
+        "200":
+          description: Feature flags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/FeatureFlags" }
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -417,6 +474,62 @@ paths:
           description: Decommission queued
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/clusters/{id}/ownership/takeover/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Clusters]
+      summary: Transfer CRD-owned cluster row to API ownership
+      description: |
+        Explicitly clears CRD ownership metadata from a cluster row so future
+        UI/API updates can mutate fields that ordinary PUT/PATCH otherwise
+        reject with `ownership_conflict`. Only CRD-owned rows can be taken
+        over by this endpoint; system and ArgoCD-owned rows remain protected.
+      responses:
+        "200":
+          description: Ownership transfer result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/OwnershipTransferResponse" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Row is not eligible for takeover
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/projects/{id}/ownership/takeover/:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Projects]
+      summary: Transfer CRD-owned project row to API ownership
+      description: |
+        Explicitly clears CRD ownership metadata from a project row so future
+        UI/API updates can mutate fields that ordinary PUT/PATCH otherwise
+        reject with `ownership_conflict`. Only CRD-owned rows can be taken
+        over by this endpoint; system and ArgoCD-owned rows remain protected.
+      responses:
+        "200":
+          description: Ownership transfer result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/OwnershipTransferResponse" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Row is not eligible for takeover
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/v1/clusters/{id}/manifest/:
     parameters:

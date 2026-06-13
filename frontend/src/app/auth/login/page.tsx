@@ -59,11 +59,7 @@ export default function LoginPage() {
         setChallenge(result.challenge);
         return;
       }
-      login(result.user, result.token);
-      localStorage.setItem('astronomer_token', result.token);
-      if (result.refresh) {
-        localStorage.setItem('astronomer_refresh', result.refresh);
-      }
+      login(result.user);
       router.push('/dashboard');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed');
@@ -72,12 +68,8 @@ export default function LoginPage() {
     }
   };
 
-  const completeTotp = (token: string, refresh: string | undefined, user: User) => {
-    login(user, token);
-    localStorage.setItem('astronomer_token', token);
-    if (refresh) {
-      localStorage.setItem('astronomer_refresh', refresh);
-    }
+  const completeTotp = (_token: string, _refresh: string | undefined, user: User) => {
+    login(user);
     router.push('/dashboard');
   };
 

@@ -178,7 +178,7 @@ func (h *ServiceMeshHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "get_error", "Failed to read service mesh detection")
+		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to read service mesh detection")
 		return
 	}
 	RespondJSON(w, http.StatusOK, rowToResponse(row))
@@ -193,16 +193,16 @@ func (h *ServiceMeshHandler) Detect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.detector == nil {
-		RespondError(w, http.StatusServiceUnavailable, "detector_unwired", "Service mesh detector is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "detector_unwired", "Service mesh detector is not configured")
 		return
 	}
 	if err := h.detector.DetectAndUpsert(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusBadGateway, "detect_failed", "Service mesh detection failed: "+err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, "detect_failed", "Service mesh detection failed: "+err.Error())
 		return
 	}
 	row, err := h.queries.GetClusterServiceMesh(r.Context(), clusterID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "post_detect_read", "Detection finished but the row could not be read back")
+		RespondRequestError(w, r, http.StatusInternalServerError, "post_detect_read", "Detection finished but the row could not be read back")
 		return
 	}
 	recordAudit(r, h.auditor, "cluster.service_mesh.detected", "cluster", clusterID.String(), "", map[string]any{
@@ -233,7 +233,7 @@ func (h *ServiceMeshHandler) MTLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "mtls_error", "Failed to read service mesh detection")
+		RespondRequestError(w, r, http.StatusInternalServerError, "mtls_error", "Failed to read service mesh detection")
 		return
 	}
 	out := MTLSBreakdownResponse{
@@ -345,11 +345,11 @@ func modeStrength(mode string) int {
 func (h *ServiceMeshHandler) requireCluster(w http.ResponseWriter, r *http.Request, verb rbac.Verb) (uuid.UUID, bool) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return uuid.Nil, false
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return uuid.Nil, false
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, verb) {

@@ -126,3 +126,45 @@ UPDATE argocd_managed_clusters
 SET labels = $3, updated_at = now()
 WHERE argocd_instance_id = $1 AND cluster_id = $2
 RETURNING *;
+
+-- ArgoCD cluster-proxy service tokens. These are not user API tokens:
+-- they are cluster-scoped machine identities used only by built-in ArgoCD
+-- to reach an adopted cluster through Astronomer's tunnel-backed proxy.
+
+-- name: GetActiveArgoCDClusterProxyTokenByClusterID :one
+SELECT * FROM argocd_cluster_proxy_tokens
+WHERE cluster_id = $1
+  AND purpose = 'argocd_cluster_proxy'
+  AND is_revoked = false
+  AND (expires_at IS NULL OR expires_at > now());
+
+-- name: GetArgoCDClusterProxyTokenByHash :one
+SELECT * FROM argocd_cluster_proxy_tokens
+WHERE token_hash = $1
+  AND purpose = 'argocd_cluster_proxy'
+  AND is_revoked = false
+  AND (expires_at IS NULL OR expires_at > now());
+
+-- name: UpsertArgoCDClusterProxyToken :one
+INSERT INTO argocd_cluster_proxy_tokens
+    (cluster_id, token_hash, token_prefix, token_encrypted, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (cluster_id, purpose) DO UPDATE SET
+    token_hash = EXCLUDED.token_hash,
+    token_prefix = EXCLUDED.token_prefix,
+    token_encrypted = EXCLUDED.token_encrypted,
+    expires_at = EXCLUDED.expires_at,
+    is_revoked = false,
+    updated_at = now()
+RETURNING *;
+
+-- name: TouchArgoCDClusterProxyToken :exec
+UPDATE argocd_cluster_proxy_tokens SET last_used_at = now() WHERE id = $1;
+
+-- name: RevokeArgoCDClusterProxyTokenForCluster :exec
+UPDATE argocd_cluster_proxy_tokens
+SET is_revoked = true, updated_at = now()
+WHERE cluster_id = $1 AND purpose = 'argocd_cluster_proxy';
+
+-- name: DeleteArgoCDClusterProxyTokensByCluster :execrows
+DELETE FROM argocd_cluster_proxy_tokens WHERE cluster_id = $1;

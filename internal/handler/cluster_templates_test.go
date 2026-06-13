@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // fakeClusterTemplateQuerier is the narrow ClusterTemplateQuerier surface
@@ -31,6 +32,12 @@ type fakeClusterTemplateQuerier struct {
 	applications map[uuid.UUID]sqlc.ClusterTemplateApplication
 	clusters     map[uuid.UUID]sqlc.Cluster
 	policies     map[uuid.UUID]sqlc.ClusterRegistrationPolicy
+}
+
+type fakeAtomicClusterTemplateQuerier struct {
+	*fakeClusterTemplateQuerier
+
+	atomicApps []sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams
 }
 
 func newFakeClusterTemplateQuerier() *fakeClusterTemplateQuerier {
@@ -165,6 +172,15 @@ func (f *fakeClusterTemplateQuerier) UpsertClusterTemplateApplication(_ context.
 	}
 	f.applications[arg.ClusterID] = a
 	return a, nil
+}
+
+func (f *fakeAtomicClusterTemplateQuerier) UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error) {
+	f.atomicApps = append(f.atomicApps, arg)
+	return f.fakeClusterTemplateQuerier.UpsertClusterTemplateApplication(ctx, sqlc.UpsertClusterTemplateApplicationParams{
+		ClusterID:    arg.ClusterID,
+		TemplateID:   arg.TemplateID,
+		SpecSnapshot: arg.SpecSnapshot,
+	})
 }
 
 func (f *fakeClusterTemplateQuerier) MarkClusterTemplateApplicationStatus(_ context.Context, arg sqlc.MarkClusterTemplateApplicationStatusParams) (sqlc.ClusterTemplateApplication, error) {
@@ -457,6 +473,100 @@ func TestClusterTemplate_ApplyAndStatus(t *testing.T) {
 	}
 	if _, ok := q.applications[clusterID]; ok {
 		t.Errorf("application row not deleted")
+	}
+}
+
+func TestClusterTemplateApplyWritesTaskOutbox(t *testing.T) {
+	q := newFakeClusterTemplateQuerier()
+	clusterID := uuid.New()
+	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), Annotations: json.RawMessage(`{}`)}
+	tmplID := uuid.New()
+	q.templates[tmplID] = sqlc.ClusterTemplate{ID: tmplID, Name: "production-web", Spec: json.RawMessage(`{"tools":[]}`)}
+	outbox := &fakeRegistrationTaskOutbox{}
+	cap := &captureEnqueuer{}
+	h := NewClusterTemplateHandler(q)
+	h.SetQueue(cap)
+	h.SetTaskOutbox(outbox)
+
+	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
+	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
+	h.Apply(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("apply: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if cap.count != 0 {
+		t.Fatalf("direct enqueues = %d, want 0 when outbox succeeds", cap.count)
+	}
+	args := outbox.all()
+	if len(args) != 1 {
+		t.Fatalf("outbox writes = %d, want 1", len(args))
+	}
+	arg := args[0]
+	if arg.TaskType != tasks.ClusterTemplateApplyType {
+		t.Fatalf("task type = %q, want %q", arg.TaskType, tasks.ClusterTemplateApplyType)
+	}
+	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_template_apply:"+clusterID.String() {
+		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
+	}
+	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
+	}
+	var payload tasks.ClusterTemplateApplyPayload
+	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.ClusterID != clusterID.String() {
+		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
+	}
+}
+
+func TestClusterTemplateApplyWritesApplicationAndTaskOutboxAtomically(t *testing.T) {
+	base := newFakeClusterTemplateQuerier()
+	clusterID := uuid.New()
+	base.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), Annotations: json.RawMessage(`{}`)}
+	tmplID := uuid.New()
+	base.templates[tmplID] = sqlc.ClusterTemplate{ID: tmplID, Name: "production-web", Spec: json.RawMessage(`{"tools":[]}`)}
+	q := &fakeAtomicClusterTemplateQuerier{fakeClusterTemplateQuerier: base}
+	outbox := &fakeRegistrationTaskOutbox{}
+	cap := &captureEnqueuer{}
+	h := NewClusterTemplateHandler(q)
+	h.SetQueue(cap)
+	h.SetTaskOutbox(outbox)
+
+	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
+	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
+	h.Apply(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("apply: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(q.atomicApps) != 1 {
+		t.Fatalf("atomic app+outbox writes = %d, want 1", len(q.atomicApps))
+	}
+	if len(outbox.all()) != 0 {
+		t.Fatalf("separate outbox writes = %d, want 0", len(outbox.all()))
+	}
+	if cap.count != 0 {
+		t.Fatalf("direct enqueues = %d, want 0", cap.count)
+	}
+	arg := q.atomicApps[0]
+	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_template_apply:"+clusterID.String() {
+		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
+	}
+	if arg.TaskType != tasks.ClusterTemplateApplyType || arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+		t.Fatalf("task metadata = %s/%s/%d/%d", arg.TaskType, arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
+	}
+	var payload tasks.ClusterTemplateApplyPayload
+	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.ClusterID != clusterID.String() {
+		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
 	}
 }
 

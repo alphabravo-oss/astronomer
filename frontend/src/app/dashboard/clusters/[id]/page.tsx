@@ -19,6 +19,7 @@ import { getImageVulnSummary } from '@/lib/api/cluster-detail';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { getServiceMeshDetection, type ServiceMeshKind } from '@/lib/api/cluster-detail';
@@ -54,8 +55,9 @@ import {
   CircleHelp,
   ShieldAlert,
   Package,
+  GitBranch,
 } from 'lucide-react';
-import type { ClusterCondition } from '@/types';
+import type { Cluster, ClusterCondition } from '@/types';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
 import { renderForCluster } from '@/lib/api/dashboards';
 
@@ -197,10 +199,13 @@ export default function ClusterDetailPage() {
 
   if (!cluster) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <Server className="h-8 w-8 mb-3" />
-        <p>Cluster not found</p>
-      </div>
+      <EmptyState
+        icon={Server}
+        title="Cluster not found"
+        description="The cluster may have been deleted or you may not have access to it."
+        actionLabel="Back to clusters"
+        actionHref="/dashboard/clusters"
+      />
     );
   }
 
@@ -445,6 +450,9 @@ export default function ClusterDetailPage() {
         />
       </div>
 
+      <ArgoCDOwnershipPanel cluster={cluster} />
+      <AgentPrivilegePanel cluster={cluster} />
+
       {/* Recent Events */}
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Recent Events</h3>
@@ -515,6 +523,177 @@ export default function ClusterDetailPage() {
         confirmText="Enable & Download"
         loading={updateMutation.isPending || generateKubeconfig.isPending}
       />
+    </div>
+  );
+}
+
+function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
+  const profile = (cluster.agentPrivilegeProfile || 'admin').toLowerCase();
+  const isAdmin = profile === 'admin';
+  const label =
+    profile === 'viewer'
+      ? 'Viewer'
+      : profile === 'operator'
+        ? 'Operator'
+        : 'Admin';
+  const detail =
+    profile === 'viewer'
+      ? 'Read-only inventory, logs, health checks, and discovery.'
+      : profile === 'operator'
+        ? 'Workload operations without ClusterRole or cluster-admin escalation.'
+        : 'Full API-group, resource, verb, and non-resource URL access.';
+  const tone = isAdmin
+    ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+    : 'border-status-success/30 bg-status-success/10 text-status-success';
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+            <ShieldAlert className={`h-4 w-4 ${isAdmin ? 'text-status-warning' : 'text-muted-foreground'}`} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-medium text-foreground">Agent access profile</h3>
+              <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${tone}`}>
+                {label}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+            {isAdmin ? (
+              <p className="mt-1 text-xs text-status-warning">
+                Full-admin agent access should be reserved for compatibility or break-glass workflows.
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <Link
+          href="/docs/agent-privilege-profiles.md"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <CircleHelp className="h-3.5 w-3.5" />
+          Profile matrix
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
+  const argo = cluster.argocd;
+  const owner = argo?.baselineManagedBy ?? 'unknown';
+  const components = argo?.baselineComponents ?? [];
+  const isArgoOwned = owner === 'argocd';
+  const isPending = owner === 'argocd_pending';
+  const isHelm = owner === 'helm';
+  const ownerLabel =
+    owner === 'argocd'
+      ? 'ArgoCD'
+      : owner === 'argocd_pending'
+        ? 'ArgoCD pending'
+        : owner === 'helm'
+          ? 'Helm over tunnel'
+          : owner === 'local'
+            ? 'Local cluster'
+            : 'Unknown';
+  const tone = isArgoOwned
+    ? 'border-status-success/30 bg-status-success/10 text-status-success'
+    : isPending
+      ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+      : isHelm
+        ? 'border-status-info/30 bg-status-info/10 text-status-info'
+        : 'border-border bg-muted/30 text-muted-foreground';
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+            <GitBranch className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-medium text-foreground">GitOps ownership</h3>
+              <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${tone}`}>
+                {ownerLabel}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                Cluster registration: {argo?.registered ? `${argo.instanceCount} ArgoCD instance${argo.instanceCount === 1 ? '' : 's'}` : 'not registered'}
+              </span>
+              {argo?.clusterSecretNames?.length ? (
+                <span className="truncate">
+                  Secret: <code className="font-mono">{argo.clusterSecretNames.join(', ')}</code>
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Link
+            href="/dashboard/argocd"
+            className="inline-flex h-8 items-center gap-1.5 rounded border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            ArgoCD
+          </Link>
+          <Link
+            href={`/dashboard/clusters/${cluster.id}/tools`}
+            className="inline-flex h-8 items-center gap-1.5 rounded border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Package className="h-3.5 w-3.5" />
+            Components
+          </Link>
+        </div>
+      </div>
+      {components.length > 0 ? (
+        <div className="border-t border-border px-4 py-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {components.map((component) => {
+              const componentOwner = component.managedBy ?? owner;
+              const componentTone =
+                componentOwner === 'argocd'
+                  ? 'border-status-success/30 bg-status-success/10 text-status-success'
+                  : componentOwner === 'argocd_pending'
+                    ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+                    : componentOwner === 'helm'
+                      ? 'border-status-info/30 bg-status-info/10 text-status-info'
+                      : 'border-border bg-muted/30 text-muted-foreground';
+              const componentOwnerLabel =
+                componentOwner === 'argocd'
+                  ? 'ArgoCD'
+                  : componentOwner === 'argocd_pending'
+                    ? 'Pending'
+                    : componentOwner === 'helm'
+                      ? 'Helm'
+                      : componentOwner === 'local'
+                        ? 'Local'
+                        : 'Unknown';
+              return (
+                <div
+                  key={component.slug}
+                  className="min-w-0 rounded-md border border-border bg-background px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-foreground">{component.name}</span>
+                    <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium ${componentTone}`}>
+                      {componentOwnerLabel}
+                    </span>
+                  </div>
+                  <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                    {component.namespace}
+                    {component.applicationSetName ? ` / ${component.applicationSetName}` : ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,19 +1,44 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+type ServiceProxyToolQuerier interface {
+	ListEnabledTools(ctx context.Context) ([]sqlc.ClusterTool, error)
+}
 
 type ServiceProxyHandler struct {
 	requester K8sRequester
+	tools     ServiceProxyToolQuerier
+	audit     any
 }
 
 func NewServiceProxyHandler(requester K8sRequester) *ServiceProxyHandler {
 	return &ServiceProxyHandler{requester: requester}
+}
+
+func (h *ServiceProxyHandler) SetToolQuerier(tools ServiceProxyToolQuerier) {
+	if h == nil {
+		return
+	}
+	h.tools = tools
+}
+
+func (h *ServiceProxyHandler) SetAuditWriter(audit any) {
+	if h == nil {
+		return
+	}
+	h.audit = audit
 }
 
 func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -23,15 +48,30 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	pathSuffix := chi.URLParam(r, "*")
 
 	if h.requester == nil {
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", "service proxy not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", "service proxy not configured")
 		return
 	}
 
-	target := servicePort
-	if !strings.Contains(target, ":") {
-		target = target + ":80"
+	target, err := parseServiceProxyTarget(namespace, servicePort)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_service_proxy_target", err.Error())
+		return
 	}
-	proxyPath := "/api/v1/namespaces/" + namespace + "/services/http:" + target + "/proxy"
+	if err := h.authorizeTarget(r.Context(), target); err != nil {
+		RespondRequestError(w, r, http.StatusForbidden, "service_proxy_denied", err.Error())
+		return
+	}
+	if isServiceProxyAuditMethod(r.Method) {
+		recordAudit(r, h.audit, "cluster.service_proxy.forwarded", "cluster", clusterID, target.serviceName, map[string]any{
+			"namespace":   target.namespace,
+			"service":     target.serviceName,
+			"port":        target.port,
+			"path_suffix": pathSuffix,
+			"method":      r.Method,
+		})
+	}
+
+	proxyPath := "/api/v1/namespaces/" + target.namespace + "/services/http:" + target.serviceName + ":" + target.port + "/proxy"
 	if pathSuffix != "" {
 		proxyPath += "/" + pathSuffix
 	} else {
@@ -43,7 +83,7 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Failed to read request body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Failed to read request body")
 		return
 	}
 	headers := requestHeaders(r.Header.Get("Content-Type"))
@@ -56,7 +96,7 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondError(w, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
 		return
 	}
 
@@ -70,3 +110,142 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(body)
 }
+
+type serviceProxyTarget struct {
+	namespace   string
+	serviceName string
+	port        string
+}
+
+func parseServiceProxyTarget(namespace, servicePort string) (serviceProxyTarget, error) {
+	namespace = strings.TrimSpace(namespace)
+	servicePort = strings.TrimSpace(servicePort)
+	if !isSafeK8sName(namespace) {
+		return serviceProxyTarget{}, httpError("invalid Kubernetes namespace")
+	}
+	if isSensitiveServiceProxyNamespace(namespace) {
+		return serviceProxyTarget{}, httpError("service proxy is not allowed for this namespace")
+	}
+	serviceName := servicePort
+	port := "80"
+	if left, right, ok := strings.Cut(servicePort, ":"); ok {
+		serviceName = left
+		port = right
+	}
+	if !isSafeK8sName(serviceName) {
+		return serviceProxyTarget{}, httpError("invalid Kubernetes service name")
+	}
+	if !isValidServiceProxyPort(port) {
+		return serviceProxyTarget{}, httpError("invalid Kubernetes service port")
+	}
+	return serviceProxyTarget{namespace: namespace, serviceName: serviceName, port: port}, nil
+}
+
+func (h *ServiceProxyHandler) authorizeTarget(ctx context.Context, target serviceProxyTarget) error {
+	if h == nil || h.tools == nil {
+		return httpError("service proxy allowlist is not configured")
+	}
+	tools, err := h.tools.ListEnabledTools(ctx)
+	if err != nil {
+		return httpError("failed to load service proxy allowlist")
+	}
+	for _, tool := range tools {
+		if serviceProxyToolAllowsTarget(tool, target) {
+			return nil
+		}
+	}
+	return httpError("service proxy target is not enabled")
+}
+
+func serviceProxyToolAllowsTarget(tool sqlc.ClusterTool, target serviceProxyTarget) bool {
+	if !serviceProxyAllowedByPresets(tool.Presets) {
+		return false
+	}
+	if tool.ServiceName != "" && tool.ServicePort.Valid {
+		if tool.ServiceName == target.serviceName && strconv.Itoa(int(tool.ServicePort.Int32)) == target.port {
+			return true
+		}
+	}
+	if len(tool.SubServices) == 0 {
+		return false
+	}
+	var subs []struct {
+		Service             string `json:"service"`
+		Port                int32  `json:"port"`
+		ServiceProxyAllowed *bool  `json:"service_proxy_allowed"`
+	}
+	if err := json.Unmarshal(tool.SubServices, &subs); err != nil {
+		return false
+	}
+	for _, sub := range subs {
+		if sub.ServiceProxyAllowed != nil && !*sub.ServiceProxyAllowed {
+			continue
+		}
+		if sub.Service == target.serviceName && strconv.Itoa(int(sub.Port)) == target.port {
+			return true
+		}
+	}
+	return false
+}
+
+func serviceProxyAllowedByPresets(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var presets map[string]any
+	if err := json.Unmarshal(raw, &presets); err != nil {
+		return true
+	}
+	v, ok := presets["service_proxy_allowed"]
+	if !ok {
+		return true
+	}
+	allowed, ok := v.(bool)
+	return ok && allowed
+}
+
+func isSensitiveServiceProxyNamespace(namespace string) bool {
+	switch namespace {
+	case "kube-system", "kube-public", "kube-node-lease":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSafeK8sName(name string) bool {
+	if name == "" || len(name) > 63 {
+		return false
+	}
+	if name[0] == '-' || name[len(name)-1] == '-' {
+		return false
+	}
+	for _, r := range name {
+		if r == '-' || ('0' <= r && r <= '9') || ('a' <= r && r <= 'z') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isValidServiceProxyPort(port string) bool {
+	if port == "" || len(port) > 5 {
+		return false
+	}
+	n, err := strconv.Atoi(port)
+	return err == nil && n >= 1 && n <= 65535
+}
+
+func isServiceProxyAuditMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+type httpError string
+
+func (e httpError) Error() string { return string(e) }

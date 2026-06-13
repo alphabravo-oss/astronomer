@@ -105,6 +105,20 @@ curl -fsSL -X POST .../clusters/$cluster_id/registration/confirm/
 curl -fsSL -N .../clusters/$cluster_id/registration/events/
 ```
 
+## Agent privilege profile
+
+The agent manifest supports `viewer`, `operator`, and `admin` RBAC
+profiles. The selected profile is stored on the cluster as annotation
+`astronomer.io/agent-privilege-profile` before the manifest is rendered.
+Missing or invalid values default to `admin` for compatibility.
+
+Declarative operators can set `Cluster.spec.agent.privilegeProfile`.
+API automation can set the reserved annotation when creating or updating
+the cluster row, then fetch `/clusters/{id}/manifest/`.
+
+See [agent-privilege-profiles.md](agent-privilege-profiles.md) for the
+feature/profile matrix.
+
 ## Backwards compatibility
 
 Migration 078 backfills `registration_phase = 'ready'` for every

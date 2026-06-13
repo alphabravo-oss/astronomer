@@ -82,19 +82,20 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 }
 
 const createClusterRegistrationToken = `-- name: CreateClusterRegistrationToken :one
-INSERT INTO cluster_registration_tokens (cluster_id, token, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
+VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), $4)
 RETURNING id, cluster_id, token, expires_at, is_used, created_at, updated_at
 `
 
 type CreateClusterRegistrationTokenParams struct {
 	ClusterID uuid.UUID `json:"cluster_id"`
 	Token     string    `json:"token"`
+	TokenHash string    `json:"token_hash"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
 func (q *Queries) CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error) {
-	row := q.db.QueryRow(ctx, createClusterRegistrationToken, arg.ClusterID, arg.Token, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, createClusterRegistrationToken, arg.ClusterID, arg.Token, arg.TokenHash, arg.ExpiresAt)
 	var i ClusterRegistrationToken
 	err := row.Scan(
 		&i.ID,
@@ -266,7 +267,7 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 }
 
 const getClusterAgentTokenByClusterID = `-- name: GetClusterAgentTokenByClusterID :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at FROM cluster_agent_tokens WHERE cluster_id = $1
+SELECT id, cluster_id, token, token_hash, last_used_at, created_at, updated_at FROM cluster_agent_tokens WHERE cluster_id = $1
 `
 
 func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error) {
@@ -276,6 +277,7 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 		&i.ID,
 		&i.ClusterID,
 		&i.Token,
+		&i.TokenHash,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -284,7 +286,9 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 }
 
 const getClusterAgentTokenByToken = `-- name: GetClusterAgentTokenByToken :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at FROM cluster_agent_tokens WHERE token = $1
+SELECT id, cluster_id, token, token_hash, last_used_at, created_at, updated_at FROM cluster_agent_tokens
+WHERE token_hash = encode(digest($1, 'sha256'), 'hex')
+   OR (token_hash = '' AND token = $1)
 `
 
 func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, token string) (ClusterAgentToken, error) {
@@ -294,6 +298,7 @@ func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, token string)
 		&i.ID,
 		&i.ClusterID,
 		&i.Token,
+		&i.TokenHash,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -392,7 +397,7 @@ func (q *Queries) GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUI
 }
 
 const getClusterRegistryConfig = `-- name: GetClusterRegistryConfig :one
-SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at FROM cluster_registry_configs WHERE cluster_id = $1
+SELECT id, cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle, created_at, updated_at FROM cluster_registry_configs WHERE cluster_id = $1
 `
 
 func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (ClusterRegistryConfig, error) {
@@ -404,6 +409,7 @@ func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.U
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
 		&i.RegistryPassword,
+		&i.RegistryPasswordEncrypted,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -413,7 +419,9 @@ func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.U
 }
 
 const getRegistrationTokenByToken = `-- name: GetRegistrationTokenByToken :one
-SELECT id, cluster_id, token, expires_at, is_used, created_at, updated_at FROM cluster_registration_tokens WHERE token = $1 AND expires_at > now()
+SELECT id, cluster_id, token, expires_at, is_used, created_at, updated_at FROM cluster_registration_tokens
+WHERE (token_hash = encode(digest($1, 'sha256'), 'hex') OR (token_hash = '' AND token = $1))
+  AND expires_at > now()
 `
 
 // The is_used filter is intentionally NOT applied: until the server issues a
@@ -697,26 +705,29 @@ func (q *Queries) UpdateClusterStatus(ctx context.Context, arg UpdateClusterStat
 }
 
 const upsertClusterAgentToken = `-- name: UpsertClusterAgentToken :one
-INSERT INTO cluster_agent_tokens (cluster_id, token, last_used_at)
-VALUES ($1, $2, now())
+INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
+VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), now())
 ON CONFLICT (cluster_id) DO UPDATE SET
     token = EXCLUDED.token,
+    token_hash = EXCLUDED.token_hash,
     last_used_at = now()
-RETURNING id, cluster_id, token, last_used_at, created_at, updated_at
+RETURNING id, cluster_id, token, token_hash, last_used_at, created_at, updated_at
 `
 
 type UpsertClusterAgentTokenParams struct {
 	ClusterID uuid.UUID `json:"cluster_id"`
 	Token     string    `json:"token"`
+	TokenHash string    `json:"token_hash"`
 }
 
 func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error) {
-	row := q.db.QueryRow(ctx, upsertClusterAgentToken, arg.ClusterID, arg.Token)
+	row := q.db.QueryRow(ctx, upsertClusterAgentToken, arg.ClusterID, arg.Token, arg.TokenHash)
 	var i ClusterAgentToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
 		&i.Token,
+		&i.TokenHash,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -828,24 +839,26 @@ func (q *Queries) UpsertClusterHealthStatus(ctx context.Context, arg UpsertClust
 }
 
 const upsertClusterRegistryConfig = `-- name: UpsertClusterRegistryConfig :one
-INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (cluster_id) DO UPDATE SET
     private_registry_url = EXCLUDED.private_registry_url,
     registry_username = EXCLUDED.registry_username,
     registry_password = EXCLUDED.registry_password,
+    registry_password_encrypted = EXCLUDED.registry_password_encrypted,
     insecure = EXCLUDED.insecure,
     ca_bundle = EXCLUDED.ca_bundle
-RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at
+RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle, created_at, updated_at
 `
 
 type UpsertClusterRegistryConfigParams struct {
-	ClusterID          uuid.UUID `json:"cluster_id"`
-	PrivateRegistryUrl string    `json:"private_registry_url"`
-	RegistryUsername   string    `json:"registry_username"`
-	RegistryPassword   string    `json:"registry_password"`
-	Insecure           bool      `json:"insecure"`
-	CaBundle           string    `json:"ca_bundle"`
+	ClusterID                 uuid.UUID `json:"cluster_id"`
+	PrivateRegistryUrl        string    `json:"private_registry_url"`
+	RegistryUsername          string    `json:"registry_username"`
+	RegistryPassword          string    `json:"registry_password"`
+	RegistryPasswordEncrypted string    `json:"registry_password_encrypted"`
+	Insecure                  bool      `json:"insecure"`
+	CaBundle                  string    `json:"ca_bundle"`
 }
 
 func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
@@ -854,6 +867,7 @@ func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClu
 		arg.PrivateRegistryUrl,
 		arg.RegistryUsername,
 		arg.RegistryPassword,
+		arg.RegistryPasswordEncrypted,
 		arg.Insecure,
 		arg.CaBundle,
 	)
@@ -864,6 +878,7 @@ func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClu
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
 		&i.RegistryPassword,
+		&i.RegistryPasswordEncrypted,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,

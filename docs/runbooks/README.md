@@ -20,6 +20,8 @@ Anything reachable from a `runbook_url` annotation on a PrometheusRule
 | `AstronomerWorkerQueueBacklog` | [worker-queue-backlog.md](worker-queue-backlog.md) |
 | `AstronomerWorkerDLQGrowing` | [worker-dlq-growing.md](worker-dlq-growing.md) |
 | `AstronomerDBPoolExhausted` | [db-pool-exhausted.md](db-pool-exhausted.md) |
+| `AstronomerDBDeadlocks` | [db-runtime-contention.md](db-runtime-contention.md) |
+| `AstronomerDBLongTransaction` | [db-runtime-contention.md](db-runtime-contention.md) |
 | `AstronomerAgentDisconnected` | [agent-disconnected.md](agent-disconnected.md) |
 | `AstronomerArgoSelfManageDrift` | [argocd-drift.md](argocd-drift.md) |
 

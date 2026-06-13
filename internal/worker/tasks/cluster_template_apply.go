@@ -10,26 +10,26 @@
 //  1. Mark the row 'applying'.
 //
 //  2. environment    — UPDATE clusters.environment when the spec sets it.
-//                      Skipped silently when already equal.
+//     Skipped silently when already equal.
 //
 //  3. labels         — merge spec.labels into clusters.labels. We MERGE
-//                      (not overwrite) so a template's labels don't blow
-//                      away operator-set labels on a cluster.
+//     (not overwrite) so a template's labels don't blow
+//     away operator-set labels on a cluster.
 //
 //  4. tools          — for each spec.tools entry, ensure the tool is
-//                      installed on the cluster. Skips when already
-//                      installed; otherwise enqueues a tool install
-//                      operation through the existing ToolInstaller —
-//                      we DO NOT reimplement helm wiring here.
+//     installed on the cluster. Skips when already
+//     installed; otherwise enqueues a tool install
+//     operation through the existing ToolInstaller —
+//     we DO NOT reimplement helm wiring here.
 //
 //  5. default_project — when spec.default_project.name is non-empty, look
-//                      it up on the cluster; if absent, create it with
-//                      the PSS profile + resource-quota + netpol fields
-//                      from the spec.
+//     it up on the cluster; if absent, create it with
+//     the PSS profile + resource-quota + netpol fields
+//     from the spec.
 //
 //  6. registration_policy — stamp cluster_registration_policies with the
-//                      token_rotation_days knob so the existing token
-//                      cleanup task can act on it.
+//     token_rotation_days knob so the existing token
+//     cleanup task can act on it.
 //
 // On any step failure the row goes to 'failed' with last_error set and
 // the worker returns nil (we deliberately don't return the error: asynq
@@ -88,6 +88,16 @@ const ClusterTemplateApplyQueueName = "tunnel"
 // racing on the same row.
 const ClusterTemplateDriftCheckType = "cluster_template:drift_check"
 
+const platformSettingArgoCDManageBaselineKey = "argocd.manage_platform_baseline"
+
+var argoCDManagedBaselineToolSlugs = map[string]struct{}{
+	"trivy-operator":           {},
+	"kube-state-metrics":       {},
+	"prometheus-node-exporter": {},
+	"fluent-bit":               {},
+	"cert-manager":             {},
+}
+
 // clusterTemplateDriftCheckLimit caps how many applications the drift
 // sweep evaluates per tick. The sweep is meant to surface drift as a UI
 // badge, not be the hot path; keeping the batch small keeps the
@@ -123,6 +133,7 @@ type ClusterTemplateApplyQuerier interface {
 	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error)
 	MarkClusterTemplateApplicationStatus(ctx context.Context, arg sqlc.MarkClusterTemplateApplicationStatusParams) (sqlc.ClusterTemplateApplication, error)
 	ListClusterTemplateApplicationsByStatus(ctx context.Context, arg sqlc.ListClusterTemplateApplicationsByStatusParams) ([]sqlc.ClusterTemplateApplication, error)
+	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 	GetToolBySlug(ctx context.Context, slug string) (sqlc.ClusterTool, error)
 	GetProjectByNameAndCluster(ctx context.Context, arg sqlc.GetProjectByNameAndClusterParams) (sqlc.Project, error)
 	CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.Project, error)
@@ -170,7 +181,7 @@ type ToolInstaller interface {
 // ClusterTemplateApplyDeps wires the apply worker. Set once at startup
 // via ConfigureClusterTemplateApply; tests can swap fakes.
 type ClusterTemplateApplyDeps struct {
-	Queries  ClusterTemplateApplyQuerier
+	Queries   ClusterTemplateApplyQuerier
 	Installer ToolInstaller
 	// Registration is the wizard phase machine. Optional; when wired
 	// the worker calls it on start (→ provisioning) and on end
@@ -319,7 +330,7 @@ func runClusterTemplateApply(ctx context.Context, deps ClusterTemplateApplyDeps,
 		persistApplyFailure(ctx, deps, clusterID, err.Error())
 		return nil
 	}
-	if err := applyTools(ctx, deps, clusterID, spec); err != nil {
+	if err := applyTools(ctx, deps, cluster, spec); err != nil {
 		// "cluster agent not connected" means the agent's WS terminates
 		// on a different server pod than the one this asynq worker is
 		// running in. Reset the row to pending and return the error to
@@ -431,7 +442,7 @@ func applyClusterMutations(ctx context.Context, deps ClusterTemplateApplyDeps, c
 // ToolInstaller surface so we don't duplicate helm + adopt logic. When
 // the Installer dep isn't wired (tests without it), each tool is treated
 // as a no-op success.
-func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, clusterID uuid.UUID, spec templateSpec) error {
+func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, cluster sqlc.Cluster, spec templateSpec) error {
 	if len(spec.Tools) == 0 {
 		return nil
 	}
@@ -442,6 +453,7 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, clusterID uu
 		// the operator is running in a unit-test or chart-less env.
 		return nil
 	}
+	argocdOwnsBaseline := !cluster.IsLocal && argoCDManagePlatformBaselineSetting(ctx, deps.Queries)
 	// Sprint 23: emit a per-tool step row + SSE event so the wizard
 	// progress timeline (page 3) shows individual install progress
 	// instead of one opaque "Applying Platform Baseline → applied"
@@ -450,13 +462,19 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, clusterID uu
 	// Registration service is nil-safe: when unwired (test fakes) we
 	// just install without writing step rows.
 	for _, t := range spec.Tools {
+		if argocdOwnsBaseline && isArgoCDManagedBaselineTool(t.Slug) {
+			runtimeLogger().InfoContext(ctx, "skipping cluster-template tool install because ArgoCD owns platform baseline",
+				"cluster_id", cluster.ID.String(),
+				"tool_slug", t.Slug)
+			continue
+		}
 		valuesYAML := ""
 		if len(t.Values) > 0 {
 			valuesYAML = string(t.Values)
 		}
 		var stepID uuid.UUID
 		if deps.Registration != nil {
-			step, werr := deps.Registration.WriteStep(ctx, clusterID, registration.StepInput{
+			step, werr := deps.Registration.WriteStep(ctx, cluster.ID, registration.StepInput{
 				StepName:    "tool_installing:" + t.Slug,
 				Status:      "running",
 				ProgressPct: 0,
@@ -470,7 +488,7 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, clusterID uu
 				stepID = step.ID
 			}
 		}
-		_, err := deps.Installer.EnsureInstalled(ctx, clusterID, t.Slug, t.Slug, t.Preset, valuesYAML)
+		_, err := deps.Installer.EnsureInstalled(ctx, cluster.ID, t.Slug, t.Slug, t.Preset, valuesYAML)
 		if err != nil {
 			if deps.Registration != nil && stepID != uuid.Nil {
 				_, _ = deps.Registration.UpdateStep(ctx, registration.UpdateStepInput{
@@ -489,6 +507,28 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, clusterID uu
 		}
 	}
 	return nil
+}
+
+func isArgoCDManagedBaselineTool(slug string) bool {
+	_, ok := argoCDManagedBaselineToolSlugs[strings.TrimSpace(slug)]
+	return ok
+}
+
+func argoCDManagePlatformBaselineSetting(ctx context.Context, q ClusterTemplateApplyQuerier) bool {
+	row, err := q.GetPlatformSetting(ctx, platformSettingArgoCDManageBaselineKey)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true
+		}
+		runtimeLogger().WarnContext(ctx, "failed to read argocd platform baseline setting; preserving legacy template installs", "error", err)
+		return false
+	}
+	var enabled bool
+	if err := json.Unmarshal(row.Value, &enabled); err != nil {
+		runtimeLogger().WarnContext(ctx, "failed to parse argocd platform baseline setting; preserving legacy template installs", "error", err)
+		return false
+	}
+	return enabled
 }
 
 // applyDefaultProject creates the spec'd project when absent. We don't
@@ -548,9 +588,9 @@ func applyRegistrationPolicy(ctx context.Context, deps ClusterTemplateApplyDeps,
 	}
 	tmpl := pgtype.UUID{Bytes: templateID, Valid: true}
 	if _, err := deps.Queries.UpsertClusterRegistrationPolicy(ctx, sqlc.UpsertClusterRegistrationPolicyParams{
-		ClusterID:           clusterID,
-		TokenRotationDays:   spec.RegistrationPolicy.TokenRotationDays,
-		SourceTemplateID:    tmpl,
+		ClusterID:         clusterID,
+		TokenRotationDays: spec.RegistrationPolicy.TokenRotationDays,
+		SourceTemplateID:  tmpl,
 	}); err != nil {
 		return fmt.Errorf("upsert registration policy: %w", err)
 	}

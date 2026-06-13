@@ -15,7 +15,7 @@ group:
 
 | Kind      | DB table   | Authoritative subset                                                    |
 | --------- | ---------- | ----------------------------------------------------------------------- |
-| `Cluster` | `clusters` | name, displayName, description, environment, region, provider, distribution, labels, annotations, projectRefs |
+| `Cluster` | `clusters` | name, displayName, description, environment, region, provider, distribution, labels, annotations, projectRefs, ArgoCD adoption intent, baseline profile, agent privilege profile, adoption policy |
 | `Project` | `projects` | name, displayName, description, podSecurityProfile, resourceQuota (cpuLimit / memoryLimit / podCount), networkPolicyMode, clusters |
 
 A controller-runtime manager runs **inside the existing server pod** — there
@@ -62,6 +62,15 @@ spec:
     tier: prod
     region: us-east-1
   projectRefs: [platform]
+  argocd:
+    autoAdopt: true
+  baseline:
+    profile: default
+  agent:
+    privilegeProfile: operator
+  adoptionPolicy:
+    mode: auto
+    allowedManagementModes: [argocd]
 ---
 apiVersion: management.astronomer.io/v1alpha1
 kind: Project
@@ -102,10 +111,59 @@ kubectl describe cluster prod-us-east
   cluster — same guard as the REST API. The controller surfaces the refusal
   as a delete-in-progress retry, so `kubectl delete` will appear to hang
   until the operator force-removes the finalizer (don't).
+- `spec.adoptionPolicy` is the cluster-level declarative policy knob for
+  management-mode intent. It is stored on the cluster row annotations as
+  `management.astronomer.io/adoption-policy-mode` and
+  `management.astronomer.io/allowed-management-modes`; it does not create a
+  separate DB ownership domain. Use it to express whether the cluster should be
+  auto-adopted and whether ArgoCD, Helm, or manual management are allowed.
 - The CRD path runs in the server pod alongside REST. There is no separate
   agent / sidecar / second deployment.
 - Polling cadence is 60s per CR. Driven from `crd.ControllerConfig.PollPeriod`
   — wired in `internal/server/crd_wiring.go`.
+
+## Versioning and conversion policy
+
+The current public API version is `management.astronomer.io/v1alpha1`.
+Breaking CRD schema changes must not be made in-place.
+
+Version progression:
+
+1. Add `v1beta1` as a second served version while keeping `v1alpha1` served
+   and storage-compatible.
+2. Add a conversion webhook before any field rename, field removal, enum
+   narrowing, semantic ownership change, or status/spec move.
+3. Store only one version at a time; prefer the newest stable served version
+   as storage after the webhook has round-trip tests.
+4. Keep the previous served version for at least one minor release after the
+   new version is available.
+5. Move to `v1` only after the CRD fields, ownership rules, finalizers,
+   status conditions, and restore behavior have passed upgrade and rollback
+   drills.
+
+Allowed in-place `v1alpha1` changes:
+
+- Add optional spec fields with safe defaults.
+- Add status fields.
+- Add printer columns.
+- Loosen validation.
+
+Not allowed in-place:
+
+- Removing or renaming spec fields.
+- Changing a field's meaning or source of truth.
+- Narrowing enum values.
+- Moving a field between spec and status.
+- Changing finalizer semantics.
+
+Every new served version needs tests that prove:
+
+- old objects convert to the new hub version;
+- new objects convert back to the previous served version while it remains
+  served;
+- omitted fields preserve existing default behavior;
+- CRD-owned Postgres rows keep `external_ref_*`, `managed_by`, and
+  `observed_generation` semantics through conversion.
 
 ## Disabling
 
@@ -124,12 +182,9 @@ This is permanent; CR data backed by the DB stays intact.
 
 ## Deferred
 
-- Conversion webhook for a future `v1beta1` schema. Today only `v1alpha1` is
-  served.
-- Conditions are exposed as a free-form `array of object` in the schema so
-  the controller can populate them without dragging the apimachinery
-  validation into the chart. A future iteration will narrow this to the
-  standard `metav1.Condition` shape.
+- Conversion webhook implementation for a future `v1beta1` schema. Today only
+  `v1alpha1` is served, and the policy above defines when the webhook becomes
+  mandatory.
 - Mirroring beyond `Cluster` + `Project`. Other tables (`monitoring_*`,
   `argocd_*`, `cluster_templates`, `cluster_registries`, etc.) stay
   REST-only for now.

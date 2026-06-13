@@ -2,7 +2,7 @@
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
-        validate-live-b6 validate-live-argocd validate-live-argocd-register-appset validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects
+        validate-live-b6 validate-live-argocd validate-live-argocd-register-appset validate-live-argocd-auto-adoption validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects
 
 # ── Variables ────────────────────────────────────────────────────────────────
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -135,6 +135,9 @@ validate-live-argocd: ## Validate live ArgoCD create/patch/delete flow (set AUTH
 
 validate-live-argocd-register-appset: ## Validate live ArgoCD register + ApplicationSet fan-out flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-argocd-register-appset.sh
+
+validate-live-argocd-auto-adoption: ## Validate live ArgoCD auto-adoption + baseline fan-out (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
+	./scripts/validate-live-argocd-auto-adoption.sh
 
 validate-live-dex: ## Validate live Dex connector apply + redirect flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-dex.sh

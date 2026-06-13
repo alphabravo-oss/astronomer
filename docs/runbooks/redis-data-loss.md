@@ -49,6 +49,10 @@ kubectl -n astronomer rollout restart statefulset/astronomer-redis
 
 For the work that's now gone, look at the database for "what should
 have been pending":
+- `task_outbox WHERE status IN ('pending','failed','delivering')` —
+  these are durable task intents and will be retried by
+  `task_outbox:dispatch` after Redis returns. Rows in `dead` need
+  operator review before requeueing.
 - `tool_operations WHERE status='pending'` — these can be requeued
   by the reconciler's next tick (T17 parallel dispatch)
 - `catalog_operations WHERE status='pending'` — same
@@ -74,6 +78,11 @@ restored endpoint via `redis.external.address`.
 
 - `/readyz` returns 200 with `checks.redis.ok=true`
 - `astronomer_worker_jobs_total` rate climbs as queued work drains
+- `task_outbox WHERE status IN ('pending','failed','delivering') AND
+  next_attempt_at < NOW() - interval '5 minutes'` is empty, unless Redis
+  is still down
+- `task_outbox WHERE status='dead'` is empty or has an acknowledged
+  incident note
 - `tool_operations WHERE status='pending' AND created_at < NOW() -
   interval '1 hour'` is empty (no orphaned work)
 

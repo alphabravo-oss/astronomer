@@ -27,14 +27,14 @@ type fakeMaintenanceQuerier struct {
 	user    sqlc.User
 	userErr error
 
-	windows       []sqlc.MaintenanceWindow
-	getWindowErr  error
-	createdRow    sqlc.MaintenanceWindow
-	createErr     error
-	updatedRow    sqlc.MaintenanceWindow
-	updateErr     error
-	deleteErr     error
-	nameExists    bool
+	windows      []sqlc.MaintenanceWindow
+	getWindowErr error
+	createdRow   sqlc.MaintenanceWindow
+	createErr    error
+	updatedRow   sqlc.MaintenanceWindow
+	updateErr    error
+	deleteErr    error
+	nameExists   bool
 
 	deferred       []sqlc.DeferredOperation
 	deferredCount  int64
@@ -336,6 +336,8 @@ type gateMaintenanceQuerier struct {
 	createErr  error
 	calls      int
 	auditCalls int
+	idemCalls  int
+	idemByKey  map[string]sqlc.DeferredOperation
 }
 
 func (g *gateMaintenanceQuerier) CreateDeferredOperation(_ context.Context, _ sqlc.CreateDeferredOperationParams) (sqlc.DeferredOperation, error) {
@@ -344,6 +346,34 @@ func (g *gateMaintenanceQuerier) CreateDeferredOperation(_ context.Context, _ sq
 		return sqlc.DeferredOperation{}, g.createErr
 	}
 	return g.createdRow, nil
+}
+func (g *gateMaintenanceQuerier) CreateDeferredOperationIdempotent(_ context.Context, arg sqlc.CreateDeferredOperationIdempotentParams) (sqlc.DeferredOperation, error) {
+	g.idemCalls++
+	if g.createErr != nil {
+		return sqlc.DeferredOperation{}, g.createErr
+	}
+	if g.idemByKey == nil {
+		g.idemByKey = map[string]sqlc.DeferredOperation{}
+	}
+	key := arg.Scope + "|" + arg.IdempotencyKey
+	if row, ok := g.idemByKey[key]; ok {
+		return row, nil
+	}
+	row := g.createdRow
+	if row.ID == uuid.Nil {
+		row.ID = uuid.New()
+	}
+	row.WindowID = arg.WindowID
+	row.OperationType = arg.OperationType
+	row.OperationSpec = arg.OperationSpec
+	row.TargetClusterID = arg.TargetClusterID
+	row.TargetProjectID = arg.TargetProjectID
+	row.DeferredUntil = arg.DeferredUntil
+	row.ExpiresAt = arg.ExpiresAt
+	row.RequestedBy = arg.RequestedBy
+	row.Status = "pending"
+	g.idemByKey[key] = row
+	return row, nil
 }
 func (g *gateMaintenanceQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
 	g.auditCalls++
@@ -442,6 +472,43 @@ func TestDefer_Returns202AndInserts(t *testing.T) {
 	}
 	if q.calls != 1 {
 		t.Fatalf("expected one CreateDeferredOperation call, got %d", q.calls)
+	}
+}
+
+func TestDeferredOperationUsesIdempotencyKey(t *testing.T) {
+	callerID := uuid.New()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/abc/", nil)
+	req.Header.Set("Idempotency-Key", "defer-retry-1")
+	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		ID: callerID.String(), AuthMethod: "jwt",
+	}))
+	ctx := withOperationIdempotency(req, "deferred")
+	q := &gateMaintenanceQuerier{}
+	params := sqlc.CreateDeferredOperationParams{
+		WindowID:      uuid.New(),
+		OperationType: "cluster.delete",
+		OperationSpec: json.RawMessage(`{"method":"DELETE"}`),
+		DeferredUntil: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		ExpiresAt:     pgtype.Timestamptz{Time: time.Now().Add(25 * time.Hour), Valid: true},
+		RequestedBy:   currentUserUUID(req),
+	}
+
+	first, err := createDeferredOperation(ctx, q, params)
+	if err != nil {
+		t.Fatalf("first deferred op: %v", err)
+	}
+	second, err := createDeferredOperation(ctx, q, params)
+	if err != nil {
+		t.Fatalf("second deferred op: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("deferred id = %s then %s, want replay to return original", first.ID, second.ID)
+	}
+	if q.calls != 0 {
+		t.Fatalf("plain deferred creates = %d, want idempotent path only", q.calls)
+	}
+	if q.idemCalls != 2 {
+		t.Fatalf("idempotent deferred calls = %d, want 2", q.idemCalls)
 	}
 }
 

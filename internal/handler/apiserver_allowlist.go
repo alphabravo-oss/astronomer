@@ -107,10 +107,14 @@ func (h *ApiserverAllowlistHandler) SetEnqueuer(e ApiserverAllowlistEnqueuer) { 
 // SetReconciler wires the in-process reconcile hook (used by the
 // /reconcile/ endpoint when no asynq client is wired and as the
 // post-PUT immediate-trigger path in unit tests).
-func (h *ApiserverAllowlistHandler) SetReconciler(f ApiserverAllowlistReconcileFunc) { h.reconciler = f }
+func (h *ApiserverAllowlistHandler) SetReconciler(f ApiserverAllowlistReconcileFunc) {
+	h.reconciler = f
+}
 
 // SetTaskBuilder wires the asynq task factory.
-func (h *ApiserverAllowlistHandler) SetTaskBuilder(b ApiserverAllowlistTaskBuilder) { h.taskBuilder = b }
+func (h *ApiserverAllowlistHandler) SetTaskBuilder(b ApiserverAllowlistTaskBuilder) {
+	h.taskBuilder = b
+}
 
 // SetAstronomerEgress sets the egress CIDR list used by the /preview/
 // renderer. The handler's stored value takes precedence; if empty the
@@ -197,7 +201,7 @@ func decodeCIDRSlice(raw []byte) []string {
 func parseAllowlistClusterID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 		return uuid.Nil, false
 	}
 	return id, true
@@ -264,7 +268,7 @@ func (h *ApiserverAllowlistHandler) Get(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	row, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)
@@ -285,24 +289,24 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	var req AllowlistUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	if req.Mode == "" {
 		req.Mode = "monitor"
 	}
 	if _, ok := validModes[req.Mode]; !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_mode", fmt.Sprintf("mode must be one of monitor|enforce|disabled, got %q", req.Mode))
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_mode", fmt.Sprintf("mode must be one of monitor|enforce|disabled, got %q", req.Mode))
 		return
 	}
 	canonical, err := allowlist.ValidateCIDRs(req.CIDRs)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_cidr", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cidr", err.Error())
 		return
 	}
 
@@ -311,7 +315,7 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 	existing, existsErr := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)
 	isUpgrade := existsErr == nil && existing.Mode == "monitor" && req.Mode == "enforce"
 	if isUpgrade && existing.SyncStatus == "drifting" && !req.ForceApply {
-		RespondError(w, http.StatusConflict, "mode_change_requires_force",
+		RespondRequestError(w, r, http.StatusConflict, "mode_change_requires_force",
 			"Switching to enforce while drift exists requires force_apply=true; the apiserver allow-list would change on the next reconcile.")
 		return
 	}
@@ -323,16 +327,16 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		Mode:      req.Mode,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_error", "Failed to update apiserver allow-list")
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update apiserver allow-list")
 		return
 	}
 	h.audit(r, "cluster.apiserver_allowlist.updated", clusterID, map[string]any{
-		"mode":         req.Mode,
-		"cidrs_hash":   hashCIDRs(canonical),
-		"cidrs_count":  len(canonical),
-		"force_apply":  req.ForceApply,
-		"prev_mode":    existing.Mode,
-		"prev_status":  existing.SyncStatus,
+		"mode":        req.Mode,
+		"cidrs_hash":  hashCIDRs(canonical),
+		"cidrs_count": len(canonical),
+		"force_apply": req.ForceApply,
+		"prev_mode":   existing.Mode,
+		"prev_status": existing.SyncStatus,
 	})
 	// Fire an immediate reconcile (best-effort).
 	h.fireReconcile(r.Context(), clusterID)
@@ -346,11 +350,11 @@ func (h *ApiserverAllowlistHandler) Reconcile(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	if _, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "No allow-list policy on this cluster")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "No allow-list policy on this cluster")
 		return
 	}
 	h.fireReconcile(r.Context(), clusterID)
@@ -383,7 +387,7 @@ func (h *ApiserverAllowlistHandler) Snapshots(w http.ResponseWriter, r *http.Req
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_error", "Failed to list snapshots")
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list snapshots")
 		return
 	}
 	out := make([]SnapshotResponseEntry, 0, len(rows))
@@ -409,7 +413,7 @@ func (h *ApiserverAllowlistHandler) Preview(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondError(w, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
 		return
 	}
 	row, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)

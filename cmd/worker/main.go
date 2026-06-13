@@ -21,6 +21,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/hibiken/asynq"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -101,6 +102,20 @@ func main() {
 		AuditLogRetentionMonths: cfg.AuditLogRetentionMonths,
 		Leader:                  leader.New(database.Pool(), log),
 	})
+	var controlPlaneK8s kubernetes.Interface
+	var controlPlaneDyn dynamic.Interface
+	if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
+		if cs, kErr := kubernetes.NewForConfig(restCfg); kErr == nil {
+			controlPlaneK8s = cs
+		}
+		if dyn, dErr := dynamic.NewForConfig(restCfg); dErr == nil {
+			controlPlaneDyn = dyn
+		}
+	}
+	tasks.ConfigureCRDOwnershipDrift(tasks.CRDOwnershipDriftDeps{
+		Queries: sqlc.New(database.Pool()),
+		Dynamic: controlPlaneDyn,
+	})
 	// Cluster decommission reconciler: the standalone worker process
 	// doesn't have the tunnel hub (the hub lives in the server pod), so
 	// Tunnel is nil. The reconciler treats a nil Tunnel as "agent
@@ -112,6 +127,7 @@ func main() {
 	// hub, so the full flow including tunnel ops works there.
 	tasks.ConfigureClusterDecommission(tasks.ClusterDecommissionDeps{
 		Queries: sqlc.New(database.Pool()),
+		K8s:     controlPlaneK8s,
 		// TODO(rbac-invalidation): the standalone worker process has no
 		// in-process RBAC cache to flush, but when it runs the decommission
 		// phase from here, the server pod's cache still holds stale per-user
@@ -126,15 +142,28 @@ func main() {
 	// in-cluster config isn't available (laptop dev) the task degrades to a
 	// logged warning and the operator re-registers manually.
 	{
-		var refreshK8s kubernetes.Interface
-		if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
-			if cs, kErr := kubernetes.NewForConfig(restCfg); kErr == nil {
-				refreshK8s = cs
-			}
-		}
+		refreshK8s := controlPlaneK8s
 		tasks.ConfigureArgoCDRefresh(tasks.ArgoCDRefreshDeps{
 			Queries: sqlc.New(database.Pool()),
 			K8s:     refreshK8s,
+		})
+		var enc *auth.Encryptor
+		if cfg.EncryptionKey != "" {
+			if e, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
+				enc = e
+			} else {
+				log.Warn("argocd auto-register encryptor init failed; task will skip remote proxy tokens", "error", encErr)
+			}
+		}
+		tasks.ConfigureArgoCDAutoRegister(tasks.ArgoCDAutoRegisterDeps{
+			Queries:             sqlc.New(database.Pool()),
+			Encryptor:           enc,
+			K8s:                 refreshK8s,
+			ClusterProxyBaseURL: cfg.ArgoCDClusterProxyBaseURL,
+		})
+		tasks.ConfigurePlaintextCredentialMigration(tasks.PlaintextCredentialMigrationDeps{
+			Queries:   sqlc.New(database.Pool()),
+			Encryptor: enc,
 		})
 	}
 
@@ -170,6 +199,19 @@ func main() {
 		log.Error("failed to start worker", "error", werr)
 		os.Exit(1)
 	}
+	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
+	if redisErr != nil {
+		// Already validated by NewWorker above; keep this fail-fast in case
+		// a future edit changes worker initialization order.
+		log.Error("failed to parse REDIS_URL for task outbox dispatcher", "error", redisErr)
+		os.Exit(1)
+	}
+	taskOutboxClient := asynq.NewClient(redisOpt)
+	defer taskOutboxClient.Close()
+	tasks.ConfigureTaskOutboxDispatch(tasks.TaskOutboxDispatchDeps{
+		Queries:  sqlc.New(database.Pool()),
+		Enqueuer: taskOutboxClient,
+	})
 	w.RegisterHandlers()
 
 	s, serr := worker.NewScheduler(cfg.RedisURL, log)
@@ -186,13 +228,6 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	db.StartMetricsReporter(ctx, database.Pool(), log)
-	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
-	if redisErr != nil {
-		// Already validated by NewWorker/NewScheduler above; if we get
-		// here REDIS_URL was somehow mutated between then and now.
-		log.Error("failed to parse REDIS_URL for inspector", "error", redisErr)
-		os.Exit(1)
-	}
 	inspector := asynq.NewInspector(redisOpt)
 	defer inspector.Close()
 	worker.StartQueueMetricsReporter(ctx, inspector, log)

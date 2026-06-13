@@ -28,12 +28,20 @@ spec:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 8 }}
     spec:
       serviceAccountName: {{ include "astronomer.fullname" . }}-dex
+      {{- with .Values.dex.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: dex
+          {{- with .Values.dex.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.dex.image.repository "tag" .Values.dex.image.tag "registry" .Values.dex.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:

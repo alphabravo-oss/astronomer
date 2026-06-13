@@ -113,10 +113,10 @@ type ratingResponse struct {
 }
 
 type aggregateResponse struct {
-	RatingCount   int32     `json:"rating_count"`
-	AvgStars      float64   `json:"avg_stars"`
-	BayesianScore float64   `json:"bayesian_score"`
-	Histogram     [5]int64  `json:"histogram"`
+	RatingCount   int32    `json:"rating_count"`
+	AvgStars      float64  `json:"avg_stars"`
+	BayesianScore float64  `json:"bayesian_score"`
+	Histogram     [5]int64 `json:"histogram"`
 }
 
 func toRatingResponse(r sqlc.ChartRating) ratingResponse {
@@ -190,37 +190,37 @@ func parseInstallationID(s *string) (pgtype.UUID, bool) {
 func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
 		return
 	}
 
 	var body createOrUpdateRatingRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "Body must be valid JSON")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_json", "Body must be valid JSON")
 		return
 	}
 	if body.Stars < 1 || body.Stars > 5 {
-		RespondError(w, http.StatusBadRequest, "invalid_stars", "stars must be 1-5")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_stars", "stars must be 1-5")
 		return
 	}
 	note := sanitizeNote(body.Note)
 	if len(note) > NoteMaxLen {
-		RespondError(w, http.StatusBadRequest, "note_too_long", "note must be 280 chars or fewer")
+		RespondRequestError(w, r, http.StatusBadRequest, "note_too_long", "note must be 280 chars or fewer")
 		return
 	}
 	instID, ok := parseInstallationID(body.InstallationID)
 	if !ok {
-		RespondError(w, http.StatusBadRequest, "invalid_installation_id", "installation_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_installation_id", "installation_id must be a UUID")
 		return
 	}
 
@@ -228,11 +228,11 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 	// 404, not silently insert and then fail on the FK.
 	if _, err := h.queries.GetHelmChartByID(r.Context(), chartID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "chart_not_found", "chart not found")
+			RespondRequestError(w, r, http.StatusNotFound, "chart_not_found", "chart not found")
 			return
 		}
 		h.log.ErrorContext(r.Context(), "lookup chart", "error", err)
-		RespondError(w, http.StatusInternalServerError, "internal_error", "lookup chart failed")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "lookup chart failed")
 		return
 	}
 
@@ -246,7 +246,7 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 		})
 		if err != nil {
 			h.log.ErrorContext(r.Context(), "update rating", "error", err)
-			RespondError(w, http.StatusInternalServerError, "update_failed", "could not update rating")
+			RespondRequestError(w, r, http.StatusInternalServerError, "update_failed", "could not update rating")
 			return
 		}
 		h.recomputeInline(r.Context(), chartID)
@@ -267,7 +267,7 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		h.log.ErrorContext(r.Context(), "create rating", "error", err)
-		RespondError(w, http.StatusInternalServerError, "create_failed", "could not create rating")
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_failed", "could not create rating")
 		return
 	}
 	h.recomputeInline(r.Context(), chartID)
@@ -316,7 +316,7 @@ func (h *ChartRatingsHandler) recomputeInline(ctx context.Context, chartID uuid.
 func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
 		return
 	}
 	limit := int32(queryInt(r, "limit", 20))
@@ -328,12 +328,12 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 		ChartID: chartID, Limit: limit, Offset: offset,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	total, err := h.queries.CountChartRatingsByChart(r.Context(), chartID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "count_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "count_failed", err.Error())
 		return
 	}
 	out := make([]ratingResponse, 0, len(rows))
@@ -347,17 +347,17 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 func (h *ChartRatingsHandler) GetAggregate(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
 		return
 	}
 	agg, err := h.queries.GetChartRatingAggregate(r.Context(), chartID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondError(w, http.StatusInternalServerError, "aggregate_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "aggregate_failed", err.Error())
 		return
 	}
 	hist, err := h.queries.ChartRatingHistogram(r.Context(), chartID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "histogram_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "histogram_failed", err.Error())
 		return
 	}
 	resp := aggregateResponse{
@@ -373,17 +373,17 @@ func (h *ChartRatingsHandler) GetAggregate(w http.ResponseWriter, r *http.Reques
 func (h *ChartRatingsHandler) GetMyRating(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return
 	}
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
 		return
 	}
 	got, err := h.queries.GetChartRatingForUserChart(r.Context(), sqlc.GetChartRatingForUserChartParams{
@@ -391,10 +391,10 @@ func (h *ChartRatingsHandler) GetMyRating(w http.ResponseWriter, r *http.Request
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "not_found", "no rating")
+			RespondRequestError(w, r, http.StatusNotFound, "not_found", "no rating")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_failed", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, toRatingResponse(got))
@@ -412,41 +412,41 @@ func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Reques
 	}
 	ratingID, err := uuid.Parse(chi.URLParam(r, "rating_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_rating_id", "rating_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_rating_id", "rating_id must be a UUID")
 		return
 	}
 	existing, err := h.queries.GetChartRatingByID(r.Context(), ratingID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "rating_not_found", "rating not found")
+			RespondRequestError(w, r, http.StatusNotFound, "rating_not_found", "rating not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_failed", err.Error())
 		return
 	}
 	if existing.UserID != callerID && !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "only the rating's owner may modify it")
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "only the rating's owner may modify it")
 		return
 	}
 	var body createOrUpdateRatingRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "Body must be valid JSON")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_json", "Body must be valid JSON")
 		return
 	}
 	if body.Stars < 1 || body.Stars > 5 {
-		RespondError(w, http.StatusBadRequest, "invalid_stars", "stars must be 1-5")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_stars", "stars must be 1-5")
 		return
 	}
 	note := sanitizeNote(body.Note)
 	if len(note) > NoteMaxLen {
-		RespondError(w, http.StatusBadRequest, "note_too_long", "note must be 280 chars or fewer")
+		RespondRequestError(w, r, http.StatusBadRequest, "note_too_long", "note must be 280 chars or fewer")
 		return
 	}
 	updated, err := h.queries.UpdateChartRating(r.Context(), sqlc.UpdateChartRatingParams{
 		ID: ratingID, Stars: body.Stars, Note: note,
 	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "update_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "update_failed", err.Error())
 		return
 	}
 	h.recomputeInline(r.Context(), existing.ChartID)
@@ -466,24 +466,24 @@ func (h *ChartRatingsHandler) DeleteRating(w http.ResponseWriter, r *http.Reques
 	}
 	ratingID, err := uuid.Parse(chi.URLParam(r, "rating_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_rating_id", "rating_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_rating_id", "rating_id must be a UUID")
 		return
 	}
 	existing, err := h.queries.GetChartRatingByID(r.Context(), ratingID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "rating_not_found", "rating not found")
+			RespondRequestError(w, r, http.StatusNotFound, "rating_not_found", "rating not found")
 			return
 		}
-		RespondError(w, http.StatusInternalServerError, "lookup_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_failed", err.Error())
 		return
 	}
 	if existing.UserID != callerID && !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden", "only the rating's owner may delete it")
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "only the rating's owner may delete it")
 		return
 	}
 	if err := h.queries.DeleteChartRating(r.Context(), ratingID); err != nil {
-		RespondError(w, http.StatusInternalServerError, "delete_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_failed", err.Error())
 		return
 	}
 	h.recomputeInline(r.Context(), existing.ChartID)
@@ -502,7 +502,7 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 	}
 	results, err := catalog.TopCharts(r.Context(), h.queries, limit)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, results)
@@ -512,7 +512,7 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_chart_id", "chart_id must be a UUID")
 		return
 	}
 	limit := queryInt(r, "limit", 5)
@@ -521,7 +521,7 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 	}
 	results, err := catalog.SimilarCharts(r.Context(), h.queries, chartID, limit)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "list_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, results)
@@ -535,17 +535,17 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 func (h *ChartRatingsHandler) requireUser(w http.ResponseWriter, r *http.Request) (sqlc.User, uuid.UUID, bool) {
 	auth, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		return sqlc.User{}, uuid.Nil, false
 	}
 	userID, err := uuid.Parse(auth.ID)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid user ID")
 		return sqlc.User{}, uuid.Nil, false
 	}
 	user, err := h.queries.GetUserByID(r.Context(), userID)
 	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
+		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "Caller not found")
 		return sqlc.User{}, uuid.Nil, false
 	}
 	return user, userID, true

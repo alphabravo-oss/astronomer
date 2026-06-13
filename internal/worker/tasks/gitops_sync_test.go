@@ -8,6 +8,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -655,6 +656,49 @@ func TestSync_DecommissionsImmediatelyUnderDecommissionPolicy(t *testing.T) {
 	}
 	if len(enq.tasks) != 1 || enq.tasks[0].Type() != "cluster:decommission" {
 		t.Fatalf("expected immediate decommission enqueue; got %d tasks", len(enq.tasks))
+	}
+}
+
+func TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue(t *testing.T) {
+	ResetGitOps()
+	defer ResetGitOps()
+	q := newFakeQuerier()
+	clusterID := uuid.New()
+	outbox := &fakeTaskOutboxWriter{}
+	enq := &fakeEnqueuer{}
+	ConfigureGitOps(GitOpsDeps{
+		Queries:    q,
+		Enqueuer:   enq,
+		TaskOutbox: outbox,
+		Now:        time.Now,
+	})
+
+	if err := enqueueDecommission(context.Background(), clusterID, "prod-east"); err != nil {
+		t.Fatalf("enqueueDecommission: %v", err)
+	}
+	if len(q.createdDecoms) != 1 {
+		t.Fatalf("created decommissions = %d, want 1", len(q.createdDecoms))
+	}
+	if len(enq.tasks) != 0 {
+		t.Fatalf("direct enqueues = %d, want 0 when outbox succeeds", len(enq.tasks))
+	}
+	arg := outbox.arg
+	if arg.TaskType != ClusterDecommissionType {
+		t.Fatalf("outbox task type = %q, want %q", arg.TaskType, ClusterDecommissionType)
+	}
+	wantDedupe := "cluster_decommission:" + q.createdDecoms[0].ID.String()
+	if !arg.DedupeKey.Valid || arg.DedupeKey.String != wantDedupe {
+		t.Fatalf("dedupe key = %+v, want %s", arg.DedupeKey, wantDedupe)
+	}
+	if arg.QueueName != "default" || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
+	}
+	var payload ClusterDecommissionPayload
+	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if payload.DecommissionID != q.createdDecoms[0].ID.String() {
+		t.Fatalf("payload decommission_id = %q, want %s", payload.DecommissionID, q.createdDecoms[0].ID)
 	}
 }
 

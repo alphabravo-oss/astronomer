@@ -10,6 +10,7 @@
 #   {{REGISTRATION_TOKEN}}   - Bearer token for agent authentication
 #   {{CA_CERT}}              - Base64-encoded CA certificate (optional)
 #   {{AGENT_IMAGE}}          - Full agent container image reference
+#   {{AGENT_RBAC_RULES}}     - ClusterRole rules selected by privilege profile
 # ============================================================================
 
 ---
@@ -37,7 +38,7 @@ metadata:
 automountServiceAccountToken: true
 
 ---
-# ClusterRole - the agent needs broad read access and RBAC management
+# ClusterRole - rules are rendered from the selected agent privilege profile
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -47,13 +48,7 @@ metadata:
     app.kubernetes.io/component: agent
     app.kubernetes.io/part-of: astronomer
 rules:
-  # Full access to proxy Kubernetes API requests from the management server
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["*"]
-  # Non-resource URLs (healthz, metrics, etc.)
-  - nonResourceURLs: ["*"]
-    verbs: ["*"]
+{{AGENT_RBAC_RULES}}
 
 ---
 # ClusterRoleBinding

@@ -44,7 +44,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // ── metrics ────────────────────────────────────────────────────────────
@@ -231,7 +230,7 @@ func (h *ComplianceHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 	from, to, err := parseComplianceRange(r)
 	if err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_range", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_range", err.Error())
 		return
 	}
 
@@ -274,17 +273,17 @@ func (h *ComplianceHandler) GetExportStatus(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	idx := strings.LastIndex(path, "/")
 	if idx == -1 {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Missing export id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Missing export id")
 		return
 	}
 	id := path[idx+1:]
 	if id == "" {
-		RespondError(w, http.StatusBadRequest, "invalid_id", "Missing export id")
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Missing export id")
 		return
 	}
 	job, ok := h.jobs.get(id)
 	if !ok {
-		RespondError(w, http.StatusNotFound, "not_found", "Export not found")
+		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Export not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, job)
@@ -539,31 +538,10 @@ func marshalCompliancePayload(p ComplianceExportPayload) ([]byte, error) {
 // gate enforces superuser-only access. Mirrors the pattern in
 // admin_drill.go / admin_queues.go.
 func (h *ComplianceHandler) gate(w http.ResponseWriter, r *http.Request) (sqlc.User, bool) {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
-		return sqlc.User{}, false
-	}
-	callerID, err := uuid.Parse(caller.ID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "internal_error", "Invalid user ID")
-		return sqlc.User{}, false
-	}
-	if h.queries == nil {
-		RespondError(w, http.StatusServiceUnavailable, "store_unavailable", "Compliance store not configured")
-		return sqlc.User{}, false
-	}
-	user, err := h.queries.GetUserByID(r.Context(), callerID)
-	if err != nil {
-		RespondError(w, http.StatusForbidden, "forbidden", "Caller not found")
-		return sqlc.User{}, false
-	}
-	if !user.IsSuperuser {
-		RespondError(w, http.StatusForbidden, "forbidden",
-			"Compliance export requires superuser privileges")
-		return sqlc.User{}, false
-	}
-	return user, true
+	return requireSuperuser(w, r, h.queries, superuserGateConfig{
+		StoreUnavailableMessage: "Compliance store not configured",
+		ForbiddenMessage:        "Compliance export requires superuser privileges",
+	})
 }
 
 // ── parsing ────────────────────────────────────────────────────────────

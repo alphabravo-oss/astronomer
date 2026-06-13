@@ -91,9 +91,39 @@ spec:
               the asynq CLI to see which task type is failing.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/worker-dlq-growing.md
 
+        # ── Durable task outbox stuck/dead rows ─────────────────────────
+        - alert: AstronomerTaskOutboxDeadRows
+          expr: sum(astronomer_task_outbox_rows{status="dead"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: worker
+          annotations:
+            summary: "Astronomer task outbox has dead rows"
+            description: |
+              Durable task intents exceeded their delivery-attempt budget.
+              Redis may have been unavailable for an extended period, or
+              Asynq is rejecting the task envelope. Inspect task_outbox
+              before requeueing.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/task-outbox-stalled.md
+
+        - alert: AstronomerTaskOutboxStalled
+          expr: max(astronomer_task_outbox_oldest_due_seconds{status=~"pending|failed|delivering"}) > 300
+          for: 5m
+          labels:
+            severity: warning
+            component: worker
+          annotations:
+            summary: "Astronomer task outbox delivery is stalled"
+            description: |
+              A due task_outbox row has not been delivered to Redis/Asynq
+              for more than 5 minutes. Check Redis health and the
+              task_outbox:dispatch worker logs.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/task-outbox-stalled.md
+
         # ── Database pool exhaustion ────────────────────────────────────
         - alert: AstronomerDBPoolExhausted
-          expr: rate(db_pool_empty_acquire_count_total[5m]) > 0
+          expr: rate(astronomer_db_pool_empty_acquire_count_total[5m]) > 0
           for: 5m
           labels:
             severity: warning
@@ -106,6 +136,91 @@ spec:
               long-held conn (look for queries that hold an advisory lock,
               especially around the leader election in periodic tasks).
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/db-pool-exhausted.md
+
+        - alert: AstronomerDBDeadlocks
+          expr: rate(astronomer_db_deadlocks_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: server
+          annotations:
+            summary: "Astronomer Postgres deadlocks detected"
+            description: |
+              PostgreSQL has reported deadlocks in the current database.
+              Inspect recent application errors and pg_stat_activity to
+              identify conflicting transaction paths.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/db-runtime-contention.md
+
+        - alert: AstronomerDBLongTransaction
+          expr: astronomer_db_longest_transaction_seconds > 300
+          for: 10m
+          labels:
+            severity: warning
+            component: server
+          annotations:
+            summary: "Astronomer has an open Postgres transaction older than 5 minutes"
+            description: |
+              A server or worker connection is holding a transaction open.
+              This can block vacuum, migrations, and schema changes.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/db-runtime-contention.md
+
+        # ── Migration health and duration ───────────────────────────────
+        # kube-state-metrics exposes Job start/completion/failure times.
+        # The migration Job should usually finish in seconds; 15 minutes
+        # means it is blocked on connectivity, a dirty schema, or an
+        # unexpected lock.
+        - alert: AstronomerMigrationJobLongRunning
+          expr: |
+            max(
+              (time() - kube_job_status_start_time{job_name=~".*-migrate.*"})
+              unless on(job_name)
+              kube_job_status_completion_time{job_name=~".*-migrate.*"}
+            ) > 900
+          for: 5m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "Astronomer migration Job has been running for >15 minutes"
+            description: |
+              The release migration Job is still running after 15 minutes.
+              Check for schema lock contention, invalid DATABASE_URL, or a
+              dirty schema_migrations row.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/failed-migration.md
+
+        - alert: AstronomerMigrationJobFailed
+          expr: |
+            sum(increase(kube_job_status_failed{job_name=~".*-migrate.*"}[24h])) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: database
+          annotations:
+            summary: "Astronomer migration Job failed in the last 24h"
+            description: |
+              A migration Job failed. Do not roll the application forward
+              until schema_migrations is inspected and the failed migration
+              is either safely retried or forward-fixed.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/failed-migration.md
+
+        # ── External Postgres replication lag ───────────────────────────
+        # This rule is intentionally best-effort. It fires only when the
+        # platform's Postgres exporter publishes pg_replication_lag_seconds;
+        # managed services that expose lag under a cloud-specific metric can
+        # override this rule set.
+        - alert: AstronomerPostgresReplicationLagHigh
+          expr: max(pg_replication_lag_seconds) > 300
+          for: 10m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "Astronomer Postgres replication lag is above 5 minutes"
+            description: |
+              The configured Postgres exporter reports replication lag above
+              5 minutes. Confirm the replica/subscriber is healthy before
+              relying on PITR, failover, or read replicas.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/postgres-failover.md
 
         # ── Agent disconnected ──────────────────────────────────────────
         # 120s = 4× the default heartbeat interval — small enough to
@@ -180,6 +295,45 @@ spec:
               critical table, or pre-dates the expected minimum schema
               version. Pull the failed Job's pod logs and inspect
               backup_drill_results.error_message for the last row.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
+
+        # ── Management-plane backup recency and failure ─────────────────
+        # A backup CronJob that never completes successfully is just as bad
+        # as a restore drill that never succeeds. The default schedule is
+        # daily at 03:00 UTC; 26h gives room for controller delay and a slow
+        # pg_dump without waiting multiple days.
+        - alert: AstronomerManagementBackupStale
+          expr: |
+            time() - max(
+              kube_job_status_completion_time{job_name=~".*-management-backup-.*"}
+              and on(job_name)
+              kube_job_status_succeeded{job_name=~".*-management-backup-.*"} > 0
+            ) > 26 * 3600
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+          annotations:
+            summary: "Astronomer management-plane backup has not succeeded in >26 hours"
+            description: |
+              The management-plane backup CronJob has not completed
+              successfully in more than 26 hours. Check the backup Job logs,
+              S3 credentials, bucket permissions, and object-store reachability.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
+
+        - alert: AstronomerManagementBackupFailed
+          expr: |
+            sum(increase(kube_job_status_failed{job_name=~".*-management-backup-.*"}[24h])) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: backup
+          annotations:
+            summary: "Astronomer management-plane backup failed in the last 24h"
+            description: |
+              A management-plane backup Job failed. The latest Postgres
+              state may not be protected until the next successful backup.
+              Inspect the failed Job's pod logs and verify S3 credentials.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
 
         # ── Management-plane log forwarder down ─────────────────────────

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
@@ -379,7 +380,12 @@ func TestApplyVeleroBSL_RoundTrip(t *testing.T) {
 // only need GetBackupStorageConfigByID for TestStorageConfig; everything
 // else returns zero values.
 type fakeBackupQuerier struct {
-	cfg sqlc.BackupStorageConfig
+	cfg             sqlc.BackupStorageConfig
+	createArg       sqlc.CreateBackupStorageConfigParams
+	updateArg       sqlc.UpdateBackupStorageConfigParams
+	restoreByKey    map[string]sqlc.RestoreOperation
+	restoreCreates  []sqlc.CreateRestoreOperationParams
+	idemRestoreArgs []sqlc.CreateRestoreOperationIdempotentParams
 }
 
 func (f *fakeBackupQuerier) GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (sqlc.BackupStorageConfig, error) {
@@ -396,10 +402,47 @@ func (f *fakeBackupQuerier) ListBackupStorageConfigs(ctx context.Context, arg sq
 	return nil, nil
 }
 func (f *fakeBackupQuerier) CreateBackupStorageConfig(ctx context.Context, arg sqlc.CreateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error) {
-	return sqlc.BackupStorageConfig{}, errors.New("not implemented")
+	f.createArg = arg
+	return sqlc.BackupStorageConfig{
+		ID:                   uuid.New(),
+		Name:                 arg.Name,
+		StorageType:          arg.StorageType,
+		Bucket:               arg.Bucket,
+		Prefix:               arg.Prefix,
+		Region:               arg.Region,
+		EndpointUrl:          arg.EndpointUrl,
+		AccessKey:            arg.AccessKey,
+		SecretKey:            arg.SecretKey,
+		IsDefault:            arg.IsDefault,
+		CreatedByID:          arg.CreatedByID,
+		ClusterID:            arg.ClusterID,
+		VeleroNamespace:      arg.VeleroNamespace,
+		BslName:              arg.BslName,
+		EncryptedCredentials: arg.EncryptedCredentials,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
+	}, nil
 }
 func (f *fakeBackupQuerier) UpdateBackupStorageConfig(ctx context.Context, arg sqlc.UpdateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error) {
-	return sqlc.BackupStorageConfig{}, errors.New("not implemented")
+	f.updateArg = arg
+	return sqlc.BackupStorageConfig{
+		ID:                   arg.ID,
+		Name:                 arg.Name,
+		StorageType:          arg.StorageType,
+		Bucket:               arg.Bucket,
+		Prefix:               arg.Prefix,
+		Region:               arg.Region,
+		EndpointUrl:          arg.EndpointUrl,
+		AccessKey:            arg.AccessKey,
+		SecretKey:            arg.SecretKey,
+		IsDefault:            arg.IsDefault,
+		ClusterID:            arg.ClusterID,
+		VeleroNamespace:      arg.VeleroNamespace,
+		BslName:              arg.BslName,
+		EncryptedCredentials: arg.EncryptedCredentials,
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
+	}, nil
 }
 func (f *fakeBackupQuerier) DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error {
 	return errors.New("not implemented")
@@ -468,7 +511,30 @@ func (f *fakeBackupQuerier) GetRestoreOperationByID(ctx context.Context, id uuid
 	return sqlc.RestoreOperation{}, errors.New("not implemented")
 }
 func (f *fakeBackupQuerier) CreateRestoreOperation(ctx context.Context, arg sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error) {
-	return sqlc.RestoreOperation{}, errors.New("not implemented")
+	f.restoreCreates = append(f.restoreCreates, arg)
+	return restoreOperationFromParams(arg), nil
+}
+func (f *fakeBackupQuerier) CreateRestoreOperationIdempotent(ctx context.Context, arg sqlc.CreateRestoreOperationIdempotentParams) (sqlc.RestoreOperation, error) {
+	f.idemRestoreArgs = append(f.idemRestoreArgs, arg)
+	if f.restoreByKey == nil {
+		f.restoreByKey = map[string]sqlc.RestoreOperation{}
+	}
+	key := arg.Scope + "|" + arg.IdempotencyKey
+	if restore, ok := f.restoreByKey[key]; ok {
+		return restore, nil
+	}
+	restore := restoreOperationFromParams(sqlc.CreateRestoreOperationParams{
+		BackupID:           arg.BackupID,
+		Status:             arg.Status,
+		InitiatedByID:      arg.InitiatedByID,
+		ClusterID:          arg.ClusterID,
+		VeleroNamespace:    arg.VeleroNamespace,
+		VeleroRestoreName:  arg.VeleroRestoreName,
+		IncludedNamespaces: arg.IncludedNamespaces,
+		NamespaceMapping:   arg.NamespaceMapping,
+	})
+	f.restoreByKey[key] = restore
+	return restore, nil
 }
 func (f *fakeBackupQuerier) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error {
 	return nil
@@ -484,6 +550,126 @@ func (f *fakeBackupQuerier) TouchRestorePolling(ctx context.Context, id uuid.UUI
 }
 func (f *fakeBackupQuerier) CountRestoreOperations(ctx context.Context) (int64, error) {
 	return 0, nil
+}
+
+func restoreOperationFromParams(arg sqlc.CreateRestoreOperationParams) sqlc.RestoreOperation {
+	now := time.Now()
+	return sqlc.RestoreOperation{
+		ID:                 uuid.New(),
+		BackupID:           arg.BackupID,
+		Status:             arg.Status,
+		InitiatedByID:      arg.InitiatedByID,
+		ClusterID:          arg.ClusterID,
+		VeleroNamespace:    arg.VeleroNamespace,
+		VeleroRestoreName:  arg.VeleroRestoreName,
+		IncludedNamespaces: arg.IncludedNamespaces,
+		NamespaceMapping:   arg.NamespaceMapping,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+}
+
+func TestCreateRestoreOperationUsesIdempotencyKey(t *testing.T) {
+	q := &fakeBackupQuerier{}
+	h := NewBackupHandler(q)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/backups/backup-1/restore/", nil)
+	req.Header.Set("Idempotency-Key", "restore-retry-1")
+	ctx := withOperationIdempotency(req, "restore")
+	params := sqlc.CreateRestoreOperationParams{
+		BackupID:          uuid.New(),
+		Status:            "pending",
+		VeleroNamespace:   "velero",
+		VeleroRestoreName: "restore-demo",
+	}
+
+	first, err := h.createRestoreOperation(ctx, params)
+	if err != nil {
+		t.Fatalf("first restore: %v", err)
+	}
+	second, err := h.createRestoreOperation(ctx, params)
+	if err != nil {
+		t.Fatalf("second restore: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("restore id = %s then %s, want replay to return original", first.ID, second.ID)
+	}
+	if len(q.restoreCreates) != 0 {
+		t.Fatalf("plain restore creates = %d, want idempotent path only", len(q.restoreCreates))
+	}
+	if len(q.idemRestoreArgs) != 2 {
+		t.Fatalf("idempotent restore calls = %d, want 2", len(q.idemRestoreArgs))
+	}
+}
+
+func TestCreateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	enc, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	q := &fakeBackupQuerier{}
+	h := NewBackupHandler(q)
+	h.SetEncryptor(enc)
+
+	body := `{"name":"primary","storage_type":"s3","bucket":"backups","access_key":"AKIA","secret_key":"SECRET","velero_namespace":"velero","bsl_name":"primary"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/backups/storage/", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.CreateStorageConfig(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if q.createArg.AccessKey != "" || q.createArg.SecretKey != "" {
+		t.Fatalf("expected plaintext credential columns to be blank, got access=%q secret=%q", q.createArg.AccessKey, q.createArg.SecretKey)
+	}
+	if q.createArg.EncryptedCredentials == "" {
+		t.Fatal("expected encrypted credentials to be stored")
+	}
+	plain, err := enc.Decrypt(q.createArg.EncryptedCredentials)
+	if err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	if !strings.Contains(plain, `"access_key":"AKIA"`) || !strings.Contains(plain, `"secret_key":"SECRET"`) {
+		t.Fatalf("encrypted credentials did not contain expected payload: %s", plain)
+	}
+}
+
+func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	enc, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	id := uuid.New()
+	q := &fakeBackupQuerier{}
+	h := NewBackupHandler(q)
+	h.SetEncryptor(enc)
+
+	body := `{"name":"primary","storage_type":"s3","bucket":"backups","access_key":"AKIA","secret_key":"SECRET","velero_namespace":"velero","bsl_name":"primary"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/backups/storage/"+id.String()+"/", strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rec := httptest.NewRecorder()
+
+	h.UpdateStorageConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if q.updateArg.AccessKey != "" || q.updateArg.SecretKey != "" {
+		t.Fatalf("expected plaintext credential columns to be blank, got access=%q secret=%q", q.updateArg.AccessKey, q.updateArg.SecretKey)
+	}
+	if q.updateArg.EncryptedCredentials == "" {
+		t.Fatal("expected encrypted credentials to be stored")
+	}
 }
 
 func TestStorageConfigEndpoint_Success(t *testing.T) {
