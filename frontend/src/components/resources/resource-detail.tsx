@@ -345,6 +345,15 @@ export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resou
       case 'secrets': return <SecretOverview obj={obj!} />;
       case 'persistentvolumes': return <PVOverview obj={obj!} />;
       case 'networkpolicies': return <NetworkPolicyOverview obj={obj!} />;
+      case 'storageclasses': return <StorageClassOverview obj={obj!} />;
+      case 'k8s-clusterroles':
+      case 'k8s-roles': return <RoleOverview obj={obj!} />;
+      case 'k8s-clusterrolebindings':
+      case 'k8s-rolebindings': return <RoleBindingOverview obj={obj!} />;
+      case 'serviceaccounts': return <ServiceAccountOverview obj={obj!} />;
+      case 'poddisruptionbudgets': return <PDBOverview obj={obj!} />;
+      case 'resourcequotas': return <ResourceQuotaOverview obj={obj!} />;
+      case 'crds': return <CRDOverview obj={obj!} />;
       default: return null;
     }
   })();
@@ -840,6 +849,137 @@ function NetworkPolicyOverview({ obj }: { obj: K8sObject }) {
       <Section title="Pod Selector"><KeyValueTable entries={podSelector} /></Section>
     </>
   );
+}
+
+function StorageClassOverview({ obj }: { obj: K8sObject }) {
+  const o = asRecord(obj); // StorageClass fields are top-level, not under spec.
+  const summary: Array<[string, string]> = [];
+  if (o.provisioner) summary.push(['provisioner', String(o.provisioner)]);
+  if (o.reclaimPolicy) summary.push(['reclaimPolicy', String(o.reclaimPolicy)]);
+  if (o.volumeBindingMode) summary.push(['volumeBindingMode', String(o.volumeBindingMode)]);
+  if (o.allowVolumeExpansion != null) summary.push(['allowVolumeExpansion', o.allowVolumeExpansion ? 'Yes' : 'No']);
+  const params = Object.entries(asRecord(o.parameters)) as Array<[string, string]>;
+  return (
+    <>
+      <Section title="StorageClass"><KeyValueTable entries={summary} /></Section>
+      {params.length > 0 && <Section title="Parameters"><KeyValueTable entries={params} /></Section>}
+    </>
+  );
+}
+
+function RoleOverview({ obj }: { obj: K8sObject }) {
+  const rules = (Array.isArray(asRecord(obj).rules) ? (asRecord(obj).rules as Array<Record<string, unknown>>) : []);
+  const join = (v: unknown, blankAs?: string) =>
+    (Array.isArray(v) ? v : []).map((x) => (x === '' && blankAs ? blankAs : String(x))).join(', ') || '-';
+  return (
+    <Section title="Rules">
+      {rules.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No rules.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow><TableHead>API Groups</TableHead><TableHead>Resources</TableHead><TableHead>Verbs</TableHead></TableRow>
+          </TableHeader>
+          <TableBody>
+            {rules.map((r, i) => (
+              <TableRow key={i}>
+                <TableCell className="font-mono text-xs">{join(r.apiGroups, 'core')}</TableCell>
+                <TableCell className="font-mono text-xs">{join(r.resources)}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{join(r.verbs)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Section>
+  );
+}
+
+function RoleBindingOverview({ obj }: { obj: K8sObject }) {
+  const o = asRecord(obj);
+  const roleRef = asRecord(o.roleRef);
+  const subjects = (Array.isArray(o.subjects) ? (o.subjects as Array<Record<string, unknown>>) : []);
+  return (
+    <>
+      <Section title="Role Reference">
+        <KeyValueTable entries={[['kind', String(roleRef.kind ?? '-')], ['name', String(roleRef.name ?? '-')]]} />
+      </Section>
+      <Section title="Subjects">
+        {subjects.length === 0 ? (
+          <p className="text-xs text-muted-foreground">None</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Kind</TableHead><TableHead>Name</TableHead><TableHead>Namespace</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {subjects.map((s, i) => (
+                <TableRow key={`${String(s.name ?? '')}-${i}`}>
+                  <TableCell className="text-xs">{String(s.kind ?? '-')}</TableCell>
+                  <TableCell className="font-mono text-xs">{String(s.name ?? '-')}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{String(s.namespace ?? '-')}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Section>
+    </>
+  );
+}
+
+function ServiceAccountOverview({ obj }: { obj: K8sObject }) {
+  const o = asRecord(obj);
+  const secrets = (Array.isArray(o.secrets) ? (o.secrets as Array<Record<string, unknown>>) : []);
+  const summary: Array<[string, string]> = [
+    ['automountToken', o.automountServiceAccountToken === false ? 'No' : 'Yes'],
+    ['secrets', String(secrets.length)],
+  ];
+  return (
+    <>
+      <Section title="ServiceAccount"><KeyValueTable entries={summary} /></Section>
+      {secrets.length > 0 && (
+        <Section title="Secrets">
+          <ul className="space-y-1">
+            {secrets.map((s, i) => <li key={`${String(s.name ?? '')}-${i}`} className="font-mono text-xs text-foreground">{String(s.name ?? '-')}</li>)}
+          </ul>
+        </Section>
+      )}
+    </>
+  );
+}
+
+function PDBOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const summary: Array<[string, string]> = [];
+  if (spec.minAvailable != null) summary.push(['minAvailable', String(spec.minAvailable)]);
+  if (spec.maxUnavailable != null) summary.push(['maxUnavailable', String(spec.maxUnavailable)]);
+  summary.push(['healthy', `${num(status.currentHealthy, '0')}/${num(status.desiredHealthy, '0')}`]);
+  if (status.disruptionsAllowed != null) summary.push(['disruptionsAllowed', String(status.disruptionsAllowed)]);
+  return <Section title="PodDisruptionBudget"><KeyValueTable entries={summary} /></Section>;
+}
+
+function ResourceQuotaOverview({ obj }: { obj: K8sObject }) {
+  const status = asRecord(obj.status);
+  const hard = asRecord(Object.keys(asRecord(status.hard)).length ? status.hard : asRecord(obj.spec).hard);
+  const used = asRecord(status.used);
+  const rows = Object.keys(hard).map((k) => [k, `${num(used[k], '0')} / ${num(hard[k])}`] as [string, string]);
+  return <Section title="Quota (used / hard)"><KeyValueTable entries={rows} /></Section>;
+}
+
+function CRDOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const names = asRecord(spec.names);
+  const versions = (Array.isArray(spec.versions) ? (spec.versions as Array<Record<string, unknown>>) : []);
+  const summary: Array<[string, string]> = [];
+  if (spec.group) summary.push(['group', String(spec.group)]);
+  if (spec.scope) summary.push(['scope', String(spec.scope)]);
+  if (names.kind) summary.push(['kind', String(names.kind)]);
+  if (names.plural) summary.push(['plural', String(names.plural)]);
+  const vers = versions.map((v) => String(v.name ?? '')).filter(Boolean).join(', ');
+  if (vers) summary.push(['versions', vers]);
+  return <Section title="CustomResourceDefinition"><KeyValueTable entries={summary} /></Section>;
 }
 
 // ── Events tab (plan D1) ──

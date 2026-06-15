@@ -190,6 +190,56 @@ describe('ResourceOverview kind-specific branches', () => {
     expect(screen.getByText('target 75%')).toBeInTheDocument();
   });
 
+  it('renders RBAC role rules', () => {
+    render(
+      <ResourceOverview
+        resourceType="k8s-clusterroles"
+        obj={{
+          metadata: { name: 'reader' },
+          rules: [{ apiGroups: [''], resources: ['pods'], verbs: ['get', 'list'] }],
+        } as never}
+      />
+    );
+    expect(screen.getByText('Rules')).toBeInTheDocument();
+    expect(screen.getByText('core')).toBeInTheDocument(); // '' apiGroup -> core
+    expect(screen.getByText('pods')).toBeInTheDocument();
+    expect(screen.getByText('get, list')).toBeInTheDocument();
+  });
+
+  it('renders a rolebinding roleRef and subjects', () => {
+    render(
+      <ResourceOverview
+        resourceType="k8s-rolebindings"
+        obj={{
+          metadata: { name: 'rb', namespace: 'default' },
+          roleRef: { kind: 'ClusterRole', name: 'reader' },
+          subjects: [{ kind: 'ServiceAccount', name: 'sa-1', namespace: 'default' }],
+        } as never}
+      />
+    );
+    expect(screen.getByText('Role Reference')).toBeInTheDocument();
+    expect(screen.getByText('reader')).toBeInTheDocument();
+    expect(screen.getByText('Subjects')).toBeInTheDocument();
+    expect(screen.getByText('sa-1')).toBeInTheDocument();
+  });
+
+  it('renders a storageclass with provisioner and parameters', () => {
+    render(
+      <ResourceOverview
+        resourceType="storageclasses"
+        obj={{
+          metadata: { name: 'gp3' },
+          provisioner: 'ebs.csi.aws.com',
+          reclaimPolicy: 'Delete',
+          parameters: { type: 'gp3' },
+        } as never}
+      />
+    );
+    expect(screen.getByText('StorageClass')).toBeInTheDocument();
+    expect(screen.getByText('ebs.csi.aws.com')).toBeInTheDocument();
+    expect(screen.getByText('Parameters')).toBeInTheDocument();
+  });
+
   it('masks secret data values', () => {
     render(
       <ResourceOverview
