@@ -129,3 +129,53 @@ export function detailHref(clusterId: string, resourceType: string, namespace: s
 export function getResourceDef(resourceType: string): K8sResourceDef | undefined {
   return resourceDefs[resourceType];
 }
+
+// ── Custom resource (CRD instance) helpers (GATE C) ──
+//
+// ponytail: arbitrary CRs don't fit the static resourceDefs map (group/version/
+// plural are runtime values), so these build the dynamic k8s paths directly
+// rather than registering every CRD. The CRD's group may be empty (core-ish CRDs
+// are rare but possible) → fall back to a bare apis path.
+
+/** K8s API path for listing a CRD's instances cluster-wide (namespaced CRs return all namespaces). */
+export function crListPath(group: string, version: string, plural: string): string {
+  const apiBase = group ? `apis/${group}/${version}` : `api/${version}`;
+  return `${apiBase}/${plural}`;
+}
+
+/** K8s API path for a single CR instance. Namespaced when `namespace` is set. */
+export function crResourcePath(
+  group: string,
+  version: string,
+  plural: string,
+  name: string,
+  namespace?: string,
+): string {
+  const apiBase = group ? `apis/${group}/${version}` : `api/${version}`;
+  return namespace
+    ? `${apiBase}/namespaces/${namespace}/${plural}/${name}`
+    : `${apiBase}/${plural}/${name}`;
+}
+
+/** In-app URL for the custom-resources CRD list (the explorer entry). */
+export function crdListHref(clusterId: string): string {
+  return `/dashboard/clusters/${clusterId}/custom-resources`;
+}
+
+/** In-app URL for a CRD's instance list. */
+export function crListHref(clusterId: string, group: string, version: string, plural: string): string {
+  return `/dashboard/clusters/${clusterId}/custom-resources/${group || '_'}/${version}/${plural}`;
+}
+
+/** In-app URL for a single CR instance detail. Namespaced → .../ns/name; cluster-scoped → .../name. */
+export function crDetailHref(
+  clusterId: string,
+  group: string,
+  version: string,
+  plural: string,
+  name: string,
+  namespace?: string,
+): string {
+  const base = crListHref(clusterId, group, version, plural);
+  return namespace ? `${base}/${namespace}/${name}` : `${base}/${name}`;
+}

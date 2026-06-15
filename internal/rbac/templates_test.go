@@ -139,6 +139,63 @@ func TestLoadCatalog_TemplateMetadata(t *testing.T) {
 	}
 }
 
+// TestCustomResources_TemplateGrants asserts the built-in role templates
+// gate CRD/CR proxy access via the dedicated custom_resources resource
+// (F2 follow-up): viewer/read-only roles get read+list, operator roles get
+// the write verbs, and the wildcard admin templates cover it implicitly.
+func TestCustomResources_TemplateGrants(t *testing.T) {
+	cat, err := LoadCatalog()
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	verbsFor := func(tmplName string) []string {
+		tmpl, ok := cat.Get(tmplName)
+		if !ok {
+			t.Fatalf("template %q missing", tmplName)
+		}
+		for _, r := range tmpl.Rules {
+			if r.Resource == string(ResourceCustomResources) {
+				return r.Verbs
+			}
+			if r.Resource == string(ResourceWildcard) {
+				return r.Verbs // wildcard admin: covers custom_resources implicitly
+			}
+		}
+		t.Fatalf("template %q has no custom_resources (or wildcard) grant", tmplName)
+		return nil
+	}
+	has := func(verbs []string, want Verb) bool {
+		for _, v := range verbs {
+			if v == string(want) || v == string(VerbWildcard) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Viewer/read-only roles: read + list, but NOT write.
+	for _, name := range []string{"cluster-viewer", "project-viewer"} {
+		verbs := verbsFor(name)
+		if !has(verbs, VerbRead) || !has(verbs, VerbList) {
+			t.Errorf("%s custom_resources verbs = %v, want read+list", name, verbs)
+		}
+		if has(verbs, VerbCreate) || has(verbs, VerbUpdate) || has(verbs, VerbDelete) {
+			t.Errorf("%s custom_resources verbs = %v, must not include write verbs", name, verbs)
+		}
+	}
+
+	// Operator + admin roles: write verbs (create/update/delete).
+	for _, name := range []string{"cluster-operator", "platform-operator", "cluster-owner", "platform-admin"} {
+		verbs := verbsFor(name)
+		if !has(verbs, VerbCreate) || !has(verbs, VerbUpdate) || !has(verbs, VerbDelete) {
+			t.Errorf("%s custom_resources verbs = %v, want create+update+delete", name, verbs)
+		}
+		if !has(verbs, VerbRead) || !has(verbs, VerbList) {
+			t.Errorf("%s custom_resources verbs = %v, want read+list too", name, verbs)
+		}
+	}
+}
+
 func namesOf(ts []Template) []string {
 	out := make([]string, len(ts))
 	for i, t := range ts {

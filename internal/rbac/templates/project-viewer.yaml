@@ -21,3 +21,5 @@ rules:
     verbs: [read, list]
   - resource: argocd
     verbs: [read, list]
+  - resource: custom_resources
+    verbs: [read, list, watch]

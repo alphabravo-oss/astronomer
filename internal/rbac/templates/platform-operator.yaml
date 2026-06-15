@@ -35,5 +35,7 @@ rules:
     verbs: [read, list]
   - resource: backups
     verbs: [create, read, update, list]
+  - resource: custom_resources
+    verbs: [create, read, update, delete, list, watch]
   - resource: audit_logs
     verbs: [read, list]

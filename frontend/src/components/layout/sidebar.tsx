@@ -227,6 +227,8 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
     {
       label: 'More Resources',
       items: [
+        // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
+        { label: 'Custom Resources', href: `${base}/custom-resources`, icon: Puzzle, permission: { resource: 'custom_resources', verb: 'read' } },
         { label: 'CRDs', href: `${base}/crds`, icon: Puzzle, countKey: 'crds' },
         { label: 'ServiceAccounts', href: `${base}/serviceaccounts`, icon: UserCircle, countKey: 'serviceaccounts' },
         { label: 'ClusterRoles', href: `${base}/k8s-clusterroles`, icon: KeyRound, countKey: 'k8sClusterroles' },
