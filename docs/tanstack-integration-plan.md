@@ -716,12 +716,13 @@ Every task lists its own tests; this is the program-level safety net.
 
 ## 13. Execution checklist (copy into tracker)
 
-> **Progress (branch `feat/tanstack-foundation`, all green: type-check / lint 0-warn / 191 Jest /
-> 8 Playwright e2e in a real browser / code-health):** P0 + **all of P1 (A1–A4, D1–D3)** DONE, plus
-> **B0 + B1** (TanStack Table keystone — `DataTable` internals on `@tanstack/react-table` behind the
-> unchanged public API; ~74 call sites untouched, original test unedited, 6 new behavior tests) and
-> **B2 column-visibility persistence** (`persistKey`, hydration-safe, e2e-confirmed). Column *resize*
-> deferred. Next: B3 (faceted filters) → B4 (server-side). Nothing committed — on a branch for review.
+> **Progress (branch `feat/tanstack-foundation`, all green: type-check / lint 0-warn / 193 Jest /
+> 10 Playwright e2e in a real browser / code-health):** P0 + **all of P1 (A1–A4, D1–D3)** DONE, and
+> **all of the Table track B0–B4** DONE — `DataTable` internals on `@tanstack/react-table` behind the
+> unchanged public API (~74 call sites untouched), plus column-visibility persistence (B2), faceted
+> filters (B3), and opt-in server-side pagination (B4, Audit page refactored onto it). Only column
+> *resize* (part of B2) is deferred. Remaining plan items: A5 (optional streamedQuery spike), D4
+> (Vite-readiness doc), virtualization track C. Commits d2ac588 / d2bf354 / (B3) / (B4) on the branch.
 
 ```
 P0
@@ -752,7 +753,10 @@ P2
 P3
   [x] B3  Faceted filters — additive `Column.filter` config + toolbar multi-select dropdown
           (getFacetedRowModel/UniqueValues); enabled on clusters Provider; unit + real-browser e2e
-  [ ] B4  Opt-in server-side mode (workloads, audit)               (GATE 3)
+  [x] B4  Opt-in server-side mode — `serverSide` prop (manualPagination + controlled state +
+          rowCount); refactored the Audit page onto it (dropped its bespoke prev/next footer).
+          Unit + real-browser e2e (offset-based per-page fetch). NB: server-side sort/filter is a
+          future extension; audit columns aren't server-sortable today.            (GATE 3)
 
 P4
   [ ] C0  Virtualize DataTable body (separate role=grid path; drop pagination model; measureElement)

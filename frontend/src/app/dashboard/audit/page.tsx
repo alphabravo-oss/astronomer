@@ -3,8 +3,6 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
   Download,
   Filter,
   RefreshCw,
@@ -58,8 +56,6 @@ export default function AuditLogPage() {
   const auditQuery = useAuditLogs(queryParams);
   const rows = auditQuery.data?.data || [];
   const total = auditQuery.data?.count ?? auditQuery.data?.total ?? rows.length;
-  const hasPrevious = page > 0;
-  const hasNext = Boolean(auditQuery.data?.next) || (page + 1) * PAGE_SIZE < total;
   const activeFilterCount = countActiveFilters(filters);
   const exportHref = getAuditLogExportURL({ ...queryParams, limit: 500, offset: 0 });
 
@@ -254,32 +250,12 @@ export default function AuditLogPage() {
         loading={auditQuery.isLoading}
         emptyMessage="No audit rows"
         onRowClick={setSelected}
+        serverSide={{
+          rowCount: total,
+          pagination: { pageIndex: page, pageSize: PAGE_SIZE },
+          onPaginationChange: (next) => setPage(next.pageIndex),
+        }}
       />
-
-      <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
-        <span className="text-muted-foreground">
-          Showing {rows.length ? page * PAGE_SIZE + 1 : 0}-{page * PAGE_SIZE + rows.length} of {total.toLocaleString()}
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={!hasPrevious || auditQuery.isFetching}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="px-3 text-muted-foreground">Page {page + 1}</span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={!hasNext || auditQuery.isFetching}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
 
       {selected && <AuditDetailsDrawer row={selected} onClose={() => setSelected(null)} />}
     </div>

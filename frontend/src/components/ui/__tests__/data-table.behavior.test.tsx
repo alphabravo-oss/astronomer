@@ -106,6 +106,37 @@ describe('DataTable behavior (TanStack Table engine)', () => {
     expect(body.join(' ')).not.toContain('Bravo');
   });
 
+  it('server-side mode uses rowCount for paging and reports page changes without client slicing', () => {
+    const onPaginationChange = jest.fn();
+    const pageRows: Row[] = [
+      { id: '1', name: 'A', size: 1 },
+      { id: '2', name: 'B', size: 2 },
+    ];
+    render(
+      <DataTable
+        data={pageRows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        pageSize={2}
+        searchable={false}
+        serverSide={{
+          rowCount: 10,
+          pagination: { pageIndex: 0, pageSize: 2 },
+          onPaginationChange,
+        }}
+      />
+    );
+
+    // Footer reflects the SERVER total (10), not the 2 loaded rows.
+    expect(screen.getByText('Showing 1-2 of 10')).toBeInTheDocument();
+    // The 2 loaded rows are shown as-is (no further client-side slicing).
+    expect(bodyRowText()).toHaveLength(2);
+
+    // Navigating hands the new page index back to the caller.
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    expect(onPaginationChange).toHaveBeenCalledWith(expect.objectContaining({ pageIndex: 1 }));
+  });
+
   it('toggles column visibility but refuses to hide the last column', () => {
     render(<DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />);
     fireEvent.click(screen.getByRole('button', { name: /columns/i }));

@@ -16,6 +16,7 @@ import {
   type RowSelectionState,
   type VisibilityState,
   type ColumnFiltersState,
+  type PaginationState,
   type Updater,
   type Column as RtColumn,
 } from '@tanstack/react-table';
@@ -78,6 +79,18 @@ interface DataTableProps<T> {
    * ephemeral (non-persisted) tables.
    */
   persistKey?: string;
+  /**
+   * Opt into server-driven pagination. `data` should hold only the current
+   * page's rows; the table will not slice further. The caller owns the
+   * pagination state and feeds it into its query params so each page is a
+   * separate fetch. (Search/sort remain client-side over the loaded page —
+   * pass `searchable={false}` if that's misleading for the dataset.)
+   */
+  serverSide?: {
+    rowCount: number;
+    pagination: PaginationState;
+    onPaginationChange: (next: PaginationState) => void;
+  };
 }
 
 const visibilityStorageKey = (persistKey: string) => `dt:${persistKey}:visibility`;
@@ -127,6 +140,7 @@ export function DataTable<T>({
   toolbar,
   className,
   persistKey,
+  serverSide,
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -186,7 +200,25 @@ export function DataTable<T>({
     data,
     columns: columnDefs,
     getRowId: keyExtractor,
-    state: { globalFilter, sorting, columnFilters, rowSelection, columnVisibility },
+    state: {
+      globalFilter,
+      sorting,
+      columnFilters,
+      rowSelection,
+      columnVisibility,
+      ...(serverSide ? { pagination: serverSide.pagination } : {}),
+    },
+    manualPagination: !!serverSide,
+    ...(serverSide
+      ? {
+          rowCount: serverSide.rowCount,
+          onPaginationChange: (updater: Updater<PaginationState>) => {
+            const next =
+              typeof updater === 'function' ? updater(serverSide.pagination) : updater;
+            serverSide.onPaginationChange(next);
+          },
+        }
+      : {}),
     enableRowSelection: selectable,
     enableSortingRemoval: false, // 2-state toggle (asc ⇄ desc), never back to unsorted
     sortDescFirst: false, // always start ascending, even for numeric columns
@@ -256,6 +288,10 @@ export function DataTable<T>({
   const filteredCount = table.getFilteredRowModel().rows.length;
   const totalPages = table.getPageCount();
   const page = table.getState().pagination.pageIndex;
+  // Footer counts: server mode reports the server total; client mode the
+  // filtered-row count. `effPageSize` is the page size actually in effect.
+  const effPageSize = serverSide ? serverSide.pagination.pageSize : pageSize;
+  const totalRows = serverSide ? serverSide.rowCount : filteredCount;
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -483,8 +519,8 @@ export function DataTable<T>({
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
-            Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, filteredCount)} of{' '}
-            {filteredCount}
+            Showing {totalRows === 0 ? 0 : page * effPageSize + 1}-{page * effPageSize + rows.length} of{' '}
+            {totalRows.toLocaleString()}
           </span>
           <div className="flex items-center gap-1">
             <button
