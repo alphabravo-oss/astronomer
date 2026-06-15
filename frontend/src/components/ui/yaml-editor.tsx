@@ -4,7 +4,8 @@ import { useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { CheckCircle2, Copy, Download, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
+import { ActionButton } from '@/components/ui/action-button';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react').then((m) => m.default), {
   ssr: false,
@@ -49,9 +50,9 @@ export function YamlEditor({
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success('Copied to clipboard');
+      toastSuccess('Copied to clipboard');
     } catch {
-      toast.error('Failed to copy');
+      toastError('Failed to copy');
     }
   }, [value]);
 
@@ -86,28 +87,34 @@ export function YamlEditor({
             <Download className="h-3.5 w-3.5" />
           </button>
           {!readOnly && onDryRun && (
-            <button
+            <ActionButton
               onClick={handleDryRun}
               disabled={dryRunning || saving}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium
-                bg-[#3c3c3c] text-[#cccccc] hover:bg-[#4a4a4a] disabled:opacity-50 transition-colors ml-1"
+              icon={<CheckCircle2 className="h-3 w-3" />}
+              loading={dryRunning}
+              loadingLabel="Dry run"
+              size="sm"
+              className="ml-1 h-7 border-0 bg-[#3c3c3c] px-2.5 py-1 text-[#cccccc] hover:bg-[#4a4a4a]"
               title="Dry run"
             >
-              {dryRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
               Dry run
-            </button>
+            </ActionButton>
           )}
           {!readOnly && onSave && (
-            <button
+            <ActionButton
               onClick={handleSave}
               disabled={saving || dryRunning}
-              title={saveBlocked ? 'Run dry run and review the diff before saving' : 'Save'}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium
-                bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors ml-1"
+              disabledReason={saveBlocked ? 'Run dry run and review the diff before saving' : undefined}
+              icon={<Save className="h-3 w-3" />}
+              intent="primary"
+              loading={saving}
+              loadingLabel="Save"
+              size="sm"
+              title="Save"
+              className="ml-1 h-7 bg-blue-600 px-2.5 py-1 text-white hover:bg-blue-700"
             >
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Save
-            </button>
+            </ActionButton>
           )}
         </div>
       </div>

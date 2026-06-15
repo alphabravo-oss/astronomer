@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 
@@ -121,8 +122,17 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		h.log.Warn("failed to update cluster heartbeat", slog.String("error", err.Error()))
 	}
 	conditions, _ := json.Marshal(map[string]any{
-		"connected": true,
-		"source":    "agent-heartbeat",
+		"connected":                 true,
+		"source":                    "agent-heartbeat",
+		"heartbeat_schema_version":  payload.SchemaVersion,
+		"agent_build_sha":           payload.AgentBuildSHA,
+		"privilege_profile":         payload.PrivilegeProfile,
+		"available_apis":            payload.AvailableAPIs,
+		"enabled_features":          payload.EnabledFeatures,
+		"denied_features":           payload.DeniedFeatures,
+		"last_successful_action":    payload.LastSuccessfulAction,
+		"last_successful_action_at": payload.LastSuccessfulActionAt,
+		"degraded_reasons":          payload.DegradedReasons,
 	})
 	if _, err := h.validator.UpsertClusterHealthStatus(context.Background(), sqlc.UpsertClusterHealthStatusParams{
 		ClusterID:          clusterID,
@@ -178,7 +188,7 @@ func (h *Hub) reconcileAgentLifecycle(conn *AgentConnection, clusterID uuid.UUID
 
 func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.AgentLifecycleOperation) {
 	switch op.OperationType {
-	case "agent_upgrade":
+	case agentlifecycle.OperationTypeUpgrade:
 		payload := protocol.AgentUpgradePayload{
 			OperationID:   op.ID.String(),
 			ClusterID:     conn.ClusterID,
@@ -187,7 +197,7 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 		}
 		body, err := json.Marshal(payload)
 		if err != nil {
-			h.completeAgentLifecycleOperation(op.ID, "failed", "failed to encode agent upgrade payload: "+err.Error())
+			h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "failed to encode agent upgrade payload: "+err.Error())
 			return
 		}
 		msg := &protocol.Message{
@@ -197,7 +207,7 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 			Payload:   body,
 		}
 		if err := h.SendToAgent(conn.ClusterID, msg); err != nil {
-			h.completeAgentLifecycleOperation(op.ID, "failed", "failed to send agent upgrade command: "+err.Error())
+			h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "failed to send agent upgrade command: "+err.Error())
 			return
 		}
 		h.log.Info("agent upgrade command sent",
@@ -207,7 +217,7 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 			slog.String("target_image", op.TargetImage),
 		)
 	default:
-		h.completeAgentLifecycleOperation(op.ID, "failed", "unsupported agent lifecycle operation type: "+op.OperationType)
+		h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "unsupported agent lifecycle operation type: "+op.OperationType)
 	}
 }
 
@@ -239,7 +249,7 @@ func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Mess
 		return
 	}
 	if payload.Success {
-		h.completeAgentLifecycleOperation(operationID, "succeeded", "")
+		h.completeAgentLifecycleOperation(operationID, agentlifecycle.StatusSucceeded, "")
 		h.log.Info("agent upgrade command completed",
 			slog.String("cluster_id", conn.ClusterID),
 			slog.String("operation_id", payload.OperationID),
@@ -254,7 +264,7 @@ func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Mess
 	if lastError == "" {
 		lastError = "agent upgrade command failed"
 	}
-	h.completeAgentLifecycleOperation(operationID, "failed", lastError)
+	h.completeAgentLifecycleOperation(operationID, agentlifecycle.StatusFailed, lastError)
 	h.log.Warn("agent upgrade command failed",
 		slog.String("cluster_id", conn.ClusterID),
 		slog.String("operation_id", payload.OperationID),
@@ -292,15 +302,24 @@ func (h *Hub) publishHeartbeat(clusterID string, payload protocol.HeartbeatPaylo
 		return
 	}
 	p.Publish("cluster.heartbeat", map[string]any{
-		"cluster_id":           clusterID,
-		"last_heartbeat":       time.Now().UTC().Format(time.RFC3339),
-		"agent_version":        payload.AgentVersion,
-		"kubernetes_version":   payload.KubernetesVersion,
-		"node_count":           payload.NodeCount,
-		"pod_count":            payload.PodCount,
-		"cpu_usage_percent":    payload.CPUUsagePercent,
-		"memory_usage_percent": payload.MemoryUsagePercent,
-		"distribution":         payload.Distribution,
+		"cluster_id":                clusterID,
+		"last_heartbeat":            time.Now().UTC().Format(time.RFC3339),
+		"agent_version":             payload.AgentVersion,
+		"agent_build_sha":           payload.AgentBuildSHA,
+		"heartbeat_schema_version":  payload.SchemaVersion,
+		"kubernetes_version":        payload.KubernetesVersion,
+		"node_count":                payload.NodeCount,
+		"pod_count":                 payload.PodCount,
+		"cpu_usage_percent":         payload.CPUUsagePercent,
+		"memory_usage_percent":      payload.MemoryUsagePercent,
+		"distribution":              payload.Distribution,
+		"privilege_profile":         payload.PrivilegeProfile,
+		"available_apis":            payload.AvailableAPIs,
+		"enabled_features":          payload.EnabledFeatures,
+		"denied_features":           payload.DeniedFeatures,
+		"last_successful_action":    payload.LastSuccessfulAction,
+		"last_successful_action_at": payload.LastSuccessfulActionAt,
+		"degraded_reasons":          payload.DegradedReasons,
 	})
 }
 

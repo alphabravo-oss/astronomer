@@ -41,7 +41,7 @@ Implemented on 2026-06-12:
 - Added `docs/secret-column-inventory.md` and a migration guard test requiring every new secret-like column to be explicitly classified.
 - The `Cluster` CRD now exposes ArgoCD adoption intent and status fields: `spec.argocd`, `spec.baseline.profile`, `spec.agent.privilegeProfile`, `status.argocd.phase`, `status.argocd.clusterSecretName`, and standard adoption conditions.
 - `Cluster` and `Project` CRD condition schemas now use standard Kubernetes condition fields, and CRD printer columns include the owning DB row IDs.
-- The adopted-cluster agent install manifest now supports `viewer`, `operator`, and `admin` RBAC profiles; `Cluster.spec.agent.privilegeProfile` is persisted as a reserved annotation and used when rendering the manifest.
+- The adopted-cluster agent install manifest now supports `viewer`, `operator`, `namespace-viewer`, `namespace-operator`, `custom`, and `admin` RBAC profiles; `Cluster.spec.agent.privilegeProfile` is persisted as a reserved annotation and used when rendering the manifest.
 - Cluster API responses now expose the normalized agent privilege profile, the cluster overview warns when a cluster uses full-admin agent access, and `docs/agent-privilege-profiles.md` documents profile capabilities and limits.
 - Helm values and chart docs now define the production Postgres contract: external managed/HA Postgres, TLS, PITR, logical backups, restore drills, retention minimums, and pool-sizing guidance.
 - The management-plane DR runbook now documents restore-order rules for mismatched Postgres and Kubernetes/etcd snapshots.
@@ -92,7 +92,7 @@ Implemented on 2026-06-12:
 - Migrated AuthHandler login/refresh/password/API-token flows and TOTP enrollment/verify/admin flows to request-aware error responses.
 - Migrated remaining production Go `RespondError(w, ...)` call sites in handlers and route guards to request-aware responses; `RespondError` remains only as the compatibility helper and in tests.
 - Centralized the remaining bespoke admin gate paths by routing TOTP admin disable, registration cancel, and route-level key-status through the shared superuser gate, and by making the legacy error-returning superuser helper delegate authenticated DB-user lookup to the shared authorization helper. Remaining authenticated-user reads are middleware, self-service identity, stream ticket, or attribution paths.
-- Cluster API responses now include per-baseline-component ArgoCD ownership entries for the five built-in baseline ApplicationSets, and the cluster GitOps ownership panel renders each component's owner, namespace, and ApplicationSet name.
+- Cluster API responses now include per-baseline-component ArgoCD ownership entries for the built-in baseline ApplicationSets, and the cluster GitOps ownership panel renders each component's owner, namespace, and ApplicationSet name.
 - Documented the CRD versioning and conversion policy for `management.astronomer.io/v1alpha1`, including the rules that require a `v1beta1` conversion webhook before breaking schema or ownership changes.
 - Frontend dependency hygiene now supports clean `npm ci` without peer-resolution flags, removes unused `next-auth`, updates direct vulnerable packages, and passes `npm audit --audit-level=moderate` with zero vulnerabilities.
 - Recharts has been upgraded to the active 3.x line and the existing metrics chart passes the v3 TypeScript surface.
@@ -652,7 +652,7 @@ ArgoCD, Tools, Catalog, Logging, Monitoring, and Workloads all duplicate operati
 - [x] Add built-in ArgoCD ApplicationSets for platform baseline components.
 - [x] Add an ArgoCD-owned baseline status panel on cluster detail pages.
 - [x] Show whether baseline components are managed by ArgoCD, pending ArgoCD registration, local, or Helm-over-tunnel.
-- [x] Show per-component ownership for the built-in baseline ApplicationSet catalog: trivy-operator, kube-state-metrics, node-exporter, fluent-bit, and cert-manager.
+- [x] Show per-component ownership for the built-in baseline ApplicationSet catalog: trivy-operator, kube-state-metrics, node-exporter, fluent-bit, ingress-nginx, cert-manager, and Gatekeeper.
 
 ### Acceptance Criteria
 

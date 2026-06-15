@@ -13,7 +13,51 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveAuditLogsForCluster = `-- name: ArchiveAuditLogsForCluster :execrows
+
+INSERT INTO audit_archive (
+    id, created_at, schema_version, user_id, actor_auth_method,
+    action, resource_type, resource_id, resource_name,
+    http_method, path, status_code, duration_ms, request_id,
+    ip_address, user_agent, detail, source, correlation_id,
+    archived_cluster_id
+)
+SELECT
+    id, created_at, schema_version, user_id, actor_auth_method,
+    action, resource_type, resource_id, resource_name,
+    http_method, path, status_code, duration_ms, request_id,
+    ip_address, user_agent, detail, source, correlation_id,
+    $1::uuid
+FROM audit_log
+WHERE
+    (resource_type = 'cluster' AND resource_id = $2::text)
+    OR (detail ->> 'cluster_id') = $2::text
+ON CONFLICT (id, created_at) DO NOTHING
+`
+
+type ArchiveAuditLogsForClusterParams struct {
+	ClusterID     uuid.UUID `json:"cluster_id"`
+	ClusterIDText string    `json:"cluster_id_text"`
+}
+
+// Audit archive operations.
+//
+// ArchiveAuditLogsForCluster is the bulk INSERT … SELECT used during the
+// archive_audit phase. The cluster id is looked up in two places: resource_id
+// (when the row was emitted with resource_type='cluster') and the
+// detail->>'cluster_id' field (when an unrelated resource row tagged itself
+// with the cluster). The detail extraction uses ->> so it's a text comparison
+// against the cluster_id as a string.
+func (q *Queries) ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error) {
+	result, err := q.db.Exec(ctx, archiveAuditLogsForCluster, arg.ClusterID, arg.ClusterIDText)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createClusterDecommission = `-- name: CreateClusterDecommission :one
+
 INSERT INTO cluster_decommissions (cluster_id, status, requested_by_id, cluster_name)
 VALUES ($1, 'pending', $2, $3)
 RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
@@ -25,6 +69,15 @@ type CreateClusterDecommissionParams struct {
 	ClusterName   string      `json:"cluster_name"`
 }
 
+// Phase: cluster decommission reconciler.
+//
+// The handler enqueues a row via CreateClusterDecommission; the worker
+// claims it via MarkClusterDecommissionRunning (which bumps `attempts` and
+// sets `started_at`), records per-phase progress via UpdateClusterDecommissionPhases,
+// and finally MarkClusterDecommissionSucceeded / MarkClusterDecommissionFailed
+// when all phases are done. The `phases` JSONB blob is rewritten in full each
+// time the reconciler advances — it's small and JSONB merge primitives in
+// pgx are a footgun; one-shot replace is the simpler contract.
 func (q *Queries) CreateClusterDecommission(ctx context.Context, arg CreateClusterDecommissionParams) (ClusterDecommission, error) {
 	row := q.db.QueryRow(ctx, createClusterDecommission, arg.ClusterID, arg.RequestedByID, arg.ClusterName)
 	var i ClusterDecommission
@@ -43,6 +96,179 @@ func (q *Queries) CreateClusterDecommission(ctx context.Context, arg CreateClust
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteAgentConnectionsByCluster = `-- name: DeleteAgentConnectionsByCluster :execrows
+DELETE FROM agent_connections WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAgentConnectionsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAlertRulesByCluster = `-- name: DeleteAlertRulesByCluster :execrows
+DELETE FROM alert_rules WHERE cluster_id = $1::uuid
+`
+
+func (q *Queries) DeleteAlertRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAlertRulesByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAlertSilencesByCluster = `-- name: DeleteAlertSilencesByCluster :execrows
+DELETE FROM alert_silences WHERE cluster_id = $1::uuid
+`
+
+func (q *Queries) DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAlertSilencesByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAuditLogsForCluster = `-- name: DeleteAuditLogsForCluster :execrows
+DELETE FROM audit_log
+WHERE
+    (resource_type = 'cluster' AND resource_id = $1::text)
+    OR (detail ->> 'cluster_id') = $1::text
+`
+
+// Run AFTER ArchiveAuditLogsForCluster; removes the now-archived rows from
+// the live audit_log partition tree.
+func (q *Queries) DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuditLogsForCluster, clusterIDText)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterAgentTokensByCluster = `-- name: DeleteClusterAgentTokensByCluster :execrows
+DELETE FROM cluster_agent_tokens WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterAgentTokensByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterConditionsByCluster = `-- name: DeleteClusterConditionsByCluster :execrows
+DELETE FROM cluster_conditions WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterConditionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterConditionsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterHealthStatusByCluster = `-- name: DeleteClusterHealthStatusByCluster :execrows
+DELETE FROM cluster_health_statuses WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterHealthStatusByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterHealthStatusByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterRegistrationTokensByCluster = `-- name: DeleteClusterRegistrationTokensByCluster :execrows
+
+DELETE FROM cluster_registration_tokens WHERE cluster_id = $1
+`
+
+// Dependent row cleanup: every table that holds a cluster_id FK has its
+// entries removed here. The CASCADE behaviour on the original FK definitions
+// means most of these would be implicitly removed by hard-deleting the
+// cluster row — but since the reconciler tombstones rather than DELETEs,
+// we have to do the cleanup explicitly. Each query is :execrows so the
+// worker can include "rows removed per table" in its phase outcome.
+func (q *Queries) DeleteClusterRegistrationTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterRegistrationTokensByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterRegistryConfigsByCluster = `-- name: DeleteClusterRegistryConfigsByCluster :execrows
+DELETE FROM cluster_registry_configs WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterRegistryConfigsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterRegistryConfigsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterRoleBindingsByCluster = `-- name: DeleteClusterRoleBindingsByCluster :execrows
+DELETE FROM cluster_role_bindings WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterRoleBindingsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteClusterSecurityPoliciesByCluster = `-- name: DeleteClusterSecurityPoliciesByCluster :execrows
+DELETE FROM cluster_security_policies WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterSecurityPoliciesByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteInstalledChartsByCluster = `-- name: DeleteInstalledChartsByCluster :execrows
+DELETE FROM installed_charts WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteInstalledChartsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteProjectNamespacesByCluster = `-- name: DeleteProjectNamespacesByCluster :execrows
+
+DELETE FROM project_namespaces WHERE cluster_id = $1
+`
+
+// (cluster_tools is a catalog table holding built-in tool definitions;
+// it has no cluster_id and is intentionally NOT touched by the
+// decommission reconciler. Per-cluster tool state lives in
+// installed_charts and tool_operations.)
+func (q *Queries) DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProjectNamespacesByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getClusterDecommissionByID = `-- name: GetClusterDecommissionByID :one
@@ -103,6 +329,9 @@ ORDER BY created_at ASC
 LIMIT $1
 `
 
+// Used by the periodic sweep to find decommissions that need re-runs (the
+// enqueue-time task may have been lost or the reconciler may have crashed
+// mid-phase).
 func (q *Queries) ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]ClusterDecommission, error) {
 	rows, err := q.db.Query(ctx, listPendingClusterDecommissions, limit)
 	if err != nil {
@@ -136,20 +365,26 @@ func (q *Queries) ListPendingClusterDecommissions(ctx context.Context, limit int
 	return items, nil
 }
 
-const markClusterDecommissionRunning = `-- name: MarkClusterDecommissionRunning :one
+const markClusterDecommissionFailed = `-- name: MarkClusterDecommissionFailed :one
 UPDATE cluster_decommissions
 SET
-    status = 'running',
-    attempts = attempts + 1,
-    started_at = COALESCE(started_at, now()),
-    last_error = '',
+    status = 'failed',
+    completed_at = now(),
+    last_error = $2,
+    phases = $3,
     updated_at = now()
 WHERE id = $1
 RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
 `
 
-func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, markClusterDecommissionRunning, id)
+type MarkClusterDecommissionFailedParams struct {
+	ID        uuid.UUID       `json:"id"`
+	LastError string          `json:"last_error"`
+	Phases    json.RawMessage `json:"phases"`
+}
+
+func (q *Queries) MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error) {
+	row := q.db.QueryRow(ctx, markClusterDecommissionFailed, arg.ID, arg.LastError, arg.Phases)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -168,22 +403,20 @@ func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, id uuid.UU
 	return i, err
 }
 
-const updateClusterDecommissionPhases = `-- name: UpdateClusterDecommissionPhases :one
+const markClusterDecommissionRunning = `-- name: MarkClusterDecommissionRunning :one
 UPDATE cluster_decommissions
 SET
-    phases = $2,
+    status = 'running',
+    attempts = attempts + 1,
+    started_at = COALESCE(started_at, now()),
+    last_error = '',
     updated_at = now()
 WHERE id = $1
 RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
 `
 
-type UpdateClusterDecommissionPhasesParams struct {
-	ID     uuid.UUID       `json:"id"`
-	Phases json.RawMessage `json:"phases"`
-}
-
-func (q *Queries) UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, updateClusterDecommissionPhases, arg.ID, arg.Phases)
+func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error) {
+	row := q.db.QueryRow(ctx, markClusterDecommissionRunning, id)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -239,26 +472,40 @@ func (q *Queries) MarkClusterDecommissionSucceeded(ctx context.Context, arg Mark
 	return i, err
 }
 
-const markClusterDecommissionFailed = `-- name: MarkClusterDecommissionFailed :one
+const tombstoneCluster = `-- name: TombstoneCluster :exec
+
+UPDATE clusters
+SET
+    decommissioned_at = now(),
+    status = 'decommissioned',
+    updated_at = now()
+WHERE id = $1
+`
+
+// Cluster tombstone — the final phase of the reconciler. We never hard-delete
+// the cluster row; setting decommissioned_at preserves the id for audit_archive
+// referential integrity and lets the UI render historical references.
+func (q *Queries) TombstoneCluster(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, tombstoneCluster, id)
+	return err
+}
+
+const updateClusterDecommissionPhases = `-- name: UpdateClusterDecommissionPhases :one
 UPDATE cluster_decommissions
 SET
-    status = 'failed',
-    completed_at = now(),
-    last_error = $2,
-    phases = $3,
+    phases = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
 `
 
-type MarkClusterDecommissionFailedParams struct {
-	ID        uuid.UUID       `json:"id"`
-	LastError string          `json:"last_error"`
-	Phases    json.RawMessage `json:"phases"`
+type UpdateClusterDecommissionPhasesParams struct {
+	ID     uuid.UUID       `json:"id"`
+	Phases json.RawMessage `json:"phases"`
 }
 
-func (q *Queries) MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, markClusterDecommissionFailed, arg.ID, arg.LastError, arg.Phases)
+func (q *Queries) UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error) {
+	row := q.db.QueryRow(ctx, updateClusterDecommissionPhases, arg.ID, arg.Phases)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -275,211 +522,4 @@ func (q *Queries) MarkClusterDecommissionFailed(ctx context.Context, arg MarkClu
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const tombstoneCluster = `-- name: TombstoneCluster :exec
-UPDATE clusters
-SET
-    decommissioned_at = now(),
-    status = 'decommissioned',
-    updated_at = now()
-WHERE id = $1
-`
-
-func (q *Queries) TombstoneCluster(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, tombstoneCluster, id)
-	return err
-}
-
-const deleteClusterRegistrationTokensByCluster = `-- name: DeleteClusterRegistrationTokensByCluster :execrows
-DELETE FROM cluster_registration_tokens WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterRegistrationTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterRegistrationTokensByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteClusterAgentTokensByCluster = `-- name: DeleteClusterAgentTokensByCluster :execrows
-DELETE FROM cluster_agent_tokens WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterAgentTokensByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteClusterRegistryConfigsByCluster = `-- name: DeleteClusterRegistryConfigsByCluster :execrows
-DELETE FROM cluster_registry_configs WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterRegistryConfigsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterRegistryConfigsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteClusterHealthStatusByCluster = `-- name: DeleteClusterHealthStatusByCluster :execrows
-DELETE FROM cluster_health_statuses WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterHealthStatusByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterHealthStatusByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteClusterConditionsByCluster = `-- name: DeleteClusterConditionsByCluster :execrows
-DELETE FROM cluster_conditions WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterConditionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterConditionsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteAgentConnectionsByCluster = `-- name: DeleteAgentConnectionsByCluster :execrows
-DELETE FROM agent_connections WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAgentConnectionsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteAlertRulesByCluster = `-- name: DeleteAlertRulesByCluster :execrows
-DELETE FROM alert_rules WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteAlertRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAlertRulesByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteAlertSilencesByCluster = `-- name: DeleteAlertSilencesByCluster :execrows
-DELETE FROM alert_silences WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAlertSilencesByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteInstalledChartsByCluster = `-- name: DeleteInstalledChartsByCluster :execrows
-DELETE FROM installed_charts WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteInstalledChartsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteClusterSecurityPoliciesByCluster = `-- name: DeleteClusterSecurityPoliciesByCluster :execrows
-DELETE FROM cluster_security_policies WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterSecurityPoliciesByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteProjectNamespacesByCluster = `-- name: DeleteProjectNamespacesByCluster :execrows
-DELETE FROM project_namespaces WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteProjectNamespacesByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteClusterRoleBindingsByCluster = `-- name: DeleteClusterRoleBindingsByCluster :execrows
-DELETE FROM cluster_role_bindings WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteClusterRoleBindingsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const archiveAuditLogsForCluster = `-- name: ArchiveAuditLogsForCluster :execrows
-INSERT INTO audit_archive (
-    id, created_at, schema_version, user_id, actor_auth_method,
-    action, resource_type, resource_id, resource_name,
-    http_method, path, status_code, duration_ms, request_id,
-    ip_address, user_agent, detail, source, correlation_id,
-    archived_cluster_id
-)
-SELECT
-    id, created_at, schema_version, user_id, actor_auth_method,
-    action, resource_type, resource_id, resource_name,
-    http_method, path, status_code, duration_ms, request_id,
-    ip_address, user_agent, detail, source, correlation_id,
-    $1::uuid
-FROM audit_log
-WHERE
-    (resource_type = 'cluster' AND resource_id = $2::text)
-    OR (detail ->> 'cluster_id') = $2::text
-ON CONFLICT (id, created_at) DO NOTHING
-`
-
-type ArchiveAuditLogsForClusterParams struct {
-	ClusterID     uuid.UUID `json:"cluster_id"`
-	ClusterIDText string    `json:"cluster_id_text"`
-}
-
-func (q *Queries) ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error) {
-	result, err := q.db.Exec(ctx, archiveAuditLogsForCluster, arg.ClusterID, arg.ClusterIDText)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteAuditLogsForCluster = `-- name: DeleteAuditLogsForCluster :execrows
-DELETE FROM audit_log
-WHERE
-    (resource_type = 'cluster' AND resource_id = $1::text)
-    OR (detail ->> 'cluster_id') = $1::text
-`
-
-func (q *Queries) DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAuditLogsForCluster, clusterIDText)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }

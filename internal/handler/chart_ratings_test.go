@@ -32,7 +32,6 @@ type fakeRatingsQuerier struct {
 	coEdges    map[[2]uuid.UUID]int32
 	charts     map[uuid.UUID]sqlc.HelmChart
 	users      map[uuid.UUID]sqlc.User
-	audits     []string
 }
 
 func newFakeRatingsQuerier() *fakeRatingsQuerier {
@@ -487,9 +486,9 @@ func TestChartRatingsHandler_AggregateIncludesHistogram(t *testing.T) {
 	}
 	var out struct {
 		Data struct {
-			RatingCount int        `json:"rating_count"`
-			Histogram   [5]int64   `json:"histogram"`
-			AvgStars    float64    `json:"avg_stars"`
+			RatingCount int      `json:"rating_count"`
+			Histogram   [5]int64 `json:"histogram"`
+			AvgStars    float64  `json:"avg_stars"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {

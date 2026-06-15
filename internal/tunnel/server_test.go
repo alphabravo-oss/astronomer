@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -147,7 +147,7 @@ func TestAgentConnectAndDisconnect(t *testing.T) {
 	}
 
 	// Close the connection and verify deregistration.
-	conn.Close(websocket.StatusNormalClosure, "done")
+	_ = conn.Close(websocket.StatusNormalClosure, "done")
 	time.Sleep(100 * time.Millisecond)
 
 	if a := h.GetAgent("cluster-1"); a != nil {
@@ -207,7 +207,7 @@ func TestSendToConnectedAgent(t *testing.T) {
 		t.Fatalf("expected request_id hc-1, got %s", received.RequestID)
 	}
 
-	conn.Close(websocket.StatusNormalClosure, "done")
+	_ = conn.Close(websocket.StatusNormalClosure, "done")
 }
 
 func TestBroadcastToAll(t *testing.T) {
@@ -246,7 +246,7 @@ func TestBroadcastToAll(t *testing.T) {
 	}
 
 	for _, conn := range conns {
-		conn.Close(websocket.StatusNormalClosure, "done")
+		_ = conn.Close(websocket.StatusNormalClosure, "done")
 	}
 }
 
@@ -290,7 +290,7 @@ func TestAgentConnectionPersistenceLifecycle(t *testing.T) {
 		t.Fatal("expected persisted ping update after heartbeat")
 	}
 
-	conn.Close(websocket.StatusNormalClosure, "done")
+	_ = conn.Close(websocket.StatusNormalClosure, "done")
 	time.Sleep(100 * time.Millisecond)
 
 	disconnects := validator.SnapshotDisconnects()
@@ -302,6 +302,36 @@ func TestAgentConnectionPersistenceLifecycle(t *testing.T) {
 	}
 	if !disconnects[0].DisconnectedAt.Valid {
 		t.Fatal("expected disconnected_at to be set")
+	}
+}
+
+func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
+	clusterID := "945db76b-d7f3-4e6c-8c70-6ca50ca514f4"
+	h := NewHub(slog.Default())
+	pub := &recordingPublisher{}
+	h.SetPublisher(pub)
+	_, conn, ctx := testServerAndClient(t, h)
+
+	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
+		ClusterID:    clusterID,
+		AgentID:      "agent-old",
+		AgentVersion: "v0.8.9",
+		Token:        "test-token",
+	})
+	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
+		t.Fatalf("write connect: %v", err)
+	}
+	var msg protocol.Message
+	err := wsjson.Read(ctx, conn, &msg)
+	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("read error status = %v err=%v, want policy violation", websocket.CloseStatus(err), err)
+	}
+	if connected := h.ConnectedClusters(); len(connected) != 0 {
+		t.Fatalf("connected clusters = %v, want none", connected)
+	}
+	events := pub.Snapshot()
+	if len(events) != 1 || events[0].Type != "agent.failed" {
+		t.Fatalf("events = %+v, want one agent.failed", events)
 	}
 }
 
@@ -329,8 +359,21 @@ func TestConnectAckRotatesToDurableAgentToken(t *testing.T) {
 	if upserts[0].TokenHash != auth.HashOpaqueToken(ack.AgentToken) {
 		t.Fatalf("expected persisted token hash to match ack token")
 	}
+	auditRows := validator.SnapshotAuditRows()
+	if len(auditRows) != 1 {
+		t.Fatalf("expected 1 token audit row, got %d", len(auditRows))
+	}
+	if auditRows[0].Action != "agent.token.rotated" {
+		t.Fatalf("audit action = %q, want agent.token.rotated", auditRows[0].Action)
+	}
+	if auditRows[0].ResourceType != "cluster" || auditRows[0].ResourceID != clusterID {
+		t.Fatalf("audit resource = %s/%s, want cluster/%s", auditRows[0].ResourceType, auditRows[0].ResourceID, clusterID)
+	}
+	if strings.Contains(string(auditRows[0].Detail), ack.AgentToken) {
+		t.Fatal("audit detail leaked durable agent token plaintext")
+	}
 
-	conn.Close(websocket.StatusNormalClosure, "done")
+	_ = conn.Close(websocket.StatusNormalClosure, "done")
 }
 
 // --- StreamManager tests ---

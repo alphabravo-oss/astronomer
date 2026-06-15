@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/gitops/[id] — single-source detail.
  *
@@ -264,34 +265,34 @@ function DetailInner({ id }: { id: string }) {
             No clusters tracked by this source yet.
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-xs text-muted-foreground uppercase">
-              <tr>
-                <th className="text-left py-2">Cluster</th>
-                <th className="text-left py-2">Path</th>
-                <th className="text-left py-2">Last applied</th>
-                <th className="text-left py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="text-xs text-muted-foreground uppercase">
+              <TableRow>
+                <TableHead className="text-left py-2">Cluster</TableHead>
+                <TableHead className="text-left py-2">Path</TableHead>
+                <TableHead className="text-left py-2">Last applied</TableHead>
+                <TableHead className="text-left py-2">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {clusters.map((c) => (
-                <tr key={c.cluster_id} className="border-t">
-                  <td className="py-2 font-mono">{c.cluster_name ?? c.cluster_id}</td>
-                  <td className="py-2 font-mono text-xs text-muted-foreground">{c.repo_path}</td>
-                  <td className="py-2 text-xs text-muted-foreground">
+                <TableRow key={c.cluster_id} className="border-t">
+                  <TableCell className="py-2 font-mono">{c.cluster_name ?? c.cluster_id}</TableCell>
+                  <TableCell className="py-2 font-mono text-xs text-muted-foreground">{c.repo_path}</TableCell>
+                  <TableCell className="py-2 text-xs text-muted-foreground">
                     {formatRelativeTime(c.last_applied_at)}
-                  </td>
-                  <td className="py-2">
+                  </TableCell>
+                  <TableCell className="py-2">
                     <StatusBadge
                       status={c.status === 'active' ? 'active' : 'warning'}
                       label={c.status}
                       size="sm"
                     />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
 

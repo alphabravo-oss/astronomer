@@ -4,8 +4,9 @@
 // with whoever is debugging an Astronomer install. Two design rules:
 //
 //  1. The bundle MUST NOT contain plaintext credentials. Anything that could
-//     wrap a secret (password hashes, API tokens, Argo auth tokens, CA
-//     certificates) is replaced with `[redacted N bytes]`.
+//     wrap a secret (password hashes, API tokens, Argo auth tokens, private
+//     keys, kubeconfigs, credential-shaped strings) is replaced with a
+//     redaction marker.
 //
 //  2. The bundle MUST stream — we don't want to buffer 10MB of pod logs in
 //     RAM. Everything writes directly to an archive/zip.Writer that wraps
@@ -14,10 +15,13 @@ package handler
 
 import (
 	"archive/zip"
+	"bufio"
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
-	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -25,11 +29,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -133,7 +140,6 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 
 	zw := zip.NewWriter(w)
-	defer zw.Close()
 
 	// Each writer is best-effort: a per-section failure shouldn't doom the
 	// whole bundle. We collect errors into a manifest file at the end so the
@@ -152,10 +158,15 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	// shell access to the cluster:
 	h.writeEvents(r.Context(), zw, collected)
 	h.writeHelmRelease(r.Context(), zw, collected)
+	h.writeNetworkPolicies(r.Context(), zw, collected)
+	h.writeIngressCertificates(r.Context(), zw, collected)
 	h.writeSchemaMigrations(r.Context(), zw, collected)
 	h.writeAsynqQueues(r.Context(), zw, collected)
 	h.writeAgentConnections(r.Context(), zw, collected)
 	h.writeReadme(zw, collected)
+	if err := zw.Close(); err != nil {
+		slog.Warn("failed to finish support bundle", "error", err)
+	}
 }
 
 // ── individual section writers ──────────────────────────────────────────
@@ -204,7 +215,7 @@ func (h *SupportBundleHandler) writeClusters(ctx context.Context, zw *zip.Writer
 			"description":        c.Description,
 			"status":             c.Status,
 			"api_server_url":     c.ApiServerUrl,
-			"ca_certificate":     redactBytes(c.CaCertificate),
+			"ca_certificate":     redaction.ByteCount(c.CaCertificate),
 			"environment":        c.Environment,
 			"region":             c.Region,
 			"provider":           c.Provider,
@@ -267,8 +278,11 @@ func (h *SupportBundleHandler) writeArgoCDInstances(ctx context.Context, zw *zip
 			"cluster_id":           a.ClusterID.String(),
 			"api_url":              a.ApiUrl,
 			"verify_ssl":           a.VerifySsl,
-			"auth_token_encrypted": redactBytes(a.AuthTokenEncrypted),
+			"is_healthy":           a.IsHealthy,
+			"auth_token_encrypted": redaction.ByteCount(a.AuthTokenEncrypted),
+			"last_sync":            timestamptzString(a.LastSync),
 			"created_at":           a.CreatedAt,
+			"updated_at":           a.UpdatedAt,
 		})
 	}
 	log.section("argocd-instances.json", writeBundleJSON(zw, "argocd-instances.json", redacted))
@@ -338,13 +352,13 @@ func (h *SupportBundleHandler) writePodLogs(ctx context.Context, zw *zip.Writer,
 			}
 			fw, err := zw.Create(name)
 			if err != nil {
-				rc.Close()
+				_ = rc.Close()
 				lcancel()
 				log.section(name, err)
 				continue
 			}
-			_, copyErr := io.Copy(fw, rc)
-			rc.Close()
+			copyErr := writeRedactedLogStream(fw, rc)
+			_ = rc.Close()
 			lcancel()
 			log.section(name, copyErr)
 		}
@@ -412,6 +426,83 @@ func (h *SupportBundleHandler) writeHelmRelease(ctx context.Context, zw *zip.Wri
 		out = append(out, entry)
 	}
 	log.section("helm-releases.json", writeBundleJSON(zw, "helm-releases.json", out))
+}
+
+// writeNetworkPolicies captures the management namespace's current
+// isolation posture without including full rule bodies. It is meant to
+// answer whether default-deny and explicit egress/ingress policies exist.
+func (h *SupportBundleHandler) writeNetworkPolicies(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.k8s == nil || h.namespace == "" {
+		log.skipped("networkpolicies.json", "k8s client not wired")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	policies, err := h.k8s.NetworkingV1().NetworkPolicies(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	if err != nil {
+		log.section("networkpolicies.json", err)
+		return
+	}
+	out := make([]map[string]any, 0, len(policies.Items))
+	for _, p := range policies.Items {
+		out = append(out, summarizeNetworkPolicy(p))
+	}
+	log.section("networkpolicies.json", writeBundleJSON(zw, "networkpolicies.json", out))
+}
+
+// writeIngressCertificates summarizes externally reachable ingress hosts and
+// TLS certificate validity from Kubernetes Secret metadata/cert public data.
+// It never writes tls.key or raw certificate PEM bytes.
+func (h *SupportBundleHandler) writeIngressCertificates(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.k8s == nil || h.namespace == "" {
+		log.skipped("ingress-certificates.json", "k8s client not wired")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	ingresses, err := h.k8s.NetworkingV1().Ingresses(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	if err != nil {
+		log.section("ingress-certificates.json", err)
+		return
+	}
+	secrets, err := h.k8s.CoreV1().Secrets(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	if err != nil {
+		log.section("ingress-certificates.json", err)
+		return
+	}
+	tlsSecrets := map[string]corev1.Secret{}
+	for _, s := range secrets.Items {
+		if s.Type == corev1.SecretTypeTLS {
+			tlsSecrets[s.Name] = s
+		}
+	}
+
+	secretRefs := map[string]bool{}
+	ingressOut := make([]map[string]any, 0, len(ingresses.Items))
+	for _, ing := range ingresses.Items {
+		entry := summarizeIngress(ing)
+		for _, name := range ingressTLSSecretNames(ing) {
+			secretRefs[name] = true
+		}
+		ingressOut = append(ingressOut, entry)
+	}
+	certOut := make([]map[string]any, 0, len(secretRefs))
+	for name := range secretRefs {
+		secret, ok := tlsSecrets[name]
+		if !ok {
+			certOut = append(certOut, map[string]any{
+				"name":    name,
+				"present": false,
+			})
+			continue
+		}
+		certOut = append(certOut, summarizeTLSSecret(secret))
+	}
+	payload := map[string]any{
+		"ingresses":    ingressOut,
+		"certificates": certOut,
+	}
+	log.section("ingress-certificates.json", writeBundleJSON(zw, "ingress-certificates.json", payload))
 }
 
 // writeSchemaMigrations surfaces the migrate-binary state table. The dirty
@@ -518,18 +609,18 @@ func (h *SupportBundleHandler) writeReadme(zw *zip.Writer, log *sectionLog) {
 	var b strings.Builder
 	b.WriteString("Astronomer support bundle\n")
 	b.WriteString("=========================\n\n")
-	b.WriteString(fmt.Sprintf("Generated: %s\n", time.Now().UTC().Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("Server:    %s (%s)\n\n", version.Version, version.GitCommit))
+	fmt.Fprintf(&b, "Generated: %s\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "Server:    %s (%s)\n\n", version.Version, version.GitCommit)
 	b.WriteString("Contents:\n")
 	for _, line := range log.lines {
 		b.WriteString("  - " + line + "\n")
 	}
 	b.WriteString("\nRedactions:\n")
-	b.WriteString("  - users.password         → [redacted bcrypt hash]\n")
-	b.WriteString("  - clusters.ca_certificate → [redacted N bytes]\n")
-	b.WriteString("  - argocd_instances.auth_token_encrypted → [redacted N bytes]\n")
+	b.WriteString("  - sensitive JSON keys and credential-shaped values → [redacted]\n")
+	b.WriteString("  - private keys and kubeconfig-shaped values → [redacted private key] / [redacted kubeconfig]\n")
+	b.WriteString("  - sensitive pod log lines → [redacted sensitive log line]\n")
 	b.WriteString("\nThis bundle may still contain other sensitive information " +
-		"(emails, audit-log payloads, pod log contents).\n")
+		"(emails, resource names, and non-secret operational metadata).\n")
 	b.WriteString("Share only with people authorized to triage this install.\n")
 	fw, err := zw.Create("README.txt")
 	if err == nil {
@@ -564,14 +655,25 @@ func writeBundleJSON(zw *zip.Writer, name string, payload any) error {
 	}
 	enc := json.NewEncoder(fw)
 	enc.SetIndent("", "  ")
-	return enc.Encode(payload)
+	return enc.Encode(redaction.Payload(payload))
 }
 
-func redactBytes(s string) string {
-	if s == "" {
-		return ""
+func writeRedactedLogStream(dst interface{ Write([]byte) (int, error) }, src interface{ Read([]byte) (int, error) }) error {
+	scanner := bufio.NewScanner(src)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		if _, err := fmt.Fprintln(dst, redaction.SensitiveLine(scanner.Text())); err != nil {
+			return err
+		}
 	}
-	return fmt.Sprintf("[redacted %d bytes]", len(s))
+	return scanner.Err()
+}
+
+func timestamptzString(value pgtype.Timestamptz) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Time.UTC().Format(time.RFC3339)
 }
 
 // sumSecretBytes is a cheap "how big is this helm release blob" probe for
@@ -609,4 +711,132 @@ func summarizeContainers(statuses []corev1.ContainerStatus) []map[string]any {
 		out = append(out, entry)
 	}
 	return out
+}
+
+func summarizeNetworkPolicy(policy networkingv1.NetworkPolicy) map[string]any {
+	entry := map[string]any{
+		"name":               policy.Name,
+		"namespace":          policy.Namespace,
+		"created":            policy.CreationTimestamp,
+		"pod_selector":       policy.Spec.PodSelector.MatchLabels,
+		"policy_types":       networkPolicyTypes(policy.Spec.PolicyTypes),
+		"ingress_rule_count": len(policy.Spec.Ingress),
+		"egress_rule_count":  len(policy.Spec.Egress),
+	}
+	if policy.Spec.PodSelector.MatchExpressions != nil {
+		entry["pod_selector_match_expressions"] = len(policy.Spec.PodSelector.MatchExpressions)
+	}
+	return entry
+}
+
+func networkPolicyTypes(types []networkingv1.PolicyType) []string {
+	out := make([]string, 0, len(types))
+	for _, policyType := range types {
+		out = append(out, string(policyType))
+	}
+	return out
+}
+
+func summarizeIngress(ing networkingv1.Ingress) map[string]any {
+	hosts := make([]string, 0)
+	for _, rule := range ing.Spec.Rules {
+		if rule.Host != "" {
+			hosts = append(hosts, rule.Host)
+		}
+	}
+	entry := map[string]any{
+		"name":        ing.Name,
+		"namespace":   ing.Namespace,
+		"class_name":  ingressClassName(ing),
+		"hosts":       hosts,
+		"tls_secrets": ingressTLSSecretNames(ing),
+		"addresses":   ingressLoadBalancerAddresses(ing),
+		"created":     ing.CreationTimestamp,
+	}
+	return entry
+}
+
+func ingressClassName(ing networkingv1.Ingress) string {
+	if ing.Spec.IngressClassName == nil {
+		return ""
+	}
+	return *ing.Spec.IngressClassName
+}
+
+func ingressTLSSecretNames(ing networkingv1.Ingress) []string {
+	out := make([]string, 0, len(ing.Spec.TLS))
+	seen := map[string]bool{}
+	for _, tls := range ing.Spec.TLS {
+		if tls.SecretName == "" || seen[tls.SecretName] {
+			continue
+		}
+		out = append(out, tls.SecretName)
+		seen[tls.SecretName] = true
+	}
+	return out
+}
+
+func ingressLoadBalancerAddresses(ing networkingv1.Ingress) []string {
+	out := make([]string, 0, len(ing.Status.LoadBalancer.Ingress))
+	for _, lb := range ing.Status.LoadBalancer.Ingress {
+		if lb.Hostname != "" {
+			out = append(out, lb.Hostname)
+			continue
+		}
+		if lb.IP != "" {
+			out = append(out, lb.IP)
+		}
+	}
+	return out
+}
+
+func summarizeTLSSecret(secret corev1.Secret) map[string]any {
+	entry := map[string]any{
+		"name":    secret.Name,
+		"present": true,
+		"type":    string(secret.Type),
+		"created": secret.CreationTimestamp,
+	}
+	certs, err := parseCertificateSummaries(secret.Data[corev1.TLSCertKey])
+	if err != nil {
+		entry["parse_error"] = err.Error()
+		return entry
+	}
+	entry["certificates"] = certs
+	return entry
+}
+
+func parseCertificateSummaries(raw []byte) ([]map[string]any, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("tls.crt missing")
+	}
+	out := make([]map[string]any, 0, 1)
+	rest := raw
+	for {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		rest = remaining
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{
+			"subject":    cert.Subject.String(),
+			"issuer":     cert.Issuer.String(),
+			"dns_names":  cert.DNSNames,
+			"not_before": cert.NotBefore.UTC().Format(time.RFC3339),
+			"not_after":  cert.NotAfter.UTC().Format(time.RFC3339),
+			"is_expired": time.Now().After(cert.NotAfter),
+			"serial":     fmt.Sprintf("%X", cert.SerialNumber),
+		})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no PEM certificate blocks found")
+	}
+	return out, nil
 }

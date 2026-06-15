@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // EKSProvider patches an EKS cluster's vpcConfig.publicAccessCidrs field
@@ -104,7 +105,7 @@ func (p *EKSProvider) signAndSend(ctx context.Context, req *http.Request, cluste
 	}
 	client := p.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = httpclient.DefaultExternal()
 	}
 	return client.Do(req)
 }
@@ -122,7 +123,9 @@ func (p *EKSProvider) GetEffective(ctx context.Context, cluster Cluster) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode/100 != 2 {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("EKS DescribeCluster %s: status %d: %s", cluster.Name, resp.StatusCode, string(body))
@@ -165,7 +168,9 @@ func (p *EKSProvider) Apply(ctx context.Context, cluster Cluster, cidrs []string
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode/100 != 2 {
 		rb, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("EKS UpdateClusterConfig %s: status %d: %s", cluster.Name, resp.StatusCode, string(rb))

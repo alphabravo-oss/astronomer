@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Orbit, Eye, EyeOff, Loader2, KeyRound, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { changeOwnPassword } from '@/lib/api';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 
 // Forced password-rotation screen for the bootstrap admin and for any user
 // whose `must_change_password` flag is set. Reachable directly at
@@ -26,7 +26,7 @@ export default function ChangePasswordPage() {
   const matches = form.next === form.confirm;
   const canSubmit = !!form.current && newLongEnough && newDiffers && matches;
 
-  const forced = !!user?.must_change_password;
+  const forced = !!(user?.must_change_password || user?.mustChangePassword);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,11 +34,11 @@ export default function ChangePasswordPage() {
     setLoading(true);
     try {
       await changeOwnPassword(form.current, form.next);
-      updateUser({ must_change_password: false });
-      toast.success('Password updated');
+      updateUser({ must_change_password: false, mustChangePassword: false });
+      toastSuccess('Password updated');
       router.push('/dashboard');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update password');
+      toastApiError('', err, 'Failed to update password');
     } finally {
       setLoading(false);
     }

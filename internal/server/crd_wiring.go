@@ -151,7 +151,7 @@ func (a *crdClusterAdapter) ValidateClusterOwnership(ctx context.Context, spec c
 	if err != nil {
 		return fmt.Errorf("load cluster ownership: %w", err)
 	}
-	if ownership.ManagedBy == "crd" && ownershipMatchesRef(ownership, ref) {
+	if ownership.ManagedBy == "crd" && ownershipMatchesRef(ownership.ExternalRefApiVersion, ownership.ExternalRefKind, ownership.ExternalRefNamespace, ownership.ExternalRefName, ref) {
 		return nil
 	}
 	return fmt.Errorf("cluster %q already exists and is managed_by=%q; refusing implicit CRD takeover", spec.Name, ownership.ManagedBy)
@@ -386,7 +386,7 @@ func (a *crdProjectAdapter) ValidateProjectOwnership(ctx context.Context, spec c
 	if err != nil {
 		return fmt.Errorf("load project ownership: %w", err)
 	}
-	if ownership.ManagedBy == "crd" && ownershipMatchesRef(ownership, ref) {
+	if ownership.ManagedBy == "crd" && ownershipMatchesRef(ownership.ExternalRefApiVersion, ownership.ExternalRefKind, ownership.ExternalRefNamespace, ownership.ExternalRefName, ref) {
 		return nil
 	}
 	return fmt.Errorf("project %q already exists and is managed_by=%q; refusing implicit CRD takeover", spec.Name, ownership.ManagedBy)
@@ -528,11 +528,11 @@ func projectResourceQuotaJSON(q crd.ProjectResourceQuota) json.RawMessage {
 	return b
 }
 
-func ownershipMatchesRef(ownership sqlc.FleetOwnership, ref crd.ObjectRef) bool {
-	return ownership.ExternalRefApiVersion == ref.APIVersion &&
-		ownership.ExternalRefKind == ref.Kind &&
-		ownership.ExternalRefNamespace == ref.Namespace &&
-		ownership.ExternalRefName == ref.Name
+func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref crd.ObjectRef) bool {
+	return apiVersion == ref.APIVersion &&
+		kind == ref.Kind &&
+		namespace == ref.Namespace &&
+		name == ref.Name
 }
 
 // startCRDController boots the controller-runtime manager when CRD_ENABLED
@@ -568,6 +568,7 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	mgr, err := crd.New(crd.ControllerConfig{
 		K8sConfig:               restCfg,
 		WatchNamespace:          crdWatchNamespace(),
+		ArgoNamespace:           crdArgoNamespace(),
 		LeaderElection:          true,
 		LeaderElectionNamespace: crdWatchNamespace(),
 		ClusterHandler:          cAdapter,
@@ -584,7 +585,7 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	}
 
 	go func() {
-		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace())
+		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace(), "argo_namespace", crdArgoNamespace())
 		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("crd_controller_stopped", "error", err.Error())
 			return
@@ -613,6 +614,14 @@ func crdWatchNamespace() string {
 	v := strings.TrimSpace(getenv("CRD_WATCH_NAMESPACE"))
 	if v == "" {
 		return "astronomer-mgmt"
+	}
+	return v
+}
+
+func crdArgoNamespace() string {
+	v := strings.TrimSpace(getenv("CRD_ARGO_NAMESPACE"))
+	if v == "" {
+		return "argocd"
 	}
 	return v
 }

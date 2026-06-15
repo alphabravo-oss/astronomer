@@ -17,61 +17,140 @@ type Querier interface {
 	AcknowledgeControlPlaneAlert(ctx context.Context, arg AcknowledgeControlPlaneAlertParams) (ControlPlaneAlert, error)
 	// Alert Rule Channels (M2M)
 	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
-	// Pipeline <-> Output M2M
-	AddPipelineOutput(ctx context.Context, arg AddPipelineOutputParams) error
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
-	// Cluster Decommission: archives every audit_log row tied to the cluster
-	// (either as resource_id when resource_type='cluster' or via the
-	// detail->>'cluster_id' tag) into audit_archive. ON CONFLICT DO NOTHING
-	// so re-running the phase is safe.
+	AggregateClusterVulnerabilities(ctx context.Context, clusterID uuid.UUID) (AggregateClusterVulnerabilitiesRow, error)
+	AggregateFleetVulnerabilities(ctx context.Context) (AggregateFleetVulnerabilitiesRow, error)
+	// Audit archive operations.
+	//
+	// ArchiveAuditLogsForCluster is the bulk INSERT … SELECT used during the
+	// archive_audit phase. The cluster id is looked up in two places: resource_id
+	// (when the row was emitted with resource_type='cluster') and the
+	// detail->>'cluster_id' field (when an unrelated resource row tagged itself
+	// with the cluster). The detail extraction uses ->> so it's a text comparison
+	// against the cluster_id as a string.
 	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
+	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
 	ClearMustChangePassword(ctx context.Context, id uuid.UUID) error
+	// Sprint 086 — closes orphan "running" step rows on a given
+	// (cluster_id, step_name). The orchestrator's auto-retry path was
+	// writing a fresh `template_applying` row on every retry without
+	// closing the previous one, leaving the Provisioning tab showing
+	// "running" forever even after the apply finished. Called from
+	// OnTemplateApplyStart before the new row is written.
+	CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg CompleteArgoCDOperationWithResultParams) (ArgocdOperation, error)
-	CountAPITokens(ctx context.Context) (int64, error)
-	CountActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Atomically marks a reset token as used. Returns row-count so the
+	// caller can distinguish "first use" (1) from "already used" (0)
+	// without a separate SELECT. The handler also verifies expires_at +
+	// password-hash match BEFORE this call — the predicate here is just
+	// the race guard.
+	ConsumePasswordResetToken(ctx context.Context, arg ConsumePasswordResetTokenParams) (int64, error)
+	// Atomically marks a recovery code as used. Returns the row-count so
+	// the caller can distinguish "valid + just consumed" (1) from "invalid
+	// or already used" (0) without a separate SELECT. Using execrows
+	// keeps the verify path race-free: a concurrent login attempt that
+	// sees used_at IS NULL will have its UPDATE no-op.
+	ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCodeParams) (int64, error)
+	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Drives the startup-time deprecation warning (migration 045). Counts
+	// enabled sso_configurations rows that have NOT been stamped as migrated
+	// to dex_connectors — i.e. rows the operator added AFTER cutover. When > 0
+	// we log a warn-level line at boot so the drift is visible without burying
+	// the migration story.
 	CountActiveUnmigratedSSORows(ctx context.Context) (int64, error)
-	CountAgentConnections(ctx context.Context) (int64, error)
 	CountAlertEvents(ctx context.Context) (int64, error)
 	CountAlertRules(ctx context.Context) (int64, error)
 	CountAlertSilences(ctx context.Context) (int64, error)
+	CountAnomalyBaselines(ctx context.Context) (int64, error)
 	CountAppsByInstance(ctx context.Context, argocdInstanceID uuid.UUID) (int64, error)
 	CountArgoCDApplications(ctx context.Context) (int64, error)
+	CountArgoCDApplicationsBySyncHealth(ctx context.Context) ([]CountArgoCDApplicationsBySyncHealthRow, error)
 	CountArgoCDInstances(ctx context.Context) (int64, error)
+	// The size estimate retained for compliance dashboards and future durable
+	// background export planning. The current handler streams inline and keeps
+	// async compliance exports disabled until durable job/output state exists.
+	CountAuditLogV1ForRange(ctx context.Context, arg CountAuditLogV1ForRangeParams) (int64, error)
 	CountBackupDrillResults(ctx context.Context) (int64, error)
 	CountBackupSchedules(ctx context.Context) (int64, error)
 	CountBackupStorageConfigs(ctx context.Context) (int64, error)
 	CountBackups(ctx context.Context) (int64, error)
-	CountChartVersions(ctx context.Context, chartID uuid.UUID) (int64, error)
+	// Counts attempts for a (cluster, type) within a window. The reconciler
+	// uses this as a daily-cap circuit breaker so a permanently-broken
+	// cluster can't drive unbounded token reissuance / audit-log growth.
+	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
 	CountClusterRoles(ctx context.Context) (int64, error)
 	CountClusterSecurityPolicies(ctx context.Context) (int64, error)
+	// Pre-flight check so the DELETE handler can return a friendly 409 body
+	// with the "remove from N clusters first" count BEFORE attempting the
+	// FK-restricted delete.
+	CountClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) (int64, error)
+	CountClusterTemplates(ctx context.Context) (int64, error)
 	CountClusterTools(ctx context.Context) (int64, error)
 	CountClusters(ctx context.Context) (int64, error)
+	CountClustersInGroup(ctx context.Context, groupID uuid.UUID) (int64, error)
+	CountClustersInGroupTree(ctx context.Context, id uuid.UUID) (int64, error)
+	// Per-tenant usage counters ----------------------------------------------
+	CountClustersInProject(ctx context.Context, id uuid.UUID) (int64, error)
+	CountDeferredOperations(ctx context.Context) (int64, error)
+	CountEmailMessages(ctx context.Context) (int64, error)
+	CountFleetOperationTargets(ctx context.Context, operationID uuid.UUID) (int64, error)
+	// Single round-trip aggregate used to refresh the parent operation's
+	// counter columns. Returns (status, count) for every group present.
+	CountFleetOperationTargetsByStatus(ctx context.Context, operationID uuid.UUID) ([]CountFleetOperationTargetsByStatusRow, error)
+	CountFleetOperations(ctx context.Context, status pgtype.Text) (int64, error)
+	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
+	CountGitOpsTombstonedBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	CountGlobalRoles(ctx context.Context) (int64, error)
+	CountGroupMappings(ctx context.Context) (int64, error)
+	CountGroupSyncClusterBindings(ctx context.Context) (int64, error)
+	CountGroupSyncGlobalBindings(ctx context.Context) (int64, error)
+	CountGroupSyncProjectBindings(ctx context.Context) (int64, error)
 	CountHelmCharts(ctx context.Context) (int64, error)
 	CountHelmRepositories(ctx context.Context) (int64, error)
 	CountInstalledCharts(ctx context.Context) (int64, error)
 	CountInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountKubectlSessionCommands(ctx context.Context, sessionID uuid.UUID) (int64, error)
 	CountLoggingOutputs(ctx context.Context) (int64, error)
 	CountLoggingPipelines(ctx context.Context) (int64, error)
+	CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
+	CountNamespacesInProject(ctx context.Context, id uuid.UUID) (int32, error)
+	CountNetworkPolicyTemplates(ctx context.Context) (int64, error)
 	CountNotificationChannels(ctx context.Context) (int64, error)
 	CountPodSecurityTemplates(ctx context.Context) (int64, error)
 	CountProjectRoles(ctx context.Context) (int64, error)
 	CountProjects(ctx context.Context) (int64, error)
 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
 	CountRestoreOperations(ctx context.Context) (int64, error)
-	CountSSOConfigurations(ctx context.Context) (int64, error)
+	// Gate for the max_concurrent dispatcher.
+	CountRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
+	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
 	CountSecurityScanResults(ctx context.Context) (int64, error)
+	// A target is terminal when it's completed/failed/skipped/aborted.
+	// The orchestrator transitions the parent operation to completed/failed
+	// once every target is terminal.
+	CountTerminalTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
 	CountTokensByUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountTotalActiveUsers(ctx context.Context) (int64, error)
+	// Global / fleet-wide --------------------------------------------------
+	CountTotalClusters(ctx context.Context) (int64, error)
+	// Lightweight count for the /status endpoint — avoids hauling the
+	// whole list back when we only need the integer.
+	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
+	CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
+	CountVulnerabilitiesForReport(ctx context.Context, arg CountVulnerabilitiesForReportParams) (int64, error)
+	CountVulnerableImagesForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
 	CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error)
 	CreateAgentConnection(ctx context.Context, arg CreateAgentConnectionParams) (AgentConnection, error)
 	CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) (AlertEvent, error)
 	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error)
 	CreateAlertSilence(ctx context.Context, arg CreateAlertSilenceParams) (AlertSilence, error)
-	CreateArgoCDApplication(ctx context.Context, arg CreateArgoCDApplicationParams) (ArgocdApplication, error)
 	CreateArgoCDInstance(ctx context.Context, arg CreateArgoCDInstanceParams) (ArgocdInstance, error)
 	// ArgoCD Managed Clusters (Phase B1)
 	// Index of which of OUR clusters have been registered into each upstream
@@ -85,104 +164,277 @@ type Querier interface {
 	CreateBackupSchedule(ctx context.Context, arg CreateBackupScheduleParams) (BackupSchedule, error)
 	CreateBackupStorageConfig(ctx context.Context, arg CreateBackupStorageConfigParams) (BackupStorageConfig, error)
 	// Creates the initial admin user that ensure_admin runs on first boot of a
-	// fresh database. Mirrors CreateUser but sets must_change_password=true so
-	// the dashboard forces a rotation of the auto-generated/operator-provided
-	// bootstrap password before any other action.
+	// fresh database. The password is either operator-provided through Helm values
+	// or auto-generated into the bootstrap Secret; the account is immediately
+	// usable and is not forced through a first-login password reset.
 	CreateBootstrapAdmin(ctx context.Context, arg CreateBootstrapAdminParams) (User, error)
 	// Phase B5: explicit constructor that records the upstream ClusterScan CR name
 	// so the worker can poll the matching ClusterScanReport for ingestion.
 	CreateCISScan(ctx context.Context, arg CreateCISScanParams) (SecurityScanResult, error)
 	CreateCatalogOperation(ctx context.Context, arg CreateCatalogOperationParams) (CatalogOperation, error)
 	CreateCatalogOperationEvent(ctx context.Context, arg CreateCatalogOperationEventParams) (CatalogOperationEvent, error)
+	CreateCloudCredential(ctx context.Context, arg CreateCloudCredentialParams) (CloudCredential, error)
 	CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error)
+	// Phase: cluster decommission reconciler.
+	//
+	// The handler enqueues a row via CreateClusterDecommission; the worker
+	// claims it via MarkClusterDecommissionRunning (which bumps `attempts` and
+	// sets `started_at`), records per-phase progress via UpdateClusterDecommissionPhases,
+	// and finally MarkClusterDecommissionSucceeded / MarkClusterDecommissionFailed
+	// when all phases are done. The `phases` JSONB blob is rewritten in full each
+	// time the reconciler advances — it's small and JSONB merge primitives in
+	// pgx are a footgun; one-shot replace is the simpler contract.
 	CreateClusterDecommission(ctx context.Context, arg CreateClusterDecommissionParams) (ClusterDecommission, error)
+	CreateClusterGroup(ctx context.Context, arg CreateClusterGroupParams) (ClusterGroup, error)
 	CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error)
+	CreateClusterRegistryConfig(ctx context.Context, arg CreateClusterRegistryConfigParams) (ClusterRegistryConfig, error)
+	CreateClusterRestore(ctx context.Context, arg CreateClusterRestoreParams) (ClusterRestore, error)
 	CreateClusterRole(ctx context.Context, arg CreateClusterRoleParams) (ClusterRole, error)
 	CreateClusterRoleBinding(ctx context.Context, arg CreateClusterRoleBindingParams) (ClusterRoleBinding, error)
 	CreateClusterSecurityPolicy(ctx context.Context, arg CreateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error)
-	CreateClusterTool(ctx context.Context, arg CreateClusterToolParams) (ClusterTool, error)
+	CreateClusterSnapshot(ctx context.Context, arg CreateClusterSnapshotParams) (ClusterSnapshot, error)
+	CreateClusterSnapshotSchedule(ctx context.Context, arg CreateClusterSnapshotScheduleParams) (ClusterSnapshotSchedule, error)
+	CreateClusterTemplate(ctx context.Context, arg CreateClusterTemplateParams) (ClusterTemplate, error)
 	CreateControlPlaneAlert(ctx context.Context, arg CreateControlPlaneAlertParams) (ControlPlaneAlert, error)
 	CreateControlPlaneSilence(ctx context.Context, arg CreateControlPlaneSilenceParams) (ControlPlaneSilence, error)
+	CreateDashboardWidget(ctx context.Context, arg CreateDashboardWidgetParams) (DashboardWidget, error)
+	// Deferred operations --------------------------------------------------
+	CreateDeferredOperation(ctx context.Context, arg CreateDeferredOperationParams) (DeferredOperation, error)
 	CreateDexConnector(ctx context.Context, arg CreateDexConnectorParams) (DexConnector, error)
+	// Fleet operations (migration 056). Backs:
+	//   * /api/v1/fleet-operations/*       — CRUD + lifecycle endpoints
+	//   * fleet:orchestrate worker         — periodic, idempotent dispatcher
+	//
+	// Two tables: fleet_operations (the coordinated action) +
+	// fleet_operation_targets (one row per matched cluster).
+	//
+	// Operator-facing CRUD is restricted to create / list / get; updates
+	// happen via pause/resume/abort/retry-failed which are status
+	// transitions only. Once dispatched, the operation's selector and
+	// operation_spec are frozen — the persisted target list is the
+	// contract.
+	// ─────────────────────────────────────────────────────────────────────
+	// fleet_operations
+	// ─────────────────────────────────────────────────────────────────────
+	CreateFleetOperation(ctx context.Context, arg CreateFleetOperationParams) (FleetOperation, error)
+	// ─────────────────────────────────────────────────────────────────────
+	// fleet_operation_targets
+	// ─────────────────────────────────────────────────────────────────────
+	// ON CONFLICT DO NOTHING — defensive. The orchestrator evaluates the
+	// selector exactly once at launch, but a duplicate INSERT (e.g. the
+	// launch step ran twice because a tick crashed mid-INSERT) must be
+	// caught at the DB so the operation never has two rows competing
+	// for one cluster's terminal state.
+	CreateFleetOperationTarget(ctx context.Context, arg CreateFleetOperationTargetParams) (FleetOperationTarget, error)
+	CreateGitOpsSource(ctx context.Context, arg CreateGitOpsSourceParams) (GitopsRegistrationSource, error)
 	CreateGlobalRole(ctx context.Context, arg CreateGlobalRoleParams) (GlobalRole, error)
 	CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalRoleBindingParams) (GlobalRoleBinding, error)
+	// Identity-group sync queries (migration 042). Drives the
+	// claims-to-role-binding mapping resolved on every SSO login + the
+	// admin CRUD endpoints under /api/v1/admin/group-mappings/.
+	// Admin endpoint POST. Caller is responsible for validating that
+	// scope/role_id/cluster_id/project_id agree before this call — the
+	// table's scope_matches CHECK constraint will reject mismatched rows.
+	CreateGroupMapping(ctx context.Context, arg CreateGroupMappingParams) (IdentityGroupMapping, error)
+	CreateGroupSyncClusterBinding(ctx context.Context, arg CreateGroupSyncClusterBindingParams) (ClusterRoleBinding, error)
+	// Marks the source column with 'group_sync' on insert. ON CONFLICT
+	// DO NOTHING handles the idempotent re-sync case (manual binding
+	// on (user_id, role_id) wins; group_sync row stays absent).
+	CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGroupSyncGlobalBindingParams) (GlobalRoleBinding, error)
+	CreateGroupSyncProjectBinding(ctx context.Context, arg CreateGroupSyncProjectBindingParams) (ProjectRoleBinding, error)
 	CreateHelmChart(ctx context.Context, arg CreateHelmChartParams) (HelmChart, error)
 	CreateHelmChartVersion(ctx context.Context, arg CreateHelmChartVersionParams) (HelmChartVersion, error)
 	CreateHelmRepository(ctx context.Context, arg CreateHelmRepositoryParams) (HelmRepository, error)
 	CreateInstalledChart(ctx context.Context, arg CreateInstalledChartParams) (InstalledChart, error)
+	// Kubectl shell session bookkeeping (migration 065).
+	//
+	// Hand-authored SQL for kubectl_sessions + kubectl_session_commands.
+	// The sqlc generator produces a thin Go shim with type-safe arguments
+	// around these queries; the worktree's generator is occasionally not
+	// runnable so the *.sql.go file is hand-edited to match the same
+	// output shape.
+	CreateKubectlSession(ctx context.Context, arg CreateKubectlSessionParams) (KubectlSession, error)
 	CreateLoggingOperation(ctx context.Context, arg CreateLoggingOperationParams) (LoggingOperation, error)
 	CreateLoggingOperationEvent(ctx context.Context, arg CreateLoggingOperationEventParams) (LoggingOperationEvent, error)
 	CreateLoggingOutput(ctx context.Context, arg CreateLoggingOutputParams) (LoggingOutput, error)
 	CreateLoggingPipeline(ctx context.Context, arg CreateLoggingPipelineParams) (LoggingPipeline, error)
+	CreateMaintenanceWindow(ctx context.Context, arg CreateMaintenanceWindowParams) (MaintenanceWindow, error)
 	CreateMonitoringOperation(ctx context.Context, arg CreateMonitoringOperationParams) (MonitoringOperation, error)
 	CreateMonitoringOperationEvent(ctx context.Context, arg CreateMonitoringOperationEventParams) (MonitoringOperationEvent, error)
+	CreateNetworkPolicyApplication(ctx context.Context, arg CreateNetworkPolicyApplicationParams) (NetworkPolicyApplication, error)
+	CreateNetworkPolicyTemplate(ctx context.Context, arg CreateNetworkPolicyTemplateParams) (NetworkPolicyTemplate, error)
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
+	// ----- Password reset tokens -----
+	// Issues a new reset token. The handler caller hashes the plaintext
+	// token (returned to the user via email) before calling this; we never
+	// see the plaintext. password_hash_at_issue snapshots the user's
+	// current password hash so a successful password change invalidates
+	// every outstanding link.
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreatePodSecurityTemplate(ctx context.Context, arg CreatePodSecurityTemplateParams) (PodSecurityTemplate, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
+	CreateProjectCatalogSubscription(ctx context.Context, arg CreateProjectCatalogSubscriptionParams) (ProjectCatalogSubscription, error)
+	CreateProjectOwnedCatalog(ctx context.Context, arg CreateProjectOwnedCatalogParams) (HelmRepository, error)
 	CreateProjectRole(ctx context.Context, arg CreateProjectRoleParams) (ProjectRole, error)
 	CreateProjectRoleBinding(ctx context.Context, arg CreateProjectRoleBindingParams) (ProjectRoleBinding, error)
+	CreatePrometheusDatasource(ctx context.Context, arg CreatePrometheusDatasourceParams) (PrometheusDatasource, error)
 	CreateRestoreOperation(ctx context.Context, arg CreateRestoreOperationParams) (RestoreOperation, error)
+	CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForwarderParams) (SiemForwarder, error)
 	CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfigurationParams) (SsoConfiguration, error)
 	CreateSecurityScanResult(ctx context.Context, arg CreateSecurityScanResultParams) (SecurityScanResult, error)
 	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
 	CreateToolOperationEvent(ctx context.Context, arg CreateToolOperationEventParams) (ToolOperationEvent, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateVaultConnection(ctx context.Context, arg CreateVaultConnectionParams) (VaultConnection, error)
+	CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error)
 	CreateWorkloadOperation(ctx context.Context, arg CreateWorkloadOperationParams) (WorkloadOperation, error)
 	CreateWorkloadOperationEvent(ctx context.Context, arg CreateWorkloadOperationEventParams) (WorkloadOperationEvent, error)
-	DeleteAPIToken(ctx context.Context, id uuid.UUID) error
-	DeleteAgentConnection(ctx context.Context, id uuid.UUID) error
+	DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Deletes alert events older than the supplied cutoff. Used by the scheduled
 	// cleanup_old_alert_events worker.
 	DeleteAlertEventsOlderThan(ctx context.Context, firedAt time.Time) (int64, error)
 	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
+	DeleteAlertRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
-	DeleteArgoCDApplication(ctx context.Context, id uuid.UUID) error
+	DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// 90-day retention sweep — drop rows older than the given cutoff.
+	DeleteApiserverAllowlistSnapshotsOlderThan(ctx context.Context, capturedAt time.Time) error
+	DeleteArgoCDClusterProxyTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgoCDManagedClusterParams) error
+	// Bulk-delete every (instance, cluster) mapping for one cluster. Used by
+	// the decommission worker to drop local rows after a cluster is tombstoned.
+	// Upstream Argo cluster Secrets (the actual k8s resource in each Argo
+	// namespace) need a separate unregister flow; the orphans are surfaced via
+	// the cluster.decommission.argocd_secret_orphan audit row.
 	DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Run AFTER ArchiveAuditLogsForCluster; removes the now-archived rows from
+	// the live audit_log partition tree.
+	DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error)
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
-	DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteAlertRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error)
+	DeleteCloudCredential(ctx context.Context, id uuid.UUID) error
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
 	DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterConditionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteClusterConditionsForCluster(ctx context.Context, clusterID uuid.UUID) error
+	DeleteClusterGroup(ctx context.Context, id uuid.UUID) error
 	DeleteClusterHealthStatusByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) error
+	// Dependent row cleanup: every table that holds a cluster_id FK has its
+	// entries removed here. The CASCADE behaviour on the original FK definitions
+	// means most of these would be implicitly removed by hard-deleting the
+	// cluster row — but since the reconciler tombstones rather than DELETEs,
+	// we have to do the cleanup explicitly. Each query is :execrows so the
+	// worker can include "rows removed per table" in its phase outcome.
 	DeleteClusterRegistrationTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteClusterRegistryConfigsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error
+	DeleteClusterRegistryConfigByID(ctx context.Context, id uuid.UUID) error
+	DeleteClusterRegistryConfigsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRole(ctx context.Context, id uuid.UUID) error
 	DeleteClusterRoleBinding(ctx context.Context, id uuid.UUID) error
+	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterSecurityPolicy(ctx context.Context, id uuid.UUID) error
-	DeleteClusterTool(ctx context.Context, id uuid.UUID) error
+	DeleteClusterSnapshot(ctx context.Context, id uuid.UUID) error
+	DeleteClusterSnapshotSchedule(ctx context.Context, id uuid.UUID) error
+	// The FK on cluster_template_applications.template_id is ON DELETE RESTRICT,
+	// so this raises a foreign_key_violation when at least one cluster still
+	// references the template. The handler translates that into a 409 Conflict.
+	DeleteClusterTemplate(ctx context.Context, id uuid.UUID) error
+	// Detach: removes the binding row but leaves any tools/projects the
+	// apply worker installed in place. The DELETE handler documents this
+	// behavior so an operator who wants a full teardown can chain the
+	// individual uninstalls.
+	DeleteClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) error
 	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error
+	DeleteDashboardWidget(ctx context.Context, id uuid.UUID) error
 	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
+	// Retention sweep, runs daily. Returns the row count so the task can
+	// emit a "rows deleted" log line for the operator.
+	DeleteEmailsOlderThan(ctx context.Context, createdAt time.Time) (int64, error)
+	// Daily retention sweep companion to email retention. Returns the
+	// row count for the log line.
+	DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error)
 	DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
+	// Hard-deletes installed_charts rows that are stuck in a failed_* state
+	// on the given cluster. Used by the Apps tab's "Delete failed installs"
+	// bulk action; mirrors Rancher's "Force Delete" affordance for orphaned
+	// helm release rows that didn't actually deploy (and therefore can't be
+	// uninstalled cleanly). Returns the affected-row count so the handler
+	// can include it in the response.
 	DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteGitOpsRegisteredCluster(ctx context.Context, clusterID uuid.UUID) error
+	DeleteGitOpsSource(ctx context.Context, id uuid.UUID) error
 	DeleteGlobalRole(ctx context.Context, id uuid.UUID) error
 	DeleteGlobalRoleBinding(ctx context.Context, id uuid.UUID) error
+	DeleteGroupMapping(ctx context.Context, id uuid.UUID) error
+	DeleteGroupSyncClusterBinding(ctx context.Context, id uuid.UUID) error
+	// Belt-and-suspenders source check so a sync run can never delete a
+	// manual binding even if the caller picks the wrong ID.
+	DeleteGroupSyncGlobalBinding(ctx context.Context, id uuid.UUID) error
+	DeleteGroupSyncProjectBinding(ctx context.Context, id uuid.UUID) error
 	DeleteHelmChart(ctx context.Context, id uuid.UUID) error
 	DeleteHelmChartVersion(ctx context.Context, id uuid.UUID) error
 	DeleteHelmRepository(ctx context.Context, id uuid.UUID) error
+	// Wipe a report's CVE rows before bulk re-insert. The ON DELETE CASCADE
+	// on the FK would do this for free when the parent row is deleted, but
+	// on an upsert path we need an explicit clear.
+	DeleteImageVulnerabilitiesByReport(ctx context.Context, reportID uuid.UUID) error
 	DeleteInstalledChart(ctx context.Context, id uuid.UUID) error
+	DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
+	DeleteMaintenanceWindow(ctx context.Context, id uuid.UUID) error
+	DeleteMirroredGatewayClass(ctx context.Context, arg DeleteMirroredGatewayClassParams) error
+	DeleteMirroredIngressClass(ctx context.Context, arg DeleteMirroredIngressClassParams) error
+	DeleteMirroredLimitRange(ctx context.Context, arg DeleteMirroredLimitRangeParams) error
+	DeleteMirroredNetworkPolicy(ctx context.Context, arg DeleteMirroredNetworkPolicyParams) error
+	DeleteMirroredResourceQuota(ctx context.Context, arg DeleteMirroredResourceQuotaParams) error
+	DeleteNetworkPolicyApplication(ctx context.Context, id uuid.UUID) error
+	DeleteNetworkPolicyTemplate(ctx context.Context, id uuid.UUID) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
+	// Removes rows whose (cluster_id, namespace) no longer appears in the
+	// credential's target_refs JSONB. The handler calls this after writing
+	// the new target_refs and upserting the kept rows so the drift sweep
+	// doesn't keep re-applying old targets.
+	DeleteOrphanCloudCredentialMaterializations(ctx context.Context, arg DeleteOrphanCloudCredentialMaterializationsParams) error
+	// Wipes every outstanding reset token for a user. Called after a
+	// successful reset so the consumed token's siblings can't be replayed,
+	// and on user delete (CASCADE handles that one but this exists for
+	// explicit "force expire all links" flows).
+	DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error
+	// DELETE resets to handler-side defaults — the row is gone and the
+	// handler's registry default is what subsequent GETs return.
 	DeletePlatformSetting(ctx context.Context, key string) error
 	DeletePodSecurityTemplate(ctx context.Context, id uuid.UUID) error
 	DeleteProject(ctx context.Context, id uuid.UUID) error
+	DeleteProjectCatalogSubscription(ctx context.Context, arg DeleteProjectCatalogSubscriptionParams) error
 	DeleteProjectNamespace(ctx context.Context, arg DeleteProjectNamespaceParams) error
+	// (cluster_tools is a catalog table holding built-in tool definitions;
+	// it has no cluster_id and is intentionally NOT touched by the
+	// decommission reconciler. Per-cluster tool state lives in
+	// installed_charts and tool_operations.)
+	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteProjectRole(ctx context.Context, id uuid.UUID) error
 	DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) error
-	DeleteRestoreOperation(ctx context.Context, id uuid.UUID) error
+	DeletePrometheusDatasource(ctx context.Context, id uuid.UUID) error
+	DeleteQuotaPlan(ctx context.Context, name string) error
+	// Called by both the disable-2FA path and the regenerate-codes path.
+	// Wipes every code (used or not) so a regen invalidates the old sheet
+	// entirely, not just the unused entries.
+	DeleteRecoveryCodesByUser(ctx context.Context, userID uuid.UUID) error
+	// ON DELETE CASCADE on siem_forward_queue.forwarder_id +
+	// siem_forwarder_status.forwarder_id cleans up the queued events + the
+	// status row; the handler doesn't have to do that explicitly.
+	DeleteSIEMForwarder(ctx context.Context, id uuid.UUID) error
+	// Called after a successful batch send. The dispatcher computes the id
+	// set from the rows it just shipped.
+	DeleteSIEMQueueByIDs(ctx context.Context, dollar_1 []int64) error
+	// Daily retention sweep. Removes queue rows older than the cutoff
+	// regardless of forwarder status so a stuck/disabled forwarder doesn't
+	// pin disk.
+	DeleteSIEMQueueOlderThan(ctx context.Context, createdAt time.Time) (int64, error)
 	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
 	// Drops a single row by JTI. Called by Logout after the end-session
 	// redirect URL is built, so the upstream session can't be redirected
@@ -192,9 +444,23 @@ type Querier interface {
 	// firing the back-channel end-session POSTs. Matches the semantics of
 	// InvalidateAllTokens: the user is logged out everywhere.
 	DeleteSSOSessionsByUser(ctx context.Context, userID uuid.UUID) error
-	DeleteSecurityScanResult(ctx context.Context, id uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	// Disables 2FA. The handler that wraps this query ALSO deletes the
+	// recovery codes so a lost-device admin force-disable doesn't leave
+	// exploitable codes behind.
+	DeleteUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) error
+	DeleteVaultConnection(ctx context.Context, id uuid.UUID) error
+	// Retention sweep, runs daily. Returns the row count so the task can
+	// emit an operator-visible "rows deleted" log line.
+	DeleteWebhookDeliveriesOlderThan(ctx context.Context, createdAt time.Time) (int64, error)
+	// ON DELETE CASCADE on webhook_deliveries.subscription_id cleans up the
+	// delivery history; the handler doesn't have to do that explicitly.
+	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
+	// Bus-tap insert. Called once per (forwarder, event) pair that matched
+	// at least one filter glob. The dispatcher picks rows up in batch
+	// order via the (forwarder_id, id) index.
+	EnqueueSIEMEvent(ctx context.Context, arg EnqueueSIEMEventParams) (SiemForwardQueue, error)
 	// Idempotently create-or-return the singleton "local" cluster row that
 	// represents the Kubernetes cluster the server itself runs in. Uses a CTE
 	// so the round-trip both inserts (when no local row exists yet) and selects
@@ -205,22 +471,29 @@ type Querier interface {
 	FailArgoCDOperationWithResult(ctx context.Context, arg FailArgoCDOperationWithResultParams) (ArgocdOperation, error)
 	// API Tokens
 	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
-	GetActiveAlertSilences(ctx context.Context) ([]AlertSilence, error)
-	GetActiveAlertSilencesByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertSilence, error)
-	GetActiveConnectionByCluster(ctx context.Context, clusterID uuid.UUID) (AgentConnection, error)
+	// ArgoCD cluster-proxy service tokens. These are not user API tokens:
+	// they are cluster-scoped machine identities used only by built-in ArgoCD
+	// to reach an adopted cluster through Astronomer's tunnel-backed proxy.
+	GetActiveArgoCDClusterProxyTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ArgocdClusterProxyToken, error)
 	GetActiveControlPlaneAlert(ctx context.Context, arg GetActiveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	GetActiveControlPlaneSilences(ctx context.Context) ([]ControlPlaneSilence, error)
 	GetActiveSchedules(ctx context.Context) ([]BackupSchedule, error)
-	GetAgentConnectionByID(ctx context.Context, id uuid.UUID) (AgentConnection, error)
 	// Alert Events
 	GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEvent, error)
 	// Alert Rules
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule, error)
-	// Alert Silences
-	GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (AlertSilence, error)
+	GetAnomalyBaseline(ctx context.Context, arg GetAnomalyBaselineParams) (AnomalyBaseline, error)
+	GetAnomalyBaselineByID(ctx context.Context, id uuid.UUID) (AnomalyBaseline, error)
+	// Apiserver allow-list CRUD (migration 070).
+	//
+	// Hand-edited SQL for the apiserver_allowlists + apiserver_allowlist_
+	// snapshots tables. The sqlc generator produces a thin Go shim with
+	// type-safe arguments around these queries.
+	GetApiserverAllowlistByClusterID(ctx context.Context, clusterID uuid.UUID) (ApiserverAllowlist, error)
 	// ArgoCD Applications
 	GetArgoCDApplicationByID(ctx context.Context, id uuid.UUID) (ArgocdApplication, error)
 	GetArgoCDApplicationByName(ctx context.Context, arg GetArgoCDApplicationByNameParams) (ArgocdApplication, error)
+	GetArgoCDClusterProxyTokenByHash(ctx context.Context, tokenHash string) (ArgocdClusterProxyToken, error)
 	// ArgoCD Instances
 	GetArgoCDInstanceByID(ctx context.Context, id uuid.UUID) (ArgocdInstance, error)
 	GetArgoCDInstanceByName(ctx context.Context, name string) (ArgocdInstance, error)
@@ -228,48 +501,57 @@ type Querier interface {
 	GetArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	// Backups
 	GetBackupByID(ctx context.Context, id uuid.UUID) (Backup, error)
-	// The summary endpoint shows ONLY the most recent drill — that's enough
-	// for the "are we current?" question. History uses ListBackupDrillResults.
-	GetLatestBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
-	// Surfaces "when did we last *prove* the backups work?". Distinct from
-	// the latest row because the most recent drill may have failed; the
-	// staleness alert fires on the gap from the latest *success*, not the
-	// latest attempt.
-	GetLatestSuccessfulBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
 	// Backup Schedules
 	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
 	// Backup Storage Configs
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
 	GetCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	GetCloudCredentialByID(ctx context.Context, id uuid.UUID) (CloudCredential, error)
+	GetCloudCredentialByProjectAndName(ctx context.Context, arg GetCloudCredentialByProjectAndNameParams) (CloudCredential, error)
 	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error)
-	GetClusterAgentTokenByToken(ctx context.Context, token string) (ClusterAgentToken, error)
+	GetClusterAgentTokenByToken(ctx context.Context, dollar_1 string) (ClusterAgentToken, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
-	GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
-	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterDecommission, error)
-	GetLatestClusterConditionRemediation(ctx context.Context, arg GetLatestClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
-	InsertClusterConditionRemediation(ctx context.Context, arg InsertClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
-	ListClusterConditionRemediationByCluster(ctx context.Context, clusterID uuid.UUID) ([]ClusterConditionRemediationAttempt, error)
-	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
-	ListClusterConditionsByStatus(ctx context.Context, status string) ([]ClusterCondition, error)
 	GetClusterByName(ctx context.Context, name string) (Cluster, error)
+	GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
+	GetClusterGroupByID(ctx context.Context, id uuid.UUID) (ClusterGroup, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
 	GetClusterMonitoringConfig(ctx context.Context, clusterID uuid.UUID) (ClusterMonitoringConfig, error)
 	GetClusterMonitoringContext(ctx context.Context, clusterID uuid.UUID) (GetClusterMonitoringContextRow, error)
+	// Ownership metadata helpers for rows that can be created or reconciled from
+	// REST/UI, CRDs, system loops, or ArgoCD. The hand-written Go shim lives in
+	// internal/db/sqlc/fleet_ownership.sql.go until sqlc is runnable everywhere.
+	GetClusterOwnership(ctx context.Context, id uuid.UUID) (GetClusterOwnershipRow, error)
+	// Wizard registration phase + steps (migration 078).
+	// sqlc is hand-shimmed in this tree; the canonical Go source for these
+	// queries is internal/db/sqlc/cluster_registration.sql.go. This file is
+	// kept in sync so a future sqlc-CLI run reproduces the same shapes.
+	GetClusterRegistrationRecord(ctx context.Context, id uuid.UUID) (GetClusterRegistrationRecordRow, error)
+	GetClusterRegistrationStep(ctx context.Context, id uuid.UUID) (ClusterRegistrationStep, error)
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (ClusterRegistryConfig, error)
+	GetClusterRegistryConfigByID(ctx context.Context, id uuid.UUID) (ClusterRegistryConfig, error)
+	GetClusterRestoreByID(ctx context.Context, id uuid.UUID) (ClusterRestore, error)
 	// Cluster Role Bindings
 	GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (ClusterRoleBinding, error)
-	GetClusterRoleBindingsByGroup(ctx context.Context, group string) ([]ClusterRoleBinding, error)
-	GetClusterRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error)
 	// Cluster Roles
 	GetClusterRoleByID(ctx context.Context, id uuid.UUID) (ClusterRole, error)
-	GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error)
 	// Cluster Security Policies
 	GetClusterSecurityPolicyByID(ctx context.Context, id uuid.UUID) (ClusterSecurityPolicy, error)
+	GetClusterSnapshotByID(ctx context.Context, id uuid.UUID) (ClusterSnapshot, error)
+	GetClusterSnapshotScheduleByID(ctx context.Context, id uuid.UUID) (ClusterSnapshotSchedule, error)
+	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (ClusterTemplateApplication, error)
+	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (ClusterTemplate, error)
+	GetClusterTemplateByName(ctx context.Context, name string) (ClusterTemplate, error)
 	GetClusterToolByID(ctx context.Context, id uuid.UUID) (ClusterTool, error)
-	GetDefaultBackupStorageConfig(ctx context.Context) (BackupStorageConfig, error)
+	// Project just the cluster_uid column for the render handler's
+	// templating step. The generated GetClusterByID query (still keyed on
+	// the migration-053 column list) doesn't include cluster_uid, so this
+	// targeted query avoids a full row scan + a stale model.
+	GetClusterUIDForID(ctx context.Context, id uuid.UUID) (string, error)
+	GetDashboardWidgetByID(ctx context.Context, id uuid.UUID) (DashboardWidget, error)
 	GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlanePolicy, error)
 	GetDefaultMonitoringBackend(ctx context.Context) (MonitoringBackend, error)
 	GetDefaultPodSecurityTemplate(ctx context.Context) (PodSecurityTemplate, error)
+	GetDeferredOperation(ctx context.Context, id uuid.UUID) (DeferredOperation, error)
 	// Phase B4: Dex shim CRUD.
 	// The Dex install itself is just a normal cluster_tools row (see migration
 	// 023). Sensitive fields inside `config` are encrypted by the handler before
@@ -277,14 +559,18 @@ type Querier interface {
 	GetDexConnectorByID(ctx context.Context, id uuid.UUID) (DexConnector, error)
 	GetDexConnectorByName(ctx context.Context, name string) (DexConnector, error)
 	GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error)
+	GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error)
+	// Effective quota lookups ------------------------------------------------
+	GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error)
 	GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguration, error)
+	GetFleetOperation(ctx context.Context, id uuid.UUID) (FleetOperation, error)
+	GetGitOpsSource(ctx context.Context, id uuid.UUID) (GitopsRegistrationSource, error)
+	GetGitOpsSourceByName(ctx context.Context, name string) (GitopsRegistrationSource, error)
 	// Global Role Bindings
 	GetGlobalRoleBindingByID(ctx context.Context, id uuid.UUID) (GlobalRoleBinding, error)
-	GetGlobalRoleBindingsByGroup(ctx context.Context, group string) ([]GlobalRoleBinding, error)
-	GetGlobalRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
 	// Global Roles
 	GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (GlobalRole, error)
-	GetGlobalRoleByName(ctx context.Context, name string) (GlobalRole, error)
+	GetGroupMappingByID(ctx context.Context, id uuid.UUID) (IdentityGroupMapping, error)
 	// Helm Charts
 	GetHelmChartByID(ctx context.Context, id uuid.UUID) (HelmChart, error)
 	GetHelmChartByRepoAndName(ctx context.Context, arg GetHelmChartByRepoAndNameParams) (HelmChart, error)
@@ -293,44 +579,99 @@ type Querier interface {
 	GetHelmChartVersionByID(ctx context.Context, id uuid.UUID) (HelmChartVersion, error)
 	// Helm Repositories
 	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (HelmRepository, error)
-	GetHelmRepositoryByName(ctx context.Context, name string) (HelmRepository, error)
+	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (HelmRepository, error)
+	GetImageVulnerabilityReportByID(ctx context.Context, id uuid.UUID) (ImageVulnerabilityReport, error)
 	// Installed Charts
 	GetInstalledChartByID(ctx context.Context, id uuid.UUID) (InstalledChart, error)
 	GetInstalledChartByRelease(ctx context.Context, arg GetInstalledChartByReleaseParams) (InstalledChart, error)
+	GetKubectlSessionByID(ctx context.Context, id uuid.UUID) (KubectlSession, error)
 	GetLatestArgoCDOperationForTarget(ctx context.Context, arg GetLatestArgoCDOperationForTargetParams) (ArgocdOperation, error)
+	// Backup restore drill results — written by the
+	// management-plane-restore-drill-cronjob, read by the
+	// /api/v1/admin/backup-drill/ admin endpoint.
+	// The summary endpoint shows ONLY the most recent drill — that's enough
+	// for the "are we current?" question. History uses ListBackupDrillResults.
+	GetLatestBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
+	// Orders by the upstream chart's publish time (the `created:` field
+	// in helm index.yaml, persisted to created_at_upstream during ingest)
+	// so the install modal's "default to latest" picks the actual newest
+	// version rather than whichever row happened to be inserted last
+	// during a backfill sync. Falls back to created_at DESC when the
+	// upstream timestamp is NULL (older catalog rows pre-dating the
+	// created_at_upstream column or OCI charts without a publish date).
 	GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (HelmChartVersion, error)
+	// Returns the most recent attempt for the given (cluster, condition_type).
+	// Used by the reconciler to compute backoff before its next attempt; the
+	// partial-index sort makes this O(log N).
+	GetLatestClusterConditionRemediation(ctx context.Context, arg GetLatestClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
+	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterDecommission, error)
 	GetLatestMonitoringOperationForTarget(ctx context.Context, arg GetLatestMonitoringOperationForTargetParams) (MonitoringOperation, error)
+	// Surfaces "when did we last *prove* the backups work?". Distinct from
+	// the latest row because the most recent drill may have failed; the
+	// staleness alert fires on the gap from the latest *success*, not the
+	// latest attempt.
+	GetLatestSuccessfulBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
 	GetLatestToolOperationForTarget(ctx context.Context, arg GetLatestToolOperationForTargetParams) (ToolOperation, error)
 	GetLoggingOperation(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	// Logging Outputs
 	GetLoggingOutputByID(ctx context.Context, id uuid.UUID) (LoggingOutput, error)
 	// Logging Pipelines
 	GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (LoggingPipeline, error)
+	GetMaintenanceWindow(ctx context.Context, id uuid.UUID) (MaintenanceWindow, error)
+	GetMaintenanceWindowByName(ctx context.Context, name string) (MaintenanceWindow, error)
 	GetMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
+	GetNetworkPolicyApplicationByID(ctx context.Context, id uuid.UUID) (NetworkPolicyApplication, error)
+	GetNetworkPolicyApplicationByUnique(ctx context.Context, arg GetNetworkPolicyApplicationByUniqueParams) (NetworkPolicyApplication, error)
+	GetNetworkPolicyTemplateByID(ctx context.Context, id uuid.UUID) (NetworkPolicyTemplate, error)
+	GetNetworkPolicyTemplateBySlug(ctx context.Context, slug string) (NetworkPolicyTemplate, error)
 	// Notification Channels
 	GetNotificationChannelByID(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
+	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPlatformConfig(ctx context.Context) (PlatformConfiguration, error)
 	GetPlatformSetting(ctx context.Context, key string) (PlatformSetting, error)
 	// Pod Security Templates
 	GetPodSecurityTemplateByID(ctx context.Context, id uuid.UUID) (PodSecurityTemplate, error)
-	GetPodSecurityTemplateByName(ctx context.Context, name string) (PodSecurityTemplate, error)
 	GetPolicyByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterSecurityPolicy, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error)
 	GetProjectByNameAndCluster(ctx context.Context, arg GetProjectByNameAndClusterParams) (Project, error)
+	GetProjectCatalogSubscription(ctx context.Context, arg GetProjectCatalogSubscriptionParams) (ProjectCatalogSubscription, error)
+	// Returns the (possibly NULL) default_vault_connection_id pointer. Caller
+	// decides whether to chase the FK; this just answers "is a default set?".
+	GetProjectDefaultVaultConnection(ctx context.Context, id uuid.UUID) (pgtype.UUID, error)
+	GetProjectOwnership(ctx context.Context, id uuid.UUID) (GetProjectOwnershipRow, error)
 	// Project Role Bindings
 	GetProjectRoleBindingByID(ctx context.Context, id uuid.UUID) (ProjectRoleBinding, error)
-	GetProjectRoleBindingsByGroup(ctx context.Context, group string) ([]ProjectRoleBinding, error)
-	GetProjectRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
 	// Project Roles
 	GetProjectRoleByID(ctx context.Context, id uuid.UUID) (ProjectRole, error)
-	GetProjectRoleByName(ctx context.Context, name string) (ProjectRole, error)
+	GetPrometheusDatasourceByID(ctx context.Context, id uuid.UUID) (PrometheusDatasource, error)
+	GetPrometheusDatasourceByName(ctx context.Context, name string) (PrometheusDatasource, error)
+	GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, error)
 	// The is_used filter is intentionally NOT applied: until the server issues a
 	// long-lived agent token in CONNECT_ACK, the same registration token is the
 	// only credential the agent has, and reconnect attempts must succeed up to
 	// expires_at. is_used remains a tracking column for the future flow.
-	GetRegistrationTokenByToken(ctx context.Context, token string) (ClusterRegistrationToken, error)
+	GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error)
 	// Restore Operations
 	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (RestoreOperation, error)
+	GetSIEMForwarder(ctx context.Context, id uuid.UUID) (SiemForwarder, error)
+	GetSIEMForwarderByName(ctx context.Context, name string) (SiemForwarder, error)
+	GetSIEMForwarderStatus(ctx context.Context, forwarderID uuid.UUID) (SiemForwarderStatus, error)
+	// SMTP + email-message queries (migration 047). Backs:
+	//
+	//   * the admin /api/v1/admin/smtp/* endpoints (Get/Upsert/Test) and
+	//     /api/v1/admin/emails/ audit view
+	//   * the email:dispatch worker that drains queued/failed rows into
+	//     real SMTP sends
+	//   * the email:cleanup_old retention task
+	//   * the password-reset request/complete flow (token table)
+	//
+	// The smtp_settings row is a singleton — every read/write targets the
+	// same well-known id. The application code (NOT this query layer) is
+	// responsible for Fernet-encrypting/decrypting password_encrypted; we
+	// store and return the ciphertext verbatim.
+	// Returns the singleton settings row. Callers handle the no-rows case
+	// by treating an absent row as "disabled with all defaults".
+	GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSetting, error)
 	// SSO Configurations
 	GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (SsoConfiguration, error)
 	GetSSOConfigurationByProvider(ctx context.Context, provider string) (SsoConfiguration, error)
@@ -347,9 +688,20 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
-	GetUserClusterRoles(ctx context.Context, arg GetUserClusterRolesParams) ([]ClusterRole, error)
-	GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([]GlobalRole, error)
-	GetUserProjectRoles(ctx context.Context, arg GetUserProjectRolesParams) ([]ProjectRole, error)
+	GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (UserIdpGroup, error)
+	// TOTP / 2FA queries (migration 043). Drives the per-user enrollment
+	// table + recovery-code table behind /api/v1/auth/totp/*.
+	//
+	// Secrets are stored encrypted (callers Encrypt before INSERT and
+	// Decrypt after SELECT); recovery codes are stored as hex(sha256(code)).
+	// Read the (encrypted) enrollment row for a user. Returns ErrNoRows
+	// when the user has not enrolled.
+	GetUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) (UserTotpEnrollment, error)
+	GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (VaultConnection, error)
+	GetVaultConnectionByName(ctx context.Context, name string) (VaultConnection, error)
+	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
+	GetWebhookSubscription(ctx context.Context, id uuid.UUID) (WebhookSubscription, error)
+	GetWebhookSubscriptionByName(ctx context.Context, name string) (WebhookSubscription, error)
 	GetWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	// Account lockout (NIST 800-53 AC-7).
 	//
@@ -358,7 +710,36 @@ type Querier interface {
 	// on a successful auth. Auto-unlock is implicit: a locked_until in the
 	// past behaves like "not locked".
 	IncrementFailedLoginCount(ctx context.Context, arg IncrementFailedLoginCountParams) error
-	InsertBackupDrillResult(ctx context.Context, arg InsertBackupDrillResultParams) (BackupDrillResult, error)
+	// Bumps the per-row retry counter without changing payload/severity. The
+	// dispatcher calls this on each failure; when attempts crosses the cap
+	// (100) the row is force-deleted via DeleteSIEMQueueByIDs and the
+	// forwarder's dropped_total counter is bumped.
+	IncrementSIEMQueueAttempts(ctx context.Context, dollar_1 []int64) error
+	// Snapshots ------------------------------------------------------------
+	InsertApiserverAllowlistSnapshot(ctx context.Context, arg InsertApiserverAllowlistSnapshotParams) (ApiserverAllowlistSnapshot, error)
+	InsertClusterConditionRemediation(ctx context.Context, arg InsertClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
+	InsertClusterRegistrationStep(ctx context.Context, arg InsertClusterRegistrationStepParams) (ClusterRegistrationStep, error)
+	// Persists a "we want to send this" record. The handler that wraps a
+	// user-facing event (lockout, totp-enabled, alert-fired, ...) always
+	// writes a row BEFORE the SMTP attempt — even when SMTP is disabled,
+	// which writes the row with status='skipped' so operators can spot the
+	// gap in the admin view.
+	InsertEmailMessage(ctx context.Context, arg InsertEmailMessageParams) (EmailMessage, error)
+	InsertKubectlSessionCommand(ctx context.Context, arg InsertKubectlSessionCommandParams) error
+	// Stores ONE hashed recovery code. Called 10 times in a row at
+	// enrollment / regeneration; we keep it as a single-row INSERT for
+	// simplicity (10 round-trips on a flow the user only runs every few
+	// months).
+	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
+	// Single sign-out (SLO) session tracking — migration 054.
+	//
+	// The Astronomer JWT is revoked locally on Logout (migration 039); this
+	// table additionally holds the upstream id_token + cached
+	// end_session_endpoint so the Logout HTTP response can drive
+	// RP-initiated logout at Dex / the upstream IdP.
+	//
+	// Lifetime is bounded by expires_at (= the Astronomer JWT's exp). The
+	// nightly retention worker piggy-backs on the jwt_revocations purge.
 	// Called by the SSO Callback after the Astronomer JWT pair is minted.
 	// jti is the access JWT's JTI; upstream_id_token_encrypted is Fernet-
 	// ciphertext (the caller wraps before calling). ON CONFLICT replaces
@@ -366,101 +747,435 @@ type Querier interface {
 	// JTIs are uuid.New per token — but the upsert protects against a
 	// pathological repeat without an extra round-trip).
 	InsertSSOSession(ctx context.Context, arg InsertSSOSessionParams) error
+	// Tap-side insert. Called by the event-bus tap once per (subscription,
+	// event) pair that matched at least one filter glob. status='queued'
+	// and next_attempt_at=now() so the dispatcher picks it up on the very
+	// next tick.
+	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
-	ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error)
-	ListActiveAlertsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertRule, error)
+	// Every API token row with user identity LEFT-JOINed in and the hash
+	// + raw secret material stripped. `is_revoked = false` is NOT
+	// filtered — auditors need the historical record of issued
+	// credentials, including revoked ones. Selects `allowed_cidrs` +
+	// `last_seen_remote_ip` from migration 044.
+	ListAPITokensForCompliance(ctx context.Context) ([]ListAPITokensForComplianceRow, error)
+	// "active" == mode != 'disabled' — the rows the reconciler walks every tick.
+	ListActiveApiserverAllowlists(ctx context.Context) ([]ApiserverAllowlist, error)
 	ListActiveConnections(ctx context.Context) ([]AgentConnection, error)
-	ListAgentConnections(ctx context.Context, arg ListAgentConnectionsParams) ([]AgentConnection, error)
+	ListActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) ([]KubectlSession, error)
+	ListAdminCatalogsIncludingProjectOwned(ctx context.Context, arg ListAdminCatalogsIncludingProjectOwnedParams) ([]HelmRepository, error)
 	ListAlertEvents(ctx context.Context, arg ListAlertEventsParams) ([]AlertEvent, error)
-	ListAlertEventsByCluster(ctx context.Context, arg ListAlertEventsByClusterParams) ([]AlertEvent, error)
 	ListAlertEventsByRule(ctx context.Context, arg ListAlertEventsByRuleParams) ([]AlertEvent, error)
 	ListAlertRules(ctx context.Context, arg ListAlertRulesParams) ([]AlertRule, error)
 	ListAlertRulesByCluster(ctx context.Context, arg ListAlertRulesByClusterParams) ([]AlertRule, error)
-	ListAlertRulesForChannel(ctx context.Context, notificationChannelID uuid.UUID) ([]AlertRule, error)
+	// Alert Silences
 	ListAlertSilences(ctx context.Context, arg ListAlertSilencesParams) ([]AlertSilence, error)
+	ListAllActiveKubectlSessions(ctx context.Context) ([]KubectlSession, error)
+	// Used by the drift-reconcile sweep — walks every row across every cluster.
+	ListAllClusterRegistryConfigs(ctx context.Context) ([]ClusterRegistryConfig, error)
+	// Used by the drift sweep to fan out across every materialization that's
+	// not in steady state. status != 'applied' means either fresh or failed
+	// and needing retry.
+	ListAllPendingCloudCredentialMaterializations(ctx context.Context) ([]CloudCredentialMaterialization, error)
 	ListAllProjectNamespaces(ctx context.Context) ([]ProjectNamespace, error)
-	ListAllTokensByUser(ctx context.Context, arg ListAllTokensByUserParams) ([]ApiToken, error)
+	// Every project with just the policy fields the compliance bundle
+	// needs (pod_security_profile, network_policy_mode, resource_quota_*).
+	// Distinct from ListProjects to keep the read cheap when there are
+	// thousands of projects.
+	ListAllProjectsForCompliance(ctx context.Context) ([]ListAllProjectsForComplianceRow, error)
+	// All-users variant of ListUserBindingsWithRoles. Used by the
+	// rbac-snapshot.csv writer. UNION across the three binding tables
+	// joined with role names; the scope discriminator
+	// ('global' | 'cluster' | 'project') tells the writer which scope
+	// columns are meaningful. The COALESCE(source, 'manual') normalises
+	// the column for pre-migration-042 rows.
+	ListAllRoleBindingsWithRoleNames(ctx context.Context) ([]ListAllRoleBindingsWithRoleNamesRow, error)
+	// Migration 072 — rolling-window baselines for "deviation from
+	// baseline" alert rules. Queries here are mirrored in the
+	// hand-authored shim at internal/db/sqlc/anomaly_baselines_ext.sql.go
+	// so the build keeps passing on agent worktrees where the sqlc CLI
+	// is occasionally not available.
+	ListAnomalyBaselines(ctx context.Context, arg ListAnomalyBaselinesParams) ([]AnomalyBaseline, error)
+	ListAnomalyBaselinesByCluster(ctx context.Context, clusterID uuid.UUID) ([]AnomalyBaseline, error)
+	ListApiserverAllowlistSnapshots(ctx context.Context, arg ListApiserverAllowlistSnapshotsParams) ([]ApiserverAllowlistSnapshot, error)
+	ListApplicationsForCluster(ctx context.Context, clusterID uuid.UUID) ([]NetworkPolicyApplication, error)
+	ListApplicationsForTemplate(ctx context.Context, templateID uuid.UUID) ([]NetworkPolicyApplication, error)
+	// For the drift sweep: walks only 'applied' rows, GETs the in-cluster
+	// NetworkPolicy, compares to the rendered spec. Mismatch -> 'drifting'.
+	ListAppliedNetworkPolicyApplications(ctx context.Context, limit int32) ([]NetworkPolicyApplication, error)
 	ListAppsByInstance(ctx context.Context, arg ListAppsByInstanceParams) ([]ArgocdApplication, error)
-	ListAppsByInstanceAndProject(ctx context.Context, arg ListAppsByInstanceAndProjectParams) ([]ArgocdApplication, error)
 	ListArgoCDApplications(ctx context.Context, arg ListArgoCDApplicationsParams) ([]ArgocdApplication, error)
+	ListArgoCDApplicationsByManagedClusterTargets(ctx context.Context, arg ListArgoCDApplicationsByManagedClusterTargetsParams) ([]ArgocdApplication, error)
 	ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstancesParams) ([]ArgocdInstance, error)
 	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error)
+	// Reverse index of the above: every ArgoCD instance into which a given
+	// Astronomer cluster is registered. Used by the
+	// "argocd:refresh_managed_cluster_labels" worker task to re-stamp the
+	// astronomer.io/label-* keys on every relevant cluster Secret after a
+	// clusters.labels mutation.
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]ArgocdManagedCluster, error)
 	ListArgoCDOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ArgocdOperationEvent, error)
 	ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperationsParams) ([]ArgocdOperation, error)
+	// Compliance report export queries.
+	//
+	// These power the SOC 2 / ISO 27001 audit-prep bundle the
+	// `/api/v1/admin/compliance/export/` endpoint emits. The generated sqlc
+	// output is the canonical Go API for these reads; keep this file parseable
+	// by the pinned sqlc version used in CI.
+	// Keyset-paginated stream across the partitioned audit_log table for
+	// the export streamer. The compliance writer calls this in a loop
+	// until the returned slice is shorter than the limit; ASC ordering on
+	// (created_at, id) keeps the data consistent under concurrent
+	// inserts (the existing ListAuditLogV1 sorts DESC, fine for the UI
+	// but wrong for an export of millions of rows).
+	ListAuditLogV1ForRange(ctx context.Context, arg ListAuditLogV1ForRangeParams) ([]ListAuditLogV1ForRangeRow, error)
+	// Paginated history for the admin UI.
 	ListBackupDrillResults(ctx context.Context, arg ListBackupDrillResultsParams) ([]BackupDrillResult, error)
 	ListBackupSchedules(ctx context.Context, arg ListBackupSchedulesParams) ([]BackupSchedule, error)
 	ListBackupStorageConfigs(ctx context.Context, arg ListBackupStorageConfigsParams) ([]BackupStorageConfig, error)
 	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)
-	ListBackupsByStatus(ctx context.Context, arg ListBackupsByStatusParams) ([]Backup, error)
 	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
+	ListCRDOwnedClusters(ctx context.Context, limit int32) ([]ListCRDOwnedClustersRow, error)
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
+	// Per-project catalog queries — migration 061.
+	//
+	// The hot path is ListCatalogsForProject which UNIONs three buckets:
+	//   1. globals (owner_project_id IS NULL)
+	//   2. catalogs the project owns
+	//   3. catalogs the project has subscribed to
+	// so a single SELECT returns the catalog row set the project admin
+	// (and project users browsing Apps) should see.
+	//
+	// Generated sqlc output is the canonical Go API for this surface.
+	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
+	// Same ordering rationale as GetLatestChartVersion — the version
+	// dropdown in the install/upgrade modal needs newest-first by upstream
+	// publish time, not by DB insert order.
 	ListChartVersions(ctx context.Context, arg ListChartVersionsParams) ([]HelmChartVersion, error)
-	ListChartsByCategory(ctx context.Context, arg ListChartsByCategoryParams) ([]HelmChart, error)
 	ListChartsByRepository(ctx context.Context, arg ListChartsByRepositoryParams) ([]HelmChart, error)
+	// Materializations -------------------------------------------------------
+	ListCloudCredentialMaterializations(ctx context.Context, credentialID uuid.UUID) ([]CloudCredentialMaterialization, error)
+	// Cloud credentials CRUD (migration 053).
+	//
+	// Hand-edited SQL for the cloud_credentials + cloud_credential_-
+	// materializations tables. The sqlc generator produces a thin Go shim
+	// with type-safe arguments around these queries.
+	ListCloudCredentialsForProject(ctx context.Context, projectID uuid.UUID) ([]CloudCredential, error)
+	// Backs the per-cluster UI panel — shows the 50 most recent attempts so
+	// operators can see the trail. 50 is enough to span ~24h at the default
+	// 30s reconcile cadence for one stuck condition without becoming a
+	// DB-pressure liability.
+	ListClusterConditionRemediationByCluster(ctx context.Context, clusterID uuid.UUID) ([]ClusterConditionRemediationAttempt, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]ClusterCondition, error)
+	// Fleet-wide list of conditions in the given status, used by the
+	// remediation reconciler to find work each tick. Skips decommissioned
+	// clusters because their conditions are about to be deleted by the
+	// decommission reconciler anyway.
+	ListClusterConditionsByStatus(ctx context.Context, status string) ([]ClusterCondition, error)
+	// Migration 066 — cluster groups CRUD + tree expansion.
+	//
+	// The Go shim in internal/db/sqlc/cluster_groups.sql.go hand-implements
+	// these while generated freshness is enforced separately; the queries below
+	// are the canonical source-of-truth for the contract.
+	ListClusterGroups(ctx context.Context) ([]ClusterGroup, error)
+	ListClusterGroupsAsTree(ctx context.Context) ([]ListClusterGroupsAsTreeRow, error)
+	ListClusterRegistrationSteps(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistrationStep, error)
+	// Migration 050: multi-registry-per-cluster CRUD. The legacy
+	// Get/Upsert/Delete by cluster_id above is kept for back-compat with the old
+	// single-registry route; the queries below operate on the row id so multiple
+	// registry configs can co-exist under one cluster.
+	ListClusterRegistryConfigs(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistryConfig, error)
+	// ====== cluster_restores =================================================
+	ListClusterRestores(ctx context.Context, targetClusterID uuid.UUID) ([]ClusterRestore, error)
 	ListClusterRoleBindings(ctx context.Context, arg ListClusterRoleBindingsParams) ([]ClusterRoleBinding, error)
 	ListClusterRoleBindingsByCluster(ctx context.Context, arg ListClusterRoleBindingsByClusterParams) ([]ClusterRoleBinding, error)
 	ListClusterRoles(ctx context.Context, arg ListClusterRolesParams) ([]ClusterRole, error)
 	ListClusterSecurityPolicies(ctx context.Context, arg ListClusterSecurityPoliciesParams) ([]ClusterSecurityPolicy, error)
+	// ====== cluster_snapshot_schedules =======================================
+	ListClusterSnapshotSchedules(ctx context.Context, clusterID uuid.UUID) ([]ClusterSnapshotSchedule, error)
+	// Per-cluster Velero snapshot + restore self-service (migration 052).
+	//
+	// Every query in this file targets one of:
+	//   - cluster_snapshots
+	//   - cluster_restores
+	//   - cluster_snapshot_schedules
+	//
+	// Note for maintainers: the actual Go bodies live in
+	// internal/db/sqlc/cluster_snapshots_ext.sql.go (hand-authored shim) —
+	// the SQL text below is the canonical source, kept in this directory so
+	// sqlc generate against a workstation continues to round-trip cleanly.
+	// ====== cluster_snapshots ================================================
+	ListClusterSnapshots(ctx context.Context, clusterID uuid.UUID) ([]ClusterSnapshot, error)
+	// Drives the periodic drift_check sweep — every 'applied' row gets its
+	// live cluster state compared against spec_snapshot. We don't filter on
+	// spec equality here because the comparison is structural and lives in
+	// Go.
+	ListClusterTemplateApplicationsByStatus(ctx context.Context, arg ListClusterTemplateApplicationsByStatusParams) ([]ClusterTemplateApplication, error)
+	// Cluster templates + applications + registration policies (migration 049).
+	// Backs:
+	//   * /api/v1/cluster-templates/*       — CRUD on cluster_templates
+	//   * /api/v1/clusters/{id}/template/*  — apply/reapply/detach + status
+	//   * cluster_template:apply worker     — idempotent convergent apply task
+	//   * cluster_template:drift_check task — periodic drift surface
+	//
+	// The handler validates spec.* shapes (env enum, PSS enum, unknown keys);
+	// this layer stores/returns the JSONB verbatim.
+	ListClusterTemplates(ctx context.Context, arg ListClusterTemplatesParams) ([]ClusterTemplate, error)
 	ListClusterTools(ctx context.Context, arg ListClusterToolsParams) ([]ClusterTool, error)
+	// Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
+	// their row in the DB for forensics but never appear in the UI list.
 	ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error)
 	ListClustersByStatus(ctx context.Context, arg ListClustersByStatusParams) ([]Cluster, error)
+	// All non-decommissioned clusters. The orchestrator's selector
+	// evaluator walks this list in Go (matchLabels intersection is a
+	// string-map comparison that's easier to reason about than a JSONB
+	// predicate, and the cluster count never exceeds a few thousand
+	// in any deployment we've seen).
+	ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error)
+	ListClustersInGroupTree(ctx context.Context, id uuid.UUID) ([]ListClustersInGroupTreeRow, error)
 	ListConnectionsByCluster(ctx context.Context, arg ListConnectionsByClusterParams) ([]AgentConnection, error)
 	ListControlPlaneAlerts(ctx context.Context, arg ListControlPlaneAlertsParams) ([]ControlPlaneAlert, error)
 	ListControlPlaneSilences(ctx context.Context, arg ListControlPlaneSilencesParams) ([]ControlPlaneSilence, error)
+	// Dashboard widgets + Prometheus datasources (migration 058).
+	//
+	// Hand-edited SQL companion to the hand-written sqlc shim in
+	// internal/db/sqlc/dashboards.sql.go. The sqlc CLI isn't part of the
+	// local build path (compliance.sql lexer error blocks a fresh
+	// generate); these queries are kept in the canonical queries/ tree so
+	// a future `sqlc generate` picks them up by name.
+	ListDashboardWidgets(ctx context.Context) ([]DashboardWidget, error)
+	ListDeferredOperations(ctx context.Context, arg ListDeferredOperationsParams) ([]DeferredOperation, error)
 	ListDexConnectors(ctx context.Context) ([]DexConnector, error)
+	// Admin audit view. Paginated, newest-first. The handler redacts the
+	// body_text/body_html before returning the rows so a sensitive reset
+	// link or recovery-code email doesn't appear in the admin UI.
+	ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error)
 	ListEnabledDexConnectors(ctx context.Context) ([]DexConnector, error)
+	ListEnabledGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
 	ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error)
+	ListEnabledMaintenanceWindows(ctx context.Context) ([]MaintenanceWindow, error)
 	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
-	ListEnabledOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]LoggingOutput, error)
-	ListEnabledPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) ([]LoggingPipeline, error)
+	ListEnabledPrometheusDatasources(ctx context.Context) ([]PrometheusDatasource, error)
+	// Used by the event-bus tap: every published event scans this list and
+	// filters by glob. Enabled-only because a disabled forwarder should NOT
+	// accumulate queue rows the dispatcher will never drain.
+	ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
+	ListEnabledSnapshotSchedules(ctx context.Context) ([]ClusterSnapshotSchedule, error)
 	ListEnabledTools(ctx context.Context) ([]ClusterTool, error)
-	ListFiringAlertEvents(ctx context.Context, arg ListFiringAlertEventsParams) ([]AlertEvent, error)
+	// Used by the event-bus tap: every published event scans this list and
+	// filters by glob. Enabled-only because a disabled subscription should
+	// NOT accumulate deliveries the dispatcher will never send (operators
+	// toggle the flag while keeping the config row around).
+	ListEnabledWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
+	ListExpiredKubectlSessions(ctx context.Context) ([]KubectlSession, error)
+	ListExpiredTerminalSnapshots(ctx context.Context, limit int32) ([]ClusterSnapshot, error)
+	// The reaper pulls rows that have been tombstoned for longer than the
+	// grace window (24h by default — passed in as the parameter so tests
+	// can shrink it). The partial index idx_gitops_tombstoned_clusters
+	// keeps this scan cheap as the table grows.
+	ListExpiredTombstones(ctx context.Context, tombstonedAt pgtype.Timestamptz) ([]GitopsRegisteredCluster, error)
+	ListFleetOperationTargets(ctx context.Context, arg ListFleetOperationTargetsParams) ([]FleetOperationTarget, error)
+	// Paginated list, optional status filter. The handler passes the
+	// empty string when no filter is requested; the COALESCE-style guard
+	// below skips the WHERE clause cleanly in that case.
+	ListFleetOperations(ctx context.Context, arg ListFleetOperationsParams) ([]FleetOperation, error)
+	// Registered clusters --------------------------------------------------
+	ListGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) ([]GitopsRegisteredCluster, error)
+	// GitOps cluster registration sources + tracked clusters (migration 060).
+	//
+	// The sync worker pulls ListEnabledGitOpsSources every 60s, fetches each
+	// repo, walks the YAML files, and reconciles via UpsertGitOpsRegistered
+	// + StampGitOpsSourceSync. The reaper sweeps tombstoned rows older than
+	// the 24h grace via ListExpiredTombstones, enqueueing
+	// cluster:decommission for each. The handler tier owns CRUD over the
+	// sources themselves and the per-source /clusters/ + /preview/ readers.
+	ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
 	ListGlobalRoleBindings(ctx context.Context, arg ListGlobalRoleBindingsParams) ([]GlobalRoleBinding, error)
 	ListGlobalRoles(ctx context.Context, arg ListGlobalRolesParams) ([]GlobalRole, error)
+	// Admin endpoint GET (paginated).
+	ListGroupMappings(ctx context.Context, arg ListGroupMappingsParams) ([]IdentityGroupMapping, error)
+	// Hot path. Used by SyncUserGroups on every successful SSO login.
+	// Returns rows whose connector_id is either the supplied UUID *or*
+	// NULL (the wildcard connector). The Go-side filter on group_name
+	// happens in the caller so we can batch a single round-trip against
+	// the user's slice — Postgres has no array-of-text-to-IN-clause
+	// shortcut that sqlc can express portably.
+	//
+	// NOTE: pgtype.UUID is the parameter type so the caller can pass an
+	// Invalid (NULL) value to mean "wildcard only", though the typical
+	// call has a Valid connector ID and gets both connector-scoped + NULL
+	// rows back in one read.
+	ListGroupMappingsForConnector(ctx context.Context, connectorID pgtype.UUID) ([]IdentityGroupMapping, error)
+	ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error)
+	// Enumerates the user's group_sync-managed global bindings so the
+	// sync loop can compute the revocation diff. Manual bindings are
+	// explicitly excluded.
+	ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
+	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
 	ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) ([]HelmChart, error)
 	ListHelmRepositories(ctx context.Context, arg ListHelmRepositoriesParams) ([]HelmRepository, error)
 	ListInstalledCharts(ctx context.Context, arg ListInstalledChartsParams) ([]InstalledChart, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg ListInstalledChartsByClusterParams) ([]InstalledChart, error)
-	ListInstalledChartsByToolSlug(ctx context.Context, arg ListInstalledChartsByToolSlugParams) ([]InstalledChart, error)
 	ListInstancesByCluster(ctx context.Context, arg ListInstancesByClusterParams) ([]ArgocdInstance, error)
+	ListKubectlSessionCommands(ctx context.Context, arg ListKubectlSessionCommandsParams) ([]KubectlSessionCommand, error)
 	ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]LoggingOperationEvent, error)
 	ListLoggingOperations(ctx context.Context, arg ListLoggingOperationsParams) ([]LoggingOperation, error)
 	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)
 	ListLoggingPipelines(ctx context.Context, arg ListLoggingPipelinesParams) ([]LoggingPipeline, error)
-	ListMonitoringBackends(ctx context.Context) ([]MonitoringBackend, error)
+	// Maintenance windows + deferred operations (migration 057).
+	//
+	// The window evaluator reads ListEnabledMaintenanceWindows() into an
+	// in-memory cache (30s TTL) so the per-mutation check is cheap. The
+	// deferred-ops worker scans ListPendingDeferredOperations every 60s and
+	// re-fires the rows whose deferred_until has elapsed.
+	ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWindow, error)
+	// ---------------------------------------------------------------------
+	// mirrored_gateway_classes
+	// ---------------------------------------------------------------------
+	ListMirroredGatewayClasses(ctx context.Context, clusterID uuid.UUID) ([]MirroredGatewayClass, error)
+	// Migration 069 — CRD-mirror v2 queries.
+	//
+	// These queries are hand-implemented in
+	// internal/db/sqlc/crd_mirror_v2_ext.sql.go (sqlc CLI is broken; we keep
+	// the SQL here as documentation + a future-proof source of truth so a
+	// `sqlc generate` run from a working environment would land on the same
+	// bind shapes).
+	//
+	// One block per mirrored table: list, list-by-namespace (where
+	// applicable), get-by-name, upsert (idempotent), delete, prune-stale.
+	// ---------------------------------------------------------------------
+	// mirrored_ingress_classes
+	// ---------------------------------------------------------------------
+	ListMirroredIngressClasses(ctx context.Context, clusterID uuid.UUID) ([]MirroredIngressClass, error)
+	// ---------------------------------------------------------------------
+	// mirrored_limit_ranges
+	// ---------------------------------------------------------------------
+	ListMirroredLimitRanges(ctx context.Context, clusterID uuid.UUID) ([]MirroredLimitRange, error)
+	ListMirroredLimitRangesByNamespace(ctx context.Context, arg ListMirroredLimitRangesByNamespaceParams) ([]MirroredLimitRange, error)
+	// ---------------------------------------------------------------------
+	// mirrored_network_policies
+	// ---------------------------------------------------------------------
+	ListMirroredNetworkPolicies(ctx context.Context, clusterID uuid.UUID) ([]MirroredNetworkPolicy, error)
+	ListMirroredNetworkPoliciesByNamespace(ctx context.Context, arg ListMirroredNetworkPoliciesByNamespaceParams) ([]MirroredNetworkPolicy, error)
+	// ---------------------------------------------------------------------
+	// mirrored_resource_quotas
+	// ---------------------------------------------------------------------
+	ListMirroredResourceQuotas(ctx context.Context, clusterID uuid.UUID) ([]MirroredResourceQuota, error)
+	ListMirroredResourceQuotasByNamespace(ctx context.Context, arg ListMirroredResourceQuotasByNamespaceParams) ([]MirroredResourceQuota, error)
 	ListMonitoringOperationEvents(ctx context.Context, operationID uuid.UUID) ([]MonitoringOperationEvent, error)
 	ListMonitoringOperations(ctx context.Context, arg ListMonitoringOperationsParams) ([]MonitoringOperation, error)
+	// Network policy templates + applications (migration 068).
+	// Backs:
+	//   * /api/v1/admin/network-policy-templates/*  — superuser CRUD on templates
+	//   * /api/v1/clusters/{cluster_id}/network-policies/applications/*
+	//                                                — per-cluster apply/list/delete
+	//   * network_policy:apply worker  — reconcile each pending row via SSA
+	//   * network_policy:drift_check worker — periodic divergence sweep
+	//
+	// The handler validates body shapes (slug regex, kind enum); this layer
+	// stores/returns the values verbatim.
+	ListNetworkPolicyTemplates(ctx context.Context, arg ListNetworkPolicyTemplatesParams) ([]NetworkPolicyTemplate, error)
 	ListNotificationChannels(ctx context.Context, arg ListNotificationChannelsParams) ([]NotificationChannel, error)
+	// Used by the tap when the queue depth hits the chart-tunable cap. We
+	// delete the oldest N rows to make room for the new ones.
+	ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQueueParams) ([]int64, error)
 	ListOutputsByCluster(ctx context.Context, arg ListOutputsByClusterParams) ([]LoggingOutput, error)
-	ListOutputsForPipeline(ctx context.Context, loggingPipelineID uuid.UUID) ([]LoggingOutput, error)
 	ListPendingArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	ListPendingCatalogOperations(ctx context.Context, limit int32) ([]CatalogOperation, error)
+	// Used by the periodic sweep to find decommissions that need re-runs (the
+	// enqueue-time task may have been lost or the reconciler may have crashed
+	// mid-phase).
 	ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]ClusterDecommission, error)
+	ListPendingClusterRestores(ctx context.Context, limit int32) ([]ClusterRestore, error)
+	ListPendingClusterSnapshots(ctx context.Context, limit int32) ([]ClusterSnapshot, error)
+	// The dispatcher pulls rows whose deferred_until has elapsed. The
+	// partial index idx_deferred_operations_pending makes this scan cheap.
+	ListPendingDeferredOperations(ctx context.Context, arg ListPendingDeferredOperationsParams) ([]DeferredOperation, error)
+	// Drives the orchestrator tick. Returns every operation that's
+	// pending (still needs a launch) OR running (still needs dispatch /
+	// polling). Ordered by created_at so the orchestrator drains older
+	// operations first.
+	ListPendingFleetOperations(ctx context.Context, limit int32) ([]FleetOperation, error)
 	ListPendingLoggingOperations(ctx context.Context, limit int32) ([]LoggingOperation, error)
 	ListPendingMonitoringOperations(ctx context.Context, limit int32) ([]MonitoringOperation, error)
+	// The reconciler picks up rows in {pending, failed, drifting}. 'failed'
+	// rows are retried on every tick — combined with the apply-time
+	// idempotence (SSA), this self-heals transient tunnel hiccups without
+	// operator intervention. Cap defends against a "every app failed" stampede.
+	ListPendingNetworkPolicyApplications(ctx context.Context, limit int32) ([]NetworkPolicyApplication, error)
+	// Next batch to dispatch. Ordered by created_at so the orchestrator
+	// preserves the launch ordering across ticks.
+	ListPendingTargetsForOperation(ctx context.Context, arg ListPendingTargetsForOperationParams) ([]FleetOperationTarget, error)
 	ListPendingToolOperations(ctx context.Context, limit int32) ([]ToolOperation, error)
+	// Dispatcher worker batch read. Returns rows the worker should attempt
+	// this tick: status IN ('queued', 'failed') AND next_attempt_at <= now.
+	// The partial index on next_attempt_at WHERE status IN ('queued','failed')
+	// keeps this O(pending) regardless of table size.
+	ListPendingWebhookDeliveries(ctx context.Context, arg ListPendingWebhookDeliveriesParams) ([]WebhookDelivery, error)
 	ListPendingWorkloadOperations(ctx context.Context, limit int32) ([]WorkloadOperation, error)
 	ListPipelinesByCluster(ctx context.Context, arg ListPipelinesByClusterParams) ([]LoggingPipeline, error)
-	ListPipelinesForOutput(ctx context.Context, loggingOutputID uuid.UUID) ([]LoggingPipeline, error)
 	ListPlatformSettings(ctx context.Context) ([]PlatformSetting, error)
+	// The prefix scan is range-indexable thanks to text_pattern_ops in 046.
+	// Pass exact prefix WITHOUT a trailing wildcard — the LIKE pattern is
+	// assembled here so callers can't accidentally smuggle a wildcard mid-
+	// string.
 	ListPlatformSettingsByPrefix(ctx context.Context, prefix string) ([]PlatformSetting, error)
 	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error)
+	ListProjectOwnedCatalogs(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
+	// Usage snapshots for the admin dashboard --------------------------------
+	ListProjectQuotaSnapshots(ctx context.Context, arg ListProjectQuotaSnapshotsParams) ([]ListProjectQuotaSnapshotsRow, error)
 	ListProjectRoleBindings(ctx context.Context, arg ListProjectRoleBindingsParams) ([]ProjectRoleBinding, error)
 	ListProjectRoleBindingsByProject(ctx context.Context, arg ListProjectRoleBindingsByProjectParams) ([]ProjectRoleBinding, error)
 	ListProjectRoles(ctx context.Context, arg ListProjectRolesParams) ([]ProjectRole, error)
+	ListProjectSubscriptions(ctx context.Context, projectID uuid.UUID) ([]ProjectCatalogSubscription, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
 	ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error)
+	// Prometheus datasources -------------------------------------------------
+	ListPrometheusDatasources(ctx context.Context) ([]PrometheusDatasource, error)
+	// Dispatcher worker batch read. Returns rows the worker should attempt
+	// this tick: brand-new queued rows and previously-failed rows whose
+	// attempt count is still under the retry budget. ORDER BY created_at
+	// so the dispatch is FIFO even after failures bubble rows back to the
+	// front of the queue.
+	ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMessage, error)
+	// Quota plans CRUD --------------------------------------------------------
+	ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error)
 	ListRestoreOperations(ctx context.Context, arg ListRestoreOperationsParams) ([]RestoreOperation, error)
-	ListRestoreOperationsByBackup(ctx context.Context, backupID uuid.UUID) ([]RestoreOperation, error)
 	ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]Backup, error)
 	ListRunningRestoresForPolling(ctx context.Context, limit int32) ([]RestoreOperation, error)
+	// Used by the orchestrator to poll sub-operation status for every
+	// running target. Bounded by the operation's max_concurrent so this
+	// can never return more than that many rows.
+	ListRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) ([]FleetOperationTarget, error)
+	// SIEM forwarder + queue + status queries (migration 055). Backs:
+	//
+	//   * /api/v1/admin/siem-forwarders/* CRUD + test + status (handler)
+	//   * the event-bus tap that enqueues matching events onto the per-
+	//     forwarder queue (internal/siem.BusTap)
+	//   * the worker dispatcher that batches + ships queue rows to the
+	//     forwarder's transport, deletes on success, and updates the
+	//     status row (queue_depth + dispatched_total + last_sent_at)
+	//   * the daily retention sweep that purges queue rows older than 7
+	//     days regardless of forwarder status so stale forwarders don't
+	//     pin disk
+	//
+	// auth_encrypted is the Fernet ciphertext of the JSON auth blob; this
+	// layer stores and returns it verbatim. Decryption happens in the
+	// dispatcher right before the per-tick connect.
+	ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
+	// Dispatcher batch read. Ordered by id ascending so the dispatcher
+	// processes oldest-first and the per-forwarder partial index serves
+	// this query in constant time.
+	ListSIEMQueueBatch(ctx context.Context, arg ListSIEMQueueBatchParams) ([]SiemForwardQueue, error)
+	// Returns rows that have hit the retry cap. The dispatcher deletes
+	// these + counts them as dropped — they aren't going to succeed and
+	// holding them in the queue starves the rest of the batch.
+	ListSIEMQueueExhausted(ctx context.Context, arg ListSIEMQueueExhaustedParams) ([]SiemForwardQueue, error)
 	ListSSOConfigurations(ctx context.Context, arg ListSSOConfigurationsParams) ([]SsoConfiguration, error)
 	// Used by admin force-logout to enumerate the user's active upstream
 	// sessions for back-channel logout. Ordered by created_at DESC so the
@@ -473,13 +1188,50 @@ type Querier interface {
 	ListTokensByUser(ctx context.Context, arg ListTokensByUserParams) ([]ApiToken, error)
 	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ToolOperationEvent, error)
 	ListToolOperations(ctx context.Context, arg ListToolOperationsParams) ([]ToolOperation, error)
-	ListToolsByCategory(ctx context.Context, category string) ([]ClusterTool, error)
+	// Drives the "N codes remaining" indicator on the account page. Used
+	// by the audit summary too.
+	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]UserTotpRecoveryCode, error)
 	// One round-trip alternative to the per-scope ListBindings + per-binding
 	// GetRoleByID fan-out used by the RBAC middleware. The scope discriminator
 	// ('global' | 'cluster' | 'project') tells the Go side which scope columns
 	// are meaningful for each row; unused columns are returned as NULL.
 	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]ListUserBindingsWithRolesRow, error)
+	ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]ListUserQuotaSnapshotsRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	// Vault connections CRUD (migration 067).
+	//
+	// Hand-edited SQL paired with the hand-authored sqlc shim in
+	// internal/db/sqlc/vault_connections.sql.go (sqlc CLI not available
+	// in agent worktrees; same pattern cloud_credentials uses). Keep this
+	// file byte-compatible with what sqlc would emit so a future
+	// `make sqlc` is a no-op.
+	ListVaultConnections(ctx context.Context) ([]VaultConnection, error)
+	// Severity filter is empty-string-treated-as-no-filter so callers can
+	// pass an empty string for the unfiltered list.
+	ListVulnerabilitiesForReport(ctx context.Context, arg ListVulnerabilitiesForReportParams) ([]ImageVulnerability, error)
+	ListVulnerableImagesByNamespace(ctx context.Context, arg ListVulnerableImagesByNamespaceParams) ([]ImageVulnerabilityReport, error)
+	// Admin "recent deliveries" view. Newest-first; the handler caps
+	// limit + offset.
+	ListWebhookDeliveriesBySubscription(ctx context.Context, arg ListWebhookDeliveriesBySubscriptionParams) ([]WebhookDelivery, error)
+	// Webhook subscription + delivery queries (migration 048). Backs:
+	//
+	//   * /api/v1/admin/webhooks/* CRUD + test + deliveries view (handler)
+	//   * the event-bus tap that inserts a queued delivery on each matching
+	//     event (internal/webhook)
+	//   * the webhook:dispatch worker that drains pending rows into real
+	//     HTTP POSTs with HMAC signing + exponential backoff
+	//   * the daily retention sweep (default 30 days) that purges old
+	//     delivery rows so the table doesn't grow unbounded
+	//
+	// secret_encrypted is the Fernet ciphertext of the HMAC signing secret;
+	// this layer stores and returns it verbatim. Decryption happens in the
+	// sender right before signing.
+	ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
+	// Returns the widgets the render handler should ship to a client at the
+	// given (scope, scope_id) coordinate. Always includes globals; for
+	// 'cluster' / 'project' the list expands to widgets scoped to that
+	// entity OR widgets in that scope with an empty scope_ids set.
+	ListWidgetsForScope(ctx context.Context, arg ListWidgetsForScopeParams) ([]DashboardWidget, error)
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
 	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)
 	LockUser(ctx context.Context, arg LockUserParams) error
@@ -491,9 +1243,48 @@ type Querier interface {
 	MarkCatalogOperationFailed(ctx context.Context, arg MarkCatalogOperationFailedParams) (CatalogOperation, error)
 	MarkCatalogOperationRunning(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	MarkCatalogOperationSuperseded(ctx context.Context, arg MarkCatalogOperationSupersededParams) (CatalogOperation, error)
+	MarkCloudCredentialMaterializationApplied(ctx context.Context, id uuid.UUID) error
+	MarkCloudCredentialMaterializationFailed(ctx context.Context, arg MarkCloudCredentialMaterializationFailedParams) error
 	MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error)
 	MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
 	MarkClusterDecommissionSucceeded(ctx context.Context, arg MarkClusterDecommissionSucceededParams) (ClusterDecommission, error)
+	MarkClusterRegistryApplied(ctx context.Context, id uuid.UUID) error
+	MarkClusterRegistryApplyError(ctx context.Context, arg MarkClusterRegistryApplyErrorParams) error
+	// Generic status transition used by the apply worker. The handler-level
+	// code keeps the status strings centralized as constants so a typo here
+	// doesn't drift from the DB CHECK semantics (we deliberately don't have a
+	// CHECK constraint — the small enum is enforced in Go).
+	MarkClusterTemplateApplicationStatus(ctx context.Context, arg MarkClusterTemplateApplicationStatusParams) (ClusterTemplateApplication, error)
+	MarkDeferredCancelled(ctx context.Context, arg MarkDeferredCancelledParams) error
+	MarkDeferredDispatched(ctx context.Context, arg MarkDeferredDispatchedParams) error
+	MarkDeferredExpired(ctx context.Context, arg MarkDeferredExpiredParams) error
+	MarkDeferredFailed(ctx context.Context, arg MarkDeferredFailedParams) error
+	// Records a delivery failure. attempts is the NEW count (caller computes
+	// prev+1) so the dispatcher can decide whether to mark the row 'failed'
+	// (still retryable) or escalate to a final state. last_error is kept
+	// short by the caller; the column is TEXT so we don't truncate here.
+	MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) error
+	// Final-state UPDATE on a successful send. attempts is incremented in
+	// the same UPDATE so the sent rows reflect the actual try count.
+	MarkEmailSent(ctx context.Context, arg MarkEmailSentParams) error
+	// Used by the dispatcher to age out queued rows that have been sitting
+	// around for more than an hour with SMTP still disabled. Without this,
+	// a disabled-SMTP deployment would accumulate queued rows forever.
+	MarkEmailSkipped(ctx context.Context, arg MarkEmailSkippedParams) error
+	// Atomic state transition. The orchestrator uses this to move
+	// pending → running, running → completed/failed/aborted, etc.
+	// The from_status guard prevents two concurrent ticks from racing on
+	// the same operation: only the tick whose claimed-from status matches
+	// the live row wins.
+	MarkFleetOperationTransition(ctx context.Context, arg MarkFleetOperationTransitionParams) (FleetOperation, error)
+	MarkFleetTargetCompleted(ctx context.Context, id uuid.UUID) (FleetOperationTarget, error)
+	// Atomic transition pending → running with the sub-operation reference
+	// and timestamps stamped in. The status guard makes the call idempotent
+	// against a duplicate tick: only one tick succeeds, the second is a
+	// no-op (zero rows updated → pgx.ErrNoRows).
+	MarkFleetTargetDispatched(ctx context.Context, arg MarkFleetTargetDispatchedParams) (FleetOperationTarget, error)
+	MarkFleetTargetFailed(ctx context.Context, arg MarkFleetTargetFailedParams) (FleetOperationTarget, error)
+	MarkFleetTargetSkipped(ctx context.Context, arg MarkFleetTargetSkippedParams) (FleetOperationTarget, error)
 	MarkLoggingOperationCompleted(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	MarkLoggingOperationFailed(ctx context.Context, arg MarkLoggingOperationFailedParams) (LoggingOperation, error)
 	MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
@@ -502,16 +1293,40 @@ type Querier interface {
 	MarkMonitoringOperationFailed(ctx context.Context, arg MarkMonitoringOperationFailedParams) (MonitoringOperation, error)
 	MarkMonitoringOperationRunning(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	MarkMonitoringOperationSuperseded(ctx context.Context, arg MarkMonitoringOperationSupersededParams) (MonitoringOperation, error)
+	// Atomic transition used by the reconciler + drift check. When
+	// last_applied_at is set the column is updated; passing the zero value
+	// (Valid=false) leaves the existing timestamp untouched.
+	MarkNetworkPolicyApplicationStatus(ctx context.Context, arg MarkNetworkPolicyApplicationStatusParams) (NetworkPolicyApplication, error)
 	MarkProjectNamespaceReconciled(ctx context.Context, arg MarkProjectNamespaceReconciledParams) error
 	MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error
+	MarkRestorePhase(ctx context.Context, arg MarkRestorePhaseParams) error
+	MarkSnapshotPhase(ctx context.Context, arg MarkSnapshotPhaseParams) error
+	MarkSnapshotScheduleRan(ctx context.Context, arg MarkSnapshotScheduleRanParams) error
 	MarkToolOperationCompleted(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	MarkToolOperationFailed(ctx context.Context, arg MarkToolOperationFailedParams) (ToolOperation, error)
 	MarkToolOperationRunning(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	MarkToolOperationSuperseded(ctx context.Context, arg MarkToolOperationSupersededParams) (ToolOperation, error)
+	// Final-state UPDATE on a 2xx. response_status/response_body capture
+	// the receiver's reply for the admin view; the handler/sender caps
+	// response_body to the first 4 KiB before this call.
+	MarkWebhookDeliveryDelivered(ctx context.Context, arg MarkWebhookDeliveryDeliveredParams) error
+	// Terminal failure: either a permanent 4xx from the receiver (operator
+	// has to fix the URL) or the retry budget was exhausted. next_attempt_at
+	// is cleared so the row stops appearing in the pending list.
+	MarkWebhookDeliveryDropped(ctx context.Context, arg MarkWebhookDeliveryDroppedParams) error
+	// Records a delivery failure that is still retryable. The dispatcher
+	// computes the next backoff slot and passes it via next_attempt_at.
+	MarkWebhookDeliveryFailed(ctx context.Context, arg MarkWebhookDeliveryFailedParams) error
 	MarkWorkloadOperationCompleted(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationFailed(ctx context.Context, arg MarkWorkloadOperationFailedParams) (WorkloadOperation, error)
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
+	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
+	PruneStaleMirroredGatewayClasses(ctx context.Context, lastSeenAt time.Time) (int64, error)
+	PruneStaleMirroredIngressClasses(ctx context.Context, lastSeenAt time.Time) (int64, error)
+	PruneStaleMirroredLimitRanges(ctx context.Context, lastSeenAt time.Time) (int64, error)
+	PruneStaleMirroredNetworkPolicies(ctx context.Context, lastSeenAt time.Time) (int64, error)
+	PruneStaleMirroredResourceQuotas(ctx context.Context, lastSeenAt time.Time) (int64, error)
 	// Called by the nightly retention worker so the deny list doesn't grow
 	// without bound. Returning the rowcount lets the worker emit it as a
 	// metric.
@@ -521,32 +1336,101 @@ type Querier interface {
 	// row's id_token_hint is moot too.
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
-	RemovePipelineOutput(ctx context.Context, arg RemovePipelineOutputParams) error
 	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	RequeueCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	// Bulk reset for the retry-failed endpoint. Resets every 'failed'
+	// target on this operation back to 'pending' so the next orchestrator
+	// tick re-dispatches them. sub_operation_id is cleared so the
+	// orchestrator doesn't see a stale reference.
+	RequeueFailedTargets(ctx context.Context, operationID uuid.UUID) error
 	RequeueLoggingOperation(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	RequeueMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	RequeueToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	// Called on a successful login. Also clears any expired lock so the next
+	// failed-attempt cycle starts from a clean state.
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
+	// Admin-triggered re-dispatch. Resets the row so the next dispatcher
+	// tick picks it up immediately, regardless of where it was in the
+	// backoff schedule.
+	RetryWebhookDelivery(ctx context.Context, arg RetryWebhookDeliveryParams) error
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
+	// JWT session revocation.
+	//
+	// Two layers:
+	//   1. Per-JTI deny list. Used by Logout. ON CONFLICT lets the same JTI
+	//      be submitted multiple times (idempotent).
+	//   2. Per-user `tokens_invalidated_at` cutoff. Used by admin force-
+	//      logout to invalidate ALL active tokens for a user without having
+	//      to enumerate them — the JWT validator rejects any token whose
+	//      iat predates the cutoff.
 	RevokeJWT(ctx context.Context, arg RevokeJWTParams) error
+	SetClusterInstallBaseline(ctx context.Context, arg SetClusterInstallBaselineParams) (SetClusterInstallBaselineRow, error)
+	SetClusterOwnership(ctx context.Context, arg SetClusterOwnershipParams) (SetClusterOwnershipRow, error)
+	// Unconditional status set. The pause/resume/abort handler endpoints
+	// use this because the operator's intent overrides whatever the
+	// orchestrator was about to do — the orchestrator re-checks status
+	// on every tick and reconciles.
+	SetFleetOperationStatus(ctx context.Context, arg SetFleetOperationStatusParams) (FleetOperation, error)
+	// Explicit ::text casts on status keep pgx happy. Without them pgx infers
+	// two different types for the same parameter (one for SET status, one
+	// inside the CASE WHEN literal IN list) and rejects the query with
+	// SQLSTATE 42P08 ("inconsistent types deduced for parameter").
+	SetKubectlSessionStatus(ctx context.Context, arg SetKubectlSessionStatusParams) error
+	// Sprint 074. UPDATE-only (NOT upsert) — the singleton row is seeded by
+	// migration 001 and must always exist. Pass pgtype.UUID{} (Valid:false)
+	// to clear the auto-attach default; pass a valid UUID to set it. The
+	// handler validates that the UUID points to an existing template row
+	// before calling this — we don't re-validate here because pg's FK does
+	// the second-line check (a stale UUID raises foreign_key_violation,
+	// which the handler translates into a 400).
+	SetPlatformDefaultClusterTemplate(ctx context.Context, defaultClusterTemplateID pgtype.UUID) (PlatformConfiguration, error)
+	SetProjectDefaultVaultConnection(ctx context.Context, arg SetProjectDefaultVaultConnectionParams) error
+	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
+	// Stamped on a hard sync failure (clone error, walk error, etc).
+	StampGitOpsSourceError(ctx context.Context, arg StampGitOpsSourceErrorParams) error
+	// Called by the sync worker after every successful tick. Clearing
+	// last_error on success is intentional — partial failures during a tick
+	// leave last_error stamped via StampGitOpsSourceError.
+	StampGitOpsSourceSync(ctx context.Context, arg StampGitOpsSourceSyncParams) error
+	// Cluster tombstone — the final phase of the reconciler. We never hard-delete
+	// the cluster row; setting decommissioned_at preserves the id for audit_archive
+	// referential integrity and lets the UI render historical references.
 	TombstoneCluster(ctx context.Context, id uuid.UUID) error
+	// Sets status='tombstoned' + tombstoned_at=now. The reaper later picks
+	// the row up via ListExpiredTombstones.
+	TombstoneGitOpsRegisteredCluster(ctx context.Context, arg TombstoneGitOpsRegisteredClusterParams) error
+	// For the fleet rollup at /dashboard/security/. Sums critical+high per
+	// cluster_id and returns the worst N.
+	TopClustersByVulnerability(ctx context.Context, limit int32) ([]TopClustersByVulnerabilityRow, error)
+	// Ordered by critical desc, high desc — the idx_ivr_cluster_severity
+	// index covers this without an explicit sort.
+	TopVulnerableImages(ctx context.Context, arg TopVulnerableImagesParams) ([]ImageVulnerabilityReport, error)
+	TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
+	TouchKubectlSessionInput(ctx context.Context, id uuid.UUID) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
+	// Best-effort timestamp update after a successful verify. Audit + the
+	// /status endpoint surface this so users can spot "I never logged in
+	// yesterday" anomalies.
+	TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLastUsedParams) error
+	UnassignClusterGroup(ctx context.Context, id uuid.UUID) error
 	UnlockUser(ctx context.Context, id uuid.UUID) error
-	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 	// Best-effort stamp written from the auth middleware on every successful
 	// API-token request. The handler ignores write errors — this column is
 	// informational (operator UI / forensic review) and must NEVER cause a
 	// 5xx on the request path.
 	UpdateAPITokenLastSeenIP(ctx context.Context, arg UpdateAPITokenLastSeenIPParams) error
+	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg UpdateAgentConnectionStatusParams) error
 	UpdateAlertEventStatus(ctx context.Context, arg UpdateAlertEventStatusParams) error
 	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (AlertRule, error)
+	// Stamps the per-tick outcome — provider, sync_status, last_error,
+	// effective_cidrs snapshot, last_reconciled_at. Called by the reconciler.
+	UpdateApiserverAllowlistReconcileState(ctx context.Context, arg UpdateApiserverAllowlistReconcileStateParams) error
 	UpdateArgoCDApplication(ctx context.Context, arg UpdateArgoCDApplicationParams) (ArgocdApplication, error)
 	UpdateArgoCDInstance(ctx context.Context, arg UpdateArgoCDInstanceParams) (ArgocdInstance, error)
 	UpdateArgoCDInstanceHealth(ctx context.Context, arg UpdateArgoCDInstanceHealthParams) error
@@ -557,27 +1441,49 @@ type Querier interface {
 	UpdateBackupSchedule(ctx context.Context, arg UpdateBackupScheduleParams) (BackupSchedule, error)
 	UpdateBackupScheduleLastBackup(ctx context.Context, arg UpdateBackupScheduleLastBackupParams) error
 	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
-	UpdateBackupStatus(ctx context.Context, arg UpdateBackupStatusParams) error
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
+	UpdateCloudCredential(ctx context.Context, arg UpdateCloudCredentialParams) (CloudCredential, error)
 	UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error)
 	UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error)
+	UpdateClusterGroup(ctx context.Context, arg UpdateClusterGroupParams) (ClusterGroup, error)
 	UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error
+	UpdateClusterRegistrationPhase(ctx context.Context, arg UpdateClusterRegistrationPhaseParams) (UpdateClusterRegistrationPhaseRow, error)
+	UpdateClusterRegistrationStep(ctx context.Context, arg UpdateClusterRegistrationStepParams) (ClusterRegistrationStep, error)
+	UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClusterRegistryConfigParams) (ClusterRegistryConfig, error)
 	UpdateClusterRole(ctx context.Context, arg UpdateClusterRoleParams) (ClusterRole, error)
-	UpdateClusterSecurityPolicy(ctx context.Context, arg UpdateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error)
 	UpdateClusterSecurityPolicyApplied(ctx context.Context, id uuid.UUID) error
-	UpdateClusterSecurityPolicyFailed(ctx context.Context, arg UpdateClusterSecurityPolicyFailedParams) error
+	UpdateClusterSnapshotSchedule(ctx context.Context, arg UpdateClusterSnapshotScheduleParams) (ClusterSnapshotSchedule, error)
+	// Guarded: never overwrite a cluster that has already been tombstoned.
+	// The decommission reconciler is the sole writer for decommissioned
+	// clusters; the health-check + metrics sweepers can race against it
+	// and would otherwise flip 'decommissioned' back to 'disconnected' or
+	// 'active', producing the half-deleted "ghost" rows observed on .247.
 	UpdateClusterStatus(ctx context.Context, arg UpdateClusterStatusParams) error
-	UpdateClusterTool(ctx context.Context, arg UpdateClusterToolParams) (ClusterTool, error)
+	// The handler always passes the full body; we don't try to do partial
+	// merges in SQL — JSONB merge semantics are surprising enough that we'd
+	// rather keep them in Go where the validator lives.
+	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
+	UpdateDashboardWidget(ctx context.Context, arg UpdateDashboardWidgetParams) (DashboardWidget, error)
 	UpdateDexConnector(ctx context.Context, arg UpdateDexConnectorParams) (DexConnector, error)
+	// Bulk counter refresh. The orchestrator recomputes the aggregate
+	// counts from fleet_operation_targets when it observes a target
+	// transition, then writes them back here so the read endpoints
+	// don't have to GROUP BY.
+	UpdateFleetOperationCounters(ctx context.Context, arg UpdateFleetOperationCountersParams) (FleetOperation, error)
+	UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSourceParams) (GitopsRegistrationSource, error)
 	UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRoleParams) (GlobalRole, error)
-	UpdateHelmChart(ctx context.Context, arg UpdateHelmChartParams) (HelmChart, error)
 	UpdateHelmRepository(ctx context.Context, arg UpdateHelmRepositoryParams) (HelmRepository, error)
 	UpdateHelmRepositoryLastSynced(ctx context.Context, id uuid.UUID) error
 	UpdateInstalledChartStatus(ctx context.Context, arg UpdateInstalledChartStatusParams) error
 	UpdateInstalledChartValues(ctx context.Context, arg UpdateInstalledChartValuesParams) (InstalledChart, error)
 	UpdateLoggingOutput(ctx context.Context, arg UpdateLoggingOutputParams) (LoggingOutput, error)
 	UpdateLoggingPipeline(ctx context.Context, arg UpdateLoggingPipelineParams) (LoggingPipeline, error)
+	UpdateMaintenanceWindow(ctx context.Context, arg UpdateMaintenanceWindowParams) (MaintenanceWindow, error)
+	// Builtin rows are not edited via this path — the handler refuses with a
+	// 403 before calling Update. The query still works on any row so an
+	// operator-script with direct DB access can repair a broken builtin.
+	UpdateNetworkPolicyTemplate(ctx context.Context, arg UpdateNetworkPolicyTemplateParams) (NetworkPolicyTemplate, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdatePodSecurityTemplate(ctx context.Context, arg UpdatePodSecurityTemplateParams) (PodSecurityTemplate, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
@@ -587,13 +1493,15 @@ type Querier interface {
 	// list (which would cause an unnecessary reconcile cascade).
 	UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPolicyParams) (Project, error)
 	UpdateProjectRole(ctx context.Context, arg UpdateProjectRoleParams) (ProjectRole, error)
+	UpdatePrometheusDatasource(ctx context.Context, arg UpdatePrometheusDatasourceParams) (PrometheusDatasource, error)
 	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
 	UpdateRestoreOperationFailed(ctx context.Context, arg UpdateRestoreOperationFailedParams) error
 	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
-	UpdateRestoreVeleroIdentity(ctx context.Context, arg UpdateRestoreVeleroIdentityParams) error
+	// Full replacement update (PUT semantics). The handler preserves the
+	// existing auth_encrypted when the admin didn't re-supply it (sentinel
+	// pattern, analogous to webhook_subscriptions.secret_encrypted).
+	UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error)
 	UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfigurationParams) (SsoConfiguration, error)
-	UpdateSecurityScanCompleted(ctx context.Context, arg UpdateSecurityScanCompletedParams) error
-	UpdateSecurityScanFailed(ctx context.Context, id uuid.UUID) error
 	// Phase B5: failure path that preserves the operator/agent message so users
 	// can see *why* an ingest timed out, instead of a blank "failed" badge.
 	UpdateSecurityScanFailedWithMessage(ctx context.Context, arg UpdateSecurityScanFailedWithMessageParams) error
@@ -601,13 +1509,23 @@ type Querier interface {
 	// statement so the row reaches its terminal state atomically and the UI never
 	// sees a half-populated scan.
 	UpdateSecurityScanReport(ctx context.Context, arg UpdateSecurityScanReportParams) error
-	UpdateToolEnabled(ctx context.Context, arg UpdateToolEnabledParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	// Convenience alias used by the login flow when an inherited Django
 	// PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
+	UpdateVaultConnection(ctx context.Context, arg UpdateVaultConnectionParams) (VaultConnection, error)
+	UpdateVaultConnectionHealth(ctx context.Context, arg UpdateVaultConnectionHealthParams) error
+	// Full replacement update (PUT semantics). Caller computes the merged
+	// view and passes the final values; the handler is responsible for
+	// preserving the existing secret when the admin didn't re-supply it
+	// (analogous to smtp_settings password sentinel).
+	UpdateWebhookSubscription(ctx context.Context, arg UpdateWebhookSubscriptionParams) (WebhookSubscription, error)
+	UpsertAnomalyBaseline(ctx context.Context, arg UpsertAnomalyBaselineParams) (AnomalyBaseline, error)
+	UpsertApiserverAllowlist(ctx context.Context, arg UpsertApiserverAllowlistParams) (ApiserverAllowlist, error)
+	UpsertArgoCDClusterProxyToken(ctx context.Context, arg UpsertArgoCDClusterProxyTokenParams) (ArgocdClusterProxyToken, error)
+	UpsertCloudCredentialMaterialization(ctx context.Context, arg UpsertCloudCredentialMaterializationParams) (CloudCredentialMaterialization, error)
 	UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error)
 	// Match metav1.Condition semantics: when status flips, bump
 	// last_transition_time; on every probe, bump last_probe_time and
@@ -615,164 +1533,57 @@ type Querier interface {
 	UpsertClusterCondition(ctx context.Context, arg UpsertClusterConditionParams) (ClusterCondition, error)
 	UpsertClusterHealthStatus(ctx context.Context, arg UpsertClusterHealthStatusParams) (ClusterHealthStatus, error)
 	UpsertClusterMonitoringConfig(ctx context.Context, arg UpsertClusterMonitoringConfigParams) (ClusterMonitoringConfig, error)
+	// Registration policy table (per-cluster). The apply worker stamps this
+	// when spec.registration_policy is set; the existing token cleanup task
+	// can read token_rotation_days when rotating.
+	UpsertClusterRegistrationPolicy(ctx context.Context, arg UpsertClusterRegistrationPolicyParams) (ClusterRegistrationPolicy, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error)
+	// Single statement to either INSERT a fresh row OR overwrite the
+	// existing one on reapply / template change. We reset status to
+	// 'pending' on every call so the apply worker re-runs convergence.
+	UpsertClusterTemplateApplication(ctx context.Context, arg UpsertClusterTemplateApplicationParams) (ClusterTemplateApplication, error)
 	UpsertDefaultControlPlanePolicy(ctx context.Context, arg UpsertDefaultControlPlanePolicyParams) (ControlPlanePolicy, error)
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
 	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
+	// The sync worker calls this after a YAML's contents have been applied
+	// so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT
+	// promotes any tombstoned row back to active — that's the
+	// "YAML reappears" path under on_delete='tombstone'.
+	UpsertGitOpsRegisteredCluster(ctx context.Context, arg UpsertGitOpsRegisteredClusterParams) (GitopsRegisteredCluster, error)
+	// Sprint 062 — image vulnerability report + per-CVE row CRUD.
+	//
+	// Generated sqlc output is the canonical Go API for this surface.
+	// Idempotent on the upstream (cluster_id, report_name) key. Updates
+	// aggregate counts + scanned_at on every re-ingest so the rollups stay
+	// live without an extra SELECT.
+	UpsertImageVulnerabilityReport(ctx context.Context, arg UpsertImageVulnerabilityReportParams) (ImageVulnerabilityReport, error)
+	UpsertMirroredGatewayClass(ctx context.Context, arg UpsertMirroredGatewayClassParams) (MirroredGatewayClass, error)
+	UpsertMirroredIngressClass(ctx context.Context, arg UpsertMirroredIngressClassParams) (MirroredIngressClass, error)
+	UpsertMirroredLimitRange(ctx context.Context, arg UpsertMirroredLimitRangeParams) (MirroredLimitRange, error)
+	UpsertMirroredNetworkPolicy(ctx context.Context, arg UpsertMirroredNetworkPolicyParams) (MirroredNetworkPolicy, error)
+	UpsertMirroredResourceQuota(ctx context.Context, arg UpsertMirroredResourceQuotaParams) (MirroredResourceQuota, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfiguration, error)
-	// Sprint 074 — set/clear the auto-attach default cluster template.
-	SetPlatformDefaultClusterTemplate(ctx context.Context, defaultClusterTemplateID pgtype.UUID) (PlatformConfiguration, error)
 	UpsertPlatformSetting(ctx context.Context, arg UpsertPlatformSettingParams) (PlatformSetting, error)
 	UpsertProjectNamespace(ctx context.Context, arg UpsertProjectNamespaceParams) (ProjectNamespace, error)
-	// Group-claim sync (migration 042).
-	CountGroupMappings(ctx context.Context) (int64, error)
-	CountGroupSyncClusterBindings(ctx context.Context) (int64, error)
-	CountGroupSyncGlobalBindings(ctx context.Context) (int64, error)
-	CountGroupSyncProjectBindings(ctx context.Context) (int64, error)
-	CreateGroupMapping(ctx context.Context, arg CreateGroupMappingParams) (IdentityGroupMapping, error)
-	CreateGroupSyncClusterBinding(ctx context.Context, arg CreateGroupSyncClusterBindingParams) (ClusterRoleBinding, error)
-	CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGroupSyncGlobalBindingParams) (GlobalRoleBinding, error)
-	CreateGroupSyncProjectBinding(ctx context.Context, arg CreateGroupSyncProjectBindingParams) (ProjectRoleBinding, error)
-	DeleteGroupMapping(ctx context.Context, id uuid.UUID) error
-	DeleteGroupSyncClusterBinding(ctx context.Context, id uuid.UUID) error
-	DeleteGroupSyncGlobalBinding(ctx context.Context, id uuid.UUID) error
-	DeleteGroupSyncProjectBinding(ctx context.Context, id uuid.UUID) error
-	GetGroupMappingByID(ctx context.Context, id uuid.UUID) (IdentityGroupMapping, error)
-	GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (UserIdpGroup, error)
-	ListGroupMappings(ctx context.Context, arg ListGroupMappingsParams) ([]IdentityGroupMapping, error)
-	ListGroupMappingsForConnector(ctx context.Context, connectorID pgtype.UUID) ([]IdentityGroupMapping, error)
-	ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error)
-	ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
-	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
-	UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error)
-	// TOTP / 2FA (migration 043).
-	ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCodeParams) (int64, error)
-	CountTOTPEnrollments(ctx context.Context) (int64, error)
-	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
-	DeleteRecoveryCodesByUser(ctx context.Context, userID uuid.UUID) error
-	DeleteUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) error
-	GetUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) (UserTotpEnrollment, error)
-	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
-	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]UserTotpRecoveryCode, error)
-	TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLastUsedParams) error
-	UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error)
-	// SMTP + email-message + password-reset (migration 047).
-	ConsumePasswordResetToken(ctx context.Context, arg ConsumePasswordResetTokenParams) (int64, error)
-	CountEmailMessages(ctx context.Context) (int64, error)
-	CountEmailsByStatus(ctx context.Context, status string) (int64, error)
-	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
-	DeleteEmailsOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
-	DeleteExpiredPasswordResetTokens(ctx context.Context, cutoff time.Time) (int64, error)
-	DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error
-	GetEmailMessageByID(ctx context.Context, id uuid.UUID) (EmailMessage, error)
-	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
-	GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSettings, error)
-	InsertEmailMessage(ctx context.Context, arg InsertEmailMessageParams) (EmailMessage, error)
-	ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error)
-	ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMessage, error)
-	MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) error
-	MarkEmailSent(ctx context.Context, arg MarkEmailSentParams) error
-	MarkEmailSkipped(ctx context.Context, arg MarkEmailSkippedParams) error
-	UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSettings, error)
-	// Outbound webhook subscriptions + delivery history (migration 048).
-	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
-	CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error)
-	DeleteWebhookDeliveriesOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
-	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
-	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
-	GetWebhookSubscription(ctx context.Context, id uuid.UUID) (WebhookSubscription, error)
-	GetWebhookSubscriptionByName(ctx context.Context, name string) (WebhookSubscription, error)
-	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
-	ListEnabledWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
-	ListPendingWebhookDeliveries(ctx context.Context, arg ListPendingWebhookDeliveriesParams) ([]WebhookDelivery, error)
-	ListWebhookDeliveriesBySubscription(ctx context.Context, arg ListWebhookDeliveriesBySubscriptionParams) ([]WebhookDelivery, error)
-	ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
-	MarkWebhookDeliveryDelivered(ctx context.Context, arg MarkWebhookDeliveryDeliveredParams) error
-	MarkWebhookDeliveryDropped(ctx context.Context, arg MarkWebhookDeliveryDroppedParams) error
-	MarkWebhookDeliveryFailed(ctx context.Context, arg MarkWebhookDeliveryFailedParams) error
-	RetryWebhookDelivery(ctx context.Context, arg RetryWebhookDeliveryParams) error
-	UpdateWebhookSubscription(ctx context.Context, arg UpdateWebhookSubscriptionParams) (WebhookSubscription, error)
-	// Cluster templates (migration 049).
-	CountClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) (int64, error)
-	CountClusterTemplates(ctx context.Context) (int64, error)
-	CreateClusterTemplate(ctx context.Context, arg CreateClusterTemplateParams) (ClusterTemplate, error)
-	DeleteClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) error
-	DeleteClusterTemplate(ctx context.Context, id uuid.UUID) error
-	DeleteClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) error
-	GetClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) (ClusterRegistrationPolicy, error)
-	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (ClusterTemplateApplication, error)
-	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (ClusterTemplate, error)
-	GetClusterTemplateByName(ctx context.Context, name string) (ClusterTemplate, error)
-	ListClusterTemplateApplicationsByStatus(ctx context.Context, arg ListClusterTemplateApplicationsByStatusParams) ([]ClusterTemplateApplication, error)
-	ListClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) ([]ClusterTemplateApplication, error)
-	ListClusterTemplates(ctx context.Context, arg ListClusterTemplatesParams) ([]ClusterTemplate, error)
-	MarkClusterTemplateApplicationStatus(ctx context.Context, arg MarkClusterTemplateApplicationStatusParams) (ClusterTemplateApplication, error)
-	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
-	UpsertClusterRegistrationPolicy(ctx context.Context, arg UpsertClusterRegistrationPolicyParams) (ClusterRegistrationPolicy, error)
-	UpsertClusterTemplateApplication(ctx context.Context, arg UpsertClusterTemplateApplicationParams) (ClusterTemplateApplication, error)
-	// Tenant quotas (migration 051).
-	ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error)
-	GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, error)
 	UpsertQuotaPlan(ctx context.Context, arg UpsertQuotaPlanParams) (QuotaPlan, error)
-	DeleteQuotaPlan(ctx context.Context, name string) error
-	CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
-	CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
-	GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error)
-	GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error)
-	SetProjectQuotaPlan(ctx context.Context, arg SetProjectQuotaPlanParams) (Project, error)
-	SetUserQuotaPlan(ctx context.Context, arg SetUserQuotaPlanParams) (User, error)
-	CountClustersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
-	CountNamespacesInProject(ctx context.Context, projectID uuid.UUID) (int32, error)
-	CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error)
-	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	CountTotalClusters(ctx context.Context) (int64, error)
-	CountTotalActiveUsers(ctx context.Context) (int64, error)
-	ListProjectQuotaSnapshots(ctx context.Context, arg ListProjectQuotaSnapshotsParams) ([]ProjectQuotaSnapshotRow, error)
-	ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]UserQuotaSnapshotRow, error)
-	// SIEM forwarders + queue + status (migration 055).
-	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
-	CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForwarderParams) (SiemForwarder, error)
-	DeleteSIEMForwarder(ctx context.Context, id uuid.UUID) error
-	DeleteSIEMQueueByIDs(ctx context.Context, ids []int64) error
-	DeleteSIEMQueueOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
-	EnqueueSIEMEvent(ctx context.Context, arg EnqueueSIEMEventParams) (SiemForwardQueue, error)
-	GetSIEMForwarder(ctx context.Context, id uuid.UUID) (SiemForwarder, error)
-	GetSIEMForwarderByName(ctx context.Context, name string) (SiemForwarder, error)
-	GetSIEMForwarderStatus(ctx context.Context, forwarderID uuid.UUID) (SiemForwarderStatus, error)
-	IncrementSIEMQueueAttempts(ctx context.Context, ids []int64) error
-	ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
-	ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQueueParams) ([]int64, error)
-	ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
-	ListSIEMQueueBatch(ctx context.Context, arg ListSIEMQueueBatchParams) ([]SiemForwardQueue, error)
-	ListSIEMQueueExhausted(ctx context.Context, arg ListSIEMQueueExhaustedParams) ([]SiemForwardQueue, error)
-	UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error)
+	// Called by the dispatcher after each tick. The composite parameters
+	// carry the deltas the dispatcher computed for this tick; the existing
+	// row is preserved on conflict so the cumulative totals accumulate.
 	UpsertSIEMForwarderStatus(ctx context.Context, arg UpsertSIEMForwarderStatusParams) error
-	// Fleet operations (migration 056).
-	CreateFleetOperation(ctx context.Context, arg CreateFleetOperationParams) (FleetOperation, error)
-	GetFleetOperation(ctx context.Context, id uuid.UUID) (FleetOperation, error)
-	ListFleetOperations(ctx context.Context, arg ListFleetOperationsParams) ([]FleetOperation, error)
-	CountFleetOperations(ctx context.Context, status pgtype.Text) (int64, error)
-	ListPendingFleetOperations(ctx context.Context, queryLimit int32) ([]FleetOperation, error)
-	MarkFleetOperationTransition(ctx context.Context, arg MarkFleetOperationTransitionParams) (FleetOperation, error)
-	UpdateFleetOperationCounters(ctx context.Context, arg UpdateFleetOperationCountersParams) (FleetOperation, error)
-	SetFleetOperationStatus(ctx context.Context, arg SetFleetOperationStatusParams) (FleetOperation, error)
-	DeleteFleetOperation(ctx context.Context, id uuid.UUID) error
-	CreateFleetOperationTarget(ctx context.Context, arg CreateFleetOperationTargetParams) (FleetOperationTarget, error)
-	ListFleetOperationTargets(ctx context.Context, arg ListFleetOperationTargetsParams) ([]FleetOperationTarget, error)
-	CountFleetOperationTargets(ctx context.Context, operationID uuid.UUID) (int64, error)
-	ListPendingTargetsForOperation(ctx context.Context, arg ListPendingTargetsForOperationParams) ([]FleetOperationTarget, error)
-	ListRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) ([]FleetOperationTarget, error)
-	CountRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
-	CountFailedTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
-	CountTerminalTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
-	CountFleetOperationTargetsByStatus(ctx context.Context, operationID uuid.UUID) ([]CountFleetOperationTargetsByStatusRow, error)
-	MarkFleetTargetDispatched(ctx context.Context, arg MarkFleetTargetDispatchedParams) (FleetOperationTarget, error)
-	MarkFleetTargetCompleted(ctx context.Context, id uuid.UUID) (FleetOperationTarget, error)
-	MarkFleetTargetFailed(ctx context.Context, arg MarkFleetTargetFailedParams) (FleetOperationTarget, error)
-	MarkFleetTargetSkipped(ctx context.Context, arg MarkFleetTargetSkippedParams) (FleetOperationTarget, error)
-	RequeueFailedTargets(ctx context.Context, operationID uuid.UUID) error
-	ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error)
+	// Singleton write. The handler always passes the same well-known id;
+	// ON CONFLICT lets the first PUT create the row and every subsequent
+	// one update it without a separate INSERT/UPDATE branch.
+	UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSetting, error)
+	// Replace the user's group snapshot on every login. The synced_at
+	// timestamp drives the audit + "stale-claims" detection in the
+	// admin resync endpoint.
+	UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error)
+	// Persists a freshly-confirmed enrollment. Caller passes the Fernet-
+	// encrypted secret in $2 — the plaintext must NEVER reach this query.
+	// ON CONFLICT lets the user re-enroll (lost device, new authenticator)
+	// without first calling DeleteUserTOTPEnrollment. confirmed_at is
+	// replaced on the conflict path so the audit detail is accurate.
+	UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error)
 }
 
 var _ Querier = (*Queries)(nil)

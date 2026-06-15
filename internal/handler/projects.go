@@ -75,11 +75,12 @@ type ProjectQuerier interface {
 // set to nil — server boot code wires them in a follow-up; today's existing
 // tests that hand the handler only `queries` continue to pass.
 type ProjectHandler struct {
-	queries   ProjectQuerier
-	queue     *asynq.Client
-	requester K8sRequester
-	log       *slog.Logger
-	encryptor *auth.Encryptor
+	queries    ProjectQuerier
+	queue      *asynq.Client
+	taskOutbox tasks.TaskOutboxWriter
+	requester  K8sRequester
+	log        *slog.Logger
+	encryptor  *auth.Encryptor
 
 	reconcileOnce sync.Once
 	runTask       func(context.Context, *asynq.Task) error
@@ -115,6 +116,15 @@ func NewProjectHandler(queries ProjectQuerier) *ProjectHandler {
 // project:reconcile:remove tasks. Optional; without it AddNamespace /
 // RemoveNamespace still update the DB but no enforcement happens.
 func (h *ProjectHandler) SetTaskQueue(queue *asynq.Client) { h.queue = queue }
+
+// SetTaskOutbox wires durable project reconcile delivery for fallback paths
+// that do not have a live tunnel requester.
+func (h *ProjectHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
+	if h == nil {
+		return
+	}
+	h.taskOutbox = q
+}
 
 func (h *ProjectHandler) SetEncryptor(e *auth.Encryptor) {
 	if h == nil {
@@ -1243,11 +1253,14 @@ func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, cluste
 		h.dispatchProjectTask(ctx, task)
 		return
 	}
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+	task = asynq.NewTask(task.Type(), payload)
+	if h.enqueueProjectTaskOutbox(ctx, task, projectID, clusterID, namespace, "apply") {
+		return
+	}
 	if h.queue == nil {
 		return
 	}
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
-	task = asynq.NewTask(task.Type(), payload)
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project reconcile task", "error", err)
 	}
@@ -1272,6 +1285,11 @@ func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterI
 		h.dispatchProjectTask(ctx, task)
 		return
 	}
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+	task = asynq.NewTask(task.Type(), payload)
+	if h.enqueueProjectTaskOutbox(ctx, task, projectID, clusterID, namespace, "remove") {
+		return
+	}
 	if h.queue == nil {
 		// Without an asynq client wired we still attempt the synchronous DB
 		// half so the row goes away and the UI reflects the removal. The
@@ -1283,11 +1301,26 @@ func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterI
 		})
 		return
 	}
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
-	task = asynq.NewTask(task.Type(), payload)
 	if _, err := h.queue.Enqueue(task); err != nil {
 		h.logger().Warn("enqueue project cleanup task", "error", err)
 	}
+}
+
+func (h *ProjectHandler) enqueueProjectTaskOutbox(ctx context.Context, task *asynq.Task, projectID, clusterID uuid.UUID, namespace, op string) bool {
+	if h == nil || h.taskOutbox == nil || task == nil {
+		return false
+	}
+	dedupe := fmt.Sprintf("project_reconcile:%s:%s:%s:%s", op, projectID.String(), clusterID.String(), namespace)
+	_, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
+		DedupeKey:           dedupe,
+		QueueName:           "default",
+		MaxDeliveryAttempts: 20,
+	})
+	if err != nil {
+		h.logger().Warn("enqueue project reconcile task_outbox", "op", op, "error", err)
+		return false
+	}
+	return true
 }
 
 func (h *ProjectHandler) dispatchProjectTask(ctx context.Context, task *asynq.Task) {

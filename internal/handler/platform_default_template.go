@@ -4,7 +4,8 @@
 // Closes the "register a cluster, get nothing" gap. Sprint 074
 // introduces a single platform-wide default cluster_template
 // (typically the seeded "Platform baseline" — trivy-operator,
-// kube-state-metrics, node-exporter, fluent-bit, cert-manager) that the
+// kube-state-metrics, node-exporter, fluent-bit, ingress-nginx, cert-manager,
+// gatekeeper) that the
 // cluster Create handler auto-attaches to every newly-registered
 // cluster. This handler is the operator-facing surface for managing
 // that default and for back-filling existing clusters.

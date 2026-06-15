@@ -204,6 +204,10 @@ func StepLabel(stepName string) string {
 		return "Registering cluster in ArgoCD"
 	case "argocd_registered":
 		return "Cluster registered in ArgoCD"
+	case "argocd_registration_repaired":
+		return "ArgoCD registration repaired"
+	case "argocd_registration_repair_blocked":
+		return "ArgoCD registration repair blocked"
 	case "argocd_registration_failed":
 		return "ArgoCD registration failed"
 	case "baseline_appsets_matched":

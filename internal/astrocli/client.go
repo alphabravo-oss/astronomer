@@ -110,7 +110,9 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, url, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
@@ -152,7 +154,9 @@ func (c *Client) GetRaw(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return nil, &APIError{StatusCode: resp.StatusCode, RawBody: string(body)}

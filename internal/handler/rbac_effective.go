@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -15,6 +17,7 @@ import (
 
 type effectivePermissionResponse struct {
 	Subject     effectivePermissionSubject `json:"subject"`
+	Context     effectivePermissionContext `json:"context"`
 	Bindings    []effectiveBinding         `json:"bindings"`
 	Permissions []effectivePermissionGrant `json:"permissions"`
 }
@@ -22,6 +25,14 @@ type effectivePermissionResponse struct {
 type effectivePermissionSubject struct {
 	UserID string `json:"user_id"`
 	Self   bool   `json:"self"`
+}
+
+type effectivePermissionContext struct {
+	ClusterID                        string   `json:"cluster_id,omitempty"`
+	ProjectID                        string   `json:"project_id,omitempty"`
+	Namespace                        string   `json:"namespace,omitempty"`
+	NamespaceScopedBindingsSupported bool     `json:"namespace_scoped_bindings_supported"`
+	Warnings                         []string `json:"warnings,omitempty"`
 }
 
 type effectiveBinding struct {
@@ -32,13 +43,15 @@ type effectiveBinding struct {
 	Group     string      `json:"group,omitempty"`
 	ClusterID string      `json:"cluster_id,omitempty"`
 	ProjectID string      `json:"project_id,omitempty"`
+	Namespace string      `json:"namespace,omitempty"`
 	Rules     []rbac.Rule `json:"rules"`
 }
 
 type effectivePermissionGrant struct {
-	Resource string                      `json:"resource"`
-	Verb     string                      `json:"verb"`
-	Sources  []effectivePermissionSource `json:"sources"`
+	Resource         string                      `json:"resource"`
+	Verb             string                      `json:"verb"`
+	AppliesToContext bool                        `json:"applies_to_context"`
+	Sources          []effectivePermissionSource `json:"sources"`
 }
 
 type effectivePermissionSource struct {
@@ -48,6 +61,7 @@ type effectivePermissionSource struct {
 	RoleName  string `json:"role_name,omitempty"`
 	ClusterID string `json:"cluster_id,omitempty"`
 	ProjectID string `json:"project_id,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type permissionPreviewRequest struct {
@@ -143,6 +157,11 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 		RespondRequestError(w, r, http.StatusServiceUnavailable, "rbac_unavailable", "RBAC binding lookup is not configured")
 		return
 	}
+	selectedContext, err := effectivePermissionContextFromRequest(r)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_context", err.Error())
+		return
+	}
 	bindings, err := h.bindings.GetUserBindings(r.Context(), userID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load user bindings")
@@ -150,6 +169,7 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 	}
 	response := effectivePermissionResponse{
 		Subject:  effectivePermissionSubject{UserID: userID, Self: self},
+		Context:  selectedContext,
 		Bindings: make([]effectiveBinding, 0, len(bindings)),
 	}
 	for _, binding := range bindings {
@@ -161,6 +181,7 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 			Group:     binding.Group,
 			ClusterID: binding.ClusterID,
 			ProjectID: binding.ProjectID,
+			Namespace: binding.Namespace,
 			Rules:     binding.RoleRules,
 		})
 		source := effectivePermissionSource{
@@ -170,11 +191,41 @@ func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http
 			RoleName:  binding.RoleName,
 			ClusterID: binding.ClusterID,
 			ProjectID: binding.ProjectID,
+			Namespace: binding.Namespace,
 		}
 		response.Permissions = mergeGrants(response.Permissions, grantsFromRules(binding.RoleRules, source))
 	}
+	for i := range response.Permissions {
+		response.Permissions[i].AppliesToContext = grantAppliesToContext(response.Permissions[i], selectedContext)
+	}
 	sortEffectivePermissions(response.Permissions)
 	RespondJSON(w, http.StatusOK, response)
+}
+
+func effectivePermissionContextFromRequest(r *http.Request) (effectivePermissionContext, error) {
+	values := r.URL.Query()
+	out := effectivePermissionContext{
+		ClusterID: strings.TrimSpace(values.Get("cluster_id")),
+		ProjectID: strings.TrimSpace(values.Get("project_id")),
+		Namespace: strings.TrimSpace(values.Get("namespace")),
+	}
+	if out.ClusterID != "" {
+		if _, err := uuid.Parse(out.ClusterID); err != nil {
+			return out, errString("cluster_id must be a UUID")
+		}
+	}
+	if out.ProjectID != "" {
+		if _, err := uuid.Parse(out.ProjectID); err != nil {
+			return out, errString("project_id must be a UUID")
+		}
+	}
+	if out.Namespace != "" {
+		if errs := k8svalidation.IsDNS1123Label(out.Namespace); len(errs) > 0 {
+			return out, errString("namespace must be a valid Kubernetes namespace")
+		}
+		out.Warnings = append(out.Warnings, "namespace context is enforced for namespace-scoped bindings when present; binding storage and assignment UI are still pending")
+	}
+	return out, nil
 }
 
 func (h *RBACHandler) previewRules(ctx context.Context, req permissionPreviewRequest, scope string) ([]rbac.Rule, string, error) {
@@ -252,9 +303,10 @@ func grantsFromRules(rules []rbac.Rule, source effectivePermissionSource) []effe
 	for _, rule := range rules {
 		for _, verb := range rule.Verbs {
 			grants = append(grants, effectivePermissionGrant{
-				Resource: rule.Resource,
-				Verb:     verb,
-				Sources:  []effectivePermissionSource{source},
+				Resource:         rule.Resource,
+				Verb:             verb,
+				AppliesToContext: true,
+				Sources:          []effectivePermissionSource{source},
 			})
 		}
 	}
@@ -277,6 +329,39 @@ func mergeGrants(existing, incoming []effectivePermissionGrant) []effectivePermi
 		existing = append(existing, grant)
 	}
 	return existing
+}
+
+func grantAppliesToContext(grant effectivePermissionGrant, context effectivePermissionContext) bool {
+	if context.ClusterID == "" && context.ProjectID == "" {
+		return true
+	}
+	for _, source := range grant.Sources {
+		if sourceAppliesToContext(source, context) {
+			return true
+		}
+	}
+	return false
+}
+
+func sourceAppliesToContext(source effectivePermissionSource, context effectivePermissionContext) bool {
+	if source.Namespace != "" {
+		if context.Namespace == "" || source.Namespace != context.Namespace {
+			return false
+		}
+		if source.ClusterID == "" && source.ProjectID == "" {
+			return false
+		}
+	}
+	if source.ClusterID == "" && source.ProjectID == "" {
+		return true
+	}
+	if context.ClusterID != "" && source.ClusterID == context.ClusterID {
+		return true
+	}
+	if context.ProjectID != "" && source.ProjectID == context.ProjectID {
+		return true
+	}
+	return false
 }
 
 func sortEffectivePermissions(grants []effectivePermissionGrant) {

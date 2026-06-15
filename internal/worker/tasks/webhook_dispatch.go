@@ -121,7 +121,7 @@ func HandleWebhookDispatch(ctx context.Context, _ *asynq.Task) error {
 					_ = webhookDeps.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
 						ID:        row.ID,
 						Attempts:  row.Attempts + 1,
-						LastError: truncate("subscription load failed: "+err.Error(), 1024),
+						LastError: truncateDispatchLastError("subscription load failed: "+err.Error(), 1024),
 					})
 					webhook.RecordOutcome("dropped", 0)
 					continue
@@ -152,7 +152,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 		_ = webhookDeps.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
 			ID:        row.ID,
 			Attempts:  row.Attempts + 1,
-			LastError: truncate(err.Error(), 1024),
+			LastError: truncateDispatchLastError(err.Error(), 1024),
 		})
 		return
 	}
@@ -172,13 +172,6 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 	// Pull the max-retries budget off the live subscription row (cached
 	// in webhook.Subscription via the loader below).
 	maxRetries := 5
-	if sub.TimeoutSeconds == 0 {
-		// TimeoutSeconds zero means caller forgot to populate; defaults
-		// elsewhere already kick in. Use this branch as a defensive
-		// placeholder — we never actually read TimeoutSeconds here for
-		// the retry budget; the real source is the row sub.MaxRetries
-		// passed through the loader.
-	}
 	if sub.MaxRetries > 0 {
 		maxRetries = sub.MaxRetries
 	}
@@ -191,7 +184,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 			Attempts:       nextAttempts,
 			ResponseStatus: int32(outcome.Status),
 			ResponseBody:   outcome.ResponseBody,
-			LastError:      truncate(failureReason(outcome), 1024),
+			LastError:      truncateDispatchLastError(failureReason(outcome), 1024),
 		})
 		return
 	}
@@ -203,7 +196,7 @@ func dispatchOne(ctx context.Context, row sqlc.WebhookDelivery, sub webhook.Subs
 		Attempts:       nextAttempts,
 		ResponseStatus: int32(outcome.Status),
 		ResponseBody:   outcome.ResponseBody,
-		LastError:      truncate(failureReason(outcome), 1024),
+		LastError:      truncateDispatchLastError(failureReason(outcome), 1024),
 		NextAttemptAt:  pgtype.Timestamptz{Time: now.Add(backoff), Valid: true},
 	})
 }
@@ -285,9 +278,9 @@ func failureReason(outcome webhook.Outcome) string {
 	return fmt.Sprintf("HTTP %d", outcome.Status)
 }
 
-// truncate caps the string at n bytes so an absurdly verbose receiver
+// truncateDispatchLastError caps the string at n bytes so an absurdly verbose receiver
 // error doesn't blow up the last_error column.
-func truncate(s string, n int) string {
+func truncateDispatchLastError(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}

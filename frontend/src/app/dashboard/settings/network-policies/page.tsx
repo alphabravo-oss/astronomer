@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/network-policies — admin CRUD for network policy
  * templates (migration 068).
@@ -16,7 +17,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Save, Copy, Loader2, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   listNetworkPolicyTemplates,
@@ -49,16 +50,16 @@ function TemplateRow({
   onDelete: () => void;
 }) {
   return (
-    <tr className="border-b border-border last:border-0">
-      <td className="px-3 py-3 align-top">
+    <TableRow className="border-b border-border last:border-0">
+      <TableCell className="px-3 py-3 align-top">
         <div className="font-medium text-foreground">{tmpl.name}</div>
         <div className="text-xs text-muted-foreground font-mono">{tmpl.slug}</div>
-      </td>
-      <td className="px-3 py-3 align-top">
+      </TableCell>
+      <TableCell className="px-3 py-3 align-top">
         <KindBadge kind={tmpl.kind} />
-      </td>
-      <td className="px-3 py-3 align-top text-sm text-muted-foreground max-w-md">{tmpl.description}</td>
-      <td className="px-3 py-3 align-top">
+      </TableCell>
+      <TableCell className="px-3 py-3 align-top text-sm text-muted-foreground max-w-md">{tmpl.description}</TableCell>
+      <TableCell className="px-3 py-3 align-top">
         <span
           className={`text-xs px-2 py-0.5 rounded border font-medium ${
             tmpl.enabled
@@ -68,8 +69,8 @@ function TemplateRow({
         >
           {tmpl.enabled ? 'enabled' : 'disabled'}
         </span>
-      </td>
-      <td className="px-3 py-3 align-top text-right">
+      </TableCell>
+      <TableCell className="px-3 py-3 align-top text-right">
         <div className="flex items-center justify-end gap-1">
           <button
             type="button"
@@ -98,8 +99,8 @@ function TemplateRow({
             </>
           )}
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -119,7 +120,7 @@ function NetworkPoliciesPanel() {
       const items = await listNetworkPolicyTemplates();
       setTemplates(items);
     } catch (err: unknown) {
-      toast.error(`Failed to load templates: ${(err as Error).message}`);
+      toastApiError('Failed to load templates', err);
     } finally {
       setLoading(false);
     }
@@ -155,10 +156,10 @@ function NetworkPoliciesPanel() {
     if (!confirm(`Delete custom template "${tmpl.name}"?`)) return;
     try {
       await deleteNetworkPolicyTemplate(tmpl.id);
-      toast.success('Template deleted');
+      toastSuccess('Template deleted');
       await refresh();
     } catch (err: unknown) {
-      toast.error(`Delete failed: ${(err as Error).message}`);
+      toastApiError('Delete failed', err);
     }
   };
 
@@ -173,15 +174,15 @@ function NetworkPoliciesPanel() {
           spec_template: draft.spec_template,
           enabled: draft.enabled,
         });
-        toast.success('Template updated');
+        toastSuccess('Template updated');
       } else {
         await createNetworkPolicyTemplate(draft);
-        toast.success('Template created');
+        toastSuccess('Template created');
       }
       setDraft(null);
       await refresh();
     } catch (err: unknown) {
-      toast.error(`Save failed: ${(err as Error).message}`);
+      toastApiError('Save failed', err);
     } finally {
       setSaving(false);
     }
@@ -228,17 +229,17 @@ function NetworkPoliciesPanel() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted">
-              <tr className="text-left">
-                <th className="px-3 py-2 font-medium">Template</th>
-                <th className="px-3 py-2 font-medium">Kind</th>
-                <th className="px-3 py-2 font-medium">Description</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 text-right" />
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted">
+              <TableRow className="text-left">
+                <TableHead className="px-3 py-2 font-medium">Template</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Kind</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Description</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Status</TableHead>
+                <TableHead className="px-3 py-2 text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {templates.map((t) => (
                 <TemplateRow
                   key={t.id}
@@ -249,14 +250,14 @@ function NetworkPoliciesPanel() {
                 />
               ))}
               {templates.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={5} className="px-3 py-6 text-center text-sm text-muted-foreground">
                     No templates. Run migration 068 to seed the built-ins.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 

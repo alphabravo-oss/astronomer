@@ -253,15 +253,6 @@ func (q *Queries) DeletePodSecurityTemplate(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
-const deleteSecurityScanResult = `-- name: DeleteSecurityScanResult :exec
-DELETE FROM security_scan_results WHERE id = $1
-`
-
-func (q *Queries) DeleteSecurityScanResult(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSecurityScanResult, id)
-	return err
-}
-
 const getClusterSecurityPolicyByID = `-- name: GetClusterSecurityPolicyByID :one
 
 SELECT id, cluster_id, template_id, applied_at, sync_status, error_message, created_at, updated_at FROM cluster_security_policies WHERE id = $1
@@ -320,34 +311,6 @@ SELECT id, name, description, is_default, enforce_level, enforce_version, audit_
 // Pod Security Templates
 func (q *Queries) GetPodSecurityTemplateByID(ctx context.Context, id uuid.UUID) (PodSecurityTemplate, error) {
 	row := q.db.QueryRow(ctx, getPodSecurityTemplateByID, id)
-	var i PodSecurityTemplate
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Description,
-		&i.IsDefault,
-		&i.EnforceLevel,
-		&i.EnforceVersion,
-		&i.AuditLevel,
-		&i.AuditVersion,
-		&i.WarnLevel,
-		&i.WarnVersion,
-		&i.ExemptUsernames,
-		&i.ExemptRuntimeClasses,
-		&i.ExemptNamespaces,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getPodSecurityTemplateByName = `-- name: GetPodSecurityTemplateByName :one
-SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at FROM pod_security_templates WHERE name = $1
-`
-
-func (q *Queries) GetPodSecurityTemplateByName(ctx context.Context, name string) (PodSecurityTemplate, error) {
-	row := q.db.QueryRow(ctx, getPodSecurityTemplateByName, name)
 	var i PodSecurityTemplate
 	err := row.Scan(
 		&i.ID,
@@ -654,63 +617,12 @@ func (q *Queries) ListSecurityScanResults(ctx context.Context, arg ListSecurityS
 	return items, nil
 }
 
-const updateClusterSecurityPolicy = `-- name: UpdateClusterSecurityPolicy :one
-UPDATE cluster_security_policies SET
-    template_id = $2,
-    sync_status = $3,
-    error_message = $4
-WHERE id = $1
-RETURNING id, cluster_id, template_id, applied_at, sync_status, error_message, created_at, updated_at
-`
-
-type UpdateClusterSecurityPolicyParams struct {
-	ID           uuid.UUID `json:"id"`
-	TemplateID   uuid.UUID `json:"template_id"`
-	SyncStatus   string    `json:"sync_status"`
-	ErrorMessage string    `json:"error_message"`
-}
-
-func (q *Queries) UpdateClusterSecurityPolicy(ctx context.Context, arg UpdateClusterSecurityPolicyParams) (ClusterSecurityPolicy, error) {
-	row := q.db.QueryRow(ctx, updateClusterSecurityPolicy,
-		arg.ID,
-		arg.TemplateID,
-		arg.SyncStatus,
-		arg.ErrorMessage,
-	)
-	var i ClusterSecurityPolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ClusterID,
-		&i.TemplateID,
-		&i.AppliedAt,
-		&i.SyncStatus,
-		&i.ErrorMessage,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const updateClusterSecurityPolicyApplied = `-- name: UpdateClusterSecurityPolicyApplied :exec
 UPDATE cluster_security_policies SET applied_at = now(), sync_status = 'synced', error_message = '' WHERE id = $1
 `
 
 func (q *Queries) UpdateClusterSecurityPolicyApplied(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, updateClusterSecurityPolicyApplied, id)
-	return err
-}
-
-const updateClusterSecurityPolicyFailed = `-- name: UpdateClusterSecurityPolicyFailed :exec
-UPDATE cluster_security_policies SET sync_status = 'failed', error_message = $2 WHERE id = $1
-`
-
-type UpdateClusterSecurityPolicyFailedParams struct {
-	ID           uuid.UUID `json:"id"`
-	ErrorMessage string    `json:"error_message"`
-}
-
-func (q *Queries) UpdateClusterSecurityPolicyFailed(ctx context.Context, arg UpdateClusterSecurityPolicyFailedParams) error {
-	_, err := q.db.Exec(ctx, updateClusterSecurityPolicyFailed, arg.ID, arg.ErrorMessage)
 	return err
 }
 
@@ -784,30 +696,6 @@ func (q *Queries) UpdatePodSecurityTemplate(ctx context.Context, arg UpdatePodSe
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const updateSecurityScanCompleted = `-- name: UpdateSecurityScanCompleted :exec
-UPDATE security_scan_results SET status = 'completed', summary = $2, results = $3, completed_at = now() WHERE id = $1
-`
-
-type UpdateSecurityScanCompletedParams struct {
-	ID      uuid.UUID       `json:"id"`
-	Summary json.RawMessage `json:"summary"`
-	Results json.RawMessage `json:"results"`
-}
-
-func (q *Queries) UpdateSecurityScanCompleted(ctx context.Context, arg UpdateSecurityScanCompletedParams) error {
-	_, err := q.db.Exec(ctx, updateSecurityScanCompleted, arg.ID, arg.Summary, arg.Results)
-	return err
-}
-
-const updateSecurityScanFailed = `-- name: UpdateSecurityScanFailed :exec
-UPDATE security_scan_results SET status = 'failed', completed_at = now() WHERE id = $1
-`
-
-func (q *Queries) UpdateSecurityScanFailed(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, updateSecurityScanFailed, id)
-	return err
 }
 
 const updateSecurityScanFailedWithMessage = `-- name: UpdateSecurityScanFailedWithMessage :exec

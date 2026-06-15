@@ -14,6 +14,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -22,9 +23,6 @@ import (
 // the security HTTP handler can reference the same string without importing
 // this package (avoiding a worker → handler import cycle).
 const SecurityIngestType = "security:ingest_scan_results"
-
-// cisOperatorNamespace is the well-known namespace cis-operator deploys into.
-const cisOperatorNamespace = "cis-operator-system"
 
 // ingestPollInterval and ingestMaxAttempts together cap report polling at
 // 30 minutes (60 attempts × 30s), matching the design doc. We use a
@@ -407,21 +405,21 @@ func flattenClusterScanReport(report map[string]any) (CISCounts, json.RawMessage
 	findings := []map[string]any{}
 
 	spec, _ := report["spec"].(map[string]any)
-	reportPayload := decodeReportJSON(spec)
+	reportPayload := scanner.DecodeCISReportJSON(spec)
 
-	if v, ok := numericField(reportPayload, "total"); ok {
+	if v, ok := scanner.NumericField(reportPayload, "total"); ok {
 		counts.Total = v
 	}
-	if v, ok := numericField(reportPayload, "pass"); ok {
+	if v, ok := scanner.NumericField(reportPayload, "pass"); ok {
 		counts.Pass = v
 	}
-	if v, ok := numericField(reportPayload, "fail"); ok {
+	if v, ok := scanner.NumericField(reportPayload, "fail"); ok {
 		counts.Fail = v
 	}
-	if v, ok := numericField(reportPayload, "warn"); ok {
+	if v, ok := scanner.NumericField(reportPayload, "warn"); ok {
 		counts.Warn = v
 	}
-	if v, ok := numericField(reportPayload, "skip"); ok {
+	if v, ok := scanner.NumericField(reportPayload, "skip"); ok {
 		counts.Skip = v
 	}
 
@@ -449,14 +447,14 @@ func flattenClusterScanReport(report map[string]any) (CISCounts, json.RawMessage
 			if !ok {
 				continue
 			}
-			id := stringField(test, "id", "test_number", "number")
-			status := stringField(test, "state", "status")
+			id := scanner.StringField(test, "id", "test_number", "number")
+			status := scanner.StringField(test, "state", "status")
 			finding := map[string]any{
 				"test_id":     id,
-				"severity":    stringField(test, "scored_severity", "severity"),
+				"severity":    scanner.StringField(test, "scored_severity", "severity"),
 				"status":      status,
-				"description": stringField(test, "test_desc", "description", "desc"),
-				"remediation": stringField(test, "remediation"),
+				"description": scanner.StringField(test, "test_desc", "description", "desc"),
+				"remediation": scanner.StringField(test, "remediation"),
 			}
 			findings = append(findings, finding)
 		}
@@ -479,65 +477,10 @@ func flattenClusterScanReport(report map[string]any) (CISCounts, json.RawMessage
 	summaryRaw, _ := json.Marshal(summary)
 	resultsRaw, _ := json.Marshal(map[string]any{
 		"source":  "cis-operator",
-		"version": stringField(spec, "scanProfileName"),
+		"version": scanner.StringField(spec, "scanProfileName"),
 	})
 	findingsRaw, _ := json.Marshal(findings)
 	return counts, findingsRaw, summaryRaw, resultsRaw
-}
-
-// decodeReportJSON pulls the actual report payload out of `spec.reportJSON`
-// (string-encoded) or `spec.report` (already an object), tolerating both
-// shapes.
-func decodeReportJSON(spec map[string]any) map[string]any {
-	if spec == nil {
-		return map[string]any{}
-	}
-	if raw, ok := spec["reportJSON"].(string); ok && raw != "" {
-		var out map[string]any
-		if err := json.Unmarshal([]byte(raw), &out); err == nil {
-			return out
-		}
-	}
-	if obj, ok := spec["report"].(map[string]any); ok {
-		return obj
-	}
-	if obj, ok := spec["reportJSON"].(map[string]any); ok {
-		return obj
-	}
-	return map[string]any{}
-}
-
-func stringField(m map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func numericField(m map[string]any, key string) (int32, bool) {
-	v, ok := m[key]
-	if !ok {
-		return 0, false
-	}
-	switch n := v.(type) {
-	case float64:
-		return int32(n), true
-	case int:
-		return int32(n), true
-	case int64:
-		return int32(n), true
-	case json.Number:
-		i, err := n.Int64()
-		if err != nil {
-			return 0, false
-		}
-		return int32(i), true
-	}
-	return 0, false
 }
 
 func decodeIngestBody(resp *protocol.K8sResponsePayload) ([]byte, error) {

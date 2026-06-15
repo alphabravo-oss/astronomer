@@ -332,15 +332,6 @@ func (q *Queries) DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
-const deleteRestoreOperation = `-- name: DeleteRestoreOperation :exec
-DELETE FROM restore_operations WHERE id = $1
-`
-
-func (q *Queries) DeleteRestoreOperation(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteRestoreOperation, id)
-	return err
-}
-
 const getActiveSchedules = `-- name: GetActiveSchedules :many
 SELECT id, name, storage_id, backup_type, cron_expression, retention_count, enabled, last_backup_id, created_by_id, created_at, updated_at, cluster_id, velero_namespace, velero_schedule_name, included_namespaces, excluded_namespaces, ttl FROM backup_schedules WHERE enabled = true ORDER BY created_at ASC
 `
@@ -457,35 +448,6 @@ SELECT id, name, storage_type, bucket, prefix, region, endpoint_url, access_key,
 // Backup Storage Configs
 func (q *Queries) GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error) {
 	row := q.db.QueryRow(ctx, getBackupStorageConfigByID, id)
-	var i BackupStorageConfig
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.StorageType,
-		&i.Bucket,
-		&i.Prefix,
-		&i.Region,
-		&i.EndpointUrl,
-		&i.AccessKey,
-		&i.SecretKey,
-		&i.IsDefault,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ClusterID,
-		&i.VeleroNamespace,
-		&i.BslName,
-		&i.EncryptedCredentials,
-	)
-	return i, err
-}
-
-const getDefaultBackupStorageConfig = `-- name: GetDefaultBackupStorageConfig :one
-SELECT id, name, storage_type, bucket, prefix, region, endpoint_url, access_key, secret_key, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, encrypted_credentials FROM backup_storage_configs WHERE is_default = true LIMIT 1
-`
-
-func (q *Queries) GetDefaultBackupStorageConfig(ctx context.Context) (BackupStorageConfig, error) {
-	row := q.db.QueryRow(ctx, getDefaultBackupStorageConfig)
 	var i BackupStorageConfig
 	err := row.Scan(
 		&i.ID,
@@ -684,58 +646,6 @@ func (q *Queries) ListBackups(ctx context.Context, arg ListBackupsParams) ([]Bac
 	return items, nil
 }
 
-const listBackupsByStatus = `-- name: ListBackupsByStatus :many
-SELECT id, name, storage_id, backup_type, status, file_path, file_size_bytes, database_tables, started_at, completed_at, error_message, created_by_id, created_at, updated_at, cluster_id, velero_backup_name, velero_namespace, included_namespaces, excluded_namespaces, poll_attempts, last_polled_at FROM backups WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
-`
-
-type ListBackupsByStatusParams struct {
-	Status string `json:"status"`
-	Limit  int32  `json:"limit"`
-	Offset int32  `json:"offset"`
-}
-
-func (q *Queries) ListBackupsByStatus(ctx context.Context, arg ListBackupsByStatusParams) ([]Backup, error) {
-	rows, err := q.db.Query(ctx, listBackupsByStatus, arg.Status, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Backup{}
-	for rows.Next() {
-		var i Backup
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.StorageID,
-			&i.BackupType,
-			&i.Status,
-			&i.FilePath,
-			&i.FileSizeBytes,
-			&i.DatabaseTables,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.ErrorMessage,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ClusterID,
-			&i.VeleroBackupName,
-			&i.VeleroNamespace,
-			&i.IncludedNamespaces,
-			&i.ExcludedNamespaces,
-			&i.PollAttempts,
-			&i.LastPolledAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listBackupsByStorage = `-- name: ListBackupsByStorage :many
 SELECT id, name, storage_id, backup_type, status, file_path, file_size_bytes, database_tables, started_at, completed_at, error_message, created_by_id, created_at, updated_at, cluster_id, velero_backup_name, velero_namespace, included_namespaces, excluded_namespaces, poll_attempts, last_polled_at FROM backups WHERE storage_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
@@ -799,47 +709,6 @@ type ListRestoreOperationsParams struct {
 
 func (q *Queries) ListRestoreOperations(ctx context.Context, arg ListRestoreOperationsParams) ([]RestoreOperation, error) {
 	rows, err := q.db.Query(ctx, listRestoreOperations, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RestoreOperation{}
-	for rows.Next() {
-		var i RestoreOperation
-		if err := rows.Scan(
-			&i.ID,
-			&i.BackupID,
-			&i.Status,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.ErrorMessage,
-			&i.InitiatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ClusterID,
-			&i.VeleroNamespace,
-			&i.VeleroRestoreName,
-			&i.IncludedNamespaces,
-			&i.NamespaceMapping,
-			&i.PollAttempts,
-			&i.LastPolledAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRestoreOperationsByBackup = `-- name: ListRestoreOperationsByBackup :many
-SELECT id, backup_id, status, started_at, completed_at, error_message, initiated_by_id, created_at, updated_at, cluster_id, velero_namespace, velero_restore_name, included_namespaces, namespace_mapping, poll_attempts, last_polled_at FROM restore_operations WHERE backup_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) ListRestoreOperationsByBackup(ctx context.Context, backupID uuid.UUID) ([]RestoreOperation, error) {
-	rows, err := q.db.Query(ctx, listRestoreOperationsByBackup, backupID)
 	if err != nil {
 		return nil, err
 	}
@@ -1117,34 +986,6 @@ func (q *Queries) UpdateBackupStarted(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const updateBackupStatus = `-- name: UpdateBackupStatus :exec
-UPDATE backups SET
-    status = $2,
-    file_path = $3,
-    file_size_bytes = $4,
-    error_message = $5
-WHERE id = $1
-`
-
-type UpdateBackupStatusParams struct {
-	ID            uuid.UUID `json:"id"`
-	Status        string    `json:"status"`
-	FilePath      string    `json:"file_path"`
-	FileSizeBytes int64     `json:"file_size_bytes"`
-	ErrorMessage  string    `json:"error_message"`
-}
-
-func (q *Queries) UpdateBackupStatus(ctx context.Context, arg UpdateBackupStatusParams) error {
-	_, err := q.db.Exec(ctx, updateBackupStatus,
-		arg.ID,
-		arg.Status,
-		arg.FilePath,
-		arg.FileSizeBytes,
-		arg.ErrorMessage,
-	)
-	return err
-}
-
 const updateBackupStorageConfig = `-- name: UpdateBackupStorageConfig :one
 UPDATE backup_storage_configs SET
     name = $2,
@@ -1275,30 +1116,5 @@ UPDATE restore_operations SET status = 'running', started_at = now() WHERE id = 
 
 func (q *Queries) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, updateRestoreOperationStarted, id)
-	return err
-}
-
-const updateRestoreVeleroIdentity = `-- name: UpdateRestoreVeleroIdentity :exec
-UPDATE restore_operations SET
-    velero_restore_name = $2,
-    velero_namespace    = $3,
-    cluster_id          = $4
-WHERE id = $1
-`
-
-type UpdateRestoreVeleroIdentityParams struct {
-	ID                uuid.UUID   `json:"id"`
-	VeleroRestoreName string      `json:"velero_restore_name"`
-	VeleroNamespace   string      `json:"velero_namespace"`
-	ClusterID         pgtype.UUID `json:"cluster_id"`
-}
-
-func (q *Queries) UpdateRestoreVeleroIdentity(ctx context.Context, arg UpdateRestoreVeleroIdentityParams) error {
-	_, err := q.db.Exec(ctx, updateRestoreVeleroIdentity,
-		arg.ID,
-		arg.VeleroRestoreName,
-		arg.VeleroNamespace,
-		arg.ClusterID,
-	)
 	return err
 }

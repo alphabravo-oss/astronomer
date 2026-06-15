@@ -17,11 +17,11 @@ import (
 
 // Transport identifiers stored in siem_forwarders.transport.
 const (
-	TransportSyslogUDP    = "syslog_udp"
-	TransportSyslogTCP    = "syslog_tcp"
-	TransportSyslogTLS    = "syslog_tls"
-	TransportSplunkHEC    = "splunk_hec"
-	TransportNDJSONHTTPS  = "ndjson_https"
+	TransportSyslogUDP   = "syslog_udp"
+	TransportSyslogTCP   = "syslog_tcp"
+	TransportSyslogTLS   = "syslog_tls"
+	TransportSplunkHEC   = "splunk_hec"
+	TransportNDJSONHTTPS = "ndjson_https"
 )
 
 // Transport is the per-protocol sender abstraction the dispatcher
@@ -282,7 +282,9 @@ func (s *splunkHEC) Send(ctx context.Context, batch [][]byte) error {
 	if err != nil {
 		return fmt.Errorf("splunk hec: do: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Capture a small slice of the body so the operator can debug
 		// the rejection (HEC returns a JSON error blob with text).
@@ -357,7 +359,9 @@ func (s *ndjsonHTTPS) Send(ctx context.Context, batch [][]byte) error {
 	if err != nil {
 		return fmt.Errorf("ndjson https: do: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("ndjson https: status %d: %s", resp.StatusCode, strings.TrimSpace(string(preview)))

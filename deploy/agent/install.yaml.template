@@ -10,7 +10,11 @@
 #   {{REGISTRATION_TOKEN}}   - Bearer token for agent authentication
 #   {{CA_CERT}}              - Base64-encoded CA certificate (optional)
 #   {{AGENT_IMAGE}}          - Full agent container image reference
+#   {{AGENT_SERVICE_ACCOUNT_NAME}} - Agent ServiceAccount name
+#   {{AGENT_POD_LABELS}}     - Additional Deployment pod-template labels
 #   {{AGENT_RBAC_RULES}}     - ClusterRole rules selected by privilege profile
+#   {{AGENT_RBAC_BINDING_KIND}} - ClusterRoleBinding or RoleBinding
+#   {{AGENT_RBAC_BINDING_NAMESPACE}} - Optional namespace line for RoleBinding
 # ============================================================================
 
 ---
@@ -29,7 +33,7 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: astronomer-agent
+  name: {{AGENT_SERVICE_ACCOUNT_NAME}}
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -51,12 +55,12 @@ rules:
 {{AGENT_RBAC_RULES}}
 
 ---
-# ClusterRoleBinding
+# RBAC binding - cluster-wide or namespace-scoped based on privilege profile
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: {{AGENT_RBAC_BINDING_KIND}}
 metadata:
   name: astronomer-agent
-  labels:
+{{AGENT_RBAC_BINDING_NAMESPACE}}  labels:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/component: agent
     app.kubernetes.io/part-of: astronomer
@@ -66,7 +70,7 @@ roleRef:
   name: astronomer-agent
 subjects:
   - kind: ServiceAccount
-    name: astronomer-agent
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
     namespace: astronomer-system
 
 ---
@@ -86,6 +90,7 @@ data:
   HEALTH_ADDR: ":8081"
   HEARTBEAT_INTERVAL: "30"
   METRICS_INTERVAL: "60"
+  PRIVILEGE_PROFILE: "{{PRIVILEGE_PROFILE}}"
 
 ---
 # Secret for the registration token
@@ -145,12 +150,12 @@ spec:
         app.kubernetes.io/name: astronomer-agent
         app.kubernetes.io/component: agent
         app.kubernetes.io/part-of: astronomer
-      annotations:
+{{AGENT_POD_LABELS}}      annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8081"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: astronomer-agent
+      serviceAccountName: {{AGENT_SERVICE_ACCOUNT_NAME}}
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
@@ -197,6 +202,11 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: METRICS_INTERVAL
+            - name: ASTRONOMER_PRIVILEGE_PROFILE
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: PRIVILEGE_PROFILE
           ports:
             - name: health
               containerPort: 8081

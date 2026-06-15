@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -592,7 +593,7 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("failed to apply velero backup CR", "backup_id", backup.ID.String(), "error", err)
 	}
 
-	recordAudit(r, h.queries, "backup.schedule.trigger", "backup", backup.ID.String(), backup.Name, map[string]any{
+	recordAudit(r, h.queries, "backup.create", "backup", backup.ID.String(), backup.Name, map[string]any{
 		"storage_id":  storage.ID.String(),
 		"backup_type": backup.BackupType,
 		"on_demand":   true,
@@ -1401,13 +1402,15 @@ func (h *BackupHandler) probeS3Bucket(ctx context.Context, cfg sqlc.BackupStorag
 
 	client := h.httpClient
 	if client == nil {
-		client = http.DefaultClient
+		client = httpclient.DefaultExternal()
 	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("connectivity failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 
 	switch resp.StatusCode {

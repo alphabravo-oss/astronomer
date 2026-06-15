@@ -226,13 +226,14 @@ dex:
   replicaCount: 2
   clientSecret: ""    # required — replace with `openssl rand -hex 32` or similar
 
-# Production deploys should pin the bootstrap password rather than relying
-# on the chart's random generator: the value lives in a Secret with
-# resource-policy=keep so rotation is annoying, and operators usually
-# want to control the initial credential anyway. Pass via
+# Production deploys can pin the bootstrap password instead of relying on the
+# chart's random generator. When left empty, the chart stores the generated
+# password in the <release>-bootstrap Secret. Pass a known initial password via
 #   --set bootstrap.password=<initial-admin-password>
 # or use --set-file to read from a file outside git.
 bootstrap:
+  username: admin
+  email: ""
   password: ""
 
 # ── ServiceAccount + RBAC ─────────────────────────────────────────────────
@@ -248,6 +249,23 @@ metrics:
     enabled: true
     interval: 30s
     scrapeTimeout: 10s
+
+# ── Network policy ────────────────────────────────────────────────────────
+# Production starts from namespace default-deny and intentionally clears the
+# dev-friendly broad external egress bucket. Set the narrow CIDR buckets for
+# your managed Postgres, Redis, Kubernetes API, outbound HTTPS, and IdP/LDAP
+# networks during install. The schema requires Postgres/Redis CIDRs because
+# production values also require external Postgres/Redis; without those egress
+# buckets the server and worker pods render successfully but cannot connect.
+networkPolicy:
+  enabled: true
+  defaultDeny: true
+  externalEgressCIDRs: []
+  externalHTTPSEgressCIDRs: []
+  externalPostgresEgressCIDRs: []
+  externalRedisEgressCIDRs: []
+  kubernetesAPIEgressCIDRs: []
+  identityProviderEgressCIDRs: []
 
 # ── Management-plane DR ───────────────────────────────────────────────────
 # Nightly pg_dump of Astronomer's own Postgres pushed to S3. The companion

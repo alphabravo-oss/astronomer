@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { normalizeToolStatus } from '@/lib/tool-status';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { ClusterTool, ClusterToolStatus, ToolStatus } from '@/types';
 import {
@@ -49,6 +50,9 @@ interface ToolCardProps {
   onInstall: (slug: string, preset: string) => void;
   onUninstall: (slug: string) => void;
   onAdopt: (slug: string, releaseName: string) => void;
+  installDisabledReason?: string;
+  adoptDisabledReason?: string;
+  uninstallDisabledReason?: string;
   installing?: boolean;
   uninstalling?: boolean;
   clusterDisconnected?: boolean;
@@ -61,15 +65,23 @@ export function ToolCard({
   onInstall,
   onUninstall,
   onAdopt,
+  installDisabledReason,
+  adoptDisabledReason,
+  uninstallDisabledReason,
   installing,
   uninstalling,
   clusterDisconnected,
 }: ToolCardProps) {
   const [selectedPreset, setSelectedPreset] = useState(defaultPreset);
-  const status: ToolStatus = toolStatus?.status || 'not_installed';
-  const badge = statusToBadge[status];
+  const status = normalizeToolStatus(toolStatus?.status);
+  const badge = statusToBadge[status] || statusToBadge.unknown;
   const Icon = toolIcons[tool.slug] || Wrench;
   const isInProgress = status === 'installing' || status === 'upgrading' || status === 'uninstalling';
+  const clusterDisconnectedReason = clusterDisconnected ? 'Cluster is disconnected' : undefined;
+  const enableDisabledReason = clusterDisconnectedReason || installDisabledReason;
+  const retryDisabledReason = clusterDisconnectedReason || installDisabledReason;
+  const adoptBlockedReason = clusterDisconnectedReason || adoptDisabledReason;
+  const uninstallBlockedReason = clusterDisconnectedReason || uninstallDisabledReason;
 
   return (
     <div className="rounded-lg border border-border p-5 space-y-4">
@@ -120,8 +132,8 @@ export function ToolCard({
             </select>
             <button
               onClick={() => onInstall(tool.slug, selectedPreset)}
-              disabled={installing || clusterDisconnected}
-              title={clusterDisconnected ? 'Cluster is disconnected' : undefined}
+              disabled={installing || !!enableDisabledReason}
+              title={enableDisabledReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground
                 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
@@ -147,8 +159,8 @@ export function ToolCard({
             )}
             <button
               onClick={() => onUninstall(tool.slug)}
-              disabled={uninstalling || clusterDisconnected}
-              title={clusterDisconnected ? 'Cluster is disconnected' : undefined}
+              disabled={uninstalling || !!uninstallBlockedReason}
+              title={uninstallBlockedReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border
                 text-xs font-medium text-muted-foreground hover:text-status-error hover:border-status-error/30
                 hover:bg-status-error/5 transition-colors disabled:opacity-50"
@@ -170,8 +182,8 @@ export function ToolCard({
                   onAdopt(tool.slug, toolStatus.release_name);
                 }
               }}
-              disabled={clusterDisconnected}
-              title={clusterDisconnected ? 'Cluster is disconnected' : undefined}
+              disabled={!!adoptBlockedReason}
+              title={adoptBlockedReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground
                 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
@@ -203,7 +215,8 @@ export function ToolCard({
             </select>
             <button
               onClick={() => onInstall(tool.slug, selectedPreset)}
-              disabled={installing}
+              disabled={installing || !!retryDisabledReason}
+              title={retryDisabledReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground
                 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >

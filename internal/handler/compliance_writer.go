@@ -51,13 +51,13 @@ import (
 // It's a one-method interface so a test fake can paginate against an
 // in-memory slice without satisfying the entire sqlc.Querier surface.
 type AuditExporter interface {
-	ListAuditLogV1ForRange(ctx context.Context, arg sqlc.ListAuditLogV1ForRangeParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1ForRange(ctx context.Context, arg sqlc.ListAuditLogV1ForRangeParams) ([]sqlc.ListAuditLogV1ForRangeRow, error)
 }
 
 // AuditCounter returns the row count for a date range — drives the
 // inline-vs-async path decision.
 type AuditCounter interface {
-	CountAuditLogV1ForRange(ctx context.Context, from, to time.Time) (int64, error)
+	CountAuditLogV1ForRange(ctx context.Context, arg sqlc.CountAuditLogV1ForRangeParams) (int64, error)
 }
 
 // RBACSnapshotQuerier reads every role binding across the three RBAC
@@ -82,7 +82,7 @@ type ClusterInventoryQuerier interface {
 // joined to user identity. The compliance-specific projection strips
 // the bcrypt-style token_hash.
 type AccessTokenQuerier interface {
-	ListAPITokensForCompliance(ctx context.Context) ([]sqlc.ComplianceAPITokenRow, error)
+	ListAPITokensForCompliance(ctx context.Context) ([]sqlc.ListAPITokensForComplianceRow, error)
 }
 
 // BackupDrillHistoryQuerier reads every drill row, oldest first, so
@@ -96,7 +96,7 @@ type BackupDrillHistoryQuerier interface {
 // (pod_security_profile, network_policy_mode, resource_quota_*) plus
 // the per-project bindings used for the "members" snapshot.
 type ProjectPolicyQuerier interface {
-	ListAllProjectsForCompliance(ctx context.Context) ([]sqlc.ComplianceProjectRow, error)
+	ListAllProjectsForCompliance(ctx context.Context) ([]sqlc.ListAllProjectsForComplianceRow, error)
 	ListProjectRoleBindingsByProject(ctx context.Context, arg sqlc.ListProjectRoleBindingsByProjectParams) ([]sqlc.ProjectRoleBinding, error)
 }
 
@@ -205,11 +205,11 @@ func WriteAuditLogCSV(ctx context.Context, w io.Writer, from, to time.Time, q Au
 	var total int64
 	for {
 		page, err := q.ListAuditLogV1ForRange(ctx, sqlc.ListAuditLogV1ForRangeParams{
-			From:           from,
-			To:             to,
+			FromTime:       from,
+			ToTime:         to,
 			AfterCreatedAt: afterCreatedAt,
 			AfterID:        afterID,
-			Limit:          auditExportPageSize,
+			PageLimit:      auditExportPageSize,
 		})
 		if err != nil {
 			return total, err
@@ -259,11 +259,11 @@ func WriteAuthEventsCSV(ctx context.Context, w io.Writer, from, to time.Time, q 
 	var total int64
 	for {
 		page, err := q.ListAuditLogV1ForRange(ctx, sqlc.ListAuditLogV1ForRangeParams{
-			From:           from,
-			To:             to,
+			FromTime:       from,
+			ToTime:         to,
 			AfterCreatedAt: afterCreatedAt,
 			AfterID:        afterID,
-			Limit:          auditExportPageSize,
+			PageLimit:      auditExportPageSize,
 		})
 		if err != nil {
 			return total, err
@@ -294,10 +294,10 @@ func WriteAuthEventsCSV(ctx context.Context, w io.Writer, from, to time.Time, q 
 	return total, nil
 }
 
-// auditRowToCSV flattens a sqlc.AuditLog into the auditLogCSVHeader
+// auditRowToCSV flattens an audit-log export row into the auditLogCSVHeader
 // columns. The detail JSONB is written as a compact JSON string (no
 // pretty-printing) so the CSV stays one-row-per-record.
-func auditRowToCSV(r sqlc.AuditLog) []string {
+func auditRowToCSV(r sqlc.ListAuditLogV1ForRangeRow) []string {
 	userID := ""
 	if r.UserID.Valid {
 		userID = uuid.UUID(r.UserID.Bytes).String()
@@ -505,8 +505,7 @@ func WriteClusterInventoryCSV(ctx context.Context, w io.Writer, q ClusterInvento
 
 // WriteAccessTokensCSV emits every API token (including revoked) with
 // the migration-044 hardening columns. The token_hash column is
-// explicitly absent — see ComplianceAPITokenRow's struct comment for
-// the SOC 2 CC6.7 rationale.
+// explicitly absent from the generated compliance query row.
 func WriteAccessTokensCSV(ctx context.Context, w io.Writer, q AccessTokenQuerier) (int64, error) {
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
@@ -542,8 +541,8 @@ func WriteAccessTokensCSV(ctx context.Context, w io.Writer, q AccessTokenQuerier
 			t.Name,
 			t.Prefix,
 			scopes,
-			t.AllowedCIDRs,
-			t.LastSeenRemoteIP,
+			t.AllowedCidrs,
+			t.LastSeenRemoteIp,
 			t.CreatedAt.UTC().Format(time.RFC3339Nano),
 			expires,
 			lastUsed,

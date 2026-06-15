@@ -1,5 +1,7 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback } from 'react';
 import {
   ChevronDown,
@@ -33,15 +35,18 @@ interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
   keyExtractor: (row: T) => string;
+  density?: 'compact' | 'comfortable';
   searchable?: boolean;
   searchPlaceholder?: string;
   selectable?: boolean;
   onRowClick?: (row: T) => void;
   onSelectionChange?: (selected: T[]) => void;
+  bulkActions?: (selected: T[]) => ReactNode;
   pageSize?: number;
+  loadingRows?: number;
   emptyMessage?: string;
   loading?: boolean;
-  toolbar?: React.ReactNode;
+  toolbar?: ReactNode;
   className?: string;
 }
 
@@ -53,12 +58,15 @@ export function DataTable<T>({
   data,
   columns,
   keyExtractor,
+  density = 'comfortable',
   searchable = true,
   searchPlaceholder = 'Search...',
   selectable = false,
   onRowClick,
   onSelectionChange,
+  bulkActions,
   pageSize = 20,
+  loadingRows,
   emptyMessage = 'No results found',
   loading = false,
   toolbar,
@@ -73,6 +81,9 @@ export function DataTable<T>({
     new Set(columns.filter((c) => !c.hidden).map((c) => c.key))
   );
   const [showColumnToggle, setShowColumnToggle] = useState(false);
+  const cellPadding = density === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
+  const selectPadding = density === 'compact' ? 'px-3 py-2' : 'px-3 py-3';
+  const skeletonRows = loadingRows ?? Math.min(pageSize, 8);
 
   const activeColumns = useMemo(
     () => columns.filter((c) => visibleColumns.has(c.key)),
@@ -117,6 +128,10 @@ export function DataTable<T>({
   const paginated = useMemo(
     () => sorted.slice(page * pageSize, (page + 1) * pageSize),
     [sorted, page, pageSize]
+  );
+  const selectedRows = useMemo(
+    () => data.filter((row) => selectedKeys.has(keyExtractor(row))),
+    [data, keyExtractor, selectedKeys]
   );
 
   const handleSort = useCallback(
@@ -237,27 +252,42 @@ export function DataTable<T>({
         </div>
       </div>
 
+      {selectable && selectedKeys.size > 0 && bulkActions ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+          aria-live="polite"
+        >
+          <span className="text-muted-foreground">
+            {selectedKeys.size} {selectedKeys.size === 1 ? 'row' : 'rows'} selected
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {bulkActions(selectedRows)}
+          </div>
+        </div>
+      ) : null}
+
       {/* Table */}
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="border-b border-border bg-muted/50">
                 {selectable && (
-                  <th className="w-10 px-3 py-3">
+                  <TableHead className={cn('w-10', selectPadding)}>
                     <input
                       type="checkbox"
                       checked={selectedKeys.size === paginated.length && paginated.length > 0}
                       onChange={toggleAllSelection}
                       className="rounded border-border text-primary focus:ring-ring"
                     />
-                  </th>
+                  </TableHead>
                 )}
                 {activeColumns.map((col) => (
-                  <th
+                  <TableHead
                     key={col.key}
                     className={cn(
-                      'px-4 py-3 font-medium text-muted-foreground whitespace-nowrap',
+                      cellPadding,
+                      'font-medium text-muted-foreground whitespace-nowrap',
                       col.align === 'center' && 'text-center',
                       col.align === 'right' && 'text-right',
                       col.sortable !== false && 'cursor-pointer select-none hover:text-foreground'
@@ -287,36 +317,39 @@ export function DataTable<T>({
                         </span>
                       )}
                     </div>
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    {selectable && <td className="px-3 py-3"><div className="h-4 w-4 rounded bg-muted animate-pulse" /></td>}
+                Array.from({ length: skeletonRows }).map((_, i) => (
+                  <TableRow key={i} className="border-b border-border last:border-0">
+                    {selectable && <TableCell className={selectPadding}><div className="h-4 w-4 rounded bg-muted animate-pulse" /></TableCell>}
                     {activeColumns.map((col) => (
-                      <td key={col.key} className="px-4 py-3">
-                        <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-                      </td>
+                      <TableCell key={col.key} className={cellPadding}>
+                        <div
+                          className="h-4 w-24 max-w-full rounded bg-muted animate-pulse"
+                          style={{ width: col.width ? `min(100%, ${col.width})` : undefined }}
+                        />
+                      </TableCell>
                     ))}
-                  </tr>
+                  </TableRow>
                 ))
               ) : paginated.length === 0 ? (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={activeColumns.length + (selectable ? 1 : 0)}
                     className="px-4 py-12 text-center text-muted-foreground"
                   >
                     {emptyMessage}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 paginated.map((row) => {
                   const key = keyExtractor(row);
                   return (
-                    <tr
+                    <TableRow
                       key={key}
                       className={cn(
                         'border-b border-border last:border-0 transition-colors',
@@ -326,33 +359,33 @@ export function DataTable<T>({
                       onClick={() => onRowClick?.(row)}
                     >
                       {selectable && (
-                        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className={selectPadding} onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedKeys.has(key)}
                             onChange={() => toggleSelection(key, row)}
                             className="rounded border-border text-primary focus:ring-ring"
                           />
-                        </td>
+                        </TableCell>
                       )}
                       {activeColumns.map((col) => (
-                        <td
+                        <TableCell
                           key={col.key}
                           className={cn(
-                            'px-4 py-3',
+                            cellPadding,
                             col.align === 'center' && 'text-center',
                             col.align === 'right' && 'text-right'
                           )}
                         >
                           {col.accessor(row)}
-                        </td>
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 

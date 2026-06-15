@@ -3,18 +3,18 @@ package handler
 // Tests for the sprint 075 platform-baseline coverage endpoint.
 //
 // Coverage matrix:
-//   - TestPlatformBaselineCoverage_AllResolved — all five slugs resolve;
+//   - TestPlatformBaselineCoverage_AllResolved — all seven slugs resolve;
 //     missing_slugs is empty; each entry has chart_id + repository.
-//   - TestPlatformBaselineCoverage_SomeMissing — two slugs are absent;
+//   - TestPlatformBaselineCoverage_SomeMissing — three slugs are absent;
 //     missing_slugs lists them in canonical order; resolved[] still has
-//     all five entries with found=false for the missing ones.
+//     all seven entries with found=false for the missing ones.
 //   - TestPlatformBaselineCoverage_RequiresSuperuser — a non-superuser
 //     caller receives 403 with code=forbidden; no DB resolve calls are
 //     made (gate runs first).
 //   - TestPlatformBaselineCoverage_LookupErrorTreatedAsMissing — a non-
 //     pgx error from ResolveChartByName (e.g. DB outage on a single
 //     row) surfaces as not-resolved, not a 500, so the operator banner
-//     can render "X/5 — catalog unreachable?" instead of crashing.
+//     can render "X/7 — catalog unreachable?" instead of crashing.
 
 import (
 	"context"
@@ -34,9 +34,9 @@ import (
 // resolve to sqlc.ErrCoverageSlugNotFound. errSlugs forces an arbitrary
 // DB error for a specific slug (covers the "DB outage on one row" path).
 type fakeCoverageQuerier struct {
-	user      sqlc.User
-	slugs     map[string]sqlc.ChartResolution
-	errSlugs  map[string]error
+	user        sqlc.User
+	slugs       map[string]sqlc.ChartResolution
+	errSlugs    map[string]error
 	resolveHits int
 }
 
@@ -73,7 +73,7 @@ func decodeCoverage(t *testing.T, body []byte) coverageResponse {
 
 func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 	callerID := uuid.New()
-	trivyID, ksmID, neID, fbID, cmID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	trivyID, ksmID, neID, fbID, ingressID, cmID, gatekeeperID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	q := &fakeCoverageQuerier{
 		user: sqlc.User{ID: callerID, IsSuperuser: true},
 		slugs: map[string]sqlc.ChartResolution{
@@ -81,7 +81,9 @@ func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 			"kube-state-metrics":       {ChartID: ksmID, Repository: "prometheus-community"},
 			"prometheus-node-exporter": {ChartID: neID, Repository: "prometheus-community"},
 			"fluent-bit":               {ChartID: fbID, Repository: "fluent"},
+			"ingress-nginx":            {ChartID: ingressID, Repository: "ingress-nginx"},
 			"cert-manager":             {ChartID: cmID, Repository: "jetstack"},
+			"gatekeeper":               {ChartID: gatekeeperID, Repository: "open-policy-agent"},
 		},
 	}
 	h := NewPlatformBaselineCoverageHandler(q)
@@ -94,10 +96,10 @@ func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
 	resp := decodeCoverage(t, w.Body.Bytes())
-	if got, want := len(resp.ExpectedSlugs), 5; got != want {
+	if got, want := len(resp.ExpectedSlugs), 7; got != want {
 		t.Fatalf("expected_slugs len = %d, want %d", got, want)
 	}
-	if got, want := len(resp.Resolved), 5; got != want {
+	if got, want := len(resp.Resolved), 7; got != want {
 		t.Fatalf("resolved len = %d, want %d", got, want)
 	}
 	if got, want := len(resp.MissingSlugs), 0; got != want {
@@ -115,20 +117,21 @@ func TestPlatformBaselineCoverage_AllResolved(t *testing.T) {
 			t.Errorf("resolved[%d] (%s) repository empty", i, e.Slug)
 		}
 	}
-	if q.resolveHits != 5 {
-		t.Errorf("resolveHits = %d, want 5", q.resolveHits)
+	if q.resolveHits != 7 {
+		t.Errorf("resolveHits = %d, want 7", q.resolveHits)
 	}
 }
 
 func TestPlatformBaselineCoverage_SomeMissing(t *testing.T) {
 	callerID := uuid.New()
-	// Only three of the five slugs are present — node-exporter and
-	// fluent-bit are deliberately omitted to exercise missing_slugs.
+	// Only four of the seven slugs are present. Node-exporter, fluent-bit,
+	// and Gatekeeper are deliberately omitted to exercise missing_slugs.
 	q := &fakeCoverageQuerier{
 		user: sqlc.User{ID: callerID, IsSuperuser: true},
 		slugs: map[string]sqlc.ChartResolution{
 			"trivy-operator":     {ChartID: uuid.New(), Repository: "aqua"},
 			"kube-state-metrics": {ChartID: uuid.New(), Repository: "prometheus-community"},
+			"ingress-nginx":      {ChartID: uuid.New(), Repository: "ingress-nginx"},
 			"cert-manager":       {ChartID: uuid.New(), Repository: "jetstack"},
 		},
 	}
@@ -143,10 +146,10 @@ func TestPlatformBaselineCoverage_SomeMissing(t *testing.T) {
 	}
 	resp := decodeCoverage(t, w.Body.Bytes())
 
-	// missing_slugs must contain exactly the two omitted names, in the
+	// missing_slugs must contain exactly the omitted names, in the
 	// canonical order of defaultBaselineSlugs (node-exporter then
-	// fluent-bit). The order matters for stable frontend rendering.
-	wantMissing := []string{"prometheus-node-exporter", "fluent-bit"}
+	// fluent-bit then Gatekeeper). The order matters for stable frontend rendering.
+	wantMissing := []string{"prometheus-node-exporter", "fluent-bit", "gatekeeper"}
 	if len(resp.MissingSlugs) != len(wantMissing) {
 		t.Fatalf("missing_slugs = %v, want %v", resp.MissingSlugs, wantMissing)
 	}
@@ -156,15 +159,15 @@ func TestPlatformBaselineCoverage_SomeMissing(t *testing.T) {
 		}
 	}
 
-	// resolved still has all five — the two missing are found=false.
-	if len(resp.Resolved) != 5 {
-		t.Fatalf("resolved len = %d, want 5", len(resp.Resolved))
+	// resolved still has all seven — the missing entries are found=false.
+	if len(resp.Resolved) != 7 {
+		t.Fatalf("resolved len = %d, want 7", len(resp.Resolved))
 	}
 	gotFound := map[string]bool{}
 	for _, e := range resp.Resolved {
 		gotFound[e.Slug] = e.Found
 	}
-	for _, s := range []string{"trivy-operator", "kube-state-metrics", "cert-manager"} {
+	for _, s := range []string{"trivy-operator", "kube-state-metrics", "ingress-nginx", "cert-manager"} {
 		if !gotFound[s] {
 			t.Errorf("resolved[%s] found=false, want true", s)
 		}
@@ -210,7 +213,9 @@ func TestPlatformBaselineCoverage_LookupErrorTreatedAsMissing(t *testing.T) {
 			"trivy-operator":           {ChartID: uuid.New(), Repository: "aqua"},
 			"kube-state-metrics":       {ChartID: uuid.New(), Repository: "prometheus-community"},
 			"prometheus-node-exporter": {ChartID: uuid.New(), Repository: "prometheus-community"},
+			"ingress-nginx":            {ChartID: uuid.New(), Repository: "ingress-nginx"},
 			"cert-manager":             {ChartID: uuid.New(), Repository: "jetstack"},
+			"gatekeeper":               {ChartID: uuid.New(), Repository: "open-policy-agent"},
 		},
 		errSlugs: map[string]error{
 			"fluent-bit": errors.New("connection refused"),

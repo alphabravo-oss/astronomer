@@ -294,12 +294,22 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// pgTimeString renders a pgtype.Timestamptz as RFC3339 or empty when
-// Valid is false. Centralised here so the three endpoints above
-// produce consistent output for null timestamps.
-func pgTimeString(t pgtype.Timestamptz) string {
-	if !t.Valid {
+// pgTimeString renders SQL timestamps as RFC3339 or empty when null.
+// Centralised here so the three endpoints above produce consistent
+// output for nullable and non-null generated timestamp fields.
+func pgTimeString(value any) string {
+	switch t := value.(type) {
+	case time.Time:
+		if t.IsZero() {
+			return ""
+		}
+		return t.UTC().Format(time.RFC3339)
+	case pgtype.Timestamptz:
+		if !t.Valid {
+			return ""
+		}
+		return t.Time.UTC().Format(time.RFC3339)
+	default:
 		return ""
 	}
-	return t.Time.UTC().Format(time.RFC3339)
 }

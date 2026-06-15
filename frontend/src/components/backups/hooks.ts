@@ -15,7 +15,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as api from '@/lib/api';
 import type {
   BackupRestore,
@@ -70,9 +70,9 @@ export function useB2CreateStorageLocation() {
     mutationFn: (body) => api.b2CreateStorageLocation(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('Storage location created');
+      toastSuccess('Storage location created');
     },
-    onError: (e) => toast.error(`Failed to create storage: ${e.message}`),
+    onError: (e) => toastApiError('Failed to create storage', e),
   });
 }
 
@@ -86,9 +86,9 @@ export function useB2UpdateStorageLocation() {
     mutationFn: ({ id, data }) => api.b2UpdateStorageLocation(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('Storage location updated');
+      toastSuccess('Storage location updated');
     },
-    onError: (e) => toast.error(`Failed to update storage: ${e.message}`),
+    onError: (e) => toastApiError('Failed to update storage', e),
   });
 }
 
@@ -98,9 +98,9 @@ export function useB2DeleteStorageLocation() {
     mutationFn: (id) => api.b2DeleteStorageLocation(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('Storage location deleted');
+      toastSuccess('Storage location deleted');
     },
-    onError: (e) => toast.error(`Failed to delete storage: ${e.message}`),
+    onError: (e) => toastApiError('Failed to delete storage', e),
   });
 }
 
@@ -135,9 +135,9 @@ export function useB2CreateSchedule() {
     mutationFn: (body) => api.b2CreateSchedule(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('Schedule created');
+      toastSuccess('Schedule created');
     },
-    onError: (e) => toast.error(`Failed to create schedule: ${e.message}`),
+    onError: (e) => toastApiError('Failed to create schedule', e),
   });
 }
 
@@ -152,7 +152,7 @@ export function useB2UpdateSchedule() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
     },
-    onError: (e) => toast.error(`Failed to update schedule: ${e.message}`),
+    onError: (e) => toastApiError('Failed to update schedule', e),
   });
 }
 
@@ -162,9 +162,9 @@ export function useB2DeleteSchedule() {
     mutationFn: (id) => api.b2DeleteSchedule(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('Schedule deleted');
+      toastSuccess('Schedule deleted');
     },
-    onError: (e) => toast.error(`Failed to delete schedule: ${e.message}`),
+    onError: (e) => toastApiError('Failed to delete schedule', e),
   });
 }
 
@@ -174,9 +174,9 @@ export function useB2TriggerScheduleNow() {
     mutationFn: (id) => api.b2TriggerScheduleNow(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('One-off backup triggered');
+      toastSuccess('One-off backup triggered');
     },
-    onError: (e) => toast.error(`Failed to trigger backup: ${e.message}`),
+    onError: (e) => toastApiError('Failed to trigger backup', e),
   });
 }
 
@@ -224,8 +224,8 @@ export function useB2CreateRestore() {
     mutationFn: (body) => api.b2CreateRestore(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
-      toast.success('Restore initiated');
+      toastSuccess('Restore initiated');
     },
-    onError: (e) => toast.error(`Failed to start restore: ${e.message}`),
+    onError: (e) => toastApiError('Failed to start restore', e),
   });
 }

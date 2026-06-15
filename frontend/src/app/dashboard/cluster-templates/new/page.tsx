@@ -12,7 +12,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { PermissionState } from '@/components/ui/empty-state';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useCreateClusterTemplate,
@@ -50,12 +52,12 @@ export default function NewClusterTemplatePage() {
       </div>
 
       {!canWrite && (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>
-            Saving requires the <span className="font-mono">cluster_templates:write</span> role.
-          </p>
-        </div>
+        <PermissionState
+          title="Write permission required"
+          permission="cluster_templates:write"
+          description={<>Saving requires the <span className="font-mono">cluster_templates:write</span> role.</>}
+          className="rounded-lg border border-border bg-muted/30 p-6"
+        />
       )}
 
       <TemplateForm
@@ -72,26 +74,11 @@ export default function NewClusterTemplatePage() {
             const created = await createMutation.mutateAsync(body);
             router.push(`/dashboard/cluster-templates/${created.id}`);
           } catch (err) {
-            const msg = extractAxiosError(err) ?? 'Failed to create template.';
+            const msg = extractApiErrorMessage(err) ?? 'Failed to create template.';
             setServerError(msg);
           }
         }}
       />
     </div>
-  );
-}
-
-function extractAxiosError(err: unknown): string | null {
-  if (!err) return null;
-  type ResponseShape = {
-    response?: { data?: { error?: { message?: string }; message?: string } };
-    message?: string;
-  };
-  const obj = err as ResponseShape;
-  return (
-    obj.response?.data?.error?.message ??
-    obj.response?.data?.message ??
-    obj.message ??
-    null
   );
 }

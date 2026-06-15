@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -29,7 +31,6 @@ import (
 type UserQuerier interface {
 	GetUserByEmail(ctx context.Context, email string) (sqlc.User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
-	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 }
 
@@ -74,8 +75,8 @@ type AuthAuditWriter interface {
 // PasswordRehasher updates a user's password column. It is satisfied by the
 // generated sqlc Queries type via UpdateUserPasswordHash and is used by the
 // login handler to opportunistically migrate Django-format hashes to bcrypt.
-// It also clears the bootstrap must_change_password flag after a successful
-// password change via the dashboard.
+// It also clears the must_change_password flag after a successful password
+// change via the dashboard.
 type PasswordRehasher interface {
 	UpdateUserPasswordHash(ctx context.Context, arg sqlc.UpdateUserPasswordHashParams) error
 	ClearMustChangePassword(ctx context.Context, id uuid.UUID) error
@@ -344,7 +345,6 @@ func (h *AuthHandler) effectiveLockoutPolicy() (int, time.Duration) {
 
 // LoginRequest represents the login request body.
 type LoginRequest struct {
-	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -374,7 +374,7 @@ type LoginResponse struct {
 const browserRefreshCookieMaxAge = int((7 * 24 * time.Hour) / time.Second)
 
 func setBrowserSessionCookies(w http.ResponseWriter, r *http.Request, accessToken, refreshToken string) {
-	secure := requestIsHTTPS(r)
+	secure := middleware.RequestIsHTTPS(r)
 	if csrfToken, err := newBrowserCSRFToken(); err == nil {
 		http.SetCookie(w, &http.Cookie{
 			Name:     middleware.CSRFCookieName,
@@ -409,7 +409,7 @@ func setBrowserSessionCookies(w http.ResponseWriter, r *http.Request, accessToke
 }
 
 func clearBrowserSessionCookies(w http.ResponseWriter, r *http.Request) {
-	secure := requestIsHTTPS(r)
+	secure := middleware.RequestIsHTTPS(r)
 	for _, name := range []string{middleware.SessionCookieName, middleware.RefreshCookieName, middleware.CSRFCookieName} {
 		http.SetCookie(w, &http.Cookie{
 			Name:     name,
@@ -421,16 +421,6 @@ func clearBrowserSessionCookies(w http.ResponseWriter, r *http.Request) {
 			MaxAge:   -1,
 		})
 	}
-}
-
-func requestIsHTTPS(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	if r.TLS != nil {
-		return true
-	}
-	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 func newBrowserCSRFToken() (string, error) {
@@ -468,7 +458,8 @@ func userToResponse(user sqlc.User) UserResponse {
 }
 
 // Login handles POST /api/v1/auth/login/.
-// Accepts {username, password} or {email, password}.
+// Accepts {email, password}. Usernames are display/identity metadata only and
+// are intentionally not accepted as login identifiers.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -476,8 +467,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Email == "" && req.Username == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "missing_credentials", "Email or username is required")
+	email, emailErr := normalizeLoginEmail(req.Email)
+	if req.Email == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, "missing_credentials", "Email is required")
+		return
+	}
+	if emailErr != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_email", "Enter a valid email address")
 		return
 	}
 
@@ -490,31 +486,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var user sqlc.User
 	var err error
 
-	// The frontend form is labelled "Email" but submits its value in the
-	// `username` field (legacy axios contract). Accept either: try email lookup
-	// when the value contains '@', otherwise try username, then fall back to
-	// the other shape so users can log in with either credential.
-	identifier := req.Username
-	if req.Email != "" {
-		identifier = req.Email
-	}
-	if strings.Contains(identifier, "@") {
-		user, err = h.queries.GetUserByEmail(ctx, identifier)
-		if err != nil {
-			user, err = h.queries.GetUserByUsername(ctx, identifier)
-		}
-	} else {
-		user, err = h.queries.GetUserByUsername(ctx, identifier)
-		if err != nil {
-			user, err = h.queries.GetUserByEmail(ctx, identifier)
-		}
-	}
-
+	user, err = h.queries.GetUserByEmail(ctx, email)
 	if err != nil {
 		// User-not-found is recorded under the attempted identifier so a
-		// brute-force scan for valid usernames is visible in the audit
+		// brute-force scan for valid accounts is visible in the audit
 		// stream. user_id stays NULL because there's no row to attribute.
-		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.login_failed", "user", "", identifier, map[string]any{
+		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.login_failed", "user", "", email, map[string]any{
 			"reason": "user_not_found",
 		})
 		RespondRequestError(w, r, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
@@ -601,7 +578,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 			"auth.login_totp_required", "user", user.ID.String(), user.Username, map[string]any{
-				"identifier_type": loginIdentifierType(identifier),
+				"identifier_type": "email",
 			})
 		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
 			"error":           "totp_required",
@@ -645,7 +622,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 		"auth.login", "user", user.ID.String(), user.Username, map[string]any{
-			"identifier_type": loginIdentifierType(identifier),
+			"identifier_type": "email",
 		},
 	)
 
@@ -653,13 +630,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, resp)
 }
 
-// loginIdentifierType labels how the user logged in (email vs username) for
-// the audit detail. Pure presentation; no security boundary.
-func loginIdentifierType(identifier string) string {
-	if strings.Contains(identifier, "@") {
-		return "email"
+func normalizeLoginEmail(value string) (string, error) {
+	email := strings.TrimSpace(value)
+	parsed, err := mail.ParseAddress(email)
+	if err != nil {
+		return "", err
 	}
-	return "username"
+	if parsed.Address != email {
+		return "", fmt.Errorf("display-name email format is not accepted")
+	}
+	return strings.ToLower(email), nil
 }
 
 // handleFailedAttempt is the shared post-bcrypt-miss branch: increment
@@ -942,7 +922,7 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, auditD
 		(*auditDetail)["sso_logout"] = "no_endpoint"
 		return ""
 	}
-	idToken, err := h.encryptor.Decrypt(session.UpstreamIdTokenEncrypted)
+		idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
 	if err != nil {
 		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "encrypt_error")...).Inc()
 		(*auditDetail)["sso_logout"] = "decrypt_failed"
@@ -1138,9 +1118,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Bootstrap admins are flagged must_change_password=true; clear the flag
-	// here so the frontend stops redirecting to the forced-change screen.
-	// Non-bootstrap users have the flag false and this is a no-op.
+	// If an admin has marked this account for forced rotation, clear the flag
+	// after a successful password change so the dashboard stops redirecting.
 	if dbUser.MustChangePassword {
 		if err := h.rehasher.ClearMustChangePassword(r.Context(), userID); err != nil {
 			// Log + audit but don't fail the request: the password has
@@ -1154,7 +1133,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	recordAudit(r, h.audit, "auth.change_password", "user", dbUser.ID.String(), dbUser.Username, nil)
 
-	RespondJSONUnwrapped(w, http.StatusOK, map[string]string{"detail": "Password updated"})
+	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
+		"detail":               "Password updated",
+		"must_change_password": false,
+	})
 }
 
 // CurrentUser handles GET /api/v1/auth/me/.

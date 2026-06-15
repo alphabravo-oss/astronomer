@@ -13,28 +13,9 @@ package sqlc
 
 import (
 	"context"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// NotificationTemplate mirrors the notification_templates row. The Go
-// type names are camel-cased verbatim from the column names so adding
-// the struct to the auto-generated models.go later is a one-line
-// rename if/when the sqlc CLI is fixed.
-type NotificationTemplate struct {
-	ID          uuid.UUID   `json:"id"`
-	TemplateKey string      `json:"template_key"`
-	Channel     string      `json:"channel"`
-	SubjectTpl  string      `json:"subject_tpl"`
-	BodyTpl     string      `json:"body_tpl"`
-	BodyFormat  string      `json:"body_format"`
-	Enabled     bool        `json:"enabled"`
-	UpdatedBy   pgtype.UUID `json:"updated_by"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
-}
 
 const notificationTemplateColumns = `id, template_key, channel, subject_tpl, body_tpl, body_format, enabled, updated_by, created_at, updated_at`
 

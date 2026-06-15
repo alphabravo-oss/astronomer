@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster Image Scans tab — sprint 062.
  *
@@ -20,7 +21,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   AlertTriangle,
   Loader2,
@@ -29,7 +30,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { useCluster } from '@/lib/hooks';
+import { queryKeys, useCluster } from '@/lib/hooks';
 import {
   getImageVulnReport,
   getImageVulnReportHistory,
@@ -45,21 +46,6 @@ import {
   type ImageVulnSummary,
 } from '@/lib/api/cluster-detail';
 import { Download, TrendingDown, TrendingUp, Minus } from 'lucide-react';
-
-const qk = {
-  summary: (id: string) => ['clusters', id, 'image-vulns', 'summary'] as const,
-  images: (id: string, ns: string) =>
-    ['clusters', id, 'image-vulns', 'images', ns] as const,
-  report: (id: string, reportId: string, sev: string) =>
-    ['clusters', id, 'image-vulns', 'report', reportId, sev] as const,
-  history: (id: string, h: number) =>
-    ['clusters', id, 'image-vulns', 'history', h] as const,
-  reportHistory: (id: string, reportId: string) =>
-    ['clusters', id, 'image-vulns', 'report-history', reportId] as const,
-  diff: (id: string, h: number) =>
-    ['clusters', id, 'image-vulns', 'diff', h] as const,
-  progress: (id: string) => ['clusters', id, 'image-vulns', 'progress'] as const,
-};
 
 const SEVERITIES: { key: keyof ImageVulnSummary; label: string; tone: string }[] = [
   { key: 'critical', label: 'Critical', tone: 'bg-red-500/10 text-red-500 border-red-500/30' },
@@ -99,40 +85,27 @@ export default function ClusterImageScansPage() {
   // user-visible feedback window so the click always produces a
   // legible response.
   const [lastRescanAt, setLastRescanAt] = useState<number | null>(null);
-
-  if (cluster?.isLocal) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center p-4">
-        <ShieldAlert className="h-8 w-8 mb-2" />
-        <p className="text-sm font-medium text-foreground">
-          Image scans aren&apos;t available on the management plane&apos;s own cluster.
-        </p>
-        <p className="text-xs">
-          Image scanning depends on trivy-operator running in a remote cluster
-          and reachable over the agent tunnel. Register a managed cluster, install
-          trivy-operator from the Catalog, and scans will appear here.
-        </p>
-      </div>
-    );
-  }
+  const scansEnabled = !!cluster && !cluster.isLocal;
 
   const summary = useQuery({
-    queryKey: qk.summary(clusterId),
+    queryKey: queryKeys.clusterPages.imageVulnSummary(clusterId),
     queryFn: () => getImageVulnSummary(clusterId),
+    enabled: scansEnabled,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
 
   const images = useQuery({
-    queryKey: qk.images(clusterId, namespace),
+    queryKey: queryKeys.clusterPages.imageVulnImages(clusterId, namespace),
     queryFn: () => listVulnerableImages(clusterId, { namespace: namespace || undefined, limit: 20 }),
+    enabled: scansEnabled,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
 
   const reportDetail = useQuery({
     queryKey: openReport
-      ? qk.report(clusterId, openReport.id, severityFilter || '')
+      ? queryKeys.clusterPages.imageVulnReport(clusterId, openReport.id, severityFilter || '')
       : ['noop'],
     queryFn: () =>
       openReport
@@ -141,7 +114,7 @@ export default function ClusterImageScansPage() {
             limit: 100,
           })
         : Promise.resolve(null),
-    enabled: !!openReport,
+    enabled: scansEnabled && !!openReport,
   });
 
   // Per-image scan history for the drawer. Only fires when a row is
@@ -149,13 +122,13 @@ export default function ClusterImageScansPage() {
   // so the drawer stays in sync if a new snapshot lands while open.
   const reportHistory = useQuery({
     queryKey: openReport
-      ? qk.reportHistory(clusterId, openReport.id)
+      ? queryKeys.clusterPages.imageVulnReportHistory(clusterId, openReport.id)
       : ['noop-rh'],
     queryFn: () =>
       openReport
         ? getImageVulnReportHistory(clusterId, openReport.id, { limit: 50 })
         : Promise.resolve(null),
-    enabled: !!openReport,
+    enabled: scansEnabled && !!openReport,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
@@ -164,35 +137,37 @@ export default function ClusterImageScansPage() {
     mutationFn: () => triggerImageVulnRescan(clusterId),
     onSuccess: (data) => {
       if (data.triggered) {
-        toast.success('Trivy operator nudged — re-scans will appear shortly');
+        toastSuccess('Trivy operator nudged — re-scans will appear shortly');
         // Mark the click time so the progress banner enters
         // "dispatched, waiting for jobs" mode and the progress query
         // polls at 1.5s for the next 60s — long enough to catch the
         // 5-15s scan window most clusters produce.
         setLastRescanAt(Date.now());
       } else {
-        toast.warning(`Rescan not triggered: ${data.reason ?? 'unknown'}`);
+        toastWarning(`Rescan not triggered: ${data.reason ?? 'unknown'}`);
       }
-      queryClient.invalidateQueries({ queryKey: qk.summary(clusterId) });
-      queryClient.invalidateQueries({ queryKey: qk.history(clusterId, 24 * 30) });
-      queryClient.invalidateQueries({ queryKey: qk.diff(clusterId, 24) });
-      queryClient.invalidateQueries({ queryKey: qk.progress(clusterId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnSummary(clusterId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnDiff(clusterId, 24) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.imageVulnProgress(clusterId) });
     },
-    onError: (err) => toast.error(`Rescan failed: ${(err as Error).message}`),
+    onError: (err) => toastApiError('Rescan failed', err),
   });
 
   // Sprint 081: scan history sparkline (last 30 days) + diff vs 24h
   // ago. Both refresh on the same 30s cadence as the summary so the
   // page stays in sync as new Trivy reports flow in.
   const history = useQuery({
-    queryKey: qk.history(clusterId, 24 * 30),
+    queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30),
     queryFn: () => getImageVulnHistory(clusterId, { sinceHours: 24 * 30, limit: 200 }),
+    enabled: scansEnabled,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
   const diff = useQuery({
-    queryKey: qk.diff(clusterId, 24),
+    queryKey: queryKeys.clusterPages.imageVulnDiff(clusterId, 24),
     queryFn: () => getImageVulnDiff(clusterId, 24),
+    enabled: scansEnabled,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
@@ -202,8 +177,9 @@ export default function ClusterImageScansPage() {
   //   • rescan clicked within 60s    → 1.5s (most scans finish < polling)
   //   • otherwise                    → 30s  (don't hammer the tunnel)
   const progress = useQuery({
-    queryKey: qk.progress(clusterId),
+    queryKey: queryKeys.clusterPages.imageVulnProgress(clusterId),
     queryFn: () => getImageVulnProgress(clusterId),
+    enabled: scansEnabled,
     refetchInterval: (query) => {
       if (query.state.data?.scanning) return 3_000;
       if (lastRescanAt && Date.now() - lastRescanAt < 60_000) return 1_500;
@@ -225,6 +201,22 @@ export default function ClusterImageScansPage() {
     const stillThere = images.data?.items.some((r) => r.id === openReport.id);
     if (stillThere === false) setOpenReport(null);
   }, [images.data, openReport]);
+
+  if (cluster?.isLocal) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center p-4">
+        <ShieldAlert className="h-8 w-8 mb-2" />
+        <p className="text-sm font-medium text-foreground">
+          Image scans aren&apos;t available on the management plane&apos;s own cluster.
+        </p>
+        <p className="text-xs">
+          Image scanning depends on trivy-operator running in a remote cluster
+          and reachable over the agent tunnel. Register a managed cluster, install
+          trivy-operator from the Catalog, and scans will appear here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4">
@@ -425,30 +417,30 @@ export default function ClusterImageScansPage() {
 
       {/* Top images */}
       <section className="border border-border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-            <tr>
-              <th className="px-3 py-2">Image</th>
-              <th className="px-3 py-2">Namespace</th>
-              <th className="px-3 py-2">Workload</th>
-              <th className="px-3 py-2 text-right">Critical</th>
-              <th className="px-3 py-2 text-right">High</th>
-              <th className="px-3 py-2 text-right">Total</th>
-              <th className="px-3 py-2">Scanned</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="w-full text-sm">
+          <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+            <TableRow>
+              <TableHead className="px-3 py-2">Image</TableHead>
+              <TableHead className="px-3 py-2">Namespace</TableHead>
+              <TableHead className="px-3 py-2">Workload</TableHead>
+              <TableHead className="px-3 py-2 text-right">Critical</TableHead>
+              <TableHead className="px-3 py-2 text-right">High</TableHead>
+              <TableHead className="px-3 py-2 text-right">Total</TableHead>
+              <TableHead className="px-3 py-2">Scanned</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {images.isLoading && (
-              <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
                   <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
                   Loading…
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {!images.isLoading && (images.data?.items.length ?? 0) === 0 && (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center">
+              <TableRow>
+                <TableCell colSpan={7} className="px-3 py-8 text-center">
                   <div className="inline-flex flex-col items-center gap-2 text-muted-foreground">
                     <ShieldAlert className="h-6 w-6" />
                     <div className="font-medium text-foreground">No vulnerability reports yet</div>
@@ -465,47 +457,47 @@ export default function ClusterImageScansPage() {
                         Install via Tools
                       </a>
                       <a
-                        href={`/dashboard/clusters/${clusterId}/provisioning`}
+                        href={`/dashboard/clusters/${clusterId}/adoption`}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
                       >
-                        View Provisioning status
+                        View adoption status
                       </a>
                     </div>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {images.data?.items.map((r) => {
               const total =
                 r.criticalCount + r.highCount + r.mediumCount + r.lowCount + r.unknownCount;
               return (
-                <tr
+                <TableRow
                   key={r.id}
                   className="border-t border-border hover:bg-muted/40 cursor-pointer"
                   onClick={() => setOpenReport(r)}
                 >
-                  <td className="px-3 py-2 font-mono text-xs">
+                  <TableCell className="px-3 py-2 font-mono text-xs">
                     {r.imageRepo}:{r.imageTag}
-                  </td>
-                  <td className="px-3 py-2">{r.namespace}</td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell className="px-3 py-2">{r.namespace}</TableCell>
+                  <TableCell className="px-3 py-2">
                     {r.workloadKind} / {r.workloadName}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-red-500">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right font-semibold text-red-500">
                     {r.criticalCount}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-orange-500">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right font-semibold text-orange-500">
                     {r.highCount}
-                  </td>
-                  <td className="px-3 py-2 text-right">{total}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right">{total}</TableCell>
+                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                     {new Date(r.scannedAt).toLocaleString()}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </section>
 
       {/* Per-image drawer */}

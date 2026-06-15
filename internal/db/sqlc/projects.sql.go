@@ -82,7 +82,7 @@ INSERT INTO projects (
     pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 `
 
 type CreateProjectParams struct {
@@ -137,6 +137,13 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.ResourceQuotaPodCount,
 		&i.QuotaPlan,
 		&i.QuotaOverrides,
+		&i.DefaultVaultConnectionID,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
@@ -167,7 +174,7 @@ func (q *Queries) DeleteProjectNamespace(ctx context.Context, arg DeleteProjectN
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides FROM projects WHERE id = $1
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error) {
@@ -192,12 +199,19 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.ResourceQuotaPodCount,
 		&i.QuotaPlan,
 		&i.QuotaOverrides,
+		&i.DefaultVaultConnectionID,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
 
 const getProjectByNameAndCluster = `-- name: GetProjectByNameAndCluster :one
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides FROM projects WHERE name = $1 AND cluster_id = $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects WHERE name = $1 AND cluster_id = $2
 `
 
 type GetProjectByNameAndClusterParams struct {
@@ -227,6 +241,13 @@ func (q *Queries) GetProjectByNameAndCluster(ctx context.Context, arg GetProject
 		&i.ResourceQuotaPodCount,
 		&i.QuotaPlan,
 		&i.QuotaOverrides,
+		&i.DefaultVaultConnectionID,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
@@ -301,7 +322,7 @@ func (q *Queries) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectsParams struct {
@@ -337,6 +358,13 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 			&i.ResourceQuotaPodCount,
 			&i.QuotaPlan,
 			&i.QuotaOverrides,
+			&i.DefaultVaultConnectionID,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
 		); err != nil {
 			return nil, err
 		}
@@ -349,7 +377,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 }
 
 const listProjectsByCluster = `-- name: ListProjectsByCluster :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListProjectsByClusterParams struct {
@@ -386,6 +414,13 @@ func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByC
 			&i.ResourceQuotaPodCount,
 			&i.QuotaPlan,
 			&i.QuotaOverrides,
+			&i.DefaultVaultConnectionID,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
 		); err != nil {
 			return nil, err
 		}
@@ -439,7 +474,7 @@ UPDATE projects SET
     resource_quota_pod_count      = $11,
     updated_at                    = now()
 WHERE id = $1
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 `
 
 type UpdateProjectParams struct {
@@ -490,6 +525,13 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.ResourceQuotaPodCount,
 		&i.QuotaPlan,
 		&i.QuotaOverrides,
+		&i.DefaultVaultConnectionID,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
@@ -502,7 +544,7 @@ UPDATE projects SET
     resource_quota_pod_count      = $5,
     updated_at                    = now()
 WHERE id = $1
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides
+RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 `
 
 type UpdateProjectPolicyParams struct {
@@ -545,6 +587,13 @@ func (q *Queries) UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPoli
 		&i.ResourceQuotaPodCount,
 		&i.QuotaPlan,
 		&i.QuotaOverrides,
+		&i.DefaultVaultConnectionID,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }

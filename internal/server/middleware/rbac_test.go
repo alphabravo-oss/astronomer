@@ -227,6 +227,108 @@ func TestRBAC_ClusterScopedCorrectCluster(t *testing.T) {
 	}
 }
 
+func TestRBAC_NamespaceScopedBindingFromRouteParam(t *testing.T) {
+	clusterID := uuid.New()
+	engine := rbac.NewEngine()
+	querier := &mockRBACQuerier{bindings: []rbac.RoleBinding{{
+		ClusterID: clusterID.String(),
+		Namespace: "payments",
+		RoleRules: []rbac.Rule{{
+			Resource: string(rbac.ResourceWorkloads),
+			Verbs:    []string{string(rbac.VerbRead)},
+		}},
+	}}}
+
+	mw := RequirePermission(engine, querier, rbac.ResourceWorkloads, rbac.VerbRead)
+
+	handlerCalled := false
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/workloads/deployments/payments/api", clusterID), nil)
+	req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		ID: uuid.New().String(), Email: "operator@test.com",
+	}))
+	req = setupChiRequest(req, map[string]string{"cluster_id": clusterID.String(), "namespace": "payments"})
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !handlerCalled {
+		t.Fatal("expected handler to be called")
+	}
+}
+
+func TestRBAC_NamespaceScopedBindingDeniesWrongOrMissingNamespace(t *testing.T) {
+	clusterID := uuid.New()
+	engine := rbac.NewEngine()
+	querier := &mockRBACQuerier{bindings: []rbac.RoleBinding{{
+		ClusterID: clusterID.String(),
+		Namespace: "payments",
+		RoleRules: []rbac.Rule{{
+			Resource: string(rbac.ResourceWorkloads),
+			Verbs:    []string{string(rbac.VerbRead)},
+		}},
+	}}}
+
+	mw := RequirePermission(engine, querier, rbac.ResourceWorkloads, rbac.VerbRead)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for _, params := range []map[string]string{
+		{"cluster_id": clusterID.String(), "namespace": "default"},
+		{"cluster_id": clusterID.String()},
+	} {
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/workloads", clusterID), nil)
+		req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+			ID: uuid.New().String(), Email: "operator@test.com",
+		}))
+		req = setupChiRequest(req, params)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("params=%v: expected 403, got %d body=%s", params, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+func TestRBAC_NamespaceScopedBindingFromQueryParam(t *testing.T) {
+	clusterID := uuid.New()
+	engine := rbac.NewEngine()
+	querier := &mockRBACQuerier{bindings: []rbac.RoleBinding{{
+		ClusterID: clusterID.String(),
+		Namespace: "payments",
+		RoleRules: []rbac.Rule{{
+			Resource: string(rbac.ResourceConfigMaps),
+			Verbs:    []string{string(rbac.VerbList)},
+		}},
+	}}}
+
+	mw := RequirePermission(engine, querier, rbac.ResourceConfigMaps, rbac.VerbList)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/resources/generic/configmaps?namespace=payments", clusterID), nil)
+	req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		ID: uuid.New().String(), Email: "operator@test.com",
+	}))
+	req = setupChiRequest(req, map[string]string{"cluster_id": clusterID.String()})
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestRBAC_ClusterScopedWrongCluster(t *testing.T) {
 	clusterID := uuid.New()
 	wrongClusterID := uuid.New()

@@ -105,27 +105,6 @@ func (q *Queries) DeleteClusterTemplateApplication(ctx context.Context, clusterI
 	return err
 }
 
-const getClusterRegistrationPolicy = `-- name: GetClusterRegistrationPolicy :one
-
-SELECT cluster_id, token_rotation_days, source_template_id, created_at, updated_at FROM cluster_registration_policies WHERE cluster_id = $1
-`
-
-// Registration policy table (per-cluster). The apply worker stamps this
-// when spec.registration_policy is set; the existing token cleanup task
-// can read token_rotation_days when rotating.
-func (q *Queries) GetClusterRegistrationPolicy(ctx context.Context, clusterID uuid.UUID) (ClusterRegistrationPolicy, error) {
-	row := q.db.QueryRow(ctx, getClusterRegistrationPolicy, clusterID)
-	var i ClusterRegistrationPolicy
-	err := row.Scan(
-		&i.ClusterID,
-		&i.TokenRotationDays,
-		&i.SourceTemplateID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getClusterTemplateApplication = `-- name: GetClusterTemplateApplication :one
 SELECT cluster_id, template_id, status, spec_snapshot, last_error, applied_at, created_at, updated_at FROM cluster_template_applications WHERE cluster_id = $1
 `
@@ -202,43 +181,6 @@ type ListClusterTemplateApplicationsByStatusParams struct {
 // Go.
 func (q *Queries) ListClusterTemplateApplicationsByStatus(ctx context.Context, arg ListClusterTemplateApplicationsByStatusParams) ([]ClusterTemplateApplication, error) {
 	rows, err := q.db.Query(ctx, listClusterTemplateApplicationsByStatus, arg.Status, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ClusterTemplateApplication{}
-	for rows.Next() {
-		var i ClusterTemplateApplication
-		if err := rows.Scan(
-			&i.ClusterID,
-			&i.TemplateID,
-			&i.Status,
-			&i.SpecSnapshot,
-			&i.LastError,
-			&i.AppliedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listClusterTemplateApplicationsByTemplate = `-- name: ListClusterTemplateApplicationsByTemplate :many
-SELECT cluster_id, template_id, status, spec_snapshot, last_error, applied_at, created_at, updated_at FROM cluster_template_applications
-WHERE template_id = $1
-ORDER BY updated_at DESC
-`
-
-// Reverse-lookup for the cluster-template detail view that lists every
-// cluster currently using a template (and its application status).
-func (q *Queries) ListClusterTemplateApplicationsByTemplate(ctx context.Context, templateID uuid.UUID) ([]ClusterTemplateApplication, error) {
-	rows, err := q.db.Query(ctx, listClusterTemplateApplicationsByTemplate, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -398,6 +340,7 @@ func (q *Queries) UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTe
 }
 
 const upsertClusterRegistrationPolicy = `-- name: UpsertClusterRegistrationPolicy :one
+
 INSERT INTO cluster_registration_policies (
     cluster_id, token_rotation_days, source_template_id
 )
@@ -415,6 +358,9 @@ type UpsertClusterRegistrationPolicyParams struct {
 	SourceTemplateID  pgtype.UUID `json:"source_template_id"`
 }
 
+// Registration policy table (per-cluster). The apply worker stamps this
+// when spec.registration_policy is set; the existing token cleanup task
+// can read token_rotation_days when rotating.
 func (q *Queries) UpsertClusterRegistrationPolicy(ctx context.Context, arg UpsertClusterRegistrationPolicyParams) (ClusterRegistrationPolicy, error) {
 	row := q.db.QueryRow(ctx, upsertClusterRegistrationPolicy, arg.ClusterID, arg.TokenRotationDays, arg.SourceTemplateID)
 	var i ClusterRegistrationPolicy

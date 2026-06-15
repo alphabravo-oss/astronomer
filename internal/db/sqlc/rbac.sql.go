@@ -88,7 +88,7 @@ func (q *Queries) CreateClusterRole(ctx context.Context, arg CreateClusterRolePa
 const createClusterRoleBinding = `-- name: CreateClusterRoleBinding :one
 INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source
 `
 
 type CreateClusterRoleBindingParams struct {
@@ -114,6 +114,7 @@ func (q *Queries) CreateClusterRoleBinding(ctx context.Context, arg CreateCluste
 		&i.ClusterID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Source,
 	)
 	return i, err
 }
@@ -160,7 +161,7 @@ func (q *Queries) CreateGlobalRole(ctx context.Context, arg CreateGlobalRolePara
 const createGlobalRoleBinding = `-- name: CreateGlobalRoleBinding :one
 INSERT INTO global_role_bindings (user_id, "group", role_id)
 VALUES ($1, $2, $3)
-RETURNING id, user_id, "group", role_id, created_at, updated_at
+RETURNING id, user_id, "group", role_id, created_at, updated_at, source
 `
 
 type CreateGlobalRoleBindingParams struct {
@@ -179,6 +180,7 @@ func (q *Queries) CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalR
 		&i.RoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Source,
 	)
 	return i, err
 }
@@ -225,7 +227,7 @@ func (q *Queries) CreateProjectRole(ctx context.Context, arg CreateProjectRolePa
 const createProjectRoleBinding = `-- name: CreateProjectRoleBinding :one
 INSERT INTO project_role_bindings (user_id, "group", role_id, project_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at
+RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source
 `
 
 type CreateProjectRoleBindingParams struct {
@@ -251,6 +253,7 @@ func (q *Queries) CreateProjectRoleBinding(ctx context.Context, arg CreateProjec
 		&i.ProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Source,
 	)
 	return i, err
 }
@@ -311,7 +314,7 @@ func (q *Queries) DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) er
 
 const getClusterRoleBindingByID = `-- name: GetClusterRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at FROM cluster_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE id = $1
 `
 
 // Cluster Role Bindings
@@ -326,72 +329,9 @@ func (q *Queries) GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (
 		&i.ClusterID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Source,
 	)
 	return i, err
-}
-
-const getClusterRoleBindingsByGroup = `-- name: GetClusterRoleBindingsByGroup :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at FROM cluster_role_bindings WHERE "group" = $1
-`
-
-func (q *Queries) GetClusterRoleBindingsByGroup(ctx context.Context, group string) ([]ClusterRoleBinding, error) {
-	rows, err := q.db.Query(ctx, getClusterRoleBindingsByGroup, group)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ClusterRoleBinding{}
-	for rows.Next() {
-		var i ClusterRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.ClusterID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getClusterRoleBindingsByUserID = `-- name: GetClusterRoleBindingsByUserID :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at FROM cluster_role_bindings WHERE user_id = $1
-`
-
-func (q *Queries) GetClusterRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error) {
-	rows, err := q.db.Query(ctx, getClusterRoleBindingsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ClusterRoleBinding{}
-	for rows.Next() {
-		var i ClusterRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.ClusterID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getClusterRoleByID = `-- name: GetClusterRoleByID :one
@@ -417,30 +357,9 @@ func (q *Queries) GetClusterRoleByID(ctx context.Context, id uuid.UUID) (Cluster
 	return i, err
 }
 
-const getClusterRoleByName = `-- name: GetClusterRoleByName :one
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM cluster_roles WHERE name = $1
-`
-
-func (q *Queries) GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error) {
-	row := q.db.QueryRow(ctx, getClusterRoleByName, name)
-	var i ClusterRole
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Description,
-		&i.Permissions,
-		&i.Rules,
-		&i.IsBuiltin,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DisplayName,
-	)
-	return i, err
-}
-
 const getGlobalRoleBindingByID = `-- name: GetGlobalRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, created_at, updated_at FROM global_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, created_at, updated_at, source FROM global_role_bindings WHERE id = $1
 `
 
 // Global Role Bindings
@@ -454,70 +373,9 @@ func (q *Queries) GetGlobalRoleBindingByID(ctx context.Context, id uuid.UUID) (G
 		&i.RoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Source,
 	)
 	return i, err
-}
-
-const getGlobalRoleBindingsByGroup = `-- name: GetGlobalRoleBindingsByGroup :many
-SELECT id, user_id, "group", role_id, created_at, updated_at FROM global_role_bindings WHERE "group" = $1
-`
-
-func (q *Queries) GetGlobalRoleBindingsByGroup(ctx context.Context, group string) ([]GlobalRoleBinding, error) {
-	rows, err := q.db.Query(ctx, getGlobalRoleBindingsByGroup, group)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GlobalRoleBinding{}
-	for rows.Next() {
-		var i GlobalRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getGlobalRoleBindingsByUserID = `-- name: GetGlobalRoleBindingsByUserID :many
-SELECT id, user_id, "group", role_id, created_at, updated_at FROM global_role_bindings WHERE user_id = $1
-`
-
-func (q *Queries) GetGlobalRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error) {
-	rows, err := q.db.Query(ctx, getGlobalRoleBindingsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GlobalRoleBinding{}
-	for rows.Next() {
-		var i GlobalRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getGlobalRoleByID = `-- name: GetGlobalRoleByID :one
@@ -543,30 +401,9 @@ func (q *Queries) GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (GlobalRo
 	return i, err
 }
 
-const getGlobalRoleByName = `-- name: GetGlobalRoleByName :one
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM global_roles WHERE name = $1
-`
-
-func (q *Queries) GetGlobalRoleByName(ctx context.Context, name string) (GlobalRole, error) {
-	row := q.db.QueryRow(ctx, getGlobalRoleByName, name)
-	var i GlobalRole
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Description,
-		&i.Permissions,
-		&i.Rules,
-		&i.IsBuiltin,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DisplayName,
-	)
-	return i, err
-}
-
 const getProjectRoleBindingByID = `-- name: GetProjectRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at FROM project_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings WHERE id = $1
 `
 
 // Project Role Bindings
@@ -581,72 +418,9 @@ func (q *Queries) GetProjectRoleBindingByID(ctx context.Context, id uuid.UUID) (
 		&i.ProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Source,
 	)
 	return i, err
-}
-
-const getProjectRoleBindingsByGroup = `-- name: GetProjectRoleBindingsByGroup :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at FROM project_role_bindings WHERE "group" = $1
-`
-
-func (q *Queries) GetProjectRoleBindingsByGroup(ctx context.Context, group string) ([]ProjectRoleBinding, error) {
-	rows, err := q.db.Query(ctx, getProjectRoleBindingsByGroup, group)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ProjectRoleBinding{}
-	for rows.Next() {
-		var i ProjectRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.ProjectID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getProjectRoleBindingsByUserID = `-- name: GetProjectRoleBindingsByUserID :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at FROM project_role_bindings WHERE user_id = $1
-`
-
-func (q *Queries) GetProjectRoleBindingsByUserID(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error) {
-	rows, err := q.db.Query(ctx, getProjectRoleBindingsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ProjectRoleBinding{}
-	for rows.Next() {
-		var i ProjectRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.ProjectID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getProjectRoleByID = `-- name: GetProjectRoleByID :one
@@ -672,147 +446,8 @@ func (q *Queries) GetProjectRoleByID(ctx context.Context, id uuid.UUID) (Project
 	return i, err
 }
 
-const getProjectRoleByName = `-- name: GetProjectRoleByName :one
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM project_roles WHERE name = $1
-`
-
-func (q *Queries) GetProjectRoleByName(ctx context.Context, name string) (ProjectRole, error) {
-	row := q.db.QueryRow(ctx, getProjectRoleByName, name)
-	var i ProjectRole
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Description,
-		&i.Permissions,
-		&i.Rules,
-		&i.IsBuiltin,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DisplayName,
-	)
-	return i, err
-}
-
-const getUserClusterRoles = `-- name: GetUserClusterRoles :many
-SELECT cr.id, cr.name, cr.description, cr.permissions, cr.rules, cr.is_builtin, cr.created_at, cr.updated_at, cr.display_name FROM cluster_roles cr
-INNER JOIN cluster_role_bindings crb ON cr.id = crb.role_id
-WHERE crb.user_id = $1 AND crb.cluster_id = $2
-`
-
-type GetUserClusterRolesParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	ClusterID uuid.UUID   `json:"cluster_id"`
-}
-
-func (q *Queries) GetUserClusterRoles(ctx context.Context, arg GetUserClusterRolesParams) ([]ClusterRole, error) {
-	rows, err := q.db.Query(ctx, getUserClusterRoles, arg.UserID, arg.ClusterID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ClusterRole{}
-	for rows.Next() {
-		var i ClusterRole
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.Permissions,
-			&i.Rules,
-			&i.IsBuiltin,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DisplayName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getUserGlobalRoles = `-- name: GetUserGlobalRoles :many
-SELECT gr.id, gr.name, gr.description, gr.permissions, gr.rules, gr.is_builtin, gr.created_at, gr.updated_at, gr.display_name FROM global_roles gr
-INNER JOIN global_role_bindings grb ON gr.id = grb.role_id
-WHERE grb.user_id = $1
-`
-
-func (q *Queries) GetUserGlobalRoles(ctx context.Context, userID pgtype.UUID) ([]GlobalRole, error) {
-	rows, err := q.db.Query(ctx, getUserGlobalRoles, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GlobalRole{}
-	for rows.Next() {
-		var i GlobalRole
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.Permissions,
-			&i.Rules,
-			&i.IsBuiltin,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DisplayName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getUserProjectRoles = `-- name: GetUserProjectRoles :many
-SELECT pr.id, pr.name, pr.description, pr.permissions, pr.rules, pr.is_builtin, pr.created_at, pr.updated_at, pr.display_name FROM project_roles pr
-INNER JOIN project_role_bindings prb ON pr.id = prb.role_id
-WHERE prb.user_id = $1 AND prb.project_id = $2
-`
-
-type GetUserProjectRolesParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	ProjectID uuid.UUID   `json:"project_id"`
-}
-
-func (q *Queries) GetUserProjectRoles(ctx context.Context, arg GetUserProjectRolesParams) ([]ProjectRole, error) {
-	rows, err := q.db.Query(ctx, getUserProjectRoles, arg.UserID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ProjectRole{}
-	for rows.Next() {
-		var i ProjectRole
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.Permissions,
-			&i.Rules,
-			&i.IsBuiltin,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DisplayName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listClusterRoleBindings = `-- name: ListClusterRoleBindings :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClusterRoleBindingsParams struct {
@@ -837,6 +472,7 @@ func (q *Queries) ListClusterRoleBindings(ctx context.Context, arg ListClusterRo
 			&i.ClusterID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -849,7 +485,7 @@ func (q *Queries) ListClusterRoleBindings(ctx context.Context, arg ListClusterRo
 }
 
 const listClusterRoleBindingsByCluster = `-- name: ListClusterRoleBindingsByCluster :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListClusterRoleBindingsByClusterParams struct {
@@ -875,6 +511,7 @@ func (q *Queries) ListClusterRoleBindingsByCluster(ctx context.Context, arg List
 			&i.ClusterID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -926,7 +563,7 @@ func (q *Queries) ListClusterRoles(ctx context.Context, arg ListClusterRolesPara
 }
 
 const listGlobalRoleBindings = `-- name: ListGlobalRoleBindings :many
-SELECT id, user_id, "group", role_id, created_at, updated_at FROM global_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, created_at, updated_at, source FROM global_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListGlobalRoleBindingsParams struct {
@@ -950,6 +587,7 @@ func (q *Queries) ListGlobalRoleBindings(ctx context.Context, arg ListGlobalRole
 			&i.RoleID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -1001,7 +639,7 @@ func (q *Queries) ListGlobalRoles(ctx context.Context, arg ListGlobalRolesParams
 }
 
 const listProjectRoleBindings = `-- name: ListProjectRoleBindings :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at FROM project_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectRoleBindingsParams struct {
@@ -1026,6 +664,7 @@ func (q *Queries) ListProjectRoleBindings(ctx context.Context, arg ListProjectRo
 			&i.ProjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -1038,7 +677,7 @@ func (q *Queries) ListProjectRoleBindings(ctx context.Context, arg ListProjectRo
 }
 
 const listProjectRoleBindingsByProject = `-- name: ListProjectRoleBindingsByProject :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListProjectRoleBindingsByProjectParams struct {
@@ -1064,6 +703,7 @@ func (q *Queries) ListProjectRoleBindingsByProject(ctx context.Context, arg List
 			&i.ProjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}

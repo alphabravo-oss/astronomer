@@ -81,7 +81,9 @@ func main() {
 		os.Exit(2)
 	}
 	db := stdlib.OpenDB(*connCfg)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	db.SetMaxOpenConns(4)
 
 	if err := db.PingContext(ctx); err != nil {
@@ -154,8 +156,8 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 		return s
 	}
 	type row struct {
-		id  string
-		ct  string
+		id string
+		ct string
 	}
 	var batch []row
 	for rows.Next() {
@@ -202,4 +204,3 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 	}
 	return s
 }
-

@@ -55,9 +55,6 @@ INSERT INTO email_messages (
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
--- name: GetEmailMessageByID :one
-SELECT * FROM email_messages WHERE id = $1;
-
 -- name: ListQueuedEmails :many
 -- Dispatcher worker batch read. Returns rows the worker should attempt
 -- this tick: brand-new queued rows and previously-failed rows whose
@@ -118,9 +115,6 @@ WHERE id = $1;
 -- Retention sweep, runs daily. Returns the row count so the task can
 -- emit a "rows deleted" log line for the operator.
 DELETE FROM email_messages WHERE created_at < $1;
-
--- name: CountEmailsByStatus :one
-SELECT count(*) FROM email_messages WHERE status = $1;
 
 -- ----- Password reset tokens -----
 

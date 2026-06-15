@@ -17,6 +17,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Search } from 'lucide-react';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import { cn } from '@/lib/utils';
 import {
   useDexConnectorTypes,
@@ -64,7 +65,7 @@ export default function NewConnectorPage() {
     } catch (err) {
       // Surface the server's `error.message` so missing-fields lists land
       // inline next to the form.
-      const message = extractAxiosError(err) ?? 'Failed to create connector.';
+      const message = extractApiErrorMessage(err) ?? 'Failed to create connector.';
       setServerError(message);
     }
   };
@@ -209,20 +210,5 @@ export default function NewConnectorPage() {
         </div>
       )}
     </div>
-  );
-}
-
-// Pull the `error.message` out of an axios failure so the form can show the
-// server's "missing required fields: ..." string verbatim. Falls back to
-// `Error.message` when the response shape doesn't match.
-function extractAxiosError(err: unknown): string | null {
-  if (!err) return null;
-  type ResponseShape = { response?: { data?: { error?: { message?: string }; message?: string } }; message?: string };
-  const obj = err as ResponseShape;
-  return (
-    obj.response?.data?.error?.message ??
-    obj.response?.data?.message ??
-    obj.message ??
-    null
   );
 }

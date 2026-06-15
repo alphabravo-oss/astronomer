@@ -38,19 +38,6 @@ func (q *Queries) ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCo
 	return result.RowsAffected(), nil
 }
 
-const countTOTPEnrollments = `-- name: CountTOTPEnrollments :one
-SELECT count(*) FROM user_totp_enrollments
-`
-
-// Drives the astronomer_auth_totp_enrollments gauge. Cheap full-table
-// count over a small table; no index needed.
-func (q *Queries) CountTOTPEnrollments(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countTOTPEnrollments)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countUnusedRecoveryCodes = `-- name: CountUnusedRecoveryCodes :one
 SELECT count(*) FROM user_totp_recovery_codes
 WHERE user_id = $1 AND used_at IS NULL

@@ -43,14 +43,14 @@ const (
 // in to IsBlocked and what operators put in operation_types JSONB.
 // Kept here so both sides agree on spelling.
 const (
-	OpClusterDelete         = "cluster.delete"
-	OpProjectDelete         = "project.delete"
-	OpToolInstall           = "tool.install"
-	OpToolUpgrade           = "tool.upgrade"
-	OpToolUninstall         = "tool.uninstall"
-	OpHelmInstall           = "helm.install"
-	OpHelmUninstall         = "helm.uninstall"
-	OpClusterTemplateApply  = "cluster_template.apply"
+	OpClusterDelete        = "cluster.delete"
+	OpProjectDelete        = "project.delete"
+	OpToolInstall          = "tool.install"
+	OpToolUpgrade          = "tool.upgrade"
+	OpToolUninstall        = "tool.uninstall"
+	OpHelmInstall          = "helm.install"
+	OpHelmUninstall        = "helm.uninstall"
+	OpClusterTemplateApply = "cluster_template.apply"
 )
 
 // KnownOperationTypes is the set of operation types the platform currently
@@ -135,10 +135,9 @@ type Evaluator struct {
 	queries WindowQuerier
 	ttl     time.Duration
 
-	mu        sync.RWMutex
-	cached    []Window
-	cachedAt  time.Time
-	cacheHits int
+	mu       sync.RWMutex
+	cached   []Window
+	cachedAt time.Time
 }
 
 // NewEvaluator builds an Evaluator with the default 30s TTL.

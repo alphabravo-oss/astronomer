@@ -337,7 +337,9 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 	if err != nil {
 		return nil, true, err
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		_ = httpResp.Body.Close()
+	}()
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, true, err

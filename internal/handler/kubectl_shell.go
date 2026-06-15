@@ -35,10 +35,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"nhooyr.io/websocket"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -495,7 +495,9 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		h.logger().Error("kubectl shell websocket accept failed", slog.String("error", err.Error()))
 		return
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "closed")
+	defer func() {
+		_ = conn.Close(websocket.StatusNormalClosure, "closed")
+	}()
 
 	// Wire the input-line recorder: assemble inbound stdin bytes into
 	// lines (terminated by \r or \n — the xterm TTY ships \r on Enter)

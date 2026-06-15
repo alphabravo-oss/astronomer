@@ -65,6 +65,7 @@ export interface ClusterHeartbeatPayload {
   cluster_id: string;
   last_heartbeat: string;
   agent_version?: string;
+  heartbeat_schema_version?: number;
   kubernetes_version?: string;
   node_count?: number;
   pod_count?: number;

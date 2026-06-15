@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Loader2, Minus, Plus } from 'lucide-react';
+import { ModalShell } from '@/components/ui/modal-shell';
 
 interface ScaleDialogProps {
   open: boolean;
@@ -26,63 +27,17 @@ export function ScaleDialog({
     if (open) setReplicas(currentReplicas);
   }, [open, currentReplicas]);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-sm w-full mx-4 animate-fade-in">
-        <div className="p-6">
-          <h3 className="text-base font-semibold text-foreground">Scale Workload</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Set the desired number of replicas for{' '}
-            <span className="font-mono text-foreground">{workloadName}</span>
-          </p>
-
-          <div className="mt-5 flex items-center justify-center gap-4">
-            <button
-              onClick={() => setReplicas(Math.max(0, replicas - 1))}
-              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={replicas}
-              onChange={(e) => setReplicas(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-              className="h-10 w-20 text-center text-lg font-medium tabular-nums rounded border border-border
-                bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-
-            <button
-              onClick={() => setReplicas(Math.min(100, replicas + 1))}
-              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            Current: {currentReplicas} replica{currentReplicas !== 1 ? 's' : ''}
-          </p>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
+    <ModalShell
+      title="Scale Workload"
+      onClose={onClose}
+      size="sm"
+      panelClassName="max-w-sm"
+      bodyClassName="space-y-0"
+      footer={(
+        <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
             disabled={loading}
@@ -102,7 +57,44 @@ export function ScaleDialog({
             Scale
           </button>
         </div>
+      )}
+    >
+      <p className="text-sm text-muted-foreground">
+        Set the desired number of replicas for{' '}
+        <span className="font-mono text-foreground">{workloadName}</span>
+      </p>
+
+      <div className="mt-5 flex items-center justify-center gap-4">
+        <button
+          onClick={() => setReplicas(Math.max(0, replicas - 1))}
+          className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
+            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+
+        <input
+          type="number"
+          min={0}
+          max={100}
+          value={replicas}
+          onChange={(e) => setReplicas(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+          className="h-10 w-20 text-center text-lg font-medium tabular-nums rounded border border-border
+            bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+
+        <button
+          onClick={() => setReplicas(Math.min(100, replicas + 1))}
+          className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
+            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
       </div>
-    </div>
+
+      <p className="mt-2 text-center text-xs text-muted-foreground">
+        Current: {currentReplicas} replica{currentReplicas !== 1 ? 's' : ''}
+      </p>
+    </ModalShell>
   );
 }

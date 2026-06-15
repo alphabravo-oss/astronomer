@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "auth-session-public-baseline",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/refresh"
+      ],
+      "classification": "covered-auth-flow",
+      "reason": "Core auth session endpoints are public or token/cookie-gated by design and have dedicated auth/rate-limit test coverage outside the high-risk route registry."
+    }
+  ]
+}

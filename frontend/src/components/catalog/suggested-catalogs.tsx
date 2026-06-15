@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Package, Check, Plus, Loader2, AlertTriangle, X } from 'lucide-react';
+import { Package, Check, Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { useCreateHelmRepository } from '@/lib/hooks';
 import { SUGGESTED_CATALOGS, normalizeRepoUrl, type SuggestedCatalog } from '@/lib/catalogs/suggested';
 import type { HelmRepository } from '@/types';
@@ -164,34 +165,16 @@ function DhiConfirmModal({
   pending: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            <h3 className="text-base font-semibold text-foreground">
-              Subscription required
-            </h3>
-          </div>
-          <button
-            onClick={onCancel}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="px-6 py-4 space-y-3">
-          <p className="text-sm text-foreground">
-            Add <span className="font-medium">{catalog.displayName}</span>?
-          </p>
-          <p className="text-sm text-muted-foreground">
-            This catalog requires a paid Docker Hardened Images subscription.
-            Pulls will fail without credentials configured in{' '}
-            <code className="font-mono text-xs px-1 py-0.5 rounded bg-muted">auth_config</code>.
-          </p>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
+    <ModalShell
+      title="Subscription required"
+      onClose={onCancel}
+      size="sm"
+      panelClassName="max-w-md bg-popover"
+      bodyClassName="space-y-3 py-4"
+      footerClassName="bg-muted/30"
+      titleIcon={<AlertTriangle className="h-5 w-5 text-amber-500" />}
+      footer={(
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
@@ -213,7 +196,16 @@ function DhiConfirmModal({
             I have a subscription, add anyway
           </button>
         </div>
-      </div>
-    </div>
+      )}
+    >
+          <p className="text-sm text-foreground">
+            Add <span className="font-medium">{catalog.displayName}</span>?
+          </p>
+          <p className="text-sm text-muted-foreground">
+            This catalog requires a paid Docker Hardened Images subscription.
+            Pulls will fail without credentials configured in{' '}
+            <code className="font-mono text-xs px-1 py-0.5 rounded bg-muted">auth_config</code>.
+          </p>
+    </ModalShell>
   );
 }

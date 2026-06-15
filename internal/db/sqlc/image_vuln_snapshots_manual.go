@@ -147,20 +147,6 @@ type ListImageVulnerabilityHistoryForReportParams struct {
 	Limit    int32     `json:"limit"`
 }
 
-// ImageVulnerabilityReportSnapshot is the table row shape.
-type ImageVulnerabilityReportSnapshot struct {
-	ID            uuid.UUID          `json:"id"`
-	ReportID      uuid.UUID          `json:"report_id"`
-	ClusterID     uuid.UUID          `json:"cluster_id"`
-	CriticalCount int32              `json:"critical_count"`
-	HighCount     int32              `json:"high_count"`
-	MediumCount   int32              `json:"medium_count"`
-	LowCount      int32              `json:"low_count"`
-	UnknownCount  int32              `json:"unknown_count"`
-	ScannedAt     pgtype.Timestamptz `json:"scanned_at"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-}
-
 func (q *Queries) ListImageVulnerabilityHistoryForReport(ctx context.Context, arg ListImageVulnerabilityHistoryForReportParams) ([]ImageVulnerabilityReportSnapshot, error) {
 	rows, err := q.db.Query(ctx, listImageVulnerabilityHistoryForReport, arg.ReportID, arg.Limit)
 	if err != nil {

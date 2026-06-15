@@ -29,7 +29,7 @@ export default function InstallDexPage() {
   const router = useRouter();
   const { data: tools } = useTools();
   const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
-  const clusters = clustersData?.data ?? [];
+  const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
 
   const installMutation = useInstallTool();
   const settingsMutation = useUpdateDexSettings();

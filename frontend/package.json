@@ -9,6 +9,9 @@
     "prebuild": "mkdir -p public && cp node_modules/@wterm/core/wasm/wterm.wasm public/wterm.wasm",
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",
+    "code-health": "npm run openapi:types:check && node ../scripts/code-health-inventory.mjs --check --verify-doc && node ../scripts/operation-task-inventory.mjs --check --verify-doc",
+    "openapi:types": "node ../scripts/generate-openapi-types.mjs --write",
+    "openapi:types:check": "node ../scripts/generate-openapi-types.mjs --check",
     "type-check": "tsc --noEmit",
     "test": "jest",
     "test:e2e": "playwright test"
@@ -57,7 +60,6 @@
     "@tailwindcss/forms": "^0.5.7",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.4.0",
-    "@playwright/test": "^1.57.0",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^29.5.12",
     "@types/js-yaml": "^4.0.9",

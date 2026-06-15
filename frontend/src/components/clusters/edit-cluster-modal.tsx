@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { useUpdateCluster } from '@/lib/hooks';
 import type { Cluster, ClusterEnvironment } from '@/types';
-import { X, Loader2, Pencil, AlertTriangle } from 'lucide-react';
+import { Loader2, Pencil, AlertTriangle } from 'lucide-react';
 
 interface EditClusterModalProps {
   cluster: Cluster;
@@ -37,27 +38,37 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-              <Pencil className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground">Edit Cluster</h3>
-          </div>
+    <ModalShell
+      title="Edit Cluster"
+      onClose={onClose}
+      panelClassName="max-w-lg bg-popover overflow-hidden"
+      footerClassName="bg-muted/30"
+      titleIcon={(
+        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+          <Pencil className="h-4 w-4 text-muted-foreground" />
+        </div>
+      )}
+      footer={(
+        <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
-            <X className="h-5 w-5" />
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!form.displayName || updateCluster.isPending}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
+              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {updateCluster.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Save Changes
           </button>
         </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-4">
+      )}
+    >
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster Name</label>
             <input
@@ -131,28 +142,6 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
               </span>
             </span>
           </label>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!form.displayName || updateCluster.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {updateCluster.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Save Changes
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

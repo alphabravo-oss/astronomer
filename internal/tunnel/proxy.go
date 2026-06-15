@@ -53,7 +53,9 @@ func NewProxyHandler(hub *Hub, log *slog.Logger) *ProxyHandler {
 // upstream stream.
 func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
+	mode := k8sProxyMode(r)
 	if clusterID == "" {
+		recordK8sProxyError(mode, "missing_cluster_id")
 		http.Error(w, `{"error":"cluster_id is required"}`, http.StatusBadRequest)
 		return
 	}
@@ -70,6 +72,7 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		if p.forwardToOwnerPod(w, r, clusterID) {
 			return
 		}
+		recordK8sProxyError(mode, "agent_unavailable")
 		http.Error(w, `{"error":"Cluster agent not connected"}`, http.StatusServiceUnavailable)
 		return
 	}
@@ -82,6 +85,7 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
+		recordK8sProxyError(mode, "stream_create_failed")
 		http.Error(w, `{"error":"failed to create stream"}`, http.StatusInternalServerError)
 		return
 	}
@@ -94,12 +98,14 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
+		recordK8sProxyError(mode, "payload_build_failed")
 		http.Error(w, `{"error":"failed to build request payload"}`, http.StatusInternalServerError)
 		return
 	}
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
+		recordK8sProxyError(mode, "payload_marshal_failed")
 		http.Error(w, `{"error":"failed to marshal payload"}`, http.StatusInternalServerError)
 		return
 	}
@@ -123,6 +129,7 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
+		recordK8sProxyError(mode, "send_failed")
 		http.Error(w, `{"error":"failed to send request to agent"}`, http.StatusServiceUnavailable)
 		return
 	}
@@ -144,15 +151,18 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 				slog.String("cluster_id", clusterID),
 				slog.String("error", err.Error()),
 			)
+			recordK8sProxyError(mode, "invalid_response")
 			http.Error(w, `{"error":"invalid response from agent"}`, http.StatusBadGateway)
 			return
 		}
 		writeK8sResponse(w, &resp)
 
 	case <-stream.DoneCh:
+		recordK8sProxyError(mode, "stream_closed")
 		http.Error(w, `{"error":"stream closed unexpectedly"}`, http.StatusBadGateway)
 
 	case <-ctx.Done():
+		recordK8sProxyError(mode, "timeout")
 		http.Error(w, `{"error":"request timed out"}`, http.StatusGatewayTimeout)
 	}
 }
@@ -174,6 +184,13 @@ func isWatchRequest(r *http.Request) bool {
 	return false
 }
 
+func k8sProxyMode(r *http.Request) string {
+	if isWatchRequest(r) {
+		return "watch"
+	}
+	return "normal"
+}
+
 // consumeStreamingResponse drains K8sStreamFrame frames from the agent and
 // flushes each chunk to the HTTP client. It returns once an end frame is
 // received, the stream closes, or the client disconnects.
@@ -183,6 +200,7 @@ func isWatchRequest(r *http.Request) bool {
 func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.Request, stream *Stream, clusterID string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		recordK8sProxyError("watch", "streaming_not_supported")
 		http.Error(w, `{"error":"streaming not supported by ResponseWriter"}`, http.StatusInternalServerError)
 		return
 	}
@@ -199,16 +217,19 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 				slog.String("cluster_id", clusterID),
 				slog.String("error", err.Error()),
 			)
+			recordK8sProxyError("watch", "invalid_stream_header")
 			http.Error(w, `{"error":"invalid stream header from agent"}`, http.StatusBadGateway)
 			return
 		}
 	case <-stream.DoneCh:
+		recordK8sProxyError("watch", "stream_closed_before_header")
 		http.Error(w, `{"error":"stream closed before header"}`, http.StatusBadGateway)
 		return
 	case <-headerCtx.Done():
 		if r.Context().Err() != nil {
 			return // client disconnected
 		}
+		recordK8sProxyError("watch", "stream_header_timeout")
 		http.Error(w, `{"error":"timeout waiting for stream header"}`, http.StatusGatewayTimeout)
 		return
 	}
@@ -216,16 +237,19 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 	if firstFrame.Kind != protocol.K8sStreamFrameHeader {
 		// Agent terminated before sending a header (e.g. immediate error).
 		if firstFrame.Kind == protocol.K8sStreamFrameEnd && firstFrame.Error != "" {
+			recordK8sProxyError("watch", "agent_stream_error")
 			http.Error(w, `{"error":`+strconv.Quote(firstFrame.Error)+`}`, http.StatusBadGateway)
 			return
 		}
+		recordK8sProxyError("watch", "first_frame_not_header")
 		http.Error(w, `{"error":"first frame was not a header"}`, http.StatusBadGateway)
 		return
 	}
 
-	// Apply headers + status. Skip hop-by-hop and content-length: chunked.
+	// Apply headers + status. Only forward response headers that are safe at
+	// the browser-facing proxy boundary.
 	for k, v := range firstFrame.Headers {
-		if isHopByHopHeader(k) || strings.EqualFold(k, "Content-Length") {
+		if !k8sProxyResponseHeaderAllowed(k) {
 			continue
 		}
 		w.Header().Set(k, v)
@@ -247,6 +271,7 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 					slog.String("cluster_id", clusterID),
 					slog.String("error", err.Error()),
 				)
+				recordK8sProxyError("watch", "invalid_stream_frame")
 				return
 			}
 			switch frame.Kind {
@@ -259,6 +284,7 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 					bodyBytes = []byte(frame.Body)
 				}
 				if _, werr := w.Write(bodyBytes); werr != nil {
+					recordK8sProxyError("watch", "client_write_failed")
 					return
 				}
 				flusher.Flush()
@@ -304,10 +330,22 @@ func isClientOnlyHeader(name string) bool {
 func isHopByHopHeader(name string) bool {
 	switch strings.ToLower(name) {
 	case "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-		"te", "trailers", "transfer-encoding", "upgrade":
+		"te", "trailer", "trailers", "transfer-encoding", "upgrade":
 		return true
 	}
 	return false
+}
+
+func k8sProxyResponseHeaderAllowed(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	switch lower {
+	case "":
+		return false
+	case "authorization", "clear-site-data", "content-length", "cookie", "proxy-authenticate", "proxy-authorization", "set-cookie", "set-cookie2", "www-authenticate":
+		return false
+	default:
+		return !isHopByHopHeader(lower)
+	}
 }
 
 // buildK8sRequestPayload constructs a K8sRequestPayload from an HTTP request.
@@ -379,6 +417,9 @@ func extractK8sPath(fullPath string) string {
 func writeK8sResponse(w http.ResponseWriter, resp *protocol.K8sResponsePayload) {
 	// Set response headers.
 	for key, value := range resp.Headers {
+		if !k8sProxyResponseHeaderAllowed(key) {
+			continue
+		}
 		w.Header().Set(key, value)
 	}
 
@@ -401,7 +442,7 @@ func writeK8sResponse(w http.ResponseWriter, resp *protocol.K8sResponsePayload) 
 
 	w.WriteHeader(statusCode)
 	if len(bodyBytes) > 0 {
-		w.Write(bodyBytes)
+		_, _ = w.Write(bodyBytes)
 	}
 }
 
@@ -429,6 +470,7 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
 		)
+		recordK8sProxyError(k8sProxyMode(r), "owner_lookup_failed")
 		return false
 	}
 	if addr == "" {
@@ -451,6 +493,7 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 			slog.String("target", target),
 			slog.String("error", err.Error()),
 		)
+		recordK8sProxyError(k8sProxyMode(r), "owner_request_build_failed")
 		return false
 	}
 	// Copy headers verbatim — the sibling handler does its own auth /
@@ -469,10 +512,16 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 			slog.String("target", target),
 			slog.String("error", err.Error()),
 		)
+		recordK8sProxyError(k8sProxyMode(r), "owner_forward_failed")
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	for k, v := range resp.Header {
+		if !k8sProxyResponseHeaderAllowed(k) {
+			continue
+		}
 		w.Header()[k] = v
 	}
 	w.WriteHeader(resp.StatusCode)

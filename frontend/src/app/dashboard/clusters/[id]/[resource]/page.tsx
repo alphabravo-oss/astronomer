@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   useCluster,
@@ -41,15 +41,17 @@ import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
+import { ActionButton } from '@/components/ui/action-button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
-import { ConfigMapDialog } from '@/components/resources/configmap-dialog';
-import { SecretDialog } from '@/components/resources/secret-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
-import { k8sResourcePath, k8sListPath } from '@/lib/k8s-paths';
+import { k8sResourcePath } from '@/lib/k8s-paths';
+import { usePermissionDecision } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
+import type { PermissionDecision } from '@/lib/permissions';
 import type {
   ClusterNode,
   Namespace,
@@ -74,7 +76,7 @@ import {
   Loader2, Server, Terminal, FileText, Trash2, RotateCw, Scaling,
   Code, Pencil, ShieldBan, ShieldCheck, Unplug, Plus,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastError, toastSuccess, toastWarning } from '@/lib/toast';
 
 // ── Column Definitions ──
 
@@ -706,49 +708,186 @@ const genericColumnMap: Record<string, Column<GenericK8sResource>[]> = {
   replicasets: replicaSetColumns,
 };
 
+const WORKLOAD_SCALABLE_KINDS = ['Deployment', 'StatefulSet'];
+const WORKLOAD_KIND_TO_RESOURCE_TYPE: Record<string, string> = {
+  Deployment: 'deployments',
+  StatefulSet: 'statefulsets',
+  DaemonSet: 'daemonsets',
+};
+const WORKLOAD_KIND_TO_TEMPLATE: Record<string, string> = {
+  Deployment: 'deployment',
+  StatefulSet: 'statefulset',
+  DaemonSet: 'daemonset',
+};
+
+type ResourcePermissionDecisions = {
+  create: PermissionDecision;
+  read: PermissionDecision;
+  update: PermissionDecision;
+  delete: PermissionDecision;
+  scale: PermissionDecision;
+  restart: PermissionDecision;
+  exec: PermissionDecision;
+  logs: PermissionDecision;
+  manage: PermissionDecision;
+};
+
+function canonicalPermissionResource(resourceType: string): string {
+  switch (resourceType.toLowerCase()) {
+    case 'services':
+    case 'service':
+    case 'endpoints':
+    case 'endpoint':
+      return 'services';
+    case 'ingresses':
+    case 'ingress':
+    case 'gateways':
+    case 'gateway':
+    case 'httproutes':
+    case 'httproute':
+    case 'gatewayclasses':
+    case 'gatewayclass':
+    case 'grpcroutes':
+    case 'grpcroute':
+    case 'tcproutes':
+    case 'tcproute':
+    case 'udproutes':
+    case 'udproute':
+    case 'tlsroutes':
+    case 'tlsroute':
+    case 'referencegrants':
+    case 'referencegrant':
+      return 'ingresses';
+    case 'networkpolicies':
+    case 'networkpolicy':
+      return 'network_policies';
+    case 'persistentvolumes':
+    case 'persistentvolume':
+    case 'persistentvolumeclaims':
+    case 'persistentvolumeclaim':
+    case 'storageclasses':
+    case 'storageclass':
+      return 'storage';
+    case 'configmaps':
+    case 'configmap':
+      return 'configmaps';
+    case 'secrets':
+    case 'secret':
+      return 'secrets';
+    case 'pods':
+    case 'pod':
+      return 'pods';
+    case 'nodes':
+    case 'node':
+      return 'nodes';
+    case 'deployments':
+    case 'deployment':
+    case 'daemonsets':
+    case 'daemonset':
+    case 'statefulsets':
+    case 'statefulset':
+    case 'replicasets':
+    case 'replicaset':
+    case 'jobs':
+    case 'job':
+    case 'cronjobs':
+    case 'cronjob':
+    case 'hpa':
+    case 'horizontalpodautoscalers':
+    case 'horizontalpodautoscaler':
+    case 'poddisruptionbudgets':
+    case 'poddisruptionbudget':
+      return 'workloads';
+    default:
+      return 'clusters';
+  }
+}
+
+function useClusterResourcePermissions(clusterId: string, resourceType: string): ResourcePermissionDecisions {
+  const permissionResource = canonicalPermissionResource(resourceType);
+  const scope = useMemo(() => ({ type: 'cluster' as const, id: clusterId }), [clusterId]);
+
+  return {
+    create: usePermissionDecision(permissionResource, 'create', scope),
+    read: usePermissionDecision(permissionResource, 'read', scope),
+    update: usePermissionDecision(permissionResource, 'update', scope),
+    delete: usePermissionDecision(permissionResource, 'delete', scope),
+    scale: usePermissionDecision(permissionResource, 'scale', scope),
+    restart: usePermissionDecision(permissionResource, 'restart', scope),
+    exec: usePermissionDecision(permissionResource, 'exec', scope),
+    logs: usePermissionDecision(permissionResource, 'logs', scope),
+    manage: usePermissionDecision(permissionResource, 'manage', scope),
+  };
+}
+
+function permissionDeniedReason(decision: PermissionDecision): string {
+  return decision.disabledReason || decision.reason;
+}
+
+function toastPermissionDenied(decision: PermissionDecision) {
+  toastWarning(permissionDeniedReason(decision));
+}
+
+function firstDeniedDecision(...decisions: PermissionDecision[]): PermissionDecision | undefined {
+  return decisions.find((decision) => !decision.allowed);
+}
+
 // ── Per-resource components (each calls only its own hook) ──
 
 function NodesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNodes(clusterId);
   const router = useRouter();
   const k8sPatch = useK8sPatch();
+  const permissions = useClusterResourcePermissions(clusterId, 'nodes');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [drainTarget, setDrainTarget] = useState<ClusterNode | null>(null);
 
-  const handleCordon = (node: ClusterNode) => {
+  const handleCordon = useCallback((node: ClusterNode) => {
+    if (!permissions.update.allowed) {
+      toastPermissionDenied(permissions.update);
+      return;
+    }
     k8sPatch.mutate({
       clusterId,
       path: k8sResourcePath('nodes', node.name),
       body: { spec: { unschedulable: true } },
       patchType: 'strategic-merge',
     });
-  };
+  }, [clusterId, k8sPatch, permissions.update]);
 
-  const handleUncordon = (node: ClusterNode) => {
+  const handleUncordon = useCallback((node: ClusterNode) => {
+    if (!permissions.update.allowed) {
+      toastPermissionDenied(permissions.update);
+      return;
+    }
     k8sPatch.mutate({
       clusterId,
       path: k8sResourcePath('nodes', node.name),
       body: { spec: { unschedulable: false } },
       patchType: 'strategic-merge',
     });
-  };
+  }, [clusterId, k8sPatch, permissions.update]);
 
   const handleDrain = async (node: ClusterNode) => {
+    if (!permissions.manage.allowed) {
+      toastPermissionDenied(permissions.manage);
+      return;
+    }
     try {
       const result = await apiClient.drainNode(clusterId, node.name, {
         ignore_daemonsets: true,
         delete_empty_dir_data: false,
       });
       if (result.status === 'blocked') {
-        toast.warning(result.message);
+        toastWarning(result.message);
       } else if (result.status === 'partial') {
-        toast.warning(result.message);
+        toastWarning(result.message);
       } else {
-        toast.success(result.message || `Node ${node.name} drained`);
+        toastSuccess(result.message || `Node ${node.name} drained`);
       }
       setDrainTarget(null);
     } catch (error) {
-      toast.error(`Failed to drain node: ${(error as Error).message}`);
+      toastApiError('Failed to drain node', error);
     }
   };
 
@@ -766,11 +905,15 @@ function NodesTable({ clusterId }: { clusterId: string }) {
                 label: 'View YAML',
                 icon: <Code className="h-3.5 w-3.5" />,
                 onClick: () => setYamlTarget({ path: k8sResourcePath('nodes', row.name), title: `Node: ${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
               },
               {
                 label: isCordonable ? 'Cordon' : 'Uncordon',
                 icon: isCordonable ? <ShieldBan className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />,
                 onClick: () => isCordonable ? handleCordon(row) : handleUncordon(row),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
                 separator: true,
               },
               {
@@ -778,6 +921,8 @@ function NodesTable({ clusterId }: { clusterId: string }) {
                 icon: <Unplug className="h-3.5 w-3.5" />,
                 onClick: () => setDrainTarget(row),
                 variant: 'destructive',
+                disabled: !permissions.manage.allowed,
+                disabledReason: permissionDeniedReason(permissions.manage),
               },
             ]}
           />
@@ -786,13 +931,19 @@ function NodesTable({ clusterId }: { clusterId: string }) {
       sortable: false,
       align: 'center' as const,
     },
-  ], [clusterId]);
+  ], [handleCordon, handleUncordon, permissions.manage, permissions.read, permissions.update]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
         searchPlaceholder="Search nodes..." loading={isLoading} emptyMessage="No nodes found"
-        onRowClick={(row) => router.push(`/dashboard/clusters/${clusterId}/nodes/${row.name}`)} />
+        onRowClick={(row) => {
+          if (!permissions.read.allowed) {
+            toastPermissionDenied(permissions.read);
+            return;
+          }
+          router.push(`/dashboard/clusters/${clusterId}/nodes/${row.name}`);
+        }} />
 
       {yamlTarget && (
         <YamlViewDialog
@@ -801,13 +952,14 @@ function NodesTable({ clusterId }: { clusterId: string }) {
           clusterId={clusterId}
           k8sPath={yamlTarget.path}
           title={yamlTarget.title}
+          allowEdit={permissions.update.allowed}
         />
       )}
 
       <ConfirmDialog
         open={!!drainTarget}
         onClose={() => setDrainTarget(null)}
-        onConfirm={() => { if (drainTarget) handleDrain(drainTarget); }}
+        onConfirm={() => { if (drainTarget) void handleDrain(drainTarget); }}
         title="Drain Node"
         description={`This will cordon the node and evict all non-DaemonSet pods. Workloads will be rescheduled to other nodes.`}
         confirmValue={drainTarget?.name}
@@ -821,6 +973,7 @@ function NodesTable({ clusterId }: { clusterId: string }) {
 function NamespacesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNamespaces(clusterId);
   const k8sDeleteMut = useK8sDelete();
+  const permissions = useClusterResourcePermissions(clusterId, 'namespaces');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Namespace | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -828,6 +981,10 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
   const k8sCreate = apiClient.k8sCreate;
 
   const handleCreateNamespace = async () => {
+    if (!permissions.update.allowed) {
+      toastPermissionDenied(permissions.update);
+      return;
+    }
     if (!newNsName.trim()) return;
     try {
       await k8sCreate(clusterId, 'api/v1/namespaces', {
@@ -835,11 +992,11 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
         kind: 'Namespace',
         metadata: { name: newNsName.trim() },
       });
-      toast.success(`Namespace ${newNsName} created`);
+      toastSuccess(`Namespace ${newNsName} created`);
       setShowCreate(false);
       setNewNsName('');
     } catch (error) {
-      toast.error(`Failed to create namespace: ${(error as Error).message}`);
+      toastApiError('Failed to create namespace', error);
     }
   };
 
@@ -851,42 +1008,51 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('namespaces', row.name), title: `Namespace: ${row.name}` }),
-            },
-            {
-              label: 'Edit YAML',
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('namespaces', row.name), title: `Namespace: ${row.name}` }),
-            },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
-              separator: true,
-            },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('namespaces', row.name), title: `Namespace: ${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('namespaces', row.name), title: `Namespace: ${row.name}` }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+                separator: true,
+              },
           ]}
         />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.read, permissions.update]);
 
   return (
     <>
       <div className="flex items-center justify-between mb-4">
         <div />
-        <button
+        <ActionButton
+          size="sm"
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
           onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          disabled={!permissions.update.allowed}
+          disabledReason={permissionDeniedReason(permissions.update)}
         >
-          <Plus className="h-3.5 w-3.5" /> Create Namespace
-        </button>
+          Create Namespace
+        </ActionButton>
       </div>
 
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
@@ -899,7 +1065,7 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
           clusterId={clusterId}
           k8sPath={yamlTarget.path}
           title={yamlTarget.title}
-          allowEdit
+          allowEdit={permissions.update.allowed}
         />
       )}
 
@@ -907,6 +1073,10 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.update.allowed) {
+            toastPermissionDenied(permissions.update);
+            return;
+          }
           if (deleteTarget) {
             k8sDeleteMut.mutate(
               { clusterId, path: k8sResourcePath('namespaces', deleteTarget.name) },
@@ -923,8 +1093,7 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
 
       {/* Create Namespace Dialog */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
+        <OverlayShell onClose={() => setShowCreate(false)}>
           <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
             <h3 className="text-base font-semibold text-foreground mb-4">Create Namespace</h3>
             <label className="block text-xs text-muted-foreground mb-1.5">Name</label>
@@ -943,14 +1112,17 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
                 className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                 Cancel
               </button>
-              <button onClick={handleCreateNamespace} disabled={!newNsName.trim()}
+              <button
+                onClick={handleCreateNamespace}
+                disabled={!newNsName.trim() || !permissions.update.allowed}
+                title={!permissions.update.allowed ? permissionDeniedReason(permissions.update) : undefined}
                 className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 Create
               </button>
             </div>
           </div>
-        </div>
+        </OverlayShell>
       )}
     </>
   );
@@ -967,6 +1139,7 @@ function EventsTable({ clusterId }: { clusterId: string }) {
 function PodsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterPods(clusterId);
   const deletePod = useDeletePod();
+  const permissions = useClusterResourcePermissions(clusterId, 'pods');
 
   const [deleteTarget, setDeleteTarget] = useState<Pod | null>(null);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
@@ -974,7 +1147,11 @@ function PodsTable({ clusterId }: { clusterId: string }) {
   // Open a pod-logs / exec session inside the global WindowManager drawer.
   // The drawer mounts at the dashboard layout level and persists across
   // navigation, so we do NOT manage its open/close lifecycle here.
-  const openLogs = (pod: Pod) => {
+  const openLogs = useCallback((pod: Pod) => {
+    if (!permissions.logs.allowed) {
+      toastPermissionDenied(permissions.logs);
+      return;
+    }
     useWindowManagerStore.getState().addTab({
       kind: 'logs',
       clusterId,
@@ -982,8 +1159,12 @@ function PodsTable({ clusterId }: { clusterId: string }) {
       pod: pod.name,
       container: pod.containers[0]?.name,
     });
-  };
-  const openExec = (pod: Pod) => {
+  }, [clusterId, permissions.logs]);
+  const openExec = useCallback((pod: Pod) => {
+    if (!permissions.exec.allowed) {
+      toastPermissionDenied(permissions.exec);
+      return;
+    }
     useWindowManagerStore.getState().addTab({
       kind: 'exec',
       clusterId,
@@ -991,7 +1172,7 @@ function PodsTable({ clusterId }: { clusterId: string }) {
       pod: pod.name,
       container: pod.containers[0]?.name,
     });
-  };
+  }, [clusterId, permissions.exec]);
 
   const columns = useMemo<Column<Pod>[]>(() => [
     ...podColumns,
@@ -1005,12 +1186,15 @@ function PodsTable({ clusterId }: { clusterId: string }) {
               label: 'Execute Shell',
               icon: <Terminal className="h-3.5 w-3.5" />,
               onClick: () => openExec(row),
-              disabled: row.phase !== 'Running',
+              disabled: row.phase !== 'Running' || !permissions.exec.allowed,
+              disabledReason: row.phase !== 'Running' ? 'Pod must be running.' : permissionDeniedReason(permissions.exec),
             },
             {
               label: 'View Logs',
               icon: <FileText className="h-3.5 w-3.5" />,
               onClick: () => openLogs(row),
+              disabled: !permissions.logs.allowed,
+              disabledReason: permissionDeniedReason(permissions.logs),
             },
             {
               label: 'View YAML',
@@ -1019,6 +1203,8 @@ function PodsTable({ clusterId }: { clusterId: string }) {
                 path: k8sResourcePath('pods', row.name, row.namespace),
                 title: `Pod: ${row.namespace}/${row.name}`,
               }),
+              disabled: !permissions.read.allowed,
+              disabledReason: permissionDeniedReason(permissions.read),
               separator: true,
             },
             {
@@ -1026,6 +1212,8 @@ function PodsTable({ clusterId }: { clusterId: string }) {
               icon: <Trash2 className="h-3.5 w-3.5" />,
               onClick: () => setDeleteTarget(row),
               variant: 'destructive',
+              disabled: !permissions.delete.allowed,
+              disabledReason: permissionDeniedReason(permissions.delete),
               separator: true,
             },
           ]}
@@ -1034,7 +1222,7 @@ function PodsTable({ clusterId }: { clusterId: string }) {
       sortable: false,
       align: 'center',
     },
-  ], []);
+  ], [openExec, openLogs, permissions.delete, permissions.exec, permissions.logs, permissions.read]);
 
   return (
     <>
@@ -1045,6 +1233,10 @@ function PodsTable({ clusterId }: { clusterId: string }) {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) {
             deletePod.mutate(
               { clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name },
@@ -1066,6 +1258,7 @@ function PodsTable({ clusterId }: { clusterId: string }) {
           clusterId={clusterId}
           k8sPath={yamlTarget.path}
           title={yamlTarget.title}
+          allowEdit={permissions.update.allowed}
         />
       )}
     </>
@@ -1078,32 +1271,28 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
   const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
   const k8sDeleteMut = useK8sDelete();
-
-  const scalableKinds = ['Deployment', 'StatefulSet'];
-
-  const kindToResourceType: Record<string, string> = {
-    Deployment: 'deployments',
-    StatefulSet: 'statefulsets',
-    DaemonSet: 'daemonsets',
-  };
+  const permissions = useClusterResourcePermissions(clusterId, 'workloads');
+  const podPermissions = useClusterResourcePermissions(clusterId, 'pods');
 
   const [scaleTarget, setScaleTarget] = useState<Workload | null>(null);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Workload | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const kindToTemplate: Record<string, string> = {
-    Deployment: 'deployment',
-    StatefulSet: 'statefulset',
-    DaemonSet: 'daemonset',
-  };
 
   // Resolve the running pod for a workload then push a tab into the global
   // WindowManager. We deliberately don't open a per-page panel: the drawer
   // lives at the dashboard layout level and survives navigation.
-  const openWorkloadInWindowManager = async (
+  const openWorkloadInWindowManager = useCallback(async (
     workload: Workload,
     kind: 'logs' | 'exec'
   ) => {
+    const denied = kind === 'exec'
+      ? firstDeniedDecision(podPermissions.read, podPermissions.exec)
+      : firstDeniedDecision(podPermissions.read, podPermissions.logs);
+    if (denied) {
+      toastPermissionDenied(denied);
+      return;
+    }
     try {
       const pods = await apiClient.getWorkloadPods(
         clusterId,
@@ -1113,7 +1302,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
       );
       const runningPod = pods.find((p) => p.phase === 'Running') || pods[0];
       if (!runningPod) {
-        toast.error('No pods available for this workload');
+        toastError('No pods available for this workload');
         return;
       }
       useWindowManagerStore.getState().addTab({
@@ -1124,9 +1313,9 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
         container: runningPod.containers[0]?.name,
       });
     } catch {
-      toast.error('Failed to fetch workload pods');
+      toastError('Failed to fetch workload pods');
     }
-  };
+  }, [clusterId, podPermissions.exec, podPermissions.logs, podPermissions.read]);
 
   const columns = useMemo<Column<Workload>[]>(() => [
     // Override the shared workloadColumns "name" cell with a Link into the
@@ -1148,17 +1337,23 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
       key: 'actions',
       header: '',
       accessor: (row) => {
-        const resType = kindToResourceType[row.kind] || 'deployments';
+        const resType = WORKLOAD_KIND_TO_RESOURCE_TYPE[row.kind] || 'deployments';
+        const execDenied = firstDeniedDecision(podPermissions.read, podPermissions.exec);
+        const logsDenied = firstDeniedDecision(podPermissions.read, podPermissions.logs);
         const items: ActionMenuItem[] = [
           {
             label: 'Execute Shell',
             icon: <Terminal className="h-3.5 w-3.5" />,
             onClick: () => openWorkloadInWindowManager(row, 'exec'),
+            disabled: Boolean(execDenied),
+            disabledReason: execDenied ? permissionDeniedReason(execDenied) : undefined,
           },
           {
             label: 'View Logs',
             icon: <FileText className="h-3.5 w-3.5" />,
             onClick: () => openWorkloadInWindowManager(row, 'logs'),
+            disabled: Boolean(logsDenied),
+            disabledReason: logsDenied ? permissionDeniedReason(logsDenied) : undefined,
           },
           {
             label: 'View YAML',
@@ -1167,6 +1362,8 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
               path: k8sResourcePath(resType, row.name, row.namespace),
               title: `${row.kind}: ${row.namespace}/${row.name}`,
             }),
+            disabled: !permissions.read.allowed,
+            disabledReason: permissionDeniedReason(permissions.read),
             separator: true,
           },
           {
@@ -1176,13 +1373,17 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
               path: k8sResourcePath(resType, row.name, row.namespace),
               title: `${row.kind}: ${row.namespace}/${row.name}`,
             }),
+            disabled: !permissions.update.allowed,
+            disabledReason: permissionDeniedReason(permissions.update),
           },
         ];
-        if (scalableKinds.includes(row.kind)) {
+        if (WORKLOAD_SCALABLE_KINDS.includes(row.kind)) {
           items.push({
             label: 'Scale',
             icon: <Scaling className="h-3.5 w-3.5" />,
             onClick: () => setScaleTarget(row),
+            disabled: !permissions.scale.allowed,
+            disabledReason: permissionDeniedReason(permissions.scale),
             separator: true,
           });
         }
@@ -1190,6 +1391,10 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
           label: 'Restart',
           icon: <RotateCw className="h-3.5 w-3.5" />,
           onClick: () => {
+            if (!permissions.restart.allowed) {
+              toastPermissionDenied(permissions.restart);
+              return;
+            }
             restartWorkload.mutate({
               clusterId,
               kind: row.kind,
@@ -1197,13 +1402,17 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
               name: row.name,
             });
           },
-          separator: !scalableKinds.includes(row.kind),
+          disabled: !permissions.restart.allowed,
+          disabledReason: permissionDeniedReason(permissions.restart),
+          separator: !WORKLOAD_SCALABLE_KINDS.includes(row.kind),
         });
         items.push({
           label: 'Delete',
           icon: <Trash2 className="h-3.5 w-3.5" />,
           onClick: () => setDeleteTarget(row),
           variant: 'destructive',
+          disabled: !permissions.delete.allowed,
+          disabledReason: permissionDeniedReason(permissions.delete),
           separator: true,
         });
         return <ActionMenu items={items} />;
@@ -1211,15 +1420,33 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
       sortable: false,
       align: 'center',
     },
-  ], [clusterId]);
+  ], [
+    clusterId,
+    openWorkloadInWindowManager,
+    permissions.delete,
+    permissions.read,
+    permissions.restart,
+    permissions.scale,
+    permissions.update,
+    podPermissions.exec,
+    podPermissions.logs,
+    podPermissions.read,
+    restartWorkload,
+  ]);
 
   return (
     <>
       <div className="flex justify-end mb-4">
-        <button onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-          <Plus className="h-3.5 w-3.5" /> Create {kind}
-        </button>
+        <ActionButton
+          size="sm"
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => setShowCreate(true)}
+          disabled={!permissions.create.allowed}
+          disabledReason={permissionDeniedReason(permissions.create)}
+        >
+          Create {kind}
+        </ActionButton>
       </div>
       <DataTable data={filtered} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
@@ -1228,6 +1455,10 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
         open={!!scaleTarget}
         onClose={() => setScaleTarget(null)}
         onScale={(replicas) => {
+          if (!permissions.scale.allowed) {
+            toastPermissionDenied(permissions.scale);
+            return;
+          }
           if (scaleTarget) {
             scaleWorkload.mutate(
               {
@@ -1253,7 +1484,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
           clusterId={clusterId}
           k8sPath={yamlTarget.path}
           title={yamlTarget.title}
-          allowEdit
+          allowEdit={permissions.update.allowed}
         />
       )}
 
@@ -1261,8 +1492,12 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) {
-            const resType = kindToResourceType[deleteTarget.kind] || 'deployments';
+            const resType = WORKLOAD_KIND_TO_RESOURCE_TYPE[deleteTarget.kind] || 'deployments';
             k8sDeleteMut.mutate(
               { clusterId, path: k8sResourcePath(resType, deleteTarget.name, deleteTarget.namespace) },
               { onSuccess: () => setDeleteTarget(null) }
@@ -1276,12 +1511,12 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
         loading={k8sDeleteMut.isPending}
       />
 
-      {kindToTemplate[kind] && (
+      {WORKLOAD_KIND_TO_TEMPLATE[kind] && (
         <CreateResourceDialog
           open={showCreate}
           onClose={() => setShowCreate(false)}
           clusterId={clusterId}
-          templateKey={kindToTemplate[kind]}
+          templateKey={WORKLOAD_KIND_TO_TEMPLATE[kind]}
           title={`Create ${kind}`}
         />
       )}
@@ -1292,6 +1527,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
 function ServicesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useServices(clusterId);
   const deleteService = useDeleteService();
+  const permissions = useClusterResourcePermissions(clusterId, 'services');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<K8sService | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -1304,48 +1540,64 @@ function ServicesTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('services', row.name, row.namespace), title: `Service: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Edit YAML',
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('services', row.name, row.namespace), title: `Service: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
-              separator: true,
-            },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('services', row.name, row.namespace), title: `Service: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('services', row.name, row.namespace), title: `Service: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.delete.allowed,
+                disabledReason: permissionDeniedReason(permissions.delete),
+                separator: true,
+              },
           ]}
         />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
       <div className="flex justify-end mb-4">
-        <button onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-          <Plus className="h-3.5 w-3.5" /> Create Service
-        </button>
+        <ActionButton
+          size="sm"
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => setShowCreate(true)}
+          disabled={!permissions.create.allowed}
+          disabledReason={permissionDeniedReason(permissions.create)}
+        >
+          Create Service
+        </ActionButton>
       </div>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search services..." loading={isLoading} emptyMessage="No services found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) deleteService.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
         }}
         title="Delete Service" description={`This will permanently delete the service ${deleteTarget?.name}.`}
@@ -1360,6 +1612,7 @@ function ServicesTable({ clusterId }: { clusterId: string }) {
 function IngressesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useIngresses(clusterId);
   const deleteIngress = useDeleteIngress();
+  const permissions = useClusterResourcePermissions(clusterId, 'ingresses');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Ingress | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -1372,48 +1625,64 @@ function IngressesTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('ingresses', row.name, row.namespace), title: `Ingress: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Edit YAML',
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('ingresses', row.name, row.namespace), title: `Ingress: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
-              separator: true,
-            },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('ingresses', row.name, row.namespace), title: `Ingress: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('ingresses', row.name, row.namespace), title: `Ingress: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.delete.allowed,
+                disabledReason: permissionDeniedReason(permissions.delete),
+                separator: true,
+              },
           ]}
         />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
       <div className="flex justify-end mb-4">
-        <button onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-          <Plus className="h-3.5 w-3.5" /> Create Ingress
-        </button>
+        <ActionButton
+          size="sm"
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => setShowCreate(true)}
+          disabled={!permissions.create.allowed}
+          disabledReason={permissionDeniedReason(permissions.create)}
+        >
+          Create Ingress
+        </ActionButton>
       </div>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search ingresses..." loading={isLoading} emptyMessage="No ingresses found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) deleteIngress.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
         }}
         title="Delete Ingress" description={`This will permanently delete the ingress ${deleteTarget?.name}.`}
@@ -1428,6 +1697,7 @@ function IngressesTable({ clusterId }: { clusterId: string }) {
 function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useNetworkPolicies(clusterId);
   const deleteNp = useDeleteNetworkPolicy();
+  const permissions = useClusterResourcePermissions(clusterId, 'networkpolicies');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NetworkPolicy | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -1440,48 +1710,64 @@ function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('networkpolicies', row.name, row.namespace), title: `NetworkPolicy: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Edit YAML',
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('networkpolicies', row.name, row.namespace), title: `NetworkPolicy: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
-              separator: true,
-            },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('networkpolicies', row.name, row.namespace), title: `NetworkPolicy: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('networkpolicies', row.name, row.namespace), title: `NetworkPolicy: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.delete.allowed,
+                disabledReason: permissionDeniedReason(permissions.delete),
+                separator: true,
+              },
           ]}
         />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
       <div className="flex justify-end mb-4">
-        <button onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-          <Plus className="h-3.5 w-3.5" /> Create Network Policy
-        </button>
+        <ActionButton
+          size="sm"
+          intent="primary"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => setShowCreate(true)}
+          disabled={!permissions.create.allowed}
+          disabledReason={permissionDeniedReason(permissions.create)}
+        >
+          Create Network Policy
+        </ActionButton>
       </div>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search network policies..." loading={isLoading} emptyMessage="No network policies found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) deleteNp.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
         }}
         title="Delete Network Policy" description={`This will permanently delete the network policy ${deleteTarget?.name}.`}
@@ -1703,12 +1989,14 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   resourceType,
   kindLabel,
   row,
+  permissions,
   onView,
   onDelete,
 }: {
   resourceType: string;
   kindLabel: string;
   row: T;
+  permissions: ResourcePermissionDecisions;
   onView: (target: { path: string; title: string }) => void;
   onDelete: (row: T) => void;
 }) {
@@ -1717,9 +2005,29 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   return (
     <ActionMenu
       items={[
-        { label: 'View YAML', icon: <Code className="h-3.5 w-3.5" />, onClick: () => onView({ path, title }) },
-        { label: 'Edit YAML', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => onView({ path, title }) },
-        { label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => onDelete(row), variant: 'destructive', separator: true },
+        {
+          label: 'View YAML',
+          icon: <Code className="h-3.5 w-3.5" />,
+          onClick: () => onView({ path, title }),
+          disabled: !permissions.read.allowed,
+          disabledReason: permissionDeniedReason(permissions.read),
+        },
+        {
+          label: 'Edit YAML',
+          icon: <Pencil className="h-3.5 w-3.5" />,
+          onClick: () => onView({ path, title }),
+          disabled: !permissions.update.allowed,
+          disabledReason: permissionDeniedReason(permissions.update),
+        },
+        {
+          label: 'Delete',
+          icon: <Trash2 className="h-3.5 w-3.5" />,
+          onClick: () => onDelete(row),
+          variant: 'destructive',
+          disabled: !permissions.delete.allowed,
+          disabledReason: permissionDeniedReason(permissions.delete),
+          separator: true,
+        },
       ]}
     />
   );
@@ -1728,6 +2036,7 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
 function GatewaysTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useGateways(clusterId);
   const k8sDelete = useK8sDelete();
+  const permissions = useClusterResourcePermissions(clusterId, 'gateways');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Gateway | null>(null);
 
@@ -1737,12 +2046,12 @@ function GatewaysTable({ clusterId }: { clusterId: string }) {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <NamespacedActions resourceType="gateways" kindLabel="Gateway" row={row} onView={setYamlTarget} onDelete={setDeleteTarget} />
+        <NamespacedActions resourceType="gateways" kindLabel="Gateway" row={row} permissions={permissions} onView={setYamlTarget} onDelete={setDeleteTarget} />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions]);
 
   return (
     <>
@@ -1750,11 +2059,15 @@ function GatewaysTable({ clusterId }: { clusterId: string }) {
         searchPlaceholder="Search gateways..." loading={isLoading} emptyMessage="No gateways found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) k8sDelete.mutate(
             { clusterId, path: k8sResourcePath('gateways', deleteTarget.name, deleteTarget.namespace) },
             { onSuccess: () => setDeleteTarget(null) },
@@ -1782,6 +2095,7 @@ function RouteTable<T extends GatewayRoute>({
   emptyMessage: string;
 }) {
   const k8sDelete = useK8sDelete();
+  const permissions = useClusterResourcePermissions(clusterId, resourceType);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<T | null>(null);
 
@@ -1791,12 +2105,12 @@ function RouteTable<T extends GatewayRoute>({
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <NamespacedActions resourceType={resourceType} kindLabel={kindLabel} row={row} onView={setYamlTarget} onDelete={(r) => setDeleteTarget(r as T)} />
+        <NamespacedActions resourceType={resourceType} kindLabel={kindLabel} row={row} permissions={permissions} onView={setYamlTarget} onDelete={(r) => setDeleteTarget(r as T)} />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [resourceType, kindLabel]);
+  ], [resourceType, kindLabel, permissions]);
 
   return (
     <>
@@ -1804,11 +2118,15 @@ function RouteTable<T extends GatewayRoute>({
         searchPlaceholder={searchPlaceholder} loading={isLoading} emptyMessage={emptyMessage} />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) k8sDelete.mutate(
             { clusterId, path: k8sResourcePath(resourceType, deleteTarget.name, deleteTarget.namespace) },
             { onSuccess: () => setDeleteTarget(null) },
@@ -1854,6 +2172,7 @@ function UDPRoutesTable({ clusterId }: { clusterId: string }) {
 function GatewayClassesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useGatewayClasses(clusterId);
   const k8sDelete = useK8sDelete();
+  const permissions = useClusterResourcePermissions(clusterId, 'gatewayclasses');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GatewayClass | null>(null);
 
@@ -1868,9 +2187,29 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
         return (
           <ActionMenu
             items={[
-              { label: 'View YAML', icon: <Code className="h-3.5 w-3.5" />, onClick: () => setYamlTarget({ path, title }) },
-              { label: 'Edit YAML', icon: <Pencil className="h-3.5 w-3.5" />, onClick: () => setYamlTarget({ path, title }) },
-              { label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, onClick: () => setDeleteTarget(row), variant: 'destructive', separator: true },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path, title }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path, title }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.delete.allowed,
+                disabledReason: permissionDeniedReason(permissions.delete),
+                separator: true,
+              },
             ]}
           />
         );
@@ -1878,7 +2217,7 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
@@ -1886,11 +2225,15 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
         searchPlaceholder="Search GatewayClasses..." loading={isLoading} emptyMessage="No GatewayClasses found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) k8sDelete.mutate(
             { clusterId, path: k8sResourcePath('gatewayclasses', deleteTarget.name) },
             { onSuccess: () => setDeleteTarget(null) },
@@ -1906,6 +2249,7 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useReferenceGrants(clusterId);
   const k8sDelete = useK8sDelete();
+  const permissions = useClusterResourcePermissions(clusterId, 'referencegrants');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ReferenceGrant | null>(null);
 
@@ -1915,12 +2259,12 @@ function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <NamespacedActions resourceType="referencegrants" kindLabel="ReferenceGrant" row={row} onView={setYamlTarget} onDelete={setDeleteTarget} />
+        <NamespacedActions resourceType="referencegrants" kindLabel="ReferenceGrant" row={row} permissions={permissions} onView={setYamlTarget} onDelete={setDeleteTarget} />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions]);
 
   return (
     <>
@@ -1928,11 +2272,15 @@ function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
         searchPlaceholder="Search ReferenceGrants..." loading={isLoading} emptyMessage="No ReferenceGrants found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) k8sDelete.mutate(
             { clusterId, path: k8sResourcePath('referencegrants', deleteTarget.name, deleteTarget.namespace) },
             { onSuccess: () => setDeleteTarget(null) },
@@ -1948,6 +2296,7 @@ function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
 function PVsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumes(clusterId);
   const deletePv = useDeletePV();
+  const permissions = useClusterResourcePermissions(clusterId, 'persistentvolumes');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PersistentVolume | null>(null);
 
@@ -1959,30 +2308,36 @@ function PVsTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumes', row.name), title: `PV: ${row.name}` }),
-            },
-            {
-              label: 'Edit YAML',
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumes', row.name), title: `PV: ${row.name}` }),
-            },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
-              separator: true,
-            },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumes', row.name), title: `PV: ${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumes', row.name), title: `PV: ${row.name}` }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.delete.allowed,
+                disabledReason: permissionDeniedReason(permissions.delete),
+                separator: true,
+              },
           ]}
         />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
@@ -1990,11 +2345,15 @@ function PVsTable({ clusterId }: { clusterId: string }) {
         searchPlaceholder="Search persistent volumes..." loading={isLoading} emptyMessage="No persistent volumes found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) deletePv.mutate({ clusterId, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
         }}
         title="Delete Persistent Volume" description={`This will permanently delete the PV ${deleteTarget?.name}. Bound data may be lost.`}
@@ -2007,6 +2366,7 @@ function PVsTable({ clusterId }: { clusterId: string }) {
 function PVCsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumeClaims(clusterId);
   const deletePvc = useDeletePVC();
+  const permissions = useClusterResourcePermissions(clusterId, 'persistentvolumeclaims');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PersistentVolumeClaim | null>(null);
 
@@ -2018,30 +2378,36 @@ function PVCsTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumeclaims', row.name, row.namespace), title: `PVC: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Edit YAML',
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumeclaims', row.name, row.namespace), title: `PVC: ${row.namespace}/${row.name}` }),
-            },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
-              separator: true,
-            },
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumeclaims', row.name, row.namespace), title: `PVC: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+              {
+                label: 'Edit YAML',
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('persistentvolumeclaims', row.name, row.namespace), title: `PVC: ${row.namespace}/${row.name}` }),
+                disabled: !permissions.update.allowed,
+                disabledReason: permissionDeniedReason(permissions.update),
+              },
+              {
+                label: 'Delete',
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => setDeleteTarget(row),
+                variant: 'destructive',
+                disabled: !permissions.delete.allowed,
+                disabledReason: permissionDeniedReason(permissions.delete),
+                separator: true,
+              },
           ]}
         />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
@@ -2049,11 +2415,15 @@ function PVCsTable({ clusterId }: { clusterId: string }) {
         searchPlaceholder="Search PVCs..." loading={isLoading} emptyMessage="No persistent volume claims found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget) deletePvc.mutate({ clusterId, namespace: deleteTarget.namespace, name: deleteTarget.name }, { onSuccess: () => setDeleteTarget(null) });
         }}
         title="Delete PVC" description={`This will permanently delete the PVC ${deleteTarget?.name}. Bound data may be lost.`}
@@ -2065,6 +2435,7 @@ function PVCsTable({ clusterId }: { clusterId: string }) {
 
 function StorageClassesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useStorageClasses(clusterId);
+  const permissions = useClusterResourcePermissions(clusterId, 'storageclasses');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
 
   const columns = useMemo<Column<StorageClass>[]>(() => [
@@ -2075,18 +2446,20 @@ function StorageClassesTable({ clusterId }: { clusterId: string }) {
       accessor: (row) => (
         <ActionMenu
           items={[
-            {
-              label: 'View YAML',
-              icon: <Code className="h-3.5 w-3.5" />,
-              onClick: () => setYamlTarget({ path: k8sResourcePath('storageclasses', row.name), title: `StorageClass: ${row.name}` }),
-            },
-          ]}
-        />
+              {
+                label: 'View YAML',
+                icon: <Code className="h-3.5 w-3.5" />,
+                onClick: () => setYamlTarget({ path: k8sResourcePath('storageclasses', row.name), title: `StorageClass: ${row.name}` }),
+                disabled: !permissions.read.allowed,
+                disabledReason: permissionDeniedReason(permissions.read),
+              },
+            ]}
+          />
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], []);
+  ], [permissions.read]);
 
   return (
     <>
@@ -2150,6 +2523,7 @@ const editableGenericTypes = new Set([
 function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: string; resourceType: string; title: string }) {
   const { data, isLoading } = useGenericResources(clusterId, resourceType);
   const k8sDeleteMut = useK8sDelete();
+  const permissions = useClusterResourcePermissions(clusterId, resourceType);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GenericK8sResource | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -2179,9 +2553,11 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
                     : k8sResourcePath(k8sType, row.name);
                   setYamlTarget({ path, title: `${title}: ${row.namespace ? row.namespace + '/' : ''}${row.name}` });
                 } catch {
-                  toast.error('YAML view not available for this resource type');
+                  toastError('YAML view not available for this resource type');
                 }
               },
+              disabled: !permissions.read.allowed,
+              disabledReason: permissionDeniedReason(permissions.read),
             },
           ];
           if (isEditable) {
@@ -2195,9 +2571,11 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
                     : k8sResourcePath(k8sType, row.name);
                   setYamlTarget({ path, title: `${title}: ${row.namespace ? row.namespace + '/' : ''}${row.name}` });
                 } catch {
-                  toast.error('Edit not available for this resource type');
+                  toastError('Edit not available for this resource type');
                 }
               },
+              disabled: !permissions.update.allowed,
+              disabledReason: permissionDeniedReason(permissions.update),
             });
           }
           if (isDeletable) {
@@ -2206,6 +2584,8 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
               icon: <Trash2 className="h-3.5 w-3.5" />,
               onClick: () => setDeleteTarget(row),
               variant: 'destructive',
+              disabled: !permissions.delete.allowed,
+              disabledReason: permissionDeniedReason(permissions.delete),
               separator: true,
             });
           }
@@ -2215,27 +2595,37 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
         align: 'center' as const,
       },
     ];
-  }, [baseColumns, k8sType, isDeletable, isEditable, title]);
+  }, [baseColumns, k8sType, isDeletable, isEditable, permissions.delete, permissions.read, permissions.update, title]);
 
   return (
     <>
       {creatableConfig && (
         <div className="flex justify-end mb-4">
-          <button onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-            <Plus className="h-3.5 w-3.5" /> {creatableConfig.label}
-          </button>
+          <ActionButton
+            size="sm"
+            intent="primary"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => setShowCreate(true)}
+            disabled={!permissions.create.allowed}
+            disabledReason={permissionDeniedReason(permissions.create)}
+          >
+            {creatableConfig.label}
+          </ActionButton>
         </div>
       )}
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.namespace ? `${r.namespace}/${r.name}` : r.name}
         searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
-          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={isEditable} />
+          k8sPath={yamlTarget.path} title={yamlTarget.title} allowEdit={isEditable && permissions.update.allowed} />
       )}
       <ConfirmDialog
         open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (!permissions.delete.allowed) {
+            toastPermissionDenied(permissions.delete);
+            return;
+          }
           if (deleteTarget && k8sType) {
             const path = deleteTarget.namespace
               ? k8sResourcePath(k8sType, deleteTarget.name, deleteTarget.namespace)

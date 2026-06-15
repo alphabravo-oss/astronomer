@@ -1,0 +1,3262 @@
+[
+  {
+    "id": "registration-events",
+    "route": "/api/v1/clusters/{id}/registration/events/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registration/events/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster registration server-sent events",
+    "auth": "stream ticket or bearer/session auth",
+    "rbac": "clusters:read",
+    "csrf": "not applicable: GET stream",
+    "audit": "read-side audit middleware when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRegistrationEventsRejectQueryJWT",
+      "TestRegistrationEventsAuthAndRBAC"
+    ]
+  },
+  {
+    "id": "remotedialer-pods-demo",
+    "route": "/api/v1/clusters/{id}/v2/pods/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/v2/pods/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "remotedialer Kubernetes client demonstration endpoint",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit middleware when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRemotedialerPodDemoRouteDisabledInProduction"
+    ]
+  },
+  {
+    "id": "remotedialer-connect",
+    "route": "/api/v1/connect/{cluster_id}/",
+    "sample_path": "/api/v1/connect/{cluster_id}/",
+    "method": "*",
+    "expected_unauthenticated_status": 400,
+    "surface": "remotedialer agent tunnel",
+    "auth": "agent bearer token",
+    "rbac": "not user RBAC; valid cluster agent token must identify the tunnel",
+    "csrf": "not applicable: agent tunnel route",
+    "audit": "agent connection lifecycle metrics/events should cover successful connections",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "audit-log-list",
+    "route": "/api/v1/audit/",
+    "sample_path": "/api/v1/audit/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "audit log read API",
+    "auth": "bearer/session auth",
+    "rbac": "audit_logs:read or audit_logs:list",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit should cover audit log reads when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestAuditLogRoutesRequireAuditLogRBAC"
+    ]
+  },
+  {
+    "id": "audit-log-export",
+    "route": "/api/v1/audit/export/",
+    "sample_path": "/api/v1/audit/export/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "audit log CSV export",
+    "auth": "bearer/session auth",
+    "rbac": "audit_logs:read or audit_logs:list",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit should cover audit log exports when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestAuditLogRoutesRequireAuditLogRBAC"
+    ]
+  },
+  {
+    "id": "audit-log-detail",
+    "route": "/api/v1/audit/{id}/",
+    "sample_path": "/api/v1/audit/{id}/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "audit log detail read API",
+    "auth": "bearer/session auth",
+    "rbac": "audit_logs:read",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit should cover audit log detail reads when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestAuditLogRoutesRequireAuditLogRBAC"
+    ]
+  },
+  {
+    "id": "legacy-settings-audit-log-list",
+    "route": "/api/v1/settings/audit-logs/",
+    "sample_path": "/api/v1/settings/audit-logs/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy settings audit log read API",
+    "auth": "bearer/session auth",
+    "rbac": "audit_logs:read or audit_logs:list",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit should cover audit log reads when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestAuditLogRoutesRequireAuditLogRBAC"
+    ]
+  },
+  {
+    "id": "agent-fleet-self-test",
+    "route": "/api/v1/agents/fleet/{cluster_id}/self-test/",
+    "sample_path": "/api/v1/agents/fleet/{cluster_id}/self-test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "active agent health self-test through inventory and live diagnostics",
+    "auth": "bearer/session auth",
+    "rbac": "agents:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "agent self-test is read-only but active; add explicit audit if command execution expands",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestAgentFleetSelfTestPassesForHealthyConnectedAgent",
+      "TestAgentFleetSelfTestFailsForDisconnectedBlockedAgent"
+    ]
+  },
+  {
+    "id": "agent-fleet-upgrade-plan",
+    "route": "/api/v1/agents/fleet/{cluster_id}/upgrade-plan/",
+    "sample_path": "/api/v1/agents/fleet/{cluster_id}/upgrade-plan/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "agent lifecycle upgrade plan generation",
+    "auth": "bearer/session auth",
+    "rbac": "agents:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "upgrade planning is read-only but active; queued upgrades are audited separately",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "agent-fleet-upgrade-queue",
+    "route": "/api/v1/agents/fleet/{cluster_id}/upgrade/",
+    "sample_path": "/api/v1/agents/fleet/{cluster_id}/upgrade/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "agent lifecycle upgrade operation queue",
+    "auth": "bearer/session auth",
+    "rbac": "agents:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "agent.upgrade.queued",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestAgentFleetUpgradeQueuesLifecycleOperation",
+      "TestAgentFleetUpgradeDoesNotQueueBlockedPlan"
+    ]
+  },
+  {
+    "id": "generic-k8s-proxy",
+    "route": "/api/v1/clusters/{cluster_id}/k8s/*",
+    "sample_path": "/api/v1/clusters/{cluster_id}/k8s/api/v1/pods",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "generic Kubernetes API tunnel proxy",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read for safe methods; clusters:update for mutating methods; pods:exec for pod exec, attach, and portforward; secrets:read/list/watch for Secret reads",
+    "csrf": "required for browser cookie mutating methods by RequireAuthWithQueries",
+    "audit": "cluster.k8s_proxy.forwarded for mutating methods; cluster.secret.read for authorized Secret reads/lists/watches",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestK8sProxyRequiresAuth",
+      "TestK8sProxyMutationsRequireClusterUpdate",
+      "TestK8sProxyMutationsAreAudited",
+      "TestK8sProxySecretReadsRequireSecretsRBACAndAudit",
+      "TestK8sProxyPodExecRequiresPodExecPermission",
+      "TestHandleK8sProxy_ForwardsNamedK8sOperations",
+      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
+    ]
+  },
+  {
+    "id": "generic-secret-resource-list",
+    "route": "/api/v1/clusters/{cluster_id}/resources/generic/{resource_type}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/resources/generic/secrets/?namespace=default",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "per-cluster generic Kubernetes resource list for Secrets",
+    "auth": "bearer/session auth",
+    "rbac": "secrets:list when resource_type=secrets",
+    "csrf": "not applicable: GET",
+    "audit": "cluster.secret.read for authorized Secret list requests",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestGenericSecretResourcesRequireSecretsListAndAudit"
+    ]
+  },
+  {
+    "id": "cross-cluster-secret-search",
+    "route": "/api/v1/resources/search/",
+    "sample_path": "/api/v1/resources/search/?type=secrets",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "cross-cluster Secret search fan-out",
+    "auth": "bearer/session auth",
+    "rbac": "secrets:list per target cluster when type=secrets",
+    "csrf": "not applicable: GET",
+    "audit": "cluster.secret.read for authorized cross-cluster Secret searches",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourcesSearchSecretsRequireSecretsListAndAudit"
+    ]
+  },
+  {
+    "id": "argocd-k8s-proxy",
+    "route": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
+    "sample_path": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/api/v1/pods",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster-scoped machine-to-machine Kubernetes proxy for built-in Argo CD",
+    "auth": "cluster-scoped argocd cluster proxy token only",
+    "rbac": "not user RBAC; token hash must match the requested cluster",
+    "csrf": "not applicable: machine-to-machine bearer token",
+    "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
+      "TestArgoCDInternalK8sProxyMutationsAreAudited",
+      "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
+    ]
+  },
+  {
+    "id": "service-proxy-root",
+    "route": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}",
+    "sample_path": "/api/v1/clusters/{cluster_id}/proxy/service/observability/grafana:3000/",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "allowlisted in-cluster Service HTTP proxy",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read for safe methods; clusters:update for mutating methods",
+    "csrf": "required for browser cookie mutating methods by RequireAuthWithQueries",
+    "audit": "cluster.service_proxy.forwarded for mutating methods",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestServiceProxyRequiresAuth",
+      "TestServiceProxyMutationsRequireClusterUpdate",
+      "TestServiceProxyAllowsClusterUpdateMutation",
+      "TestServiceProxyAPITokenMutationsRequireWriteScope",
+      "TestServiceProxyRejectsTargetsOutsideAllowlist"
+    ]
+  },
+  {
+    "id": "service-proxy-suffix",
+    "route": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*",
+    "sample_path": "/api/v1/clusters/{cluster_id}/proxy/service/observability/grafana:3000/api/health",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "allowlisted in-cluster Service HTTP proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read for safe methods; clusters:update for mutating methods",
+    "csrf": "required for browser cookie mutating methods by RequireAuthWithQueries",
+    "audit": "cluster.service_proxy.forwarded for mutating methods",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestServiceProxyRequiresAuth",
+      "TestServiceProxyMutationsRequireClusterUpdate",
+      "TestServiceProxyAllowsClusterUpdateMutation",
+      "TestServiceProxyAPITokenMutationsRequireWriteScope",
+      "TestServiceProxyRejectsTargetsOutsideAllowlist"
+    ]
+  },
+  {
+    "id": "exec-websocket",
+    "route": "/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/",
+    "sample_path": "/api/v1/ws/exec/{cluster_id}/default/example/shell/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "pod exec WebSocket relay",
+    "auth": "stream ticket or Authorization bearer token",
+    "rbac": "stream authorization plus pod exec permission on higher-level entry points",
+    "csrf": "not applicable: WebSocket GET; stream ticket preferred for browser clients",
+    "audit": "direct route records pod.exec.opened without stream payload; kubectl shell path records session and commands",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestExecAndLogsRejectQueryJWT",
+      "TestDirectExecAndLogsStreamsAuditOpen"
+    ]
+  },
+  {
+    "id": "logs-websocket",
+    "route": "/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/",
+    "sample_path": "/api/v1/ws/logs/{cluster_id}/default/example/app/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "pod logs WebSocket relay",
+    "auth": "stream ticket or Authorization bearer token",
+    "rbac": "stream authorization plus pod logs permission on higher-level entry points",
+    "csrf": "not applicable: WebSocket GET; stream ticket preferred for browser clients",
+    "audit": "direct route records pod.logs.opened without log payload; read-side audit policy can also cover REST log reads when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestExecAndLogsRejectQueryJWT",
+      "TestDirectExecAndLogsStreamsAuditOpen"
+    ]
+  },
+  {
+    "id": "kubectl-shell-websocket",
+    "route": "/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/",
+    "sample_path": "/api/v1/ws/clusters/{cluster_id}/shell/sessions/00000000-0000-0000-0000-000000000001/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "session-scoped kubectl shell WebSocket relay",
+    "auth": "stream ticket or Authorization bearer token",
+    "rbac": "session ownership plus cluster update permission on session creation",
+    "csrf": "not applicable: WebSocket GET; stream ticket preferred for browser clients",
+    "audit": "kubectl.session.opened and command recording on the session path",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestKubectlHandler_WSEndpointBridgesToExecProxy"
+    ]
+  },
+  {
+    "id": "auth-change-password",
+    "route": "/api/v1/auth/change-password/",
+    "sample_path": "/api/v1/auth/change-password/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service password change",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated current user",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "auth.password_changed",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestChangePasswordRequiresCurrentPassword"
+    ]
+  },
+  {
+    "id": "auth-api-token-create",
+    "route": "/api/v1/auth/tokens/",
+    "sample_path": "/api/v1/auth/tokens/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service API token creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated current user plus token quota",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "auth.token.created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "auth-api-token-revoke",
+    "route": "/api/v1/auth/tokens/{id}/",
+    "sample_path": "/api/v1/auth/tokens/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service API token revocation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated current user and token ownership",
+    "csrf": "required for browser cookie DELETE by requireAuth",
+    "audit": "auth.token.revoked",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "totp-enroll-start",
+    "route": "/api/v1/auth/totp/enroll/start/",
+    "sample_path": "/api/v1/auth/totp/enroll/start/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service TOTP enrollment start",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated current user",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "auth.totp.enroll_started",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "totp-enroll-confirm",
+    "route": "/api/v1/auth/totp/enroll/confirm/",
+    "sample_path": "/api/v1/auth/totp/enroll/confirm/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service TOTP enrollment confirmation",
+    "auth": "bearer/session auth plus enrollment challenge token",
+    "rbac": "authenticated current user",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "auth.totp.enrolled",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "totp-disable",
+    "route": "/api/v1/auth/totp/disable/",
+    "sample_path": "/api/v1/auth/totp/disable/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service TOTP disable",
+    "auth": "bearer/session auth plus current password or valid TOTP proof",
+    "rbac": "authenticated current user",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "auth.totp.disabled",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "totp-recovery-regenerate",
+    "route": "/api/v1/auth/totp/recovery-codes/regenerate/",
+    "sample_path": "/api/v1/auth/totp/recovery-codes/regenerate/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "self-service TOTP recovery-code regeneration",
+    "auth": "bearer/session auth plus current password or valid TOTP proof",
+    "rbac": "authenticated current user",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "auth.totp.recovery_codes_regenerated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "password-reset-request",
+    "route": "/api/v1/auth/password-reset/request/",
+    "sample_path": "/api/v1/auth/password-reset/request/",
+    "method": "POST",
+    "expected_unauthenticated_status": 202,
+    "surface": "public password-reset request",
+    "auth": "public by design; email address and reset token flow is the proof boundary",
+    "rbac": "not applicable",
+    "csrf": "not applicable: public endpoint; anti-enumeration response is always accepted",
+    "audit": "auth.password_reset_request when a user lookup is attempted",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "password-reset-complete",
+    "route": "/api/v1/auth/password-reset/complete/",
+    "sample_path": "/api/v1/auth/password-reset/complete/",
+    "method": "POST",
+    "expected_unauthenticated_status": 400,
+    "surface": "public reset-token-gated password reset completion",
+    "auth": "public by design; reset token in request body is the credential",
+    "rbac": "not applicable",
+    "csrf": "not applicable: public token-gated endpoint",
+    "audit": "auth.password_reset_completed on successful reset",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "totp-verify",
+    "route": "/api/v1/auth/totp/verify/",
+    "sample_path": "/api/v1/auth/totp/verify/",
+    "method": "POST",
+    "expected_unauthenticated_status": 400,
+    "surface": "public TOTP challenge verification",
+    "auth": "public by design; signed challenge token and TOTP/recovery code are the credentials",
+    "rbac": "not applicable",
+    "csrf": "not applicable: public challenge-token-gated endpoint",
+    "audit": "auth.totp.verify_failed and auth.totp.verified depending outcome",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "kubectl-shell-open",
+    "route": "/api/v1/clusters/{cluster_id}/shell/sessions/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/shell/sessions/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "kubectl shell session creation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "kubectl.session.opened",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestKubectlHandler_OpenCreatesSession"
+    ]
+  },
+  {
+    "id": "kubectl-shell-close",
+    "route": "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/close/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/shell/sessions/00000000-0000-0000-0000-000000000001/close/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "kubectl shell session close",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update plus session ownership",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "kubectl.session.closed",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestKubectlHandler_CloseMarksSessionClosed"
+    ]
+  },
+  {
+    "id": "kubectl-shell-commands",
+    "route": "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/shell/sessions/00000000-0000-0000-0000-000000000001/commands/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "kubectl shell command history",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update plus session ownership",
+    "csrf": "not applicable: GET",
+    "audit": "command rows are written during session input; read-side audit should cover command-history reads",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestKubectlHandler_Commands"
+    ]
+  },
+  {
+    "id": "resource-create-named",
+    "route": "/api/v1/clusters/{cluster_id}/resources/{resource_type}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/resources/services/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes named resource creation",
+    "auth": "bearer/session auth",
+    "rbac": "resource-family create permission such as services:create, ingresses:create, network_policies:create, or storage:create",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.resource.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerNamedResourceMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "resource-delete-namespaced",
+    "route": "/api/v1/clusters/{cluster_id}/resources/{resource_type}/{namespace}/{name}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/resources/services/default/example/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes namespaced resource deletion",
+    "auth": "bearer/session auth",
+    "rbac": "resource-family delete permission such as services:delete, ingresses:delete, network_policies:delete, or storage:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cluster.resource.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerNamedResourceMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "resource-delete-persistent-volume",
+    "route": "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/{name}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/pv-example/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes persistent volume deletion",
+    "auth": "bearer/session auth",
+    "rbac": "storage:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cluster.resource.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerNamedResourceMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "resource-rest-update",
+    "route": "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/",
+    "sample_path": "/api/v1/resources/{cluster_id}/deployments/default/example/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "generic Kubernetes resource REST update",
+    "auth": "bearer/session auth",
+    "rbac": "resource-family update permission such as workloads:update, services:update, ingresses:update, configmaps:update, secrets:update, storage:update, or clusters:update for unmapped custom resource types",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "cluster.resource.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerNamedResourceMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "resource-rest-delete",
+    "route": "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/",
+    "sample_path": "/api/v1/resources/{cluster_id}/deployments/default/example/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "generic Kubernetes resource REST delete",
+    "auth": "bearer/session auth",
+    "rbac": "resource-family delete permission such as workloads:delete, services:delete, ingresses:delete, configmaps:delete, secrets:delete, storage:delete, or clusters:update for unmapped custom resource types",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cluster.resource.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerNamedResourceMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "node-cordon",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/cordon/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/cordon/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node cordon",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.cordoned",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerCordonAndUncordonNodeAreAudited"
+    ]
+  },
+  {
+    "id": "node-uncordon",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/uncordon/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/uncordon/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node uncordon",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.uncordoned",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerCordonAndUncordonNodeAreAudited"
+    ]
+  },
+  {
+    "id": "node-drain",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/drain/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/drain/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node drain",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.drain or cluster.node.drain_blocked depending blocker outcome",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerDrainNodeEvictsEligiblePodsAndSkipsDaemonSets",
+      "TestResourceHandlerDrainNodeBlocksEmptyDirPodsWithoutOverride"
+    ]
+  },
+  {
+    "id": "node-label-set",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/labels/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/labels/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node label set",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.label.set",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerSetAndRemoveNodeMetadata"
+    ]
+  },
+  {
+    "id": "node-label-remove",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/labels/remove/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/labels/remove/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node label remove",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.label.removed",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerSetAndRemoveNodeMetadata"
+    ]
+  },
+  {
+    "id": "node-annotation-set",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/annotations/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/annotations/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node annotation set",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.annotation.set",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerSetAndRemoveNodeMetadata"
+    ]
+  },
+  {
+    "id": "node-annotation-remove",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/annotations/remove/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/annotations/remove/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node annotation remove",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.annotation.removed",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerSetAndRemoveNodeMetadata"
+    ]
+  },
+  {
+    "id": "node-taint-add",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/taints/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/taints/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node taint add",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.taint.added",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerAddAndRemoveNodeTaint"
+    ]
+  },
+  {
+    "id": "node-taint-remove",
+    "route": "/api/v1/nodes/{cluster_id}/{node_name}/taints/remove/",
+    "sample_path": "/api/v1/nodes/{cluster_id}/worker-1/taints/remove/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Kubernetes node taint remove",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.node.taint.removed",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestResourceHandlerAddAndRemoveNodeTaint"
+    ]
+  },
+  {
+    "id": "cluster-legacy-registry-update",
+    "route": "/api/v1/clusters/{id}/registry/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registry/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy cluster image-pull registry credential update",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "cluster.registry.updated on cluster",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestUpdateRegistryConfigAuditsLegacyRegistryMutation"
+    ]
+  },
+  {
+    "id": "cluster-legacy-registry-delete",
+    "route": "/api/v1/clusters/{id}/registry/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registry/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy cluster image-pull registry credential delete",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cluster.registry.deleted on cluster",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestDeleteRegistryConfig"
+    ]
+  },
+  {
+    "id": "cluster-registry-create",
+    "route": "/api/v1/clusters/{cluster_id}/registries/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registries/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster image-pull registry credential creation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.registry.created on cluster_registry_config",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRegistry_CRUD"
+    ]
+  },
+  {
+    "id": "cluster-registry-update",
+    "route": "/api/v1/clusters/{cluster_id}/registries/{id}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registries/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster image-pull registry credential update",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "cluster.registry.updated on cluster_registry_config",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRegistry_CRUD"
+    ]
+  },
+  {
+    "id": "cluster-registry-delete",
+    "route": "/api/v1/clusters/{cluster_id}/registries/{id}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registries/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster image-pull registry credential delete",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cluster.registry.deleted on cluster_registry_config",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRegistry_CRUD"
+    ]
+  },
+  {
+    "id": "cluster-registry-test",
+    "route": "/api/v1/clusters/{cluster_id}/registries/{id}/test/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/registries/00000000-0000-0000-0000-000000000001/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster image-pull registry credential validation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.registry.tested on cluster_registry_config",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRegistry_TestEndpointReachesUpstream"
+    ]
+  },
+  {
+    "id": "cloud-credential-create",
+    "route": "/api/v1/projects/{project_id}/cloud-credentials/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/cloud-credentials/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project cloud credential creation",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cloud_credentials.created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cloud-credential-update",
+    "route": "/api/v1/projects/{project_id}/cloud-credentials/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/cloud-credentials/00000000-0000-0000-0000-000000000002/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "project cloud credential update",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "cloud_credentials.updated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cloud-credential-delete",
+    "route": "/api/v1/projects/{project_id}/cloud-credentials/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/cloud-credentials/00000000-0000-0000-0000-000000000002/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "project cloud credential delete",
+    "auth": "bearer/session auth",
+    "rbac": "projects:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cloud_credentials.deleted",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cloud-credential-test",
+    "route": "/api/v1/projects/{project_id}/cloud-credentials/{id}/test/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/cloud-credentials/00000000-0000-0000-0000-000000000002/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project cloud credential validation",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cloud_credentials.tested",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "vault-connection-create",
+    "route": "/api/v1/admin/vault-connections/",
+    "sample_path": "/api/v1/admin/vault-connections/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Vault connection credential creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin surface; superuser/permission audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "admin.vault_connection.created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestVaultHandler_CreateGetUpdate"
+    ]
+  },
+  {
+    "id": "vault-connection-update",
+    "route": "/api/v1/admin/vault-connections/{id}/",
+    "sample_path": "/api/v1/admin/vault-connections/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "Vault connection credential update",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin surface; superuser/permission audit remains open",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "admin.vault_connection.updated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestVaultHandler_CreateGetUpdate"
+    ]
+  },
+  {
+    "id": "vault-connection-delete",
+    "route": "/api/v1/admin/vault-connections/{id}/",
+    "sample_path": "/api/v1/admin/vault-connections/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "Vault connection credential delete",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin surface; superuser/permission audit remains open",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "admin.vault_connection.deleted",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestVaultHandler_DeleteAuditsConnection"
+    ]
+  },
+  {
+    "id": "vault-connection-test",
+    "route": "/api/v1/admin/vault-connections/{id}/test/",
+    "sample_path": "/api/v1/admin/vault-connections/00000000-0000-0000-0000-000000000001/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Vault connection credential validation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin surface; superuser/permission audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "admin.vault_connection.tested",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestVaultHandler_TestEndpointAuditsProbeResult"
+    ]
+  },
+  {
+    "id": "project-default-vault-update",
+    "route": "/api/v1/projects/{id}/default-vault-connection/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/default-vault-connection/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "project default Vault connection assignment",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "project.default_vault_connection.set",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestVaultHandler_ProjectDefaultVaultAssignmentIsAudited"
+    ]
+  },
+  {
+    "id": "smtp-settings-update",
+    "route": "/api/v1/admin/smtp/",
+    "sample_path": "/api/v1/admin/smtp/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "SMTP credential and sender settings update",
+    "auth": "bearer/session auth",
+    "rbac": "superuser check inside handler",
+    "csrf": "required for browser cookie PUT by requireAuth",
+    "audit": "admin.smtp.updated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "smtp-test-send",
+    "route": "/api/v1/admin/smtp/test/",
+    "sample_path": "/api/v1/admin/smtp/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "SMTP credential validation send",
+    "auth": "bearer/session auth",
+    "rbac": "superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.smtp.tested",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "webhook-create",
+    "route": "/api/v1/admin/webhooks/",
+    "sample_path": "/api/v1/admin/webhooks/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "outbound webhook secret creation",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.webhook.created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "webhook-update",
+    "route": "/api/v1/admin/webhooks/{id}/",
+    "sample_path": "/api/v1/admin/webhooks/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "outbound webhook secret update",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie PUT by requireAuth",
+    "audit": "admin.webhook.updated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "webhook-delete",
+    "route": "/api/v1/admin/webhooks/{id}/",
+    "sample_path": "/api/v1/admin/webhooks/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "outbound webhook secret delete",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie DELETE by requireAuth",
+    "audit": "admin.webhook.deleted",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "webhook-test",
+    "route": "/api/v1/admin/webhooks/{id}/test/",
+    "sample_path": "/api/v1/admin/webhooks/00000000-0000-0000-0000-000000000001/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "outbound webhook secret validation send",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.webhook.tested",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "webhook-delivery-retry",
+    "route": "/api/v1/admin/webhooks/{id}/deliveries/{delivery_id}/retry/",
+    "sample_path": "/api/v1/admin/webhooks/00000000-0000-0000-0000-000000000001/deliveries/00000000-0000-0000-0000-000000000002/retry/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "outbound webhook delivery retry",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.webhook.delivery_retried",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "sso-provider-create",
+    "route": "/api/v1/sso/",
+    "sample_path": "/api/v1/sso/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "generic SSO provider credential creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin surface; superuser/permission audit remains open",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "sso.provider.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestCreateSSOProviderRegistersGenericOIDCProvider"
+    ]
+  },
+  {
+    "id": "sso-provider-delete",
+    "route": "/api/v1/sso/{id}/",
+    "sample_path": "/api/v1/sso/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "generic SSO provider credential delete",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin surface; superuser/permission audit remains open",
+    "csrf": "required for browser cookie DELETE by requireAuth",
+    "audit": "sso.provider.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestDeleteSSOProviderRemovesProviderFromManager"
+    ]
+  },
+  {
+    "id": "dex-connector-create",
+    "route": "/api/v1/auth/dex/connectors/",
+    "sample_path": "/api/v1/auth/dex/connectors/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Dex connector secret creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated settings surface; explicit settings RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "dex.connector.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestCreateAndGetConnector_RedactsSecret"
+    ]
+  },
+  {
+    "id": "dex-connector-update",
+    "route": "/api/v1/auth/dex/connectors/{id}/",
+    "sample_path": "/api/v1/auth/dex/connectors/oidc-main/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "Dex connector secret update",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated settings surface; explicit settings RBAC audit remains open",
+    "csrf": "required for browser cookie PATCH by protected route auth",
+    "audit": "dex.connector.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestDexConnectorUpdateAndDeleteAreAudited"
+    ]
+  },
+  {
+    "id": "dex-connector-delete",
+    "route": "/api/v1/auth/dex/connectors/{id}/",
+    "sample_path": "/api/v1/auth/dex/connectors/oidc-main/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "Dex connector secret delete",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated settings surface; explicit settings RBAC audit remains open",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "dex.connector.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestDexConnectorUpdateAndDeleteAreAudited"
+    ]
+  },
+  {
+    "id": "dex-settings-update",
+    "route": "/api/v1/auth/dex/settings/",
+    "sample_path": "/api/v1/auth/dex/settings/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "Dex settings update",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated settings surface; explicit settings RBAC audit remains open",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "dex.settings.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestUpdateSettingsAuditsDexSettingsUpdate"
+    ]
+  },
+  {
+    "id": "dex-apply",
+    "route": "/api/v1/auth/dex/apply/",
+    "sample_path": "/api/v1/auth/dex/apply/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Dex rendered configuration apply",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated settings surface; explicit settings RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "dex.config.apply",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestApply_PatchesConfigMapOnLiveCluster"
+    ]
+  },
+  {
+    "id": "dex-register-as-sso",
+    "route": "/api/v1/auth/dex/register-as-sso/",
+    "sample_path": "/api/v1/auth/dex/register-as-sso/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Dex registered as Astronomer SSO provider",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated settings surface; explicit settings RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "dex.register_sso",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRegisterAsSSO_CreatesProviderRow"
+    ]
+  },
+  {
+    "id": "project-create",
+    "route": "/api/v1/projects/",
+    "sample_path": "/api/v1/projects/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project creation",
+    "auth": "bearer/session auth",
+    "rbac": "projects:create",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "project.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProjectMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "project-update",
+    "route": "/api/v1/projects/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "project update",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "project.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProjectMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "project-delete",
+    "route": "/api/v1/projects/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "project deletion",
+    "auth": "bearer/session auth",
+    "rbac": "projects:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "project.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProjectMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "project-add-namespace",
+    "route": "/api/v1/projects/{id}/add-namespace/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/add-namespace/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project namespace assignment",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "project.add_namespace",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProjectMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "project-remove-namespace",
+    "route": "/api/v1/projects/{id}/remove-namespace/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/remove-namespace/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project namespace removal",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "project.remove_namespace",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProjectMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "project-policy-update",
+    "route": "/api/v1/projects/{id}/policy/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/policy/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "project pod-security and quota policy update",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie PATCH by protected route auth",
+    "audit": "project.update_policy",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestPatchProjectPolicy_UpdatesFields"
+    ]
+  },
+  {
+    "id": "rbac-global-role-create",
+    "route": "/api/v1/rbac/global-roles/",
+    "sample_path": "/api/v1/rbac/global-roles/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "global role creation",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:create",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "role.create on global_role",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACGlobalRoleMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-global-role-update",
+    "route": "/api/v1/rbac/global-roles/{id}/",
+    "sample_path": "/api/v1/rbac/global-roles/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "global role update",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "role.update on global_role",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACGlobalRoleMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-global-role-delete",
+    "route": "/api/v1/rbac/global-roles/{id}/",
+    "sample_path": "/api/v1/rbac/global-roles/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "global role deletion",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "role.delete on global_role",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACGlobalRoleMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-global-binding-create",
+    "route": "/api/v1/rbac/global-bindings/",
+    "sample_path": "/api/v1/rbac/global-bindings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "global role binding creation",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:create",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "binding.create on global_role_binding",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACRoleBindingMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-global-binding-delete",
+    "route": "/api/v1/rbac/global-bindings/{id}/",
+    "sample_path": "/api/v1/rbac/global-bindings/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "global role binding deletion",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "binding.delete on global_role_binding",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACRoleBindingMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-cluster-binding-create",
+    "route": "/api/v1/rbac/cluster-bindings/",
+    "sample_path": "/api/v1/rbac/cluster-bindings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster role binding creation",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:create",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "binding.create on cluster_role_binding",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACRoleBindingMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-cluster-binding-delete",
+    "route": "/api/v1/rbac/cluster-bindings/{id}/",
+    "sample_path": "/api/v1/rbac/cluster-bindings/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster role binding deletion",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "binding.delete on cluster_role_binding",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACRoleBindingMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-project-binding-create",
+    "route": "/api/v1/rbac/project-bindings/",
+    "sample_path": "/api/v1/rbac/project-bindings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project role binding creation",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:create",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "binding.create on project_role_binding",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACRoleBindingMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "rbac-project-binding-delete",
+    "route": "/api/v1/rbac/project-bindings/{id}/",
+    "sample_path": "/api/v1/rbac/project-bindings/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "project role binding deletion",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "binding.delete on project_role_binding",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRBACRoleBindingMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-create",
+    "route": "/api/v1/backups/",
+    "sample_path": "/api/v1/backups/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup run creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit backup RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "backup.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-delete",
+    "route": "/api/v1/backups/{id}/",
+    "sample_path": "/api/v1/backups/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup run deletion",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit backup RBAC audit remains open",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "backup.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-restore-create",
+    "route": "/api/v1/backups/{id}/restore/",
+    "sample_path": "/api/v1/backups/00000000-0000-0000-0000-000000000001/restore/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "restore from backup",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit restore RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "backup.restore.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-storage-create",
+    "route": "/api/v1/backups/storage/",
+    "sample_path": "/api/v1/backups/storage/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage credential creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit backup storage RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "backup.storage.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-storage-update",
+    "route": "/api/v1/backups/storage/{id}/",
+    "sample_path": "/api/v1/backups/storage/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage credential update",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit backup storage RBAC audit remains open",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "backup.storage.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-storage-delete",
+    "route": "/api/v1/backups/storage/{id}/",
+    "sample_path": "/api/v1/backups/storage/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage credential deletion",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit backup storage RBAC audit remains open",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "backup.storage.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-schedule-create",
+    "route": "/api/v1/backups/schedules/",
+    "sample_path": "/api/v1/backups/schedules/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup schedule creation",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit schedule RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "backup.schedule.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "backup-schedule-trigger",
+    "route": "/api/v1/backups/schedules/{id}/trigger-now/",
+    "sample_path": "/api/v1/backups/schedules/00000000-0000-0000-0000-000000000001/trigger-now/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "manual backup schedule trigger",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated backup surface; explicit schedule RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "backup.schedule.trigger",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBackupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "cluster-snapshot-create",
+    "route": "/api/v1/clusters/{cluster_id}/snapshots/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/snapshots/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster snapshot creation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.snapshot.created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestSnapshot_CreatesVeleroBackupCRD"
+    ]
+  },
+  {
+    "id": "cluster-snapshot-restore",
+    "route": "/api/v1/clusters/{cluster_id}/snapshots/{id}/restore/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/snapshots/00000000-0000-0000-0000-000000000001/restore/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster snapshot restore",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.snapshot.restore_requested",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestRestore_CreatesVeleroRestoreCRD"
+    ]
+  },
+  {
+    "id": "cluster-snapshot-schedule-create",
+    "route": "/api/v1/clusters/{cluster_id}/snapshot-schedules/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/snapshot-schedules/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster snapshot schedule creation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.snapshot.schedule_created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestSchedule_CRUD"
+    ]
+  },
+  {
+    "id": "project-catalog-create",
+    "route": "/api/v1/projects/{project_id}/catalogs/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/catalogs/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project Helm catalog creation",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "project.catalog.owned_created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestCreateProjectCatalog_AutoSubscribes"
+    ]
+  },
+  {
+    "id": "project-catalog-subscribe",
+    "route": "/api/v1/projects/{project_id}/catalogs/{catalog_id}/subscribe/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/catalogs/00000000-0000-0000-0000-000000000002/subscribe/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project Helm catalog subscription",
+    "auth": "bearer/session auth",
+    "rbac": "projects:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "project.catalog.subscribed_foreign",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestSubscribe_SuperuserBypassesPrivateRule"
+    ]
+  },
+  {
+    "id": "cluster-group-create",
+    "route": "/api/v1/cluster-groups/",
+    "sample_path": "/api/v1/cluster-groups/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster group creation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "admin.cluster_group.created",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestClusterGroupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "cluster-group-move",
+    "route": "/api/v1/cluster-groups/{id}/move/",
+    "sample_path": "/api/v1/cluster-groups/00000000-0000-0000-0000-000000000001/move/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster group membership move",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "admin.cluster_group.moved_cluster",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestClusterGroupMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "fleet-operation-create",
+    "route": "/api/v1/fleet-operations/",
+    "sample_path": "/api/v1/fleet-operations/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy fleet-named multi-cluster operation creation",
+    "auth": "bearer/session auth",
+    "rbac": "fleet_operations:create plus clusters write API-token scope",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "fleet.operation.created; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestFleetOperation_CRUD"
+    ]
+  },
+  {
+    "id": "fleet-operation-abort",
+    "route": "/api/v1/fleet-operations/{id}/abort/",
+    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/abort/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy fleet-named multi-cluster operation abort",
+    "auth": "bearer/session auth",
+    "rbac": "fleet_operations:update plus clusters write API-token scope",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "fleet.operation.aborted; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestFleetOperation_Abort"
+    ]
+  },
+  {
+    "id": "apiserver-allowlist-update",
+    "route": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "target cluster API server allow-list update",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "cluster.apiserver_allowlist.updated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestApiserverAllowlistHandler_PUTHappyPath"
+    ]
+  },
+  {
+    "id": "catalog-installed-create",
+    "route": "/api/v1/catalog/installed/",
+    "sample_path": "/api/v1/catalog/installed/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog app install",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated catalog surface; explicit catalog RBAC audit remains open",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "catalog.installation.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestCatalogInstalledMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "catalog-installed-upgrade",
+    "route": "/api/v1/catalog/installed/{id}/upgrade/",
+    "sample_path": "/api/v1/catalog/installed/00000000-0000-0000-0000-000000000001/upgrade/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog app upgrade",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated catalog surface; explicit catalog RBAC audit remains open",
+    "csrf": "required for browser cookie PUT by protected route auth",
+    "audit": "catalog.installation.upgrade",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestCatalogInstalledMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "catalog-installed-delete",
+    "route": "/api/v1/catalog/installed/{id}/",
+    "sample_path": "/api/v1/catalog/installed/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog app uninstall",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated catalog surface; explicit catalog RBAC audit remains open",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "catalog.installation.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestCatalogInstalledMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "cluster-template-apply",
+    "route": "/api/v1/clusters/{cluster_id}/template/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/template/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template apply",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.template_applied",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestClusterTemplate_ApplyAndStatus"
+    ]
+  },
+  {
+    "id": "cluster-template-detach",
+    "route": "/api/v1/clusters/{cluster_id}/template/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/template/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template detach",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "cluster.template_detached",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestClusterTemplate_ApplyAndStatus"
+    ]
+  },
+  {
+    "id": "network-policy-application-create",
+    "route": "/api/v1/clusters/{cluster_id}/network-policies/applications/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/network-policies/applications/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "managed network policy application",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:update",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.network_policy.applied",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestNetPolHandler_TestApply_CreatesRowAndEnqueues"
+    ]
+  },
+  {
+    "id": "workload-scale",
+    "route": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/workloads/deployment/default/example/scale/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "workload scale",
+    "auth": "bearer/session auth",
+    "rbac": "workloads:scale",
+    "csrf": "required for browser cookie PATCH by protected route auth",
+    "audit": "workload.scale",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestWorkloadMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "workload-restart",
+    "route": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/workloads/deployment/default/example/restart/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "workload restart",
+    "auth": "bearer/session auth",
+    "rbac": "workloads:restart",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "workload.restart",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestWorkloadMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "workload-delete",
+    "route": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/workloads/deployment/default/example/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "workload deletion",
+    "auth": "bearer/session auth",
+    "rbac": "workloads:delete",
+    "csrf": "required for browser cookie DELETE by protected route auth",
+    "audit": "workload.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestWorkloadMutationsAreAudited"
+    ]
+  },
+  {
+    "id": "service-mesh-validate",
+    "route": "/api/v1/clusters/{cluster_id}/service-mesh/validate/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/service-mesh/validate/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "service mesh policy validation",
+    "auth": "bearer/session auth",
+    "rbac": "service_mesh:update plus clusters write API-token scope",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "cluster.service_mesh.policy_validated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned"
+    ]
+  },
+  {
+    "id": "admin-shell-sessions",
+    "route": "/api/v1/admin/shell-sessions/",
+    "sample_path": "/api/v1/admin/shell-sessions/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "superuser kubectl shell session inventory",
+    "auth": "bearer/session auth",
+    "rbac": "superuser check inside handler",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit should cover privileged shell inventory reads",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestKubectlHandler_AdminRoutesRequireSuperuser"
+    ]
+  },
+  {
+    "id": "admin-shell-session-commands",
+    "route": "/api/v1/admin/shell-sessions/{id}/commands/",
+    "sample_path": "/api/v1/admin/shell-sessions/00000000-0000-0000-0000-000000000001/commands/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "superuser kubectl shell command history",
+    "auth": "bearer/session auth",
+    "rbac": "superuser check inside handler",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit should cover privileged command-history reads",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestKubectlHandler_AdminCanReadAnySessionCommands"
+    ]
+  },
+  {
+    "id": "user-reset-password",
+    "route": "/api/v1/users/{id}/reset-password/",
+    "sample_path": "/api/v1/users/00000000-0000-0000-0000-000000000001/reset-password/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "admin user password reset",
+    "auth": "bearer/session auth",
+    "rbac": "admin user-management route",
+    "csrf": "required for browser cookie POST by protected route auth",
+    "audit": "user.password_reset",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "admin-user-unlock",
+    "route": "/api/v1/admin/users/{id}/unlock/",
+    "sample_path": "/api/v1/admin/users/00000000-0000-0000-0000-000000000001/unlock/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "admin account unlock",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.user.unlock",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "admin-user-force-logout",
+    "route": "/api/v1/admin/users/{id}/force-logout/",
+    "sample_path": "/api/v1/admin/users/00000000-0000-0000-0000-000000000001/force-logout/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "admin force logout across user sessions",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.user.force_logout",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "admin-user-disable-totp",
+    "route": "/api/v1/admin/users/{id}/disable-totp/",
+    "sample_path": "/api/v1/admin/users/00000000-0000-0000-0000-000000000001/disable-totp/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "admin TOTP disable override",
+    "auth": "bearer/session auth",
+    "rbac": "admin API token scope plus superuser check inside handler",
+    "csrf": "required for browser cookie POST by requireAuth",
+    "audit": "admin.user.totp_disabled",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "argocd-ui-root",
+    "route": "/argocd",
+    "sample_path": "/argocd",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "browser reverse proxy to built-in Argo CD UI",
+    "auth": "Astronomer bearer token or astronomer_session cookie",
+    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
+    "audit": "route should add explicit Argo UI access audit in a future hardening pass",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "argocd-ui-suffix",
+    "route": "/argocd/*",
+    "sample_path": "/argocd/api/version",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
+    "auth": "Astronomer bearer token or astronomer_session cookie",
+    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
+    "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "internal-tunnel-k8s",
+    "route": "/internal/tunnel/k8s/{cluster_id}",
+    "sample_path": "/internal/tunnel/k8s/{cluster_id}",
+    "method": "POST",
+    "expected_unauthenticated_status": 403,
+    "surface": "server-internal cross-pod Kubernetes request fallback",
+    "auth": "X-Astronomer-Internal-PSK derived from shared encryption key",
+    "rbac": "server-internal only; caller workflow owns user RBAC",
+    "csrf": "not applicable: server-to-server PSK route",
+    "audit": "caller workflow owns user audit; route should emit internal correlation metrics",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "internal-tunnel-helm",
+    "route": "/internal/tunnel/helm/{cluster_id}",
+    "sample_path": "/internal/tunnel/helm/{cluster_id}",
+    "method": "POST",
+    "expected_unauthenticated_status": 403,
+    "surface": "server-internal cross-pod Helm request fallback",
+    "auth": "X-Astronomer-Internal-PSK derived from shared encryption key",
+    "rbac": "server-internal only; caller workflow owns user RBAC",
+    "csrf": "not applicable: server-to-server PSK route",
+    "audit": "caller workflow owns user audit; route should emit internal correlation metrics",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalHelmHandler_ForbidsBadPSK"
+    ]
+  },
+  {
+    "id": "registration-manifest",
+    "route": "/api/v1/register/{token}",
+    "sample_path": "/api/v1/register/not-a-real-token.yaml",
+    "method": "GET",
+    "expected_unauthenticated_status": 404,
+    "surface": "public one-line cluster registration manifest endpoint",
+    "auth": "registration token in path is the credential",
+    "rbac": "not user RBAC; valid unexpired registration token must resolve to a cluster",
+    "csrf": "not applicable: GET manifest fetch",
+    "audit": "token generation is audited; invalid manifest fetches should remain opaque",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-create",
+    "route": "/api/v1/clusters/",
+    "sample_path": "/api/v1/clusters/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "adopted cluster inventory creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-update",
+    "route": "/api/v1/clusters/{id}/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "adopted cluster inventory update",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-patch",
+    "route": "/api/v1/clusters/{id}/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "adopted cluster inventory partial update",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-delete",
+    "route": "/api/v1/clusters/{id}/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "adopted cluster decommission request",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.delete/decommission operation audit",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-ownership-takeover",
+    "route": "/api/v1/clusters/{id}/ownership/takeover/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/ownership/takeover/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "adopted cluster ownership transfer",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.ownership.takeover",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-registration-token-create",
+    "route": "/api/v1/clusters/{id}/register/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/register/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster agent registration token creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.registration_token.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-kubeconfig-generate",
+    "route": "/api/v1/clusters/{id}/generate-kubeconfig/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/generate-kubeconfig/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster kubeconfig generation",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read; route returns scoped cluster access material",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.kubeconfig.generated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-kubeconfig-generate-underscore-alias",
+    "route": "/api/v1/clusters/{id}/generate_kubeconfig/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/generate_kubeconfig/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy cluster kubeconfig generation alias",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read; route returns scoped cluster access material",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.kubeconfig.generated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-registration-options-update",
+    "route": "/api/v1/clusters/{id}/registration/options/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/registration/options/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster adoption registration options update",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.registration.options_updated",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-registration-confirm",
+    "route": "/api/v1/clusters/{id}/registration/confirm/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/registration/confirm/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster adoption registration confirmation",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.registration.confirmed",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-registration-step-retry",
+    "route": "/api/v1/clusters/{id}/registration/retry/{step_id}/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/registration/retry/00000000-0000-0000-0000-000000000002/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster adoption registration step retry",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.registration.retry",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-registration-cancel",
+    "route": "/api/v1/clusters/{id}/registration/cancel/",
+    "sample_path": "/api/v1/clusters/00000000-0000-0000-0000-000000000001/registration/cancel/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster adoption registration cancellation",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster.registration.cancel",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "user-create",
+    "route": "/api/v1/users/",
+    "sample_path": "/api/v1/users/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "local user creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus users:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "user.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "user-update",
+    "route": "/api/v1/users/{id}/",
+    "sample_path": "/api/v1/users/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "local user update",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus users:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "user.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "user-patch",
+    "route": "/api/v1/users/{id}/",
+    "sample_path": "/api/v1/users/00000000-0000-0000-0000-000000000001/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "local user partial update",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus users:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "user.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "user-delete",
+    "route": "/api/v1/users/{id}/",
+    "sample_path": "/api/v1/users/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "local user deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus users:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "user.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-cluster-role-create",
+    "route": "/api/v1/rbac/cluster-roles/",
+    "sample_path": "/api/v1/rbac/cluster-roles/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC cluster role creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.cluster_role.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-cluster-role-update",
+    "route": "/api/v1/rbac/cluster-roles/{id}/",
+    "sample_path": "/api/v1/rbac/cluster-roles/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC cluster role update",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.cluster_role.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-cluster-role-delete",
+    "route": "/api/v1/rbac/cluster-roles/{id}/",
+    "sample_path": "/api/v1/rbac/cluster-roles/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC cluster role deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.cluster_role.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-project-role-create",
+    "route": "/api/v1/rbac/project-roles/",
+    "sample_path": "/api/v1/rbac/project-roles/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC project role creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.project_role.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-project-role-update",
+    "route": "/api/v1/rbac/project-roles/{id}/",
+    "sample_path": "/api/v1/rbac/project-roles/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC project role update",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.project_role.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-project-role-delete",
+    "route": "/api/v1/rbac/project-roles/{id}/",
+    "sample_path": "/api/v1/rbac/project-roles/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC project role deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.project_role.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-global-role-binding-alias-create",
+    "route": "/api/v1/rbac/global-role-bindings/",
+    "sample_path": "/api/v1/rbac/global-role-bindings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC global role binding alias creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.global_binding.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-global-role-binding-alias-delete",
+    "route": "/api/v1/rbac/global-role-bindings/{id}/",
+    "sample_path": "/api/v1/rbac/global-role-bindings/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC global role binding alias deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.global_binding.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-cluster-role-binding-alias-create",
+    "route": "/api/v1/rbac/cluster-role-bindings/",
+    "sample_path": "/api/v1/rbac/cluster-role-bindings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC cluster role binding alias creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.cluster_binding.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-cluster-role-binding-alias-delete",
+    "route": "/api/v1/rbac/cluster-role-bindings/{id}/",
+    "sample_path": "/api/v1/rbac/cluster-role-bindings/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC cluster role binding alias deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.cluster_binding.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-project-role-binding-alias-create",
+    "route": "/api/v1/rbac/project-role-bindings/",
+    "sample_path": "/api/v1/rbac/project-role-bindings/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC project role binding alias creation",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.project_binding.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-project-role-binding-alias-delete",
+    "route": "/api/v1/rbac/project-role-bindings/{id}/",
+    "sample_path": "/api/v1/rbac/project-role-bindings/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC project role binding alias deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token rbac:write plus rbac:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "rbac.project_binding.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "rbac-permission-preview",
+    "route": "/api/v1/rbac/permission-preview/",
+    "sample_path": "/api/v1/rbac/permission-preview/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "RBAC permission preview for requested role assignments",
+    "auth": "bearer/session auth",
+    "rbac": "rbac:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "authorization preview access should be audited or documented as a read-side authorization calculation",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-template-create",
+    "route": "/api/v1/cluster-templates/",
+    "sample_path": "/api/v1/cluster-templates/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template definition creation",
+    "auth": "bearer/session auth",
+    "rbac": "cluster_templates:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_template.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-template-update",
+    "route": "/api/v1/cluster-templates/{id}/",
+    "sample_path": "/api/v1/cluster-templates/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template definition update",
+    "auth": "bearer/session auth",
+    "rbac": "cluster_templates:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_template.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-template-patch",
+    "route": "/api/v1/cluster-templates/{id}/",
+    "sample_path": "/api/v1/cluster-templates/00000000-0000-0000-0000-000000000001/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template definition partial update",
+    "auth": "bearer/session auth",
+    "rbac": "cluster_templates:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_template.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-template-delete",
+    "route": "/api/v1/cluster-templates/{id}/",
+    "sample_path": "/api/v1/cluster-templates/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template definition deletion",
+    "auth": "bearer/session auth",
+    "rbac": "cluster_templates:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_template.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "network-policy-template-create",
+    "route": "/api/v1/admin/network-policy-templates/",
+    "sample_path": "/api/v1/admin/network-policy-templates/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "network policy template library creation",
+    "auth": "bearer/session auth",
+    "rbac": "network_policies:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "network_policy_template.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "network-policy-template-update",
+    "route": "/api/v1/admin/network-policy-templates/{id}/",
+    "sample_path": "/api/v1/admin/network-policy-templates/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "network policy template library update",
+    "auth": "bearer/session auth",
+    "rbac": "network_policies:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "network_policy_template.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "network-policy-template-delete",
+    "route": "/api/v1/admin/network-policy-templates/{id}/",
+    "sample_path": "/api/v1/admin/network-policy-templates/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "network policy template library deletion",
+    "auth": "bearer/session auth",
+    "rbac": "network_policies:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "network_policy_template.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-repository-create",
+    "route": "/api/v1/catalog/repositories/",
+    "sample_path": "/api/v1/catalog/repositories/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog Helm repository creation",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.repository.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-repository-update",
+    "route": "/api/v1/catalog/repositories/{id}/",
+    "sample_path": "/api/v1/catalog/repositories/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog Helm repository update",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.repository.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-repository-delete",
+    "route": "/api/v1/catalog/repositories/{id}/",
+    "sample_path": "/api/v1/catalog/repositories/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog Helm repository deletion",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.repository.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-repository-sync",
+    "route": "/api/v1/catalog/repositories/{id}/sync/",
+    "sample_path": "/api/v1/catalog/repositories/00000000-0000-0000-0000-000000000001/sync/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog Helm repository sync trigger",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.repository.sync",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-repository-test-connection",
+    "route": "/api/v1/catalog/repositories/{id}/test-connection/",
+    "sample_path": "/api/v1/catalog/repositories/00000000-0000-0000-0000-000000000001/test-connection/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog Helm repository credential/connectivity test",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.repository.test_connection",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-operation-retry",
+    "route": "/api/v1/catalog/operations/{id}/retry/",
+    "sample_path": "/api/v1/catalog/operations/00000000-0000-0000-0000-000000000001/retry/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "catalog operation retry",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.operation.retry",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "catalog-installed-rollback",
+    "route": "/api/v1/catalog/installed/{id}/rollback/",
+    "sample_path": "/api/v1/catalog/installed/00000000-0000-0000-0000-000000000001/rollback/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "installed catalog application rollback",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.installation.rollback",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "fleet-operation-pause",
+    "route": "/api/v1/fleet-operations/{id}/pause/",
+    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/pause/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy Fleet-named multi-cluster operation pause",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus fleet_operations:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "fleet.operation.paused; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestFleetOperation_PauseResume"
+    ]
+  },
+  {
+    "id": "fleet-operation-resume",
+    "route": "/api/v1/fleet-operations/{id}/resume/",
+    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/resume/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy Fleet-named multi-cluster operation resume",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus fleet_operations:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "fleet.operation.resumed; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestFleetOperation_PauseResume"
+    ]
+  },
+  {
+    "id": "fleet-operation-retry-failed",
+    "route": "/api/v1/fleet-operations/{id}/retry-failed/",
+    "sample_path": "/api/v1/fleet-operations/00000000-0000-0000-0000-000000000001/retry-failed/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy Fleet-named multi-cluster failed-target retry",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus fleet_operations:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "fleet.operation.retry_failed; route remains legacy Fleet-named compatibility for Argo-style multi-cluster operations",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestFleetOperation_RetryFailed"
+    ]
+  },
+  {
+    "id": "workload-operation-retry",
+    "route": "/api/v1/workloads/operations/{id}/retry/",
+    "sample_path": "/api/v1/workloads/operations/00000000-0000-0000-0000-000000000001/retry/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "workload operation retry",
+    "auth": "bearer/session auth",
+    "rbac": "workloads:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "workload.operation.retry",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "workload-pod-delete",
+    "route": "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/",
+    "sample_path": "/api/v1/workloads/pods/{cluster_id}/default/example-pod/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "direct pod deletion",
+    "auth": "bearer/session auth",
+    "rbac": "pods:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "workload.pod.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "settings-general-update",
+    "route": "/api/v1/settings/general/",
+    "sample_path": "/api/v1/settings/general/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy general platform settings update alias",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus settings:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "settings.general.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "settings-sso-create",
+    "route": "/api/v1/settings/sso/",
+    "sample_path": "/api/v1/settings/sso/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy SSO provider creation alias",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus sso:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "sso.provider.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "settings-sso-delete",
+    "route": "/api/v1/settings/sso/{id}/",
+    "sample_path": "/api/v1/settings/sso/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy SSO provider deletion alias",
+    "auth": "bearer/session auth",
+    "rbac": "API token admin scope plus sso:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "sso.provider.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "settings-token-create",
+    "route": "/api/v1/settings/tokens/",
+    "sample_path": "/api/v1/settings/tokens/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy self-service API token creation alias",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated user token owner",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "api_token.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "settings-token-delete",
+    "route": "/api/v1/settings/tokens/{id}/",
+    "sample_path": "/api/v1/settings/tokens/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "legacy self-service API token revocation alias",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated user token owner",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "api_token.revoke",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "vault-connection-health",
+    "route": "/api/v1/admin/vault-connections/{id}/health/",
+    "sample_path": "/api/v1/admin/vault-connections/00000000-0000-0000-0000-000000000001/health/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "Vault connection health probe",
+    "auth": "bearer/session auth",
+    "rbac": "authenticated admin/secret configuration surface; handler validates connection ownership/configuration",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "vault.connection.health",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-storage-config-create-alias",
+    "route": "/api/v1/backups/storage-configs/",
+    "sample_path": "/api/v1/backups/storage-configs/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage configuration creation alias",
+    "auth": "bearer/session auth",
+    "rbac": "backups:create",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.storage_config.create",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-storage-config-update-alias",
+    "route": "/api/v1/backups/storage-configs/{id}/",
+    "sample_path": "/api/v1/backups/storage-configs/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage configuration update alias",
+    "auth": "bearer/session auth",
+    "rbac": "backups:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.storage_config.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-storage-config-delete-alias",
+    "route": "/api/v1/backups/storage-configs/{id}/",
+    "sample_path": "/api/v1/backups/storage-configs/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage configuration deletion alias",
+    "auth": "bearer/session auth",
+    "rbac": "backups:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.storage_config.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-storage-config-test-alias",
+    "route": "/api/v1/backups/storage-configs/{id}/test-connection/",
+    "sample_path": "/api/v1/backups/storage-configs/00000000-0000-0000-0000-000000000001/test-connection/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage configuration connection test alias",
+    "auth": "bearer/session auth",
+    "rbac": "backups:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.storage_config.test_connection",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-storage-test",
+    "route": "/api/v1/backups/storage/{id}/test/",
+    "sample_path": "/api/v1/backups/storage/00000000-0000-0000-0000-000000000001/test/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage configuration test",
+    "auth": "bearer/session auth",
+    "rbac": "backups:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.storage_config.test_connection",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-storage-test-connection",
+    "route": "/api/v1/backups/storage/{id}/test-connection/",
+    "sample_path": "/api/v1/backups/storage/00000000-0000-0000-0000-000000000001/test-connection/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup storage configuration connection test",
+    "auth": "bearer/session auth",
+    "rbac": "backups:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.storage_config.test_connection",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-schedule-update",
+    "route": "/api/v1/backups/schedules/{id}/",
+    "sample_path": "/api/v1/backups/schedules/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup schedule update",
+    "auth": "bearer/session auth",
+    "rbac": "backups:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.schedule.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "backup-schedule-delete",
+    "route": "/api/v1/backups/schedules/{id}/",
+    "sample_path": "/api/v1/backups/schedules/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "backup schedule deletion",
+    "auth": "bearer/session auth",
+    "rbac": "backups:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "backup.schedule.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-group-update",
+    "route": "/api/v1/cluster-groups/{id}/",
+    "sample_path": "/api/v1/cluster-groups/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster group update",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_group.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-group-patch",
+    "route": "/api/v1/cluster-groups/{id}/",
+    "sample_path": "/api/v1/cluster-groups/00000000-0000-0000-0000-000000000001/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster group partial update",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_group.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-group-delete",
+    "route": "/api/v1/cluster-groups/{id}/",
+    "sample_path": "/api/v1/cluster-groups/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster group deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_group.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "apiserver-allowlist-reconcile",
+    "route": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/reconcile/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/reconcile/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster API server allow-list reconcile trigger",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "apiserver_allowlist.reconcile",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-failed-apps-delete",
+    "route": "/api/v1/clusters/{cluster_id}/apps/failed/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/apps/failed/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "bulk delete failed catalog installations for a cluster",
+    "auth": "bearer/session auth",
+    "rbac": "catalog:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "catalog.failed_apps.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "network-policy-application-delete",
+    "route": "/api/v1/clusters/{cluster_id}/network-policies/applications/{id}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/network-policies/applications/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "network policy application deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "network_policy.application.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "network-policy-application-reapply",
+    "route": "/api/v1/clusters/{cluster_id}/network-policies/applications/{id}/reapply/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/network-policies/applications/00000000-0000-0000-0000-000000000001/reapply/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "network policy application reapply",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "network_policy.application.reapply",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "service-mesh-detect",
+    "route": "/api/v1/clusters/{cluster_id}/service-mesh/detect/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/service-mesh/detect/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "service mesh detection trigger",
+    "auth": "bearer/session auth",
+    "rbac": "clusters:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "service_mesh.detect",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-snapshot-schedule-update",
+    "route": "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/snapshot-schedules/00000000-0000-0000-0000-000000000001/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster snapshot schedule update",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_snapshot.schedule.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-snapshot-schedule-delete",
+    "route": "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/snapshot-schedules/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster snapshot schedule deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_snapshot.schedule.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-snapshot-delete",
+    "route": "/api/v1/clusters/{cluster_id}/snapshots/{id}/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/snapshots/00000000-0000-0000-0000-000000000001/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster snapshot deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_snapshot.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "cluster-template-reapply",
+    "route": "/api/v1/clusters/{cluster_id}/template/reapply/",
+    "sample_path": "/api/v1/clusters/{cluster_id}/template/reapply/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "cluster template reapply",
+    "auth": "bearer/session auth",
+    "rbac": "API token clusters:write plus clusters:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cluster_template.reapply",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "project-patch",
+    "route": "/api/v1/projects/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "project partial update",
+    "auth": "bearer/session auth",
+    "rbac": "API token projects:write plus projects:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "project.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "project-ownership-takeover",
+    "route": "/api/v1/projects/{id}/ownership/takeover/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/ownership/takeover/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "project ownership transfer",
+    "auth": "bearer/session auth",
+    "rbac": "API token projects:write plus projects:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "project.ownership.takeover",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "project-catalog-delete",
+    "route": "/api/v1/projects/{project_id}/catalogs/{catalog_id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/catalogs/00000000-0000-0000-0000-000000000002/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "project catalog deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token projects:write plus projects:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "project_catalog.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "project-cloud-credential-patch",
+    "route": "/api/v1/projects/{project_id}/cloud-credentials/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/cloud-credentials/00000000-0000-0000-0000-000000000002/",
+    "method": "PATCH",
+    "expected_unauthenticated_status": 401,
+    "surface": "project cloud credential partial update",
+    "auth": "bearer/session auth",
+    "rbac": "API token projects:write plus projects:update",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cloud_credential.update",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  },
+  {
+    "id": "project-cloud-credential-delete",
+    "route": "/api/v1/projects/{project_id}/cloud-credentials/{id}/",
+    "sample_path": "/api/v1/projects/00000000-0000-0000-0000-000000000001/cloud-credentials/00000000-0000-0000-0000-000000000002/",
+    "method": "DELETE",
+    "expected_unauthenticated_status": 401,
+    "surface": "project cloud credential deletion",
+    "auth": "bearer/session auth",
+    "rbac": "API token projects:write plus projects:delete",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "cloud_credential.delete",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ]
+  }
+]

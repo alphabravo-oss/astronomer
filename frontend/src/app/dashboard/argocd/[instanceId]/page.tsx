@@ -18,10 +18,12 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
+  CalendarClock,
   CheckCircle2,
   ExternalLink,
   GitBranch,
@@ -38,9 +40,11 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import api, {
+import {
   getArgoInstanceB1,
   getArgoInstanceHealth,
+  getArgoOrphanReport,
+  listArgoCachedApplications,
   listArgoApplicationsLive,
   listArgoApplicationSets,
   listArgoManagedClusters,
@@ -54,7 +58,7 @@ import api, {
   refreshArgoManagedClusterLabels,
   unregisterArgoManagedCluster,
 } from '@/lib/api';
-import { useClusters } from '@/lib/hooks';
+import { queryKeys, useClusters } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -66,6 +70,7 @@ import { CreateApplicationDialog } from '@/components/argocd/create-application-
 import { CreateProjectDialog } from '@/components/argocd/create-project-dialog';
 import { AddRepoDialog } from '@/components/argocd/add-repo-dialog';
 import { RegisterManagedClusterDialog } from '@/components/argocd/register-managed-cluster-dialog';
+import { SyncWindowsDialog } from '@/components/argocd/sync-windows-dialog';
 import { flattenArgoApp, shortRepo } from '@/components/argocd/argo-utils';
 import { formatRelativeTime } from '@/lib/utils';
 import type {
@@ -76,7 +81,6 @@ import type {
   ArgoProject,
   ArgoRepository,
   Cluster,
-  PaginatedResponse,
 } from '@/types';
 
 type TabId = 'overview' | 'apps' | 'projects' | 'appsets' | 'clusters' | 'repos' | 'operations';
@@ -118,7 +122,7 @@ export default function InstanceDetailPage() {
   const [tab, setTab] = useState<TabId>('overview');
 
   const { data: instance, isLoading: instanceLoading } = useQuery({
-    queryKey: ['argocd', 'instance', instanceId],
+    queryKey: queryKeys.argocd.instance(instanceId),
     queryFn: () => getArgoInstanceB1(instanceId),
     enabled: !!instanceId,
     refetchInterval: 30000,
@@ -228,28 +232,33 @@ export default function InstanceDetailPage() {
 
 function OverviewTab({ instanceId }: { instanceId: string }) {
   const { data: health } = useQuery({
-    queryKey: ['argocd', 'instance', instanceId, 'health'],
+    queryKey: queryKeys.argocd.instanceHealth(instanceId),
     queryFn: () => getArgoInstanceHealth(instanceId),
     refetchInterval: 30000,
   });
   const { data: apps } = useQuery({
-    queryKey: ['argocd', 'live-apps', instanceId],
+    queryKey: queryKeys.argocd.liveApps(instanceId),
     queryFn: () => listArgoApplicationsLive(instanceId),
     refetchInterval: 30000,
   });
   const { data: projects } = useQuery({
-    queryKey: ['argocd', 'projects', instanceId],
+    queryKey: queryKeys.argocd.projects(instanceId),
     queryFn: () => listArgoProjects(instanceId),
     refetchInterval: 60000,
   });
   const { data: repos } = useQuery({
-    queryKey: ['argocd', 'repos', instanceId],
+    queryKey: queryKeys.argocd.repos(instanceId),
     queryFn: () => listArgoRepos(instanceId),
     refetchInterval: 60000,
   });
   const { data: clusters } = useQuery({
-    queryKey: ['argocd', 'managed-clusters', instanceId],
+    queryKey: queryKeys.argocd.managedClusters(instanceId),
     queryFn: () => listArgoManagedClusters(instanceId),
+    refetchInterval: 60000,
+  });
+  const { data: orphanReport } = useQuery({
+    queryKey: queryKeys.argocd.orphanReport(instanceId),
+    queryFn: () => getArgoOrphanReport(instanceId),
     refetchInterval: 60000,
   });
 
@@ -259,19 +268,67 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
     { label: 'AppProjects', value: String(projects?.length ?? 0) },
     { label: 'Repositories', value: String(repos?.length ?? 0) },
     { label: 'Managed Clusters', value: String(clusters?.length ?? 0) },
+    { label: 'Orphaned Baseline Apps', value: String(orphanReport?.orphanApplicationCount ?? 0) },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      {stats.map((s) => (
-        <div
-          key={s.label}
-          className="rounded-lg border border-border bg-card p-4"
-        >
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</p>
-          <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className="rounded-lg border border-border bg-card p-4"
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
+          </div>
+        ))}
+      </div>
+      {!!orphanReport?.orphanApplicationCount && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium text-foreground">Orphaned baseline Applications</h3>
+                <span className="text-xs text-muted-foreground">
+                  {formatRelativeTime(orphanReport.generatedAt)}
+                </span>
+              </div>
+              {orphanReport.liveError ? (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  Live ArgoCD scan failed; showing cached findings only.
+                </p>
+              ) : null}
+              <div className="mt-3 divide-y divide-border/60">
+                {orphanReport.orphanApplications.slice(0, 5).map((app) => (
+                  <div key={`${app.name}:${app.destinationCluster}`} className="py-2 first:pt-0 last:pb-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground truncate">{app.name}</p>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className="text-2xs px-1.5 py-0.5 rounded bg-background text-muted-foreground">
+                          {app.source}
+                        </span>
+                        <span className="text-2xs px-1.5 py-0.5 rounded bg-background text-muted-foreground">
+                          {app.reason.replaceAll('_', ' ')}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground font-mono truncate">
+                      {app.destinationCluster || 'missing destination'}
+                    </p>
+                    {app.applicationSetName ? (
+                      <p className="mt-1 text-xs text-muted-foreground font-mono truncate">
+                        {app.applicationSetName}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -287,7 +344,7 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   const [deleteTarget, setDeleteTarget] = useState<ArgoLiveApplication | null>(null);
 
   const { data: apps = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'live-apps', instanceId],
+    queryKey: queryKeys.argocd.liveApps(instanceId),
     queryFn: () => listArgoApplicationsLive(instanceId),
     refetchInterval: 15000,
   });
@@ -296,14 +353,8 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   // and sync endpoints expect. The DB list is paginated, so cap to 200 per
   // page; a single instance with more than that is unusual.
   const { data: dbApps } = useQuery({
-    queryKey: ['argocd', 'db-apps', instanceId],
-    queryFn: async () => {
-      const res = await api.get<PaginatedResponse<{ id: string; name: string; argocdInstanceId: string }>>(
-        `/argocd/instances/${instanceId}/cached-applications`,
-        { params: { limit: 200 } },
-      );
-      return res.data.data ?? [];
-    },
+    queryKey: queryKeys.argocd.dbApps(instanceId),
+    queryFn: () => listArgoCachedApplications({ instanceId, limit: 200 }),
     refetchInterval: 30000,
   });
 
@@ -311,7 +362,7 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   // proxy invalidator per the prompt.
   useLiveQueryInvalidation(
     ['cluster.k8s_changed', 'cluster.connected', 'cluster.disconnected'],
-    [['argocd', 'live-apps', instanceId]],
+    [queryKeys.argocd.liveApps(instanceId)],
   );
 
   const idForApp = (name: string): string | undefined =>
@@ -322,11 +373,11 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   const deleteApp = useMutation({
     mutationFn: () => deleteArgoApplicationByName(instanceId, deleteTarget!.metadata.name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'live-apps', instanceId] });
-      toast.success('Application deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.liveApps(instanceId) });
+      toastSuccess('Application deleted');
       setDeleteTarget(null);
     },
-    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Delete failed', err),
   });
 
   type Row = ReturnType<typeof flattenArgoApp>;
@@ -391,7 +442,7 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
                 icon: <Rocket className="h-3.5 w-3.5" />,
                 onClick: () => {
                   if (id) router.push(`/dashboard/argocd/${instanceId}/applications/${id}`);
-                  else toast.error('Application not yet indexed locally — try again in a moment');
+                  else toastError('Application not yet indexed locally — try again in a moment');
                 },
               },
               {
@@ -460,9 +511,10 @@ function ProjectsTab({ instanceId }: { instanceId: string }) {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ArgoProject | null>(null);
+  const [syncWindowTarget, setSyncWindowTarget] = useState<ArgoProject | null>(null);
 
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'projects', instanceId],
+    queryKey: queryKeys.argocd.projects(instanceId),
     queryFn: () => listArgoProjects(instanceId),
     refetchInterval: 30000,
   });
@@ -470,11 +522,11 @@ function ProjectsTab({ instanceId }: { instanceId: string }) {
   const del = useMutation({
     mutationFn: () => deleteArgoProject(instanceId, deleteTarget!.metadata.name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'projects', instanceId] });
-      toast.success('AppProject deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.projects(instanceId) });
+      toastSuccess('AppProject deleted');
       setDeleteTarget(null);
     },
-    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Delete failed', err),
   });
 
   const columns: Column<ArgoProject>[] = [
@@ -512,6 +564,33 @@ function ProjectsTab({ instanceId }: { instanceId: string }) {
       align: 'center',
     },
     {
+      key: 'syncWindows',
+      header: 'Sync Windows',
+      accessor: (row) => {
+        const windows = row.spec.syncWindows ?? [];
+        const denyCount = windows.filter((window) => window.kind === 'deny').length;
+        const allowCount = windows.filter((window) => window.kind === 'allow').length;
+        if (windows.length === 0) {
+          return <span className="text-xs text-muted-foreground">0</span>;
+        }
+        return (
+          <div className="flex items-center justify-center gap-1">
+            {denyCount > 0 && (
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
+                {denyCount} deny
+              </span>
+            )}
+            {allowCount > 0 && (
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                {allowCount} allow
+              </span>
+            )}
+          </div>
+        );
+      },
+      align: 'center',
+    },
+    {
       key: 'actions',
       header: '',
       sortable: false,
@@ -520,8 +599,14 @@ function ProjectsTab({ instanceId }: { instanceId: string }) {
         <ActionMenu
           items={[
             {
+              label: 'Sync windows',
+              icon: <CalendarClock className="h-3.5 w-3.5" />,
+              onClick: () => setSyncWindowTarget(row),
+            },
+            {
               label: 'Delete',
               icon: <Trash2 className="h-3.5 w-3.5" />,
+              separator: true,
               variant: 'destructive',
               onClick: () => setDeleteTarget(row),
             },
@@ -556,6 +641,13 @@ function ProjectsTab({ instanceId }: { instanceId: string }) {
       {showCreate && (
         <CreateProjectDialog instanceId={instanceId} onClose={() => setShowCreate(false)} />
       )}
+      {syncWindowTarget && (
+        <SyncWindowsDialog
+          instanceId={instanceId}
+          project={syncWindowTarget}
+          onClose={() => setSyncWindowTarget(null)}
+        />
+      )}
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
@@ -581,7 +673,7 @@ function ApplicationSetsTab({ instanceId }: { instanceId: string }) {
   const [deleteTarget, setDeleteTarget] = useState<ArgoApplicationSet | null>(null);
 
   const { data: sets = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'appsets', instanceId],
+    queryKey: queryKeys.argocd.appsets(instanceId),
     queryFn: () => listArgoApplicationSets(instanceId),
     refetchInterval: 30000,
   });
@@ -589,11 +681,11 @@ function ApplicationSetsTab({ instanceId }: { instanceId: string }) {
   const del = useMutation({
     mutationFn: () => deleteArgoApplicationSet(instanceId, deleteTarget!.metadata.name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'appsets', instanceId] });
-      toast.success('ApplicationSet deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.appsets(instanceId) });
+      toastSuccess('ApplicationSet deleted');
       setDeleteTarget(null);
     },
-    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Delete failed', err),
   });
 
   const columns: Column<ArgoApplicationSet>[] = [
@@ -695,7 +787,7 @@ function ApplicationSetsTab({ instanceId }: { instanceId: string }) {
 function ClustersTab({ instanceId }: { instanceId: string }) {
   const queryClient = useQueryClient();
   const { data: managed = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'managed-clusters', instanceId],
+    queryKey: queryKeys.argocd.managedClusters(instanceId),
     queryFn: () => listArgoManagedClusters(instanceId),
     refetchInterval: 30000,
   });
@@ -706,26 +798,26 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
 
   useLiveQueryInvalidation(
     ['cluster.connected', 'cluster.disconnected', 'cluster.k8s_changed'],
-    [['argocd', 'managed-clusters', instanceId]],
+    [queryKeys.argocd.managedClusters(instanceId)],
   );
 
   const unregister = useMutation({
     mutationFn: () => unregisterArgoManagedCluster(instanceId, unregisterTarget!.clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'managed-clusters', instanceId] });
-      toast.success('Cluster unregistered from ArgoCD');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.managedClusters(instanceId) });
+      toastSuccess('Cluster unregistered from ArgoCD');
       setUnregisterTarget(null);
     },
-    onError: (err: Error) => toast.error(`Unregister failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Unregister failed', err),
   });
 
   const refreshLabels = useMutation({
     mutationFn: (row: ArgoManagedCluster) => refreshArgoManagedClusterLabels(instanceId, row.clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'managed-clusters', instanceId] });
-      toast.success('Cluster labels refreshed');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.managedClusters(instanceId) });
+      toastSuccess('Cluster labels refreshed');
     },
-    onError: (err: Error) => toast.error(`Refresh labels failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Refresh labels failed', err),
   });
 
   const managedById = new Map(managed.map((m) => [m.clusterId, m]));
@@ -806,7 +898,7 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
                         if (cluster) {
                           setRegisterCluster(cluster);
                         } else {
-                          toast.error('Cluster row is no longer available');
+                          toastError('Cluster row is no longer available');
                         }
                       },
                     },
@@ -892,7 +984,7 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
 function ReposTab({ instanceId }: { instanceId: string }) {
   const queryClient = useQueryClient();
   const { data: repos = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'repos', instanceId],
+    queryKey: queryKeys.argocd.repos(instanceId),
     queryFn: () => listArgoRepos(instanceId),
     refetchInterval: 60000,
   });
@@ -902,11 +994,11 @@ function ReposTab({ instanceId }: { instanceId: string }) {
   const del = useMutation({
     mutationFn: () => deleteArgoRepo(instanceId, deleteTarget!.repo),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'repos', instanceId] });
-      toast.success('Repository removed');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.repos(instanceId) });
+      toastSuccess('Repository removed');
       setDeleteTarget(null);
     },
-    onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Delete failed', err),
   });
 
   const columns: Column<ArgoRepository>[] = [
@@ -1019,12 +1111,12 @@ function OperationsTab({ instanceId: _instanceId }: { instanceId: string }) {
   // instance ID server-side. We still tag them with the app name when we
   // can resolve it from the DB-app list.
   const { data: ops = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'operations'],
+    queryKey: queryKeys.argocd.operations,
     queryFn: () => listArgoOperations({ limit: 100 }),
     refetchInterval: 10000,
   });
 
-  useLiveQueryInvalidation(['cluster.k8s_changed'], [['argocd', 'operations']]);
+  useLiveQueryInvalidation(['cluster.k8s_changed'], [queryKeys.argocd.operations]);
 
   const columns: Column<ArgoOperation>[] = [
     {

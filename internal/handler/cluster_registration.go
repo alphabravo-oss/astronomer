@@ -399,7 +399,9 @@ func (h *ClusterRegistrationHandler) StreamEvents(w http.ResponseWriter, r *http
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, ": connected\n\n")
+	if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil {
+		return
+	}
 	flusher.Flush()
 	keepalive := time.NewTicker(25 * time.Second)
 	defer keepalive.Stop()
@@ -410,7 +412,9 @@ func (h *ClusterRegistrationHandler) StreamEvents(w http.ResponseWriter, r *http
 		case <-r.Context().Done():
 			return
 		case <-keepalive.C:
-			fmt.Fprint(w, ": ping\n\n")
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		case ev, ok := <-ch:
 			if !ok {
@@ -423,7 +427,9 @@ func (h *ClusterRegistrationHandler) StreamEvents(w http.ResponseWriter, r *http
 			if err != nil {
 				continue
 			}
-			fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.Type, payload)
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.Type, payload); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}
@@ -571,7 +577,7 @@ func (h *ClusterRegistrationHandler) publishRegistrationStep(step sqlc.ClusterRe
 		"label":      step.Label,
 		"status":     step.Status,
 		"progress":   int(step.ProgressPct),
-		"detail":     step.DetailJSON,
+		"detail":     step.DetailJson,
 		"error":      step.ErrorMessage,
 		"step_order": int(step.StepOrder),
 	}

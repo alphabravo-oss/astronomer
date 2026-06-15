@@ -15,7 +15,7 @@ ORDER BY key;
 -- string.
 SELECT key, value, description, updated_by, updated_at, created_at
 FROM platform_settings
-WHERE key LIKE $1 || '%'
+WHERE key LIKE sqlc.arg(prefix)::text || '%'
 ORDER BY key;
 
 -- name: UpsertPlatformSetting :one

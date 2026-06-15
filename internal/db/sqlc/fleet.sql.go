@@ -2,71 +2,164 @@
 // versions:
 //   sqlc v1.31.1
 // source: fleet.sql
-//
-// This file is hand-rolled in lockstep with the sqlc generator output
-// pattern (same as compliance_manual.go / quotas.sql.go). The
-// `sqlc generate` CLI cannot regenerate against the working tree
-// because one pre-existing query in compliance.sql fails the upstream
-// parser. The hand-rolled style here matches the generated output
-// shape so a future regeneration is a no-op diff.
 
 package sqlc
 
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// FleetOperation mirrors a row in fleet_operations (migration 056).
-type FleetOperation struct {
-	ID                          uuid.UUID          `json:"id"`
-	Name                        string             `json:"name"`
-	Description                 string             `json:"description"`
-	OperationType               string             `json:"operation_type"`
-	OperationSpec               json.RawMessage    `json:"operation_spec"`
-	Selector                    json.RawMessage    `json:"selector"`
-	Strategy                    string             `json:"strategy"`
-	MaxConcurrent               int32              `json:"max_concurrent"`
-	OnError                     string             `json:"on_error"`
-	RespectMaintenanceWindows   bool               `json:"respect_maintenance_windows"`
-	Status                      string             `json:"status"`
-	TotalClusters               int32              `json:"total_clusters"`
-	CompletedClusters           int32              `json:"completed_clusters"`
-	FailedClusters              int32              `json:"failed_clusters"`
-	SkippedClusters             int32              `json:"skipped_clusters"`
-	StartedAt                   pgtype.Timestamptz `json:"started_at"`
-	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
-	LastError                   string             `json:"last_error"`
-	CreatedBy                   pgtype.UUID        `json:"created_by"`
-	CreatedAt                   time.Time          `json:"created_at"`
-	UpdatedAt                   time.Time          `json:"updated_at"`
+const countFleetOperationTargets = `-- name: CountFleetOperationTargets :one
+SELECT count(*) FROM fleet_operation_targets WHERE operation_id = $1
+`
+
+func (q *Queries) CountFleetOperationTargets(ctx context.Context, operationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countFleetOperationTargets, operationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
-// FleetOperationTarget mirrors a row in fleet_operation_targets.
-type FleetOperationTarget struct {
-	ID                uuid.UUID          `json:"id"`
-	OperationID       uuid.UUID          `json:"operation_id"`
-	ClusterID         uuid.UUID          `json:"cluster_id"`
-	Status            string             `json:"status"`
-	SubOperationID    pgtype.UUID        `json:"sub_operation_id"`
-	SubOperationType  string             `json:"sub_operation_type"`
-	StartedAt         pgtype.Timestamptz `json:"started_at"`
-	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
-	LastError         string             `json:"last_error"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
+const countFleetOperationTargetsByStatus = `-- name: CountFleetOperationTargetsByStatus :many
+SELECT status, count(*)::bigint AS n FROM fleet_operation_targets
+WHERE operation_id = $1
+GROUP BY status
+`
+
+type CountFleetOperationTargetsByStatusRow struct {
+	Status string `json:"status"`
+	N      int64  `json:"n"`
 }
 
-// scanFleetOperation centralises the column ordering so every
-// SELECT * / RETURNING * call site stays in lockstep with the
-// table definition. A future column addition lands here once.
-func scanFleetOperation(row interface {
-	Scan(dest ...interface{}) error
-}) (FleetOperation, error) {
+// Single round-trip aggregate used to refresh the parent operation's
+// counter columns. Returns (status, count) for every group present.
+func (q *Queries) CountFleetOperationTargetsByStatus(ctx context.Context, operationID uuid.UUID) ([]CountFleetOperationTargetsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, countFleetOperationTargetsByStatus, operationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountFleetOperationTargetsByStatusRow{}
+	for rows.Next() {
+		var i CountFleetOperationTargetsByStatusRow
+		if err := rows.Scan(&i.Status, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countFleetOperations = `-- name: CountFleetOperations :one
+SELECT count(*) FROM fleet_operations
+WHERE (
+    $1::text IS NULL OR status = $1::text
+)
+`
+
+func (q *Queries) CountFleetOperations(ctx context.Context, status pgtype.Text) (int64, error) {
+	row := q.db.QueryRow(ctx, countFleetOperations, status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRunningTargetsForOperation = `-- name: CountRunningTargetsForOperation :one
+SELECT count(*) FROM fleet_operation_targets
+WHERE operation_id = $1 AND status = 'running'
+`
+
+// Gate for the max_concurrent dispatcher.
+func (q *Queries) CountRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRunningTargetsForOperation, operationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTerminalTargetsForOperation = `-- name: CountTerminalTargetsForOperation :one
+SELECT count(*) FROM fleet_operation_targets
+WHERE operation_id = $1
+  AND status IN ('completed','failed','skipped','aborted')
+`
+
+// A target is terminal when it's completed/failed/skipped/aborted.
+// The orchestrator transitions the parent operation to completed/failed
+// once every target is terminal.
+func (q *Queries) CountTerminalTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTerminalTargetsForOperation, operationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createFleetOperation = `-- name: CreateFleetOperation :one
+
+
+INSERT INTO fleet_operations (
+    name,
+    description,
+    operation_type,
+    operation_spec,
+    selector,
+    strategy,
+    max_concurrent,
+    on_error,
+    respect_maintenance_windows,
+    created_by
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at
+`
+
+type CreateFleetOperationParams struct {
+	Name                      string          `json:"name"`
+	Description               string          `json:"description"`
+	OperationType             string          `json:"operation_type"`
+	OperationSpec             json.RawMessage `json:"operation_spec"`
+	Selector                  json.RawMessage `json:"selector"`
+	Strategy                  string          `json:"strategy"`
+	MaxConcurrent             int32           `json:"max_concurrent"`
+	OnError                   string          `json:"on_error"`
+	RespectMaintenanceWindows bool            `json:"respect_maintenance_windows"`
+	CreatedBy                 pgtype.UUID     `json:"created_by"`
+}
+
+// Fleet operations (migration 056). Backs:
+//   - /api/v1/fleet-operations/*       — CRUD + lifecycle endpoints
+//   - fleet:orchestrate worker         — periodic, idempotent dispatcher
+//
+// Two tables: fleet_operations (the coordinated action) +
+// fleet_operation_targets (one row per matched cluster).
+//
+// Operator-facing CRUD is restricted to create / list / get; updates
+// happen via pause/resume/abort/retry-failed which are status
+// transitions only. Once dispatched, the operation's selector and
+// operation_spec are frozen — the persisted target list is the
+// contract.
+// ─────────────────────────────────────────────────────────────────────
+// fleet_operations
+// ─────────────────────────────────────────────────────────────────────
+func (q *Queries) CreateFleetOperation(ctx context.Context, arg CreateFleetOperationParams) (FleetOperation, error) {
+	row := q.db.QueryRow(ctx, createFleetOperation,
+		arg.Name,
+		arg.Description,
+		arg.OperationType,
+		arg.OperationSpec,
+		arg.Selector,
+		arg.Strategy,
+		arg.MaxConcurrent,
+		arg.OnError,
+		arg.RespectMaintenanceWindows,
+		arg.CreatedBy,
+	)
 	var i FleetOperation
 	err := row.Scan(
 		&i.ID,
@@ -94,9 +187,34 @@ func scanFleetOperation(row interface {
 	return i, err
 }
 
-func scanFleetOperationTarget(row interface {
-	Scan(dest ...interface{}) error
-}) (FleetOperationTarget, error) {
+const createFleetOperationTarget = `-- name: CreateFleetOperationTarget :one
+
+INSERT INTO fleet_operation_targets (
+    operation_id,
+    cluster_id,
+    sub_operation_type
+)
+VALUES ($1, $2, $3)
+ON CONFLICT (operation_id, cluster_id) DO NOTHING
+RETURNING id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at
+`
+
+type CreateFleetOperationTargetParams struct {
+	OperationID      uuid.UUID `json:"operation_id"`
+	ClusterID        uuid.UUID `json:"cluster_id"`
+	SubOperationType string    `json:"sub_operation_type"`
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// fleet_operation_targets
+// ─────────────────────────────────────────────────────────────────────
+// ON CONFLICT DO NOTHING — defensive. The orchestrator evaluates the
+// selector exactly once at launch, but a duplicate INSERT (e.g. the
+// launch step ran twice because a tick crashed mid-INSERT) must be
+// caught at the DB so the operation never has two rows competing
+// for one cluster's terminal state.
+func (q *Queries) CreateFleetOperationTarget(ctx context.Context, arg CreateFleetOperationTargetParams) (FleetOperationTarget, error) {
+	row := q.db.QueryRow(ctx, createFleetOperationTarget, arg.OperationID, arg.ClusterID, arg.SubOperationType)
 	var i FleetOperationTarget
 	err := row.Scan(
 		&i.ID,
@@ -114,122 +232,69 @@ func scanFleetOperationTarget(row interface {
 	return i, err
 }
 
-// fleetOperationColumns is repeated verbatim across the SELECT/RETURNING
-// statements so every query lands in scanFleetOperation in the same
-// order. Kept inline-friendly (no leading newline) because the SQL
-// statements embed it directly.
-const fleetOperationColumns = `
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-`
-
-const fleetOperationTargetColumns = `
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
-`
-
-// ────────────────────────────────────────────────────────────────────
-// fleet_operations CRUD
-// ────────────────────────────────────────────────────────────────────
-
-const createFleetOperation = `-- name: CreateFleetOperation :one
-INSERT INTO fleet_operations (
-    name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error,
-    respect_maintenance_windows, created_by
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-`
-
-type CreateFleetOperationParams struct {
-	Name                      string          `json:"name"`
-	Description               string          `json:"description"`
-	OperationType             string          `json:"operation_type"`
-	OperationSpec             json.RawMessage `json:"operation_spec"`
-	Selector                  json.RawMessage `json:"selector"`
-	Strategy                  string          `json:"strategy"`
-	MaxConcurrent             int32           `json:"max_concurrent"`
-	OnError                   string          `json:"on_error"`
-	RespectMaintenanceWindows bool            `json:"respect_maintenance_windows"`
-	CreatedBy                 pgtype.UUID     `json:"created_by"`
-}
-
-func (q *Queries) CreateFleetOperation(ctx context.Context, arg CreateFleetOperationParams) (FleetOperation, error) {
-	row := q.db.QueryRow(ctx, createFleetOperation,
-		arg.Name,
-		arg.Description,
-		arg.OperationType,
-		arg.OperationSpec,
-		arg.Selector,
-		arg.Strategy,
-		arg.MaxConcurrent,
-		arg.OnError,
-		arg.RespectMaintenanceWindows,
-		arg.CreatedBy,
-	)
-	return scanFleetOperation(row)
-}
-
 const getFleetOperation = `-- name: GetFleetOperation :one
-SELECT
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-FROM fleet_operations WHERE id = $1
+SELECT id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at FROM fleet_operations WHERE id = $1
 `
 
 func (q *Queries) GetFleetOperation(ctx context.Context, id uuid.UUID) (FleetOperation, error) {
 	row := q.db.QueryRow(ctx, getFleetOperation, id)
-	return scanFleetOperation(row)
+	var i FleetOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.OperationType,
+		&i.OperationSpec,
+		&i.Selector,
+		&i.Strategy,
+		&i.MaxConcurrent,
+		&i.OnError,
+		&i.RespectMaintenanceWindows,
+		&i.Status,
+		&i.TotalClusters,
+		&i.CompletedClusters,
+		&i.FailedClusters,
+		&i.SkippedClusters,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
-const listFleetOperations = `-- name: ListFleetOperations :many
-SELECT
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-FROM fleet_operations
-WHERE (
-    $1::text IS NULL OR status = $1::text
-)
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+const listClustersForSelectorEvaluation = `-- name: ListClustersForSelectorEvaluation :many
+SELECT id, name, labels FROM clusters
+WHERE decommissioned_at IS NULL
+ORDER BY name ASC
 `
 
-type ListFleetOperationsParams struct {
-	Status      pgtype.Text `json:"status"`
-	QueryLimit  int32       `json:"query_limit"`
-	QueryOffset int32       `json:"query_offset"`
+type ListClustersForSelectorEvaluationRow struct {
+	ID     uuid.UUID       `json:"id"`
+	Name   string          `json:"name"`
+	Labels json.RawMessage `json:"labels"`
 }
 
-func (q *Queries) ListFleetOperations(ctx context.Context, arg ListFleetOperationsParams) ([]FleetOperation, error) {
-	rows, err := q.db.Query(ctx, listFleetOperations, arg.Status, arg.QueryLimit, arg.QueryOffset)
+// All non-decommissioned clusters. The orchestrator's selector
+// evaluator walks this list in Go (matchLabels intersection is a
+// string-map comparison that's easier to reason about than a JSONB
+// predicate, and the cluster count never exceeds a few thousand
+// in any deployment we've seen).
+func (q *Queries) ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error) {
+	rows, err := q.db.Query(ctx, listClustersForSelectorEvaluation)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []FleetOperation{}
+	items := []ListClustersForSelectorEvaluationRow{}
 	for rows.Next() {
-		op, err := scanFleetOperation(rows)
-		if err != nil {
+		var i ListClustersForSelectorEvaluationRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Labels); err != nil {
 			return nil, err
 		}
-		items = append(items, op)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -237,46 +302,244 @@ func (q *Queries) ListFleetOperations(ctx context.Context, arg ListFleetOperatio
 	return items, nil
 }
 
-const countFleetOperations = `-- name: CountFleetOperations :one
-SELECT count(*) FROM fleet_operations
+const listFleetOperationTargets = `-- name: ListFleetOperationTargets :many
+SELECT id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at FROM fleet_operation_targets
+WHERE operation_id = $1
+ORDER BY created_at ASC
+LIMIT $3 OFFSET $2
+`
+
+type ListFleetOperationTargetsParams struct {
+	OperationID uuid.UUID `json:"operation_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListFleetOperationTargets(ctx context.Context, arg ListFleetOperationTargetsParams) ([]FleetOperationTarget, error) {
+	rows, err := q.db.Query(ctx, listFleetOperationTargets, arg.OperationID, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FleetOperationTarget{}
+	for rows.Next() {
+		var i FleetOperationTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperationID,
+			&i.ClusterID,
+			&i.Status,
+			&i.SubOperationID,
+			&i.SubOperationType,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFleetOperations = `-- name: ListFleetOperations :many
+SELECT id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at FROM fleet_operations
 WHERE (
     $1::text IS NULL OR status = $1::text
 )
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $2
 `
 
-func (q *Queries) CountFleetOperations(ctx context.Context, status pgtype.Text) (int64, error) {
-	row := q.db.QueryRow(ctx, countFleetOperations, status)
-	var n int64
-	err := row.Scan(&n)
-	return n, err
+type ListFleetOperationsParams struct {
+	Status      pgtype.Text `json:"status"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
 }
 
-const listPendingFleetOperations = `-- name: ListPendingFleetOperations :many
-SELECT
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-FROM fleet_operations
-WHERE status IN ('pending','running')
-ORDER BY created_at ASC
-LIMIT $1
-`
-
-func (q *Queries) ListPendingFleetOperations(ctx context.Context, queryLimit int32) ([]FleetOperation, error) {
-	rows, err := q.db.Query(ctx, listPendingFleetOperations, queryLimit)
+// Paginated list, optional status filter. The handler passes the
+// empty string when no filter is requested; the COALESCE-style guard
+// below skips the WHERE clause cleanly in that case.
+func (q *Queries) ListFleetOperations(ctx context.Context, arg ListFleetOperationsParams) ([]FleetOperation, error) {
+	rows, err := q.db.Query(ctx, listFleetOperations, arg.Status, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	items := []FleetOperation{}
 	for rows.Next() {
-		op, err := scanFleetOperation(rows)
-		if err != nil {
+		var i FleetOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.OperationType,
+			&i.OperationSpec,
+			&i.Selector,
+			&i.Strategy,
+			&i.MaxConcurrent,
+			&i.OnError,
+			&i.RespectMaintenanceWindows,
+			&i.Status,
+			&i.TotalClusters,
+			&i.CompletedClusters,
+			&i.FailedClusters,
+			&i.SkippedClusters,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastError,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, op)
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingFleetOperations = `-- name: ListPendingFleetOperations :many
+SELECT id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at FROM fleet_operations
+WHERE status IN ('pending','running')
+ORDER BY created_at ASC
+LIMIT $1
+`
+
+// Drives the orchestrator tick. Returns every operation that's
+// pending (still needs a launch) OR running (still needs dispatch /
+// polling). Ordered by created_at so the orchestrator drains older
+// operations first.
+func (q *Queries) ListPendingFleetOperations(ctx context.Context, limit int32) ([]FleetOperation, error) {
+	rows, err := q.db.Query(ctx, listPendingFleetOperations, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FleetOperation{}
+	for rows.Next() {
+		var i FleetOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.OperationType,
+			&i.OperationSpec,
+			&i.Selector,
+			&i.Strategy,
+			&i.MaxConcurrent,
+			&i.OnError,
+			&i.RespectMaintenanceWindows,
+			&i.Status,
+			&i.TotalClusters,
+			&i.CompletedClusters,
+			&i.FailedClusters,
+			&i.SkippedClusters,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastError,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingTargetsForOperation = `-- name: ListPendingTargetsForOperation :many
+SELECT id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at FROM fleet_operation_targets
+WHERE operation_id = $1 AND status = 'pending'
+ORDER BY created_at ASC
+LIMIT $2
+`
+
+type ListPendingTargetsForOperationParams struct {
+	OperationID uuid.UUID `json:"operation_id"`
+	Limit       int32     `json:"limit"`
+}
+
+// Next batch to dispatch. Ordered by created_at so the orchestrator
+// preserves the launch ordering across ticks.
+func (q *Queries) ListPendingTargetsForOperation(ctx context.Context, arg ListPendingTargetsForOperationParams) ([]FleetOperationTarget, error) {
+	rows, err := q.db.Query(ctx, listPendingTargetsForOperation, arg.OperationID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FleetOperationTarget{}
+	for rows.Next() {
+		var i FleetOperationTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperationID,
+			&i.ClusterID,
+			&i.Status,
+			&i.SubOperationID,
+			&i.SubOperationType,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRunningTargetsForOperation = `-- name: ListRunningTargetsForOperation :many
+SELECT id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at FROM fleet_operation_targets
+WHERE operation_id = $1 AND status = 'running'
+ORDER BY started_at ASC
+`
+
+// Used by the orchestrator to poll sub-operation status for every
+// running target. Bounded by the operation's max_concurrent so this
+// can never return more than that many rows.
+func (q *Queries) ListRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) ([]FleetOperationTarget, error) {
+	rows, err := q.db.Query(ctx, listRunningTargetsForOperation, operationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FleetOperationTarget{}
+	for rows.Next() {
+		var i FleetOperationTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperationID,
+			&i.ClusterID,
+			&i.Status,
+			&i.SubOperationID,
+			&i.SubOperationType,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -286,354 +549,64 @@ func (q *Queries) ListPendingFleetOperations(ctx context.Context, queryLimit int
 
 const markFleetOperationTransition = `-- name: MarkFleetOperationTransition :one
 UPDATE fleet_operations SET
-    status        = $2,
-    started_at    = COALESCE(started_at, $3),
-    completed_at  = $4,
-    last_error    = $5,
+    status        = $1,
+    started_at    = COALESCE(started_at, $2),
+    completed_at  = $3,
+    last_error    = $4,
     updated_at    = now()
-WHERE id = $1
+WHERE id = $5
   AND status = $6
-RETURNING
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
+RETURNING id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at
 `
 
 type MarkFleetOperationTransitionParams struct {
-	ID          uuid.UUID          `json:"id"`
 	ToStatus    string             `json:"to_status"`
 	StartedAt   pgtype.Timestamptz `json:"started_at"`
 	CompletedAt pgtype.Timestamptz `json:"completed_at"`
 	LastError   string             `json:"last_error"`
+	ID          uuid.UUID          `json:"id"`
 	FromStatus  string             `json:"from_status"`
 }
 
+// Atomic state transition. The orchestrator uses this to move
+// pending → running, running → completed/failed/aborted, etc.
+// The from_status guard prevents two concurrent ticks from racing on
+// the same operation: only the tick whose claimed-from status matches
+// the live row wins.
 func (q *Queries) MarkFleetOperationTransition(ctx context.Context, arg MarkFleetOperationTransitionParams) (FleetOperation, error) {
 	row := q.db.QueryRow(ctx, markFleetOperationTransition,
-		arg.ID,
 		arg.ToStatus,
 		arg.StartedAt,
 		arg.CompletedAt,
 		arg.LastError,
+		arg.ID,
 		arg.FromStatus,
 	)
-	return scanFleetOperation(row)
-}
-
-const updateFleetOperationCounters = `-- name: UpdateFleetOperationCounters :one
-UPDATE fleet_operations SET
-    total_clusters     = $2,
-    completed_clusters = $3,
-    failed_clusters    = $4,
-    skipped_clusters   = $5,
-    updated_at         = now()
-WHERE id = $1
-RETURNING
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-`
-
-type UpdateFleetOperationCountersParams struct {
-	ID                uuid.UUID `json:"id"`
-	TotalClusters     int32     `json:"total_clusters"`
-	CompletedClusters int32     `json:"completed_clusters"`
-	FailedClusters    int32     `json:"failed_clusters"`
-	SkippedClusters   int32     `json:"skipped_clusters"`
-}
-
-func (q *Queries) UpdateFleetOperationCounters(ctx context.Context, arg UpdateFleetOperationCountersParams) (FleetOperation, error) {
-	row := q.db.QueryRow(ctx, updateFleetOperationCounters,
-		arg.ID,
-		arg.TotalClusters,
-		arg.CompletedClusters,
-		arg.FailedClusters,
-		arg.SkippedClusters,
+	var i FleetOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.OperationType,
+		&i.OperationSpec,
+		&i.Selector,
+		&i.Strategy,
+		&i.MaxConcurrent,
+		&i.OnError,
+		&i.RespectMaintenanceWindows,
+		&i.Status,
+		&i.TotalClusters,
+		&i.CompletedClusters,
+		&i.FailedClusters,
+		&i.SkippedClusters,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
-	return scanFleetOperation(row)
-}
-
-const setFleetOperationStatus = `-- name: SetFleetOperationStatus :one
-UPDATE fleet_operations SET
-    status     = $2,
-    last_error = $3,
-    updated_at = now()
-WHERE id = $1
-RETURNING
-    id, name, description, operation_type, operation_spec, selector,
-    strategy, max_concurrent, on_error, respect_maintenance_windows,
-    status, total_clusters, completed_clusters, failed_clusters,
-    skipped_clusters, started_at, completed_at, last_error,
-    created_by, created_at, updated_at
-`
-
-type SetFleetOperationStatusParams struct {
-	ID        uuid.UUID `json:"id"`
-	Status    string    `json:"status"`
-	LastError string    `json:"last_error"`
-}
-
-func (q *Queries) SetFleetOperationStatus(ctx context.Context, arg SetFleetOperationStatusParams) (FleetOperation, error) {
-	row := q.db.QueryRow(ctx, setFleetOperationStatus, arg.ID, arg.Status, arg.LastError)
-	return scanFleetOperation(row)
-}
-
-const deleteFleetOperation = `-- name: DeleteFleetOperation :exec
-DELETE FROM fleet_operations WHERE id = $1
-`
-
-func (q *Queries) DeleteFleetOperation(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteFleetOperation, id)
-	return err
-}
-
-// ────────────────────────────────────────────────────────────────────
-// fleet_operation_targets CRUD
-// ────────────────────────────────────────────────────────────────────
-
-const createFleetOperationTarget = `-- name: CreateFleetOperationTarget :one
-INSERT INTO fleet_operation_targets (
-    operation_id, cluster_id, sub_operation_type
-)
-VALUES ($1, $2, $3)
-ON CONFLICT (operation_id, cluster_id) DO NOTHING
-RETURNING
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
-`
-
-type CreateFleetOperationTargetParams struct {
-	OperationID      uuid.UUID `json:"operation_id"`
-	ClusterID        uuid.UUID `json:"cluster_id"`
-	SubOperationType string    `json:"sub_operation_type"`
-}
-
-func (q *Queries) CreateFleetOperationTarget(ctx context.Context, arg CreateFleetOperationTargetParams) (FleetOperationTarget, error) {
-	row := q.db.QueryRow(ctx, createFleetOperationTarget,
-		arg.OperationID,
-		arg.ClusterID,
-		arg.SubOperationType,
-	)
-	return scanFleetOperationTarget(row)
-}
-
-const listFleetOperationTargets = `-- name: ListFleetOperationTargets :many
-SELECT
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
-FROM fleet_operation_targets
-WHERE operation_id = $1
-ORDER BY created_at ASC
-LIMIT $2 OFFSET $3
-`
-
-type ListFleetOperationTargetsParams struct {
-	OperationID uuid.UUID `json:"operation_id"`
-	QueryLimit  int32     `json:"query_limit"`
-	QueryOffset int32     `json:"query_offset"`
-}
-
-func (q *Queries) ListFleetOperationTargets(ctx context.Context, arg ListFleetOperationTargetsParams) ([]FleetOperationTarget, error) {
-	rows, err := q.db.Query(ctx, listFleetOperationTargets, arg.OperationID, arg.QueryLimit, arg.QueryOffset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []FleetOperationTarget{}
-	for rows.Next() {
-		t, err := scanFleetOperationTarget(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const countFleetOperationTargets = `-- name: CountFleetOperationTargets :one
-SELECT count(*) FROM fleet_operation_targets WHERE operation_id = $1
-`
-
-func (q *Queries) CountFleetOperationTargets(ctx context.Context, operationID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countFleetOperationTargets, operationID)
-	var n int64
-	err := row.Scan(&n)
-	return n, err
-}
-
-const listPendingTargetsForOperation = `-- name: ListPendingTargetsForOperation :many
-SELECT
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
-FROM fleet_operation_targets
-WHERE operation_id = $1 AND status = 'pending'
-ORDER BY created_at ASC
-LIMIT $2
-`
-
-type ListPendingTargetsForOperationParams struct {
-	OperationID uuid.UUID `json:"operation_id"`
-	QueryLimit  int32     `json:"query_limit"`
-}
-
-func (q *Queries) ListPendingTargetsForOperation(ctx context.Context, arg ListPendingTargetsForOperationParams) ([]FleetOperationTarget, error) {
-	rows, err := q.db.Query(ctx, listPendingTargetsForOperation, arg.OperationID, arg.QueryLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []FleetOperationTarget{}
-	for rows.Next() {
-		t, err := scanFleetOperationTarget(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRunningTargetsForOperation = `-- name: ListRunningTargetsForOperation :many
-SELECT
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
-FROM fleet_operation_targets
-WHERE operation_id = $1 AND status = 'running'
-ORDER BY started_at ASC
-`
-
-func (q *Queries) ListRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) ([]FleetOperationTarget, error) {
-	rows, err := q.db.Query(ctx, listRunningTargetsForOperation, operationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []FleetOperationTarget{}
-	for rows.Next() {
-		t, err := scanFleetOperationTarget(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const countRunningTargetsForOperation = `-- name: CountRunningTargetsForOperation :one
-SELECT count(*) FROM fleet_operation_targets
-WHERE operation_id = $1 AND status = 'running'
-`
-
-func (q *Queries) CountRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRunningTargetsForOperation, operationID)
-	var n int64
-	err := row.Scan(&n)
-	return n, err
-}
-
-const countFailedTargetsForOperation = `-- name: CountFailedTargetsForOperation :one
-SELECT count(*) FROM fleet_operation_targets
-WHERE operation_id = $1 AND status = 'failed'
-`
-
-func (q *Queries) CountFailedTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countFailedTargetsForOperation, operationID)
-	var n int64
-	err := row.Scan(&n)
-	return n, err
-}
-
-const countTerminalTargetsForOperation = `-- name: CountTerminalTargetsForOperation :one
-SELECT count(*) FROM fleet_operation_targets
-WHERE operation_id = $1
-  AND status IN ('completed','failed','skipped','aborted')
-`
-
-func (q *Queries) CountTerminalTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countTerminalTargetsForOperation, operationID)
-	var n int64
-	err := row.Scan(&n)
-	return n, err
-}
-
-const countFleetOperationTargetsByStatus = `-- name: CountFleetOperationTargetsByStatus :many
-SELECT status, count(*)::bigint AS n FROM fleet_operation_targets
-WHERE operation_id = $1
-GROUP BY status
-`
-
-// CountFleetOperationTargetsByStatusRow is the (status, count) pair
-// emitted by the GROUP BY aggregate.
-type CountFleetOperationTargetsByStatusRow struct {
-	Status string `json:"status"`
-	N      int64  `json:"n"`
-}
-
-func (q *Queries) CountFleetOperationTargetsByStatus(ctx context.Context, operationID uuid.UUID) ([]CountFleetOperationTargetsByStatusRow, error) {
-	rows, err := q.db.Query(ctx, countFleetOperationTargetsByStatus, operationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CountFleetOperationTargetsByStatusRow{}
-	for rows.Next() {
-		var r CountFleetOperationTargetsByStatusRow
-		if err := rows.Scan(&r.Status, &r.N); err != nil {
-			return nil, err
-		}
-		items = append(items, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const markFleetTargetDispatched = `-- name: MarkFleetTargetDispatched :one
-UPDATE fleet_operation_targets SET
-    status             = 'running',
-    sub_operation_id   = $2,
-    sub_operation_type = $3,
-    started_at         = now(),
-    updated_at         = now()
-WHERE id = $1 AND status = 'pending'
-RETURNING
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
-`
-
-type MarkFleetTargetDispatchedParams struct {
-	ID               uuid.UUID   `json:"id"`
-	SubOperationID   pgtype.UUID `json:"sub_operation_id"`
-	SubOperationType string      `json:"sub_operation_type"`
-}
-
-func (q *Queries) MarkFleetTargetDispatched(ctx context.Context, arg MarkFleetTargetDispatchedParams) (FleetOperationTarget, error) {
-	row := q.db.QueryRow(ctx, markFleetTargetDispatched, arg.ID, arg.SubOperationID, arg.SubOperationType)
-	return scanFleetOperationTarget(row)
+	return i, err
 }
 
 const markFleetTargetCompleted = `-- name: MarkFleetTargetCompleted :one
@@ -643,16 +616,66 @@ UPDATE fleet_operation_targets SET
     last_error   = '',
     updated_at   = now()
 WHERE id = $1
-RETURNING
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
+RETURNING id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at
 `
 
 func (q *Queries) MarkFleetTargetCompleted(ctx context.Context, id uuid.UUID) (FleetOperationTarget, error) {
 	row := q.db.QueryRow(ctx, markFleetTargetCompleted, id)
-	return scanFleetOperationTarget(row)
+	var i FleetOperationTarget
+	err := row.Scan(
+		&i.ID,
+		&i.OperationID,
+		&i.ClusterID,
+		&i.Status,
+		&i.SubOperationID,
+		&i.SubOperationType,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markFleetTargetDispatched = `-- name: MarkFleetTargetDispatched :one
+UPDATE fleet_operation_targets SET
+    status            = 'running',
+    sub_operation_id  = $2,
+    sub_operation_type = $3,
+    started_at        = now(),
+    updated_at        = now()
+WHERE id = $1 AND status = 'pending'
+RETURNING id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at
+`
+
+type MarkFleetTargetDispatchedParams struct {
+	ID               uuid.UUID   `json:"id"`
+	SubOperationID   pgtype.UUID `json:"sub_operation_id"`
+	SubOperationType string      `json:"sub_operation_type"`
+}
+
+// Atomic transition pending → running with the sub-operation reference
+// and timestamps stamped in. The status guard makes the call idempotent
+// against a duplicate tick: only one tick succeeds, the second is a
+// no-op (zero rows updated → pgx.ErrNoRows).
+func (q *Queries) MarkFleetTargetDispatched(ctx context.Context, arg MarkFleetTargetDispatchedParams) (FleetOperationTarget, error) {
+	row := q.db.QueryRow(ctx, markFleetTargetDispatched, arg.ID, arg.SubOperationID, arg.SubOperationType)
+	var i FleetOperationTarget
+	err := row.Scan(
+		&i.ID,
+		&i.OperationID,
+		&i.ClusterID,
+		&i.Status,
+		&i.SubOperationID,
+		&i.SubOperationType,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const markFleetTargetFailed = `-- name: MarkFleetTargetFailed :one
@@ -662,11 +685,7 @@ UPDATE fleet_operation_targets SET
     last_error   = $2,
     updated_at   = now()
 WHERE id = $1
-RETURNING
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
+RETURNING id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at
 `
 
 type MarkFleetTargetFailedParams struct {
@@ -676,7 +695,21 @@ type MarkFleetTargetFailedParams struct {
 
 func (q *Queries) MarkFleetTargetFailed(ctx context.Context, arg MarkFleetTargetFailedParams) (FleetOperationTarget, error) {
 	row := q.db.QueryRow(ctx, markFleetTargetFailed, arg.ID, arg.LastError)
-	return scanFleetOperationTarget(row)
+	var i FleetOperationTarget
+	err := row.Scan(
+		&i.ID,
+		&i.OperationID,
+		&i.ClusterID,
+		&i.Status,
+		&i.SubOperationID,
+		&i.SubOperationType,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const markFleetTargetSkipped = `-- name: MarkFleetTargetSkipped :one
@@ -686,11 +719,7 @@ UPDATE fleet_operation_targets SET
     last_error   = $2,
     updated_at   = now()
 WHERE id = $1
-RETURNING
-    id, operation_id, cluster_id, status,
-    sub_operation_id, sub_operation_type,
-    started_at, completed_at, last_error,
-    created_at, updated_at
+RETURNING id, operation_id, cluster_id, status, sub_operation_id, sub_operation_type, started_at, completed_at, last_error, created_at, updated_at
 `
 
 type MarkFleetTargetSkippedParams struct {
@@ -700,7 +729,21 @@ type MarkFleetTargetSkippedParams struct {
 
 func (q *Queries) MarkFleetTargetSkipped(ctx context.Context, arg MarkFleetTargetSkippedParams) (FleetOperationTarget, error) {
 	row := q.db.QueryRow(ctx, markFleetTargetSkipped, arg.ID, arg.LastError)
-	return scanFleetOperationTarget(row)
+	var i FleetOperationTarget
+	err := row.Scan(
+		&i.ID,
+		&i.OperationID,
+		&i.ClusterID,
+		&i.Status,
+		&i.SubOperationID,
+		&i.SubOperationType,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const requeueFailedTargets = `-- name: RequeueFailedTargets :exec
@@ -714,43 +757,117 @@ UPDATE fleet_operation_targets SET
 WHERE operation_id = $1 AND status = 'failed'
 `
 
+// Bulk reset for the retry-failed endpoint. Resets every 'failed'
+// target on this operation back to 'pending' so the next orchestrator
+// tick re-dispatches them. sub_operation_id is cleared so the
+// orchestrator doesn't see a stale reference.
 func (q *Queries) RequeueFailedTargets(ctx context.Context, operationID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, requeueFailedTargets, operationID)
 	return err
 }
 
-const listClustersForSelectorEvaluation = `-- name: ListClustersForSelectorEvaluation :many
-SELECT id, name, labels FROM clusters
-WHERE decommissioned_at IS NULL
-ORDER BY name ASC
+const setFleetOperationStatus = `-- name: SetFleetOperationStatus :one
+UPDATE fleet_operations SET
+    status     = $2,
+    last_error = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at
 `
 
-// ListClustersForSelectorEvaluationRow is the minimal projection the
-// orchestrator's selector evaluator needs: ID + labels. We don't need
-// the rest of the cluster row to decide membership, so we don't pay
-// for it.
-type ListClustersForSelectorEvaluationRow struct {
-	ID     uuid.UUID       `json:"id"`
-	Name   string          `json:"name"`
-	Labels json.RawMessage `json:"labels"`
+type SetFleetOperationStatusParams struct {
+	ID        uuid.UUID `json:"id"`
+	Status    string    `json:"status"`
+	LastError string    `json:"last_error"`
 }
 
-func (q *Queries) ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error) {
-	rows, err := q.db.Query(ctx, listClustersForSelectorEvaluation)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListClustersForSelectorEvaluationRow{}
-	for rows.Next() {
-		var r ListClustersForSelectorEvaluationRow
-		if err := rows.Scan(&r.ID, &r.Name, &r.Labels); err != nil {
-			return nil, err
-		}
-		items = append(items, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// Unconditional status set. The pause/resume/abort handler endpoints
+// use this because the operator's intent overrides whatever the
+// orchestrator was about to do — the orchestrator re-checks status
+// on every tick and reconciles.
+func (q *Queries) SetFleetOperationStatus(ctx context.Context, arg SetFleetOperationStatusParams) (FleetOperation, error) {
+	row := q.db.QueryRow(ctx, setFleetOperationStatus, arg.ID, arg.Status, arg.LastError)
+	var i FleetOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.OperationType,
+		&i.OperationSpec,
+		&i.Selector,
+		&i.Strategy,
+		&i.MaxConcurrent,
+		&i.OnError,
+		&i.RespectMaintenanceWindows,
+		&i.Status,
+		&i.TotalClusters,
+		&i.CompletedClusters,
+		&i.FailedClusters,
+		&i.SkippedClusters,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateFleetOperationCounters = `-- name: UpdateFleetOperationCounters :one
+UPDATE fleet_operations SET
+    total_clusters     = $2,
+    completed_clusters = $3,
+    failed_clusters    = $4,
+    skipped_clusters   = $5,
+    updated_at         = now()
+WHERE id = $1
+RETURNING id, name, description, operation_type, operation_spec, selector, strategy, max_concurrent, on_error, respect_maintenance_windows, status, total_clusters, completed_clusters, failed_clusters, skipped_clusters, started_at, completed_at, last_error, created_by, created_at, updated_at
+`
+
+type UpdateFleetOperationCountersParams struct {
+	ID                uuid.UUID `json:"id"`
+	TotalClusters     int32     `json:"total_clusters"`
+	CompletedClusters int32     `json:"completed_clusters"`
+	FailedClusters    int32     `json:"failed_clusters"`
+	SkippedClusters   int32     `json:"skipped_clusters"`
+}
+
+// Bulk counter refresh. The orchestrator recomputes the aggregate
+// counts from fleet_operation_targets when it observes a target
+// transition, then writes them back here so the read endpoints
+// don't have to GROUP BY.
+func (q *Queries) UpdateFleetOperationCounters(ctx context.Context, arg UpdateFleetOperationCountersParams) (FleetOperation, error) {
+	row := q.db.QueryRow(ctx, updateFleetOperationCounters,
+		arg.ID,
+		arg.TotalClusters,
+		arg.CompletedClusters,
+		arg.FailedClusters,
+		arg.SkippedClusters,
+	)
+	var i FleetOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.OperationType,
+		&i.OperationSpec,
+		&i.Selector,
+		&i.Strategy,
+		&i.MaxConcurrent,
+		&i.OnError,
+		&i.RespectMaintenanceWindows,
+		&i.Status,
+		&i.TotalClusters,
+		&i.CompletedClusters,
+		&i.FailedClusters,
+		&i.SkippedClusters,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

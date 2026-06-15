@@ -14,37 +14,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countAPITokens = `-- name: CountAPITokens :one
-SELECT count(*) FROM api_tokens
-`
-
-func (q *Queries) CountAPITokens(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countAPITokens)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countSSOConfigurations = `-- name: CountSSOConfigurations :one
-SELECT count(*) FROM sso_configurations
-`
-
-func (q *Queries) CountSSOConfigurations(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countSSOConfigurations)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countActiveUnmigratedSSORows = `-- name: CountActiveUnmigratedSSORows :one
 SELECT count(*) FROM sso_configurations
 WHERE is_enabled = true AND migrated_to_dex_at IS NULL
 `
 
-// CountActiveUnmigratedSSORows drives the startup-time deprecation warning
-// for migration 045. Rows the operator added AFTER cutover have a NULL
-// migrated_to_dex_at; this query counts them so the boot path can log a
-// warn when the drift is visible.
+// Drives the startup-time deprecation warning (migration 045). Counts
+// enabled sso_configurations rows that have NOT been stamped as migrated
+// to dex_connectors — i.e. rows the operator added AFTER cutover. When > 0
+// we log a warn-level line at boot so the drift is visible without burying
+// the migration story.
 func (q *Queries) CountActiveUnmigratedSSORows(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveUnmigratedSSORows)
 	var count int64
@@ -111,7 +90,7 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 const createSSOConfiguration = `-- name: CreateSSOConfiguration :one
 INSERT INTO sso_configurations (provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at
+RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
 `
 
 type CreateSSOConfigurationParams struct {
@@ -155,17 +134,9 @@ func (q *Queries) CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfi
 		&i.DefaultGlobalRoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedToDexAt,
 	)
 	return i, err
-}
-
-const deleteAPIToken = `-- name: DeleteAPIToken :exec
-DELETE FROM api_tokens WHERE id = $1
-`
-
-func (q *Queries) DeleteAPIToken(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteAPIToken, id)
-	return err
 }
 
 const deleteSSOConfiguration = `-- name: DeleteSSOConfiguration :exec
@@ -205,7 +176,7 @@ func (q *Queries) GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, 
 }
 
 const getEnabledSSOProviders = `-- name: GetEnabledSSOProviders :many
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at FROM sso_configurations WHERE is_enabled = true ORDER BY provider ASC
+SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE is_enabled = true ORDER BY provider ASC
 `
 
 func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguration, error) {
@@ -231,6 +202,7 @@ func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguratio
 			&i.DefaultGlobalRoleID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MigratedToDexAt,
 		); err != nil {
 			return nil, err
 		}
@@ -244,7 +216,7 @@ func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguratio
 
 const getSSOConfigurationByID = `-- name: GetSSOConfigurationByID :one
 
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at FROM sso_configurations WHERE id = $1
+SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE id = $1
 `
 
 // SSO Configurations
@@ -265,12 +237,13 @@ func (q *Queries) GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (Ss
 		&i.DefaultGlobalRoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedToDexAt,
 	)
 	return i, err
 }
 
 const getSSOConfigurationByProvider = `-- name: GetSSOConfigurationByProvider :one
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at FROM sso_configurations WHERE provider = $1
+SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE provider = $1
 `
 
 func (q *Queries) GetSSOConfigurationByProvider(ctx context.Context, provider string) (SsoConfiguration, error) {
@@ -290,6 +263,7 @@ func (q *Queries) GetSSOConfigurationByProvider(ctx context.Context, provider st
 		&i.DefaultGlobalRoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedToDexAt,
 	)
 	return i, err
 }
@@ -372,95 +346,8 @@ func (q *Queries) IsJWTRevoked(ctx context.Context, jti string) (bool, error) {
 	return revoked, err
 }
 
-const listAPITokens = `-- name: ListAPITokens :many
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens ORDER BY created_at DESC LIMIT $1 OFFSET $2
-`
-
-type ListAPITokensParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-func (q *Queries) ListAPITokens(ctx context.Context, arg ListAPITokensParams) ([]ApiToken, error) {
-	rows, err := q.db.Query(ctx, listAPITokens, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ApiToken{}
-	for rows.Next() {
-		var i ApiToken
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Name,
-			&i.TokenHash,
-			&i.Prefix,
-			&i.ExpiresAt,
-			&i.LastUsedAt,
-			&i.IsRevoked,
-			&i.Scopes,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.AllowedCidrs,
-			&i.LastSeenRemoteIp,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAllTokensByUser = `-- name: ListAllTokensByUser :many
-SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
-`
-
-type ListAllTokensByUserParams struct {
-	UserID uuid.UUID `json:"user_id"`
-	Limit  int32     `json:"limit"`
-	Offset int32     `json:"offset"`
-}
-
-func (q *Queries) ListAllTokensByUser(ctx context.Context, arg ListAllTokensByUserParams) ([]ApiToken, error) {
-	rows, err := q.db.Query(ctx, listAllTokensByUser, arg.UserID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ApiToken{}
-	for rows.Next() {
-		var i ApiToken
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Name,
-			&i.TokenHash,
-			&i.Prefix,
-			&i.ExpiresAt,
-			&i.LastUsedAt,
-			&i.IsRevoked,
-			&i.Scopes,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.AllowedCidrs,
-			&i.LastSeenRemoteIp,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSSOConfigurations = `-- name: ListSSOConfigurations :many
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListSSOConfigurationsParams struct {
@@ -491,6 +378,7 @@ func (q *Queries) ListSSOConfigurations(ctx context.Context, arg ListSSOConfigur
 			&i.DefaultGlobalRoleID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MigratedToDexAt,
 		); err != nil {
 			return nil, err
 		}
@@ -693,7 +581,7 @@ UPDATE sso_configurations SET
     auto_create_users = $9,
     default_global_role_id = $10
 WHERE id = $1
-RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at
+RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
 `
 
 type UpdateSSOConfigurationParams struct {
@@ -737,6 +625,7 @@ func (q *Queries) UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfi
 		&i.DefaultGlobalRoleID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MigratedToDexAt,
 	)
 	return i, err
 }

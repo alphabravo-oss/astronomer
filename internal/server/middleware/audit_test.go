@@ -21,7 +21,7 @@ func newTestLogger(buf *bytes.Buffer) *slog.Logger {
 
 // okHandler is a simple handler that writes a 200 OK response.
 var okHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 })
 
 func TestAuditLog_GETNotLogged(t *testing.T) {
@@ -150,7 +150,7 @@ func TestStatusWriter_ImplicitWrite(t *testing.T) {
 	sw := &statusWriter{ResponseWriter: rr}
 
 	// Write without calling WriteHeader should capture implicit 200.
-	sw.Write([]byte("hello"))
+	_, _ = sw.Write([]byte("hello"))
 
 	if sw.status != http.StatusOK {
 		t.Fatalf("expected status 200 after Write(), got %d", sw.status)
@@ -162,7 +162,7 @@ func TestStatusWriter_ExplicitWriteHeader(t *testing.T) {
 	sw := &statusWriter{ResponseWriter: rr}
 
 	sw.WriteHeader(http.StatusCreated)
-	sw.Write([]byte("created"))
+	_, _ = sw.Write([]byte("created"))
 
 	if sw.status != http.StatusCreated {
 		t.Fatalf("expected status 201 after WriteHeader(201), got %d", sw.status)

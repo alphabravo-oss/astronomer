@@ -21,7 +21,6 @@ type fakeTelemetryQuerier struct {
 	clusters int64
 	users    int64
 	projects int64
-	failKey  string
 }
 
 func (f *fakeTelemetryQuerier) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {

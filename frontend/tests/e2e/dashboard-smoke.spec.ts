@@ -231,7 +231,7 @@ async function mockApi(page: Page, user = adminUser) {
     if (path === '/settings/sso' || path === '/settings/tokens') {
       return route.fulfill({ json: apiResponse([]) });
     }
-    if (path === '/settings/audit-logs') {
+    if (path === '/audit' || path === '/settings/audit-logs') {
       return route.fulfill({ json: paginated([]) });
     }
     if (path === '/admin/backup-drill') {
@@ -278,7 +278,7 @@ test('redirects unauthenticated dashboard users and supports login/logout', asyn
   await expect(page).toHaveURL(/\/auth\/login/);
   await expect(page.getByRole('heading', { name: /sign in to astronomer/i })).toBeVisible();
 
-  await page.getByPlaceholder('admin or you@example.com').fill('admin@example.com');
+  await page.getByPlaceholder('you@example.com').fill('admin@example.com');
   await page.getByPlaceholder('Enter your password').fill('password');
   await page.getByRole('button', { name: /sign in/i }).click();
 

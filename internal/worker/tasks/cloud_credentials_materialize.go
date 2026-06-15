@@ -30,13 +30,14 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // Task type identifiers. Exported for the worker mux + scheduler.
 const (
-	CloudCredentialMaterializeType     = "cloud_credentials:materialize"
-	CloudCredentialDriftReconcileType  = "cloud_credentials:drift_reconcile"
+	CloudCredentialMaterializeType    = "cloud_credentials:materialize"
+	CloudCredentialDriftReconcileType = "cloud_credentials:drift_reconcile"
 )
 
 // cloudCredentialFieldManager is the K8s server-side-apply identifier the
@@ -49,8 +50,8 @@ const cloudCredentialFieldManager = "astronomer-go-cloud-credentials"
 // materialize task. Op is one of:
 //   - ""        / "apply": render + SSA the Secret.
 //   - "delete":            remove the Secret (used by the DELETE
-//                          handler before the credential row is
-//                          purged from the DB).
+//     handler before the credential row is
+//     purged from the DB).
 type CloudCredentialMaterializePayload struct {
 	CredentialID string `json:"credential_id"`
 	ClusterID    string `json:"cluster_id"`
@@ -299,9 +300,9 @@ func applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secre
 			"name":      secretName,
 			"namespace": namespace,
 			"labels": map[string]any{
-				"app.kubernetes.io/managed-by":     cloudCredentialFieldManager,
-				"astronomer.io/managed-by":         "astronomer",
-				"astronomer.io/cloud-credential":   credentialID.String(),
+				"app.kubernetes.io/managed-by":      cloudCredentialFieldManager,
+				"astronomer.io/managed-by":          "astronomer",
+				"astronomer.io/cloud-credential":    credentialID.String(),
 				"astronomer.io/credential-provider": provider,
 			},
 		},
@@ -312,11 +313,11 @@ func applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secre
 	if err != nil {
 		return fmt.Errorf("marshal secret manifest: %w", err)
 	}
-	path := fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s?fieldManager=%s&force=true", namespace, secretName, cloudCredentialFieldManager)
-	resp, err := cloudCredentialDeps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, map[string]string{
-		"Content-Type": "application/apply-patch+yaml",
-		"Accept":       "application/json",
-	})
+	path := kubeutil.ServerSideApplyPath(
+		fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName),
+		kubeutil.ApplyOptions{FieldManager: cloudCredentialFieldManager, Force: true},
+	)
+	resp, err := cloudCredentialDeps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
 	if err != nil {
 		return fmt.Errorf("apply secret: %w", err)
 	}

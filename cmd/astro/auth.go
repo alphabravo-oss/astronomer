@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -63,7 +62,9 @@ The persisted token is used for every subsequent astro command.`,
 
 			username := strings.TrimSpace(userFlag)
 			if username == "" {
-				fmt.Fprint(os.Stderr, "Username: ")
+				if _, err := fmt.Fprint(os.Stderr, "Username: "); err != nil {
+					return err
+				}
 				if _, err := fmt.Scanln(&username); err != nil {
 					return fmt.Errorf("read username: %w", err)
 				}
@@ -74,9 +75,13 @@ The persisted token is used for every subsequent astro command.`,
 				password = os.Getenv("ASTRO_PASSWORD")
 			}
 			if password == "" {
-				fmt.Fprint(os.Stderr, "Password: ")
+				if _, err := fmt.Fprint(os.Stderr, "Password: "); err != nil {
+					return err
+				}
 				pw, err := term.ReadPassword(int(syscall.Stdin))
-				fmt.Fprintln(os.Stderr)
+				if _, werr := fmt.Fprintln(os.Stderr); werr != nil && err == nil {
+					err = werr
+				}
 				if err != nil {
 					return fmt.Errorf("read password: %w", err)
 				}
@@ -103,8 +108,8 @@ The persisted token is used for every subsequent astro command.`,
 			if err := astrocli.SaveConfig(cfg); err != nil {
 				return fmt.Errorf("persist config: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Logged in to %s as %s\n", server, resp.Data.User.Username)
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Logged in to %s as %s\n", server, resp.Data.User.Username)
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&serverFlag, "server", "s", "", "Astronomer server URL")
@@ -128,8 +133,8 @@ func newLogoutCmd() *cobra.Command {
 			if err := astrocli.SaveConfig(cfg); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
-			return nil
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
+			return err
 		},
 	}
 }
@@ -155,9 +160,9 @@ func newWhoamiCmd() *cobra.Command {
 			if err := client.Do(cmd.Context(), "GET", "/api/v1/auth/me/", nil, &resp); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Server: %s\nUser:   %s\nEmail:  %s\nAdmin:  %v\n",
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Server: %s\nUser:   %s\nEmail:  %s\nAdmin:  %v\n",
 				cfg.ServerURL, resp.Data.Username, resp.Data.Email, resp.Data.IsSuperuser)
-			return nil
+			return err
 		},
 	}
 }
@@ -180,7 +185,3 @@ func authedClient(cmd *cobra.Command) (*astrocli.Client, *astrocli.Config, error
 	}
 	return astrocli.NewClient(server, cfg.AccessToken), cfg, nil
 }
-
-// withCtx is a helper for commands that want a cancellable context
-// tied to the cobra command.
-func withCtx(cmd *cobra.Command) context.Context { return cmd.Context() }

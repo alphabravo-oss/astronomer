@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -130,6 +130,7 @@ const globalNavGroups: NavGroup[] = [
     items: [
       { label: 'Projects', href: '/dashboard/projects', icon: FolderKanban, permission: { resource: 'projects', verb: 'list' }, featureFlag: 'feature.projects' },
       { label: 'RBAC', href: '/dashboard/rbac', icon: Shield, permission: { resource: 'rbac', verb: 'read' } },
+      { label: 'Audit Log', href: '/dashboard/audit', icon: FileText, permission: { resource: 'audit_logs', verb: 'read' } },
       { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
       { label: 'Backups', href: '/dashboard/backups', icon: Archive, permission: { resource: 'backups', verb: 'read' }, featureFlag: 'feature.backups' },
       { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound, superuserOnly: true },
@@ -158,7 +159,7 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
       defaultOpen: true,
       items: [
         { label: 'Overview', href: base, icon: LayoutDashboard, exact: true },
-        { label: 'Provisioning', href: `${base}/provisioning`, icon: Activity },
+        { label: 'Adoption', href: `${base}/adoption`, icon: Activity },
         { label: 'Nodes', href: `${base}/nodes`, icon: Server, countKey: 'nodes' },
         { label: 'Namespaces', href: `${base}/namespaces`, icon: Layers, countKey: 'namespaces' },
         // Event counts on a chatty cluster balloon into the
@@ -503,12 +504,15 @@ export function Sidebar() {
   // Fetch resource counts when in cluster context
   const counts = useResourceCounts(isClusterContext ? clusterId! : '');
 
-  const navGroups = filterNavGroups(
-    isClusterContext
-    ? getClusterNavGroups(clusterId!, { isLocal: cluster?.isLocal })
-      : globalNavGroups,
-    user,
-    featureFlags
+  const navGroups = useMemo(
+    () => filterNavGroups(
+      isClusterContext
+        ? getClusterNavGroups(clusterId!, { isLocal: cluster?.isLocal })
+        : globalNavGroups,
+      user,
+      featureFlags,
+    ),
+    [cluster?.isLocal, clusterId, featureFlags, isClusterContext, user],
   );
 
   // Accordion state: only one group open at a time
@@ -522,7 +526,7 @@ export function Sidebar() {
       )
     );
     if (activeGroup) setOpenGroup(activeGroup.label);
-  }, [pathname]);
+  }, [navGroups, pathname]);
 
   return (
     <aside

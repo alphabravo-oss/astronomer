@@ -34,6 +34,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 )
 
 // Task type names. Exported so worker.go (and any tests) can register them
@@ -625,11 +626,8 @@ func serverSideApply(ctx context.Context, requester ProjectK8sRequester, cluster
 	if err != nil {
 		return err
 	}
-	pathWithFM := path + "?fieldManager=" + projectFieldManager + "&force=true"
-	resp, err := requester.Do(ctx, clusterID, http.MethodPatch, pathWithFM, body, map[string]string{
-		"Content-Type": "application/apply-patch+yaml",
-		"Accept":       "application/json",
-	})
+	pathWithFM := kubeutil.ServerSideApplyPath(path, kubeutil.ApplyOptions{FieldManager: projectFieldManager, Force: true})
+	resp, err := requester.Do(ctx, clusterID, http.MethodPatch, pathWithFM, body, kubeutil.ApplyPatchHeaders())
 	if err != nil {
 		return err
 	}

@@ -378,17 +378,6 @@ func (d *fakeFleetDispatcher) DispatchApplyTemplate(_ context.Context, clusterID
 	return subID, FleetOpTypeApplyTemplate, nil
 }
 
-// completeSubOp manually moves a synthesised sub-op to "completed".
-// Used by tests that want to simulate a successful per-cluster
-// operation.
-func (d *fakeFleetDispatcher) completeSubOp(subID uuid.UUID) {
-	d.q.mu.Lock()
-	defer d.q.mu.Unlock()
-	op := d.q.toolOps[subID]
-	op.Status = "completed"
-	d.q.toolOps[subID] = op
-}
-
 // failSubOp moves a synthesised sub-op to "failed" with an error.
 func (d *fakeFleetDispatcher) failSubOp(subID uuid.UUID, msg string) {
 	d.q.mu.Lock()

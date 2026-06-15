@@ -907,26 +907,6 @@ func (h *ToolHandler) resolveAction(r *http.Request) (sqlc.ClusterTool, toolActi
 	return tool, req, firstChart(charts), valuesYAML, nil
 }
 
-func (h *ToolHandler) sendHelm(ctx context.Context, clusterID string, msgType protocol.MessageType, tool sqlc.ClusterTool, chart toolChart, releaseName, valuesYAML string) (*protocol.HelmResultPayload, error) {
-	if h.helm == nil {
-		return nil, errors.New("helm requester not configured")
-	}
-	var values map[string]any
-	if valuesYAML != "" {
-		if err := yaml.Unmarshal([]byte(valuesYAML), &values); err != nil {
-			return nil, err
-		}
-	}
-	return h.helm.Do(ctx, clusterID, msgType, protocol.HelmRequestPayload{
-		ReleaseName: releaseName,
-		Namespace:   chartNamespace(tool, chart),
-		ChartName:   chart.ChartName,
-		RepoURL:     chart.RepoURL,
-		Version:     tool.VersionConstraint,
-		Values:      values,
-	})
-}
-
 func (h *ToolHandler) sendHelmRaw(ctx context.Context, env toolOperationEnvelope, msgType protocol.MessageType) (*protocol.HelmResultPayload, error) {
 	if h.helm == nil {
 		return nil, errors.New("helm requester not configured")
@@ -1037,6 +1017,12 @@ func normalizeToolStatus(status string) string {
 	switch status {
 	case "deployed":
 		return "installed"
+	case "pending", "pending_install", "pending-install":
+		return "installing"
+	case "pending_upgrade", "pending-upgrade":
+		return "upgrading"
+	case "pending_uninstall", "pending-uninstall":
+		return "uninstalling"
 	default:
 		return status
 	}
@@ -1044,10 +1030,8 @@ func normalizeToolStatus(status string) string {
 
 func toolStatusFromInstalled(status string) string {
 	switch status {
-	case "pending", "pending_install":
-		return "installing"
-	case "deployed":
-		return "installed"
+	case "deployed", "pending", "pending_install", "pending-install", "pending_upgrade", "pending-upgrade", "pending_uninstall", "pending-uninstall":
+		return normalizeToolStatus(status)
 	default:
 		return status
 	}

@@ -2,10 +2,7 @@ package handler
 
 import (
 	"context"
-	"net"
 	"net/http"
-	"net/netip"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -16,47 +13,6 @@ import (
 
 type auditWriterV1 interface {
 	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
-}
-
-// remoteIPAddr extracts a parseable IP address from the request, preferring
-// X-Forwarded-For when present (load-balancer terminations are the common
-// case), then X-Real-IP, then RemoteAddr. Returns nil when no parseable value
-// is found — the audit ip_address column is nullable.
-func remoteIPAddr(r *http.Request) *netip.Addr {
-	if r == nil {
-		return nil
-	}
-	candidates := []string{}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// First entry in the conventional XFF chain is the original client.
-		if idx := strings.Index(xff, ","); idx != -1 {
-			candidates = append(candidates, strings.TrimSpace(xff[:idx]))
-		} else {
-			candidates = append(candidates, strings.TrimSpace(xff))
-		}
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		candidates = append(candidates, strings.TrimSpace(xri))
-	}
-	if r.RemoteAddr != "" {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			candidates = append(candidates, r.RemoteAddr)
-		} else {
-			candidates = append(candidates, host)
-		}
-	}
-	for _, c := range candidates {
-		if c == "" {
-			continue
-		}
-		addr, err := netip.ParseAddr(c)
-		if err != nil {
-			continue
-		}
-		return &addr
-	}
-	return nil
 }
 
 // recordAudit best-effort writes an audit row. It MUST NOT fail the calling
@@ -106,15 +62,12 @@ func recordAuditAs(r *http.Request, q any, userID pgtype.UUID, action, resourceT
 }
 
 func emitAuditRow(ctx context.Context, r *http.Request, q any, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, detail map[string]any) {
-	ua := ""
-	if r != nil {
-		ua = r.UserAgent()
-	}
 	requestID := middleware.GetRequestID(ctx)
 	correlationID := middleware.GetCorrelationID(ctx)
-	ip := remoteIPAddr(r)
+	ip := middleware.RemoteIPAddr(r)
 	if v1, ok := q.(auditWriterV1); ok && v1 != nil {
-		audit.Record(ctx, v1, audit.Event{
+		audit.Record(ctx, v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+			Request:         r,
 			Source:          "service",
 			CorrelationID:   correlationID,
 			UserID:          userID,
@@ -123,15 +76,10 @@ func emitAuditRow(ctx context.Context, r *http.Request, q any, userID pgtype.UUI
 			ResourceType:    resourceType,
 			ResourceID:      resourceID,
 			ResourceName:    resourceName,
-			HTTPMethod:      requestMethod(r),
-			Path:            requestPath(r),
-			StatusCode:      0,
-			DurationMs:      0,
 			RequestID:       requestID,
 			IPAddress:       ip,
-			UserAgent:       ua,
 			Detail:          detail,
-		})
+		}))
 	}
 }
 
@@ -143,18 +91,4 @@ func authMethodFromRequest(r *http.Request) string {
 		return user.AuthMethod
 	}
 	return ""
-}
-
-func requestMethod(r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-	return r.Method
-}
-
-func requestPath(r *http.Request) string {
-	if r == nil || r.URL == nil {
-		return ""
-	}
-	return r.URL.Path
 }

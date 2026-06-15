@@ -37,6 +37,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/netpol"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -269,10 +270,10 @@ func applyOneNetworkPolicy(ctx context.Context, deps NetworkPolicyApplyDeps, row
 			ResourceType: "network_policy_application",
 			ResourceID:   row.ID.String(),
 			Detail: map[string]any{
-				"cluster_id":  row.ClusterID.String(),
-				"namespace":   row.Namespace,
-				"policy_name": row.PolicyName,
-				"template_id": row.TemplateID.String(),
+				"cluster_id":    row.ClusterID.String(),
+				"namespace":     row.Namespace,
+				"policy_name":   row.PolicyName,
+				"template_id":   row.TemplateID.String(),
 				"template_slug": tmpl.Slug,
 			},
 		})
@@ -305,14 +306,11 @@ func markNetworkPolicyFailure(ctx context.Context, deps NetworkPolicyApplyDeps, 
 // /apis/networking.k8s.io/v1/namespaces/{ns}/networkpolicies/{name}.
 // fieldManager + force ensure we converge on re-apply.
 func applyNetworkPolicySSA(ctx context.Context, deps NetworkPolicyApplyDeps, row sqlc.NetworkPolicyApplication, body []byte) error {
-	path := fmt.Sprintf(
-		"/apis/networking.k8s.io/v1/namespaces/%s/networkpolicies/%s?fieldManager=%s&force=true",
-		row.Namespace, row.PolicyName, networkPolicyFieldManager,
+	path := kubeutil.ServerSideApplyPath(
+		fmt.Sprintf("/apis/networking.k8s.io/v1/namespaces/%s/networkpolicies/%s", row.Namespace, row.PolicyName),
+		kubeutil.ApplyOptions{FieldManager: networkPolicyFieldManager, Force: true},
 	)
-	resp, err := deps.Requester.Do(ctx, row.ClusterID.String(), http.MethodPatch, path, body, map[string]string{
-		"Content-Type": "application/apply-patch+yaml",
-		"Accept":       "application/json",
-	})
+	resp, err := deps.Requester.Do(ctx, row.ClusterID.String(), http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
 	if err != nil {
 		return fmt.Errorf("apply network policy: %w", err)
 	}

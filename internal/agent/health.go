@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -27,6 +29,10 @@ type HealthReporter struct {
 	heartbeatInterval time.Duration
 	metricsInterval   time.Duration
 	agentVersion      string
+	agentBuildSHA     string
+	privilegeProfile  string
+	enabledFeatures   []string
+	deniedFeatures    []string
 	clusterID         string
 	startedAt         time.Time
 
@@ -64,6 +70,17 @@ func (hr *HealthReporter) SetMetricsClient(mc metricsv.Interface) {
 // SetAgentVersion sets the agent version reported in heartbeats.
 func (hr *HealthReporter) SetAgentVersion(v string) {
 	hr.agentVersion = v
+}
+
+// SetAgentBuildSHA sets the build commit reported in heartbeats.
+func (hr *HealthReporter) SetAgentBuildSHA(v string) {
+	hr.agentBuildSHA = v
+}
+
+// SetPrivilegeProfile sets the installed RBAC/capability profile reported in heartbeats.
+func (hr *HealthReporter) SetPrivilegeProfile(profile string) {
+	hr.privilegeProfile = normalizeAgentPrivilegeProfile(profile)
+	hr.enabledFeatures, hr.deniedFeatures = capabilityFeaturesForProfile(hr.privilegeProfile)
 }
 
 // SetConnected updates the tunnel connection status (used by readiness probe).
@@ -259,8 +276,18 @@ func (hr *HealthReporter) sendHeartbeat(ctx context.Context, sendFn func(*protoc
 // collectHeartbeat gathers cluster-level health data.
 func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.HeartbeatPayload, error) {
 	hb := &protocol.HeartbeatPayload{
-		Timestamp:    time.Now().UTC().Format(time.RFC3339),
-		AgentVersion: hr.agentVersion,
+		SchemaVersion:          protocol.HeartbeatSchemaVersion,
+		Timestamp:              time.Now().UTC().Format(time.RFC3339),
+		AgentVersion:           hr.agentVersion,
+		AgentBuildSHA:          defaultAgentValue(hr.agentBuildSHA, version.GitCommit),
+		PrivilegeProfile:       defaultAgentValue(hr.privilegeProfile, "admin"),
+		EnabledFeatures:        append([]string{}, hr.enabledFeatures...),
+		DeniedFeatures:         append([]string{}, hr.deniedFeatures...),
+		LastSuccessfulAction:   "heartbeat.collect",
+		LastSuccessfulActionAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if len(hb.EnabledFeatures) == 0 && len(hb.DeniedFeatures) == 0 {
+		hb.EnabledFeatures, hb.DeniedFeatures = capabilityFeaturesForProfile(hb.PrivilegeProfile)
 	}
 
 	// K8s version.
@@ -277,6 +304,7 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 	}
 	hb.NodeCount = len(nodes.Items)
 	hb.Distribution = detectDistribution(nodes.Items)
+	hb.AvailableAPIs = hr.collectAvailableAPIs(ctx)
 
 	// Pod count (all namespaces).
 	pods, err := hr.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
@@ -291,15 +319,38 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 	return hb, nil
 }
 
+func (hr *HealthReporter) collectAvailableAPIs(ctx context.Context) []string {
+	if hr == nil || hr.client == nil {
+		return nil
+	}
+	groups, err := hr.client.Discovery().ServerGroups()
+	if err != nil {
+		if hr.log != nil {
+			hr.log.Debug("api discovery unavailable", "error", err)
+		}
+		return nil
+	}
+	apis := []string{"v1"}
+	for _, group := range groups.Groups {
+		if group.PreferredVersion.GroupVersion != "" {
+			apis = append(apis, group.PreferredVersion.GroupVersion)
+		}
+	}
+	sort.Strings(apis)
+	return apis
+}
+
 // collectMetrics attempts to collect CPU/Memory metrics from the metrics API.
 func (hr *HealthReporter) collectMetrics(ctx context.Context, hb *protocol.HeartbeatPayload) {
 	if hr.metricsClient == nil {
+		hb.DegradedReasons = append(hb.DegradedReasons, "metrics API client is not configured")
 		return
 	}
 
 	nodeMetrics, err := hr.metricsClient.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		hr.log.Debug("metrics API unavailable", "error", err)
+		hb.DegradedReasons = append(hb.DegradedReasons, "metrics API unavailable")
 		return
 	}
 
@@ -384,6 +435,48 @@ func detectDistribution(nodes []corev1.Node) string {
 	}
 
 	return "unknown"
+}
+
+func normalizeAgentPrivilegeProfile(profile string) string {
+	normalized := strings.NewReplacer("_", "-", " ", "-").Replace(strings.ToLower(strings.TrimSpace(profile)))
+	switch normalized {
+	case "viewer":
+		return "viewer"
+	case "operator":
+		return "operator"
+	case "namespace-viewer", "namespaced-viewer":
+		return "namespace-viewer"
+	case "namespace-operator", "namespaced-operator":
+		return "namespace-operator"
+	case "custom":
+		return "custom"
+	default:
+		return "admin"
+	}
+}
+
+func capabilityFeaturesForProfile(profile string) ([]string, []string) {
+	switch normalizeAgentPrivilegeProfile(profile) {
+	case "viewer":
+		return []string{"logs", "watch"}, []string{"exec", "helm", "mutate", "secrets", "service_proxy"}
+	case "namespace-viewer":
+		return []string{"logs", "namespace_scoped", "watch"}, []string{"cluster_scope", "exec", "helm", "mutate", "secrets", "service_proxy"}
+	case "operator":
+		return []string{"exec", "helm", "logs", "mutate", "service_proxy", "watch"}, nil
+	case "namespace-operator":
+		return []string{"exec", "logs", "mutate", "namespace_scoped", "service_proxy", "watch"}, []string{"cluster_scope", "helm", "secrets"}
+	case "custom":
+		return []string{"custom_rbac"}, []string{"capability_inference"}
+	default:
+		return []string{"cluster_admin", "exec", "helm", "logs", "mutate", "rbac", "service_proxy", "watch"}, nil
+	}
+}
+
+func defaultAgentValue(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 // ServeHealth runs a basic /healthz and /readyz HTTP server for K8s probes.

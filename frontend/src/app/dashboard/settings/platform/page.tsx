@@ -15,9 +15,9 @@ import {
   Loader2,
   Save,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { toastInfo } from '@/lib/toast';
 import {
   usePlatformSettings,
   useSavePlatformSettings,
@@ -280,7 +280,7 @@ function PlatformSettingsForm() {
 
   const handleSave = async () => {
     if (!hasChanges) {
-      toast.message('Nothing to save');
+      toastInfo('Nothing to save');
       return;
     }
     try {

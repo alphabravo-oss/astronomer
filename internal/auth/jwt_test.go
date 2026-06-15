@@ -13,8 +13,8 @@ func TestJWTManager(t *testing.T) {
 	userID := uuid.New()
 
 	tests := []struct {
-		name    string
-		run     func(t *testing.T)
+		name string
+		run  func(t *testing.T)
 	}{
 		{
 			name: "generate access token and validate returns correct claims",
@@ -215,7 +215,7 @@ func TestJWTManager(t *testing.T) {
 
 				// Expiry should be approximately 60 minutes from now
 				expectedExpiry := time.Now().Add(60 * time.Minute)
-				diff := claims.ExpiresAt.Time.Sub(expectedExpiry)
+				diff := claims.ExpiresAt.Sub(expectedExpiry)
 				if diff < -5*time.Second || diff > 5*time.Second {
 					t.Errorf("expiry %v not within 5s of expected %v", claims.ExpiresAt.Time, expectedExpiry)
 				}
@@ -237,7 +237,7 @@ func TestJWTManager(t *testing.T) {
 				}
 
 				expectedExpiry := time.Now().Add(60 * time.Minute)
-				diff := claims.ExpiresAt.Time.Sub(expectedExpiry)
+				diff := claims.ExpiresAt.Sub(expectedExpiry)
 				if diff < -5*time.Second || diff > 5*time.Second {
 					t.Errorf("expiry %v not within 5s of expected %v", claims.ExpiresAt.Time, expectedExpiry)
 				}

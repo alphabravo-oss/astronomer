@@ -56,8 +56,8 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	if err != nil {
 		t.Fatalf("list applicationsets: %v", err)
 	}
-	if len(items.Items) != 5 {
-		t.Fatalf("applicationset count = %d, want 5", len(items.Items))
+	if len(items.Items) != 7 {
+		t.Fatalf("applicationset count = %d, want 7", len(items.Items))
 	}
 	trivy := findUnstructuredByName(items.Items, "astronomer-baseline-trivy")
 	if trivy == nil {
@@ -77,6 +77,13 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	if labels[argoCDIsLocalLabelKey] != "false" {
 		t.Fatalf("selector is-local = %v, want false", labels[argoCDIsLocalLabelKey])
 	}
+	appSetLabels := trivy.GetLabels()
+	if appSetLabels[baselineApplicationSetTargetLabel] != baselineTargetAdoptedClusters {
+		t.Fatalf("applicationset target label = %q, want %q", appSetLabels[baselineApplicationSetTargetLabel], baselineTargetAdoptedClusters)
+	}
+	if appSetLabels[baselineApplicationSetSyncPhaseLabel] != string(baselineSyncPhaseHealthCheck) {
+		t.Fatalf("applicationset sync phase label = %q, want %q", appSetLabels[baselineApplicationSetSyncPhaseLabel], baselineSyncPhaseHealthCheck)
+	}
 	repo, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "spec", "source", "repoURL")
 	if repo != "https://charts.example.test/aqua" {
 		t.Fatalf("repoURL = %q", repo)
@@ -88,6 +95,103 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	values, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "spec", "source", "helm", "values")
 	if values != "operator:\n  scanJobTimeout: 10m\n" {
 		t.Fatalf("helm values = %q", values)
+	}
+	trivyWave, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
+	if trivyWave != "30" {
+		t.Fatalf("trivy sync wave = %q, want 30", trivyWave)
+	}
+	ingress := findUnstructuredByName(items.Items, "astronomer-baseline-ingress-nginx")
+	if ingress == nil {
+		t.Fatal("astronomer-baseline-ingress-nginx not created")
+	}
+	ingressRepo, _, _ := unstructured.NestedString(ingress.Object, "spec", "template", "spec", "source", "repoURL")
+	if ingressRepo != "https://kubernetes.github.io/ingress-nginx" {
+		t.Fatalf("ingress repoURL = %q", ingressRepo)
+	}
+	certManager := findUnstructuredByName(items.Items, "astronomer-baseline-cert-manager")
+	if certManager == nil {
+		t.Fatal("astronomer-baseline-cert-manager not created")
+	}
+	certManagerWave, _, _ := unstructured.NestedString(certManager.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
+	if certManagerWave != "-30" {
+		t.Fatalf("cert-manager sync wave = %q, want -30", certManagerWave)
+	}
+	gatekeeper := findUnstructuredByName(items.Items, "astronomer-baseline-gatekeeper")
+	if gatekeeper == nil {
+		t.Fatal("astronomer-baseline-gatekeeper not created")
+	}
+	gatekeeperRepo, _, _ := unstructured.NestedString(gatekeeper.Object, "spec", "template", "spec", "source", "repoURL")
+	if gatekeeperRepo != "https://open-policy-agent.github.io/gatekeeper/charts" {
+		t.Fatalf("gatekeeper repoURL = %q", gatekeeperRepo)
+	}
+	gatekeeperWave, _, _ := unstructured.NestedString(gatekeeper.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
+	if gatekeeperWave != "-10" {
+		t.Fatalf("gatekeeper sync wave = %q, want -10", gatekeeperWave)
+	}
+}
+
+func TestBaselineApplicationSetsUseSyncWaveStandards(t *testing.T) {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, nil); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list applicationsets: %v", err)
+	}
+
+	expected := map[string]struct {
+		phase baselineSyncPhase
+		wave  string
+	}{
+		"astronomer-baseline-cert-manager":       {phase: baselineSyncPhaseCRDs, wave: "-30"},
+		"astronomer-baseline-ingress-nginx":      {phase: baselineSyncPhaseOperators, wave: "-20"},
+		"astronomer-baseline-kube-state-metrics": {phase: baselineSyncPhaseWorkloads, wave: "10"},
+		"astronomer-baseline-node-exporter":      {phase: baselineSyncPhaseWorkloads, wave: "10"},
+		"astronomer-baseline-fluent-bit":         {phase: baselineSyncPhaseWorkloads, wave: "10"},
+		"astronomer-baseline-gatekeeper":         {phase: baselineSyncPhasePolicies, wave: "-10"},
+		"astronomer-baseline-trivy":              {phase: baselineSyncPhaseHealthCheck, wave: "30"},
+	}
+	if len(items.Items) != len(expected) {
+		t.Fatalf("applicationset count = %d, want %d", len(items.Items), len(expected))
+	}
+	for name, want := range expected {
+		appSet := findUnstructuredByName(items.Items, name)
+		if appSet == nil {
+			t.Fatalf("%s not created", name)
+		}
+		if got := appSet.GetLabels()[baselineApplicationSetSyncPhaseLabel]; got != string(want.phase) {
+			t.Fatalf("%s sync phase label = %q, want %q", name, got, want.phase)
+		}
+		templatePhase, _, _ := unstructured.NestedString(appSet.Object, "spec", "template", "metadata", "labels", baselineApplicationSetSyncPhaseLabel)
+		if templatePhase != string(want.phase) {
+			t.Fatalf("%s template sync phase label = %q, want %q", name, templatePhase, want.phase)
+		}
+		templateWave, _, _ := unstructured.NestedString(appSet.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
+		if templateWave != want.wave {
+			t.Fatalf("%s sync wave = %q, want %q", name, templateWave, want.wave)
+		}
+	}
+}
+
+func TestBaselineSyncWaveStandardsReserveAllLifecyclePhases(t *testing.T) {
+	expected := map[baselineSyncPhase]int{
+		baselineSyncPhaseNamespaces:  baselineSyncWaveNamespaces,
+		baselineSyncPhaseCRDs:        baselineSyncWaveCRDs,
+		baselineSyncPhaseOperators:   baselineSyncWaveOperators,
+		baselineSyncPhasePolicies:    baselineSyncWavePolicies,
+		baselineSyncPhaseWorkloads:   baselineSyncWaveWorkloads,
+		baselineSyncPhaseHealthCheck: baselineSyncWaveHealthCheck,
+	}
+	for phase, wave := range expected {
+		if got := baselineSyncWaveForPhase(phase); got != wave {
+			t.Fatalf("%s wave = %d, want %d", phase, got, wave)
+		}
+	}
+	if got := baselineSyncWaveForPhase("unknown"); got != baselineSyncWaveWorkloads {
+		t.Fatalf("unknown phase wave = %d, want default workload wave %d", got, baselineSyncWaveWorkloads)
 	}
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -45,16 +46,7 @@ import {
   type MirroredNetworkPolicy,
   type MirroredResourceQuota,
 } from '@/lib/api/cluster-detail';
-
-// React-query keys. Prefixed with the cluster id so the cache invalidates
-// cleanly when the user navigates between clusters.
-const qk = {
-  ingressClasses: (id: string) => ['clusters', id, 'mirrored', 'ingress-classes'] as const,
-  gatewayClasses: (id: string) => ['clusters', id, 'mirrored', 'gateway-classes'] as const,
-  networkPolicies: (id: string) => ['clusters', id, 'mirrored', 'network-policies'] as const,
-  resourceQuotas: (id: string) => ['clusters', id, 'mirrored', 'resource-quotas'] as const,
-  limitRanges: (id: string) => ['clusters', id, 'mirrored', 'limit-ranges'] as const,
-};
+import { queryKeys } from '@/lib/hooks';
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -145,21 +137,21 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
     return <p className="text-sm text-muted-foreground">No IngressClasses installed.</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left text-xs uppercase text-muted-foreground">
-          <th className="py-2">Name</th>
-          <th className="py-2">Controller</th>
-          <th className="py-2">Default</th>
-          <th className="py-2">Last seen</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table className="w-full text-sm">
+      <TableHeader>
+        <TableRow className="text-left text-xs uppercase text-muted-foreground">
+          <TableHead className="py-2">Name</TableHead>
+          <TableHead className="py-2">Controller</TableHead>
+          <TableHead className="py-2">Default</TableHead>
+          <TableHead className="py-2">Last seen</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((r) => (
-          <tr key={r.name} className="border-t">
-            <td className="py-2 font-mono">{r.name}</td>
-            <td className="py-2 font-mono text-xs">{r.controller || '—'}</td>
-            <td className="py-2">
+          <TableRow key={r.name} className="border-t">
+            <TableCell className="py-2 font-mono">{r.name}</TableCell>
+            <TableCell className="py-2 font-mono text-xs">{r.controller || '—'}</TableCell>
+            <TableCell className="py-2">
               {r.isDefault ? (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
                   default
@@ -167,12 +159,12 @@ function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}
-            </td>
-            <td className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</td>
-          </tr>
+            </TableCell>
+            <TableCell className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 
@@ -203,28 +195,28 @@ function GatewayClassesTable({ rows }: { rows: MirroredGatewayClass[] }) {
     return <p className="text-sm text-muted-foreground">No GatewayClasses installed.</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left text-xs uppercase text-muted-foreground">
-          <th className="py-2">Name</th>
-          <th className="py-2">Controller</th>
-          <th className="py-2">Accepted</th>
-          <th className="py-2">Last seen</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table className="w-full text-sm">
+      <TableHeader>
+        <TableRow className="text-left text-xs uppercase text-muted-foreground">
+          <TableHead className="py-2">Name</TableHead>
+          <TableHead className="py-2">Controller</TableHead>
+          <TableHead className="py-2">Accepted</TableHead>
+          <TableHead className="py-2">Last seen</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((r) => (
-          <tr key={r.name} className="border-t">
-            <td className="py-2 font-mono">{r.name}</td>
-            <td className="py-2 font-mono text-xs">{r.controllerName || '—'}</td>
-            <td className="py-2">
+          <TableRow key={r.name} className="border-t">
+            <TableCell className="py-2 font-mono">{r.name}</TableCell>
+            <TableCell className="py-2 font-mono text-xs">{r.controllerName || '—'}</TableCell>
+            <TableCell className="py-2">
               <AcceptedBadge status={r.acceptedStatus} />
-            </td>
-            <td className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</td>
-          </tr>
+            </TableCell>
+            <TableCell className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 
@@ -233,29 +225,29 @@ function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
     return <p className="text-sm text-muted-foreground">No NetworkPolicies in this cluster.</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left text-xs uppercase text-muted-foreground">
-          <th className="py-2">Namespace</th>
-          <th className="py-2">Name</th>
-          <th className="py-2">Types</th>
-          <th className="py-2">Owner</th>
-          <th className="py-2">Last seen</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table className="w-full text-sm">
+      <TableHeader>
+        <TableRow className="text-left text-xs uppercase text-muted-foreground">
+          <TableHead className="py-2">Namespace</TableHead>
+          <TableHead className="py-2">Name</TableHead>
+          <TableHead className="py-2">Types</TableHead>
+          <TableHead className="py-2">Owner</TableHead>
+          <TableHead className="py-2">Last seen</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((r) => (
-          <tr key={`${r.namespace}/${r.name}`} className="border-t">
-            <td className="py-2 font-mono">{r.namespace}</td>
-            <td className="py-2 font-mono">{r.name}</td>
-            <td className="py-2">
+          <TableRow key={`${r.namespace}/${r.name}`} className="border-t">
+            <TableCell className="py-2 font-mono">{r.namespace}</TableCell>
+            <TableCell className="py-2 font-mono">{r.name}</TableCell>
+            <TableCell className="py-2">
               {(r.policyTypes ?? []).map((t) => (
                 <span key={t} className="mr-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs">
                   {t}
                 </span>
               ))}
-            </td>
-            <td className="py-2">
+            </TableCell>
+            <TableCell className="py-2">
               {r.isManaged ? (
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
                   astronomer
@@ -265,12 +257,12 @@ function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
                   operator
                 </span>
               )}
-            </td>
-            <td className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</td>
-          </tr>
+            </TableCell>
+            <TableCell className="py-2 text-muted-foreground">{fmtRelative(r.lastSeenAt)}</TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 
@@ -361,28 +353,28 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
               <span className="font-mono text-sm">{r.namespace}/{r.name}</span>
               <span className="text-xs text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
             </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1">Type</th>
-                  <th className="py-1">Default</th>
-                  <th className="py-1">DefaultRequest</th>
-                  <th className="py-1">Min</th>
-                  <th className="py-1">Max</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-xs">
+              <TableHeader>
+                <TableRow className="text-left text-muted-foreground">
+                  <TableHead className="py-1">Type</TableHead>
+                  <TableHead className="py-1">Default</TableHead>
+                  <TableHead className="py-1">DefaultRequest</TableHead>
+                  <TableHead className="py-1">Min</TableHead>
+                  <TableHead className="py-1">Max</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {limits.map((l, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="py-1 font-mono">{l.type ?? '—'}</td>
-                    <td className="py-1 font-mono">{fmtMap(l.default)}</td>
-                    <td className="py-1 font-mono">{fmtMap(l.defaultRequest)}</td>
-                    <td className="py-1 font-mono">{fmtMap(l.min)}</td>
-                    <td className="py-1 font-mono">{fmtMap(l.max)}</td>
-                  </tr>
+                  <TableRow key={i} className="border-t">
+                    <TableCell className="py-1 font-mono">{l.type ?? '—'}</TableCell>
+                    <TableCell className="py-1 font-mono">{fmtMap(l.default)}</TableCell>
+                    <TableCell className="py-1 font-mono">{fmtMap(l.defaultRequest)}</TableCell>
+                    <TableCell className="py-1 font-mono">{fmtMap(l.min)}</TableCell>
+                    <TableCell className="py-1 font-mono">{fmtMap(l.max)}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         );
       })}
@@ -405,23 +397,23 @@ export default function ClusterResourcesPage() {
   const { id } = useParams<{ id: string }>();
 
   const ingressClassesQ = useQuery({
-    queryKey: qk.ingressClasses(id),
+    queryKey: queryKeys.clusterPages.mirroredIngressClasses(id),
     queryFn: () => listMirroredIngressClasses(id),
   });
   const gatewayClassesQ = useQuery({
-    queryKey: qk.gatewayClasses(id),
+    queryKey: queryKeys.clusterPages.mirroredGatewayClasses(id),
     queryFn: () => listMirroredGatewayClasses(id),
   });
   const networkPoliciesQ = useQuery({
-    queryKey: qk.networkPolicies(id),
+    queryKey: queryKeys.clusterPages.mirroredNetworkPolicies(id),
     queryFn: () => listMirroredNetworkPolicies(id),
   });
   const resourceQuotasQ = useQuery({
-    queryKey: qk.resourceQuotas(id),
+    queryKey: queryKeys.clusterPages.mirroredResourceQuotas(id),
     queryFn: () => listMirroredResourceQuotas(id),
   });
   const limitRangesQ = useQuery({
-    queryKey: qk.limitRanges(id),
+    queryKey: queryKeys.clusterPages.mirroredLimitRanges(id),
     queryFn: () => listMirroredLimitRanges(id),
   });
 

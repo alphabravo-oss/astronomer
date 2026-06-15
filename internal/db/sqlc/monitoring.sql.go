@@ -186,45 +186,6 @@ func (q *Queries) GetDefaultMonitoringBackend(ctx context.Context) (MonitoringBa
 	return i, err
 }
 
-const listMonitoringBackends = `-- name: ListMonitoringBackends :many
-SELECT id, name, backend_type, query_url, alertmanager_url, tenant_id, auth_type, auth_config, default_step_seconds, timeout_seconds, is_default, created_by_id, created_at, updated_at FROM monitoring_backends ORDER BY created_at DESC
-`
-
-func (q *Queries) ListMonitoringBackends(ctx context.Context) ([]MonitoringBackend, error) {
-	rows, err := q.db.Query(ctx, listMonitoringBackends)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []MonitoringBackend{}
-	for rows.Next() {
-		var i MonitoringBackend
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.BackendType,
-			&i.QueryUrl,
-			&i.AlertmanagerUrl,
-			&i.TenantID,
-			&i.AuthType,
-			&i.AuthConfig,
-			&i.DefaultStepSeconds,
-			&i.TimeoutSeconds,
-			&i.IsDefault,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const upsertClusterMonitoringConfig = `-- name: UpsertClusterMonitoringConfig :one
 INSERT INTO cluster_monitoring_configs (
     cluster_id,

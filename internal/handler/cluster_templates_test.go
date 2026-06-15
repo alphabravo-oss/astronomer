@@ -32,6 +32,7 @@ type fakeClusterTemplateQuerier struct {
 	applications map[uuid.UUID]sqlc.ClusterTemplateApplication
 	clusters     map[uuid.UUID]sqlc.Cluster
 	policies     map[uuid.UUID]sqlc.ClusterRegistrationPolicy
+	audits       []sqlc.CreateAuditLogV1Params
 }
 
 type fakeAtomicClusterTemplateQuerier struct {
@@ -176,7 +177,7 @@ func (f *fakeClusterTemplateQuerier) UpsertClusterTemplateApplication(_ context.
 
 func (f *fakeAtomicClusterTemplateQuerier) UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error) {
 	f.atomicApps = append(f.atomicApps, arg)
-	return f.fakeClusterTemplateQuerier.UpsertClusterTemplateApplication(ctx, sqlc.UpsertClusterTemplateApplicationParams{
+	return f.UpsertClusterTemplateApplication(ctx, sqlc.UpsertClusterTemplateApplicationParams{
 		ClusterID:    arg.ClusterID,
 		TemplateID:   arg.TemplateID,
 		SpecSnapshot: arg.SpecSnapshot,
@@ -219,6 +220,23 @@ func (f *fakeClusterTemplateQuerier) DeleteClusterRegistrationPolicy(_ context.C
 	defer f.mu.Unlock()
 	delete(f.policies, clusterID)
 	return nil
+}
+
+func (f *fakeClusterTemplateQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
+	return nil
+}
+
+func (f *fakeClusterTemplateQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.audits) <= idx {
+		t.Fatalf("audit rows=%d, want index %d", len(f.audits), idx)
+	}
+	return f.audits[idx]
 }
 
 // fakePGError mirrors the surface CreateClusterTemplate returns on a
@@ -428,6 +446,11 @@ func TestClusterTemplate_ApplyAndStatus(t *testing.T) {
 	if cap.count == 0 {
 		t.Errorf("apply did not enqueue a task")
 	}
+	applyAudit := q.auditRowAt(t, 0)
+	if applyAudit.Action != "cluster.template_applied" || applyAudit.ResourceType != "cluster" || applyAudit.ResourceID != clusterID.String() || applyAudit.ResourceName != "demo" {
+		t.Fatalf("apply audit row=%+v, want cluster.template_applied on cluster %s", applyAudit, clusterID)
+	}
+	assertAuditDetail(t, applyAudit.Detail, "template_id", tmplID.String())
 
 	// Status endpoint should return pending.
 	rec = httptest.NewRecorder()
@@ -473,6 +496,10 @@ func TestClusterTemplate_ApplyAndStatus(t *testing.T) {
 	}
 	if _, ok := q.applications[clusterID]; ok {
 		t.Errorf("application row not deleted")
+	}
+	detachAudit := q.auditRowAt(t, 2)
+	if detachAudit.Action != "cluster.template_detached" || detachAudit.ResourceType != "cluster" || detachAudit.ResourceID != clusterID.String() || detachAudit.ResourceName != "demo" {
+		t.Fatalf("detach audit row=%+v, want cluster.template_detached on cluster %s", detachAudit, clusterID)
 	}
 }
 

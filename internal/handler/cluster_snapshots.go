@@ -463,7 +463,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 	// through to a NULL expires_at (the cleanup worker simply leaves
 	// it alone — no-op rather than crash).
 	expiresAt := pgtype.Timestamptz{}
-	if d, ok := parseDuration(spec.TTL); ok {
+	if d, ok := parseSnapshotTTLDuration(spec.TTL); ok {
 		expiresAt = pgtype.Timestamptz{Time: time.Now().Add(d), Valid: true}
 	}
 
@@ -1069,10 +1069,10 @@ func validVeleroResourceName(s string) bool {
 	return true
 }
 
-// parseDuration parses a Velero-style TTL string ("168h", "30m"). Returns
+// parseSnapshotTTLDuration parses a Velero-style TTL string ("168h", "30m"). Returns
 // (0, false) when the input is empty or unparseable so the caller can
 // fall through to leaving expires_at NULL.
-func parseDuration(s string) (time.Duration, bool) {
+func parseSnapshotTTLDuration(s string) (time.Duration, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, false

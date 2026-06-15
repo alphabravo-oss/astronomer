@@ -59,6 +59,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 )
 
 // FleetOrchestrateType is the asynq task type. The scheduler enqueues
@@ -91,19 +92,19 @@ const fleetOrchestratePendingTargetsPerTick = 50
 // ─────────────────────────────────────────────────────────────────────
 
 const (
-	FleetOpStatusPending   = "pending"
-	FleetOpStatusRunning   = "running"
+	FleetOpStatusPending   = operationstate.Pending
+	FleetOpStatusRunning   = operationstate.Running
 	FleetOpStatusPaused    = "paused"
-	FleetOpStatusCompleted = "completed"
-	FleetOpStatusFailed    = "failed"
+	FleetOpStatusCompleted = operationstate.Completed
+	FleetOpStatusFailed    = operationstate.Failed
 	FleetOpStatusAborted   = "aborted"
 )
 
 const (
-	FleetTargetStatusPending   = "pending"
-	FleetTargetStatusRunning   = "running"
-	FleetTargetStatusCompleted = "completed"
-	FleetTargetStatusFailed    = "failed"
+	FleetTargetStatusPending   = operationstate.Pending
+	FleetTargetStatusRunning   = operationstate.Running
+	FleetTargetStatusCompleted = operationstate.Completed
+	FleetTargetStatusFailed    = operationstate.Failed
 	FleetTargetStatusSkipped   = "skipped"
 	FleetTargetStatusAborted   = "aborted"
 )
@@ -119,13 +120,13 @@ const (
 // Operation types the orchestrator knows how to dispatch in this
 // slice. The handler validates against this list at create time.
 const (
-	FleetOpTypeToolUpgrade       = "tool_upgrade"
-	FleetOpTypeToolInstall       = "tool_install"
-	FleetOpTypeToolUninstall     = "tool_uninstall"
-	FleetOpTypeApplyTemplate     = "apply_template"
-	FleetOpTypeDrainNamespaces   = "drain_namespaces"
-	FleetOpTypeRotateAgentToken  = "rotate_agent_token"
-	FleetOpTypeCustomHelm        = "custom_helm"
+	FleetOpTypeToolUpgrade      = "tool_upgrade"
+	FleetOpTypeToolInstall      = "tool_install"
+	FleetOpTypeToolUninstall    = "tool_uninstall"
+	FleetOpTypeApplyTemplate    = "apply_template"
+	FleetOpTypeDrainNamespaces  = "drain_namespaces"
+	FleetOpTypeRotateAgentToken = "rotate_agent_token"
+	FleetOpTypeCustomHelm       = "custom_helm"
 )
 
 // ─────────────────────────────────────────────────────────────────────
@@ -453,9 +454,10 @@ func completeOperationNoTargets(ctx context.Context, deps FleetOrchestrateDeps, 
 // ─────────────────────────────────────────────────────────────────────
 
 // tickRunningFleetOperation does three things per call:
-//   1. Poll every running target's sub-operation; propagate terminal.
-//   2. Decide whether to abort based on on_error policy.
-//   3. Dispatch up to (max_concurrent - running) pending targets.
+//  1. Poll every running target's sub-operation; propagate terminal.
+//  2. Decide whether to abort based on on_error policy.
+//  3. Dispatch up to (max_concurrent - running) pending targets.
+//
 // After each transition we refresh the aggregate counters on the
 // operation row so the read endpoints don't have to GROUP BY.
 func tickRunningFleetOperation(ctx context.Context, deps FleetOrchestrateDeps, op sqlc.FleetOperation) error {
@@ -538,10 +540,10 @@ func pollFleetTarget(ctx context.Context, deps FleetOrchestrateDeps, op sqlc.Fle
 			return err
 		}
 		switch subOp.Status {
-		case "completed":
+		case operationstate.Completed:
 			_, err := deps.Queries.MarkFleetTargetCompleted(ctx, target.ID)
 			return err
-		case "failed", "superseded":
+		case operationstate.Failed, operationstate.Superseded:
 			_, err := deps.Queries.MarkFleetTargetFailed(ctx, sqlc.MarkFleetTargetFailedParams{
 				ID:        target.ID,
 				LastError: nonEmpty(subOp.ErrorMessage, subOp.Status),
@@ -618,7 +620,7 @@ func dispatchPendingFleetTargets(ctx context.Context, deps FleetOrchestrateDeps,
 
 	pending, err := deps.Queries.ListPendingTargetsForOperation(ctx, sqlc.ListPendingTargetsForOperationParams{
 		OperationID: op.ID,
-		QueryLimit:  fleetOrchestratePendingTargetsPerTick,
+		Limit:       fleetOrchestratePendingTargetsPerTick,
 	})
 	if err != nil {
 		return fmt.Errorf("list pending targets: %w", err)
@@ -742,7 +744,7 @@ func failOperation(ctx context.Context, deps FleetOrchestrateDeps, op sqlc.Fleet
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("fail operation: %w", err)
 	}
-	fleetOperationsTotal.WithLabelValues(observability.MetricValues(op.OperationType, "failed")...).Inc()
+	fleetOperationsTotal.WithLabelValues(observability.MetricValues(op.OperationType, FleetOpStatusFailed)...).Inc()
 	return nil
 }
 

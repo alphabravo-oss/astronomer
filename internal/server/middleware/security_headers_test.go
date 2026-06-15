@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,6 +46,28 @@ func TestSecurityHeadersPreservesHandlerOverrides(t *testing.T) {
 	})).ServeHTTP(rec, req)
 
 	assertHeader(t, rec, "Content-Security-Policy", "default-src 'none'")
+}
+
+func TestRequestIsHTTPS(t *testing.T) {
+	if RequestIsHTTPS(nil) {
+		t.Fatal("nil request should not be HTTPS")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	if RequestIsHTTPS(req) {
+		t.Fatal("plain request should not be HTTPS")
+	}
+
+	req.TLS = &tls.ConnectionState{}
+	if !RequestIsHTTPS(req) {
+		t.Fatal("TLS request should be HTTPS")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if !RequestIsHTTPS(req) {
+		t.Fatal("X-Forwarded-Proto=https should be HTTPS")
+	}
 }
 
 func assertHeader(t *testing.T, rec *httptest.ResponseRecorder, key, want string) {

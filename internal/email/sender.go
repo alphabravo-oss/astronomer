@@ -28,17 +28,17 @@ var SingletonSettingsID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 // column is decrypted INTO Password before Send runs; callers MUST NOT
 // log Password.
 type Settings struct {
-	Enabled        bool
-	Host           string
-	Port           int
-	Username       string
-	Password       string
-	FromAddress    string
-	FromName       string
-	AuthMechanism  string // "plain" | "login" | "cram-md5" | "none"
-	Encryption     string // "starttls" | "tls" | "none"
-	RequireTLS     bool
-	Timeout        time.Duration
+	Enabled       bool
+	Host          string
+	Port          int
+	Username      string
+	Password      string
+	FromAddress   string
+	FromName      string
+	AuthMechanism string // "plain" | "login" | "cram-md5" | "none"
+	Encryption    string // "starttls" | "tls" | "none"
+	RequireTLS    bool
+	Timeout       time.Duration
 }
 
 // Addr returns the host:port the dialer connects to.
@@ -270,7 +270,7 @@ func (s *Sender) Send(ctx context.Context, msg Message) error {
 	}
 
 	if authMech := strings.ToLower(cfg.AuthMechanism); authMech != "" && authMech != "none" && cfg.Username != "" {
-		a, err := buildAuth(authMech, cfg.Username, cfg.Password, cfg.Host)
+		a, err := buildSMTPAuth(authMech, cfg.Username, cfg.Password, cfg.Host)
 		if err != nil {
 			return fmt.Errorf("smtp auth: %w", err)
 		}
@@ -330,10 +330,10 @@ func localHostname() string {
 	return "astronomer-go"
 }
 
-// buildAuth maps the configured mechanism string to a net/smtp Auth.
+// buildSMTPAuth maps the configured mechanism string to a net/smtp Auth.
 // CRAM-MD5 is supported because some enterprise relays still require
 // it; LOGIN is the legacy ESMTP base64 dance.
-func buildAuth(mech, user, pass, host string) (smtp.Auth, error) {
+func buildSMTPAuth(mech, user, pass, host string) (smtp.Auth, error) {
 	switch mech {
 	case "plain":
 		return smtp.PlainAuth("", user, pass, host), nil
@@ -413,12 +413,12 @@ func realDialer(ctx context.Context, addr string, tlsConfig *tls.Config, useTLS 
 // not auto-widen io.WriteCloser to our anonymous interface).
 type smtpClientWrapper struct{ c *smtp.Client }
 
-func (w *smtpClientWrapper) Hello(localName string) error { return w.c.Hello(localName) }
-func (w *smtpClientWrapper) StartTLS(cfg *tls.Config) error { return w.c.StartTLS(cfg) }
+func (w *smtpClientWrapper) Hello(localName string) error        { return w.c.Hello(localName) }
+func (w *smtpClientWrapper) StartTLS(cfg *tls.Config) error      { return w.c.StartTLS(cfg) }
 func (w *smtpClientWrapper) Extension(ext string) (bool, string) { return w.c.Extension(ext) }
-func (w *smtpClientWrapper) Auth(a smtp.Auth) error { return w.c.Auth(a) }
-func (w *smtpClientWrapper) Mail(from string) error { return w.c.Mail(from) }
-func (w *smtpClientWrapper) Rcpt(to string) error { return w.c.Rcpt(to) }
+func (w *smtpClientWrapper) Auth(a smtp.Auth) error              { return w.c.Auth(a) }
+func (w *smtpClientWrapper) Mail(from string) error              { return w.c.Mail(from) }
+func (w *smtpClientWrapper) Rcpt(to string) error                { return w.c.Rcpt(to) }
 func (w *smtpClientWrapper) Data() (writeCloser, error) {
 	wc, err := w.c.Data()
 	if err != nil {

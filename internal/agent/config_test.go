@@ -40,6 +40,9 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.HealthAddr != ":8081" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":8081")
 	}
+	if cfg.PrivilegeProfile != "admin" {
+		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "admin")
+	}
 	if cfg.TokenSecretName != "astronomer-agent-token" {
 		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "astronomer-agent-token")
 	}
@@ -58,6 +61,7 @@ func TestLoadAgentConfig_CustomValues(t *testing.T) {
 	t.Setenv("ASTRONOMER_HEARTBEAT_INTERVAL", "15")
 	t.Setenv("ASTRONOMER_METRICS_INTERVAL", "120")
 	t.Setenv("ASTRONOMER_HEALTH_ADDR", ":9090")
+	t.Setenv("ASTRONOMER_PRIVILEGE_PROFILE", "operator")
 	t.Setenv("ASTRONOMER_TOKEN_SECRET_NAME", "custom-secret")
 	t.Setenv("ASTRONOMER_TOKEN_SECRET_KEY", "agent-token")
 
@@ -83,6 +87,9 @@ func TestLoadAgentConfig_CustomValues(t *testing.T) {
 	}
 	if cfg.HealthAddr != ":9090" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":9090")
+	}
+	if cfg.PrivilegeProfile != "operator" {
+		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "operator")
 	}
 	if cfg.TokenSecretName != "custom-secret" {
 		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "custom-secret")
@@ -129,7 +136,7 @@ func TestLoadAgentConfig_MissingRequired(t *testing.T) {
 				"ASTRONOMER_AGENT_TOKEN",
 				"ASTRONOMER_AGENT_ID",
 			} {
-				os.Unsetenv(key)
+				_ = os.Unsetenv(key)
 			}
 
 			for k, v := range tt.envVars {

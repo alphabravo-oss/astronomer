@@ -6,11 +6,13 @@
 // token minted inside the destination cluster (Astronomer doesn't store
 // these; the operator pastes one here per registration).
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { X, Loader2, Server } from 'lucide-react';
+import { toastApiError, toastSuccess } from '@/lib/toast';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { Loader2, Server } from 'lucide-react';
 import { registerArgoManagedCluster } from '@/lib/api';
+import { queryKeys } from '@/lib/hooks';
 import type { Cluster } from '@/types';
 
 interface RegisterManagedClusterDialogProps {
@@ -33,6 +35,20 @@ function parseLabels(text: string): Record<string, string> {
   return out;
 }
 
+function reservedArgoLabelKey(key: string): boolean {
+  const trimmed = key.trim();
+  return (
+    trimmed === 'astronomer.io' ||
+    trimmed === 'argocd.argoproj.io' ||
+    trimmed.startsWith('astronomer.io/') ||
+    trimmed.startsWith('argocd.argoproj.io/')
+  );
+}
+
+function firstReservedLabel(labels: Record<string, string>): string | null {
+  return Object.keys(labels).find(reservedArgoLabelKey) ?? null;
+}
+
 export function RegisterManagedClusterDialog({
   instanceId,
   cluster,
@@ -41,52 +57,69 @@ export function RegisterManagedClusterDialog({
   const queryClient = useQueryClient();
   const [bearerToken, setBearerToken] = useState('');
   const [insecure, setInsecure] = useState(false);
-  const [labelsText, setLabelsText] = useState(
-    `astronomer.io/environment=${cluster.environment}`,
-  );
+  const [labelsText, setLabelsText] = useState('');
+  const parsedLabels = useMemo(() => parseLabels(labelsText), [labelsText]);
+  const reservedLabel = useMemo(() => firstReservedLabel(parsedLabels), [parsedLabels]);
 
   const register = useMutation({
-    mutationFn: () =>
-      registerArgoManagedCluster(instanceId, cluster.id, {
+    mutationFn: () => {
+      if (reservedLabel) {
+        throw new Error(`Reserved label: ${reservedLabel}`);
+      }
+      return registerArgoManagedCluster(instanceId, cluster.id, {
         bearer_token: bearerToken,
         insecure,
-        labels: parseLabels(labelsText),
-      }),
+        labels: parsedLabels,
+      });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'managed-clusters', instanceId] });
-      toast.success(`${cluster.displayName} registered into ArgoCD`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.managedClusters(instanceId) });
+      toastSuccess(`${cluster.displayName} registered into ArgoCD`);
       onClose();
     },
     onError: (error: Error) => {
-      toast.error(`Registration failed: ${error.message}`);
+      toastApiError('Registration failed', error);
     },
   });
 
   const isLocalCluster = cluster.name === 'local';
-  const canSubmit = (bearerToken.trim() !== '') || insecure;
+  const hasRegistrationCredential = bearerToken.trim() !== '' || insecure;
+  const canSubmit = !reservedLabel && (isLocalCluster || hasRegistrationCredential);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-              <Server className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground">
-              Register {cluster.displayName}
-            </h3>
-          </div>
+    <ModalShell
+      title={`Register ${cluster.displayName}`}
+      onClose={onClose}
+      panelClassName="max-w-lg bg-popover overflow-hidden"
+      footerClassName="bg-muted/30"
+      titleIcon={(
+        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+          <Server className="h-4 w-4 text-muted-foreground" />
+        </div>
+      )}
+      footer={(
+        <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            disabled={register.isPending}
+            className="inline-flex items-center h-8 px-3 rounded text-sm
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
-            <X className="h-5 w-5" />
+            Cancel
+          </button>
+          <button
+            onClick={() => register.mutate()}
+            disabled={!canSubmit || register.isPending}
+            className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
+              bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
+              disabled:opacity-50"
+          >
+            {register.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Register
           </button>
         </div>
-
-        <div className="p-6 space-y-4">
+      )}
+    >
           <p className="text-xs text-muted-foreground">
             Stamps a Cluster Secret in the upstream ArgoCD instance so it can deploy
             applications to <span className="font-mono text-foreground">{cluster.name}</span>.
@@ -133,33 +166,14 @@ export function RegisterManagedClusterDialog({
                 focus:outline-none focus:ring-1 focus:ring-ring"
             />
             <p className="text-xs text-muted-foreground">
-              ApplicationSet cluster generators select on these labels. The astronomer.io/cluster-id
-              and astronomer.io/cluster-name labels are added automatically.
+              Use non-reserved labels. Astronomer and Argo CD labels are added automatically.
             </p>
+            {reservedLabel && (
+              <p className="text-xs text-status-error">
+                Reserved label: <code>{reservedLabel}</code>
+              </p>
+            )}
           </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
-          <button
-            onClick={onClose}
-            disabled={register.isPending}
-            className="inline-flex items-center h-8 px-3 rounded text-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => register.mutate()}
-            disabled={(!isLocalCluster && !canSubmit) || register.isPending}
-            className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
-              bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-              disabled:opacity-50"
-          >
-            {register.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Register
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

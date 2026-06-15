@@ -14,9 +14,10 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { isSuperuser as hasSuperuserAccess } from '@/lib/permissions';
 import type {
   GroupMappingWriteRequest,
   QuotaPlanWriteRequest,
@@ -32,17 +33,16 @@ import type {
 /**
  * Whether the current user is allowed to see admin-only settings pages.
  *
- * The User type currently exposes `globalRoles: string[]`; presence of the
- * `admin` or `superuser` role gates the page. The backend already returns
- * 403 for non-admins, so this is purely a UX nicety to avoid the empty
- * loading-then-error flash.
+ * The backend marks bootstrap and platform administrators with `is_superuser`
+ * while some older frontend/session shapes used `isSuperuser` or global role
+ * labels. Use the shared permission helper so every admin-only settings page
+ * accepts the same user shapes as the rest of the application.
  */
 export function useIsSuperuser(): { isSuperuser: boolean; ready: boolean } {
   const user = useAuthStore((s) => s.user);
   if (!user) return { isSuperuser: false, ready: false };
-  const roles = user.globalRoles ?? [];
   return {
-    isSuperuser: roles.includes('admin') || roles.includes('superuser'),
+    isSuperuser: hasSuperuserAccess(user),
     ready: true,
   };
 }
@@ -92,10 +92,10 @@ export function useSavePlatformSettings() {
       api.savePlatformSettingsBatch(updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.platform });
-      toast.success('Platform settings saved');
+      toastSuccess('Platform settings saved');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to save settings: ${err.message}`);
+      toastApiError('Failed to save settings', err);
     },
   });
 }
@@ -117,10 +117,10 @@ export function useUpdateSmtpConfig() {
     mutationFn: (body: Partial<SmtpConfig>) => api.updateSmtpConfig(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.smtp });
-      toast.success('SMTP configuration saved');
+      toastSuccess('SMTP configuration saved');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to save SMTP config: ${err.message}`);
+      toastApiError('Failed to save SMTP config', err);
     },
   });
 }
@@ -130,13 +130,13 @@ export function useTestSmtp() {
     mutationFn: (body: SmtpTestRequest) => api.testSmtpConfig(body),
     onSuccess: (result) => {
       if (result.success) {
-        toast.success(`Test email sent in ${result.durationMs}ms`);
+        toastSuccess(`Test email sent in ${result.durationMs}ms`);
       } else {
-        toast.error(`Test failed: ${result.message}`);
+        toastApiError('Test failed', result.message);
       }
     },
     onError: (err: Error) => {
-      toast.error(`SMTP test failed: ${err.message}`);
+      toastApiError('SMTP test failed', err);
     },
   });
 }
@@ -173,10 +173,10 @@ export function useCreateWebhook() {
     mutationFn: (body: WebhookWriteRequest) => api.createWebhook(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.webhooks });
-      toast.success('Webhook created');
+      toastSuccess('Webhook created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create webhook: ${err.message}`);
+      toastApiError('Failed to create webhook', err);
     },
   });
 }
@@ -189,10 +189,10 @@ export function useUpdateWebhook() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: settingsKeys.webhooks });
       qc.invalidateQueries({ queryKey: settingsKeys.webhook(vars.id) });
-      toast.success('Webhook updated');
+      toastSuccess('Webhook updated');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to update webhook: ${err.message}`);
+      toastApiError('Failed to update webhook', err);
     },
   });
 }
@@ -203,10 +203,10 @@ export function useDeleteWebhook() {
     mutationFn: (id: string) => api.deleteWebhook(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.webhooks });
-      toast.success('Webhook deleted');
+      toastSuccess('Webhook deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to delete webhook: ${err.message}`);
+      toastApiError('Failed to delete webhook', err);
     },
   });
 }
@@ -215,7 +215,7 @@ export function useTestWebhook() {
   return useMutation({
     mutationFn: (id: string) => api.testWebhook(id),
     onError: (err: Error) => {
-      toast.error(`Webhook test failed: ${err.message}`);
+      toastApiError('Webhook test failed', err);
     },
   });
 }
@@ -240,10 +240,10 @@ export function useRetryWebhookDelivery(webhookId: string) {
       qc.invalidateQueries({
         queryKey: ['settings', 'webhooks', webhookId, 'deliveries'],
       });
-      toast.success('Delivery re-queued');
+      toastSuccess('Delivery re-queued');
     },
     onError: (err: Error) => {
-      toast.error(`Retry failed: ${err.message}`);
+      toastApiError('Retry failed', err);
     },
   });
 }
@@ -273,10 +273,10 @@ export function useCreateQuotaPlan() {
     mutationFn: (body: QuotaPlanWriteRequest) => api.createQuotaPlan(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.quotas });
-      toast.success('Quota plan created');
+      toastSuccess('Quota plan created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create plan: ${err.message}`);
+      toastApiError('Failed to create plan', err);
     },
   });
 }
@@ -289,10 +289,10 @@ export function useUpdateQuotaPlan() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: settingsKeys.quotas });
       qc.invalidateQueries({ queryKey: settingsKeys.quota(vars.name) });
-      toast.success('Quota plan saved');
+      toastSuccess('Quota plan saved');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to save plan: ${err.message}`);
+      toastApiError('Failed to save plan', err);
     },
   });
 }
@@ -303,10 +303,10 @@ export function useDeleteQuotaPlan() {
     mutationFn: (name: string) => api.deleteQuotaPlan(name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.quotas });
-      toast.success('Quota plan deleted');
+      toastSuccess('Quota plan deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to delete plan: ${err.message}`);
+      toastApiError('Failed to delete plan', err);
     },
   });
 }
@@ -338,10 +338,10 @@ export function useCreateGroupMapping() {
     mutationFn: (body: GroupMappingWriteRequest) => api.createGroupMapping(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.groupMappings });
-      toast.success('Group mapping created');
+      toastSuccess('Group mapping created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create mapping: ${err.message}`);
+      toastApiError('Failed to create mapping', err);
     },
   });
 }
@@ -352,10 +352,10 @@ export function useDeleteGroupMapping() {
     mutationFn: (id: string) => api.deleteGroupMapping(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.groupMappings });
-      toast.success('Group mapping deleted');
+      toastSuccess('Group mapping deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to delete mapping: ${err.message}`);
+      toastApiError('Failed to delete mapping', err);
     },
   });
 }
@@ -364,10 +364,10 @@ export function useResyncUserGroups() {
   return useMutation({
     mutationFn: (userId: string) => api.resyncUserGroups(userId),
     onSuccess: (result) => {
-      toast.success(`Synced ${result.synced} group(s)`);
+      toastSuccess(`Synced ${result.synced} group(s)`);
     },
     onError: (err: Error) => {
-      toast.error(`Resync failed: ${err.message}`);
+      toastApiError('Resync failed', err);
     },
   });
 }
@@ -424,10 +424,10 @@ export function useCreateGitOpsSource() {
       api.createGitOpsSource(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
-      toast.success('GitOps source created');
+      toastSuccess('GitOps source created');
     },
     onError: (err: Error) => {
-      toast.error(`Create failed: ${err.message}`);
+      toastApiError('Create failed', err);
     },
   });
 }
@@ -445,10 +445,10 @@ export function useUpdateGitOpsSource() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSource(vars.id) });
-      toast.success('GitOps source updated');
+      toastSuccess('GitOps source updated');
     },
     onError: (err: Error) => {
-      toast.error(`Update failed: ${err.message}`);
+      toastApiError('Update failed', err);
     },
   });
 }
@@ -459,10 +459,10 @@ export function useDeleteGitOpsSource() {
     mutationFn: (id: string) => api.deleteGitOpsSource(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSources });
-      toast.success('GitOps source deleted');
+      toastSuccess('GitOps source deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Delete failed: ${err.message}`);
+      toastApiError('Delete failed', err);
     },
   });
 }
@@ -474,10 +474,10 @@ export function useSyncGitOpsSource() {
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsSource(id) });
       qc.invalidateQueries({ queryKey: settingsKeys.gitopsClusters(id) });
-      toast.success('Sync triggered');
+      toastSuccess('Sync triggered');
     },
     onError: (err: Error) => {
-      toast.error(`Sync failed: ${err.message}`);
+      toastApiError('Sync failed', err);
     },
   });
 }
@@ -486,7 +486,7 @@ export function usePreviewGitOpsSource() {
   return useMutation({
     mutationFn: (id: string) => api.previewGitOpsSource(id),
     onError: (err: Error) => {
-      toast.error(`Preview failed: ${err.message}`);
+      toastApiError('Preview failed', err);
     },
   });
 }

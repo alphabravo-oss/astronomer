@@ -93,7 +93,7 @@ func (q *Queries) UpdateClusterRegistrationStepWithTaskOutbox(ctx context.Contex
 		&s.Label,
 		&s.Status,
 		&s.ProgressPct,
-		&s.DetailJSON,
+		&s.DetailJson,
 		&s.StartedAt,
 		&s.CompletedAt,
 		&s.ErrorMessage,

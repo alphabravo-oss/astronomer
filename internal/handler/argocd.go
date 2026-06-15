@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
@@ -46,8 +47,8 @@ const (
 	argocdApplicationControllerSA     = "argocd-application-controller"
 	localArgoCDTokenDuration          = 24 * time.Hour
 	localArgoCDTokenRefreshWindow     = 2 * time.Hour
-	argocdClusterSecretTypeLabelKey   = "argocd.argoproj.io/secret-type"
-	argocdClusterSecretTypeLabelValue = "cluster"
+	argocdClusterSecretTypeLabelKey   = argolabels.ArgoCDClusterSecretTypeLabel
+	argocdClusterSecretTypeLabelValue = argolabels.ArgoCDClusterSecretTypeValue
 )
 
 // ArgoCDQuerier abstracts the ArgoCD-related database queries needed by ArgoCDHandler.
@@ -218,18 +219,34 @@ func (h *ArgoCDHandler) resolveAuthToken(req CreateArgoCDInstanceRequest) (strin
 }
 
 type argocdOperationEnvelope struct {
-	ApplicationID string                    `json:"applicationId,omitempty"`
-	InstanceID    string                    `json:"instanceId,omitempty"`
-	SyncOptions   *argocdclient.SyncOptions `json:"syncOptions,omitempty"`
+	ApplicationID      string                    `json:"applicationId,omitempty"`
+	InstanceID         string                    `json:"instanceId,omitempty"`
+	SyncOptions        *argocdclient.SyncOptions `json:"syncOptions,omitempty"`
+	Reason             string                    `json:"reason,omitempty"`
+	SyncWindowOverride bool                      `json:"syncWindowOverride,omitempty"`
 }
 
 // SyncRequest is the JSON body accepted by POST /argocd/apps/{id}/sync/.
 // All fields are optional — an empty body is a "sync at targetRevision,
 // no prune, not a dry run" request.
 type SyncRequest struct {
-	Revision string `json:"revision,omitempty"`
-	Prune    bool   `json:"prune,omitempty"`
-	DryRun   bool   `json:"dry_run,omitempty"`
+	Revision           string `json:"revision,omitempty"`
+	Prune              bool   `json:"prune,omitempty"`
+	DryRun             bool   `json:"dry_run,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	SyncWindowOverride bool   `json:"sync_window_override,omitempty"`
+}
+
+func normalizeSyncRequest(req SyncRequest) (SyncRequest, error) {
+	req.Revision = strings.TrimSpace(req.Revision)
+	req.Reason = strings.TrimSpace(req.Reason)
+	if len(req.Reason) > 500 {
+		return req, fmt.Errorf("reason must be 500 characters or fewer")
+	}
+	if req.SyncWindowOverride && req.Reason == "" {
+		return req, fmt.Errorf("sync_window_override requires a reason")
+	}
+	return req, nil
 }
 
 func (h *ArgoCDHandler) SetLogger(log *slog.Logger) {
@@ -571,22 +588,29 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	req, err = normalizeSyncRequest(req)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 
 	op, err := h.enqueueSyncOperation(withOperationIdempotency(r, "argocd"), app, currentUserUUID(r), argocdclient.SyncOptions{
 		Revision: req.Revision,
 		Prune:    req.Prune,
 		DryRun:   req.DryRun,
-	})
+	}, req.Reason, req.SyncWindowOverride)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", "Failed to enqueue ArgoCD sync")
 		return
 	}
 	recordAudit(r, h.queries, "argocd.app.sync", "argocd_application", app.ID.String(), app.Name, map[string]any{
-		"instance_id":  app.ArgocdInstanceID.String(),
-		"revision":     req.Revision,
-		"prune":        req.Prune,
-		"dry_run":      req.DryRun,
-		"operation_id": op.ID.String(),
+		"instance_id":          app.ArgocdInstanceID.String(),
+		"revision":             req.Revision,
+		"prune":                req.Prune,
+		"dry_run":              req.DryRun,
+		"sync_window_override": req.SyncWindowOverride,
+		"override_reason":      req.Reason,
+		"operation_id":         op.ID.String(),
 	})
 	RespondJSON(w, http.StatusAccepted, argocdOperationResponse(op))
 }
@@ -759,7 +783,9 @@ func (h *ArgoCDHandler) callInstance(ctx context.Context, instance sqlc.ArgocdIn
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("argocd API returned status %d", resp.StatusCode)
 	}
@@ -978,10 +1004,12 @@ func (h *ArgoCDHandler) controllerSummary(ctx context.Context) (map[string]any, 
 	}, nil
 }
 
-func (h *ArgoCDHandler) enqueueSyncOperation(ctx context.Context, app sqlc.ArgocdApplication, userID pgtype.UUID, opts argocdclient.SyncOptions) (sqlc.ArgocdOperation, error) {
+func (h *ArgoCDHandler) enqueueSyncOperation(ctx context.Context, app sqlc.ArgocdApplication, userID pgtype.UUID, opts argocdclient.SyncOptions, reason string, syncWindowOverride bool) (sqlc.ArgocdOperation, error) {
 	envelope := argocdOperationEnvelope{
-		ApplicationID: app.ID.String(),
-		InstanceID:    app.ArgocdInstanceID.String(),
+		ApplicationID:      app.ID.String(),
+		InstanceID:         app.ArgocdInstanceID.String(),
+		Reason:             reason,
+		SyncWindowOverride: syncWindowOverride,
 	}
 	if opts.Revision != "" || opts.Prune || opts.DryRun {
 		envelope.SyncOptions = &opts
@@ -1226,11 +1254,13 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 		return operationResult{}, fmt.Errorf("argocd instance %s is not healthy", instance.Name)
 	}
 	h.recordArgoCDOperationEvent(ctx, op.ID, "info", "sync", "calling upstream ArgoCD sync", map[string]any{
-		"applicationId": app.ID.String(),
-		"application":   app.Name,
-		"instanceId":    instance.ID.String(),
-		"instanceName":  instance.Name,
-		"apiUrl":        instance.ApiUrl,
+		"applicationId":            app.ID.String(),
+		"application":              app.Name,
+		"instanceId":               instance.ID.String(),
+		"instanceName":             instance.Name,
+		"apiUrl":                   instance.ApiUrl,
+		"syncWindowOverride":       env.SyncWindowOverride,
+		"syncWindowOverrideReason": env.Reason,
 	})
 
 	client := h.argoCDClient(instance)
@@ -1254,6 +1284,14 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 	if upstream.Status.Health.Status != "" {
 		healthStatus = upstream.Status.Health.Status
 	}
+	resourceCreatedCount := app.ResourceCreatedCount
+	resourceChangedCount := app.ResourceChangedCount
+	resourcePrunedCount := app.ResourcePrunedCount
+	if created, changed, pruned, ok := argoCDResourceDriftCountsFromApplication(upstream); ok {
+		resourceCreatedCount = created
+		resourceChangedCount = changed
+		resourcePrunedCount = pruned
+	}
 	lastSynced := app.LastSynced
 	if !res.async && res.phase == "Succeeded" {
 		lastSynced = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
@@ -1268,6 +1306,9 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 		DestinationNamespace: app.DestinationNamespace,
 		SyncStatus:           syncStatus,
 		HealthStatus:         healthStatus,
+		ResourceCreatedCount: resourceCreatedCount,
+		ResourceChangedCount: resourceChangedCount,
+		ResourcePrunedCount:  resourcePrunedCount,
 		LastSynced:           lastSynced,
 	}); updErr != nil && h.log != nil {
 		h.log.Warn("failed to update argocd application after sync", "id", app.ID.String(), "error", updErr)
@@ -1309,6 +1350,24 @@ func operationResultFromApp(app *argocdclient.Application) operationResult {
 	}
 	res.async = true
 	return res
+}
+
+func argoCDResourceDriftCountsFromApplication(app *argocdclient.Application) (created, changed, pruned int32, observed bool) {
+	if app == nil || len(app.Status.Resources) == 0 {
+		return 0, 0, 0, false
+	}
+	for _, resource := range app.Status.Resources {
+		status := normalizeArgoStatus(resource.Status)
+		switch {
+		case resource.RequiresPruning || status == "extraneous":
+			pruned++
+		case status == "missing":
+			created++
+		case status == "outofsync" || status == "modified":
+			changed++
+		}
+	}
+	return created, changed, pruned, true
 }
 
 // isTerminalArgoCDPhase reports whether a phase reported by ArgoCD's
@@ -1378,6 +1437,14 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 			continue
 		}
 		res := operationResultFromApp(upstream)
+		resourceCreatedCount := app.ResourceCreatedCount
+		resourceChangedCount := app.ResourceChangedCount
+		resourcePrunedCount := app.ResourcePrunedCount
+		if created, changed, pruned, ok := argoCDResourceDriftCountsFromApplication(upstream); ok {
+			resourceCreatedCount = created
+			resourceChangedCount = changed
+			resourcePrunedCount = pruned
+		}
 		// Reflect cached app status, regardless of phase.
 		_, _ = h.queries.UpdateArgoCDApplication(ctx, sqlc.UpdateArgoCDApplicationParams{
 			ID:                   app.ID,
@@ -1389,6 +1456,9 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 			DestinationNamespace: app.DestinationNamespace,
 			SyncStatus:           firstNonEmptyString(upstream.Status.Sync.Status, app.SyncStatus),
 			HealthStatus:         firstNonEmptyString(upstream.Status.Health.Status, app.HealthStatus),
+			ResourceCreatedCount: resourceCreatedCount,
+			ResourceChangedCount: resourceChangedCount,
+			ResourcePrunedCount:  resourcePrunedCount,
 			LastSynced:           lastSyncedFor(app, res),
 		})
 		if res.async {
@@ -1519,7 +1589,9 @@ func (h *ArgoCDHandler) probeInstance(ctx context.Context, instance sqlc.ArgocdI
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	return resp.StatusCode < http.StatusBadRequest
 }
 
@@ -1597,13 +1669,14 @@ func (h *ArgoCDHandler) upsertLocalManagedClusterRegistration(ctx context.Contex
 	if err != nil {
 		return err
 	}
-	labels := managedClusterLabels(cluster)
+	labels, err := h.managedClusterLabels(ctx, cluster)
+	if err != nil {
+		return err
+	}
 	if len(row.Labels) > 0 {
 		var existing map[string]string
 		if err := json.Unmarshal(row.Labels, &existing); err == nil {
-			for k, v := range existing {
-				labels[k] = v
-			}
+			mergeManagedClusterLabelOverrides(labels, existing)
 		}
 	}
 	reg := argocdclient.ClusterRegistration{
@@ -1672,27 +1745,29 @@ func (h *ArgoCDHandler) lookupArgoCDClusterSecret(ctx context.Context, secretNam
 // astronomerManagedByLabelKey marks the Argo cluster Secret as having been
 // stamped by Astronomer. ApplicationSet `clusters` generators can use this
 // alone to target every managed cluster, regardless of per-cluster labels.
-const astronomerManagedByLabelKey = "astronomer.io/managed-by"
+const astronomerManagedByLabelKey = argolabels.ManagedByLabelKey
 
 // astronomerManagedByLabelValue is the constant value paired with
 // astronomerManagedByLabelKey. Kept short so it survives the 63-char Kubernetes
 // label-value cap with room to spare.
-const astronomerManagedByLabelValue = "astronomer"
+const astronomerManagedByLabelValue = argolabels.ManagedByLabelValue
 
-// astronomerLabelPrefix is the namespace under which we mirror the Astronomer
-// cluster row's user-managed labels onto the Argo cluster Secret. ApplicationSet
-// selectors target these to opt clusters into bundles by cluster-side labels
-// rather than by name.
-//
-// Example: a cluster row with labels={"tier":"prod"} ends up with
-// astronomer.io/label-tier=prod on the Secret.
-const astronomerLabelPrefix = "astronomer.io/label-"
-
-// maxLabelKeyLen is the Kubernetes-enforced maximum for the *name* portion
-// of a label key (the part after the optional prefix/). Sanitization
-// truncates user-supplied keys at this length to avoid the upstream Argo API
-// rejecting the registration outright.
-const maxLabelKeyLen = 63
+const (
+	astronomerClusterIDLabelKey              = argolabels.ClusterIDLabelKey
+	astronomerClusterNameLabelKey            = argolabels.ClusterNameLabelKey
+	astronomerEnvironmentLabelKey            = argolabels.EnvironmentLabelKey
+	astronomerIsLocalLabelKey                = argolabels.IsLocalLabelKey
+	astronomerRegionLabelKey                 = argolabels.RegionLabelKey
+	astronomerProviderLabelKey               = argolabels.ProviderLabelKey
+	astronomerDistributionLabelKey           = argolabels.DistributionLabelKey
+	astronomerAgentProfileLabelKey           = argolabels.AgentProfileLabelKey
+	astronomerAgentVersionLabelKey           = argolabels.AgentVersionLabelKey
+	astronomerKubernetesVersionLabelKey      = argolabels.KubernetesVersionLabelKey
+	astronomerProjectLabelKey                = argolabels.ProjectLabelKey
+	astronomerProjectIDLabelKey              = argolabels.ProjectIDLabelKey
+	astronomerProjectMembershipLabelPrefix   = argolabels.ProjectMembershipPrefix
+	astronomerProjectIDMembershipLabelPrefix = argolabels.ProjectIDMembershipPrefix
+)
 
 // sanitizeLabelKey converts an arbitrary user-supplied label key into a form
 // the Kubernetes label-key rules accept: lowercase alphanumerics, '.', '-',
@@ -1701,75 +1776,33 @@ const maxLabelKeyLen = 63
 // reverse is not computed (operators reading the Argo Secret label see the
 // sanitized form, not the original).
 func sanitizeLabelKey(in string) string {
-	if in == "" {
-		return ""
-	}
-	out := make([]byte, 0, len(in))
-	lastDash := false
-	for i := 0; i < len(in); i++ {
-		c := in[i]
-		switch {
-		case c >= 'A' && c <= 'Z':
-			out = append(out, c+('a'-'A'))
-			lastDash = false
-		case (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-':
-			out = append(out, c)
-			lastDash = c == '-'
-		default:
-			// Replace anything else with a single '-', collapsing runs.
-			if !lastDash && len(out) > 0 {
-				out = append(out, '-')
-				lastDash = true
-			}
-		}
-	}
-	// Trim leading/trailing non-alphanumeric so the label is valid.
-	start := 0
-	for start < len(out) && !isLabelAlnum(out[start]) {
-		start++
-	}
-	end := len(out)
-	for end > start && !isLabelAlnum(out[end-1]) {
-		end--
-	}
-	out = out[start:end]
-	if len(out) > maxLabelKeyLen {
-		out = out[:maxLabelKeyLen]
-		// After truncation we may have stranded a trailing non-alphanumeric.
-		for len(out) > 0 && !isLabelAlnum(out[len(out)-1]) {
-			out = out[:len(out)-1]
-		}
-	}
-	return string(out)
+	return argolabels.SanitizeLabelKey(in)
 }
 
-func isLabelAlnum(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+func validateManagedClusterLabelOverrides(labels map[string]string) error {
+	for k := range labels {
+		if isReservedManagedClusterLabel(k) {
+			return fmt.Errorf("label %q uses a reserved Astronomer or ArgoCD prefix", k)
+		}
+	}
+	return nil
 }
 
-// applyClusterLabelsToArgoLabels copies each (k, v) from the Astronomer cluster
-// row's `labels` JSONB onto the Argo cluster Secret's label map under the
-// astronomer.io/label-<k> prefix, sanitizing k first. Existing entries in dst
-// are NOT overwritten — caller controls precedence by ordering the calls.
-func applyClusterLabelsToArgoLabels(dst map[string]string, raw json.RawMessage) {
-	if len(raw) == 0 {
-		return
-	}
-	var clusterLabels map[string]string
-	if err := json.Unmarshal(raw, &clusterLabels); err != nil {
-		return
-	}
-	for k, v := range clusterLabels {
-		key := sanitizeLabelKey(k)
-		if key == "" {
+func mergeManagedClusterLabelOverrides(dst map[string]string, labels map[string]string) {
+	for k, v := range labels {
+		if isReservedManagedClusterLabel(k) {
 			continue
 		}
-		full := astronomerLabelPrefix + key
-		if _, exists := dst[full]; exists {
-			continue
-		}
-		dst[full] = v
+		dst[k] = v
 	}
+}
+
+func isReservedManagedClusterLabel(key string) bool {
+	key = strings.TrimSpace(key)
+	return key == "astronomer.io" ||
+		key == "argocd.argoproj.io" ||
+		strings.HasPrefix(key, "astronomer.io/") ||
+		strings.HasPrefix(key, "argocd.argoproj.io/")
 }
 
 // managedClusterLabels builds the Astronomer-owned label set stamped onto the
@@ -1782,22 +1815,28 @@ func applyClusterLabelsToArgoLabels(dst map[string]string, raw json.RawMessage) 
 //   - astronomer.io/cluster-id: <uuid>             (always)
 //   - astronomer.io/cluster-name: <name>           (always)
 //   - astronomer.io/environment: <env>             (when set)
+//   - astronomer.io/region: <region>               (when set)
+//   - astronomer.io/provider: <provider>           (when set)
+//   - astronomer.io/distribution: <distribution>   (when set)
+//   - astronomer.io/agent-privilege-profile: <profile> (always)
 //   - astronomer.io/label-<sanitized-k>: <v>       (one per cluster.Labels entry)
 //
 // Sanitization rules are documented on sanitizeLabelKey. This is a one-way
 // projection; the reverse is not computed.
 func managedClusterLabels(cluster sqlc.Cluster) map[string]string {
-	labels := map[string]string{
-		astronomerManagedByLabelKey:  astronomerManagedByLabelValue,
-		"astronomer.io/cluster-id":   cluster.ID.String(),
-		"astronomer.io/cluster-name": cluster.Name,
-		"astronomer.io/is-local":     fmt.Sprintf("%t", cluster.IsLocal),
+	return argolabels.ManagedClusterLabels(cluster, nil)
+}
+
+func managedClusterLabelsForProjects(cluster sqlc.Cluster, projects []sqlc.Project) map[string]string {
+	return argolabels.ManagedClusterLabels(cluster, projects)
+}
+
+func (h *ArgoCDHandler) managedClusterLabels(ctx context.Context, cluster sqlc.Cluster) (map[string]string, error) {
+	projects, err := argolabels.ProjectsForCluster(ctx, h.queries, cluster.ID)
+	if err != nil {
+		return nil, err
 	}
-	if cluster.Environment != "" {
-		labels["astronomer.io/environment"] = cluster.Environment
-	}
-	applyClusterLabelsToArgoLabels(labels, cluster.Labels)
-	return labels
+	return managedClusterLabelsForProjects(cluster, projects), nil
 }
 
 func argoCDClusterTokenExpiry(secret *corev1.Secret) (time.Time, bool, error) {
@@ -2073,6 +2112,10 @@ func (h *ArgoCDHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
 		return
 	}
+	if err := validateArgoProjectSpec(req.Spec); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 	client := h.argoCDClient(instance)
 	out, err := client.CreateProject(r.Context(), req.Name, req.Spec)
 	if translateClientError(w, r, err) {
@@ -2111,6 +2154,10 @@ func (h *ArgoCDHandler) PatchProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, _ := io.ReadAll(r.Body)
+	if err := validateArgoProjectPatch(raw); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 	client := h.argoCDClient(instance)
 	out, err := client.PatchProject(r.Context(), name, raw)
 	if translateClientError(w, r, err) {
@@ -2174,6 +2221,10 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "at least one generator is required")
 		return
 	}
+	if err := validateApplicationSetClusterGenerators(req.Spec); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 	client := h.argoCDClient(instance)
 	out, err := client.CreateApplicationSet(r.Context(), req.Name, req.Spec)
 	if translateClientError(w, r, err) {
@@ -2184,6 +2235,51 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 		"generator_count": len(req.Spec.Generators),
 	})
 	RespondJSON(w, http.StatusCreated, out)
+}
+
+func validateApplicationSetClusterGenerators(spec argocdclient.ApplicationSetSpec) error {
+	for i, generator := range spec.Generators {
+		if err := validateApplicationSetGeneratorClusterSelector(generator, fmt.Sprintf("generators[%d]", i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateApplicationSetGeneratorClusterSelector(generator argocdclient.ApplicationSetGenerator, path string) error {
+	if generator.Cluster != nil && !selectorRequiresAstronomerManagedCluster(generator.Cluster.Selector) {
+		return fmt.Errorf("%s cluster generator must include %s=%s", path, astronomerManagedByLabelKey, astronomerManagedByLabelValue)
+	}
+	if generator.Matrix != nil {
+		for i, child := range generator.Matrix.Generators {
+			if err := validateApplicationSetGeneratorClusterSelector(child, fmt.Sprintf("%s.matrix.generators[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func selectorRequiresAstronomerManagedCluster(selector *argocdclient.LabelSelector) bool {
+	if selector == nil {
+		return false
+	}
+	if selector.MatchLabels != nil {
+		if got, ok := selector.MatchLabels[astronomerManagedByLabelKey]; ok {
+			return got == astronomerManagedByLabelValue
+		}
+	}
+	for _, expr := range selector.MatchExpressions {
+		if expr.Key != astronomerManagedByLabelKey || expr.Operator != "In" {
+			continue
+		}
+		for _, value := range expr.Values {
+			if value == astronomerManagedByLabelValue {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ListApplicationSets handles GET /api/v1/argocd/instances/{id}/applicationsets/.
@@ -2313,14 +2409,21 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "bearer_token is required (or set insecure=true with caution)")
 		return
 	}
+	if err := validateManagedClusterLabelOverrides(req.Labels); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 
 	// Stamp our own labels so ApplicationSet selectors can target by our
 	// cluster ID / name without the user needing to remember the upstream's
-	// label scheme. User-supplied labels win on key collision.
-	labels := managedClusterLabels(cluster)
-	for k, v := range req.Labels {
-		labels[k] = v
+	// label scheme. User-supplied labels may add non-reserved labels, but may
+	// not overwrite Astronomer-owned or ArgoCD-owned labels.
+	labels, err := h.managedClusterLabels(r.Context(), cluster)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "project_lookup_error", "Failed to load project labels")
+		return
 	}
+	mergeManagedClusterLabelOverrides(labels, req.Labels)
 
 	reg := argocdclient.ClusterRegistration{
 		Server: server,
@@ -2438,7 +2541,11 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	labels := managedClusterLabels(cluster)
+	labels, err := h.managedClusterLabels(r.Context(), cluster)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "project_lookup_error", "Failed to load project labels")
+		return
+	}
 	merged := mergeAstronomerManagedLabels(secret.Labels, labels)
 	if !stringMapEqual(secret.Labels, merged) {
 		patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"labels": astronomerManagedLabelsPatch(secret.Labels, labels)}})

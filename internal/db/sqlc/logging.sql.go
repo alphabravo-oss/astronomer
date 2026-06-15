@@ -13,24 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addPipelineOutput = `-- name: AddPipelineOutput :exec
-
-INSERT INTO logging_pipeline_outputs (logging_pipeline_id, logging_output_id)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-`
-
-type AddPipelineOutputParams struct {
-	LoggingPipelineID uuid.UUID `json:"logging_pipeline_id"`
-	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
-}
-
-// Pipeline <-> Output M2M
-func (q *Queries) AddPipelineOutput(ctx context.Context, arg AddPipelineOutputParams) error {
-	_, err := q.db.Exec(ctx, addPipelineOutput, arg.LoggingPipelineID, arg.LoggingOutputID)
-	return err
-}
-
 const countLoggingOutputs = `-- name: CountLoggingOutputs :one
 SELECT count(*) FROM logging_outputs
 `
@@ -199,75 +181,6 @@ func (q *Queries) GetLoggingPipelineByID(ctx context.Context, id uuid.UUID) (Log
 	return i, err
 }
 
-const listEnabledOutputsByCluster = `-- name: ListEnabledOutputsByCluster :many
-SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at FROM logging_outputs WHERE cluster_id = $1 AND enabled = true ORDER BY created_at DESC
-`
-
-func (q *Queries) ListEnabledOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]LoggingOutput, error) {
-	rows, err := q.db.Query(ctx, listEnabledOutputsByCluster, clusterID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LoggingOutput{}
-	for rows.Next() {
-		var i LoggingOutput
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.OutputType,
-			&i.Configuration,
-			&i.ClusterID,
-			&i.Enabled,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listEnabledPipelinesByCluster = `-- name: ListEnabledPipelinesByCluster :many
-SELECT id, name, cluster_id, namespaces, labels, filters, enabled, created_by_id, created_at, updated_at FROM logging_pipelines WHERE cluster_id = $1 AND enabled = true ORDER BY created_at DESC
-`
-
-func (q *Queries) ListEnabledPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) ([]LoggingPipeline, error) {
-	rows, err := q.db.Query(ctx, listEnabledPipelinesByCluster, clusterID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LoggingPipeline{}
-	for rows.Next() {
-		var i LoggingPipeline
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.ClusterID,
-			&i.Namespaces,
-			&i.Labels,
-			&i.Filters,
-			&i.Enabled,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listLoggingOutputs = `-- name: ListLoggingOutputs :many
 SELECT id, name, output_type, configuration, cluster_id, enabled, created_by_id, created_at, updated_at FROM logging_outputs ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
@@ -387,42 +300,6 @@ func (q *Queries) ListOutputsByCluster(ctx context.Context, arg ListOutputsByClu
 	return items, nil
 }
 
-const listOutputsForPipeline = `-- name: ListOutputsForPipeline :many
-SELECT lo.id, lo.name, lo.output_type, lo.configuration, lo.cluster_id, lo.enabled, lo.created_by_id, lo.created_at, lo.updated_at FROM logging_outputs lo
-INNER JOIN logging_pipeline_outputs lpo ON lo.id = lpo.logging_output_id
-WHERE lpo.logging_pipeline_id = $1
-`
-
-func (q *Queries) ListOutputsForPipeline(ctx context.Context, loggingPipelineID uuid.UUID) ([]LoggingOutput, error) {
-	rows, err := q.db.Query(ctx, listOutputsForPipeline, loggingPipelineID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LoggingOutput{}
-	for rows.Next() {
-		var i LoggingOutput
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.OutputType,
-			&i.Configuration,
-			&i.ClusterID,
-			&i.Enabled,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPipelinesByCluster = `-- name: ListPipelinesByCluster :many
 SELECT id, name, cluster_id, namespaces, labels, filters, enabled, created_by_id, created_at, updated_at FROM logging_pipelines WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
@@ -462,57 +339,6 @@ func (q *Queries) ListPipelinesByCluster(ctx context.Context, arg ListPipelinesB
 		return nil, err
 	}
 	return items, nil
-}
-
-const listPipelinesForOutput = `-- name: ListPipelinesForOutput :many
-SELECT lp.id, lp.name, lp.cluster_id, lp.namespaces, lp.labels, lp.filters, lp.enabled, lp.created_by_id, lp.created_at, lp.updated_at FROM logging_pipelines lp
-INNER JOIN logging_pipeline_outputs lpo ON lp.id = lpo.logging_pipeline_id
-WHERE lpo.logging_output_id = $1
-`
-
-func (q *Queries) ListPipelinesForOutput(ctx context.Context, loggingOutputID uuid.UUID) ([]LoggingPipeline, error) {
-	rows, err := q.db.Query(ctx, listPipelinesForOutput, loggingOutputID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LoggingPipeline{}
-	for rows.Next() {
-		var i LoggingPipeline
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.ClusterID,
-			&i.Namespaces,
-			&i.Labels,
-			&i.Filters,
-			&i.Enabled,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const removePipelineOutput = `-- name: RemovePipelineOutput :exec
-DELETE FROM logging_pipeline_outputs WHERE logging_pipeline_id = $1 AND logging_output_id = $2
-`
-
-type RemovePipelineOutputParams struct {
-	LoggingPipelineID uuid.UUID `json:"logging_pipeline_id"`
-	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
-}
-
-func (q *Queries) RemovePipelineOutput(ctx context.Context, arg RemovePipelineOutputParams) error {
-	_, err := q.db.Exec(ctx, removePipelineOutput, arg.LoggingPipelineID, arg.LoggingOutputID)
-	return err
 }
 
 const updateLoggingOutput = `-- name: UpdateLoggingOutput :one

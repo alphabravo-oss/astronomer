@@ -7,6 +7,7 @@ Every Astronomer container image published from the
   via Sigstore (GitHub OIDC → Fulcio short-lived cert → Rekor transparency log).
 - **Attested** with an [SPDX](https://spdx.dev/) SBOM emitted by
   [syft](https://github.com/anchore/syft).
+- **Published with Buildx provenance** for the pushed image digest.
 
 This document is the verifier-side procedure. Procurement / supply-chain
 teams can run these commands before pulling our images into an internal
@@ -99,6 +100,28 @@ the signature doesn't match the expected identity.
 
 ---
 
+## Inspect build provenance
+
+The release workflow asks Buildx to attach provenance for the pushed digest.
+Use the same identity checks as the signature/SBOM commands, then inspect
+the attestation payload for the build inputs and builder metadata:
+
+```bash
+cosign download attestation "$DIGEST" > attestations.jsonl
+
+python3 -c "
+import base64, json
+for line in open('attestations.jsonl'):
+    env = json.loads(line)
+    payload = json.loads(base64.b64decode(env['payload']))
+    ptype = payload.get('predicateType', '')
+    if 'slsa' in ptype.lower() or 'provenance' in ptype.lower():
+        print(json.dumps(payload, indent=2))
+"
+```
+
+---
+
 ## Mirror to an internal registry
 
 After verification, copy the image (and its signature + attestation
@@ -117,17 +140,17 @@ OIDC identity and pass.
 ## What's covered, what's not
 
 **Covered:**
-- All four published images: `astronomer-go-server`, `astronomer-go-worker`,
-  `astronomer-go-agent`, `astronomer-go-migrate`
+- All first-party chart images: `astronomer-go-server`,
+  `astronomer-go-worker`, `astronomer-go-agent`, `astronomer-go-migrate`,
+  `astronomer-shell`, and `astronomer-frontend`
 - Both the `:v<version>` and `:latest` tags
 - SBOMs (SPDX 2.3 JSON format) attached as cosign attestations
+- Build provenance attached by Buildx for each pushed digest
+- PR validation scans every first-party image with Trivy before merge
 
 **Not covered (yet):**
 - Helm chart signing. The chart ships as a directory; once we publish an
   OCI artifact (`oras push` style), we'll add `cosign sign` for it too.
-- The `astronomer-frontend` image (built from a separate `frontend/`
-  Dockerfile under the same repo; will fold into the release workflow
-  once its build is unified with the Go components).
-- Container scanning (Trivy / Grype) — the SBOM enables it but doesn't
-  perform it. Operators are expected to run their own scanner against
-  the SBOM or the image.
+- A release-time vulnerability gate. The pull-request workflow blocks on
+  Trivy for high/critical fixed vulnerabilities; operators should still scan
+  mirrored release images against their own policy before promotion.

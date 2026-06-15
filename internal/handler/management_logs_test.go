@@ -43,7 +43,7 @@ func (f *fakeManagementLogsQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.C
 // returns "fake logs" (no timestamp prefix); scanLogStream parses that
 // into a single ManagementLogLine with empty Timestamp.
 func newK8sWithPod(component string) kubernetes.Interface {
-	return k8sfake.NewSimpleClientset(&corev1.Pod{
+	return k8sfake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "astronomer-" + component + "-0",
 			Namespace: "astronomer",
@@ -202,7 +202,7 @@ func TestManagementLogsHandler_NoMatchingPods(t *testing.T) {
 	callerID := uuid.New()
 	q := &fakeManagementLogsQuerier{user: sqlc.User{ID: callerID, IsSuperuser: true}}
 	// Build a clientset with NO matching pods at all.
-	k8s := k8sfake.NewSimpleClientset()
+	k8s := k8sfake.NewClientset()
 
 	h := NewManagementLogsHandler(q, k8s, "astronomer", "astronomer")
 

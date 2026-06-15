@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"nhooyr.io/websocket"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -37,11 +37,12 @@ import (
 // browser-friendly envelope above. Coordinating a wire change with the agent
 // is out of scope for this fix.
 type ExecConsumer struct {
-	hub     *Hub
-	log     *slog.Logger
-	jwt     *iauth.JWTManager
-	queries appmiddleware.TokenUserQuerier
-	tickets *iauth.StreamTicketStore
+	hub         *Hub
+	log         *slog.Logger
+	jwt         *iauth.JWTManager
+	queries     appmiddleware.TokenUserQuerier
+	tickets     *iauth.StreamTicketStore
+	auditWriter any
 }
 
 // NewExecConsumer creates a new ExecConsumer.
@@ -73,14 +74,11 @@ func (ec *ExecConsumer) SetStreamTickets(tickets *iauth.StreamTicketStore) {
 	ec.tickets = tickets
 }
 
-// authenticate validates the request via a one-use stream ticket or
-// Authorization header. Returns true if authenticated, or if no JWT manager is
-// wired (dev/test mode). Delegates to the shared auth.AuthorizeStreamRequest
-// helper.
-func (ec *ExecConsumer) authenticate(r *http.Request) bool {
-	clusterID, _ := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	_, ok := iauth.AuthorizeStreamRequestWithTickets(r, ec.queries, ec.jwt, ec.tickets, iauth.StreamKindExec, clusterID)
-	return ok
+func (ec *ExecConsumer) SetAuditWriter(auditWriter any) {
+	if ec == nil {
+		return
+	}
+	ec.auditWriter = auditWriter
 }
 
 // HandleExec upgrades to WebSocket and relays exec I/O between the frontend
@@ -96,7 +94,8 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !ec.authenticate(r) {
+	userID, ok := authenticateStreamRequest(r, ec.queries, ec.jwt, ec.tickets, iauth.StreamKindExec)
+	if !ok {
 		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
 		return
 	}
@@ -119,7 +118,10 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 		ec.log.Error("websocket accept failed", slog.String("error", err.Error()))
 		return
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "closed")
+	defer func() {
+		_ = conn.Close(websocket.StatusNormalClosure, "closed")
+	}()
+	recordStreamOpenAudit(r, ec.auditWriter, userID, "pod.exec.opened", clusterID, namespace, pod, container)
 
 	ec.ProxyToAgent(r.Context(), conn, clusterID, namespace, pod, container)
 }
@@ -159,7 +161,7 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 		// Best-effort error frame so the UI surfaces the problem instead of
 		// silently disconnecting.
 		_ = writeFrontendError(ctx, conn, "Cluster agent not connected")
-		conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
+		_ = conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
 		return
 	}
 
@@ -172,7 +174,7 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 			slog.String("error", err.Error()),
 		)
 		_ = writeFrontendError(ctx, conn, "failed to create stream")
-		conn.Close(websocket.StatusInternalError, "failed to create stream")
+		_ = conn.Close(websocket.StatusInternalError, "failed to create stream")
 		return
 	}
 	defer agent.Streams.CloseStream(streamID)
@@ -201,7 +203,7 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 			slog.String("error", err.Error()),
 		)
 		_ = writeFrontendError(ctx, conn, "failed to start exec session")
-		conn.Close(websocket.StatusInternalError, "failed to start exec session")
+		_ = conn.Close(websocket.StatusInternalError, "failed to start exec session")
 		return
 	}
 

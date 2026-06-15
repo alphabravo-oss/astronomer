@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 type clusterRegistryTestQuerier struct {
 	deletedRegistryConfigFor uuid.UUID
 	deleteRegistryConfigErr  error
+	auditRows                []sqlc.CreateAuditLogV1Params
 }
 
 func (q *clusterRegistryTestQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {
@@ -63,13 +65,26 @@ func (q *clusterRegistryTestQuerier) GetClusterRegistryConfig(context.Context, u
 	return sqlc.ClusterRegistryConfig{}, nil
 }
 
-func (q *clusterRegistryTestQuerier) UpsertClusterRegistryConfig(context.Context, sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error) {
-	return sqlc.ClusterRegistryConfig{}, nil
+func (q *clusterRegistryTestQuerier) UpsertClusterRegistryConfig(_ context.Context, arg sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error) {
+	return sqlc.ClusterRegistryConfig{
+		ID:                 uuid.New(),
+		ClusterID:          arg.ClusterID,
+		PrivateRegistryUrl: arg.PrivateRegistryUrl,
+		RegistryUsername:   arg.RegistryUsername,
+		RegistryPassword:   arg.RegistryPassword,
+		Insecure:           arg.Insecure,
+		CaBundle:           arg.CaBundle,
+	}, nil
 }
 
 func (q *clusterRegistryTestQuerier) DeleteClusterRegistryConfig(_ context.Context, clusterID uuid.UUID) error {
 	q.deletedRegistryConfigFor = clusterID
 	return q.deleteRegistryConfigErr
+}
+
+func (q *clusterRegistryTestQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	q.auditRows = append(q.auditRows, arg)
+	return nil
 }
 
 // ListClusterConditions satisfies the ClusterQuerier interface introduced by
@@ -113,8 +128,45 @@ func (q *clusterRegistryTestQuerier) GetPlatformSetting(context.Context, string)
 func (q *clusterRegistryTestQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
 	return nil, nil
 }
+func (q *clusterRegistryTestQuerier) ListArgoCDApplicationsByManagedClusterTargets(context.Context, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error) {
+	return nil, nil
+}
 func (q *clusterRegistryTestQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
 	return nil, nil
+}
+
+func TestUpdateRegistryConfigAuditsLegacyRegistryMutation(t *testing.T) {
+	clusterID := uuid.New()
+	q := &clusterRegistryTestQuerier{}
+	h := NewClusterHandler(q)
+	body, _ := json.Marshal(UpdateRegistryConfigRequest{
+		PrivateRegistryUrl: "https://registry.example.com",
+		RegistryUsername:   "alice",
+		RegistryPassword:   "secret",
+		Insecure:           true,
+		CaBundle:           "ca-data",
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/clusters/"+clusterID.String()+"/registry/", bytes.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+
+	h.UpdateRegistryConfig(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(q.auditRows) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(q.auditRows))
+	}
+	row := q.auditRows[0]
+	assertRegistryAudit(t, row, "cluster.registry.updated", "cluster", clusterID.String())
+	assertAuditDetail(t, row.Detail, "private_registry_url", "https://registry.example.com")
+	assertAuditDetail(t, row.Detail, "registry_username", "alice")
+	assertAuditDetailOmit(t, row.Detail, "registry_password")
+	assertAuditDetailOmit(t, row.Detail, "ca_bundle")
 }
 
 func TestDeleteRegistryConfig(t *testing.T) {
@@ -136,6 +188,10 @@ func TestDeleteRegistryConfig(t *testing.T) {
 	if q.deletedRegistryConfigFor != clusterID {
 		t.Fatalf("deleted registry config for %s, want %s", q.deletedRegistryConfigFor, clusterID)
 	}
+	if len(q.auditRows) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(q.auditRows))
+	}
+	assertRegistryAudit(t, q.auditRows[0], "cluster.registry.deleted", "cluster", clusterID.String())
 }
 
 func TestDeleteRegistryConfigRejectsBadID(t *testing.T) {

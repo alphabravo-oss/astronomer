@@ -28,9 +28,14 @@ exposed by `astronomer-go`.
 
 - `astronomer_worker_jobs_total{astronomer_instance_id,job,status}`
 - `astronomer_worker_job_duration_seconds_bucket{astronomer_instance_id,job,status}`
+- `astronomer_worker_job_retry_attempts_total{astronomer_instance_id,job}`
 - `astronomer_worker_queue_depth{astronomer_instance_id,queue,state}`
 - `astronomer_worker_queue_latency_seconds{astronomer_instance_id,queue}`
 - `astronomer_worker_leader_held{astronomer_instance_id,job}`
+
+`astronomer_worker_queue_depth` publishes bounded queue states including
+`pending`, `active`, `scheduled`, `retry`, `archived`, `completed`,
+`aggregating`, and `total`.
 
 ## Database Metrics
 
@@ -66,6 +71,20 @@ metrics when available:
 - `astronomer_agent_state_updates_handled_total{astronomer_instance_id,outcome,kind}`
 - `astronomer_tunnel_state_updates_received_total{astronomer_instance_id,kind}`
 - `astronomer_tunnel_state_updates_handled_total{astronomer_instance_id,outcome,kind}`
+- `astronomer_k8s_proxy_errors_total{astronomer_instance_id,mode,reason}`
+
+## Argo CD Metrics
+
+- `astronomer_argocd_applications{astronomer_instance_id,sync_status,health_status}`
+- `astronomer_argocd_client_requests_total{astronomer_instance_id,method,path_family,status}`
+- `astronomer_argocd_client_request_duration_seconds_bucket{astronomer_instance_id,method,path_family,status}`
+
+## Audit Metrics
+
+- `astronomer_audit_dropped_total{astronomer_instance_id,reason}`
+- `astronomer_audit_batch_inserts_total{astronomer_instance_id,outcome}`
+- `astronomer_audit_batch_size_bucket{astronomer_instance_id}`
+- `astronomer_audit_write_failures_total{astronomer_instance_id,path}`
 
 ## Async Drop Metrics
 

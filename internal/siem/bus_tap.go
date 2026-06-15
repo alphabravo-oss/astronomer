@@ -163,7 +163,7 @@ func (t *BusTap) HandleEvent(ctx context.Context, ev events.Event) {
 		EventName: eventName,
 		EventID:   fmt.Sprintf("%d", ev.ID),
 		Timestamp: ev.Time,
-		Detail:    rawJSON(ev.Data),
+		Detail:    events.RawJSON(ev.Data),
 	})
 	if err != nil {
 		t.log.WarnContext(ctx, "siem tap: marshal event failed",
@@ -171,7 +171,7 @@ func (t *BusTap) HandleEvent(ctx context.Context, ev events.Event) {
 		return
 	}
 	for _, sub := range subs {
-		filters, ok := decodeFilters(sub.EventFilters)
+		filters, ok := events.DecodeFilterGlobs(sub.EventFilters)
 		if !ok {
 			t.log.WarnContext(ctx, "siem tap: malformed event_filters; skipping",
 				"forwarder_id", sub.ID.String(), "name", sub.Name)
@@ -303,32 +303,6 @@ func (t *BusTap) maybeLogDrop(forwarder, reason string) {
 		t.log.Warn("siem tap: dropped event",
 			"forwarder", forwarder, "reason", reason, "drops_seen", n)
 	}
-}
-
-// decodeFilters unmarshals the JSONB array of filter globs. Same shape
-// as webhook_subscriptions.event_filters.
-func decodeFilters(raw []byte) ([]string, bool) {
-	if len(raw) == 0 {
-		return nil, true
-	}
-	var out []string
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, false
-	}
-	return out, true
-}
-
-// rawJSON re-marshals an arbitrary event payload into json.RawMessage.
-// Mirrors the webhook tap's helper.
-func rawJSON(v any) json.RawMessage {
-	if v == nil {
-		return nil
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	return b
 }
 
 // severityForEvent infers a syslog-style severity from the event name +

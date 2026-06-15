@@ -545,7 +545,9 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 	if err != nil {
 		return 0, 0, fmt.Errorf("fetch index: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode >= http.StatusBadRequest {
 		return 0, 0, fmt.Errorf("repository returned status %d", resp.StatusCode)
 	}
@@ -1204,7 +1206,9 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 			RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
 			return
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 			RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": fmt.Sprintf("OCI registry reachable (status %d).", resp.StatusCode)})
 			return
@@ -1224,7 +1228,9 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode >= http.StatusBadRequest {
 		RespondJSON(w, http.StatusBadGateway, map[string]any{
 			"success": false,

@@ -158,8 +158,8 @@ func TestClusterResponseIncludesAgentPrivilegeProfile(t *testing.T) {
 
 func TestClusterResponseIncludesBaselineComponentOwnership(t *testing.T) {
 	resp := clusterToResponse(fixtureCluster(t, false))
-	if len(resp.ArgoCD.BaselineComponents) != 5 {
-		t.Fatalf("baseline component count = %d, want 5", len(resp.ArgoCD.BaselineComponents))
+	if len(resp.ArgoCD.BaselineComponents) != 7 {
+		t.Fatalf("baseline component count = %d, want 7", len(resp.ArgoCD.BaselineComponents))
 	}
 	for _, component := range resp.ArgoCD.BaselineComponents {
 		if component.ManagedBy != "unknown" {
@@ -171,12 +171,110 @@ func TestClusterResponseIncludesBaselineComponentOwnership(t *testing.T) {
 	}
 
 	components := baselineComponentOwnership("argocd")
-	if len(components) != 5 {
-		t.Fatalf("argocd component count = %d, want 5", len(components))
+	if len(components) != 7 {
+		t.Fatalf("argocd component count = %d, want 7", len(components))
 	}
 	for _, component := range components {
 		if component.ManagedBy != "argocd" {
 			t.Fatalf("component %s managed_by = %q, want argocd", component.Slug, component.ManagedBy)
+		}
+	}
+}
+
+func TestSummarizeArgoCDDrift(t *testing.T) {
+	first := time.Date(2026, 6, 13, 9, 0, 0, 0, time.UTC)
+	last := time.Date(2026, 6, 13, 10, 30, 0, 0, time.UTC)
+
+	summary := summarizeArgoCDDrift([]sqlc.ArgocdApplication{
+		{
+			Name:         "cert-manager",
+			SyncStatus:   "Synced",
+			HealthStatus: "Healthy",
+			LastSynced:   pgtype.Timestamptz{Time: first, Valid: true},
+		},
+		{
+			Name:                 "ingress-nginx",
+			SyncStatus:           "OutOfSync",
+			HealthStatus:         "Degraded",
+			LastSynced:           pgtype.Timestamptz{Time: last, Valid: true},
+			ResourceCreatedCount: 1,
+			ResourceChangedCount: 2,
+		},
+		{
+			Name:                "external-secrets",
+			SyncStatus:          "out_of_sync",
+			HealthStatus:        "Progressing",
+			ResourcePrunedCount: 1,
+		},
+		{
+			Name:         "monitoring",
+			SyncStatus:   "",
+			HealthStatus: "",
+		},
+	})
+
+	if summary.AppCount != 4 {
+		t.Fatalf("app count = %d, want 4", summary.AppCount)
+	}
+	if summary.SyncedCount != 1 || summary.OutOfSyncCount != 2 || summary.UnknownSyncCount != 1 {
+		t.Fatalf("sync counts = synced:%d out:%d unknown:%d", summary.SyncedCount, summary.OutOfSyncCount, summary.UnknownSyncCount)
+	}
+	if summary.HealthyCount != 1 || summary.ProgressingCount != 1 || summary.DegradedCount != 1 || summary.UnknownHealthCount != 1 {
+		t.Fatalf("health counts = healthy:%d progressing:%d degraded:%d unknown:%d", summary.HealthyCount, summary.ProgressingCount, summary.DegradedCount, summary.UnknownHealthCount)
+	}
+	if summary.LastSynced == nil || *summary.LastSynced != last.Format(time.RFC3339Nano) {
+		t.Fatalf("last_synced = %v, want %s", summary.LastSynced, last.Format(time.RFC3339Nano))
+	}
+	if summary.LastError != "1 degraded ArgoCD application" {
+		t.Fatalf("last_error = %q", summary.LastError)
+	}
+	if summary.ResourceCreatedCount != 1 || summary.ResourceChangedCount != 2 || summary.ResourcePrunedCount != 1 {
+		t.Fatalf("resource counts = created:%d changed:%d pruned:%d", summary.ResourceCreatedCount, summary.ResourceChangedCount, summary.ResourcePrunedCount)
+	}
+}
+
+func TestArgoCDManagedClusterApplicationTargets(t *testing.T) {
+	instanceA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	instanceB := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+	cluster := fixtureCluster(t, false)
+	cluster.Name = "prod-east"
+
+	instanceIDs, targets := argoCDManagedClusterApplicationTargets(cluster, []sqlc.ArgocdManagedCluster{
+		{
+			ArgocdInstanceID:  instanceA,
+			ServerUrl:         "https://proxy.example.com/clusters/prod-east",
+			ClusterSecretName: "astronomer-prod-east",
+		},
+		{
+			ArgocdInstanceID:  instanceA,
+			ServerUrl:         "https://proxy.example.com/clusters/prod-east",
+			ClusterSecretName: "astronomer-prod-east",
+		},
+		{
+			ArgocdInstanceID:  instanceB,
+			ServerUrl:         "https://proxy.example.com/clusters/prod-east-2",
+			ClusterSecretName: "",
+		},
+	})
+
+	if len(instanceIDs) != 2 || instanceIDs[0] != instanceA || instanceIDs[1] != instanceB {
+		t.Fatalf("instance IDs = %v, want [%s %s]", instanceIDs, instanceA, instanceB)
+	}
+	gotTargets := map[string]bool{}
+	for _, target := range targets {
+		if gotTargets[target] {
+			t.Fatalf("duplicate target %q in %v", target, targets)
+		}
+		gotTargets[target] = true
+	}
+	for _, want := range []string{
+		"https://proxy.example.com/clusters/prod-east",
+		"astronomer-prod-east",
+		"https://proxy.example.com/clusters/prod-east-2",
+		"prod-east",
+	} {
+		if !gotTargets[want] {
+			t.Fatalf("missing target %q in %v", want, targets)
 		}
 	}
 }

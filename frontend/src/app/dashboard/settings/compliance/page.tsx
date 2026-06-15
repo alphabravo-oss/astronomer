@@ -3,10 +3,9 @@
 /**
  * /dashboard/settings/compliance — audit export bundles.
  *
- *   - Small ranges return the ZIP body inline (200). We trigger a download.
- *   - Large ranges return 202 with a job id; we poll
- *     `GET /admin/compliance/exports/{id}/` every few seconds until it goes
- *     `ready` (or `failed`), then surface a download link.
+ * The current backend streams the ZIP body inline (200). The polling code is
+ * retained for future durable background export jobs, but production exports
+ * download directly today.
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -16,10 +15,11 @@ import {
   FileArchive,
   Loader2,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError, toastInfo, toastSuccess } from '@/lib/toast';
 import { cn, formatBytes, formatRelativeTime } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
+  downloadComplianceExportBlob,
   getComplianceExport,
   requestComplianceExport,
   type ComplianceExportSummary,
@@ -79,7 +79,7 @@ function ComplianceForm() {
         setJob(refreshed);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Polling failed';
-        toast.error(msg);
+        toastError(msg);
       }
     }, 3000);
     return () => {
@@ -89,11 +89,11 @@ function ComplianceForm() {
 
   const handleExport = async () => {
     if (!from || !to) {
-      toast.error('Both dates are required');
+      toastError('Both dates are required');
       return;
     }
     if (from > to) {
-      toast.error('"From" must be before "to"');
+      toastError('"From" must be before "to"');
       return;
     }
     setSubmitting(true);
@@ -102,14 +102,14 @@ function ComplianceForm() {
       const result = await requestComplianceExport({ from, to });
       if (result.kind === 'blob') {
         downloadBlob(result.blob, result.filename);
-        toast.success('Export downloaded');
+        toastSuccess('Export downloaded');
       } else {
         setJob(result.job);
-        toast.message('Export queued — polling for completion');
+        toastInfo('Export queued — polling for completion');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start export';
-      toast.error(msg);
+      toastError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -118,15 +118,11 @@ function ComplianceForm() {
   const handleDownloadReady = async () => {
     if (!job || !job.downloadUrl) return;
     try {
-      // The backend returns a presigned download URL; fetch it as a blob so
-      // the JWT/auth interceptor doesn't try to camelize the binary payload.
-      const res = await fetch(job.downloadUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+      const blob = await downloadComplianceExportBlob(job.downloadUrl);
       downloadBlob(blob, `compliance-${job.from}_${job.to}.zip`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Download failed';
-      toast.error(msg);
+      toastError(msg);
     }
   };
 
@@ -236,8 +232,8 @@ export default function CompliancePage() {
             Compliance exports
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Build a signed ZIP of audit + RBAC + config for a date range. Large windows are
-            generated in the background; you&apos;ll get a download link once it&apos;s ready.
+            Build a ZIP of audit + RBAC + config for a date range. Large windows may take
+            longer, but the export downloads directly when complete.
           </p>
         </div>
         <ComplianceForm />

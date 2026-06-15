@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -68,20 +69,7 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 			if err != nil {
 				return err
 			}
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
-			if err != nil {
-				return err
-			}
-			resp, err := runtimeDeps.HTTPClient.Do(req)
-			if err != nil {
-				return err
-			}
-			if resp.StatusCode >= http.StatusBadRequest {
-				resp.Body.Close()
-				return fmt.Errorf("catalog repository %s returned status %d", repoRecord.Url, resp.StatusCode)
-			}
-			indexFile, err := decodeIndex(resp)
-			resp.Body.Close()
+			indexFile, err := fetchRepositoryIndex(ctx, runtimeHTTPClient(), indexURL, repoRecord.Url)
 			if err != nil {
 				return err
 			}
@@ -96,6 +84,28 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 		slog.InfoContext(ctx, "catalog sync complete")
 		return nil
 	})
+}
+
+const catalogFetchTimeout = 30 * time.Second
+
+func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL, repositoryURL string) (*repo.IndexFile, error) {
+	fetchCtx, cancel := context.WithTimeout(ctx, catalogFetchTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, indexURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("catalog repository %s returned status %d", repositoryURL, resp.StatusCode)
+	}
+	return decodeIndex(resp)
 }
 
 func repositoryIndexURL(base string) (string, error) {

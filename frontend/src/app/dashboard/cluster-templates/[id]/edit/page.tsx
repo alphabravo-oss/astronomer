@@ -7,7 +7,9 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useClusterTemplate,
@@ -31,14 +33,10 @@ export default function ClusterTemplateEditPage({ params }: EditPageProps) {
   const [serverError, setServerError] = useState<string | null>(null);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState title="Loading cluster template" className="h-32 py-0" />;
   }
   if (!template) {
-    return <p className="text-sm text-muted-foreground">Template not found.</p>;
+    return <ErrorState title="Template not found" description="The requested cluster template does not exist or is no longer available." />;
   }
 
   return (
@@ -61,12 +59,12 @@ export default function ClusterTemplateEditPage({ params }: EditPageProps) {
       </div>
 
       {!canWrite && (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>
-            Saving requires the <span className="font-mono">cluster_templates:write</span> role.
-          </p>
-        </div>
+        <PermissionState
+          title="Write permission required"
+          permission="cluster_templates:write"
+          description={<>Saving requires the <span className="font-mono">cluster_templates:write</span> role.</>}
+          className="rounded-lg border border-border bg-muted/30 p-6"
+        />
       )}
 
       <TemplateForm
@@ -90,26 +88,11 @@ export default function ClusterTemplateEditPage({ params }: EditPageProps) {
             await updateMutation.mutateAsync({ id, body });
             router.push(`/dashboard/cluster-templates/${id}`);
           } catch (err) {
-            const msg = extractAxiosError(err) ?? 'Failed to update template.';
+            const msg = extractApiErrorMessage(err) ?? 'Failed to update template.';
             setServerError(msg);
           }
         }}
       />
     </div>
-  );
-}
-
-function extractAxiosError(err: unknown): string | null {
-  if (!err) return null;
-  type ResponseShape = {
-    response?: { data?: { error?: { message?: string }; message?: string } };
-    message?: string;
-  };
-  const obj = err as ResponseShape;
-  return (
-    obj.response?.data?.error?.message ??
-    obj.response?.data?.message ??
-    obj.message ??
-    null
   );
 }

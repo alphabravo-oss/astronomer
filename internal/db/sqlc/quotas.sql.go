@@ -2,51 +2,346 @@
 // versions:
 //   sqlc v1.31.1
 // source: quotas.sql
-//
-// This file is hand-rolled in lockstep with the sqlc generator output
-// pattern (same as compliance_manual.go / audit_v1_manual.go). The
-// `sqlc generate` CLI cannot regenerate against the working tree
-// because one pre-existing query in compliance.sql fails the upstream
-// parser. The hand-rolled style here matches the generated output
-// shape so a future regeneration is a no-op diff.
 
 package sqlc
 
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/google/uuid"
 )
 
-// QuotaPlan mirrors a row in the quota_plans table introduced by
-// migration 051.
-type QuotaPlan struct {
-	Name                    string    `json:"name"`
+const countActiveTokensForUser = `-- name: CountActiveTokensForUser :one
+SELECT count(*)::bigint AS count
+FROM api_tokens
+WHERE user_id = $1 AND is_revoked = false
+`
+
+func (q *Queries) CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveTokensForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countClustersInProject = `-- name: CountClustersInProject :one
+
+SELECT count(*) FROM projects p2
+WHERE p2.cluster_id = (SELECT p3.cluster_id FROM projects p3 WHERE p3.id = $1)
+`
+
+// Per-tenant usage counters ----------------------------------------------
+func (q *Queries) CountClustersInProject(ctx context.Context, id uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countClustersInProject, id)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMembersInProject = `-- name: CountMembersInProject :one
+SELECT count(DISTINCT user_id)::bigint AS count
+FROM project_role_bindings
+WHERE project_id = $1 AND user_id IS NOT NULL
+`
+
+func (q *Queries) CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMembersInProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countNamespacesInProject = `-- name: CountNamespacesInProject :one
+SELECT COALESCE(jsonb_array_length(namespaces), 0)::int AS count
+FROM projects WHERE id = $1
+`
+
+func (q *Queries) CountNamespacesInProject(ctx context.Context, id uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countNamespacesInProject, id)
+	var count int32
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProjectsForUser = `-- name: CountProjectsForUser :one
+SELECT count(DISTINCT project_id)::bigint AS count
+FROM project_role_bindings
+WHERE user_id = $1::uuid
+`
+
+func (q *Queries) CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countProjectsForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProjectsUsingQuotaPlan = `-- name: CountProjectsUsingQuotaPlan :one
+SELECT count(*) FROM projects WHERE quota_plan = $1
+`
+
+func (q *Queries) CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error) {
+	row := q.db.QueryRow(ctx, countProjectsUsingQuotaPlan, quotaPlan)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTotalActiveUsers = `-- name: CountTotalActiveUsers :one
+SELECT count(*)::bigint AS count FROM users WHERE is_active = true
+`
+
+func (q *Queries) CountTotalActiveUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countTotalActiveUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTotalClusters = `-- name: CountTotalClusters :one
+
+SELECT count(*)::bigint AS count FROM clusters
+`
+
+// Global / fleet-wide --------------------------------------------------
+func (q *Queries) CountTotalClusters(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countTotalClusters)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsersUsingQuotaPlan = `-- name: CountUsersUsingQuotaPlan :one
+SELECT count(*) FROM users WHERE quota_plan = $1
+`
+
+func (q *Queries) CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsersUsingQuotaPlan, quotaPlan)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteQuotaPlan = `-- name: DeleteQuotaPlan :exec
+DELETE FROM quota_plans WHERE name = $1
+`
+
+func (q *Queries) DeleteQuotaPlan(ctx context.Context, name string) error {
+	_, err := q.db.Exec(ctx, deleteQuotaPlan, name)
+	return err
+}
+
+const getEffectiveQuotaForProject = `-- name: GetEffectiveQuotaForProject :one
+SELECT
+    pr.id              AS project_id,
+    pr.quota_plan      AS plan_name,
+    pr.quota_overrides AS overrides,
+    p.enforcement,
+    p.max_clusters_per_project,
+    p.max_namespaces_per_project,
+    p.max_members_per_project,
+    p.max_projects_per_user,
+    p.max_tokens_per_user,
+    p.max_streams_per_user,
+    p.max_total_clusters,
+    p.max_total_users
+FROM projects pr
+JOIN quota_plans p ON p.name = pr.quota_plan
+WHERE pr.id = $1
+`
+
+type GetEffectiveQuotaForProjectRow struct {
+	ProjectID               uuid.UUID       `json:"project_id"`
+	PlanName                string          `json:"plan_name"`
+	Overrides               json.RawMessage `json:"overrides"`
+	Enforcement             string          `json:"enforcement"`
+	MaxClustersPerProject   int32           `json:"max_clusters_per_project"`
+	MaxNamespacesPerProject int32           `json:"max_namespaces_per_project"`
+	MaxMembersPerProject    int32           `json:"max_members_per_project"`
+	MaxProjectsPerUser      int32           `json:"max_projects_per_user"`
+	MaxTokensPerUser        int32           `json:"max_tokens_per_user"`
+	MaxStreamsPerUser       int32           `json:"max_streams_per_user"`
+	MaxTotalClusters        int32           `json:"max_total_clusters"`
+	MaxTotalUsers           int32           `json:"max_total_users"`
+}
+
+func (q *Queries) GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error) {
+	row := q.db.QueryRow(ctx, getEffectiveQuotaForProject, id)
+	var i GetEffectiveQuotaForProjectRow
+	err := row.Scan(
+		&i.ProjectID,
+		&i.PlanName,
+		&i.Overrides,
+		&i.Enforcement,
+		&i.MaxClustersPerProject,
+		&i.MaxNamespacesPerProject,
+		&i.MaxMembersPerProject,
+		&i.MaxProjectsPerUser,
+		&i.MaxTokensPerUser,
+		&i.MaxStreamsPerUser,
+		&i.MaxTotalClusters,
+		&i.MaxTotalUsers,
+	)
+	return i, err
+}
+
+const getEffectiveQuotaForUser = `-- name: GetEffectiveQuotaForUser :one
+
+SELECT
+    u.id              AS user_id,
+    u.quota_plan      AS plan_name,
+    u.quota_overrides AS overrides,
+    p.enforcement,
+    p.max_clusters_per_project,
+    p.max_namespaces_per_project,
+    p.max_members_per_project,
+    p.max_projects_per_user,
+    p.max_tokens_per_user,
+    p.max_streams_per_user,
+    p.max_total_clusters,
+    p.max_total_users
+FROM users u
+JOIN quota_plans p ON p.name = u.quota_plan
+WHERE u.id = $1
+`
+
+type GetEffectiveQuotaForUserRow struct {
+	UserID                  uuid.UUID       `json:"user_id"`
+	PlanName                string          `json:"plan_name"`
+	Overrides               json.RawMessage `json:"overrides"`
+	Enforcement             string          `json:"enforcement"`
+	MaxClustersPerProject   int32           `json:"max_clusters_per_project"`
+	MaxNamespacesPerProject int32           `json:"max_namespaces_per_project"`
+	MaxMembersPerProject    int32           `json:"max_members_per_project"`
+	MaxProjectsPerUser      int32           `json:"max_projects_per_user"`
+	MaxTokensPerUser        int32           `json:"max_tokens_per_user"`
+	MaxStreamsPerUser       int32           `json:"max_streams_per_user"`
+	MaxTotalClusters        int32           `json:"max_total_clusters"`
+	MaxTotalUsers           int32           `json:"max_total_users"`
+}
+
+// Effective quota lookups ------------------------------------------------
+func (q *Queries) GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error) {
+	row := q.db.QueryRow(ctx, getEffectiveQuotaForUser, id)
+	var i GetEffectiveQuotaForUserRow
+	err := row.Scan(
+		&i.UserID,
+		&i.PlanName,
+		&i.Overrides,
+		&i.Enforcement,
+		&i.MaxClustersPerProject,
+		&i.MaxNamespacesPerProject,
+		&i.MaxMembersPerProject,
+		&i.MaxProjectsPerUser,
+		&i.MaxTokensPerUser,
+		&i.MaxStreamsPerUser,
+		&i.MaxTotalClusters,
+		&i.MaxTotalUsers,
+	)
+	return i, err
+}
+
+const getQuotaPlan = `-- name: GetQuotaPlan :one
+SELECT name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at FROM quota_plans WHERE name = $1
+`
+
+func (q *Queries) GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, error) {
+	row := q.db.QueryRow(ctx, getQuotaPlan, name)
+	var i QuotaPlan
+	err := row.Scan(
+		&i.Name,
+		&i.Enforcement,
+		&i.Description,
+		&i.MaxClustersPerProject,
+		&i.MaxNamespacesPerProject,
+		&i.MaxMembersPerProject,
+		&i.MaxProjectsPerUser,
+		&i.MaxTokensPerUser,
+		&i.MaxStreamsPerUser,
+		&i.MaxTotalClusters,
+		&i.MaxTotalUsers,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listProjectQuotaSnapshots = `-- name: ListProjectQuotaSnapshots :many
+
+SELECT
+    pr.id   AS project_id,
+    pr.name AS project_name,
+    pr.quota_plan,
+    p.enforcement,
+    p.max_clusters_per_project,
+    p.max_namespaces_per_project,
+    p.max_members_per_project,
+    (SELECT count(*) FROM projects pp WHERE pp.cluster_id = pr.cluster_id)::bigint                                            AS clusters_in_project,
+    COALESCE(jsonb_array_length(pr.namespaces), 0)::bigint                                                                    AS namespaces_in_project,
+    (SELECT count(DISTINCT user_id) FROM project_role_bindings WHERE project_id = pr.id AND user_id IS NOT NULL)::bigint      AS members_in_project
+FROM projects pr
+JOIN quota_plans p ON p.name = pr.quota_plan
+ORDER BY pr.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListProjectQuotaSnapshotsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListProjectQuotaSnapshotsRow struct {
+	ProjectID               uuid.UUID `json:"project_id"`
+	ProjectName             string    `json:"project_name"`
+	QuotaPlan               string    `json:"quota_plan"`
 	Enforcement             string    `json:"enforcement"`
-	Description             string    `json:"description"`
 	MaxClustersPerProject   int32     `json:"max_clusters_per_project"`
 	MaxNamespacesPerProject int32     `json:"max_namespaces_per_project"`
 	MaxMembersPerProject    int32     `json:"max_members_per_project"`
-	MaxProjectsPerUser      int32     `json:"max_projects_per_user"`
-	MaxTokensPerUser        int32     `json:"max_tokens_per_user"`
-	MaxStreamsPerUser       int32     `json:"max_streams_per_user"`
-	MaxTotalClusters        int32     `json:"max_total_clusters"`
-	MaxTotalUsers           int32     `json:"max_total_users"`
-	CreatedAt               time.Time `json:"created_at"`
-	UpdatedAt               time.Time `json:"updated_at"`
+	ClustersInProject       int64     `json:"clusters_in_project"`
+	NamespacesInProject     int64     `json:"namespaces_in_project"`
+	MembersInProject        int64     `json:"members_in_project"`
+}
+
+// Usage snapshots for the admin dashboard --------------------------------
+func (q *Queries) ListProjectQuotaSnapshots(ctx context.Context, arg ListProjectQuotaSnapshotsParams) ([]ListProjectQuotaSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listProjectQuotaSnapshots, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectQuotaSnapshotsRow{}
+	for rows.Next() {
+		var i ListProjectQuotaSnapshotsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.QuotaPlan,
+			&i.Enforcement,
+			&i.MaxClustersPerProject,
+			&i.MaxNamespacesPerProject,
+			&i.MaxMembersPerProject,
+			&i.ClustersInProject,
+			&i.NamespacesInProject,
+			&i.MembersInProject,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listQuotaPlans = `-- name: ListQuotaPlans :many
-SELECT name, enforcement, description,
-       max_clusters_per_project, max_namespaces_per_project, max_members_per_project,
-       max_projects_per_user, max_tokens_per_user, max_streams_per_user,
-       max_total_clusters, max_total_users,
-       created_at, updated_at
-FROM quota_plans ORDER BY name ASC
+
+SELECT name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at FROM quota_plans ORDER BY name ASC
 `
 
+// Quota plans CRUD --------------------------------------------------------
 func (q *Queries) ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error) {
 	rows, err := q.db.Query(ctx, listQuotaPlans)
 	if err != nil {
@@ -81,34 +376,69 @@ func (q *Queries) ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error) {
 	return items, nil
 }
 
-const getQuotaPlan = `-- name: GetQuotaPlan :one
-SELECT name, enforcement, description,
-       max_clusters_per_project, max_namespaces_per_project, max_members_per_project,
-       max_projects_per_user, max_tokens_per_user, max_streams_per_user,
-       max_total_clusters, max_total_users,
-       created_at, updated_at
-FROM quota_plans WHERE name = $1
+const listUserQuotaSnapshots = `-- name: ListUserQuotaSnapshots :many
+SELECT
+    u.id       AS user_id,
+    u.username AS username,
+    u.quota_plan,
+    p.enforcement,
+    p.max_projects_per_user,
+    p.max_tokens_per_user,
+    p.max_streams_per_user,
+    (SELECT count(DISTINCT project_id) FROM project_role_bindings WHERE user_id = u.id)::bigint AS projects_for_user,
+    (SELECT count(*) FROM api_tokens WHERE user_id = u.id AND is_revoked = false)::bigint        AS tokens_for_user
+FROM users u
+JOIN quota_plans p ON p.name = u.quota_plan
+WHERE u.is_active = true
+ORDER BY u.created_at DESC
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, error) {
-	row := q.db.QueryRow(ctx, getQuotaPlan, name)
-	var i QuotaPlan
-	err := row.Scan(
-		&i.Name,
-		&i.Enforcement,
-		&i.Description,
-		&i.MaxClustersPerProject,
-		&i.MaxNamespacesPerProject,
-		&i.MaxMembersPerProject,
-		&i.MaxProjectsPerUser,
-		&i.MaxTokensPerUser,
-		&i.MaxStreamsPerUser,
-		&i.MaxTotalClusters,
-		&i.MaxTotalUsers,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+type ListUserQuotaSnapshotsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListUserQuotaSnapshotsRow struct {
+	UserID             uuid.UUID `json:"user_id"`
+	Username           string    `json:"username"`
+	QuotaPlan          string    `json:"quota_plan"`
+	Enforcement        string    `json:"enforcement"`
+	MaxProjectsPerUser int32     `json:"max_projects_per_user"`
+	MaxTokensPerUser   int32     `json:"max_tokens_per_user"`
+	MaxStreamsPerUser  int32     `json:"max_streams_per_user"`
+	ProjectsForUser    int64     `json:"projects_for_user"`
+	TokensForUser      int64     `json:"tokens_for_user"`
+}
+
+func (q *Queries) ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]ListUserQuotaSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listUserQuotaSnapshots, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserQuotaSnapshotsRow{}
+	for rows.Next() {
+		var i ListUserQuotaSnapshotsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.QuotaPlan,
+			&i.Enforcement,
+			&i.MaxProjectsPerUser,
+			&i.MaxTokensPerUser,
+			&i.MaxStreamsPerUser,
+			&i.ProjectsForUser,
+			&i.TokensForUser,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertQuotaPlan = `-- name: UpsertQuotaPlan :one
@@ -132,11 +462,7 @@ ON CONFLICT (name) DO UPDATE SET
     max_total_clusters         = EXCLUDED.max_total_clusters,
     max_total_users            = EXCLUDED.max_total_users,
     updated_at                 = now()
-RETURNING name, enforcement, description,
-          max_clusters_per_project, max_namespaces_per_project, max_members_per_project,
-          max_projects_per_user, max_tokens_per_user, max_streams_per_user,
-          max_total_clusters, max_total_users,
-          created_at, updated_at
+RETURNING name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at
 `
 
 type UpsertQuotaPlanParams struct {
@@ -184,457 +510,4 @@ func (q *Queries) UpsertQuotaPlan(ctx context.Context, arg UpsertQuotaPlanParams
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const deleteQuotaPlan = `-- name: DeleteQuotaPlan :exec
-DELETE FROM quota_plans WHERE name = $1
-`
-
-func (q *Queries) DeleteQuotaPlan(ctx context.Context, name string) error {
-	_, err := q.db.Exec(ctx, deleteQuotaPlan, name)
-	return err
-}
-
-const countProjectsUsingQuotaPlan = `-- name: CountProjectsUsingQuotaPlan :one
-SELECT count(*) FROM projects WHERE quota_plan = $1
-`
-
-func (q *Queries) CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error) {
-	row := q.db.QueryRow(ctx, countProjectsUsingQuotaPlan, quotaPlan)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countUsersUsingQuotaPlan = `-- name: CountUsersUsingQuotaPlan :one
-SELECT count(*) FROM users WHERE quota_plan = $1
-`
-
-func (q *Queries) CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsersUsingQuotaPlan, quotaPlan)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-// GetEffectiveQuotaForUserRow is the joined row returned by
-// GetEffectiveQuotaForUser — the user's plan name + override blob alongside
-// the plan's numeric caps.
-type GetEffectiveQuotaForUserRow struct {
-	UserID                  uuid.UUID       `json:"user_id"`
-	PlanName                string          `json:"plan_name"`
-	Overrides               json.RawMessage `json:"overrides"`
-	Enforcement             string          `json:"enforcement"`
-	MaxClustersPerProject   int32           `json:"max_clusters_per_project"`
-	MaxNamespacesPerProject int32           `json:"max_namespaces_per_project"`
-	MaxMembersPerProject    int32           `json:"max_members_per_project"`
-	MaxProjectsPerUser      int32           `json:"max_projects_per_user"`
-	MaxTokensPerUser        int32           `json:"max_tokens_per_user"`
-	MaxStreamsPerUser       int32           `json:"max_streams_per_user"`
-	MaxTotalClusters        int32           `json:"max_total_clusters"`
-	MaxTotalUsers           int32           `json:"max_total_users"`
-}
-
-const getEffectiveQuotaForUser = `-- name: GetEffectiveQuotaForUser :one
-SELECT
-    u.id              AS user_id,
-    u.quota_plan      AS plan_name,
-    u.quota_overrides AS overrides,
-    p.enforcement,
-    p.max_clusters_per_project,
-    p.max_namespaces_per_project,
-    p.max_members_per_project,
-    p.max_projects_per_user,
-    p.max_tokens_per_user,
-    p.max_streams_per_user,
-    p.max_total_clusters,
-    p.max_total_users
-FROM users u
-JOIN quota_plans p ON p.name = u.quota_plan
-WHERE u.id = $1
-`
-
-func (q *Queries) GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error) {
-	row := q.db.QueryRow(ctx, getEffectiveQuotaForUser, id)
-	var i GetEffectiveQuotaForUserRow
-	err := row.Scan(
-		&i.UserID,
-		&i.PlanName,
-		&i.Overrides,
-		&i.Enforcement,
-		&i.MaxClustersPerProject,
-		&i.MaxNamespacesPerProject,
-		&i.MaxMembersPerProject,
-		&i.MaxProjectsPerUser,
-		&i.MaxTokensPerUser,
-		&i.MaxStreamsPerUser,
-		&i.MaxTotalClusters,
-		&i.MaxTotalUsers,
-	)
-	return i, err
-}
-
-type GetEffectiveQuotaForProjectRow struct {
-	ProjectID               uuid.UUID       `json:"project_id"`
-	PlanName                string          `json:"plan_name"`
-	Overrides               json.RawMessage `json:"overrides"`
-	Enforcement             string          `json:"enforcement"`
-	MaxClustersPerProject   int32           `json:"max_clusters_per_project"`
-	MaxNamespacesPerProject int32           `json:"max_namespaces_per_project"`
-	MaxMembersPerProject    int32           `json:"max_members_per_project"`
-	MaxProjectsPerUser      int32           `json:"max_projects_per_user"`
-	MaxTokensPerUser        int32           `json:"max_tokens_per_user"`
-	MaxStreamsPerUser       int32           `json:"max_streams_per_user"`
-	MaxTotalClusters        int32           `json:"max_total_clusters"`
-	MaxTotalUsers           int32           `json:"max_total_users"`
-}
-
-const getEffectiveQuotaForProject = `-- name: GetEffectiveQuotaForProject :one
-SELECT
-    pr.id              AS project_id,
-    pr.quota_plan      AS plan_name,
-    pr.quota_overrides AS overrides,
-    p.enforcement,
-    p.max_clusters_per_project,
-    p.max_namespaces_per_project,
-    p.max_members_per_project,
-    p.max_projects_per_user,
-    p.max_tokens_per_user,
-    p.max_streams_per_user,
-    p.max_total_clusters,
-    p.max_total_users
-FROM projects pr
-JOIN quota_plans p ON p.name = pr.quota_plan
-WHERE pr.id = $1
-`
-
-func (q *Queries) GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error) {
-	row := q.db.QueryRow(ctx, getEffectiveQuotaForProject, id)
-	var i GetEffectiveQuotaForProjectRow
-	err := row.Scan(
-		&i.ProjectID,
-		&i.PlanName,
-		&i.Overrides,
-		&i.Enforcement,
-		&i.MaxClustersPerProject,
-		&i.MaxNamespacesPerProject,
-		&i.MaxMembersPerProject,
-		&i.MaxProjectsPerUser,
-		&i.MaxTokensPerUser,
-		&i.MaxStreamsPerUser,
-		&i.MaxTotalClusters,
-		&i.MaxTotalUsers,
-	)
-	return i, err
-}
-
-const setProjectQuotaPlan = `-- name: SetProjectQuotaPlan :one
-UPDATE projects
-SET quota_plan      = $2,
-    quota_overrides = $3,
-    updated_at      = now()
-WHERE id = $1
-RETURNING id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides
-`
-
-type SetProjectQuotaPlanParams struct {
-	ID             uuid.UUID       `json:"id"`
-	QuotaPlan      string          `json:"quota_plan"`
-	QuotaOverrides json.RawMessage `json:"quota_overrides"`
-}
-
-func (q *Queries) SetProjectQuotaPlan(ctx context.Context, arg SetProjectQuotaPlanParams) (Project, error) {
-	row := q.db.QueryRow(ctx, setProjectQuotaPlan, arg.ID, arg.QuotaPlan, arg.QuotaOverrides)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.DisplayName,
-		&i.Description,
-		&i.ClusterID,
-		&i.Namespaces,
-		&i.ResourceQuota,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.LimitRange,
-		&i.NetworkPolicyMode,
-		&i.PodSecurityProfile,
-		&i.ResourceQuotaCpuLimit,
-		&i.ResourceQuotaMemoryLimit,
-		&i.ResourceQuotaPodCount,
-		&i.QuotaPlan,
-		&i.QuotaOverrides,
-	)
-	return i, err
-}
-
-const setUserQuotaPlan = `-- name: SetUserQuotaPlan :one
-UPDATE users
-SET quota_plan      = $2,
-    quota_overrides = $3,
-    updated_at      = now()
-WHERE id = $1
-RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides
-`
-
-type SetUserQuotaPlanParams struct {
-	ID             uuid.UUID       `json:"id"`
-	QuotaPlan      string          `json:"quota_plan"`
-	QuotaOverrides json.RawMessage `json:"quota_overrides"`
-}
-
-func (q *Queries) SetUserQuotaPlan(ctx context.Context, arg SetUserQuotaPlanParams) (User, error) {
-	row := q.db.QueryRow(ctx, setUserQuotaPlan, arg.ID, arg.QuotaPlan, arg.QuotaOverrides)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.FirstName,
-		&i.LastName,
-		&i.Password,
-		&i.IsActive,
-		&i.IsStaff,
-		&i.IsSuperuser,
-		&i.LastLogin,
-		&i.DateJoined,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.MustChangePassword,
-		&i.FailedLoginCount,
-		&i.FailedLoginAt,
-		&i.LockedUntil,
-		&i.LockedReason,
-		&i.TokensInvalidatedAt,
-		&i.QuotaPlan,
-		&i.QuotaOverrides,
-	)
-	return i, err
-}
-
-const countClustersInProject = `-- name: CountClustersInProject :one
-SELECT count(*) FROM projects p2
-WHERE p2.cluster_id = (SELECT p3.cluster_id FROM projects p3 WHERE p3.id = $1)
-`
-
-// CountClustersInProject returns the number of projects on the same
-// cluster_id as the given project — the "clusters attached to a project"
-// cap in this schema is enforced as "no more than N projects per cluster"
-// since each project carries exactly one cluster_id.
-func (q *Queries) CountClustersInProject(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countClustersInProject, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countNamespacesInProject = `-- name: CountNamespacesInProject :one
-SELECT COALESCE(jsonb_array_length(namespaces), 0)::int AS count
-FROM projects WHERE id = $1
-`
-
-func (q *Queries) CountNamespacesInProject(ctx context.Context, projectID uuid.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, countNamespacesInProject, projectID)
-	var count int32
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countMembersInProject = `-- name: CountMembersInProject :one
-SELECT count(DISTINCT user_id)::bigint AS count
-FROM project_role_bindings
-WHERE project_id = $1 AND user_id IS NOT NULL
-`
-
-func (q *Queries) CountMembersInProject(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countMembersInProject, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countProjectsForUser = `-- name: CountProjectsForUser :one
-SELECT count(DISTINCT project_id)::bigint AS count
-FROM project_role_bindings
-WHERE user_id = $1
-`
-
-func (q *Queries) CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countProjectsForUser, userID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countActiveTokensForUser = `-- name: CountActiveTokensForUser :one
-SELECT count(*)::bigint AS count
-FROM api_tokens
-WHERE user_id = $1 AND is_revoked = false
-`
-
-func (q *Queries) CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveTokensForUser, userID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countTotalClusters = `-- name: CountTotalClusters :one
-SELECT count(*)::bigint AS count FROM clusters
-`
-
-func (q *Queries) CountTotalClusters(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countTotalClusters)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countTotalActiveUsers = `-- name: CountTotalActiveUsers :one
-SELECT count(*)::bigint AS count FROM users WHERE is_active = true
-`
-
-func (q *Queries) CountTotalActiveUsers(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countTotalActiveUsers)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-// ProjectQuotaSnapshotRow is the per-project usage row returned by
-// ListProjectQuotaSnapshots — the cap columns are repeated here so the
-// caller can compute usage_pct without a second roundtrip.
-type ProjectQuotaSnapshotRow struct {
-	ProjectID               uuid.UUID `json:"project_id"`
-	ProjectName             string    `json:"project_name"`
-	QuotaPlan               string    `json:"quota_plan"`
-	Enforcement             string    `json:"enforcement"`
-	MaxClustersPerProject   int32     `json:"max_clusters_per_project"`
-	MaxNamespacesPerProject int32     `json:"max_namespaces_per_project"`
-	MaxMembersPerProject    int32     `json:"max_members_per_project"`
-	ClustersInProject       int64     `json:"clusters_in_project"`
-	NamespacesInProject     int64     `json:"namespaces_in_project"`
-	MembersInProject        int64     `json:"members_in_project"`
-}
-
-const listProjectQuotaSnapshots = `-- name: ListProjectQuotaSnapshots :many
-SELECT
-    pr.id   AS project_id,
-    pr.name AS project_name,
-    pr.quota_plan,
-    p.enforcement,
-    p.max_clusters_per_project,
-    p.max_namespaces_per_project,
-    p.max_members_per_project,
-    (SELECT count(*) FROM projects pp WHERE pp.cluster_id = pr.cluster_id)::bigint                                            AS clusters_in_project,
-    COALESCE(jsonb_array_length(pr.namespaces), 0)::bigint                                                                    AS namespaces_in_project,
-    (SELECT count(DISTINCT user_id) FROM project_role_bindings WHERE project_id = pr.id AND user_id IS NOT NULL)::bigint      AS members_in_project
-FROM projects pr
-JOIN quota_plans p ON p.name = pr.quota_plan
-ORDER BY pr.created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListProjectQuotaSnapshotsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-func (q *Queries) ListProjectQuotaSnapshots(ctx context.Context, arg ListProjectQuotaSnapshotsParams) ([]ProjectQuotaSnapshotRow, error) {
-	rows, err := q.db.Query(ctx, listProjectQuotaSnapshots, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ProjectQuotaSnapshotRow{}
-	for rows.Next() {
-		var i ProjectQuotaSnapshotRow
-		if err := rows.Scan(
-			&i.ProjectID,
-			&i.ProjectName,
-			&i.QuotaPlan,
-			&i.Enforcement,
-			&i.MaxClustersPerProject,
-			&i.MaxNamespacesPerProject,
-			&i.MaxMembersPerProject,
-			&i.ClustersInProject,
-			&i.NamespacesInProject,
-			&i.MembersInProject,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-// UserQuotaSnapshotRow mirrors the projection emitted by
-// ListUserQuotaSnapshots.
-type UserQuotaSnapshotRow struct {
-	UserID             uuid.UUID `json:"user_id"`
-	Username           string    `json:"username"`
-	QuotaPlan          string    `json:"quota_plan"`
-	Enforcement        string    `json:"enforcement"`
-	MaxProjectsPerUser int32     `json:"max_projects_per_user"`
-	MaxTokensPerUser   int32     `json:"max_tokens_per_user"`
-	MaxStreamsPerUser  int32     `json:"max_streams_per_user"`
-	ProjectsForUser    int64     `json:"projects_for_user"`
-	TokensForUser      int64     `json:"tokens_for_user"`
-}
-
-const listUserQuotaSnapshots = `-- name: ListUserQuotaSnapshots :many
-SELECT
-    u.id       AS user_id,
-    u.username AS username,
-    u.quota_plan,
-    p.enforcement,
-    p.max_projects_per_user,
-    p.max_tokens_per_user,
-    p.max_streams_per_user,
-    (SELECT count(DISTINCT project_id) FROM project_role_bindings WHERE user_id = u.id)::bigint AS projects_for_user,
-    (SELECT count(*) FROM api_tokens WHERE user_id = u.id AND is_revoked = false)::bigint        AS tokens_for_user
-FROM users u
-JOIN quota_plans p ON p.name = u.quota_plan
-WHERE u.is_active = true
-ORDER BY u.created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListUserQuotaSnapshotsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-func (q *Queries) ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]UserQuotaSnapshotRow, error) {
-	rows, err := q.db.Query(ctx, listUserQuotaSnapshots, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []UserQuotaSnapshotRow{}
-	for rows.Next() {
-		var i UserQuotaSnapshotRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.Username,
-			&i.QuotaPlan,
-			&i.Enforcement,
-			&i.MaxProjectsPerUser,
-			&i.MaxTokensPerUser,
-			&i.MaxStreamsPerUser,
-			&i.ProjectsForUser,
-			&i.TokensForUser,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

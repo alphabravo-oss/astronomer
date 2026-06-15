@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { useCreateRole } from '@/lib/hooks';
 
 interface RoleEditorProps {
@@ -110,11 +111,11 @@ export function RoleEditor({ onClose, initialRole }: RoleEditorProps) {
 
   const handleSave = async () => {
     if (!form.name || !form.displayName) {
-      toast.error('Name and display name are required');
+      toastError('Name and display name are required');
       return;
     }
     if (form.rules.some((r) => !r.resources || r.verbs.length === 0)) {
-      toast.error('Each rule must have resources and at least one verb');
+      toastError('Each rule must have resources and at least one verb');
       return;
     }
 
@@ -141,24 +142,34 @@ export function RoleEditor({ onClose, initialRole }: RoleEditorProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <h3 className="text-lg font-semibold text-foreground">
-            {initialRole ? 'Edit Role' : 'Create Role'}
-          </h3>
+    <ModalShell
+      title={initialRole ? 'Edit Role' : 'Create Role'}
+      onClose={onClose}
+      size="lg"
+      panelClassName="max-w-2xl max-h-[85vh] bg-popover flex flex-col overflow-hidden"
+      bodyClassName="flex-1 overflow-y-auto space-y-5"
+      footerClassName="bg-muted/30"
+      footer={(
+        <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
-            <X className="h-5 w-5" />
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={createRole.isPending}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
+              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {createRole.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {initialRole ? 'Update Role' : 'Create Role'}
           </button>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      )}
+    >
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -303,28 +314,6 @@ export function RoleEditor({ onClose, initialRole }: RoleEditorProps) {
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0 bg-muted/30">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={createRole.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {createRole.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {initialRole ? 'Update Role' : 'Create Role'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

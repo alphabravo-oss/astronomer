@@ -1,6 +1,6 @@
 # Agent Privilege Profiles
 
-Astronomer adopted-cluster agents support three Kubernetes RBAC profiles. The profile is rendered into the agent install manifest and recorded on the cluster row as the reserved annotation `astronomer.io/agent-privilege-profile`.
+Astronomer adopted-cluster agents support six Kubernetes RBAC profiles. The profile is rendered into the agent install manifest and recorded on the cluster row as the reserved annotation `astronomer.io/agent-privilege-profile`.
 
 Use the narrowest profile that supports the workflows the cluster needs.
 
@@ -8,13 +8,54 @@ Use the narrowest profile that supports the workflows the cluster needs.
 |---------|--------------|-------------------|---------------------|----------------------|
 | `viewer` | Inventory, monitoring, and read-only inspection | `get`, `list`, and `watch` for common core, apps, batch, autoscaling, networking, policy, and CRD resources; read-only non-resource health/version endpoints | Cluster overview, resource browsing, logs, health probes, discovery, ArgoCD baseline observation through Astronomer | No workload mutation, no exec/attach/port-forward, no tool installation, no registry patching, no direct remediation |
 | `operator` | Day-to-day operations without cluster-admin | Viewer permissions plus create/update/patch/delete for common workload, service, namespace, secret, ingress, NetworkPolicy, PDB, Role, and RoleBinding resources; CRDs remain read-only | Workload lifecycle operations, common tool installs that do not need CRD creation, pod exec/attach/port-forward, namespace/service updates, service proxy for approved tools | Cannot create or update CRDs, ClusterRoles, ClusterRoleBindings, admission webhooks, storage classes, or other cluster-admin resources |
+| `namespace-viewer` | Namespace-scoped inventory | Read-only workload, logs, service, autoscaling, networking, batch, and policy resources in the agent namespace | Team-scoped inspection where cluster-wide inventory is not allowed | No cluster-scoped resources, no mutations, no exec/attach/port-forward, no CRDs, no node/namespace inventory |
+| `namespace-operator` | Namespace-scoped operations | Namespace-local workload mutations, logs, exec/attach/port-forward, services, NetworkPolicies, PDBs, Roles, and RoleBindings in the agent namespace | Team-scoped workload operation in locked-down clusters | No cluster-scoped resources, no CRDs, no ClusterRoles/ClusterRoleBindings, no secrets by default |
+| `custom` | Externally managed RBAC | No default Kubernetes permissions from the Astronomer manifest | Operators bind exactly the permissions they want outside the generated manifest | Capability inference is intentionally conservative; live diagnostics should verify required workflows |
 | `admin` | Compatibility, bootstrap, and break-glass | `*` API groups, `*` resources, `*` verbs, and `*` non-resource URLs | All existing Astronomer workflows, including components that need cluster-wide installation or CRD management | Largest blast radius. Prefer only when baseline components or operator workflows require cluster-admin-like access |
 
 ## Selection Surfaces
 
 - UI/API-created clusters default to `admin` unless a narrower profile is recorded on the cluster annotations before the manifest is rendered.
-- `Cluster` CRDs can declare `spec.agent.privilegeProfile` as `viewer`, `operator`, or `admin`.
+- `Cluster` CRDs can declare `spec.agent.privilegeProfile` directly.
+- `Cluster` CRDs can also declare `spec.agent.profileRef` pointing to a same-namespace `AgentProfile`. The Cluster reconciler resolves that profile, records `management.astronomer.io/agent-profile-ref`, and writes the resolved `astronomer.io/agent-privilege-profile` annotation used by manifest rendering.
+- Referenced `AgentProfile` resources can also project install metadata into the same registration manifest path: `install.image`, `install.serviceAccountName`, and `install.podLabels`.
 - The server normalizes invalid or missing values to `admin` for compatibility with existing clusters.
+
+## Install Metadata
+
+`AgentProfile.spec.install` controls install-time manifest details without making operators hand-edit generated YAML:
+
+- `image` overrides the agent image rendered into the Deployment.
+- `serviceAccountName` overrides the generated ServiceAccount name and matching RoleBinding subject.
+- `podLabels` adds deterministic labels to the agent pod template for local policy, cost, or inventory selectors.
+
+The Cluster reconciler stores these as reserved annotations:
+
+- `management.astronomer.io/agent-image`
+- `management.astronomer.io/agent-service-account-name`
+- `management.astronomer.io/agent-pod-labels`
+
+The renderer validates supported CRD inputs before projection. Manually setting these annotations through API automation should use the same constraints: Kubernetes image text without control characters, DNS-1123 service account names, and valid Kubernetes label keys and values.
+
+## Capability Enforcement
+
+`AgentProfile.spec.capabilities` is validated against the selected `privilegeProfile`. A profile cannot claim a capability the rendered RBAC profile cannot support. Supported capability keys are:
+
+- `watch`
+- `logs`
+- `exec` / `shell`
+- `helm`
+- `service_proxy`
+- `mutate`
+- `secrets`
+- `rbac`
+- `cluster_scope`
+- `namespace_scoped`
+- `cluster_admin`
+- `custom_rbac`
+- `capability_inference`
+
+For built-in profiles, `allowedRules` must stay inside the same permission boundary as the rendered manifest. For example, `viewer` cannot add `pods/exec`, mutating verbs, secrets, or wildcard rules, and `namespace-operator` cannot add cluster-scoped resources or secrets. `admin` can declare broad rules. `custom` can declare externally managed RBAC, and capability claims such as `exec` are accepted only when the declared rules include the matching resource and verb.
 
 ## ArgoCD Baseline Interaction
 
@@ -27,5 +68,7 @@ For least privilege, start with `operator` for clusters where baseline component
 - Treat `admin` as an explicit risk acceptance and keep it visible in cluster review.
 - Prefer `operator` for managed workload clusters.
 - Prefer `viewer` for audit-only or inventory-only clusters.
+- Prefer `namespace-operator` or `namespace-viewer` when Astronomer should only operate inside the agent namespace.
+- Use `custom` only when you manage the Role/ClusterRole bindings outside the generated manifest.
 - Re-render and re-apply the agent manifest after changing the profile.
 - Validate important workflows after profile changes: resource browsing, logs, shell/exec, tool install, ArgoCD sync, backup, scan, and decommission.

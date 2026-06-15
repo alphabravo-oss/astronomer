@@ -69,12 +69,6 @@ SET last_health_at = now(),
     updated_at     = now()
 WHERE id = $1;
 
--- name: UpdateVaultConnectionTokenExpiry :exec
-UPDATE vault_connections
-SET cached_token_expires_at = $2,
-    updated_at = now()
-WHERE id = $1;
-
 -- name: SetProjectDefaultVaultConnection :exec
 UPDATE projects
 SET default_vault_connection_id = $2,

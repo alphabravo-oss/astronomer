@@ -23,14 +23,15 @@ import (
 
 // AppProjectSpec is the writable subset of an AppProject.
 type AppProjectSpec struct {
-	Description               string                  `json:"description,omitempty"`
-	SourceRepos               []string                `json:"sourceRepos,omitempty"`
-	Destinations              []ApplicationDestination `json:"destinations,omitempty"`
-	ClusterResourceWhitelist  []GroupKind             `json:"clusterResourceWhitelist,omitempty"`
-	NamespaceResourceWhitelist []GroupKind             `json:"namespaceResourceWhitelist,omitempty"`
-	ClusterResourceBlacklist  []GroupKind             `json:"clusterResourceBlacklist,omitempty"`
-	NamespaceResourceBlacklist []GroupKind             `json:"namespaceResourceBlacklist,omitempty"`
-	Roles                     []AppProjectRole        `json:"roles,omitempty"`
+	Description                string                   `json:"description,omitempty"`
+	SourceRepos                []string                 `json:"sourceRepos,omitempty"`
+	Destinations               []ApplicationDestination `json:"destinations,omitempty"`
+	ClusterResourceWhitelist   []GroupKind              `json:"clusterResourceWhitelist,omitempty"`
+	NamespaceResourceWhitelist []GroupKind              `json:"namespaceResourceWhitelist,omitempty"`
+	ClusterResourceBlacklist   []GroupKind              `json:"clusterResourceBlacklist,omitempty"`
+	NamespaceResourceBlacklist []GroupKind              `json:"namespaceResourceBlacklist,omitempty"`
+	Roles                      []AppProjectRole         `json:"roles,omitempty"`
+	SyncWindows                []AppProjectSyncWindow   `json:"syncWindows,omitempty"`
 }
 
 // GroupKind is the {group, kind} pair ArgoCD uses for resource whitelists.
@@ -44,6 +45,23 @@ type AppProjectRole struct {
 	Name     string   `json:"name"`
 	Policies []string `json:"policies,omitempty"`
 	Groups   []string `json:"groups,omitempty"`
+}
+
+// AppProjectSyncWindow is ArgoCD's AppProject-level sync window model.
+// Windows can be allow/deny policies over applications, namespaces, and
+// clusters using cron schedules and Go-style durations such as "1h".
+type AppProjectSyncWindow struct {
+	Kind           string   `json:"kind"`
+	Schedule       string   `json:"schedule"`
+	Duration       string   `json:"duration"`
+	Applications   []string `json:"applications,omitempty"`
+	Namespaces     []string `json:"namespaces,omitempty"`
+	Clusters       []string `json:"clusters,omitempty"`
+	ManualSync     bool     `json:"manualSync,omitempty"`
+	SyncOverrun    bool     `json:"syncOverrun,omitempty"`
+	TimeZone       string   `json:"timeZone,omitempty"`
+	UseAndOperator bool     `json:"useAndOperator,omitempty"`
+	Description    string   `json:"description,omitempty"`
 }
 
 // AppProject is the projection returned by GET / created by POST.
@@ -61,10 +79,10 @@ type AppProject struct {
 // inner object.
 type projectCreateEnvelope struct {
 	Project struct {
-		APIVersion string                  `json:"apiVersion,omitempty"`
-		Kind       string                  `json:"kind,omitempty"`
-		Metadata   ApplicationMetadata     `json:"metadata"`
-		Spec       AppProjectSpec          `json:"spec"`
+		APIVersion string              `json:"apiVersion,omitempty"`
+		Kind       string              `json:"kind,omitempty"`
+		Metadata   ApplicationMetadata `json:"metadata"`
+		Spec       AppProjectSpec      `json:"spec"`
 	} `json:"project"`
 }
 

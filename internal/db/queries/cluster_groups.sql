@@ -1,8 +1,8 @@
 -- Migration 066 — cluster groups CRUD + tree expansion.
 --
 -- The Go shim in internal/db/sqlc/cluster_groups.sql.go hand-implements
--- these (the sqlc CLI is currently disabled in worktrees); the queries
--- below are the canonical source-of-truth for the contract.
+-- these while generated freshness is enforced separately; the queries below
+-- are the canonical source-of-truth for the contract.
 
 -- name: ListClusterGroups :many
 SELECT id, name, slug, description, parent_id, color, icon, enabled, created_by, created_at, updated_at
@@ -51,7 +51,7 @@ ORDER BY depth, name;
 
 -- name: ListClustersInGroupTree :many
 WITH RECURSIVE subtree AS (
-    SELECT id FROM cluster_groups WHERE id = $1 AND enabled = true
+    SELECT cg.id FROM cluster_groups cg WHERE cg.id = $1 AND cg.enabled = true
     UNION ALL
     SELECT c.id FROM cluster_groups c
     INNER JOIN subtree s ON c.parent_id = s.id
@@ -62,26 +62,20 @@ INNER JOIN subtree s ON cl.group_id = s.id
 ORDER BY cl.name ASC;
 
 -- name: CountClustersInGroup :one
-SELECT COUNT(*)::bigint FROM clusters WHERE group_id = $1;
+SELECT COUNT(*)::bigint FROM clusters WHERE group_id = sqlc.arg(group_id)::uuid;
 
 -- name: CountClustersInGroupTree :one
 WITH RECURSIVE subtree AS (
-    SELECT id FROM cluster_groups WHERE id = $1 AND enabled = true
+    SELECT cg.id FROM cluster_groups cg WHERE cg.id = $1 AND cg.enabled = true
     UNION ALL
     SELECT c.id FROM cluster_groups c
     INNER JOIN subtree s ON c.parent_id = s.id
     WHERE c.enabled = true
 )
-SELECT COUNT(*)::bigint FROM clusters cl WHERE cl.group_id IN (SELECT id FROM subtree);
+SELECT COUNT(*)::bigint FROM clusters cl WHERE cl.group_id IN (SELECT subtree.id FROM subtree);
 
 -- name: AssignClusterGroup :exec
 UPDATE clusters SET group_id = $2, updated_at = now() WHERE id = $1;
 
 -- name: UnassignClusterGroup :exec
 UPDATE clusters SET group_id = NULL, updated_at = now() WHERE id = $1;
-
--- name: GetClusterGroupForCluster :one
-SELECT group_id FROM clusters WHERE id = $1;
-
--- name: CountEnabledClusterGroups :one
-SELECT COUNT(*)::bigint FROM cluster_groups WHERE enabled = true;

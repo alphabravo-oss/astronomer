@@ -6,18 +6,10 @@
 // single GET on /api/v1/admin/compliance/export/ which streams a ZIP
 // bundle of CSVs + JSON keyed to the relevant control IDs.
 //
-// Two transport paths share the same writer code:
-//
-//   - Inline (small ranges). The handler streams a ZIP directly into
-//     the response. Default below ~100K audit rows; the threshold is
-//     tunable via SetInlineThreshold.
-//
-//   - Async (large ranges). The handler enqueues a `compliance:export`
-//     asynq task and returns 202 Accepted with a job ID. The worker
-//     runs the same writer functions but persists the bundle. The
-//     status endpoint at /api/v1/admin/compliance/exports/{id}/ then
-//     returns either running/failed status or a presigned URL for the
-//     completed bundle.
+// The handler streams the ZIP directly. The previous async branch
+// returned an Asynq job ID without a registered worker or durable job
+// state; leaving that path enabled made large exports look queued
+// while they could never complete.
 //
 // Both paths gate on superuser inside the handler (same pattern as
 // admin_drill.go / admin_queues.go / support_bundle.go) so the
@@ -27,19 +19,16 @@ package handler
 
 import (
 	"archive/zip"
-	"compress/gzip"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -94,137 +83,32 @@ type ComplianceQuerier interface {
 	ProjectPolicyQuerier
 }
 
-// ── async job tracker ──────────────────────────────────────────────────
-
-// ComplianceExportStatus is the enum the status endpoint emits.
-const (
-	ComplianceExportStatusPending   = "pending"
-	ComplianceExportStatusRunning   = "running"
-	ComplianceExportStatusCompleted = "completed"
-	ComplianceExportStatusFailed    = "failed"
-)
-
-// ComplianceExportJob is the in-memory record of an async export
-// request. Persisted only in-process — we INTENTIONALLY skipped a
-// `compliance_exports` table per the spec; for a v1 implementation
-// the trade-off is "job state is lost on a server restart" against
-// "no migration churn". The async path can still complete a running
-// export across a restart by re-uploading on retry (asynq handles
-// the worker side), so the user-visible failure is "the GET
-// /exports/{id}/ status endpoint returns 404 after a restart" — the
-// frontend can re-issue the export and pick the new ID up.
-type ComplianceExportJob struct {
-	ID          string    `json:"id"`
-	From        time.Time `json:"from"`
-	To          time.Time `json:"to"`
-	RequestedBy string    `json:"requested_by"`
-	Status      string    `json:"status"`
-	OutputKey   string    `json:"output_key,omitempty"`
-	Error       string    `json:"error,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-type complianceJobStore struct {
-	mu   sync.Mutex
-	jobs map[string]*ComplianceExportJob
-}
-
-func newComplianceJobStore() *complianceJobStore {
-	return &complianceJobStore{jobs: make(map[string]*ComplianceExportJob)}
-}
-
-func (s *complianceJobStore) put(j *ComplianceExportJob) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.jobs[j.ID] = j
-}
-
-func (s *complianceJobStore) get(id string) (*ComplianceExportJob, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	j, ok := s.jobs[id]
-	if !ok {
-		return nil, false
-	}
-	// Return a copy so callers can't mutate the stored row through the
-	// returned pointer.
-	cp := *j
-	return &cp, true
-}
-
-// ── asynq plumbing seams ───────────────────────────────────────────────
-
-// ComplianceTaskEnqueuer is the slice of asynq.Client the handler
-// uses. Satisfied by *asynq.Client; tests substitute a fake that
-// records the enqueue without standing up a Redis.
-type ComplianceTaskEnqueuer interface {
-	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
-}
-
-// TaskTypeComplianceExport is the asynq task type that runs the
-// async export. Worker registration lives in
-// internal/worker/tasks/compliance_export.go (not part of this
-// commit — the test seam covers the enqueue + status flow without
-// requiring the worker to actually run).
-const TaskTypeComplianceExport = "compliance:export"
-
-// ComplianceExportPayload is the asynq task payload. The worker
-// re-runs the same writer code as the inline path but pipes through
-// a gzip stream to the configured object store. OutputKey is the
-// object-store key the worker writes to.
-type ComplianceExportPayload struct {
-	JobID       string    `json:"job_id"`
-	From        time.Time `json:"from"`
-	To          time.Time `json:"to"`
-	RequestedBy string    `json:"requested_by"`
-	OutputKey   string    `json:"output_key"`
-}
-
 // ── handler ────────────────────────────────────────────────────────────
 
 // ComplianceHandler wraps the /api/v1/admin/compliance/* endpoints.
 type ComplianceHandler struct {
-	queries         ComplianceQuerier
-	tasks           ComplianceTaskEnqueuer
-	jobs            *complianceJobStore
-	inlineThreshold int64
-	now             func() time.Time
+	queries ComplianceQuerier
+	now     func() time.Time
 }
 
-// NewComplianceHandler returns a wired handler. `tasks` may be nil —
-// the handler will then take the inline path for every request,
-// regardless of row count. Useful for deployments without an asynq
-// worker.
-func NewComplianceHandler(queries ComplianceQuerier, tasks ComplianceTaskEnqueuer) *ComplianceHandler {
+// NewComplianceHandler returns a wired handler. The second parameter is kept
+// for call-site compatibility while async compliance export remains disabled
+// until it has durable status and storage.
+func NewComplianceHandler(queries ComplianceQuerier, _ any) *ComplianceHandler {
 	return &ComplianceHandler{
-		queries:         queries,
-		tasks:           tasks,
-		jobs:            newComplianceJobStore(),
-		inlineThreshold: 100_000,
-		now:             time.Now,
+		queries: queries,
+		now:     time.Now,
 	}
-}
-
-// SetInlineThreshold tunes the inline-vs-async cutoff. Tests can
-// drop it to 0 to force the async path on every request.
-func (h *ComplianceHandler) SetInlineThreshold(n int64) {
-	if h == nil {
-		return
-	}
-	h.inlineThreshold = n
 }
 
 // ── HTTP handlers ──────────────────────────────────────────────────────
 
 // Export handles GET /api/v1/admin/compliance/export/?from=&to=.
 //
-// Picks the inline-streaming path or the async task path based on
-// the row-count estimate from CountAuditLogV1ForRange. Inline path
-// streams a ZIP body; async path returns 202 Accepted with a job ID.
+// Streams a ZIP body directly. Async export is intentionally disabled until it
+// has a registered worker and durable job/output state.
 func (h *ComplianceHandler) Export(w http.ResponseWriter, r *http.Request) {
-	caller, ok := h.gate(w, r)
-	if !ok {
+	if _, ok := h.gate(w, r); !ok {
 		return
 	}
 
@@ -242,34 +126,17 @@ func (h *ComplianceHandler) Export(w http.ResponseWriter, r *http.Request) {
 			"to":   to.UTC().Format(time.RFC3339),
 		})
 
-	// Row-count estimate. A query error here is non-fatal — fall
-	// back to the inline path so the user gets *something* instead of
-	// a 500.
-	var auditRows int64
-	if h.queries != nil {
-		if n, cErr := h.queries.CountAuditLogV1ForRange(r.Context(), from, to); cErr == nil {
-			auditRows = n
-		}
-	}
-
-	if h.tasks != nil && h.inlineThreshold > 0 && auditRows > h.inlineThreshold {
-		h.enqueueAsync(w, r, caller, from, to, auditRows)
-		return
-	}
-
 	h.streamInline(w, r, from, to)
 }
 
 // GetExportStatus handles GET /api/v1/admin/compliance/exports/{id}/.
-// Returns either the running job's status (pending / running /
-// failed) or, on completion, the output_key the frontend can pass to
-// the object-store presigner.
+// Async compliance exports are intentionally disabled until the system has a
+// durable job table plus object storage writer. Keep the route so old clients
+// receive a clear 404 instead of a missing-route response.
 func (h *ComplianceHandler) GetExportStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.gate(w, r); !ok {
 		return
 	}
-	// Path-segment ID extraction — we don't import chi here so callers
-	// can mount this on any router. Strip a trailing slash defensively.
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	idx := strings.LastIndex(path, "/")
 	if idx == -1 {
@@ -281,12 +148,7 @@ func (h *ComplianceHandler) GetExportStatus(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Missing export id")
 		return
 	}
-	job, ok := h.jobs.get(id)
-	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Export not found")
-		return
-	}
-	RespondJSON(w, http.StatusOK, job)
+	RespondRequestError(w, r, http.StatusNotFound, "not_found", "Async compliance exports are not enabled; request a new export")
 }
 
 // ── inline streaming path ──────────────────────────────────────────────
@@ -307,11 +169,13 @@ func (h *ComplianceHandler) streamInline(w http.ResponseWriter, r *http.Request,
 	mw := &meteringWriter{Writer: w}
 
 	zw := zip.NewWriter(mw)
-	defer zw.Close()
 
 	log := newSectionLog()
 	h.writeAllSections(r.Context(), zw, log, from, to)
 	h.writeBundleReadme(zw, log, from, to)
+	if err := zw.Close(); err != nil {
+		slog.Warn("failed to finish compliance export", "error", err)
+	}
 
 	complianceExportsTotal.WithLabelValues(observability.MetricValues("inline")...).Inc()
 	complianceExportBytes.WithLabelValues(observability.MetricValues()...).Observe(float64(mw.n))
@@ -382,9 +246,9 @@ func (h *ComplianceHandler) writeBundleReadme(zw *zip.Writer, log *sectionLog, f
 	var b strings.Builder
 	b.WriteString("Astronomer compliance export\n")
 	b.WriteString("============================\n\n")
-	b.WriteString(fmt.Sprintf("Generated: %s\n", h.now().UTC().Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("Range:     %s — %s (UTC, half-open)\n\n",
-		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339)))
+	fmt.Fprintf(&b, "Generated: %s\n", h.now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "Range:     %s — %s (UTC, half-open)\n\n",
+		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 
 	b.WriteString("Contents (per-section outcome):\n")
 	for _, line := range log.lines {
@@ -463,76 +327,6 @@ Verification notes
 	_, _ = io.Copy(fw, strings.NewReader(b.String()))
 }
 
-// ── async path ─────────────────────────────────────────────────────────
-
-// enqueueAsync stages a job record and pushes the asynq task. Returns
-// 202 with the job ID + the polling URL.
-func (h *ComplianceHandler) enqueueAsync(w http.ResponseWriter, r *http.Request, caller sqlc.User, from, to time.Time, rowCount int64) {
-	jobID := uuid.NewString()
-	outputKey := fmt.Sprintf("compliance/%s/%s.zip.gz",
-		from.UTC().Format("2006-01"), jobID)
-
-	job := &ComplianceExportJob{
-		ID:          jobID,
-		From:        from,
-		To:          to,
-		RequestedBy: caller.ID.String(),
-		Status:      ComplianceExportStatusPending,
-		OutputKey:   outputKey,
-		CreatedAt:   h.now(),
-		UpdatedAt:   h.now(),
-	}
-	h.jobs.put(job)
-
-	if h.tasks != nil {
-		payload, err := marshalCompliancePayload(ComplianceExportPayload{
-			JobID:       jobID,
-			From:        from,
-			To:          to,
-			RequestedBy: caller.ID.String(),
-			OutputKey:   outputKey,
-		})
-		if err == nil {
-			task := asynq.NewTask(TaskTypeComplianceExport, payload)
-			if _, qErr := h.tasks.Enqueue(task,
-				asynq.MaxRetry(3),
-				asynq.Timeout(30*time.Minute),
-				asynq.Retention(7*24*time.Hour),
-			); qErr != nil {
-				job.Status = ComplianceExportStatusFailed
-				job.Error = "enqueue_failed: " + qErr.Error()
-				job.UpdatedAt = h.now()
-				h.jobs.put(job)
-			}
-		}
-	}
-
-	recordAudit(r, h.queries, "admin.compliance.export_completed",
-		"platform", jobID, "compliance-export", map[string]any{
-			"transport":  "async",
-			"from":       from.UTC().Format(time.RFC3339),
-			"to":         to.UTC().Format(time.RFC3339),
-			"row_count":  rowCount,
-			"output_key": outputKey,
-		})
-	complianceExportsTotal.WithLabelValues(observability.MetricValues("async")...).Inc()
-
-	w.Header().Set("Location", fmt.Sprintf("/api/v1/admin/compliance/exports/%s/", jobID))
-	RespondJSON(w, http.StatusAccepted, map[string]any{
-		"id":         jobID,
-		"status":     job.Status,
-		"status_url": fmt.Sprintf("/api/v1/admin/compliance/exports/%s/", jobID),
-		"output_key": outputKey,
-	})
-}
-
-// marshalCompliancePayload encodes the asynq task payload as compact
-// JSON. Kept as a named helper so a future swap to a different
-// encoder (json/v2, sonic, etc.) is a one-line change.
-func marshalCompliancePayload(p ComplianceExportPayload) ([]byte, error) {
-	return json.Marshal(p)
-}
-
 // ── gating ─────────────────────────────────────────────────────────────
 
 // gate enforces superuser-only access. Mirrors the pattern in
@@ -597,8 +391,3 @@ func (m *meteringWriter) Write(p []byte) (int, error) {
 	m.n += int64(n)
 	return n, err
 }
-
-// keep the gzip import warm for the async worker hook — the
-// streaming writer in the worker (not part of this commit) pipes the
-// zip through a *gzip.Writer to the object store.
-var _ = gzip.BestSpeed

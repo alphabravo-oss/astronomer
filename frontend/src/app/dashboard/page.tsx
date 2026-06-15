@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useClusters, useActivityFeed, useAlertEvents, useTools, queryKeys } from '@/lib/hooks';
 import { useLatestBackupDrill } from '@/components/settings/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
@@ -179,51 +180,51 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium">Name</th>
-                  <th className="text-left px-4 py-2 font-medium">Status</th>
-                  <th className="text-left px-4 py-2 font-medium">Version</th>
-                  <th className="text-right px-4 py-2 font-medium">Nodes</th>
-                  <th className="text-right px-4 py-2 font-medium">Pods</th>
-                  <th className="text-right px-4 py-2 font-medium">CPU</th>
-                  <th className="text-right px-4 py-2 font-medium">Memory</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+            <Table className="w-full text-sm">
+              <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                <TableRow>
+                  <TableHead className="text-left px-4 py-2 font-medium">Name</TableHead>
+                  <TableHead className="text-left px-4 py-2 font-medium">Status</TableHead>
+                  <TableHead className="text-left px-4 py-2 font-medium">Version</TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">Nodes</TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">Pods</TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">CPU</TableHead>
+                  <TableHead className="text-right px-4 py-2 font-medium">Memory</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-border">
                 {clusters.map((cluster) => (
-                  <tr key={cluster.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-2">
+                  <TableRow key={cluster.id} className="hover:bg-muted/30 transition-colors">
+                    <TableCell className="px-4 py-2">
                       <Link
                         href={`/dashboard/clusters/${cluster.id}`}
                         className="font-medium text-foreground hover:underline"
                       >
                         {cluster.name}
                       </Link>
-                    </td>
-                    <td className="px-4 py-2">
+                    </TableCell>
+                    <TableCell className="px-4 py-2">
                       <StatusBadge status={cluster.status} />
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground font-mono text-xs">
+                    </TableCell>
+                    <TableCell className="px-4 py-2 text-muted-foreground font-mono text-xs">
                       {cluster.kubernetesVersion || '—'}
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">{cluster.nodeCount}</td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">{cluster.podCount}</td>
-                    <td className={cn('px-4 py-2 text-right font-mono text-xs',
+                    </TableCell>
+                    <TableCell className="px-4 py-2 text-right font-mono text-xs">{cluster.nodeCount}</TableCell>
+                    <TableCell className="px-4 py-2 text-right font-mono text-xs">{cluster.podCount}</TableCell>
+                    <TableCell className={cn('px-4 py-2 text-right font-mono text-xs',
                       cluster.cpuPercentage >= 90 ? 'text-red-500' :
                       cluster.cpuPercentage >= 75 ? 'text-yellow-500' : 'text-muted-foreground')}>
                       {cluster.cpuPercentage != null ? `${cluster.cpuPercentage.toFixed(0)}%` : '—'}
-                    </td>
-                    <td className={cn('px-4 py-2 text-right font-mono text-xs',
+                    </TableCell>
+                    <TableCell className={cn('px-4 py-2 text-right font-mono text-xs',
                       cluster.memoryPercentage >= 90 ? 'text-red-500' :
                       cluster.memoryPercentage >= 75 ? 'text-yellow-500' : 'text-muted-foreground')}>
                       {cluster.memoryPercentage != null ? `${cluster.memoryPercentage.toFixed(0)}%` : '—'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </section>

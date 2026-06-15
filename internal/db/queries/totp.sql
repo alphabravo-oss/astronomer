@@ -76,8 +76,3 @@ WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL;
 -- Wipes every code (used or not) so a regen invalidates the old sheet
 -- entirely, not just the unused entries.
 DELETE FROM user_totp_recovery_codes WHERE user_id = $1;
-
--- name: CountTOTPEnrollments :one
--- Drives the astronomer_auth_totp_enrollments gauge. Cheap full-table
--- count over a small table; no index needed.
-SELECT count(*) FROM user_totp_enrollments;

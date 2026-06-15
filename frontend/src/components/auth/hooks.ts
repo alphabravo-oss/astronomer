@@ -8,7 +8,7 @@
  * mutate) so the auth pages feel identical to the rest of the dashboard.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as apiClient from '@/lib/api';
 import type {
   DexConnectorWriteRequest,
@@ -53,10 +53,10 @@ export function useCreateDexConnector() {
     mutationFn: (data: DexConnectorWriteRequest) => apiClient.createDexConnector(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.connectors });
-      toast.success('Connector created');
+      toastSuccess('Connector created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create connector: ${err.message}`);
+      toastApiError('Failed to create connector', err);
     },
   });
 }
@@ -69,10 +69,10 @@ export function useUpdateDexConnector() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.connectors });
       qc.invalidateQueries({ queryKey: dexQueryKeys.connector(vars.id) });
-      toast.success('Connector updated');
+      toastSuccess('Connector updated');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to update connector: ${err.message}`);
+      toastApiError('Failed to update connector', err);
     },
   });
 }
@@ -83,10 +83,10 @@ export function useDeleteDexConnector() {
     mutationFn: (id: string) => apiClient.deleteDexConnector(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.connectors });
-      toast.success('Connector deleted');
+      toastSuccess('Connector deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to delete connector: ${err.message}`);
+      toastApiError('Failed to delete connector', err);
     },
   });
 }
@@ -104,10 +104,10 @@ export function useUpdateDexSettings() {
     mutationFn: (data: DexSettingsWriteRequest) => apiClient.updateDexSettings(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.settings });
-      toast.success('Dex settings saved');
+      toastSuccess('Dex settings saved');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to save settings: ${err.message}`);
+      toastApiError('Failed to save settings', err);
     },
   });
 }
@@ -116,10 +116,10 @@ export function useApplyDexConfig() {
   return useMutation({
     mutationFn: () => apiClient.applyDexConfig(),
     onSuccess: (data) => {
-      toast.success(`Applied ${data.connectorCount} connector(s) to Dex`);
+      toastSuccess(`Applied ${data.connectorCount} connector(s) to Dex`);
     },
     onError: (err: Error) => {
-      toast.error(`Apply failed: ${err.message}`);
+      toastApiError('Apply failed', err);
     },
   });
 }
@@ -128,10 +128,10 @@ export function useRegisterDexAsSSO() {
   return useMutation({
     mutationFn: (data: DexRegisterAsSSORequest) => apiClient.registerDexAsSSO(data),
     onSuccess: () => {
-      toast.success('Dex registered as SSO provider');
+      toastSuccess('Dex registered as SSO provider');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to register SSO: ${err.message}`);
+      toastApiError('Failed to register SSO', err);
     },
   });
 }

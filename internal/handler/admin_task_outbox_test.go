@@ -11,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -74,7 +73,9 @@ func (f *fakeAdminTaskOutboxQuerier) RetryTaskOutbox(_ context.Context, arg sqlc
 	for i, row := range f.rows {
 		if row.ID == arg.ID {
 			f.rows[i].Status = "pending"
-			f.rows[i].NextAttemptAt = arg.NextAttemptAt
+			if arg.NextAttemptAt.Valid {
+				f.rows[i].NextAttemptAt = arg.NextAttemptAt.Time
+			}
 			f.rows[i].LastError = ""
 			return f.rows[i], nil
 		}
@@ -109,10 +110,10 @@ func makeTaskOutboxRow(status string) sqlc.TaskOutbox {
 		MaxDeliveryAttempts: 20,
 		Status:              status,
 		AttemptCount:        3,
-		NextAttemptAt:       pgtype.Timestamptz{Time: now, Valid: true},
+		NextAttemptAt:       now,
 		LastError:           "redis down",
-		CreatedAt:           pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true},
-		UpdatedAt:           pgtype.Timestamptz{Time: now, Valid: true},
+		CreatedAt:           now.Add(-time.Minute),
+		UpdatedAt:           now,
 	}
 }
 

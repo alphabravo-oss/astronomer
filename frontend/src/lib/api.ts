@@ -1,19 +1,10 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import type { APIResponse, PaginatedResponse } from '@/types';
+import { clearLegacyTokenStorage } from '@/lib/auth/session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 const CSRF_COOKIE = 'astronomer_csrf';
 const CSRF_HEADER = 'X-CSRF-Token';
-
-function clearLegacyTokenStorage(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem('astronomer_token');
-    localStorage.removeItem('astronomer_refresh');
-  } catch {
-    // Storage may be blocked in hardened browser profiles. Cookie auth still works.
-  }
-}
 
 function readCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
@@ -146,8 +137,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, false);
-        localStorage.removeItem('astronomer_token');
-        localStorage.removeItem('astronomer_refresh');
+        clearLegacyTokenStorage();
         if (!window.location.pathname.startsWith('/auth')) {
           window.location.href = '/auth/login';
         }
@@ -170,16 +160,16 @@ export default api;
 
 // --- Auth ---
 
-export async function loginWithCredentials(username: string, password: string) {
+export async function loginWithCredentials(email: string, password: string) {
   const res = await api.post<APIResponse<{ token: string; refresh: string; user: import('@/types').User }>>('/auth/login', {
-    username,
+    email,
     password,
   });
   return res.data.data;
 }
 
 export async function changeOwnPassword(currentPassword: string, newPassword: string) {
-  const res = await api.post<{ detail: string }>('/auth/change-password', {
+  const res = await api.post<{ detail: string; must_change_password?: boolean }>('/auth/change-password', {
     current_password: currentPassword,
     new_password: newPassword,
   });
@@ -253,6 +243,14 @@ export async function getAgentFleet(params?: { limit?: number; offset?: number }
 export async function getAgentDiagnostics(clusterId: string) {
   const res = await api.get<APIResponse<import('@/types').AgentDiagnosticsResponse>>(
     `/agents/fleet/${clusterId}/diagnostics`,
+  );
+  return res.data.data;
+}
+
+export async function runAgentSelfTest(clusterId: string) {
+  const res = await api.post<APIResponse<import('@/types').AgentSelfTestResponse>>(
+    `/agents/fleet/${clusterId}/self-test`,
+    {},
   );
   return res.data.data;
 }
@@ -799,6 +797,39 @@ export async function getArgoApplications(params?: { clusterId?: string; project
   return res.data.data;
 }
 
+export interface ArgoCachedApplication {
+  id: string;
+  argocdInstanceId: string;
+  name: string;
+  project: string;
+  repoUrl: string;
+  path: string;
+  targetRevision: string;
+  destinationCluster: string;
+  destinationNamespace: string;
+  syncStatus: string;
+  healthStatus: string;
+  resourceCreatedCount?: number;
+  resourceChangedCount?: number;
+  resourcePrunedCount?: number;
+  lastSynced?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function listArgoCachedApplications(params?: { instanceId?: string; limit?: number; offset?: number }) {
+  const endpoint = params?.instanceId
+    ? `/argocd/instances/${params.instanceId}/cached-applications`
+    : '/argocd/applications';
+  const res = await api.get<PaginatedResponse<ArgoCachedApplication>>(endpoint, {
+    params: {
+      limit: params?.limit,
+      offset: params?.offset,
+    },
+  });
+  return res.data.data ?? [];
+}
+
 export async function syncArgoApplication(instanceId: string, appName: string) {
   const res = await api.post<APIResponse<void>>(`/argocd/instances/${instanceId}/applications/${appName}/sync`);
   return res.data;
@@ -870,14 +901,31 @@ export async function createRoleBinding(data: {
   return res.data.data;
 }
 
-export async function getMyEffectivePermissions() {
-  const res = await api.get<APIResponse<import('@/types').EffectivePermissionResponse>>('/rbac/my-permissions');
+export interface EffectivePermissionParams {
+  clusterId?: string;
+  projectId?: string;
+  namespace?: string;
+}
+
+function effectivePermissionQueryParams(params?: EffectivePermissionParams) {
+  return {
+    cluster_id: params?.clusterId || undefined,
+    project_id: params?.projectId || undefined,
+    namespace: params?.namespace || undefined,
+  };
+}
+
+export async function getMyEffectivePermissions(params?: EffectivePermissionParams) {
+  const res = await api.get<APIResponse<import('@/types').EffectivePermissionResponse>>('/rbac/my-permissions', {
+    params: effectivePermissionQueryParams(params),
+  });
   return res.data.data;
 }
 
-export async function getEffectivePermissionsForUser(userId: string) {
+export async function getEffectivePermissionsForUser(userId: string, params?: EffectivePermissionParams) {
   const res = await api.get<APIResponse<import('@/types').EffectivePermissionResponse>>(
     `/rbac/effective-permissions/${userId}`,
+    { params: effectivePermissionQueryParams(params) },
   );
   return res.data.data;
 }
@@ -950,16 +998,78 @@ export async function deleteAPIToken(id: string) {
   await api.delete(`/settings/tokens/${id}`);
 }
 
-export async function getAuditLogs(params?: {
+export type AuditLogQueryParams = {
   page?: number;
   pageSize?: number;
+  limit?: number;
+  offset?: number;
+  actor?: string;
   action?: string;
   user?: string;
+  user_id?: string;
+  target?: string;
+  resource_type?: string;
+  resource_id?: string;
+  resource_name?: string;
+  cluster_id?: string;
+  project_id?: string;
+  result?: 'success' | 'failure' | 'error' | string;
+  status_code?: number;
+  source?: string;
+  correlation_id?: string;
+  request_id?: string;
+  from?: string;
+  to?: string;
   // action_class: "mutation" | "read" | "auth" | "system" — migration 063.
   action_class?: string;
-}) {
-  const res = await api.get<PaginatedResponse<import('@/types').AuditLogEntry>>('/settings/audit-logs', { params });
+};
+
+function auditLogRequestParams(params?: AuditLogQueryParams): Record<string, string | number> | undefined {
+  if (!params) return undefined;
+  const out: Record<string, string | number> = {};
+  const limit = params.limit ?? params.pageSize;
+  const page = params.page ?? 1;
+  const offset = params.offset ?? (limit ? Math.max(0, page - 1) * limit : undefined);
+  if (limit != null) out.limit = limit;
+  if (offset != null) out.offset = offset;
+  const entries: Array<[string, string | number | undefined]> = [
+    ['actor', params.actor || params.user],
+    ['user_id', params.user_id],
+    ['action', params.action],
+    ['action_class', params.action_class],
+    ['target', params.target],
+    ['resource_type', params.resource_type],
+    ['resource_id', params.resource_id],
+    ['resource_name', params.resource_name],
+    ['cluster_id', params.cluster_id],
+    ['project_id', params.project_id],
+    ['result', params.result],
+    ['status_code', params.status_code],
+    ['source', params.source],
+    ['correlation_id', params.correlation_id],
+    ['request_id', params.request_id],
+    ['from', params.from],
+    ['to', params.to],
+  ];
+  for (const [key, value] of entries) {
+    if (value !== undefined && value !== '') out[key] = value;
+  }
+  return out;
+}
+
+export async function getAuditLogs(params?: AuditLogQueryParams) {
+  const res = await api.get<PaginatedResponse<import('@/types').AuditLogEntry>>('/audit', {
+    params: auditLogRequestParams(params),
+  });
   return res.data;
+}
+
+export function getAuditLogExportURL(params?: AuditLogQueryParams) {
+  const requestParams = auditLogRequestParams(params) || {};
+  requestParams.format = 'csv';
+  const search = new URLSearchParams();
+  Object.entries(requestParams).forEach(([key, value]) => search.set(key, String(value)));
+  return `${API_BASE_URL}/audit/export/?${search.toString()}`;
 }
 
 // --- Activity Feed ---
@@ -1911,6 +2021,7 @@ import type {
   ArgoCreateApplicationSetRequest,
   ArgoManagedCluster,
   ArgoManagedClusterRegisterRequest,
+  ArgoOrphanReport,
   ArgoRepository,
   ArgoRepositoryCreate,
   ArgoOperation,
@@ -2003,6 +2114,8 @@ export async function syncArgoApplicationById(appId: string, opts: ArgoSyncOptio
   if (opts.revision) body.revision = opts.revision;
   if (opts.prune) body.prune = true;
   if (opts.dryRun) body.dry_run = true;
+  if (opts.reason) body.reason = opts.reason;
+  if (opts.syncWindowOverride) body.sync_window_override = true;
   const res = await api.post<ArgoOperation>(`/argocd/applications/${appId}/sync`, body);
   return res.data;
 }
@@ -2099,6 +2212,13 @@ export async function listArgoManagedClusters(instanceId: string) {
   return unwrapEnvelope<ArgoManagedCluster[]>(res.data) ?? [];
 }
 
+export async function getArgoOrphanReport(instanceId: string) {
+  const res = await api.get<APIResponse<ArgoOrphanReport> | ArgoOrphanReport>(
+    `/argocd/instances/${instanceId}/orphan-report`,
+  );
+  return unwrapEnvelope<ArgoOrphanReport>(res.data);
+}
+
 export async function registerArgoManagedCluster(
   instanceId: string,
   clusterId: string,
@@ -2128,7 +2248,7 @@ export async function getArgoClusterOwnership(clusterId: string) {
   const res = await api.get<APIResponse<import('@/types').ArgoClusterOwnershipResponse>>(
     `/argocd/clusters/${clusterId}/ownership`,
   );
-  return res.data.data;
+  return unwrapEnvelope<import('@/types').ArgoClusterOwnershipResponse>(res.data);
 }
 
 export async function setArgoClusterOwnershipDecision(

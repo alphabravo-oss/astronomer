@@ -103,9 +103,6 @@ UPDATE fleet_operations SET
 WHERE id = $1
 RETURNING *;
 
--- name: DeleteFleetOperation :exec
-DELETE FROM fleet_operations WHERE id = $1;
-
 -- ─────────────────────────────────────────────────────────────────────
 -- fleet_operation_targets
 -- ─────────────────────────────────────────────────────────────────────
@@ -154,11 +151,6 @@ ORDER BY started_at ASC;
 -- Gate for the max_concurrent dispatcher.
 SELECT count(*) FROM fleet_operation_targets
 WHERE operation_id = $1 AND status = 'running';
-
--- name: CountFailedTargetsForOperation :one
--- Used by the abort-on-failure check.
-SELECT count(*) FROM fleet_operation_targets
-WHERE operation_id = $1 AND status = 'failed';
 
 -- name: CountTerminalTargetsForOperation :one
 -- A target is terminal when it's completed/failed/skipped/aborted.

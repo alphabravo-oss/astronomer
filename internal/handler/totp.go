@@ -129,19 +129,6 @@ func (h *TOTPHandler) IsEnrolled(ctx context.Context, userID uuid.UUID) bool {
 
 // --- Enrollment: start ---
 
-// enrollStartResponse is the body returned to the browser. otpauth_url
-// is the URL embedded in the QR; qr_data_url is a self-contained
-// data: image so the SPA can render the QR without an extra fetch.
-// challenge_token carries the pending secret in a 5-minute signed
-// JWT — the secret itself is NOT yet persisted, so a user who closes
-// the tab mid-enrollment leaves no DB trace.
-type enrollStartResponse struct {
-	OTPAuthURL     string `json:"otpauth_url"`
-	QRCodeDataURL  string `json:"qr_data_url"`
-	ChallengeToken string `json:"challenge_token"`
-	Issuer         string `json:"issuer"`
-}
-
 // enrollChallengeClaims is the encryptable payload tied into the
 // enrollment challenge JWT. The plaintext secret lives in the JWT
 // (signed under the platform JWT key) so a stolen-mid-flow attacker

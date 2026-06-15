@@ -27,19 +27,19 @@ import (
 // here. It models just enough of the schema to exercise the handler's
 // branching paths.
 type stubVulnQuerier struct {
-	reports        map[uuid.UUID]sqlc.ImageVulnerabilityReport
-	cves           map[uuid.UUID][]sqlc.ImageVulnerability
-	getErr         error
-	aggregateErr   error
-	listErr        error
-	listNsErr      error
-	listCVEErr     error
-	countErr       error
-	clusterAgg     sqlc.AggregateClusterVulnerabilitiesRow
-	fleetAgg       sqlc.AggregateFleetVulnerabilitiesRow
-	topByCluster   []sqlc.ImageVulnerabilityReport
-	topByNS        []sqlc.ImageVulnerabilityReport
-	topClusters    []sqlc.TopClustersByVulnerabilityRow
+	reports      map[uuid.UUID]sqlc.ImageVulnerabilityReport
+	cves         map[uuid.UUID][]sqlc.ImageVulnerability
+	getErr       error
+	aggregateErr error
+	listErr      error
+	listNsErr    error
+	listCVEErr   error
+	countErr     error
+	clusterAgg   sqlc.AggregateClusterVulnerabilitiesRow
+	fleetAgg     sqlc.AggregateFleetVulnerabilitiesRow
+	topByCluster []sqlc.ImageVulnerabilityReport
+	topByNS      []sqlc.ImageVulnerabilityReport
+	topClusters  []sqlc.TopClustersByVulnerabilityRow
 }
 
 func newStubVulnQuerier() *stubVulnQuerier {
@@ -109,14 +109,14 @@ func (s *stubVulnQuerier) ListVulnerabilitiesForReport(_ context.Context, arg sq
 		}
 		rows = filtered
 	}
-	if int(arg.Offset) >= len(rows) {
+	if int(arg.PageOffset) >= len(rows) {
 		return []sqlc.ImageVulnerability{}, nil
 	}
-	end := int(arg.Offset) + int(arg.Limit)
+	end := int(arg.PageOffset) + int(arg.PageLimit)
 	if end > len(rows) {
 		end = len(rows)
 	}
-	return rows[arg.Offset:end], nil
+	return rows[arg.PageOffset:end], nil
 }
 
 func (s *stubVulnQuerier) CountVulnerabilitiesForReport(_ context.Context, arg sqlc.CountVulnerabilitiesForReportParams) (int64, error) {
@@ -162,7 +162,7 @@ func TestImageVulnHandler_Summary(t *testing.T) {
 	q := newStubVulnQuerier()
 	q.clusterAgg = sqlc.AggregateClusterVulnerabilitiesRow{
 		Critical: 5, High: 12, Medium: 30, Low: 90, Unknown: 1,
-		ReportCount: 7,
+		ReportCount:   7,
 		LastScannedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Valid: true},
 	}
 	h := NewImageVulnHandler(q)

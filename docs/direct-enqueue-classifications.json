@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "description": "Classifies direct Redis enqueue call sites that are not statically proven task-outbox backed by scripts/operation-task-inventory.mjs.",
+  "classifications": [
+    {
+      "file": "internal/handler/apiserver_allowlist.go",
+      "function": "fireReconcile",
+      "classification": "repair-backed",
+      "owner": "backend/network",
+      "reason": "HTTP handlers persist the allowlist row and audit event before this best-effort on-demand reconcile. Missed delivery leaves durable desired state in Postgres.",
+      "validation": "apiserver_allowlist:reconcile_all is registered and scheduled every 15 minutes to reconcile active allowlists."
+    },
+    {
+      "file": "internal/handler/cluster_registries.go",
+      "function": "enqueueApply",
+      "classification": "repair-backed",
+      "owner": "backend/registry",
+      "reason": "Registry config writes are durable in cluster_registry_configs; this direct enqueue only accelerates Secret/ServiceAccount convergence.",
+      "validation": "cluster:registry_drift_reconcile is registered and scheduled every 30 minutes, and its handler re-applies every registry row idempotently."
+    },
+    {
+      "file": "internal/handler/cluster_templates.go",
+      "function": "enqueueApply",
+      "classification": "outbox-backed",
+      "owner": "backend/templates",
+      "reason": "Production server wiring sets taskOutbox on ClusterTemplateHandler; the direct enqueue is a fallback only when the durable outbox is unavailable.",
+      "validation": "internal/server/server.go wires SetTaskOutbox(queries), and cluster_template:drift_check is also scheduled on the tunnel queue for repair."
+    },
+    {
+      "file": "internal/handler/clusters.go",
+      "function": "enqueueArgoCDLabelRefresh",
+      "classification": "best-effort",
+      "owner": "backend/argocd",
+      "reason": "Refreshing labels on an already-registered upstream Argo CD cluster Secret is metadata convergence, not the authoritative adoption state. A cluster update can re-issue the refresh.",
+      "validation": "The durable managed-cluster records remain in Postgres; this task only refreshes upstream Secret labels."
+    },
+    {
+      "file": "internal/handler/clusters.go",
+      "function": "enqueueTemplateApply",
+      "classification": "outbox-backed",
+      "owner": "backend/clusters",
+      "reason": "Cluster auto-attach writes durable cluster/template application state and production server wiring provides task_outbox. The direct enqueue is only the no-outbox fallback.",
+      "validation": "ClusterTemplateHandler uses the same task_outbox helper, and cluster_template:drift_check repairs missed template application delivery."
+    },
+    {
+      "file": "internal/handler/control_plane.go",
+      "function": "enqueueNotifications",
+      "classification": "best-effort",
+      "owner": "backend/notifications",
+      "reason": "Notification fan-out is side-effect delivery for already-detected control-plane alerts. It should not block control-plane health responses.",
+      "validation": "Failure only drops an outbound notification attempt; alert state remains queryable through control-plane status."
+    },
+    {
+      "file": "internal/handler/fleet_dispatcher.go",
+      "function": "enqueueApplyForCluster",
+      "classification": "repair-backed",
+      "owner": "backend/fleet",
+      "reason": "Fleet template application first upserts cluster_template_applications; direct enqueue only accelerates work from the durable row.",
+      "validation": "cluster_template:drift_check is registered on the tunnel queue and re-enqueues failed/stale application rows."
+    },
+    {
+      "file": "internal/handler/network_policies.go",
+      "function": "enqueueApply",
+      "classification": "repair-backed",
+      "owner": "backend/network",
+      "reason": "Network policy desired state is persisted before enqueue; missed delivery is repaired by periodic apply and drift sweeps.",
+      "validation": "network_policy:apply is scheduled every 5 minutes and network_policy:drift_check is scheduled every 30 minutes."
+    },
+    {
+      "file": "internal/handler/platform_default_template.go",
+      "function": "Reapply",
+      "classification": "outbox-backed",
+      "owner": "backend/templates",
+      "reason": "The handler attempts task_outbox before the direct queue fallback, and the Reapply endpoint writes cluster_template_applications first.",
+      "validation": "Production ClusterTemplateHandler server wiring sets taskOutbox and cluster_template:drift_check repairs missed direct delivery."
+    },
+    {
+      "file": "internal/handler/projects.go",
+      "function": "upsertAndEnqueue",
+      "classification": "outbox-backed",
+      "owner": "backend/projects",
+      "reason": "Production server wiring provides a live requester, so project apply runs in-process. Non-requester fallback persists task_outbox before direct Redis enqueue, after project_namespaces is persisted.",
+      "validation": "TestProjectHandlerUpsertAndEnqueueUsesTaskOutboxWithoutRequester asserts the fallback writes task_outbox with a stable dedupe key and project:reconcile payload."
+    },
+    {
+      "file": "internal/handler/projects.go",
+      "function": "enqueueCleanup",
+      "classification": "outbox-backed",
+      "owner": "backend/projects",
+      "reason": "Production server wiring provides a live requester, so namespace cleanup runs in-process. Non-requester fallback now persists task_outbox before direct Redis enqueue; DB-only cleanup remains limited to no-outbox/no-queue dev wiring.",
+      "validation": "TestProjectHandlerEnqueueCleanupUsesTaskOutboxWithoutRequester asserts cleanup writes task_outbox, keeps the DB sidecar row for task ownership, and stores the remove payload."
+    },
+    {
+      "file": "internal/worker/job_metrics.go",
+      "function": "EnqueueWithCorrelation",
+      "classification": "wrapper-only",
+      "owner": "backend/worker",
+      "reason": "This is a shared instrumentation wrapper around asynq.Client.Enqueue, not an independent product action producer.",
+      "validation": "Callers remain responsible for their own durable intent or best-effort classification."
+    },
+    {
+      "file": "internal/worker/tasks/cluster_template_apply.go",
+      "function": "HandleClusterTemplateDriftCheck",
+      "classification": "repair-backed",
+      "owner": "backend/templates",
+      "reason": "This direct enqueue happens inside the recovery sweep for failed template applications. If delivery fails, the durable failed row remains eligible for the next sweep after backoff.",
+      "validation": "cluster_template:drift_check is scheduled on the tunnel queue and guards repeated failures with failedApplyMinBackoff."
+    },
+    {
+      "file": "internal/worker/tasks/security_scan.go",
+      "function": "reschedule",
+      "classification": "operation-backed",
+      "owner": "backend/security",
+      "reason": "Security scan ingestion is anchored by a durable security_scan_results row. Re-enqueue failures return an error for asynq retry, and timeout updates the durable scan row as failed.",
+      "validation": "security:ingest_scan_results has bounded retry/poll behavior through NewSecurityIngestTask and reschedule."
+    }
+  ]
+}

@@ -43,12 +43,6 @@ RETURNING id, project_id, name, provider, description, data_encrypted, target_re
 -- name: DeleteCloudCredential :exec
 DELETE FROM cloud_credentials WHERE id = $1;
 
--- name: ListAllCloudCredentials :many
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
-FROM cloud_credentials
-ORDER BY project_id, name ASC;
-
 -- Materializations -------------------------------------------------------
 
 -- name: ListCloudCredentialMaterializations :many
@@ -73,19 +67,15 @@ ON CONFLICT (credential_id, cluster_id, namespace) DO UPDATE SET
 RETURNING id, credential_id, cluster_id, namespace, secret_name, status,
           last_applied_at, last_error, created_at, updated_at;
 
--- name: DeleteCloudCredentialMaterialization :exec
-DELETE FROM cloud_credential_materializations
-WHERE credential_id = $1 AND cluster_id = $2 AND namespace = $3;
-
 -- name: DeleteOrphanCloudCredentialMaterializations :exec
 -- Removes rows whose (cluster_id, namespace) no longer appears in the
 -- credential's target_refs JSONB. The handler calls this after writing
 -- the new target_refs and upserting the kept rows so the drift sweep
 -- doesn't keep re-applying old targets.
 DELETE FROM cloud_credential_materializations m
-WHERE m.credential_id = $1
+WHERE m.credential_id = sqlc.arg(credential_id)
   AND NOT EXISTS (
-      SELECT 1 FROM jsonb_array_elements($2::jsonb) tgt
+      SELECT 1 FROM jsonb_array_elements(sqlc.arg(target_refs)::jsonb) tgt
       WHERE tgt->>'cluster_id' = m.cluster_id::text
         AND tgt->>'namespace'  = m.namespace
   );

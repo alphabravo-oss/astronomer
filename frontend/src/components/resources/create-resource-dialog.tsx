@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { YamlEditor } from '@/components/ui/yaml-editor';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { useK8sCreate } from '@/lib/hooks';
 import { k8sTemplates } from '@/lib/k8s-templates';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { toastApiError, toastError } from '@/lib/toast';
 
 interface CreateResourceDialogProps {
   open: boolean;
@@ -35,13 +37,6 @@ export function CreateResourceDialog({
       setYamlContent(k8sTemplates[templateKey] || '');
     }
   }, [open, templateKey]);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -82,8 +77,7 @@ export function CreateResourceDialog({
 
         const plural = kindToPlural[kind];
         if (!plural) {
-          const { toast } = await import('sonner');
-          toast.error(`Unknown resource kind: ${kind}`);
+          toastError(`Unknown resource kind: ${kind}`);
           return;
         }
 
@@ -101,29 +95,19 @@ export function CreateResourceDialog({
         { onSuccess: onClose }
       );
     } catch (e) {
-      const { toast } = await import('sonner');
-      toast.error(`Invalid YAML: ${(e as Error).message}`);
+      toastApiError('Invalid YAML', e);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-lg shadow-xl w-[90vw] max-w-4xl h-[80vh] flex flex-col animate-fade-in">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent text-muted-foreground"><X className="h-4 w-4" /></button>
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <YamlEditor
-            value={yamlContent}
-            onChange={setYamlContent}
-            className="h-full"
-          />
-        </div>
-
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+    <ModalShell
+      title={title}
+      onClose={onClose}
+      size="xl"
+      panelClassName="w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden"
+      bodyClassName="flex-1 min-h-0 p-0 space-y-0"
+      footer={(
+        <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Edit the YAML template, then click Create.</p>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">Cancel</button>
@@ -134,7 +118,13 @@ export function CreateResourceDialog({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    >
+      <YamlEditor
+        value={yamlContent}
+        onChange={setYamlContent}
+        className="h-full"
+      />
+    </ModalShell>
   );
 }

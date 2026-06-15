@@ -7,10 +7,7 @@
 -- so a single SELECT returns the catalog row set the project admin
 -- (and project users browsing Apps) should see.
 --
--- NOTE: these queries are HAND-AUTHORED in
--- internal/db/sqlc/project_catalogs_ext.sql.go because the repo's local
--- sqlc CLI is broken; this .sql file is the canonical source of truth
--- the codegen would consume on a future regen.
+-- Generated sqlc output is the canonical Go API for this surface.
 
 -- name: ListCatalogsForProject :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
@@ -18,10 +15,10 @@ SELECT id, name, url, repo_type, description, is_default, auth_type,
        updated_at, owner_project_id
 FROM helm_repositories
 WHERE owner_project_id IS NULL
-   OR owner_project_id = $1
+   OR owner_project_id = sqlc.arg(project_id)::uuid
    OR id IN (
         SELECT catalog_id FROM project_catalog_subscriptions
-        WHERE project_id = $1
+        WHERE project_id = sqlc.arg(project_id)::uuid
    )
 ORDER BY name ASC;
 
@@ -50,11 +47,8 @@ SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
        updated_at, owner_project_id
 FROM helm_repositories
-WHERE owner_project_id = $1
+WHERE owner_project_id = sqlc.arg(project_id)::uuid
 ORDER BY name ASC;
-
--- name: CountSubscriptionsByCatalog :one
-SELECT count(*) FROM project_catalog_subscriptions WHERE catalog_id = $1;
 
 -- name: GetHelmRepositoryWithOwner :one
 SELECT id, name, url, repo_type, description, is_default, auth_type,

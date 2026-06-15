@@ -59,12 +59,12 @@ type TrivyMetadata struct {
 // TrivyReport is the `.report` substructure of the VulnerabilityReport
 // CR. Only fields we persist appear here.
 type TrivyReport struct {
-	Scanner         TrivyScanner   `json:"scanner"`
-	Artifact        TrivyArtifact  `json:"artifact"`
-	Registry        TrivyRegistry  `json:"registry"`
-	Summary         TrivySummary   `json:"summary"`
-	UpdateTimestamp string         `json:"updateTimestamp"`
-	Vulnerabilities []TrivyCVE     `json:"vulnerabilities"`
+	Scanner         TrivyScanner  `json:"scanner"`
+	Artifact        TrivyArtifact `json:"artifact"`
+	Registry        TrivyRegistry `json:"registry"`
+	Summary         TrivySummary  `json:"summary"`
+	UpdateTimestamp string        `json:"updateTimestamp"`
+	Vulnerabilities []TrivyCVE    `json:"vulnerabilities"`
 }
 
 // TrivyScanner identifies the scanner that produced the report. We
@@ -154,10 +154,10 @@ type AuditHook func(ctx context.Context, clusterID uuid.UUID, reportName, action
 // trio. Construct one per server process and re-use it for every
 // VulnerabilityReport event the CRD mirror surfaces.
 type Ingester struct {
-	q         Querier
-	tx        TxBeginner
-	metrics   MetricRecorder
-	audit     AuditHook
+	q       Querier
+	tx      TxBeginner
+	metrics MetricRecorder
+	audit   AuditHook
 }
 
 // NewIngester wires the receiver. tx may be nil — in that case Ingest
@@ -250,8 +250,8 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 	}
 
 	q := i.q
-	var commit func(context.Context) error = func(context.Context) error { return nil }
-	var rollback func(context.Context) error = func(context.Context) error { return nil }
+	commit := func(context.Context) error { return nil }
+	rollback := func(context.Context) error { return nil }
 	if i.tx != nil {
 		tx, err := i.tx.Begin(ctx)
 		if err != nil {

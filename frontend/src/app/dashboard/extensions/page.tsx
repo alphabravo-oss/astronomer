@@ -1,8 +1,9 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -24,10 +25,7 @@ import {
   type ExtensionManifest,
   type ExtensionValidationResponse,
 } from '@/lib/api/extensions';
-
-const qk = {
-  extensions: ['extensions'] as const,
-};
+import { queryKeys } from '@/lib/hooks';
 
 function statusClass(status: string, enabled?: boolean) {
   if (enabled) return 'bg-emerald-500/10 text-emerald-500';
@@ -82,25 +80,25 @@ function ExtensionTable({
         <div className="p-8 text-center text-sm text-muted-foreground">No extensions installed.</div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-xs text-muted-foreground">
-              <tr>
-                <th className="px-5 py-2.5 text-left font-medium">Name</th>
-                <th className="px-5 py-2.5 text-left font-medium">Version</th>
-                <th className="px-5 py-2.5 text-left font-medium">Permissions</th>
-                <th className="px-5 py-2.5 text-left font-medium">Status</th>
-                <th className="px-5 py-2.5 text-right font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/40 text-xs text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-5 py-2.5 text-left font-medium">Name</TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">Version</TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">Permissions</TableHead>
+                <TableHead className="px-5 py-2.5 text-left font-medium">Status</TableHead>
+                <TableHead className="px-5 py-2.5 text-right font-medium">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {items.map((item) => (
-                <tr key={item.id} className="border-t border-border">
-                  <td className="px-5 py-3">
+                <TableRow key={item.id} className="border-t border-border">
+                  <TableCell className="px-5 py-3">
                     <div className="font-medium text-foreground">{item.displayName || item.name}</div>
                     <div className="text-xs text-muted-foreground font-mono">{item.name}</div>
-                  </td>
-                  <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{item.version}</td>
-                  <td className="px-5 py-3">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground whitespace-nowrap">{item.version}</TableCell>
+                  <TableCell className="px-5 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       {(item.manifest.permissions ?? []).slice(0, 4).map((permission) => (
                         <span
@@ -116,13 +114,13 @@ function ExtensionTable({
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-5 py-3">
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
                     <span className={`inline-flex rounded px-2 py-1 text-xs ${statusClass(item.compatibilityStatus, item.enabled)}`}>
                       {item.enabled ? 'enabled' : item.compatibilityStatus}
                     </span>
-                  </td>
-                  <td className="px-5 py-3 text-right">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-right">
                     <button
                       type="button"
                       disabled={toggling || (item.compatibilityStatus !== 'compatible' && !item.enabled)}
@@ -133,11 +131,11 @@ function ExtensionTable({
                     >
                       {item.enabled ? 'Disable' : 'Enable'}
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>
@@ -150,7 +148,7 @@ export default function ExtensionsPage() {
   const [validation, setValidation] = useState<ExtensionValidationResponse | undefined>();
 
   const { data, isLoading } = useQuery({
-    queryKey: qk.extensions,
+    queryKey: queryKeys.extensions.list,
     queryFn: listExtensions,
   });
 
@@ -175,10 +173,10 @@ export default function ExtensionsPage() {
     },
     onSuccess: (result) => {
       setValidation(result);
-      if (result.valid) toast.success('Extension manifest is valid');
-      else toast.warning('Extension manifest has findings');
+      if (result.valid) toastSuccess('Extension manifest is valid');
+      else toastWarning('Extension manifest has findings');
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toastApiError('', error),
   });
 
   const install = useMutation({
@@ -187,20 +185,20 @@ export default function ExtensionsPage() {
       return installExtension(parsedManifest, { source: 'manual', enable: validation?.valid ?? false });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.extensions });
-      toast.success('Extension installed');
+      queryClient.invalidateQueries({ queryKey: queryKeys.extensions.list });
+      toastSuccess('Extension installed');
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toastApiError('', error),
   });
 
   const toggle = useMutation({
     mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
       enabled ? enableExtension(name) : disableExtension(name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.extensions });
-      toast.success('Extension updated');
+      queryClient.invalidateQueries({ queryKey: queryKeys.extensions.list });
+      toastSuccess('Extension updated');
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toastApiError('', error),
   });
 
   return (

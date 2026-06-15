@@ -12,7 +12,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { Server, Loader2, Info } from 'lucide-react';
 import { createCluster } from '@/lib/api';
 import { setRegistrationOptions } from '@/lib/api';
@@ -51,7 +51,7 @@ export default function RegisterClusterWizardPage() {
       router.push(`/dashboard/clusters/register/${cluster.id}/connect`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Failed to create cluster: ${msg}`);
+      toastError(`Failed to create cluster: ${msg}`);
       setSubmitting(false);
     }
   };
@@ -153,11 +153,11 @@ export default function RegisterClusterWizardPage() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">Quick Start: Install Platform Baseline after cluster connects</span>
-              <Info className="h-3.5 w-3.5 text-muted-foreground" aria-label="Installs trivy-operator, kube-state-metrics, prometheus-node-exporter, fluent-bit, cert-manager" />
+              <Info className="h-3.5 w-3.5 text-muted-foreground" aria-label="Installs trivy-operator, kube-state-metrics, prometheus-node-exporter, fluent-bit, ingress-nginx, cert-manager, gatekeeper" />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Installs five baseline charts after the agent connects: trivy-operator,
-              kube-state-metrics, prometheus-node-exporter, fluent-bit, and cert-manager.
+              Installs platform baseline components after the agent connects: trivy-operator,
+              kube-state-metrics, prometheus-node-exporter, fluent-bit, ingress-nginx, cert-manager, and Gatekeeper.
               Leave unchecked for a bare cluster — you can install these later from the Cluster Tools tab.
             </p>
           </div>

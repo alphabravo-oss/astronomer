@@ -35,6 +35,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -55,12 +56,12 @@ type telemetryQuerier interface {
 // TelemetryPayload is the wire shape POSTed to the configured endpoint.
 // Exported so tests can decode + assert.
 type TelemetryPayload struct {
-	InstanceID    string    `json:"instance_id"`
-	Version       string    `json:"version"`
-	ClusterCount  int64     `json:"cluster_count"`
-	UserCount     int64     `json:"user_count"`
-	ProjectCount  int64     `json:"project_count"`
-	AsOf          time.Time `json:"as_of"`
+	InstanceID   string    `json:"instance_id"`
+	Version      string    `json:"version"`
+	ClusterCount int64     `json:"cluster_count"`
+	UserCount    int64     `json:"user_count"`
+	ProjectCount int64     `json:"project_count"`
+	AsOf         time.Time `json:"as_of"`
 }
 
 // NewTelemetrySendTask returns a task that POSTs aggregated counts to
@@ -129,7 +130,7 @@ func sendTelemetry(ctx context.Context, q telemetryQuerier, client *http.Client,
 	}
 
 	if client == nil {
-		client = http.DefaultClient
+		client = httpclient.New(10 * time.Second)
 	}
 
 	postCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -149,7 +150,9 @@ func sendTelemetry(ctx context.Context, q telemetryQuerier, client *http.Client,
 		runtimeLogger().WarnContext(ctx, "telemetry: POST failed", "error", err, "endpoint", endpoint)
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode >= 400 {
 		runtimeLogger().WarnContext(ctx, "telemetry: non-2xx from endpoint", "status", resp.StatusCode, "endpoint", endpoint)
 		return nil

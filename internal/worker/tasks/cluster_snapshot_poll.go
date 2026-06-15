@@ -46,9 +46,9 @@ import (
 // Task type constants. Re-exported in internal/worker/worker.go for the
 // mux wiring (`TypeClusterSnapshotPoll`, …).
 const (
-	ClusterSnapshotPollType             = "cluster_snapshot:poll"
+	ClusterSnapshotPollType              = "cluster_snapshot:poll"
 	ClusterSnapshotDispatchScheduledType = "cluster_snapshot:dispatch_scheduled"
-	ClusterSnapshotCleanupExpiredType   = "cluster_snapshot:cleanup_expired"
+	ClusterSnapshotCleanupExpiredType    = "cluster_snapshot:cleanup_expired"
 )
 
 // snapshotPollBatchSize caps how many in-flight rows the poller looks
@@ -157,18 +157,11 @@ func getClusterSnapshotDeps() ClusterSnapshotDeps {
 // Velero release adding a new terminal phase doesn't require a code
 // change, just a constant update.
 var terminalSnapshotPhases = map[string]struct{}{
-	"Completed":         {},
-	"Failed":            {},
-	"FailedValidation":  {},
-	"PartiallyFailed":   {},
-	"Deleted":           {},
-}
-
-var terminalRestorePhases = map[string]struct{}{
 	"Completed":        {},
 	"Failed":           {},
 	"FailedValidation": {},
 	"PartiallyFailed":  {},
+	"Deleted":          {},
 }
 
 // outcomeForPhase maps a terminal Velero phase into one of the three
@@ -227,13 +220,13 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		// Record the error on the row so the operator can see it via
 		// list/get. Never short-circuit — the next tick retries.
 		return deps.Queries.MarkSnapshotPhase(ctx, sqlc.MarkSnapshotPhaseParams{
-			ID:            row.ID,
-			Phase:         row.Phase,
-			StartTime:     row.StartTime,
+			ID:             row.ID,
+			Phase:          row.Phase,
+			StartTime:      row.StartTime,
 			CompletionTime: row.CompletionTime,
-			WarningsCount: row.WarningsCount,
-			ErrorsCount:   row.ErrorsCount,
-			LastPollError: err.Error(),
+			WarningsCount:  row.WarningsCount,
+			ErrorsCount:    row.ErrorsCount,
+			LastPollError:  err.Error(),
 		})
 	}
 	if status.NotFound {
@@ -241,13 +234,13 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		// Move the row to the terminal "Deleted" phase so the cleanup
 		// worker can drop it. Stop polling.
 		return deps.Queries.MarkSnapshotPhase(ctx, sqlc.MarkSnapshotPhaseParams{
-			ID:            row.ID,
-			Phase:         "Deleted",
-			StartTime:     row.StartTime,
+			ID:             row.ID,
+			Phase:          "Deleted",
+			StartTime:      row.StartTime,
 			CompletionTime: row.CompletionTime,
-			WarningsCount: row.WarningsCount,
-			ErrorsCount:   row.ErrorsCount,
-			LastPollError: "",
+			WarningsCount:  row.WarningsCount,
+			ErrorsCount:    row.ErrorsCount,
+			LastPollError:  "",
 		})
 	}
 
@@ -255,13 +248,13 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 	if nextPhase == "" {
 		nextPhase = "New"
 	}
-	st := pgtype.Timestamptz{}
+	var st pgtype.Timestamptz
 	if !status.StartTime.IsZero() {
 		st = pgtype.Timestamptz{Time: status.StartTime, Valid: true}
 	} else {
 		st = row.StartTime
 	}
-	ct := pgtype.Timestamptz{}
+	var ct pgtype.Timestamptz
 	if !status.CompletionTime.IsZero() {
 		ct = pgtype.Timestamptz{Time: status.CompletionTime, Valid: true}
 	} else {

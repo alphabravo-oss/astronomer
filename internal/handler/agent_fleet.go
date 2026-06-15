@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,7 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
+	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 type AgentFleetQuerier interface {
@@ -24,6 +29,7 @@ type AgentFleetQuerier interface {
 	ListActiveConnections(ctx context.Context) ([]sqlc.AgentConnection, error)
 	ListConnectionsByCluster(ctx context.Context, arg sqlc.ListConnectionsByClusterParams) ([]sqlc.AgentConnection, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
+	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
 	CreateAgentLifecycleOperation(ctx context.Context, arg sqlc.CreateAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error)
 	ListAgentLifecycleOperationsByCluster(ctx context.Context, arg sqlc.ListAgentLifecycleOperationsByClusterParams) ([]sqlc.AgentLifecycleOperation, error)
 }
@@ -68,40 +74,56 @@ type agentFleetResponse struct {
 }
 
 type agentFleetSummary struct {
-	TotalClusters int64          `json:"total_clusters"`
-	Connected     int            `json:"connected"`
-	Degraded      int            `json:"degraded"`
-	Disconnected  int            `json:"disconnected"`
-	Versions      map[string]int `json:"versions"`
-	Profiles      map[string]int `json:"profiles"`
-	Statuses      map[string]int `json:"statuses"`
-	GeneratedAt   string         `json:"generated_at"`
+	TotalClusters                 int64          `json:"total_clusters"`
+	Connected                     int            `json:"connected"`
+	Degraded                      int            `json:"degraded"`
+	Disconnected                  int            `json:"disconnected"`
+	Versions                      map[string]int `json:"versions"`
+	Profiles                      map[string]int `json:"profiles"`
+	Statuses                      map[string]int `json:"statuses"`
+	Compatibility                 map[string]int `json:"compatibility"`
+	ServerVersion                 string         `json:"server_version"`
+	MinimumSupportedAgentVersion  string         `json:"minimum_supported_agent_version"`
+	MinimumCompatibleAgentVersion string         `json:"minimum_compatible_agent_version"`
+	GeneratedAt                   string         `json:"generated_at"`
 }
 
 type agentFleetItem struct {
-	ClusterID          string          `json:"cluster_id"`
-	ClusterName        string          `json:"cluster_name"`
-	ClusterDisplayName string          `json:"cluster_display_name"`
-	ClusterStatus      string          `json:"cluster_status"`
-	IsLocal            bool            `json:"is_local"`
-	AgentStatus        string          `json:"agent_status"`
-	AgentID            string          `json:"agent_id,omitempty"`
-	SessionID          string          `json:"session_id,omitempty"`
-	AgentVersion       string          `json:"agent_version,omitempty"`
-	KubernetesVersion  string          `json:"kubernetes_version,omitempty"`
-	Distribution       string          `json:"distribution,omitempty"`
-	NodeCount          int32           `json:"node_count"`
-	ConnectedAt        *string         `json:"connected_at,omitempty"`
-	LastPing           *string         `json:"last_ping,omitempty"`
-	LastHeartbeat      *string         `json:"last_heartbeat,omitempty"`
-	DisconnectedAt     *string         `json:"disconnected_at,omitempty"`
-	PodName            string          `json:"pod_name,omitempty"`
-	NodeName           string          `json:"node_name,omitempty"`
-	ChannelName        string          `json:"channel_name,omitempty"`
-	PrivilegeProfile   string          `json:"privilege_profile"`
-	Capabilities       map[string]bool `json:"capabilities"`
-	DegradedReasons    []string        `json:"degraded_reasons,omitempty"`
-	RecommendedAction  string          `json:"recommended_action,omitempty"`
+	ClusterID            string                `json:"cluster_id"`
+	ClusterName          string                `json:"cluster_name"`
+	ClusterDisplayName   string                `json:"cluster_display_name"`
+	ClusterStatus        string                `json:"cluster_status"`
+	IsLocal              bool                  `json:"is_local"`
+	AgentStatus          string                `json:"agent_status"`
+	AgentID              string                `json:"agent_id,omitempty"`
+	SessionID            string                `json:"session_id,omitempty"`
+	AgentVersion         string                `json:"agent_version,omitempty"`
+	KubernetesVersion    string                `json:"kubernetes_version,omitempty"`
+	Distribution         string                `json:"distribution,omitempty"`
+	NodeCount            int32                 `json:"node_count"`
+	ConnectedAt          *string               `json:"connected_at,omitempty"`
+	LastPing             *string               `json:"last_ping,omitempty"`
+	LastHeartbeat        *string               `json:"last_heartbeat,omitempty"`
+	DisconnectedAt       *string               `json:"disconnected_at,omitempty"`
+	PodName              string                `json:"pod_name,omitempty"`
+	NodeName             string                `json:"node_name,omitempty"`
+	ChannelName          string                `json:"channel_name,omitempty"`
+	PrivilegeProfile     string                `json:"privilege_profile"`
+	Capabilities         map[string]bool       `json:"capabilities"`
+	CompatibilityStatus  string                `json:"compatibility_status"`
+	CompatibilityMessage string                `json:"compatibility_message,omitempty"`
+	DegradedReasons      []string              `json:"degraded_reasons,omitempty"`
+	RecommendedAction    string                `json:"recommended_action,omitempty"`
+	OfflineBehavior      *agentOfflineBehavior `json:"offline_behavior,omitempty"`
+}
+
+type agentOfflineBehavior struct {
+	State                     string   `json:"state"`
+	LastKnownAt               *string  `json:"last_known_at,omitempty"`
+	Stale                     bool     `json:"stale"`
+	Message                   string   `json:"message"`
+	PermittedQueuedOperations []string `json:"permitted_queued_operations"`
+	BlockedOperations         []string `json:"blocked_operations"`
 }
 
 type agentDiagnosticsResponse struct {
@@ -109,6 +131,7 @@ type agentDiagnosticsResponse struct {
 	Agent                 agentFleetItem               `json:"agent"`
 	RecentConnections     []agentConnectionDiagnostic  `json:"recent_connections"`
 	Conditions            []clusterConditionDiagnostic `json:"conditions"`
+	ArgoCD                agentArgoCDDiagnostic        `json:"argocd"`
 	Live                  *agentLiveDiagnostics        `json:"live,omitempty"`
 	Recommendations       []string                     `json:"recommendations"`
 	Redactions            []string                     `json:"redactions"`
@@ -116,13 +139,14 @@ type agentDiagnosticsResponse struct {
 }
 
 type agentLiveDiagnostics struct {
-	CollectedAt string           `json:"collected_at"`
-	Deployment  map[string]any   `json:"deployment,omitempty"`
-	Pods        []agentLivePod   `json:"pods,omitempty"`
-	Events      []agentLiveEvent `json:"events,omitempty"`
-	Logs        []agentLiveLog   `json:"logs,omitempty"`
-	Discovery   map[string]any   `json:"discovery,omitempty"`
-	Errors      []string         `json:"errors,omitempty"`
+	CollectedAt string               `json:"collected_at"`
+	Deployment  map[string]any       `json:"deployment,omitempty"`
+	Pods        []agentLivePod       `json:"pods,omitempty"`
+	Events      []agentLiveEvent     `json:"events,omitempty"`
+	Logs        []agentLiveLog       `json:"logs,omitempty"`
+	Discovery   map[string]any       `json:"discovery,omitempty"`
+	Checks      []agentSelfTestCheck `json:"checks,omitempty"`
+	Errors      []string             `json:"errors,omitempty"`
 }
 
 type agentLivePod struct {
@@ -157,6 +181,21 @@ type agentDiagnosticsBundleResponse struct {
 	Notes       []string                 `json:"notes"`
 }
 
+type agentSelfTestResponse struct {
+	GeneratedAt     string               `json:"generated_at"`
+	ClusterID       string               `json:"cluster_id"`
+	ClusterName     string               `json:"cluster_name"`
+	Status          string               `json:"status"`
+	Checks          []agentSelfTestCheck `json:"checks"`
+	Recommendations []string             `json:"recommendations,omitempty"`
+}
+
+type agentSelfTestCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
 type agentConnectionDiagnostic struct {
 	ID             string  `json:"id"`
 	AgentID        string  `json:"agent_id"`
@@ -180,6 +219,14 @@ type clusterConditionDiagnostic struct {
 	LastProbeTime      *string `json:"last_probe_time,omitempty"`
 }
 
+type agentArgoCDDiagnostic struct {
+	Registered         bool     `json:"registered"`
+	InstanceCount      int      `json:"instance_count"`
+	ClusterSecretNames []string `json:"cluster_secret_names,omitempty"`
+	ServerURLs         []string `json:"server_urls,omitempty"`
+	LastUpdatedAt      *string  `json:"last_updated_at,omitempty"`
+}
+
 type agentUpgradeRecommendation struct {
 	CurrentVersion string `json:"current_version,omitempty"`
 	Status         string `json:"status"`
@@ -187,25 +234,35 @@ type agentUpgradeRecommendation struct {
 }
 
 type agentUpgradePlanRequest struct {
-	TargetVersion string `json:"target_version"`
-	TargetImage   string `json:"target_image"`
-	Strategy      string `json:"strategy"`
+	TargetVersion    string   `json:"target_version"`
+	TargetImage      string   `json:"target_image"`
+	Strategy         string   `json:"strategy"`
+	CanaryClusterIDs []string `json:"canary_cluster_ids"`
+	BatchSize        int32    `json:"batch_size"`
+	MaxUnavailable   int32    `json:"max_unavailable"`
+	RollbackImage    string   `json:"rollback_image"`
 }
 
 type agentUpgradePlanResponse struct {
-	ClusterID        string   `json:"cluster_id"`
-	ClusterName      string   `json:"cluster_name"`
-	CurrentVersion   string   `json:"current_version,omitempty"`
-	TargetVersion    string   `json:"target_version"`
-	CurrentImage     string   `json:"current_image,omitempty"`
-	TargetImage      string   `json:"target_image"`
-	PrivilegeProfile string   `json:"privilege_profile"`
-	Strategy         string   `json:"strategy"`
-	Ready            bool     `json:"ready"`
-	Blockers         []string `json:"blockers,omitempty"`
-	Steps            []string `json:"steps"`
-	Validation       []string `json:"validation"`
-	Rollback         []string `json:"rollback"`
+	ClusterID               string   `json:"cluster_id"`
+	ClusterName             string   `json:"cluster_name"`
+	CurrentVersion          string   `json:"current_version,omitempty"`
+	TargetVersion           string   `json:"target_version"`
+	CurrentImage            string   `json:"current_image,omitempty"`
+	TargetImage             string   `json:"target_image"`
+	RollbackImage           string   `json:"rollback_image,omitempty"`
+	PrivilegeProfile        string   `json:"privilege_profile"`
+	Strategy                string   `json:"strategy"`
+	CanaryClusterIDs        []string `json:"canary_cluster_ids,omitempty"`
+	BatchSize               int32    `json:"batch_size"`
+	MaxUnavailable          int32    `json:"max_unavailable"`
+	Ready                   bool     `json:"ready"`
+	Blockers                []string `json:"blockers,omitempty"`
+	PreflightChecks         []string `json:"preflight_checks"`
+	Steps                   []string `json:"steps"`
+	PostUpgradeHealthChecks []string `json:"post_upgrade_health_checks"`
+	Validation              []string `json:"validation"`
+	Rollback                []string `json:"rollback"`
 }
 
 type agentUpgradeOperationResponse struct {
@@ -288,11 +345,15 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 	now := h.now().UTC()
 	items := make([]agentFleetItem, 0, len(clusters))
 	summary := agentFleetSummary{
-		TotalClusters: total,
-		Versions:      map[string]int{},
-		Profiles:      map[string]int{},
-		Statuses:      map[string]int{},
-		GeneratedAt:   now.Format(time.RFC3339),
+		TotalClusters:                 total,
+		Versions:                      map[string]int{},
+		Profiles:                      map[string]int{},
+		Statuses:                      map[string]int{},
+		Compatibility:                 map[string]int{},
+		ServerVersion:                 version.Version,
+		MinimumSupportedAgentVersion:  agentcompat.MinimumSupportedVersion,
+		MinimumCompatibleAgentVersion: agentcompat.MinimumCompatibleVersion,
+		GeneratedAt:                   now.Format(time.RFC3339),
 	}
 	for _, cluster := range clusters {
 		conn, connected := activeByCluster[cluster.ID]
@@ -321,6 +382,7 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 			summary.Versions[item.AgentVersion]++
 		}
 		summary.Profiles[item.PrivilegeProfile]++
+		summary.Compatibility[item.CompatibilityStatus]++
 	}
 
 	RespondJSON(w, http.StatusOK, agentFleetResponse{
@@ -368,18 +430,37 @@ func (h *AgentFleetHandler) DiagnosticsBundle(w http.ResponseWriter, r *http.Req
 	filename := "astronomer-agent-diagnostics-" + cluster.ID.String() + ".json"
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(agentDiagnosticsBundleResponse{
+	bundle := agentDiagnosticsBundleResponse{
 		Version:     "v1",
 		GeneratedAt: h.now().UTC().Format(time.RFC3339),
 		ClusterID:   cluster.ID.String(),
 		ClusterName: firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name),
 		Diagnostics: diagnostics,
 		Notes: []string{
-			"Secrets, registration tokens, and certificate material are intentionally excluded.",
+			"Credential material and certificate bodies are intentionally excluded.",
 			"Use this bundle for support triage; it does not grant cluster access.",
 		},
-	})
+	}
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(redaction.Payload(bundle))
+}
+
+func (h *AgentFleetHandler) SelfTest(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.queries == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		return
+	}
+	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		return
+	}
+	cluster, diagnostics, err := h.buildDiagnostics(r.Context(), clusterID)
+	if err != nil {
+		respondAgentFleetError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, buildAgentSelfTest(cluster, diagnostics, h.now().UTC()))
 }
 
 func (h *AgentFleetHandler) buildDiagnostics(ctx context.Context, clusterID uuid.UUID) (sqlc.Cluster, agentDiagnosticsResponse, error) {
@@ -398,6 +479,10 @@ func (h *AgentFleetHandler) buildDiagnostics(ctx context.Context, clusterID uuid
 	conditions, err := h.queries.ListClusterConditions(ctx, clusterID)
 	if err != nil {
 		return sqlc.Cluster{}, agentDiagnosticsResponse{}, &agentFleetHandlerError{status: http.StatusInternalServerError, code: "condition_error", message: "Failed to list cluster conditions"}
+	}
+	managedClusters, err := h.queries.ListArgoCDManagedClustersByCluster(ctx, clusterID)
+	if err != nil {
+		return sqlc.Cluster{}, agentDiagnosticsResponse{}, &agentFleetHandlerError{status: http.StatusInternalServerError, code: "argocd_error", message: "Failed to load Argo CD registration state"}
 	}
 
 	now := h.now().UTC()
@@ -423,12 +508,17 @@ func (h *AgentFleetHandler) buildDiagnostics(ctx context.Context, clusterID uuid
 			recommendations = append(recommendations, condition.Type+": "+condition.Message)
 		}
 	}
+	argoCD := buildAgentArgoCDDiagnostic(managedClusters)
+	if !argoCD.Registered {
+		recommendations = append(recommendations, "Cluster is not registered to the built-in Argo CD managed-cluster inventory.")
+	}
 
 	response := agentDiagnosticsResponse{
 		GeneratedAt:       now.Format(time.RFC3339),
 		Agent:             agent,
 		RecentConnections: connectionDiagnostics(connections),
 		Conditions:        conditionDiagnostics(conditions),
+		ArgoCD:            argoCD,
 		Recommendations:   recommendations,
 		Redactions: []string{
 			"agent registration tokens are not included",
@@ -443,6 +533,172 @@ func (h *AgentFleetHandler) buildDiagnostics(ctx context.Context, clusterID uuid
 		response.Redactions = append(response.Redactions, "live agent logs are tail-limited and sensitive-looking lines are redacted")
 	}
 	return cluster, response, nil
+}
+
+func buildAgentSelfTest(cluster sqlc.Cluster, diagnostics agentDiagnosticsResponse, now time.Time) agentSelfTestResponse {
+	agent := diagnostics.Agent
+	checks := []agentSelfTestCheck{
+		agentConnectionSelfTestCheck(agent),
+		agentTimestampSelfTestCheck("heartbeat_freshness", "heartbeat", agent.LastHeartbeat, now, 2*time.Minute, 5*time.Minute),
+		agentTimestampSelfTestCheck("ping_freshness", "connection ping", agent.LastPing, now, 2*time.Minute, 5*time.Minute),
+		agentPrivilegeProfileSelfTestCheck(agent),
+		agentCompatibilitySelfTestCheck(agent),
+		agentArgoCDSelfTestCheck(diagnostics.ArgoCD),
+		agentLiveDiagnosticsSelfTestCheck(agent, diagnostics.Live),
+		agentClusterConditionsSelfTestCheck(diagnostics.Conditions),
+	}
+
+	return agentSelfTestResponse{
+		GeneratedAt:     now.UTC().Format(time.RFC3339),
+		ClusterID:       cluster.ID.String(),
+		ClusterName:     firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name),
+		Status:          agentSelfTestOverallStatus(checks),
+		Checks:          checks,
+		Recommendations: append([]string{}, diagnostics.Recommendations...),
+	}
+}
+
+func agentConnectionSelfTestCheck(agent agentFleetItem) agentSelfTestCheck {
+	switch agent.AgentStatus {
+	case "connected":
+		return agentSelfTestCheck{Name: "agent_connection", Status: "passed", Message: "Agent tunnel is connected."}
+	case "degraded":
+		message := "Agent tunnel is connected but degraded."
+		if len(agent.DegradedReasons) > 0 {
+			message = message + " " + strings.Join(agent.DegradedReasons, "; ")
+		}
+		return agentSelfTestCheck{Name: "agent_connection", Status: "warning", Message: message}
+	case "disconnected":
+		return agentSelfTestCheck{Name: "agent_connection", Status: "failed", Message: "Agent tunnel is disconnected."}
+	default:
+		return agentSelfTestCheck{Name: "agent_connection", Status: "warning", Message: "Agent tunnel state is unknown."}
+	}
+}
+
+func agentTimestampSelfTestCheck(name, label string, value *string, now time.Time, warnAfter, failAfter time.Duration) agentSelfTestCheck {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return agentSelfTestCheck{Name: name, Status: "failed", Message: "No " + label + " timestamp has been recorded."}
+	}
+	parsed, err := time.Parse(time.RFC3339, *value)
+	if err != nil {
+		return agentSelfTestCheck{Name: name, Status: "failed", Message: "The " + label + " timestamp is invalid."}
+	}
+	age := now.Sub(parsed)
+	if age < 0 {
+		age = 0
+	}
+	ageText := age.Round(time.Second).String()
+	switch {
+	case age > failAfter:
+		return agentSelfTestCheck{Name: name, Status: "failed", Message: "Last " + label + " is stale (" + ageText + " ago)."}
+	case age > warnAfter:
+		return agentSelfTestCheck{Name: name, Status: "warning", Message: "Last " + label + " is aging (" + ageText + " ago)."}
+	default:
+		return agentSelfTestCheck{Name: name, Status: "passed", Message: "Last " + label + " is fresh (" + ageText + " ago)."}
+	}
+}
+
+func agentPrivilegeProfileSelfTestCheck(agent agentFleetItem) agentSelfTestCheck {
+	switch agenttemplate.NormalizePrivilegeProfile(agent.PrivilegeProfile) {
+	case agenttemplate.PrivilegeProfileViewer, agenttemplate.PrivilegeProfileOperator,
+		agenttemplate.PrivilegeProfileNamespaceViewer, agenttemplate.PrivilegeProfileNamespaceOperator:
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the " + agent.PrivilegeProfile + " privilege profile."}
+	case agenttemplate.PrivilegeProfileAdmin:
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using the full-admin privilege profile."}
+	case agenttemplate.PrivilegeProfileCustom:
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using custom RBAC; run live diagnostics to verify required permissions."}
+	default:
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent privilege profile is unknown."}
+	}
+}
+
+func agentCompatibilitySelfTestCheck(agent agentFleetItem) agentSelfTestCheck {
+	message := agent.CompatibilityMessage
+	if message == "" {
+		message = "Agent compatibility status is " + agent.CompatibilityStatus + "."
+	}
+	switch agent.CompatibilityStatus {
+	case "supported":
+		return agentSelfTestCheck{Name: "compatibility", Status: "passed", Message: message}
+	case "blocked":
+		return agentSelfTestCheck{Name: "compatibility", Status: "failed", Message: message}
+	default:
+		return agentSelfTestCheck{Name: "compatibility", Status: "warning", Message: message}
+	}
+}
+
+func agentArgoCDSelfTestCheck(argoCD agentArgoCDDiagnostic) agentSelfTestCheck {
+	if !argoCD.Registered {
+		return agentSelfTestCheck{Name: "argocd_registration", Status: "failed", Message: "Cluster is not registered to built-in Argo CD."}
+	}
+	return agentSelfTestCheck{
+		Name:    "argocd_registration",
+		Status:  "passed",
+		Message: fmt.Sprintf("Cluster is registered to %d Argo CD instance(s).", argoCD.InstanceCount),
+	}
+}
+
+func agentLiveDiagnosticsSelfTestCheck(agent agentFleetItem, live *agentLiveDiagnostics) agentSelfTestCheck {
+	if agent.AgentStatus == "disconnected" {
+		return agentSelfTestCheck{Name: "live_diagnostics", Status: "failed", Message: "Live diagnostics cannot run while the agent is disconnected."}
+	}
+	if live == nil {
+		return agentSelfTestCheck{Name: "live_diagnostics", Status: "warning", Message: "Live diagnostics requester is not configured for this server."}
+	}
+	if len(live.Errors) > 0 {
+		return agentSelfTestCheck{Name: "live_diagnostics", Status: "warning", Message: "Live diagnostics completed with errors: " + strings.Join(live.Errors, "; ")}
+	}
+	warnings := make([]string, 0)
+	for _, check := range live.Checks {
+		if check.Status == "failed" {
+			return agentSelfTestCheck{Name: "live_diagnostics", Status: "failed", Message: "Live diagnostic check failed: " + check.Name + ". " + check.Message}
+		}
+		if check.Status == "warning" {
+			warnings = append(warnings, check.Name)
+		}
+	}
+	if len(warnings) > 0 {
+		return agentSelfTestCheck{Name: "live_diagnostics", Status: "warning", Message: "Live diagnostics completed with warnings: " + strings.Join(warnings, ", ")}
+	}
+	return agentSelfTestCheck{Name: "live_diagnostics", Status: "passed", Message: "Live diagnostics completed through the agent tunnel."}
+}
+
+func agentClusterConditionsSelfTestCheck(conditions []clusterConditionDiagnostic) agentSelfTestCheck {
+	if len(conditions) == 0 {
+		return agentSelfTestCheck{Name: "cluster_conditions", Status: "warning", Message: "No cluster conditions have been recorded yet."}
+	}
+	falseConditions := make([]string, 0)
+	unknownConditions := make([]string, 0)
+	for _, condition := range conditions {
+		switch condition.Status {
+		case "True":
+			continue
+		case "False":
+			falseConditions = append(falseConditions, condition.Type)
+		default:
+			unknownConditions = append(unknownConditions, condition.Type)
+		}
+	}
+	if len(falseConditions) > 0 {
+		return agentSelfTestCheck{Name: "cluster_conditions", Status: "failed", Message: "False cluster conditions: " + strings.Join(falseConditions, ", ")}
+	}
+	if len(unknownConditions) > 0 {
+		return agentSelfTestCheck{Name: "cluster_conditions", Status: "warning", Message: "Unknown cluster conditions: " + strings.Join(unknownConditions, ", ")}
+	}
+	return agentSelfTestCheck{Name: "cluster_conditions", Status: "passed", Message: "Recorded cluster conditions are healthy."}
+}
+
+func agentSelfTestOverallStatus(checks []agentSelfTestCheck) string {
+	status := "passed"
+	for _, check := range checks {
+		switch check.Status {
+		case "failed":
+			return "failed"
+		case "warning":
+			status = "warning"
+		}
+	}
+	return status
 }
 
 func (h *AgentFleetHandler) UpgradePlan(w http.ResponseWriter, r *http.Request) {
@@ -503,9 +759,9 @@ func (h *AgentFleetHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, "encode_error", "Failed to encode lifecycle operation")
 		return
 	}
-	op, err := h.queries.CreateAgentLifecycleOperation(r.Context(), sqlc.CreateAgentLifecycleOperationParams{
+	op, err := h.createAgentLifecycleOperation(withOperationIdempotency(r, "agent_lifecycle"), sqlc.CreateAgentLifecycleOperationParams{
 		ClusterID:      cluster.ID,
-		OperationType:  "agent_upgrade",
+		OperationType:  agentlifecycle.OperationTypeUpgrade,
 		TargetVersion:  plan.TargetVersion,
 		TargetImage:    plan.TargetImage,
 		CurrentVersion: plan.CurrentVersion,
@@ -528,6 +784,29 @@ func (h *AgentFleetHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		Operation: agentLifecycleOperationDTO(op),
 		Plan:      plan,
 	})
+}
+
+func (h *AgentFleetHandler) createAgentLifecycleOperation(ctx context.Context, params sqlc.CreateAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error) {
+	if idem, ok := operationIdempotencyFromContext(ctx); ok {
+		type idempotentCreator interface {
+			CreateAgentLifecycleOperationIdempotent(context.Context, sqlc.CreateAgentLifecycleOperationIdempotentParams) (sqlc.AgentLifecycleOperation, error)
+		}
+		if creator, ok := h.queries.(idempotentCreator); ok {
+			return creator.CreateAgentLifecycleOperationIdempotent(ctx, sqlc.CreateAgentLifecycleOperationIdempotentParams{
+				Scope:          idem.scope,
+				IdempotencyKey: idem.key,
+				ClusterID:      params.ClusterID,
+				OperationType:  params.OperationType,
+				TargetVersion:  params.TargetVersion,
+				TargetImage:    params.TargetImage,
+				CurrentVersion: params.CurrentVersion,
+				Strategy:       params.Strategy,
+				OperationSpec:  params.OperationSpec,
+				RequestedBy:    params.RequestedBy,
+			})
+		}
+	}
+	return h.queries.CreateAgentLifecycleOperation(ctx, params)
 }
 
 func (h *AgentFleetHandler) Operations(w http.ResponseWriter, r *http.Request) {
@@ -594,19 +873,23 @@ func (h *AgentFleetHandler) buildUpgradePlanForCluster(ctx context.Context, clus
 
 func buildAgentFleetItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, connected bool, now time.Time) agentFleetItem {
 	profile := agentPrivilegeProfileFromAnnotations(cluster.Annotations)
+	agentVersion := firstNonEmptyAgentValue(conn.AgentVersion, cluster.AgentVersion)
+	compatibility := agentcompat.Evaluate(agentVersion)
 	item := agentFleetItem{
-		ClusterID:          cluster.ID.String(),
-		ClusterName:        cluster.Name,
-		ClusterDisplayName: cluster.DisplayName,
-		ClusterStatus:      cluster.Status,
-		IsLocal:            cluster.IsLocal,
-		AgentVersion:       firstNonEmptyAgentValue(conn.AgentVersion, cluster.AgentVersion),
-		KubernetesVersion:  cluster.KubernetesVersion,
-		Distribution:       cluster.Distribution,
-		NodeCount:          cluster.NodeCount,
-		LastHeartbeat:      timestampPtr(cluster.LastHeartbeat),
-		PrivilegeProfile:   profile,
-		Capabilities:       inferredAgentCapabilities(profile),
+		ClusterID:            cluster.ID.String(),
+		ClusterName:          cluster.Name,
+		ClusterDisplayName:   cluster.DisplayName,
+		ClusterStatus:        cluster.Status,
+		IsLocal:              cluster.IsLocal,
+		AgentVersion:         agentVersion,
+		KubernetesVersion:    cluster.KubernetesVersion,
+		Distribution:         cluster.Distribution,
+		NodeCount:            cluster.NodeCount,
+		LastHeartbeat:        timestampPtr(cluster.LastHeartbeat),
+		PrivilegeProfile:     profile,
+		Capabilities:         inferredAgentCapabilities(profile),
+		CompatibilityStatus:  compatibility.Status,
+		CompatibilityMessage: compatibility.Message,
 	}
 	if conn.ID != uuid.Nil {
 		item.AgentID = conn.AgentID
@@ -622,6 +905,7 @@ func buildAgentFleetItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, connec
 	reasons := make([]string, 0, 3)
 	if !connected {
 		item.AgentStatus = "disconnected"
+		item.OfflineBehavior = buildAgentOfflineBehavior(cluster, conn, now)
 		if cluster.Status == "awaiting_agent" {
 			item.RecommendedAction = "Install or restart the Astronomer agent manifest for this cluster."
 		} else {
@@ -642,6 +926,9 @@ func buildAgentFleetItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, connec
 	if profile == agenttemplate.PrivilegeProfileAdmin {
 		reasons = append(reasons, "agent is using full-admin privilege profile")
 	}
+	if compatibility.DegradedReason != "" {
+		reasons = append(reasons, compatibility.DegradedReason)
+	}
 	if len(reasons) > 0 {
 		item.AgentStatus = "degraded"
 		item.DegradedReasons = reasons
@@ -650,6 +937,56 @@ func buildAgentFleetItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, connec
 	}
 	item.AgentStatus = "connected"
 	return item
+}
+
+func buildAgentOfflineBehavior(cluster sqlc.Cluster, conn sqlc.AgentConnection, now time.Time) *agentOfflineBehavior {
+	lastKnown := latestAgentObservationTime(cluster, conn)
+	var lastKnownAt *string
+	stale := true
+	if !lastKnown.IsZero() {
+		stamp := lastKnown.UTC().Format(time.RFC3339)
+		lastKnownAt = &stamp
+		stale = now.Sub(lastKnown) > 5*time.Minute
+	}
+	message := "Agent tunnel is offline; live diagnostics and in-cluster operations are blocked until it reconnects."
+	if lastKnownAt == nil {
+		message = "Agent tunnel is offline and no last-known observation has been recorded yet."
+	}
+	return &agentOfflineBehavior{
+		State:       "offline",
+		LastKnownAt: lastKnownAt,
+		Stale:       stale,
+		Message:     message,
+		PermittedQueuedOperations: []string{
+			"cluster_metadata_updates",
+			"argocd_registration_repair",
+			"agent_install_manifest_regeneration",
+		},
+		BlockedOperations: []string{
+			agentlifecycle.OperationTypeUpgrade,
+			"live_diagnostics",
+			"kubernetes_proxy",
+			"kubectl_exec",
+			"pod_logs",
+			"service_proxy",
+			"in_cluster_mutations",
+		},
+	}
+}
+
+func latestAgentObservationTime(cluster sqlc.Cluster, conn sqlc.AgentConnection) time.Time {
+	newest := time.Time{}
+	for _, candidate := range []pgtype.Timestamptz{cluster.LastHeartbeat, conn.LastPing, conn.DisconnectedAt} {
+		if candidate.Valid && candidate.Time.After(newest) {
+			newest = candidate.Time
+		}
+	}
+	for _, candidate := range []time.Time{conn.ConnectedAt, cluster.UpdatedAt} {
+		if !candidate.IsZero() && candidate.After(newest) {
+			newest = candidate
+		}
+	}
+	return newest
 }
 
 func agentPrivilegeProfileFromAnnotations(raw json.RawMessage) string {
@@ -665,7 +1002,7 @@ func agentPrivilegeProfileFromAnnotations(raw json.RawMessage) string {
 
 func inferredAgentCapabilities(profile string) map[string]bool {
 	switch agenttemplate.NormalizePrivilegeProfile(profile) {
-	case agenttemplate.PrivilegeProfileViewer:
+	case agenttemplate.PrivilegeProfileViewer, agenttemplate.PrivilegeProfileNamespaceViewer:
 		return map[string]bool{
 			"watch":         true,
 			"logs":          true,
@@ -682,6 +1019,24 @@ func inferredAgentCapabilities(profile string) map[string]bool {
 			"helm":          true,
 			"service_proxy": true,
 			"mutate":        true,
+		}
+	case agenttemplate.PrivilegeProfileNamespaceOperator:
+		return map[string]bool{
+			"watch":         true,
+			"logs":          true,
+			"exec":          true,
+			"helm":          false,
+			"service_proxy": true,
+			"mutate":        true,
+		}
+	case agenttemplate.PrivilegeProfileCustom:
+		return map[string]bool{
+			"watch":         false,
+			"logs":          false,
+			"exec":          false,
+			"helm":          false,
+			"service_proxy": false,
+			"mutate":        false,
 		}
 	default:
 		return map[string]bool{
@@ -726,6 +1081,29 @@ func conditionDiagnostics(conditions []sqlc.ClusterCondition) []clusterCondition
 			LastTransitionTime: condition.LastTransitionTime.UTC().Format(time.RFC3339),
 			LastProbeTime:      timePtr(condition.LastProbeTime),
 		})
+	}
+	return out
+}
+
+func buildAgentArgoCDDiagnostic(rows []sqlc.ArgocdManagedCluster) agentArgoCDDiagnostic {
+	out := agentArgoCDDiagnostic{
+		Registered:    len(rows) > 0,
+		InstanceCount: len(rows),
+	}
+	var newest time.Time
+	for _, row := range rows {
+		if row.ClusterSecretName != "" {
+			out.ClusterSecretNames = append(out.ClusterSecretNames, row.ClusterSecretName)
+		}
+		if row.ServerUrl != "" {
+			out.ServerURLs = append(out.ServerURLs, row.ServerUrl)
+		}
+		if row.UpdatedAt.After(newest) {
+			newest = row.UpdatedAt
+		}
+	}
+	if !newest.IsZero() {
+		out.LastUpdatedAt = stringPtr(newest.UTC().Format(time.RFC3339))
 	}
 	return out
 }
@@ -831,10 +1209,16 @@ func (h *AgentFleetHandler) collectLiveDiagnostics(ctx context.Context, clusterI
 	}
 
 	var version map[string]any
-	if err := h.getLiveJSON(liveCtx, clusterID, "/version", &version); err != nil {
+	versionBody, versionHeaders, err := h.getLiveRaw(liveCtx, clusterID, "/version")
+	if err != nil {
 		out.Errors = append(out.Errors, "version: "+err.Error())
 	} else {
-		out.Discovery["version"] = version
+		if err := json.Unmarshal(versionBody, &version); err != nil {
+			out.Errors = append(out.Errors, "version: "+err.Error())
+		} else {
+			out.Discovery["version"] = version
+		}
+		out.Checks = append(out.Checks, agentClockSkewDiagnosticCheck(versionHeaders, now))
 	}
 	var apis map[string]any
 	if err := h.getLiveJSON(liveCtx, clusterID, "/apis", &apis); err != nil {
@@ -842,11 +1226,110 @@ func (h *AgentFleetHandler) collectLiveDiagnostics(ctx context.Context, clusterI
 	} else {
 		out.Discovery["apis"] = summarizeAPIResourceList(apis)
 	}
+	out.Checks = append(out.Checks,
+		h.collectRBACSelfReview(liveCtx, clusterID),
+		h.collectKubernetesReadyzCheck(liveCtx, clusterID),
+	)
 	return out
 }
 
+func (h *AgentFleetHandler) collectRBACSelfReview(ctx context.Context, clusterID string) agentSelfTestCheck {
+	body := map[string]any{
+		"apiVersion": "authorization.k8s.io/v1",
+		"kind":       "SelfSubjectAccessReview",
+		"spec": map[string]any{
+			"resourceAttributes": map[string]any{
+				"namespace": "astronomer-system",
+				"verb":      "get",
+				"resource":  "pods",
+			},
+		},
+	}
+	var review struct {
+		Status struct {
+			Allowed         bool   `json:"allowed"`
+			Denied          bool   `json:"denied"`
+			Reason          string `json:"reason"`
+			EvaluationError string `json:"evaluationError"`
+		} `json:"status"`
+	}
+	if err := h.postLiveJSON(ctx, clusterID, "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews", body, &review); err != nil {
+		return agentSelfTestCheck{Name: "rbac_self_check", Status: "warning", Message: "Unable to run Kubernetes SelfSubjectAccessReview: " + err.Error()}
+	}
+	if review.Status.Allowed {
+		return agentSelfTestCheck{Name: "rbac_self_check", Status: "passed", Message: "Agent can read its own pods in astronomer-system."}
+	}
+	if review.Status.Denied {
+		return agentSelfTestCheck{Name: "rbac_self_check", Status: "failed", Message: firstNonEmptyAgentValue(review.Status.Reason, "Kubernetes denied the agent pod read self-check.")}
+	}
+	return agentSelfTestCheck{Name: "rbac_self_check", Status: "warning", Message: firstNonEmptyAgentValue(review.Status.EvaluationError, "Kubernetes returned an inconclusive SelfSubjectAccessReview.")}
+}
+
+func (h *AgentFleetHandler) collectKubernetesReadyzCheck(ctx context.Context, clusterID string) agentSelfTestCheck {
+	body, _, err := h.getLiveRaw(ctx, clusterID, "/readyz")
+	if err != nil {
+		return agentSelfTestCheck{Name: "network_readyz", Status: "warning", Message: "Kubernetes readyz check failed through the agent tunnel: " + err.Error()}
+	}
+	text := strings.TrimSpace(string(body))
+	if text == "" || strings.EqualFold(text, "ok") {
+		return agentSelfTestCheck{Name: "network_readyz", Status: "passed", Message: "Kubernetes API readyz succeeded through the agent tunnel."}
+	}
+	return agentSelfTestCheck{Name: "network_readyz", Status: "warning", Message: "Kubernetes API readyz returned: " + truncateDiagnosticMessage(text)}
+}
+
+func agentClockSkewDiagnosticCheck(headers map[string]string, now time.Time) agentSelfTestCheck {
+	dateValue := firstHeaderValue(headers, "Date")
+	if dateValue == "" {
+		return agentSelfTestCheck{Name: "clock_skew", Status: "warning", Message: "Kubernetes API response did not include a Date header."}
+	}
+	remoteTime, err := http.ParseTime(dateValue)
+	if err != nil {
+		return agentSelfTestCheck{Name: "clock_skew", Status: "warning", Message: "Kubernetes API Date header could not be parsed."}
+	}
+	skew := now.Sub(remoteTime)
+	if skew < 0 {
+		skew = -skew
+	}
+	skewText := skew.Round(time.Second).String()
+	switch {
+	case skew > 5*time.Minute:
+		return agentSelfTestCheck{Name: "clock_skew", Status: "failed", Message: "Management plane and Kubernetes API clocks differ by " + skewText + "."}
+	case skew > 2*time.Minute:
+		return agentSelfTestCheck{Name: "clock_skew", Status: "warning", Message: "Management plane and Kubernetes API clocks differ by " + skewText + "."}
+	default:
+		return agentSelfTestCheck{Name: "clock_skew", Status: "passed", Message: "Management plane and Kubernetes API clock skew is " + skewText + "."}
+	}
+}
+
 func (h *AgentFleetHandler) getLiveJSON(ctx context.Context, clusterID, path string, out any) error {
+	body, _, err := h.getLiveRaw(ctx, clusterID, path)
+	if err != nil {
+		return err
+	}
+	if len(body) == 0 {
+		return nil
+	}
+	return json.Unmarshal(body, out)
+}
+
+func (h *AgentFleetHandler) getLiveRaw(ctx context.Context, clusterID, path string) ([]byte, map[string]string, error) {
 	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return nil, resp.Headers, err
+	}
+	body, err := decodeResponseBody(resp)
+	return body, resp.Headers, err
+}
+
+func (h *AgentFleetHandler) postLiveJSON(ctx context.Context, clusterID, path string, body any, out any) error {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodPost, path, raw, requestHeaders("application/json"))
 	if err != nil {
 		return err
 	}
@@ -858,14 +1341,7 @@ func (h *AgentFleetHandler) getLiveJSON(ctx context.Context, clusterID, path str
 
 func (h *AgentFleetHandler) getLivePodLogs(ctx context.Context, clusterID, podName string) ([]string, bool, error) {
 	path := "/api/v1/namespaces/astronomer-system/pods/" + url.PathEscape(podName) + "/log?tailLines=200&timestamps=true"
-	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
-	if err != nil {
-		return nil, false, err
-	}
-	if err := ensureSuccess(resp); err != nil {
-		return nil, false, err
-	}
-	raw, err := decodeResponseBody(resp)
+	raw, _, err := h.getLiveRaw(ctx, clusterID, path)
 	if err != nil {
 		return nil, false, err
 	}
@@ -879,7 +1355,7 @@ func (h *AgentFleetHandler) getLivePodLogs(ctx context.Context, clusterID, podNa
 		truncated = true
 	}
 	for i, line := range lines {
-		lines[i] = redactDiagnosticLine(line)
+		lines[i] = redaction.SensitiveLine(line)
 	}
 	return lines, truncated, nil
 }
@@ -932,17 +1408,24 @@ func stringAt(raw map[string]any, keys ...string) string {
 	return value
 }
 
-func redactDiagnosticLine(line string) string {
-	lower := strings.ToLower(line)
-	for _, marker := range []string{"token", "secret", "authorization", "bearer ", "password"} {
-		if strings.Contains(lower, marker) {
-			return "[redacted sensitive log line]"
+func firstHeaderValue(headers map[string]string, name string) string {
+	if len(headers) == 0 {
+		return ""
+	}
+	for key, value := range headers {
+		if strings.EqualFold(key, name) {
+			return value
 		}
 	}
-	if len(line) > 500 {
-		return line[:500] + "...[truncated]"
+	return ""
+}
+
+func truncateDiagnosticMessage(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 200 {
+		return value
 	}
-	return line
+	return value[:200] + "...[truncated]"
 }
 
 func upgradeRecommendation(agent agentFleetItem) agentUpgradeRecommendation {
@@ -957,6 +1440,13 @@ func upgradeRecommendation(agent agentFleetItem) agentUpgradeRecommendation {
 			CurrentVersion: agent.AgentVersion,
 			Status:         "blocked",
 			Message:        "Agent must reconnect before an in-place upgrade can be coordinated.",
+		}
+	}
+	if agent.CompatibilityStatus == "deprecated" {
+		return agentUpgradeRecommendation{
+			CurrentVersion: agent.AgentVersion,
+			Status:         "upgrade_recommended",
+			Message:        "Agent is on a deprecated compatibility track; queue an upgrade to the supported agent image.",
 		}
 	}
 	return agentUpgradeRecommendation{
@@ -978,9 +1468,29 @@ func (h *AgentFleetHandler) buildUpgradePlan(cluster sqlc.Cluster, agent agentFl
 	if targetImage == "" {
 		targetImage = targetAgentImage(h.agentImageRepository, targetVersion)
 	}
+	currentImage := ""
+	if agent.AgentVersion != "" {
+		currentImage = targetAgentImage(h.agentImageRepository, agent.AgentVersion)
+	}
+	rollbackImage := strings.TrimSpace(req.RollbackImage)
+	if rollbackImage == "" {
+		rollbackImage = currentImage
+	}
 	strategy := strings.TrimSpace(req.Strategy)
 	if strategy == "" {
 		strategy = "agent_self_rollout"
+	}
+	batchSize := req.BatchSize
+	if batchSize <= 0 {
+		batchSize = 1
+	}
+	maxUnavailable := req.MaxUnavailable
+	if maxUnavailable <= 0 {
+		maxUnavailable = 1
+	}
+	canaryClusterIDs := sanitizeUpgradeCanaryIDs(req.CanaryClusterIDs)
+	if len(canaryClusterIDs) == 0 && !cluster.IsLocal {
+		canaryClusterIDs = []string{cluster.ID.String()}
 	}
 	blockers := make([]string, 0, 3)
 	if agent.AgentStatus == "disconnected" {
@@ -992,13 +1502,15 @@ func (h *AgentFleetHandler) buildUpgradePlan(cluster sqlc.Cluster, agent agentFl
 	if cluster.IsLocal {
 		blockers = append(blockers, "local management-cluster agent is upgraded with the Astronomer server release")
 	}
+	if maxUnavailable > batchSize {
+		blockers = append(blockers, "max_unavailable cannot be greater than batch_size")
+	}
+	if rollbackImage == "" {
+		blockers = append(blockers, "rollback image could not be inferred; provide rollback_image explicitly")
+	}
 	profile := agent.PrivilegeProfile
 	if profile == "" {
 		profile = h.agentUpgradeDefaultProfile
-	}
-	currentImage := ""
-	if agent.AgentVersion != "" {
-		currentImage = targetAgentImage(h.agentImageRepository, agent.AgentVersion)
 	}
 	return agentUpgradePlanResponse{
 		ClusterID:        cluster.ID.String(),
@@ -1007,15 +1519,36 @@ func (h *AgentFleetHandler) buildUpgradePlan(cluster sqlc.Cluster, agent agentFl
 		TargetVersion:    targetVersion,
 		CurrentImage:     currentImage,
 		TargetImage:      targetImage,
+		RollbackImage:    rollbackImage,
 		PrivilegeProfile: profile,
 		Strategy:         strategy,
+		CanaryClusterIDs: canaryClusterIDs,
+		BatchSize:        batchSize,
+		MaxUnavailable:   maxUnavailable,
 		Ready:            len(blockers) == 0,
 		Blockers:         blockers,
+		PreflightChecks: []string{
+			"Agent self-test returns passed or only approved warnings.",
+			"Agent tunnel is connected and heartbeat/ping are fresh.",
+			"Target image is configured and pullable from the adopted cluster.",
+			"Rollback image is known before patching the Deployment.",
+			"Canary cluster list is approved for the first rollout batch.",
+			"max_unavailable is less than or equal to batch_size.",
+		},
 		Steps: []string{
 			"Queue the upgrade operation in Astronomer.",
+			"Upgrade canary clusters first and wait for post-upgrade health checks.",
+			"Proceed through batches without exceeding max unavailable agents.",
 			"The connected agent patches the astronomer-system/astronomer-agent Deployment to the target image.",
 			"The agent reports whether the Deployment patch was accepted by the Kubernetes API.",
 			"Confirm the replacement agent pod reconnects and reports the target version in Agent Fleet.",
+		},
+		PostUpgradeHealthChecks: []string{
+			"Replacement agent pod reconnects within the rollout timeout.",
+			"Agent Fleet reports the target version and supported compatibility status.",
+			"Heartbeat schema version is current and heartbeat/ping freshness checks pass.",
+			"Diagnostics self-test has no failed checks.",
+			"Argo CD managed-cluster registration remains present.",
 		},
 		Validation: []string{
 			"Agent Fleet status returns connected for the cluster.",
@@ -1024,11 +1557,25 @@ func (h *AgentFleetHandler) buildUpgradePlan(cluster sqlc.Cluster, agent agentFl
 			"Kubernetes proxy GET /version succeeds through the tunnel.",
 		},
 		Rollback: []string{
-			"Reapply the previous agent image tag if the new agent fails to reconnect.",
+			"Reapply rollback_image if the new agent fails to reconnect.",
 			"Keep the current registration token and CA bundle unchanged during rollback.",
 			"Collect diagnostics before deleting the failed agent pod if possible.",
 		},
 	}
+}
+
+func sanitizeUpgradeCanaryIDs(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		out = append(out, value)
+		seen[value] = true
+	}
+	return out
 }
 
 func respondAgentFleetError(w http.ResponseWriter, r *http.Request, err error) {

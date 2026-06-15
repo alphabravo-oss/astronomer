@@ -126,7 +126,7 @@ func (f *fakeQuerier) CreateKubectlSession(_ context.Context, arg sqlc.CreateKub
 		LastInputAt:  f.now(),
 		ExpiresAt:    f.now().Add(4 * time.Hour),
 		UserAgent:    arg.UserAgent,
-		ClientIP:     arg.ClientIP,
+		ClientIp:     arg.ClientIp,
 	}
 	f.sessions[row.ID] = &row
 	return row, nil
@@ -192,8 +192,8 @@ func (f *fakeQuerier) SetKubectlSessionStatus(_ context.Context, arg sqlc.SetKub
 		return pgx.ErrNoRows
 	}
 	row.Status = arg.Status
-	if arg.LastError.Valid {
-		row.LastError = arg.LastError.String
+	if arg.LastError != "" {
+		row.LastError = arg.LastError
 	}
 	if arg.Status == "closed" || arg.Status == "expired" || arg.Status == "failed" {
 		row.ClosedAt = pgtype.Timestamptz{Time: f.now(), Valid: true}
@@ -655,7 +655,7 @@ func TestShortID_UniqueAndSafe(t *testing.T) {
 		}
 		// Must be lowercase alphanumeric (base32 RFC4648 lowercased).
 		for _, c := range id {
-			if !((c >= 'a' && c <= 'z') || (c >= '2' && c <= '7')) {
+			if (c < 'a' || c > 'z') && (c < '2' || c > '7') {
 				t.Fatalf("unsafe char in ShortID: %q", c)
 			}
 		}

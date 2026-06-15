@@ -43,6 +43,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: postgres
               containerPort: 5432

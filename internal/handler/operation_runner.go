@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 )
 
 const operationSupersededMessage = "superseded by newer operation for target"
@@ -87,7 +89,7 @@ func claimLatestOperations[T any](ctx context.Context, ops []T, cfg operationRun
 }
 
 func isRetryableOperationStatus(status string) bool {
-	return status == OpStatusFailed || status == OpStatusSuperseded
+	return operationstate.IsRetryable(status)
 }
 
 func requireRetryableOperation(w http.ResponseWriter, r *http.Request, status string) bool {
@@ -114,8 +116,7 @@ func summarizeOperations[T any](ctx context.Context, ops []T, cfg operationStatu
 	isFailure := cfg.IsFailure
 	if isFailure == nil {
 		isFailure = func(op T) bool {
-			status := cfg.Status(op)
-			return status == OpStatusFailed || status == OpStatusSuperseded
+			return operationstate.IsFailure(cfg.Status(op))
 		}
 	}
 	summary := operationStatusSummary{
@@ -144,7 +145,7 @@ func summarizeOperations[T any](ctx context.Context, ops []T, cfg operationStatu
 			}
 		}
 	}
-	summary.QueueDepth = summary.Counts[OpStatusPending] + summary.Counts[OpStatusRunning]
+	summary.QueueDepth = operationstate.QueueDepth(summary.Counts)
 	return summary
 }
 

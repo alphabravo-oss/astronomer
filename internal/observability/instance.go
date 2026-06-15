@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -78,7 +79,7 @@ func EnsureInstanceID(ctx context.Context, q platformConfigQuerier) (string, err
 	newID := uuid.New()
 	updated, err := q.UpsertPlatformConfig(ctx, sqlc.UpsertPlatformConfigParams{
 		ServerUrl:        cfg.ServerUrl,
-		PlatformName:     defaultString(cfg.PlatformName, "Astronomer"),
+		PlatformName:     cmp.Or(cfg.PlatformName, "Astronomer"),
 		TelemetryEnabled: cfg.TelemetryEnabled,
 		BootstrappedAt:   cfg.BootstrappedAt,
 		InstanceID:       newID,
@@ -88,13 +89,6 @@ func EnsureInstanceID(ctx context.Context, q platformConfigQuerier) (string, err
 	}
 	SetInstanceID(updated.InstanceID.String())
 	return updated.InstanceID.String(), nil
-}
-
-func defaultString(value, fallback string) string {
-	if value != "" {
-		return value
-	}
-	return fallback
 }
 
 func EmptyTimestamp() pgtype.Timestamptz {

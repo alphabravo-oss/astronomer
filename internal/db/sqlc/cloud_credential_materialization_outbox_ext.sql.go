@@ -7,6 +7,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cloudCredentialMaterializationColumns = `
+    id, credential_id, cluster_id, namespace, secret_name, status,
+    last_applied_at, last_error, created_at, updated_at`
+
+func scanCloudCredentialMaterializationRow(row interface {
+	Scan(dest ...any) error
+}) (CloudCredentialMaterialization, error) {
+	var i CloudCredentialMaterialization
+	err := row.Scan(
+		&i.ID,
+		&i.CredentialID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.SecretName,
+		&i.Status,
+		&i.LastAppliedAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertCloudCredentialMaterializationWithTaskOutbox = `
 WITH materialization AS (
     INSERT INTO cloud_credential_materializations (

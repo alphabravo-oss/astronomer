@@ -291,7 +291,9 @@ func TestApply_WritesAuditRetention(t *testing.T) {
 		t.Fatalf("audit.retention_days not written: %v", err)
 	}
 	var v int
-	json.Unmarshal(row.Value, &v)
+	if err := json.Unmarshal(row.Value, &v); err != nil {
+		t.Fatalf("unmarshal audit_retention_days: %v", err)
+	}
 	if v != 365 {
 		t.Errorf("written audit_retention_days = %d, want 365", v)
 	}
@@ -345,7 +347,9 @@ func TestApply_WritesMaintenanceWindowTemplate(t *testing.T) {
 		t.Fatalf("maintenance.template not written: %v", err)
 	}
 	var tpl MaintenanceWindowSpec
-	json.Unmarshal(row.Value, &tpl)
+	if err := json.Unmarshal(row.Value, &tpl); err != nil {
+		t.Fatalf("unmarshal maintenance template: %v", err)
+	}
 	if tpl.Name != "soc2-change-management" {
 		t.Errorf("template name = %q, want soc2-change-management", tpl.Name)
 	}
@@ -368,7 +372,9 @@ func TestApply_IdempotentNoOpOnReapply(t *testing.T) {
 		t.Fatalf("applications = %d, want 2", len(db.applications))
 	}
 	var snap BaselineSpec
-	json.Unmarshal(db.applications[1].PreviousState, &snap)
+	if err := json.Unmarshal(db.applications[1].PreviousState, &snap); err != nil {
+		t.Fatalf("unmarshal previous state: %v", err)
+	}
 	if snap.PSSProfile != "baseline" {
 		t.Errorf("second-apply snapshot pss_profile = %q, want baseline (post-first-apply state)", snap.PSSProfile)
 	}
@@ -403,7 +409,9 @@ func TestRevert_RestoresPreviousState(t *testing.T) {
 	// Sanity: PCI bumped retention to 365.
 	row, _ := db.GetPlatformSetting(context.Background(), "audit.retention_days")
 	var cur int
-	json.Unmarshal(row.Value, &cur)
+	if err := json.Unmarshal(row.Value, &cur); err != nil {
+		t.Fatalf("unmarshal retention after apply: %v", err)
+	}
 	if cur != 365 {
 		t.Fatalf("post-apply retention = %d, want 365", cur)
 	}
@@ -413,7 +421,9 @@ func TestRevert_RestoresPreviousState(t *testing.T) {
 		t.Fatalf("Revert err = %v", err)
 	}
 	row, _ = db.GetPlatformSetting(context.Background(), "audit.retention_days")
-	json.Unmarshal(row.Value, &cur)
+	if err := json.Unmarshal(row.Value, &cur); err != nil {
+		t.Fatalf("unmarshal retention after revert: %v", err)
+	}
 	if cur != 60 {
 		t.Errorf("post-revert retention = %d, want 60", cur)
 	}

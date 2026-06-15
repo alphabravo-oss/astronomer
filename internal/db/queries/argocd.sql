@@ -49,13 +49,11 @@ SELECT * FROM argocd_applications ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 -- name: ListAppsByInstance :many
 SELECT * FROM argocd_applications WHERE argocd_instance_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3;
 
--- name: ListAppsByInstanceAndProject :many
-SELECT * FROM argocd_applications WHERE argocd_instance_id = $1 AND project = $2 ORDER BY name ASC LIMIT $3 OFFSET $4;
-
--- name: CreateArgoCDApplication :one
-INSERT INTO argocd_applications (argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING *;
+-- name: ListArgoCDApplicationsByManagedClusterTargets :many
+SELECT * FROM argocd_applications
+WHERE argocd_instance_id = ANY(sqlc.arg(argocd_instance_ids)::uuid[])
+  AND destination_cluster = ANY(sqlc.arg(destination_clusters)::text[])
+ORDER BY name ASC;
 
 -- name: UpdateArgoCDApplication :one
 UPDATE argocd_applications SET
@@ -67,15 +65,24 @@ UPDATE argocd_applications SET
     destination_namespace = $7,
     sync_status = $8,
     health_status = $9,
-    last_synced = $10
+    resource_created_count = $10,
+    resource_changed_count = $11,
+    resource_pruned_count = $12,
+    last_synced = $13
 WHERE id = $1
 RETURNING *;
 
--- name: DeleteArgoCDApplication :exec
-DELETE FROM argocd_applications WHERE id = $1;
-
 -- name: CountArgoCDApplications :one
 SELECT count(*) FROM argocd_applications;
+
+-- name: CountArgoCDApplicationsBySyncHealth :many
+SELECT
+    COALESCE(NULLIF(sync_status, ''), 'Unknown')::text AS sync_status,
+    COALESCE(NULLIF(health_status, ''), 'Unknown')::text AS health_status,
+    count(*)::bigint AS app_count
+FROM argocd_applications
+GROUP BY 1, 2
+ORDER BY 1, 2;
 
 -- name: CountAppsByInstance :one
 SELECT count(*) FROM argocd_applications WHERE argocd_instance_id = $1;
@@ -160,11 +167,6 @@ RETURNING *;
 
 -- name: TouchArgoCDClusterProxyToken :exec
 UPDATE argocd_cluster_proxy_tokens SET last_used_at = now() WHERE id = $1;
-
--- name: RevokeArgoCDClusterProxyTokenForCluster :exec
-UPDATE argocd_cluster_proxy_tokens
-SET is_revoked = true, updated_at = now()
-WHERE cluster_id = $1 AND purpose = 'argocd_cluster_proxy';
 
 -- name: DeleteArgoCDClusterProxyTokensByCluster :execrows
 DELETE FROM argocd_cluster_proxy_tokens WHERE cluster_id = $1;

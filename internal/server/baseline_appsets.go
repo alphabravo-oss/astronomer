@@ -10,24 +10,30 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 )
 
 const (
-	platformSettingArgoCDManageBaseline = "argocd.manage_platform_baseline"
-	argoCDManagedByLabelKey             = "astronomer.io/managed-by"
-	argoCDManagedByLabelValue           = "astronomer"
-	argoCDIsLocalLabelKey               = "astronomer.io/is-local"
+	platformSettingArgoCDManageBaseline  = "argocd.manage_platform_baseline"
+	argoCDManagedByLabelKey              = "astronomer.io/managed-by"
+	argoCDManagedByLabelValue            = "astronomer"
+	argoCDClusterIDLabelKey              = "astronomer.io/cluster-id"
+	argoCDClusterNameLabelKey            = "astronomer.io/cluster-name"
+	argoCDEnvironmentLabelKey            = "astronomer.io/environment"
+	argoCDIsLocalLabelKey                = "astronomer.io/is-local"
+	argoCDRegionLabelKey                 = "astronomer.io/region"
+	argoCDProviderLabelKey               = "astronomer.io/provider"
+	argoCDDistributionLabelKey           = "astronomer.io/distribution"
+	argoCDAgentProfileLabelKey           = "astronomer.io/agent-privilege-profile"
+	baselineApplicationSetTargetLabel    = "astronomer.io/baseline-target"
+	baselineApplicationSetSyncPhaseLabel = "astronomer.io/sync-phase"
+	baselineTargetAdoptedClusters        = "adopted-clusters"
 )
 
-var argocdApplicationSetGVR = schema.GroupVersionResource{
-	Group:    "argoproj.io",
-	Version:  "v1alpha1",
-	Resource: "applicationsets",
-}
+var argocdApplicationSetGVR = kubeutil.ArgoApplicationSetGVR
 
 type baselineApplicationSetComponent struct {
 	ApplicationSetName string
@@ -37,6 +43,54 @@ type baselineApplicationSetComponent struct {
 	RepoURL            string
 	Namespace          string
 	ValuesYAML         string
+	SyncPhase          baselineSyncPhase
+}
+
+type baselineSyncPhase string
+
+const (
+	baselineSyncPhaseNamespaces  baselineSyncPhase = "namespaces"
+	baselineSyncPhaseCRDs        baselineSyncPhase = "crds"
+	baselineSyncPhaseOperators   baselineSyncPhase = "operators"
+	baselineSyncPhasePolicies    baselineSyncPhase = "policies"
+	baselineSyncPhaseWorkloads   baselineSyncPhase = "workloads"
+	baselineSyncPhaseHealthCheck baselineSyncPhase = "health-checks"
+)
+
+const (
+	baselineSyncWaveNamespaces  = -40
+	baselineSyncWaveCRDs        = -30
+	baselineSyncWaveOperators   = -20
+	baselineSyncWavePolicies    = -10
+	baselineSyncWaveWorkloads   = 10
+	baselineSyncWaveHealthCheck = 30
+)
+
+var baselineSyncWaveByPhase = map[baselineSyncPhase]int{
+	baselineSyncPhaseNamespaces:  baselineSyncWaveNamespaces,
+	baselineSyncPhaseCRDs:        baselineSyncWaveCRDs,
+	baselineSyncPhaseOperators:   baselineSyncWaveOperators,
+	baselineSyncPhasePolicies:    baselineSyncWavePolicies,
+	baselineSyncPhaseWorkloads:   baselineSyncWaveWorkloads,
+	baselineSyncPhaseHealthCheck: baselineSyncWaveHealthCheck,
+}
+
+func baselineSyncPhaseOrDefault(phase baselineSyncPhase) baselineSyncPhase {
+	if phase == "" {
+		return baselineSyncPhaseWorkloads
+	}
+	if _, ok := baselineSyncWaveByPhase[phase]; ok {
+		return phase
+	}
+	return baselineSyncPhaseWorkloads
+}
+
+func baselineSyncWaveForPhase(phase baselineSyncPhase) int {
+	wave, ok := baselineSyncWaveByPhase[phase]
+	if !ok {
+		return baselineSyncWaveWorkloads
+	}
+	return wave
 }
 
 type baselineChartCoordinates struct {
@@ -55,6 +109,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		RepoURL:            "https://aquasecurity.github.io/helm-charts",
 		Namespace:          "trivy-system",
 		ValuesYAML:         "trivy:\n  ignoreUnfixed: true\noperator:\n  scanJobTimeout: 5m\n",
+		SyncPhase:          baselineSyncPhaseHealthCheck,
 	},
 	{
 		ApplicationSetName: "astronomer-baseline-kube-state-metrics",
@@ -64,6 +119,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		RepoURL:            "https://prometheus-community.github.io/helm-charts",
 		Namespace:          "monitoring",
 		ValuesYAML:         "metricLabelsAllowlist:\n  - pods=[*]\n  - deployments=[*]\n",
+		SyncPhase:          baselineSyncPhaseWorkloads,
 	},
 	{
 		ApplicationSetName: "astronomer-baseline-node-exporter",
@@ -73,6 +129,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		RepoURL:            "https://prometheus-community.github.io/helm-charts",
 		Namespace:          "monitoring",
 		ValuesYAML:         "hostRootFsMount:\n  enabled: true\n",
+		SyncPhase:          baselineSyncPhaseWorkloads,
 	},
 	{
 		ApplicationSetName: "astronomer-baseline-fluent-bit",
@@ -82,6 +139,17 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		RepoURL:            "https://fluent.github.io/helm-charts",
 		Namespace:          "logging",
 		ValuesYAML:         "config:\n  service: |\n    [SERVICE]\n        Daemon Off\n        Flush 1\n",
+		SyncPhase:          baselineSyncPhaseWorkloads,
+	},
+	{
+		ApplicationSetName: "astronomer-baseline-ingress-nginx",
+		ApplicationPrefix:  "astronomer-ingress-nginx",
+		Slug:               "ingress-nginx",
+		ChartName:          "ingress-nginx",
+		RepoURL:            "https://kubernetes.github.io/ingress-nginx",
+		Namespace:          "ingress-nginx",
+		ValuesYAML:         "controller:\n  metrics:\n    enabled: true\n",
+		SyncPhase:          baselineSyncPhaseOperators,
 	},
 	{
 		ApplicationSetName: "astronomer-baseline-cert-manager",
@@ -91,6 +159,16 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		RepoURL:            "https://charts.jetstack.io",
 		Namespace:          "cert-manager",
 		ValuesYAML:         "installCRDs: true\nstartupapicheck:\n  enabled: false\n",
+		SyncPhase:          baselineSyncPhaseCRDs,
+	},
+	{
+		ApplicationSetName: "astronomer-baseline-gatekeeper",
+		ApplicationPrefix:  "astronomer-gatekeeper",
+		Slug:               "gatekeeper",
+		ChartName:          "gatekeeper",
+		RepoURL:            "https://open-policy-agent.github.io/gatekeeper/charts",
+		Namespace:          "gatekeeper-system",
+		SyncPhase:          baselineSyncPhasePolicies,
 	},
 }
 
@@ -216,6 +294,7 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 	if values != "" {
 		helm["values"] = values + "\n"
 	}
+	syncPhase := baselineSyncPhaseOrDefault(component.SyncPhase)
 	return &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "argoproj.io/v1alpha1",
@@ -224,8 +303,12 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 				"name":      component.ApplicationSetName,
 				"namespace": localArgoNamespace,
 				"labels": map[string]any{
-					"astronomer.io/platform-owned": "true",
-					"astronomer.io/baseline":       "platform",
+					"app.kubernetes.io/managed-by":       "astronomer",
+					"astronomer.io/platform-owned":       "true",
+					"astronomer.io/baseline":             "platform",
+					"astronomer.io/tool-slug":            component.Slug,
+					baselineApplicationSetTargetLabel:    baselineTargetAdoptedClusters,
+					baselineApplicationSetSyncPhaseLabel: string(syncPhase),
 				},
 			},
 			"spec": map[string]any{
@@ -244,10 +327,16 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 				"template": map[string]any{
 					"metadata": map[string]any{
 						"name": component.ApplicationPrefix + "-{{nameNormalized}}",
+						"annotations": map[string]any{
+							"argocd.argoproj.io/sync-wave": fmt.Sprintf("%d", baselineSyncWaveForPhase(syncPhase)),
+						},
 						"labels": map[string]any{
-							"astronomer.io/platform-owned": "true",
-							"astronomer.io/baseline":       "platform",
-							"astronomer.io/tool-slug":      component.Slug,
+							"app.kubernetes.io/managed-by":       "astronomer",
+							"astronomer.io/platform-owned":       "true",
+							"astronomer.io/baseline":             "platform",
+							"astronomer.io/tool-slug":            component.Slug,
+							baselineApplicationSetTargetLabel:    baselineTargetAdoptedClusters,
+							baselineApplicationSetSyncPhaseLabel: string(syncPhase),
 						},
 					},
 					"spec": map[string]any{

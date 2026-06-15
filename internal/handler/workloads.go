@@ -863,9 +863,6 @@ func (h *WorkloadHandler) getNodes(ctx context.Context, clusterID string) ([]map
 }
 
 func (h *WorkloadHandler) getNodeDetail(ctx context.Context, clusterID, nodeName string) (map[string]any, error) {
-	var nodes nodeList
-	if err := h.getJSON(ctx, clusterID, "/api/v1/nodes/"+nodeName, &nodes.Items); err == nil {
-	}
 	var node struct {
 		Metadata struct {
 			Name              string            `json:"name"`

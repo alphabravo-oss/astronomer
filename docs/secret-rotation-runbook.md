@@ -246,10 +246,17 @@ runs the same step automatically when a cluster is removed.
 ## 4. Bootstrap password
 
 The bootstrap password (`bootstrap.password` value, env
-`ASTRONOMER_BOOTSTRAP_PASSWORD`) is **first-login only**. After the
-first admin login, the chart's `must_change_password` flow forces a
-real password to be set. The bootstrap value is irrelevant from that
-point on.
+`ASTRONOMER_BOOTSTRAP_PASSWORD`) is the initial admin password on an empty
+database. If `bootstrap.password` is empty, the chart generates a random value
+and keeps it in the `<release>-bootstrap` Secret so operators can retrieve it:
+
+```bash
+kubectl -n astronomer get secret <release>-bootstrap \
+  -o jsonpath='{.data.password}' | base64 -d
+```
+
+If `bootstrap.password` is set in values, that value is used as-is. The
+bootstrap admin is not forced through a first-login reset.
 
 To "rotate" it, just change the admin user's password via the normal
 profile UI or `PATCH /api/v1/users/me/password`. The chart's bootstrap

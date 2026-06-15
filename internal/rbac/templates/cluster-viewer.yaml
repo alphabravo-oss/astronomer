@@ -13,6 +13,18 @@ rules:
     verbs: [read, list]
   - resource: pods
     verbs: [read, list, watch, logs]
+  - resource: nodes
+    verbs: [read, list]
+  - resource: services
+    verbs: [read, list]
+  - resource: ingresses
+    verbs: [read, list]
+  - resource: storage
+    verbs: [read, list]
+  - resource: configmaps
+    verbs: [read, list]
+  - resource: network_policies
+    verbs: [read, list]
   - resource: monitoring
     verbs: [read, list]
   - resource: alerts

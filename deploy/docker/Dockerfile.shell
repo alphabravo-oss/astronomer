@@ -30,7 +30,7 @@
 
 # syntax=docker/dockerfile:1.7
 
-FROM alpine:3.21 AS base
+FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d AS base
 
 # kubectl version is pinned in lockstep with the bundled control-plane
 # minor. Bump in the same commit that bumps the k8s.io/* dependencies

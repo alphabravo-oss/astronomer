@@ -49,14 +49,25 @@ export interface TaskOutboxEntry {
   updated_at?: string;
 }
 
+function responseData<T>(value: T | APIResponse<T> | null | undefined): T | undefined {
+  if (value && typeof value === 'object' && 'data' in value) {
+    return (value as APIResponse<T>).data;
+  }
+  return value ?? undefined;
+}
+
 export async function listQueues(): Promise<QueueSummary[]> {
-  const res = await api.get<QueueSummary[]>('/admin/queues/');
-  return res.data ?? [];
+  const res = await api.get<QueueSummary[] | APIResponse<QueueSummary[]>>('/admin/queues/');
+  const data = responseData<QueueSummary[]>(res.data);
+  return Array.isArray(data) ? data : [];
 }
 
 export async function listDLQ(queue: string): Promise<{ queue: string; dlq: DLQEntry[]; count: number }> {
-  const res = await api.get<{ queue: string; dlq: DLQEntry[]; count: number }>(`/admin/queues/${encodeURIComponent(queue)}/dlq/`);
-  return res.data ?? { queue, dlq: [], count: 0 };
+  const fallback = { queue, dlq: [], count: 0 };
+  const res = await api.get<
+    { queue: string; dlq: DLQEntry[]; count: number } | APIResponse<{ queue: string; dlq: DLQEntry[]; count: number }>
+  >(`/admin/queues/${encodeURIComponent(queue)}/dlq/`);
+  return responseData(res.data) ?? fallback;
 }
 
 export async function retryDLQTask(queue: string, id: string): Promise<void> {

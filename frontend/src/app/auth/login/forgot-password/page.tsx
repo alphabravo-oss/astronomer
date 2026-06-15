@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Forgot-password — collects an email/username, posts to
+ * Forgot-password — collects an email address, posts to
  * /auth/password-reset/request and always shows the same "if it exists, a
  * link has been sent" success screen. The backend returns 202 unconditionally
  * (no user enumeration), so the UI mirrors that.
@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Orbit, Loader2, Mail, ArrowLeft, Check } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastError } from '@/lib/toast';
 import { requestPasswordReset } from '@/lib/api/account-security';
 
 export default function ForgotPasswordPage() {
@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      toast.error('Enter an email address');
+      toastError('Enter an email address');
       return;
     }
     setLoading(true);
@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
       setSubmitted(true);
     } catch (err) {
       // The endpoint always returns 202; surface only network errors.
-      toast.error(err instanceof Error ? err.message : 'Could not send reset email');
+      toastApiError('', err, 'Could not send reset email');
     } finally {
       setLoading(false);
     }

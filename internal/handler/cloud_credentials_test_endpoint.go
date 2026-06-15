@@ -179,7 +179,9 @@ func (t *DefaultCloudTester) TestAzure(ctx context.Context, blob map[string]stri
 	if err != nil {
 		return CloudTestResult{OK: false, Message: err.Error()}, nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return CloudTestResult{OK: false, Message: fmt.Sprintf("AAD returned status %d: %s", resp.StatusCode, summariseAzureError(body))}, nil
@@ -310,7 +312,9 @@ func signedGet(ctx context.Context, client *http.Client, accessKey, secretKey, r
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, _ := io.ReadAll(resp.Body)
 	return body, resp.StatusCode, nil
 }

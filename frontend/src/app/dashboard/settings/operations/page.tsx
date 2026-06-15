@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Operations admin tab (T28b) — surface the asynq queue state + DLQ so on-call
  * can answer "why isn't anything reconciling?" from the UI instead of curl /
@@ -27,8 +28,9 @@ import {
   Database,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { queryKeys } from '@/lib/hooks';
 import {
   listQueues,
   listDLQ,
@@ -42,17 +44,11 @@ import {
   type TaskOutboxStatus,
 } from '@/lib/api/admin-operations';
 
-const qk = {
-  queues: () => ['admin', 'queues'] as const,
-  dlq: (q: string) => ['admin', 'queues', q, 'dlq'] as const,
-  outbox: (status: TaskOutboxStatus | '') => ['admin', 'task-outbox', status] as const,
-};
-
 function OperationsBody() {
   const qc = useQueryClient();
 
   const queues = useQuery({
-    queryKey: qk.queues(),
+    queryKey: queryKeys.adminOperations.queues,
     queryFn: listQueues,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
@@ -71,14 +67,14 @@ function OperationsBody() {
   const [outboxStatus, setOutboxStatus] = useState<TaskOutboxStatus | ''>('dead');
 
   const dlq = useQuery({
-    queryKey: qk.dlq(activeQueue),
+    queryKey: queryKeys.adminOperations.dlq(activeQueue),
     queryFn: () => listDLQ(activeQueue),
     enabled: !!activeQueue,
     refetchInterval: 10_000,
   });
 
   const outbox = useQuery({
-    queryKey: qk.outbox(outboxStatus),
+    queryKey: queryKeys.adminOperations.outbox(outboxStatus),
     queryFn: () => listTaskOutbox(outboxStatus),
     refetchInterval: 10_000,
   });
@@ -86,28 +82,28 @@ function OperationsBody() {
   const retry = useMutation({
     mutationFn: ({ queue, id }: { queue: string; id: string }) => retryDLQTask(queue, id),
     onSuccess: (_, vars) => {
-      toast.success(`Retry dispatched (${vars.id.slice(0, 8)}…)`);
-      qc.invalidateQueries({ queryKey: qk.dlq(vars.queue) });
-      qc.invalidateQueries({ queryKey: qk.queues() });
+      toastSuccess(`Retry dispatched (${vars.id.slice(0, 8)}…)`);
+      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.dlq(vars.queue) });
+      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.queues });
     },
-    onError: (e) => toast.error(`Retry failed: ${(e as Error).message}`),
+    onError: (e) => toastApiError('Retry failed', e),
   });
   const discard = useMutation({
     mutationFn: ({ queue, id }: { queue: string; id: string }) => discardDLQTask(queue, id),
     onSuccess: (_, vars) => {
-      toast.success(`Discarded (${vars.id.slice(0, 8)}…)`);
-      qc.invalidateQueries({ queryKey: qk.dlq(vars.queue) });
-      qc.invalidateQueries({ queryKey: qk.queues() });
+      toastSuccess(`Discarded (${vars.id.slice(0, 8)}…)`);
+      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.dlq(vars.queue) });
+      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.queues });
     },
-    onError: (e) => toast.error(`Discard failed: ${(e as Error).message}`),
+    onError: (e) => toastApiError('Discard failed', e),
   });
   const retryOutbox = useMutation({
     mutationFn: retryTaskOutbox,
     onSuccess: (row) => {
-      toast.success(`Task outbox row queued (${row.id.slice(0, 8)}…)`);
-      qc.invalidateQueries({ queryKey: qk.outbox(outboxStatus) });
+      toastSuccess(`Task outbox row queued (${row.id.slice(0, 8)}…)`);
+      qc.invalidateQueries({ queryKey: queryKeys.adminOperations.outbox(outboxStatus) });
     },
-    onError: (e) => toast.error(`Outbox retry failed: ${(e as Error).message}`),
+    onError: (e) => toastApiError('Outbox retry failed', e),
   });
 
   return (
@@ -252,25 +248,25 @@ function QueueTable({
   }
   return (
     <div className="border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <tr>
-            <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2 text-right">Pending</th>
-            <th className="px-3 py-2 text-right">Active</th>
-            <th className="px-3 py-2 text-right">Scheduled</th>
-            <th className="px-3 py-2 text-right">Retry</th>
-            <th className="px-3 py-2 text-right">DLQ</th>
-            <th className="px-3 py-2 text-right">Completed</th>
-            <th className="px-3 py-2">State</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="w-full text-sm">
+        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+          <TableRow>
+            <TableHead className="px-3 py-2">Name</TableHead>
+            <TableHead className="px-3 py-2 text-right">Pending</TableHead>
+            <TableHead className="px-3 py-2 text-right">Active</TableHead>
+            <TableHead className="px-3 py-2 text-right">Scheduled</TableHead>
+            <TableHead className="px-3 py-2 text-right">Retry</TableHead>
+            <TableHead className="px-3 py-2 text-right">DLQ</TableHead>
+            <TableHead className="px-3 py-2 text-right">Completed</TableHead>
+            <TableHead className="px-3 py-2">State</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((r) => {
             const isActive = r.name === activeQueue;
             const isStuck = r.archived > 0;
             return (
-              <tr
+              <TableRow
                 key={r.name}
                 onClick={() => onSelect(r.name)}
                 className={
@@ -278,22 +274,22 @@ function QueueTable({
                   (isActive ? 'bg-primary/5' : 'hover:bg-muted/40')
                 }
               >
-                <td className="px-3 py-2 font-mono">{r.name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.pending}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.active}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.scheduled}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{r.retry}</td>
-                <td
+                <TableCell className="px-3 py-2 font-mono">{r.name}</TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">{r.pending}</TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">{r.active}</TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">{r.scheduled}</TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums">{r.retry}</TableCell>
+                <TableCell
                   className={
                     'px-3 py-2 text-right tabular-nums ' + (isStuck ? 'text-red-600 font-medium' : '')
                   }
                 >
                   {r.archived}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                   {r.completed}
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell className="px-3 py-2">
                   {r.paused ? (
                     <span className="inline-flex items-center gap-1 text-xs text-amber-600">
                       <AlertTriangle className="h-3 w-3" /> paused
@@ -303,12 +299,12 @@ function QueueTable({
                       <CheckCircle2 className="h-3 w-3" /> running
                     </span>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -353,32 +349,32 @@ function DLQTable({
   }
   return (
     <div className="border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <tr>
-            <th className="px-3 py-2">Task type</th>
-            <th className="px-3 py-2">ID</th>
-            <th className="px-3 py-2 text-right">Retries</th>
-            <th className="px-3 py-2">Last error</th>
-            <th className="px-3 py-2">Failed at</th>
-            <th className="px-3 py-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="w-full text-sm">
+        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+          <TableRow>
+            <TableHead className="px-3 py-2">Task type</TableHead>
+            <TableHead className="px-3 py-2">ID</TableHead>
+            <TableHead className="px-3 py-2 text-right">Retries</TableHead>
+            <TableHead className="px-3 py-2">Last error</TableHead>
+            <TableHead className="px-3 py-2">Failed at</TableHead>
+            <TableHead className="px-3 py-2 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
-              <td className="px-3 py-2 font-mono text-xs">{row.type}</td>
-              <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
+            <TableRow key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
+              <TableCell className="px-3 py-2 font-mono text-xs">{row.type}</TableCell>
+              <TableCell className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
                 {row.id.length > 16 ? row.id.slice(0, 16) + '…' : row.id}
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">{row.retried}</td>
-              <td className="px-3 py-2 text-xs text-red-600 max-w-md truncate" title={row.last_err}>
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right tabular-nums">{row.retried}</TableCell>
+              <TableCell className="px-3 py-2 text-xs text-red-600 max-w-md truncate" title={row.last_err}>
                 {row.last_err || '—'}
-              </td>
-              <td className="px-3 py-2 text-xs text-muted-foreground">
+              </TableCell>
+              <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                 {row.last_failed_at ? new Date(row.last_failed_at).toLocaleString() : '—'}
-              </td>
-              <td className="px-3 py-2 text-right">
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
                 <div className="inline-flex items-center gap-1">
                   <button
                     onClick={() => onRetry(row.id)}
@@ -397,11 +393,11 @@ function DLQTable({
                     <Trash2 className="h-3 w-3" /> Discard
                   </button>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -435,43 +431,43 @@ function TaskOutboxTable({
   }
   return (
     <div className="border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <tr>
-            <th className="px-3 py-2">Task type</th>
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2">Queue</th>
-            <th className="px-3 py-2 text-right">Attempts</th>
-            <th className="px-3 py-2">Next attempt</th>
-            <th className="px-3 py-2">Last error</th>
-            <th className="px-3 py-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="w-full text-sm">
+        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+          <TableRow>
+            <TableHead className="px-3 py-2">Task type</TableHead>
+            <TableHead className="px-3 py-2">Status</TableHead>
+            <TableHead className="px-3 py-2">Queue</TableHead>
+            <TableHead className="px-3 py-2 text-right">Attempts</TableHead>
+            <TableHead className="px-3 py-2">Next attempt</TableHead>
+            <TableHead className="px-3 py-2">Last error</TableHead>
+            <TableHead className="px-3 py-2 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
-              <td className="px-3 py-2">
+            <TableRow key={row.id} className="border-t border-border hover:bg-muted/40 align-top">
+              <TableCell className="px-3 py-2">
                 <div className="font-mono text-xs">{row.task_type}</div>
                 {row.dedupe_key && (
                   <div className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground" title={row.dedupe_key}>
                     {row.dedupe_key}
                   </div>
                 )}
-              </td>
-              <td className="px-3 py-2">
+              </TableCell>
+              <TableCell className="px-3 py-2">
                 <span className={taskOutboxStatusClass(row.status)}>{row.status}</span>
-              </td>
-              <td className="px-3 py-2 font-mono text-xs">{row.queue_name}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
+              </TableCell>
+              <TableCell className="px-3 py-2 font-mono text-xs">{row.queue_name}</TableCell>
+              <TableCell className="px-3 py-2 text-right tabular-nums">
                 {row.attempt_count}/{row.max_delivery_attempts}
-              </td>
-              <td className="px-3 py-2 text-xs text-muted-foreground">
+              </TableCell>
+              <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                 {row.next_attempt_at ? new Date(row.next_attempt_at).toLocaleString() : '—'}
-              </td>
-              <td className="px-3 py-2 max-w-md truncate text-xs text-red-600" title={row.last_error || ''}>
+              </TableCell>
+              <TableCell className="px-3 py-2 max-w-md truncate text-xs text-red-600" title={row.last_error || ''}>
                 {row.last_error || '—'}
-              </td>
-              <td className="px-3 py-2 text-right">
+              </TableCell>
+              <TableCell className="px-3 py-2 text-right">
                 <button
                   onClick={() => onRetry(row.id)}
                   disabled={pendingRetry || row.status === 'delivered'}
@@ -480,11 +476,11 @@ function TaskOutboxTable({
                 >
                   <RotateCw className="h-3 w-3" /> Retry
                 </button>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

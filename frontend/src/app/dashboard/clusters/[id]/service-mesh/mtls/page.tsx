@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * mTLS breakdown sub-page — per-namespace view backed by the
  * /api/v1/clusters/{id}/service-mesh/mtls/ endpoint (migration 071).
@@ -16,7 +17,7 @@ import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Info, Loader2, Server, Shield } from 'lucide-react';
 
-import { useCluster } from '@/lib/hooks';
+import { queryKeys, useCluster } from '@/lib/hooks';
 import { getServiceMeshMTLS, type MTLSBreakdownRow } from '@/lib/api/cluster-detail';
 
 // modeStyle picks a tailwind colour for a mode badge. STRICT is the
@@ -36,15 +37,15 @@ function modeStyle(mode: string): string {
 
 function MTLSRow({ row }: { row: MTLSBreakdownRow }) {
   return (
-    <tr className="border-t border-border">
-      <td className="px-4 py-2.5 font-mono text-sm text-foreground">{row.namespace}</td>
-      <td className="px-4 py-2.5">
+    <TableRow className="border-t border-border">
+      <TableCell className="px-4 py-2.5 font-mono text-sm text-foreground">{row.namespace}</TableCell>
+      <TableCell className="px-4 py-2.5">
         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeStyle(row.mode)}`}>
           {row.mode}
         </span>
-      </td>
-      <td className="px-4 py-2.5 text-sm text-muted-foreground">{row.rules}</td>
-    </tr>
+      </TableCell>
+      <TableCell className="px-4 py-2.5 text-sm text-muted-foreground">{row.rules}</TableCell>
+    </TableRow>
   );
 }
 
@@ -53,7 +54,7 @@ export default function ClusterServiceMeshMTLSPage() {
   const clusterId = params.id as string;
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: mtls, isLoading } = useQuery({
-    queryKey: ['clusters', clusterId, 'service-mesh', 'mtls'] as const,
+    queryKey: queryKeys.clusterPages.serviceMeshMtls(clusterId),
     queryFn: () => getServiceMeshMTLS(clusterId),
     enabled: !!clusterId,
   });
@@ -119,38 +120,38 @@ export default function ClusterServiceMeshMTLSPage() {
 
       {/* Table */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        <Table className="w-full">
+          <TableHeader>
+            <TableRow className="border-b border-border">
+              <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Namespace
-              </th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              </TableHead>
+              <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Mode
-              </th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              </TableHead>
+              <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Rules
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {isLoading ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-12 text-center">
+              <TableRow>
+                <TableCell colSpan={3} className="px-4 py-12 text-center">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground inline" />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : !mtls || mtls.rows.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={3} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {mtls?.notice ? 'No per-namespace breakdown available.' : 'No mTLS rules found.'}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               mtls.rows.map((row) => <MTLSRow key={`${row.namespace}-${row.mode}`} row={row} />)
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

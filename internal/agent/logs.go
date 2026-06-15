@@ -82,7 +82,9 @@ func (h *LogHandler) HandleLogStart(ctx context.Context, msg *protocol.Message, 
 
 	// Stream logs in a goroutine.
 	go func() {
-		defer stream.Close()
+		defer func() {
+			_ = stream.Close()
+		}()
 		defer cancel()
 		defer func() {
 			h.mu.Lock()

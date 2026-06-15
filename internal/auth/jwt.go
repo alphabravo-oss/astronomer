@@ -359,10 +359,10 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 		// Same fail-open rationale as above.
 		return nil
 	}
-	if set && claims.IssuedAt != nil && !claims.IssuedAt.Time.IsZero() {
+	if set && claims.IssuedAt != nil && !claims.IssuedAt.IsZero() {
 		// iat predates the cutoff -> reject. Use !After so a token
 		// issued at exactly the cutoff timestamp is rejected.
-		if !claims.IssuedAt.Time.After(cutoff) {
+		if !claims.IssuedAt.After(cutoff) {
 			return fmt.Errorf("invalid token: tokens invalidated for user")
 		}
 	}

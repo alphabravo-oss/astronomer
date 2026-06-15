@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -227,10 +226,4 @@ var _ = meshDetectInterval // reserved for the scheduler wiring
 // the instant a cluster lands.
 func ensureClusterRow(_ context.Context, _ uuid.UUID) error { //nolint:unused
 	return nil
-}
-
-// notFound is a helper for tests + handler call sites that need to
-// distinguish "no row yet" from a real DB error.
-func notFound(err error) bool {
-	return err == pgx.ErrNoRows
 }

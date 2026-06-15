@@ -1078,9 +1078,14 @@ func (h *ResourceHandler) setNodeSchedulable(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	action := "uncordoned"
+	auditAction := "cluster.node.uncordoned"
 	if unschedulable {
 		action = "cordoned"
+		auditAction = "cluster.node.cordoned"
 	}
+	recordAudit(r, h.queries, auditAction, "node", nodeName, nodeName, map[string]any{
+		"cluster_id": clusterID,
+	})
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"node":   nodeName,
 		"status": action,

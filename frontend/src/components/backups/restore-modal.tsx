@@ -15,6 +15,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Loader2, Plus, X } from 'lucide-react';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { useB2CreateRestore } from './hooks';
 import type { BackupRun } from '@/types';
 
@@ -74,20 +75,34 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-status-warning" />
-            <h3 className="text-lg font-semibold text-foreground">Restore from Backup</h3>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-5 w-5" />
+    <ModalShell
+      title="Restore from Backup"
+      onClose={onClose}
+      panelClassName="max-w-lg max-h-[85vh] bg-popover flex flex-col overflow-hidden"
+      bodyClassName="flex-1 overflow-y-auto"
+      footerClassName="bg-muted/30"
+      titleIcon={<AlertTriangle className="h-5 w-5 text-status-warning" />}
+      footer={(
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!confirmOK || create.isPending}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-status-warning text-white
+              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Start Restore
           </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      )}
+    >
           <div className="rounded-lg border border-status-warning/20 bg-status-warning/5 p-4 space-y-1">
             <p className="text-sm text-foreground font-medium">{backup.name}</p>
             <p className="text-xs text-muted-foreground">
@@ -204,27 +219,6 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
                 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!confirmOK || create.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-status-warning text-white
-              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Start Restore
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

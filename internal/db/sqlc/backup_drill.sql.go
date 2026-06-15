@@ -7,9 +7,6 @@ package sqlc
 
 import (
 	"context"
-	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countBackupDrillResults = `-- name: CountBackupDrillResults :one
@@ -24,11 +21,15 @@ func (q *Queries) CountBackupDrillResults(ctx context.Context) (int64, error) {
 }
 
 const getLatestBackupDrillResult = `-- name: GetLatestBackupDrillResult :one
+
 SELECT id, started_at, finished_at, status, backup_key, schema_version, error_message, created_at FROM backup_drill_results
 ORDER BY started_at DESC
 LIMIT 1
 `
 
+// Backup restore drill results — written by the
+// management-plane-restore-drill-cronjob, read by the
+// /api/v1/admin/backup-drill/ admin endpoint.
 // The summary endpoint shows ONLY the most recent drill — that's enough
 // for the "are we current?" question. History uses ListBackupDrillResults.
 func (q *Queries) GetLatestBackupDrillResult(ctx context.Context) (BackupDrillResult, error) {
@@ -60,59 +61,6 @@ LIMIT 1
 // latest attempt.
 func (q *Queries) GetLatestSuccessfulBackupDrillResult(ctx context.Context) (BackupDrillResult, error) {
 	row := q.db.QueryRow(ctx, getLatestSuccessfulBackupDrillResult)
-	var i BackupDrillResult
-	err := row.Scan(
-		&i.ID,
-		&i.StartedAt,
-		&i.FinishedAt,
-		&i.Status,
-		&i.BackupKey,
-		&i.SchemaVersion,
-		&i.ErrorMessage,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const insertBackupDrillResult = `-- name: InsertBackupDrillResult :one
-
-INSERT INTO backup_drill_results (
-    started_at,
-    finished_at,
-    status,
-    backup_key,
-    schema_version,
-    error_message
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, started_at, finished_at, status, backup_key, schema_version, error_message, created_at
-`
-
-type InsertBackupDrillResultParams struct {
-	StartedAt     time.Time          `json:"started_at"`
-	FinishedAt    pgtype.Timestamptz `json:"finished_at"`
-	Status        string             `json:"status"`
-	BackupKey     string             `json:"backup_key"`
-	SchemaVersion pgtype.Int4        `json:"schema_version"`
-	ErrorMessage  string             `json:"error_message"`
-}
-
-// Backup restore drill results — written by the
-// management-plane-restore-drill-cronjob, read by the
-// /api/v1/admin/backup-drill/ admin endpoint.
-// Called from the drill CronJob's restore container at the END of the
-// drill (success or failure), once the outcome is known. The drill
-// doesn't need a "started but not finished" row — failures still set
-// finished_at, just with status='failure' and error_message populated.
-func (q *Queries) InsertBackupDrillResult(ctx context.Context, arg InsertBackupDrillResultParams) (BackupDrillResult, error) {
-	row := q.db.QueryRow(ctx, insertBackupDrillResult,
-		arg.StartedAt,
-		arg.FinishedAt,
-		arg.Status,
-		arg.BackupKey,
-		arg.SchemaVersion,
-		arg.ErrorMessage,
-	)
 	var i BackupDrillResult
 	err := row.Scan(
 		&i.ID,

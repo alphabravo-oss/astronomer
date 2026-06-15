@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Lock, Plus } from 'lucide-react';
-import { EmptyState } from '@/components/ui/empty-state';
+import { EmptyState, ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
 
 describe('EmptyState', () => {
   it('renders title and description', () => {
@@ -65,5 +65,30 @@ describe('EmptyState', () => {
     );
 
     expect(screen.getByRole('link', { name: /back to dashboard/i })).toHaveAttribute('href', '/dashboard');
+  });
+
+  it('renders a shared loading state', () => {
+    render(<LoadingState title="Loading quota usage" description="Fetching current consumption." />);
+
+    expect(screen.getByText('Loading quota usage')).toBeInTheDocument();
+    expect(screen.getByText('Fetching current consumption.')).toBeInTheDocument();
+  });
+
+  it('renders retryable shared errors', () => {
+    const onRetry = jest.fn();
+
+    render(<ErrorState title="Load failed" description="The API returned an error." onRetry={onRetry} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders permission-specific copy', () => {
+    render(<PermissionState permission="cluster_templates:read" />);
+
+    expect(screen.getByText('Permission required')).toBeInTheDocument();
+    expect(screen.getByText('cluster_templates:read')).toBeInTheDocument();
   });
 });

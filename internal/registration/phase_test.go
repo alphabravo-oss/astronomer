@@ -62,13 +62,13 @@ func TestRegistrationWizard_IllegalTransitionsRejected(t *testing.T) {
 		from Phase
 		ev   Event
 	}{
-		{PhaseCreated, EventAgentConnected},         // skipping confirm
-		{PhaseCreated, EventTemplateApplying},       // template before agent
-		{PhaseAwaitingAgent, EventTemplateApplied},  // template before connect
-		{PhaseReady, EventConfirm},                  // re-confirming a ready cluster
-		{PhaseFailed, EventConfirm},                 // re-confirming a failed cluster
-		{PhaseReady, EventCancel},                   // cancel from terminal
-		{PhaseConnected, EventRetry},                // retry from non-failed
+		{PhaseCreated, EventAgentConnected},        // skipping confirm
+		{PhaseCreated, EventTemplateApplying},      // template before agent
+		{PhaseAwaitingAgent, EventTemplateApplied}, // template before connect
+		{PhaseReady, EventConfirm},                 // re-confirming a ready cluster
+		{PhaseFailed, EventConfirm},                // re-confirming a failed cluster
+		{PhaseReady, EventCancel},                  // cancel from terminal
+		{PhaseConnected, EventRetry},               // retry from non-failed
 	} {
 		if _, err := Transition(c.from, c.ev, false); !errors.Is(err, ErrIllegalTransition) {
 			t.Errorf("%s+%s should be illegal, got err=%v", c.from, c.ev, err)
@@ -173,16 +173,19 @@ func TestRegistrationWizard_IsTerminal(t *testing.T) {
 // copy consistent between wizard page 3 and the Provisioning tab.
 func TestRegistrationWizard_StepLabel(t *testing.T) {
 	cases := map[string]string{
-		"cluster_created":             "Cluster created",
-		"manifest_generated":          "Manifest generated",
-		"agent_connected":             "Agent connected",
-		"template_applying":           "Applying Platform Baseline",
-		"template_applied":            "Platform Baseline applied",
-		"template_failed":             "Platform Baseline failed",
-		"no_provisioning":             "Skipped Platform Baseline (operator opted out)",
-		"tool_installing:trivy-operator": "Installing tool: trivy-operator",
-		"tool_installed:fluent-bit":      "Installed tool: fluent-bit",
-		"tool_failed:cert-manager":       "Failed to install tool: cert-manager",
+		"cluster_created":                    "Cluster created",
+		"manifest_generated":                 "Manifest generated",
+		"agent_connected":                    "Agent connected",
+		"template_applying":                  "Applying Platform Baseline",
+		"template_applied":                   "Platform Baseline applied",
+		"template_failed":                    "Platform Baseline failed",
+		"argocd_registration_repaired":       "ArgoCD registration repaired",
+		"argocd_registration_repair_blocked": "ArgoCD registration repair blocked",
+		"argocd_registration_failed":         "ArgoCD registration failed",
+		"no_provisioning":                    "Skipped Platform Baseline (operator opted out)",
+		"tool_installing:trivy-operator":     "Installing tool: trivy-operator",
+		"tool_installed:fluent-bit":          "Installed tool: fluent-bit",
+		"tool_failed:cert-manager":           "Failed to install tool: cert-manager",
 	}
 	for k, want := range cases {
 		if got := StepLabel(k); got != want {

@@ -34,6 +34,19 @@ var auditBatchInsertsTotal = prometheus.NewCounterVec(
 	observability.MetricLabels("outcome"),
 )
 
+// auditWriteFailuresTotal counts direct audit-log persistence failures. Dropped
+// events have their own counter; this metric is specifically for attempted DB
+// writes that returned an error.
+var auditWriteFailuresTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "astronomer",
+		Subsystem: "audit",
+		Name:      "write_failures_total",
+		Help:      "Total number of audit-log database write failures by writer path.",
+	},
+	observability.MetricLabels("path"),
+)
+
 // auditBatchSize observes the number of rows in each batch insert. The
 // distribution makes it easy to spot the "always tiny" case (batching not
 // helping) and the "always max" case (buffer is saturated).
@@ -51,6 +64,7 @@ var auditBatchSize = prometheus.NewHistogramVec(
 func init() {
 	prometheus.MustRegister(auditDroppedTotal)
 	prometheus.MustRegister(auditBatchInsertsTotal)
+	prometheus.MustRegister(auditWriteFailuresTotal)
 	prometheus.MustRegister(auditBatchSize)
 }
 
@@ -70,4 +84,11 @@ func recordBatchInsert(outcome string, size int) {
 	}
 	auditBatchInsertsTotal.WithLabelValues(observability.MetricValues(outcome)...).Inc()
 	auditBatchSize.WithLabelValues(observability.MetricValues()...).Observe(float64(size))
+}
+
+func recordWriteFailure(path string) {
+	if path == "" {
+		path = "unknown"
+	}
+	auditWriteFailuresTotal.WithLabelValues(observability.MetricValues(path)...).Inc()
 }

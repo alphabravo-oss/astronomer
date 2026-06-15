@@ -25,22 +25,23 @@ CREATE TABLE IF NOT EXISTS chart_ratings (
     chart_id        UUID NOT NULL REFERENCES helm_charts(id) ON DELETE CASCADE,
     installation_id UUID REFERENCES installed_charts(id) ON DELETE SET NULL,
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    rating          SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    comment         TEXT NOT NULL DEFAULT '',
+    stars           SMALLINT NOT NULL CHECK (stars BETWEEN 1 AND 5),
+    note            VARCHAR(280) NOT NULL DEFAULT '',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (chart_id, user_id)
+    UNIQUE (user_id, installation_id)
 );
-CREATE INDEX IF NOT EXISTS idx_chart_ratings_chart_id ON chart_ratings (chart_id);
-CREATE INDEX IF NOT EXISTS idx_chart_ratings_user_id ON chart_ratings (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chart_ratings_user_chart_unique
+    ON chart_ratings (user_id, chart_id)
+    WHERE installation_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_chart_ratings_chart ON chart_ratings (chart_id);
 
 CREATE TABLE IF NOT EXISTS chart_rating_aggregates (
     chart_id        UUID PRIMARY KEY REFERENCES helm_charts(id) ON DELETE CASCADE,
     rating_count    INTEGER NOT NULL DEFAULT 0,
     rating_sum      INTEGER NOT NULL DEFAULT 0,
-    rating_avg      NUMERIC(4,3) NOT NULL DEFAULT 0,
-    bayesian_score  NUMERIC(5,3) NOT NULL DEFAULT 0,
-    install_count   INTEGER NOT NULL DEFAULT 0,
+    avg_stars       NUMERIC(3,2) NOT NULL DEFAULT 0.00,
+    bayesian_score  NUMERIC(4,2) NOT NULL DEFAULT 0.00,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_chart_rating_aggregates_bayesian
@@ -49,13 +50,10 @@ CREATE INDEX IF NOT EXISTS idx_chart_rating_aggregates_bayesian
 CREATE TABLE IF NOT EXISTS chart_co_installation (
     chart_a_id      UUID NOT NULL REFERENCES helm_charts(id) ON DELETE CASCADE,
     chart_b_id      UUID NOT NULL REFERENCES helm_charts(id) ON DELETE CASCADE,
-    co_count        INTEGER NOT NULL DEFAULT 0,
-    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    weight          INTEGER NOT NULL DEFAULT 0,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (chart_a_id, chart_b_id),
-    CHECK (chart_a_id <> chart_b_id)
+    CHECK (chart_a_id < chart_b_id)
 );
-CREATE INDEX IF NOT EXISTS idx_chart_co_installation_a
-    ON chart_co_installation (chart_a_id, co_count DESC);
-CREATE INDEX IF NOT EXISTS idx_chart_co_installation_b
-    ON chart_co_installation (chart_b_id, co_count DESC);
+CREATE INDEX IF NOT EXISTS idx_chart_co_a ON chart_co_installation (chart_a_id, weight DESC);
+CREATE INDEX IF NOT EXISTS idx_chart_co_b ON chart_co_installation (chart_b_id, weight DESC);

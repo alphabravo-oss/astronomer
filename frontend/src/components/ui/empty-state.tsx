@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import type { ElementType, ReactNode } from 'react';
+import { AlertCircle, Clock3, Loader2, Lock, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+type StateTone = 'neutral' | 'danger' | 'warning' | 'info';
 
 interface EmptyStateProps {
   icon: ElementType;
@@ -16,32 +19,60 @@ interface EmptyStateProps {
   className?: string;
 }
 
-export function EmptyState({
+interface StatePanelProps {
+  title: string;
+  description?: ReactNode;
+  icon?: ElementType;
+  tone?: StateTone;
+  actionLabel?: string;
+  actionHref?: string;
+  actionIcon?: ElementType;
+  onAction?: () => void;
+  disabled?: boolean;
+  className?: string;
+  iconClassName?: string;
+  role?: string;
+}
+
+const toneClass: Record<StateTone, string> = {
+  neutral: 'bg-muted text-muted-foreground',
+  danger: 'bg-status-error/10 text-status-error',
+  warning: 'bg-status-warning/10 text-status-warning',
+  info: 'bg-status-info/10 text-status-info',
+};
+
+export function StatePanel({
   icon: Icon,
   title,
   description,
+  tone = 'neutral',
   actionLabel,
   actionHref,
   actionIcon: ActionIcon,
   onAction,
   disabled = false,
   className,
-}: EmptyStateProps) {
+  iconClassName,
+  role,
+}: StatePanelProps) {
   const hasAction = !!actionLabel && (!!actionHref || !!onAction);
 
   return (
     <div
+      role={role}
       className={cn(
         'flex flex-col items-center justify-center py-16 text-center space-y-3',
         className,
       )}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-        <Icon className="h-6 w-6 text-muted-foreground" />
-      </div>
+      {Icon && (
+        <div className={cn('flex h-12 w-12 items-center justify-center rounded-lg', toneClass[tone])}>
+          <Icon className={cn('h-6 w-6', iconClassName)} />
+        </div>
+      )}
       <div className="space-y-1">
         <p className="text-base font-medium text-foreground">{title}</p>
-        <p className="max-w-md text-sm text-muted-foreground">{description}</p>
+        {description && <p className="max-w-md text-sm text-muted-foreground">{description}</p>}
       </div>
       {hasAction && (
         actionHref && !disabled ? (
@@ -66,4 +97,102 @@ export function EmptyState({
       )}
     </div>
   );
+}
+
+export function EmptyState(props: EmptyStateProps) {
+  return <StatePanel {...props} />;
+}
+
+export function LoadingState({
+  title = 'Loading',
+  description,
+  className,
+}: {
+  title?: string;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <StatePanel
+      icon={Loader2}
+      title={title}
+      description={description}
+      tone="info"
+      iconClassName="animate-spin"
+      className={className}
+    />
+  );
+}
+
+export function ErrorState({
+  title = 'Failed to load',
+  description,
+  actionLabel = 'Retry',
+  onRetry,
+  className,
+}: {
+  title?: string;
+  description?: ReactNode;
+  actionLabel?: string;
+  onRetry?: () => void;
+  className?: string;
+}) {
+  return (
+    <StatePanel
+      icon={AlertCircle}
+      title={title}
+      description={description}
+      tone="danger"
+      actionLabel={onRetry ? actionLabel : undefined}
+      onAction={onRetry}
+      className={className}
+      role="alert"
+    />
+  );
+}
+
+export function PermissionState({
+  title = 'Permission required',
+  permission,
+  description,
+  className,
+}: {
+  title?: string;
+  permission?: string;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <StatePanel
+      icon={Lock}
+      title={title}
+      description={description ?? (permission ? <>You need <code className="font-mono">{permission}</code> to use this surface.</> : undefined)}
+      tone="warning"
+      className={className}
+    />
+  );
+}
+
+export function DisconnectedState({
+  title = 'Connection unavailable',
+  description = 'Live cluster data is unavailable until the agent reconnects.',
+  className,
+}: {
+  title?: string;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return <StatePanel icon={WifiOff} title={title} description={description} tone="warning" className={className} />;
+}
+
+export function StaleState({
+  title = 'Showing cached data',
+  description = 'The latest live refresh failed, so this view may be stale.',
+  className,
+}: {
+  title?: string;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return <StatePanel icon={Clock3} title={title} description={description} tone="info" className={className} />;
 }

@@ -135,7 +135,7 @@ export type LoginResult =
   | { kind: 'challenge'; challenge: TotpChallenge };
 
 export async function loginWithCredentialsChallengeAware(
-  username: string,
+  email: string,
   password: string,
 ): Promise<LoginResult> {
   // We bypass the shared `api` axios instance because its response-error
@@ -145,7 +145,7 @@ export async function loginWithCredentialsChallengeAware(
   try {
     const res = await axios.post<APIResponse<VerifiedLogin> | VerifiedLogin>(
       `${API_BASE_URL}/auth/login/`,
-      { username, password },
+      { email, password },
       { headers: { 'Content-Type': 'application/json' }, withCredentials: true },
     );
     const raw = camelize(res.data) as { data?: VerifiedLogin } | VerifiedLogin;

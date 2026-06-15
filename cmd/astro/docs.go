@@ -26,9 +26,9 @@ etc.).`,
 				return err
 			}
 			if !print {
-				fmt.Fprintf(cmd.OutOrStdout(), "OpenAPI spec: %s/api/v1/openapi.yaml\nSwagger UI:   %s/api/v1/docs/\n",
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "OpenAPI spec: %s/api/v1/openapi.yaml\nSwagger UI:   %s/api/v1/docs/\n",
 					cfg.ServerURL, cfg.ServerURL)
-				return nil
+				return err
 			}
 			body, err := client.GetRaw(cmd.Context(), "/api/v1/openapi.yaml")
 			if err != nil {

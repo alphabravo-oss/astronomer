@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Mail, Save, Send } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -66,7 +66,7 @@ function SmtpForm({ initial }: { initial: SmtpConfig }) {
 
   const handleTest = async () => {
     if (!testTo) {
-      toast.error('Recipient required');
+      toastError('Recipient required');
       return;
     }
     try {

@@ -43,6 +43,23 @@ func TestStartCRDControllerFailsClosedInProduction(t *testing.T) {
 	}
 }
 
+func TestCRDControllerNamespaceEnvDefaultsAndOverrides(t *testing.T) {
+	if got := crdWatchNamespace(); got != "astronomer-mgmt" {
+		t.Fatalf("default CRD watch namespace = %q", got)
+	}
+	if got := crdArgoNamespace(); got != "argocd" {
+		t.Fatalf("default CRD Argo namespace = %q", got)
+	}
+	t.Setenv("CRD_WATCH_NAMESPACE", "custom-mgmt")
+	t.Setenv("CRD_ARGO_NAMESPACE", "custom-argocd")
+	if got := crdWatchNamespace(); got != "custom-mgmt" {
+		t.Fatalf("override CRD watch namespace = %q", got)
+	}
+	if got := crdArgoNamespace(); got != "custom-argocd" {
+		t.Fatalf("override CRD Argo namespace = %q", got)
+	}
+}
+
 // dsnEnforcesTLS gates the production warning when DATABASE_URL doesn't
 // require TLS. The values an operator could mis-set into a Helm install
 // must all map to the right verdict.

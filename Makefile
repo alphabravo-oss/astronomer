@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vet run sqlc sqlc-generate \
+.PHONY: help build test lint fmt vet run sqlc sqlc-generate sqlc-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -15,6 +15,8 @@ LDFLAGS      = -s -w \
                -X $(MODULE)/pkg/version.BuildDate=$(BUILD_DATE)
 
 DATABASE_URL ?= postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
+SQLC_VERSION ?= v1.31.1
+SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 # Image naming — override IMG_TAG=... to push semantic versions.
 IMG_TAG     ?= $(VERSION)
@@ -76,9 +78,12 @@ run: ## Run the server locally
 	go run -ldflags '$(LDFLAGS)' ./cmd/server
 
 sqlc-generate: ## Generate sqlc code
-	sqlc generate
+	$(SQLC) generate
 
 sqlc: sqlc-generate ## Alias for sqlc-generate
+
+sqlc-check: ## Regenerate sqlc and fail if generated files are stale
+	SQLC_VERSION=$(SQLC_VERSION) ./scripts/check-sqlc-generated.sh
 
 migrate-up: ## Run all migrations up
 	migrate -database "$(DATABASE_URL)" -path internal/db/migrations up

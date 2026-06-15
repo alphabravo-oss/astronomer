@@ -40,9 +40,6 @@ SELECT * FROM alert_rules ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 -- name: ListAlertRulesByCluster :many
 SELECT * FROM alert_rules WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
--- name: ListActiveAlertsByCluster :many
-SELECT * FROM alert_rules WHERE cluster_id = $1 AND enabled = true ORDER BY created_at DESC;
-
 -- name: CreateAlertRule :one
 INSERT INTO alert_rules (name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -80,11 +77,6 @@ SELECT nc.* FROM notification_channels nc
 INNER JOIN alert_rule_channels arc ON nc.id = arc.notification_channel_id
 WHERE arc.alert_rule_id = $1;
 
--- name: ListAlertRulesForChannel :many
-SELECT ar.* FROM alert_rules ar
-INNER JOIN alert_rule_channels arc ON ar.id = arc.alert_rule_id
-WHERE arc.notification_channel_id = $1;
-
 -- Alert Events
 
 -- name: GetAlertEventByID :one
@@ -93,14 +85,8 @@ SELECT * FROM alert_events WHERE id = $1;
 -- name: ListAlertEvents :many
 SELECT * FROM alert_events ORDER BY fired_at DESC LIMIT $1 OFFSET $2;
 
--- name: ListAlertEventsByCluster :many
-SELECT * FROM alert_events WHERE cluster_id = $1 ORDER BY fired_at DESC LIMIT $2 OFFSET $3;
-
 -- name: ListAlertEventsByRule :many
 SELECT * FROM alert_events WHERE rule_id = $1 ORDER BY fired_at DESC LIMIT $2 OFFSET $3;
-
--- name: ListFiringAlertEvents :many
-SELECT * FROM alert_events WHERE status = 'firing' ORDER BY fired_at DESC LIMIT $1 OFFSET $2;
 
 -- name: CreateAlertEvent :one
 INSERT INTO alert_events (rule_id, cluster_id, status, message, details)
@@ -123,17 +109,8 @@ DELETE FROM alert_events WHERE fired_at < $1;
 
 -- Alert Silences
 
--- name: GetAlertSilenceByID :one
-SELECT * FROM alert_silences WHERE id = $1;
-
 -- name: ListAlertSilences :many
 SELECT * FROM alert_silences ORDER BY created_at DESC LIMIT $1 OFFSET $2;
-
--- name: GetActiveAlertSilences :many
-SELECT * FROM alert_silences WHERE starts_at <= now() AND ends_at > now() ORDER BY ends_at ASC;
-
--- name: GetActiveAlertSilencesByCluster :many
-SELECT * FROM alert_silences WHERE cluster_id = $1 AND starts_at <= now() AND ends_at > now() ORDER BY ends_at ASC;
 
 -- name: CreateAlertSilence :one
 INSERT INTO alert_silences (rule_id, cluster_id, reason, starts_at, ends_at, created_by_id)

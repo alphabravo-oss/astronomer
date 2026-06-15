@@ -15,8 +15,9 @@
  */
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, Loader2, Layers, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Layers } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { LoadingState, PermissionState } from '@/components/ui/empty-state';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useClusterTemplates,
@@ -42,13 +43,16 @@ export default function ClusterTemplatesPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cluster Templates</h1>
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>
-            You need <span className="font-mono">cluster_templates:read</span> to view templates.
-            Ask an administrator to grant the role.
-          </p>
-        </div>
+        <PermissionState
+          permission="cluster_templates:read"
+          description={
+            <>
+              You need <span className="font-mono">cluster_templates:read</span> to view templates.
+              Ask an administrator to grant the role.
+            </>
+          }
+          className="rounded-lg border border-border bg-muted/30 p-6"
+        />
       </div>
     );
   }
@@ -158,9 +162,7 @@ export default function ClusterTemplatesPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingState title="Loading cluster templates" className="h-32 py-0" />
       ) : (
         <DataTable
           data={templates}

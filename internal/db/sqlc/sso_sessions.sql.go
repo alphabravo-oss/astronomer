@@ -51,7 +51,7 @@ func (q *Queries) GetSSOSession(ctx context.Context, jti string) (SsoSession, er
 		&i.Jti,
 		&i.UserID,
 		&i.ProviderName,
-		&i.UpstreamIdTokenEncrypted,
+		&i.UpstreamIDTokenEncrypted,
 		&i.EndSessionEndpoint,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -60,6 +60,7 @@ func (q *Queries) GetSSOSession(ctx context.Context, jti string) (SsoSession, er
 }
 
 const insertSSOSession = `-- name: InsertSSOSession :exec
+
 INSERT INTO sso_sessions (
     jti, user_id, provider_name, upstream_id_token_encrypted,
     end_session_endpoint, expires_at
@@ -77,11 +78,20 @@ type InsertSSOSessionParams struct {
 	Jti                      string    `json:"jti"`
 	UserID                   uuid.UUID `json:"user_id"`
 	ProviderName             string    `json:"provider_name"`
-	UpstreamIdTokenEncrypted string    `json:"upstream_id_token_encrypted"`
+	UpstreamIDTokenEncrypted string    `json:"upstream_id_token_encrypted"`
 	EndSessionEndpoint       string    `json:"end_session_endpoint"`
 	ExpiresAt                time.Time `json:"expires_at"`
 }
 
+// Single sign-out (SLO) session tracking — migration 054.
+//
+// The Astronomer JWT is revoked locally on Logout (migration 039); this
+// table additionally holds the upstream id_token + cached
+// end_session_endpoint so the Logout HTTP response can drive
+// RP-initiated logout at Dex / the upstream IdP.
+//
+// Lifetime is bounded by expires_at (= the Astronomer JWT's exp). The
+// nightly retention worker piggy-backs on the jwt_revocations purge.
 // Called by the SSO Callback after the Astronomer JWT pair is minted.
 // jti is the access JWT's JTI; upstream_id_token_encrypted is Fernet-
 // ciphertext (the caller wraps before calling). ON CONFLICT replaces
@@ -93,7 +103,7 @@ func (q *Queries) InsertSSOSession(ctx context.Context, arg InsertSSOSessionPara
 		arg.Jti,
 		arg.UserID,
 		arg.ProviderName,
-		arg.UpstreamIdTokenEncrypted,
+		arg.UpstreamIDTokenEncrypted,
 		arg.EndSessionEndpoint,
 		arg.ExpiresAt,
 	)
@@ -121,7 +131,7 @@ func (q *Queries) ListSSOSessionsByUser(ctx context.Context, userID uuid.UUID) (
 			&i.Jti,
 			&i.UserID,
 			&i.ProviderName,
-			&i.UpstreamIdTokenEncrypted,
+			&i.UpstreamIDTokenEncrypted,
 			&i.EndSessionEndpoint,
 			&i.ExpiresAt,
 			&i.CreatedAt,

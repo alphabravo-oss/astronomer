@@ -10,7 +10,7 @@
 //
 // The server does NOT actively ping the agent. If the WebSocket read goroutine
 // is silent for longer than the underlying TCP keepalive (handled by
-// nhooyr.io/websocket and the OS), the connection is torn down. Database
+// github.com/coder/websocket and the OS), the connection is torn down. Database
 // liveness is updated whenever a HEARTBEAT lands (see handleHeartbeat).
 //
 // PONG is reserved for cases where the SERVER explicitly sends a HEARTBEAT
@@ -32,12 +32,14 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -229,7 +231,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default nhooyr.io/websocket read limit is 32 KiB which is too small for
+	// Default github.com/coder/websocket read limit is 32 KiB which is too small for
 	// proxied k8s API list responses. Bump to 16 MiB on the tunnel.
 	conn.SetReadLimit(16 << 20)
 
@@ -243,27 +245,39 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	var firstMsg protocol.Message
 	if err := wsjson.Read(connectCtx, conn, &firstMsg); err != nil {
 		h.log.Error("failed to read connect message", slog.String("error", err.Error()))
-		conn.Close(websocket.StatusProtocolError, "expected CONNECT message")
+		_ = conn.Close(websocket.StatusProtocolError, "expected CONNECT message")
 		return
 	}
 
 	if firstMsg.Type != protocol.MsgConnect {
 		h.log.Warn("first message was not CONNECT", slog.String("type", string(firstMsg.Type)))
-		conn.Close(websocket.StatusProtocolError, "first message must be CONNECT")
+		_ = conn.Close(websocket.StatusProtocolError, "first message must be CONNECT")
 		return
 	}
 
 	var payload protocol.ConnectPayload
 	if err := json.Unmarshal(firstMsg.Payload, &payload); err != nil {
 		h.log.Error("invalid connect payload", slog.String("error", err.Error()))
-		conn.Close(websocket.StatusProtocolError, "invalid CONNECT payload")
+		_ = conn.Close(websocket.StatusProtocolError, "invalid CONNECT payload")
 		return
 	}
 
 	// 2. Validate registration token.
 	if payload.ClusterID == "" || payload.Token == "" {
 		h.log.Warn("connect payload missing cluster_id or token")
-		conn.Close(websocket.StatusProtocolError, "cluster_id and token are required")
+		_ = conn.Close(websocket.StatusProtocolError, "cluster_id and token are required")
+		return
+	}
+	compatibility := agentcompat.Evaluate(payload.AgentVersion)
+	if compatibility.Blocked {
+		h.log.Warn("agent compatibility check failed",
+			slog.String("cluster_id", payload.ClusterID),
+			slog.String("agent_version", payload.AgentVersion),
+			slog.String("compatibility_status", compatibility.Status),
+			slog.String("reason", compatibility.Message),
+		)
+		h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
+		_ = conn.Close(websocket.StatusPolicyViolation, compatibility.Message)
 		return
 	}
 	ackPayload := protocol.ConnectAckPayload{Accepted: true}
@@ -271,7 +285,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		clusterID, err := uuid.Parse(payload.ClusterID)
 		if err != nil {
 			h.log.Warn("invalid cluster id in connect payload", slog.String("cluster_id", payload.ClusterID))
-			conn.Close(websocket.StatusProtocolError, "invalid cluster_id")
+			_ = conn.Close(websocket.StatusProtocolError, "invalid cluster_id")
 			return
 		}
 		tokenKind, durableToken, err := h.validateAndMaybeRotateToken(ctx, clusterID, payload)
@@ -281,7 +295,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				slog.String("error", err.Error()),
 			)
 			h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
-			conn.Close(websocket.StatusPolicyViolation, err.Error())
+			_ = conn.Close(websocket.StatusPolicyViolation, err.Error())
 			return
 		}
 		if tokenKind == "registration" && durableToken != "" && durableToken != payload.Token {
@@ -304,7 +318,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err := wsjson.Write(writeCtx, conn, ackMsg); err != nil {
 		writeCancel()
 		h.log.Error("failed to send connect ack", slog.String("error", err.Error()))
-		conn.Close(websocket.StatusInternalError, "failed to send CONNECT_ACK")
+		_ = conn.Close(websocket.StatusInternalError, "failed to send CONNECT_ACK")
 		return
 	}
 	writeCancel()
@@ -401,7 +415,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// 6. On disconnect: remove from map, close connection.
 	h.removeAgent(agent)
 	agent.Streams.CloseAll()
-	conn.Close(websocket.StatusNormalClosure, "disconnected")
+	_ = conn.Close(websocket.StatusNormalClosure, "disconnected")
 
 	observability.WithEvent(h.log, "agent_disconnected").Info("agent disconnected",
 		slog.String("cluster_id", agent.ClusterID),
@@ -782,8 +796,37 @@ func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) 
 	if err != nil {
 		return "", err
 	}
+	h.recordAgentTokenRotated(ctx, clusterID, row)
 	if row.Token != "" {
 		return row.Token, nil
 	}
 	return token, nil
+}
+
+func (h *Hub) recordAgentTokenRotated(ctx context.Context, clusterID uuid.UUID, row sqlc.ClusterAgentToken) {
+	q, ok := h.validator.(audit.Querier)
+	if !ok {
+		return
+	}
+	hashPrefix := row.TokenHash
+	if len(hashPrefix) > 12 {
+		hashPrefix = hashPrefix[:12]
+	}
+	audit.Record(ctx, q, audit.Event{
+		Source:          "tunnel",
+		ActorAuthMethod: "registration_token",
+		Action:          "agent.token.rotated",
+		ResourceType:    "cluster",
+		ResourceID:      clusterID.String(),
+		Detail: map[string]any{
+			"cluster_id":               clusterID.String(),
+			"cluster_token_id":         row.ID.String(),
+			"previous_credential_type": "registration_token",
+			"new_credential_type":      "durable_agent_token",
+			"token_hash_prefix":        hashPrefix,
+			"hash_algorithm":           "sha256",
+			"plaintext_stored":         row.Token != "",
+			"source":                   "registration_token_exchange",
+		},
+	})
 }

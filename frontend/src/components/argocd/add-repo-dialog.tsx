@@ -6,9 +6,11 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { X, Loader2, GitFork, CheckCircle2, AlertCircle } from 'lucide-react';
+import { toastApiError, toastSuccess } from '@/lib/toast';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { Loader2, GitFork, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createArgoRepo, testArgoRepo } from '@/lib/api';
+import { queryKeys } from '@/lib/hooks';
 import type { ArgoRepositoryCreate } from '@/types';
 
 interface AddRepoDialogProps {
@@ -59,35 +61,62 @@ export function AddRepoDialog({ instanceId, onClose }: AddRepoDialogProps) {
   const create = useMutation({
     mutationFn: () => createArgoRepo(instanceId, buildBody()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'repos', instanceId] });
-      toast.success('Repository added');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.repos(instanceId) });
+      toastSuccess('Repository added');
       onClose();
     },
     onError: (error: Error) => {
-      toast.error(`Add failed: ${error.message}`);
+      toastApiError('Add failed', error);
     },
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-              <GitFork className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground">Add Repository</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+    <ModalShell
+      title="Add Repository"
+      onClose={onClose}
+      panelClassName="max-w-lg bg-popover overflow-hidden"
+      bodyClassName="max-h-[70vh] overflow-y-auto"
+      footerClassName="bg-muted/30"
+      titleIcon={(
+        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+          <GitFork className="h-4 w-4 text-muted-foreground" />
         </div>
-
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+      )}
+      footer={(
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => test.mutate()}
+            disabled={!form.repo.trim() || test.isPending}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-sm
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
+              disabled:opacity-50"
+          >
+            {test.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Test Connection
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              disabled={create.isPending}
+              className="inline-flex items-center h-8 px-3 rounded text-sm
+                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => create.mutate()}
+              disabled={!form.repo.trim() || create.isPending}
+              className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
+                bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
+                disabled:opacity-50"
+            >
+              {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+    >
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 space-y-1.5">
               <label className="text-sm font-medium text-foreground">Repository URL</label>
@@ -217,41 +246,6 @@ export function AddRepoDialog({ instanceId, onClose }: AddRepoDialogProps) {
               <span className="font-mono">{testResult.message || (testResult.ok ? 'Connection OK' : 'Failed')}</span>
             </div>
           )}
-        </div>
-
-        <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-border bg-muted/30">
-          <button
-            onClick={() => test.mutate()}
-            disabled={!form.repo.trim() || test.isPending}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
-              disabled:opacity-50"
-          >
-            {test.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Test Connection
-          </button>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              disabled={create.isPending}
-              className="inline-flex items-center h-8 px-3 rounded text-sm
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => create.mutate()}
-              disabled={!form.repo.trim() || create.isPending}
-              className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
-                bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-                disabled:opacity-50"
-            >
-              {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Add
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

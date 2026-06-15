@@ -57,7 +57,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	})
 	mux.HandleFunc("/jwks", func(w http.ResponseWriter, r *http.Request) {
 		idp.jwksHit.Add(1)
-		n := base64.RawURLEncoding.EncodeToString(priv.PublicKey.N.Bytes())
+		n := base64.RawURLEncoding.EncodeToString(priv.N.Bytes())
 		// Encode public exponent (typically 65537 = 0x010001).
 		eBytes := big.NewInt(int64(priv.PublicKey.E)).Bytes()
 		e := base64.RawURLEncoding.EncodeToString(eBytes)
@@ -128,6 +128,16 @@ func TestDiscoveryFetchAndCache(t *testing.T) {
 	}
 	if got := idp.hits.Load(); got != 2 {
 		t.Errorf("expected 2 discovery hits after invalidate, got %d", got)
+	}
+}
+
+func TestNewOIDCDiscoveryClientUsesBoundedDefaultHTTPClient(t *testing.T) {
+	c := NewOIDCDiscoveryClient(nil)
+	if c.httpClient == nil {
+		t.Fatal("httpClient was not configured")
+	}
+	if c.httpClient.Timeout != defaultOIDCHTTPTimeout {
+		t.Fatalf("httpClient.Timeout = %s, want %s", c.httpClient.Timeout, defaultOIDCHTTPTimeout)
 	}
 }
 

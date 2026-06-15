@@ -77,6 +77,18 @@ describe('StatusBadge', () => {
     expect(badge.className).toContain('bg-status-info');
   });
 
+  it('normalizes sync and drift-style statuses', () => {
+    const { container } = render(<StatusBadge status="OutOfSync" />);
+    const badge = container.firstChild as HTMLElement;
+    expect(badge.className).toContain('bg-status-warning');
+  });
+
+  it('applies permission denial status as error', () => {
+    const { container } = render(<StatusBadge status="denied" label="Denied" />);
+    const badge = container.firstChild as HTMLElement;
+    expect(badge.className).toContain('bg-status-error');
+  });
+
   it('applies custom className', () => {
     const { container } = render(<StatusBadge status="active" className="my-custom-class" />);
     const badge = container.firstChild as HTMLElement;
@@ -100,6 +112,15 @@ describe('StatusBadge', () => {
     const nestedSpans = badge.querySelectorAll('span > span');
     // Should only be the text, no dot container
     expect(nestedSpans.length).toBe(0);
+  });
+
+  it('renders a custom icon instead of the dot indicator', () => {
+    const { container } = render(
+      <StatusBadge status="synced" icon={<svg data-testid="badge-icon" />} />
+    );
+    expect(screen.getByTestId('badge-icon')).toBeInTheDocument();
+    const dots = container.querySelectorAll('.animate-pulse-dot');
+    expect(dots.length).toBe(0);
   });
 
   // ---------------------------------------------------------------------------

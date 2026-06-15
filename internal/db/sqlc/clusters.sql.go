@@ -28,7 +28,7 @@ func (q *Queries) CountClusters(ctx context.Context) (int64, error) {
 const createCluster = `-- name: CreateCluster :one
 INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at
+RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 `
 
 type CreateClusterParams struct {
@@ -77,14 +77,31 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 		&i.UpdatedAt,
 		&i.IsLocal,
 		&i.DecommissionedAt,
+		&i.ClusterUid,
+		&i.GroupID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
 
 const createClusterRegistrationToken = `-- name: CreateClusterRegistrationToken :one
 INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
-VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), $4)
-RETURNING id, cluster_id, token, expires_at, is_used, created_at, updated_at
+VALUES (
+    $1,
+    $2::text,
+    COALESCE(NULLIF($3::text, ''), encode(digest($2::text, 'sha256'), 'hex')),
+    $4
+)
+RETURNING id, cluster_id, token, expires_at, is_used, created_at, updated_at, token_hash
 `
 
 type CreateClusterRegistrationTokenParams struct {
@@ -95,7 +112,12 @@ type CreateClusterRegistrationTokenParams struct {
 }
 
 func (q *Queries) CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error) {
-	row := q.db.QueryRow(ctx, createClusterRegistrationToken, arg.ClusterID, arg.Token, arg.TokenHash, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, createClusterRegistrationToken,
+		arg.ClusterID,
+		arg.Token,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
 	var i ClusterRegistrationToken
 	err := row.Scan(
 		&i.ID,
@@ -105,6 +127,71 @@ func (q *Queries) CreateClusterRegistrationToken(ctx context.Context, arg Create
 		&i.IsUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenHash,
+	)
+	return i, err
+}
+
+const createClusterRegistryConfig = `-- name: CreateClusterRegistryConfig :one
+INSERT INTO cluster_registry_configs (
+    cluster_id,
+    private_registry_url,
+    registry_username,
+    registry_password,
+    registry_password_encrypted,
+    insecure,
+    ca_bundle,
+    namespaces,
+    inject_default_sa,
+    secret_name
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted
+`
+
+type CreateClusterRegistryConfigParams struct {
+	ClusterID                 uuid.UUID       `json:"cluster_id"`
+	PrivateRegistryUrl        string          `json:"private_registry_url"`
+	RegistryUsername          string          `json:"registry_username"`
+	RegistryPassword          string          `json:"registry_password"`
+	RegistryPasswordEncrypted string          `json:"registry_password_encrypted"`
+	Insecure                  bool            `json:"insecure"`
+	CaBundle                  string          `json:"ca_bundle"`
+	Namespaces                json.RawMessage `json:"namespaces"`
+	InjectDefaultSa           bool            `json:"inject_default_sa"`
+	SecretName                string          `json:"secret_name"`
+}
+
+func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
+	row := q.db.QueryRow(ctx, createClusterRegistryConfig,
+		arg.ClusterID,
+		arg.PrivateRegistryUrl,
+		arg.RegistryUsername,
+		arg.RegistryPassword,
+		arg.RegistryPasswordEncrypted,
+		arg.Insecure,
+		arg.CaBundle,
+		arg.Namespaces,
+		arg.InjectDefaultSa,
+		arg.SecretName,
+	)
+	var i ClusterRegistryConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.PrivateRegistryUrl,
+		&i.RegistryUsername,
+		&i.RegistryPassword,
+		&i.Insecure,
+		&i.CaBundle,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Namespaces,
+		&i.InjectDefaultSa,
+		&i.SecretName,
+		&i.LastAppliedAt,
+		&i.LastApplyError,
+		&i.RegistryPasswordEncrypted,
 	)
 	return i, err
 }
@@ -118,21 +205,21 @@ func (q *Queries) DeleteCluster(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const deleteClusterConditionsForCluster = `-- name: DeleteClusterConditionsForCluster :exec
-DELETE FROM cluster_conditions WHERE cluster_id = $1
-`
-
-func (q *Queries) DeleteClusterConditionsForCluster(ctx context.Context, clusterID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteClusterConditionsForCluster, clusterID)
-	return err
-}
-
 const deleteClusterRegistryConfig = `-- name: DeleteClusterRegistryConfig :exec
 DELETE FROM cluster_registry_configs WHERE cluster_id = $1
 `
 
 func (q *Queries) DeleteClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteClusterRegistryConfig, clusterID)
+	return err
+}
+
+const deleteClusterRegistryConfigByID = `-- name: DeleteClusterRegistryConfigByID :exec
+DELETE FROM cluster_registry_configs WHERE id = $1
+`
+
+func (q *Queries) DeleteClusterRegistryConfigByID(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteClusterRegistryConfigByID, id)
 	return err
 }
 
@@ -177,11 +264,11 @@ WITH inserted AS (
         'other'
     WHERE NOT EXISTS (SELECT 1 FROM clusters WHERE is_local = true)
     ON CONFLICT DO NOTHING
-    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at
+    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 )
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM inserted
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM inserted
 UNION ALL
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
 LIMIT 1
 `
 
@@ -197,28 +284,40 @@ type EnsureLocalClusterParams struct {
 }
 
 type EnsureLocalClusterRow struct {
-	ID                uuid.UUID          `json:"id"`
-	Name              string             `json:"name"`
-	DisplayName       string             `json:"display_name"`
-	Description       string             `json:"description"`
-	Status            string             `json:"status"`
-	ApiServerUrl      string             `json:"api_server_url"`
-	CaCertificate     string             `json:"ca_certificate"`
-	Environment       string             `json:"environment"`
-	Region            string             `json:"region"`
-	Provider          string             `json:"provider"`
-	Labels            json.RawMessage    `json:"labels"`
-	Annotations       json.RawMessage    `json:"annotations"`
-	Distribution      string             `json:"distribution"`
-	AgentVersion      string             `json:"agent_version"`
-	LastHeartbeat     pgtype.Timestamptz `json:"last_heartbeat"`
-	KubernetesVersion string             `json:"kubernetes_version"`
-	NodeCount         int32              `json:"node_count"`
-	CreatedByID       pgtype.UUID        `json:"created_by_id"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
-	IsLocal           bool               `json:"is_local"`
-	DecommissionedAt  pgtype.Timestamptz `json:"decommissioned_at"`
+	ID                      uuid.UUID          `json:"id"`
+	Name                    string             `json:"name"`
+	DisplayName             string             `json:"display_name"`
+	Description             string             `json:"description"`
+	Status                  string             `json:"status"`
+	ApiServerUrl            string             `json:"api_server_url"`
+	CaCertificate           string             `json:"ca_certificate"`
+	Environment             string             `json:"environment"`
+	Region                  string             `json:"region"`
+	Provider                string             `json:"provider"`
+	Labels                  json.RawMessage    `json:"labels"`
+	Annotations             json.RawMessage    `json:"annotations"`
+	Distribution            string             `json:"distribution"`
+	AgentVersion            string             `json:"agent_version"`
+	LastHeartbeat           pgtype.Timestamptz `json:"last_heartbeat"`
+	KubernetesVersion       string             `json:"kubernetes_version"`
+	NodeCount               int32              `json:"node_count"`
+	CreatedByID             pgtype.UUID        `json:"created_by_id"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               time.Time          `json:"updated_at"`
+	IsLocal                 bool               `json:"is_local"`
+	DecommissionedAt        pgtype.Timestamptz `json:"decommissioned_at"`
+	ClusterUid              string             `json:"cluster_uid"`
+	GroupID                 pgtype.UUID        `json:"group_id"`
+	RegistrationPhase       string             `json:"registration_phase"`
+	RegistrationStartedAt   pgtype.Timestamptz `json:"registration_started_at"`
+	RegistrationCompletedAt pgtype.Timestamptz `json:"registration_completed_at"`
+	InstallBaseline         pgtype.Bool        `json:"install_baseline"`
+	ManagedBy               string             `json:"managed_by"`
+	ExternalRefApiVersion   string             `json:"external_ref_api_version"`
+	ExternalRefKind         string             `json:"external_ref_kind"`
+	ExternalRefNamespace    string             `json:"external_ref_namespace"`
+	ExternalRefName         string             `json:"external_ref_name"`
+	ObservedGeneration      int64              `json:"observed_generation"`
 }
 
 // Idempotently create-or-return the singleton "local" cluster row that
@@ -262,12 +361,24 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 		&i.UpdatedAt,
 		&i.IsLocal,
 		&i.DecommissionedAt,
+		&i.ClusterUid,
+		&i.GroupID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
 
 const getClusterAgentTokenByClusterID = `-- name: GetClusterAgentTokenByClusterID :one
-SELECT id, cluster_id, token, token_hash, last_used_at, created_at, updated_at FROM cluster_agent_tokens WHERE cluster_id = $1
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error) {
@@ -277,37 +388,40 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 		&i.ID,
 		&i.ClusterID,
 		&i.Token,
-		&i.TokenHash,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenHash,
+		&i.RevokedAt,
 	)
 	return i, err
 }
 
 const getClusterAgentTokenByToken = `-- name: GetClusterAgentTokenByToken :one
-SELECT id, cluster_id, token, token_hash, last_used_at, created_at, updated_at FROM cluster_agent_tokens
-WHERE token_hash = encode(digest($1, 'sha256'), 'hex')
-   OR (token_hash = '' AND token = $1)
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at FROM cluster_agent_tokens
+WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
+   OR (token_hash = '' AND token = $1::text))
+  AND revoked_at IS NULL
 `
 
-func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, token string) (ClusterAgentToken, error) {
-	row := q.db.QueryRow(ctx, getClusterAgentTokenByToken, token)
+func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, dollar_1 string) (ClusterAgentToken, error) {
+	row := q.db.QueryRow(ctx, getClusterAgentTokenByToken, dollar_1)
 	var i ClusterAgentToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
 		&i.Token,
-		&i.TokenHash,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenHash,
+		&i.RevokedAt,
 	)
 	return i, err
 }
 
 const getClusterByID = `-- name: GetClusterByID :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE id = $1
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE id = $1
 `
 
 func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error) {
@@ -336,12 +450,24 @@ func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, er
 		&i.UpdatedAt,
 		&i.IsLocal,
 		&i.DecommissionedAt,
+		&i.ClusterUid,
+		&i.GroupID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
 
 const getClusterByName = `-- name: GetClusterByName :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE name = $1 AND decommissioned_at IS NULL
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE name = $1 AND decommissioned_at IS NULL
 `
 
 func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, error) {
@@ -370,6 +496,18 @@ func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, e
 		&i.UpdatedAt,
 		&i.IsLocal,
 		&i.DecommissionedAt,
+		&i.ClusterUid,
+		&i.GroupID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
@@ -397,7 +535,7 @@ func (q *Queries) GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUI
 }
 
 const getClusterRegistryConfig = `-- name: GetClusterRegistryConfig :one
-SELECT id, cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle, created_at, updated_at FROM cluster_registry_configs WHERE cluster_id = $1
+SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs WHERE cluster_id = $1
 `
 
 func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (ClusterRegistryConfig, error) {
@@ -409,18 +547,50 @@ func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.U
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
 		&i.RegistryPassword,
-		&i.RegistryPasswordEncrypted,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Namespaces,
+		&i.InjectDefaultSa,
+		&i.SecretName,
+		&i.LastAppliedAt,
+		&i.LastApplyError,
+		&i.RegistryPasswordEncrypted,
+	)
+	return i, err
+}
+
+const getClusterRegistryConfigByID = `-- name: GetClusterRegistryConfigByID :one
+SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs WHERE id = $1
+`
+
+func (q *Queries) GetClusterRegistryConfigByID(ctx context.Context, id uuid.UUID) (ClusterRegistryConfig, error) {
+	row := q.db.QueryRow(ctx, getClusterRegistryConfigByID, id)
+	var i ClusterRegistryConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.PrivateRegistryUrl,
+		&i.RegistryUsername,
+		&i.RegistryPassword,
+		&i.Insecure,
+		&i.CaBundle,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Namespaces,
+		&i.InjectDefaultSa,
+		&i.SecretName,
+		&i.LastAppliedAt,
+		&i.LastApplyError,
+		&i.RegistryPasswordEncrypted,
 	)
 	return i, err
 }
 
 const getRegistrationTokenByToken = `-- name: GetRegistrationTokenByToken :one
-SELECT id, cluster_id, token, expires_at, is_used, created_at, updated_at FROM cluster_registration_tokens
-WHERE (token_hash = encode(digest($1, 'sha256'), 'hex') OR (token_hash = '' AND token = $1))
+SELECT id, cluster_id, token, expires_at, is_used, created_at, updated_at, token_hash FROM cluster_registration_tokens
+WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex') OR (token_hash = '' AND token = $1::text))
   AND expires_at > now()
 `
 
@@ -428,8 +598,8 @@ WHERE (token_hash = encode(digest($1, 'sha256'), 'hex') OR (token_hash = '' AND 
 // long-lived agent token in CONNECT_ACK, the same registration token is the
 // only credential the agent has, and reconnect attempts must succeed up to
 // expires_at. is_used remains a tracking column for the future flow.
-func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, token string) (ClusterRegistrationToken, error) {
-	row := q.db.QueryRow(ctx, getRegistrationTokenByToken, token)
+func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error) {
+	row := q.db.QueryRow(ctx, getRegistrationTokenByToken, dollar_1)
 	var i ClusterRegistrationToken
 	err := row.Scan(
 		&i.ID,
@@ -439,8 +609,51 @@ func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, token string)
 		&i.IsUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenHash,
 	)
 	return i, err
+}
+
+const listAllClusterRegistryConfigs = `-- name: ListAllClusterRegistryConfigs :many
+SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs
+ORDER BY cluster_id, created_at ASC
+`
+
+// Used by the drift-reconcile sweep — walks every row across every cluster.
+func (q *Queries) ListAllClusterRegistryConfigs(ctx context.Context) ([]ClusterRegistryConfig, error) {
+	rows, err := q.db.Query(ctx, listAllClusterRegistryConfigs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterRegistryConfig{}
+	for rows.Next() {
+		var i ClusterRegistryConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.PrivateRegistryUrl,
+			&i.RegistryUsername,
+			&i.RegistryPassword,
+			&i.Insecure,
+			&i.CaBundle,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Namespaces,
+			&i.InjectDefaultSa,
+			&i.SecretName,
+			&i.LastAppliedAt,
+			&i.LastApplyError,
+			&i.RegistryPasswordEncrypted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listClusterConditions = `-- name: ListClusterConditions :many
@@ -478,8 +691,55 @@ func (q *Queries) ListClusterConditions(ctx context.Context, clusterID uuid.UUID
 	return items, nil
 }
 
+const listClusterRegistryConfigs = `-- name: ListClusterRegistryConfigs :many
+
+SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs
+WHERE cluster_id = $1
+ORDER BY created_at ASC
+`
+
+// Migration 050: multi-registry-per-cluster CRUD. The legacy
+// Get/Upsert/Delete by cluster_id above is kept for back-compat with the old
+// single-registry route; the queries below operate on the row id so multiple
+// registry configs can co-exist under one cluster.
+func (q *Queries) ListClusterRegistryConfigs(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistryConfig, error) {
+	rows, err := q.db.Query(ctx, listClusterRegistryConfigs, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterRegistryConfig{}
+	for rows.Next() {
+		var i ClusterRegistryConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.PrivateRegistryUrl,
+			&i.RegistryUsername,
+			&i.RegistryPassword,
+			&i.Insecure,
+			&i.CaBundle,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Namespaces,
+			&i.InjectDefaultSa,
+			&i.SecretName,
+			&i.LastAppliedAt,
+			&i.LastApplyError,
+			&i.RegistryPasswordEncrypted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusters = `-- name: ListClusters :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClustersParams struct {
@@ -487,6 +747,8 @@ type ListClustersParams struct {
 	Offset int32 `json:"offset"`
 }
 
+// Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
+// their row in the DB for forensics but never appear in the UI list.
 func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error) {
 	rows, err := q.db.Query(ctx, listClusters, arg.Limit, arg.Offset)
 	if err != nil {
@@ -519,6 +781,18 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 			&i.UpdatedAt,
 			&i.IsLocal,
 			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
 		); err != nil {
 			return nil, err
 		}
@@ -531,7 +805,7 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 }
 
 const listClustersByStatus = `-- name: ListClustersByStatus :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at FROM clusters WHERE status = $1 AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE status = $1 AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $2
 `
 
 type ListClustersByStatusParams struct {
@@ -572,6 +846,18 @@ func (q *Queries) ListClustersByStatus(ctx context.Context, arg ListClustersBySt
 			&i.UpdatedAt,
 			&i.IsLocal,
 			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
 		); err != nil {
 			return nil, err
 		}
@@ -581,6 +867,34 @@ func (q *Queries) ListClustersByStatus(ctx context.Context, arg ListClustersBySt
 		return nil, err
 	}
 	return items, nil
+}
+
+const markClusterRegistryApplied = `-- name: MarkClusterRegistryApplied :exec
+UPDATE cluster_registry_configs SET
+    last_applied_at  = now(),
+    last_apply_error = ''
+WHERE id = $1
+`
+
+func (q *Queries) MarkClusterRegistryApplied(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markClusterRegistryApplied, id)
+	return err
+}
+
+const markClusterRegistryApplyError = `-- name: MarkClusterRegistryApplyError :exec
+UPDATE cluster_registry_configs SET
+    last_apply_error = $2
+WHERE id = $1
+`
+
+type MarkClusterRegistryApplyErrorParams struct {
+	ID             uuid.UUID `json:"id"`
+	LastApplyError string    `json:"last_apply_error"`
+}
+
+func (q *Queries) MarkClusterRegistryApplyError(ctx context.Context, arg MarkClusterRegistryApplyErrorParams) error {
+	_, err := q.db.Exec(ctx, markClusterRegistryApplyError, arg.ID, arg.LastApplyError)
+	return err
 }
 
 const markRegistrationTokenUsed = `-- name: MarkRegistrationTokenUsed :exec
@@ -593,7 +907,7 @@ func (q *Queries) MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) e
 }
 
 const touchClusterAgentToken = `-- name: TouchClusterAgentToken :exec
-UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1
+UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error {
@@ -610,7 +924,7 @@ UPDATE clusters SET
     labels = $6,
     annotations = $7
 WHERE id = $1
-RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at
+RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 `
 
 type UpdateClusterParams struct {
@@ -657,6 +971,18 @@ func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (C
 		&i.UpdatedAt,
 		&i.IsLocal,
 		&i.DecommissionedAt,
+		&i.ClusterUid,
+		&i.GroupID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
 	)
 	return i, err
 }
@@ -690,6 +1016,69 @@ func (q *Queries) UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterH
 	return err
 }
 
+const updateClusterRegistryConfig = `-- name: UpdateClusterRegistryConfig :one
+UPDATE cluster_registry_configs SET
+    private_registry_url = $2,
+    registry_username    = $3,
+    registry_password    = $4,
+    registry_password_encrypted = $5,
+    insecure             = $6,
+    ca_bundle            = $7,
+    namespaces           = $8,
+    inject_default_sa    = $9,
+    secret_name          = $10,
+    updated_at           = now()
+WHERE id = $1
+RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted
+`
+
+type UpdateClusterRegistryConfigParams struct {
+	ID                        uuid.UUID       `json:"id"`
+	PrivateRegistryUrl        string          `json:"private_registry_url"`
+	RegistryUsername          string          `json:"registry_username"`
+	RegistryPassword          string          `json:"registry_password"`
+	RegistryPasswordEncrypted string          `json:"registry_password_encrypted"`
+	Insecure                  bool            `json:"insecure"`
+	CaBundle                  string          `json:"ca_bundle"`
+	Namespaces                json.RawMessage `json:"namespaces"`
+	InjectDefaultSa           bool            `json:"inject_default_sa"`
+	SecretName                string          `json:"secret_name"`
+}
+
+func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
+	row := q.db.QueryRow(ctx, updateClusterRegistryConfig,
+		arg.ID,
+		arg.PrivateRegistryUrl,
+		arg.RegistryUsername,
+		arg.RegistryPassword,
+		arg.RegistryPasswordEncrypted,
+		arg.Insecure,
+		arg.CaBundle,
+		arg.Namespaces,
+		arg.InjectDefaultSa,
+		arg.SecretName,
+	)
+	var i ClusterRegistryConfig
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.PrivateRegistryUrl,
+		&i.RegistryUsername,
+		&i.RegistryPassword,
+		&i.Insecure,
+		&i.CaBundle,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Namespaces,
+		&i.InjectDefaultSa,
+		&i.SecretName,
+		&i.LastAppliedAt,
+		&i.LastApplyError,
+		&i.RegistryPasswordEncrypted,
+	)
+	return i, err
+}
+
 const updateClusterStatus = `-- name: UpdateClusterStatus :exec
 UPDATE clusters SET status = $2 WHERE id = $1 AND decommissioned_at IS NULL
 `
@@ -699,6 +1088,11 @@ type UpdateClusterStatusParams struct {
 	Status string    `json:"status"`
 }
 
+// Guarded: never overwrite a cluster that has already been tombstoned.
+// The decommission reconciler is the sole writer for decommissioned
+// clusters; the health-check + metrics sweepers can race against it
+// and would otherwise flip 'decommissioned' back to 'disconnected' or
+// 'active', producing the half-deleted "ghost" rows observed on .247.
 func (q *Queries) UpdateClusterStatus(ctx context.Context, arg UpdateClusterStatusParams) error {
 	_, err := q.db.Exec(ctx, updateClusterStatus, arg.ID, arg.Status)
 	return err
@@ -706,12 +1100,18 @@ func (q *Queries) UpdateClusterStatus(ctx context.Context, arg UpdateClusterStat
 
 const upsertClusterAgentToken = `-- name: UpsertClusterAgentToken :one
 INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
-VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), now())
+VALUES (
+    $1,
+    $2::text,
+    COALESCE(NULLIF($3::text, ''), encode(digest($2::text, 'sha256'), 'hex')),
+    now()
+)
 ON CONFLICT (cluster_id) DO UPDATE SET
     token = EXCLUDED.token,
     token_hash = EXCLUDED.token_hash,
-    last_used_at = now()
-RETURNING id, cluster_id, token, token_hash, last_used_at, created_at, updated_at
+    last_used_at = now(),
+    revoked_at = NULL
+RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at
 `
 
 type UpsertClusterAgentTokenParams struct {
@@ -727,10 +1127,11 @@ func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertCluster
 		&i.ID,
 		&i.ClusterID,
 		&i.Token,
-		&i.TokenHash,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenHash,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -848,7 +1249,7 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     registry_password_encrypted = EXCLUDED.registry_password_encrypted,
     insecure = EXCLUDED.insecure,
     ca_bundle = EXCLUDED.ca_bundle
-RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle, created_at, updated_at
+RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted
 `
 
 type UpsertClusterRegistryConfigParams struct {
@@ -878,11 +1279,16 @@ func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClu
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
 		&i.RegistryPassword,
-		&i.RegistryPasswordEncrypted,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Namespaces,
+		&i.InjectDefaultSa,
+		&i.SecretName,
+		&i.LastAppliedAt,
+		&i.LastApplyError,
+		&i.RegistryPasswordEncrypted,
 	)
 	return i, err
 }

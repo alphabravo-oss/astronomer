@@ -68,12 +68,7 @@ func (f *fakeGroupSync) ListGroupMappingsForConnector(_ context.Context, connect
 
 func (f *fakeGroupSync) UpsertUserIDPGroups(_ context.Context, arg sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
 	f.upsertCalls++
-	f.snapshot = sqlc.UserIdpGroup{
-		UserID:      arg.UserID,
-		ConnectorID: arg.ConnectorID,
-		Groups:      arg.Groups,
-		SyncedAt:    arg.SyncedAt,
-	}
+	f.snapshot = sqlc.UserIdpGroup(arg)
 	return f.snapshot, nil
 }
 

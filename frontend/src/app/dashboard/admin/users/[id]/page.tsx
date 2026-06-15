@@ -19,7 +19,7 @@ import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   ShieldOff,
   Unlock,
@@ -135,11 +135,11 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
     mutationFn: async (action: ActionDef) => action.run(id),
     onSuccess: (_data, action) => {
       qc.invalidateQueries({ queryKey: userKey(id) });
-      toast.success(`${action.label}: done`);
+      toastSuccess(`${action.label}: done`);
       setPending(null);
     },
     onError: (err: Error) => {
-      toast.error(err.message || 'Action failed');
+      toastApiError('', err, 'Action failed');
       setPending(null);
     },
   });

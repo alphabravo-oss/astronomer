@@ -23,11 +23,20 @@ jobs:
       - name: Migration safety check
         run: ./scripts/check-migrations.sh
 
+      - name: SQLC generated code check
+        run: ./scripts/check-sqlc-generated.sh
+
       - name: Go tests
         run: go test ./...
 
-      - name: Route security tests
-        run: go test ./internal/server -run 'Test(AdminRouteRegistrationsAreAuthProtected|HighRiskRoutesDenyUnauthenticatedRequests|K8sProxy|ServiceProxy|RegistrationEvents|ArgoCDInternalK8sProxy)' -count=1
+      - name: Route inventory JSON validation
+        run: |
+          python3 -m json.tool docs/generated-route-inventory.json >/dev/null
+          python3 -m json.tool docs/security-sensitive-routes.json >/dev/null
+          python3 -m json.tool docs/route-risk-classifications.json >/dev/null
+
+      - name: Route security and inventory gates
+        run: go test ./internal/server -run 'Test(AdminRouteRegistrationsAreAuthProtected|HighRiskRoutesDenyUnauthenticatedRequests|MutatingRoutesHaveSecurityClassification|BrowserCookieMutatingRoutesRequireCSRF|RouteInventoryCanBeGenerated|ForwardingRoutesAreDocumentedInProxyInventory|K8sProxy|ServiceProxy|RegistrationEvents|ArgoCDInternalK8sProxy)' -count=1
 
   frontend:
     name: frontend tests
@@ -47,6 +56,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Code health inventory gate
+        run: npm run code-health
 
       - name: Type-check
         run: npm run type-check
@@ -100,11 +112,12 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - { name: server, dockerfile: deploy/docker/Dockerfile.server, image: astronomer-go-server }
-          - { name: worker, dockerfile: deploy/docker/Dockerfile.worker, image: astronomer-go-worker }
-          - { name: agent, dockerfile: deploy/docker/Dockerfile.agent, image: astronomer-go-agent }
-          - { name: migrate, dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
-          - { name: shell, dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell }
+          - { name: server, context: ., dockerfile: deploy/docker/Dockerfile.server, image: astronomer-go-server }
+          - { name: worker, context: ., dockerfile: deploy/docker/Dockerfile.worker, image: astronomer-go-worker }
+          - { name: agent, context: ., dockerfile: deploy/docker/Dockerfile.agent, image: astronomer-go-agent }
+          - { name: migrate, context: ., dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
+          - { name: shell, context: ., dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell }
+          - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile, image: astronomer-frontend }
     steps:
       - uses: actions/checkout@v4
 
@@ -114,7 +127,7 @@ jobs:
       - name: Build image locally
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
           load: true
           tags: ${{ matrix.component.image }}:ci

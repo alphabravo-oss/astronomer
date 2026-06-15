@@ -14,7 +14,7 @@ import (
 )
 
 func TestSelfUpgradeHandlerPatchesAgentDeploymentImage(t *testing.T) {
-	client := fake.NewSimpleClientset(&appsv1.Deployment{
+	client := fake.NewClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultAgentDeploymentName,
 			Namespace: DefaultAgentNamespace,

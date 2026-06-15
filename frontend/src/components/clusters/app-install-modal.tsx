@@ -32,9 +32,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { X, Loader2, AlertTriangle, Info } from 'lucide-react';
+import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
+import { Loader2, AlertTriangle, Info } from 'lucide-react';
 
+import { ModalShell } from '@/components/ui/modal-shell';
 import {
   listChartVersions,
   getChartDefaultValues,
@@ -42,6 +43,7 @@ import {
   type ChartVersionRow,
 } from '@/lib/api/cluster-detail';
 import { upgradeInstalledChart } from '@/lib/api';
+import type { PermissionDecision } from '@/lib/permissions';
 
 type Mode =
   | { kind: 'install'; chartId: string; chartName: string }
@@ -51,6 +53,7 @@ interface AppInstallModalProps {
   clusterId: string;
   mode: Mode;
   onClose: () => void;
+  submitDecision?: PermissionDecision;
 }
 
 // Charts whose first install commonly takes 5+ minutes due to CRDs /
@@ -76,14 +79,22 @@ const HAS_CRDS = new Set([
   'cert-manager',
   'trivy-operator',
   'istio-base',
+  'gatekeeper',
   'opa-gatekeeper',
   'argocd',
   'argo-cd',
 ]);
 
-export function AppInstallModal({ clusterId, mode, onClose }: AppInstallModalProps) {
+function permissionDeniedReason(decision: PermissionDecision): string {
+  return decision.disabledReason || decision.reason;
+}
+
+export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: AppInstallModalProps) {
   const qc = useQueryClient();
   const isUpgrade = mode.kind === 'upgrade';
+  const submitBlockedReason = submitDecision && !submitDecision.allowed
+    ? permissionDeniedReason(submitDecision)
+    : undefined;
 
   const [selectedVersionId, setSelectedVersionId] = useState<string>(
     mode.kind === 'upgrade' ? mode.currentVersionId : '',
@@ -160,7 +171,7 @@ export function AppInstallModal({ clusterId, mode, onClose }: AppInstallModalPro
       });
     },
     onSuccess: () => {
-      toast.success(
+      toastSuccess(
         isUpgrade
           ? `Upgrade dispatched — ${mode.kind === 'upgrade' ? mode.releaseName : ''} will reflect new revision shortly`
           : `Install dispatched — "${releaseName}" will appear in Installed once helm completes`,
@@ -169,7 +180,7 @@ export function AppInstallModal({ clusterId, mode, onClose }: AppInstallModalPro
       onClose();
     },
     onError: (err) => {
-      toast.error(`${isUpgrade ? 'Upgrade' : 'Install'} failed: ${(err as Error).message}`);
+      toastApiError(`${isUpgrade ? 'Upgrade' : 'Install'} failed`, err);
     },
   });
 
@@ -177,31 +188,59 @@ export function AppInstallModal({ clusterId, mode, onClose }: AppInstallModalPro
     !!selectedVersionId &&
     releaseName.trim() !== '' &&
     namespace.trim() !== '' &&
-    !install.isPending;
+    !install.isPending &&
+    !submitBlockedReason;
+
+  const handleSubmit = () => {
+    if (submitBlockedReason) {
+      toastWarning(submitBlockedReason);
+      return;
+    }
+    install.mutate();
+  };
 
   const slowInstall = SLOW_INSTALL_CHARTS.has(mode.chartName);
   const hasCRDs = HAS_CRDS.has(mode.chartName);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-3xl max-h-[90vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">
-              {isUpgrade ? 'Upgrade' : 'Install'} {mode.chartName}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {isUpgrade
-                ? 'Change the version and/or values on an existing release.'
-                : 'Configure version, namespace, release name, and values.'}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Close">
-            <X className="h-5 w-5" />
+    <ModalShell
+      title={`${isUpgrade ? 'Upgrade' : 'Install'} ${mode.chartName}`}
+      subtitle={
+        isUpgrade
+          ? 'Change the version and/or values on an existing release.'
+          : 'Configure version, namespace, release name, and values.'
+      }
+      onClose={onClose}
+      size="xl"
+      panelClassName="max-w-3xl bg-popover flex flex-col overflow-hidden"
+      bodyClassName="p-0"
+      footerClassName="bg-muted/30 flex-shrink-0"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
+            disabled={install.isPending}
+          >
+            Cancel
           </button>
-        </header>
-
+          <button
+            onClick={handleSubmit}
+            disabled={!submittable}
+            title={submitBlockedReason}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            {install.isPending ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {isUpgrade ? 'Upgrading' : 'Installing'}…
+              </>
+            ) : (
+              <>{isUpgrade ? 'Upgrade' : 'Install'}</>
+            )}
+          </button>
+        </div>
+      }
+    >
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {(slowInstall || hasCRDs) && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs flex items-start gap-2">
@@ -302,30 +341,7 @@ export function AppInstallModal({ clusterId, mode, onClose }: AppInstallModalPro
           </div>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-border bg-muted/30 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
-            disabled={install.isPending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => install.mutate()}
-            disabled={!submittable}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {install.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {isUpgrade ? 'Upgrading' : 'Installing'}…
-              </>
-            ) : (
-              <>{isUpgrade ? 'Upgrade' : 'Install'}</>
-            )}
-          </button>
-        </footer>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -342,6 +358,7 @@ interface AppUninstallModalProps {
   onClose: () => void;
   onConfirm: () => Promise<void> | void;
   pending?: boolean;
+  confirmDecision?: PermissionDecision;
 }
 
 export function AppUninstallModal({
@@ -351,48 +368,33 @@ export function AppUninstallModal({
   onClose,
   onConfirm,
   pending,
+  confirmDecision,
 }: AppUninstallModalProps) {
   const [typed, setTyped] = useState('');
-  const confirmable = typed === releaseName && !pending;
+  const confirmBlockedReason = confirmDecision && !confirmDecision.allowed
+    ? permissionDeniedReason(confirmDecision)
+    : undefined;
+  const confirmable = typed === releaseName && !pending && !confirmBlockedReason;
   const crdsWillSurvive = HAS_CRDS.has(chartName);
+  const handleConfirm = () => {
+    if (confirmBlockedReason) {
+      toastWarning(confirmBlockedReason);
+      return;
+    }
+    onConfirm();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl">
-        <header className="flex items-center gap-2 px-5 py-4 border-b border-border">
-          <AlertTriangle className="h-5 w-5 text-red-500" />
-          <h3 className="text-lg font-semibold text-foreground">Uninstall release</h3>
-        </header>
-        <div className="p-5 space-y-3 text-sm">
-          <p>
-            This will run <code className="font-mono text-xs">helm uninstall {releaseName} -n {namespace}</code> on the cluster.
-            Workload pods + Services + ConfigMaps owned by the release will be deleted.
-          </p>
-          {crdsWillSurvive && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-              <div className="font-medium text-amber-600 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5" /> CRDs will not be removed
-              </div>
-              <p className="text-muted-foreground mt-1">
-                <span className="font-mono">{chartName}</span> ships CRDs. Helm leaves them in place on uninstall to protect data; remove manually with <code className="font-mono">kubectl delete crd …</code> if you need a clean re-install.
-              </p>
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              Type <code className="font-mono text-xs bg-muted px-1 rounded">{releaseName}</code> to confirm
-            </label>
-            <input
-              type="text"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
-              autoFocus
-            />
-          </div>
-        </div>
-        <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border bg-muted/30">
+    <ModalShell
+      title="Uninstall release"
+      onClose={onClose}
+      size="sm"
+      panelClassName="bg-popover"
+      bodyClassName="p-5 space-y-3 text-sm"
+      footerClassName="bg-muted/30"
+      titleIcon={<AlertTriangle className="h-5 w-5 text-red-500" />}
+      footer={
+        <div className="flex items-center justify-end gap-2">
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
@@ -401,8 +403,9 @@ export function AppUninstallModal({
             Cancel
           </button>
           <button
-            onClick={() => onConfirm()}
+            onClick={handleConfirm}
             disabled={!confirmable}
+            title={confirmBlockedReason}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
           >
             {pending ? (
@@ -413,8 +416,35 @@ export function AppUninstallModal({
               <>Uninstall</>
             )}
           </button>
-        </footer>
+        </div>
+      }
+    >
+      <p>
+        This will run <code className="font-mono text-xs">helm uninstall {releaseName} -n {namespace}</code> on the cluster.
+        Workload pods + Services + ConfigMaps owned by the release will be deleted.
+      </p>
+      {crdsWillSurvive && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
+          <div className="font-medium text-amber-600 flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" /> CRDs will not be removed
+          </div>
+          <p className="text-muted-foreground mt-1">
+            <span className="font-mono">{chartName}</span> ships CRDs. Helm leaves them in place on uninstall to protect data; remove manually with <code className="font-mono">kubectl delete crd …</code> if you need a clean re-install.
+          </p>
+        </div>
+      )}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">
+          Type <code className="font-mono text-xs bg-muted px-1 rounded">{releaseName}</code> to confirm
+        </label>
+        <input
+          type="text"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+          autoFocus
+        />
       </div>
-    </div>
+    </ModalShell>
   );
 }

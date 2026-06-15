@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/templates — list of every notification template
  * registered in the Go `internal/notify` registry. Operators see a
@@ -83,27 +84,27 @@ function NotificationTemplatesList() {
         </div>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2 font-medium">Key</th>
-                <th className="px-4 py-2 font-medium">Channel</th>
-                <th className="px-4 py-2 font-medium">Description</th>
-                <th className="px-4 py-2 font-medium">Override</th>
-                <th className="px-4 py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-2 font-medium">Key</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Channel</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Description</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Override</TableHead>
+                <TableHead className="px-4 py-2 font-medium" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {(items ?? []).map((t) => (
-                <tr key={t.key} className="border-t border-border hover:bg-muted/30">
-                  <td className="px-4 py-2 font-mono text-xs">{t.key}</td>
-                  <td className="px-4 py-2">
+                <TableRow key={t.key} className="border-t border-border hover:bg-muted/30">
+                  <TableCell className="px-4 py-2 font-mono text-xs">{t.key}</TableCell>
+                  <TableCell className="px-4 py-2">
                     <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-foreground">
                       {t.channel}
                     </span>
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">{t.description}</td>
-                  <td className="px-4 py-2">
+                  </TableCell>
+                  <TableCell className="px-4 py-2 text-muted-foreground">{t.description}</TableCell>
+                  <TableCell className="px-4 py-2">
                     {t.hasOverride ? (
                       <span
                         className={`text-xs px-2 py-0.5 rounded-md ${
@@ -117,26 +118,26 @@ function NotificationTemplatesList() {
                     ) : (
                       <span className="text-xs text-muted-foreground">default</span>
                     )}
-                  </td>
-                  <td className="px-4 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="px-4 py-2 text-right">
                     <Link
                       href={`/dashboard/settings/templates/${encodeURIComponent(t.key)}`}
                       className="text-sm font-medium text-foreground hover:underline"
                     >
                       Edit
                     </Link>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {items && items.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-muted-foreground" colSpan={5}>
+                <TableRow>
+                  <TableCell className="px-4 py-6 text-center text-muted-foreground" colSpan={5}>
                     No templates registered.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

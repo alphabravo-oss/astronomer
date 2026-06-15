@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -899,7 +900,7 @@ func (h *AlertingHandler) syncSharedAlertingAssets(ctx context.Context) error {
 		return err
 	}
 	if ok {
-		if err := applySecret(ctx, h.requester, clusterID, namespace, "astronomer-thanos-rule-alertmanagers", map[string]string{
+		if err := applyAlertSecret(ctx, h.requester, clusterID, namespace, "astronomer-thanos-rule-alertmanagers", map[string]string{
 			"config": alertmanagerEndpoints,
 		}); err != nil {
 			return err
@@ -969,7 +970,7 @@ func (h *AlertingHandler) renderRulerRules(ctx context.Context, rules []sqlc.Ale
 			annotations = map[string]string{}
 		}
 		if annotations["summary"] == "" {
-			annotations["summary"] = firstNonEmptyString(stringFromMap(cfg, "description"), rule.Name)
+			annotations["summary"] = strutil.FirstNonBlank(stringFromMap(cfg, "description"), rule.Name)
 		}
 		groupRules = append(groupRules, map[string]any{
 			"alert":       alertName,
@@ -1168,12 +1169,7 @@ func firstConfigString(cfg map[string]any, keys ...string) (string, bool) {
 }
 
 func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
+	return strutil.FirstNonBlank(values...)
 }
 
 func ensureNamespaceWithRequester(ctx context.Context, requester K8sRequester, clusterID, namespace string) error {
@@ -1221,7 +1217,7 @@ func applyConfigMap(ctx context.Context, requester K8sRequester, clusterID, name
 	return applyNamedResource(ctx, requester, clusterID, namespace, "configmaps", name, body)
 }
 
-func applySecret(ctx context.Context, requester K8sRequester, clusterID, namespace, name string, stringData map[string]string) error {
+func applyAlertSecret(ctx context.Context, requester K8sRequester, clusterID, namespace, name string, stringData map[string]string) error {
 	body, err := json.Marshal(map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Secret",

@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -45,7 +44,7 @@ type PasswordResetComplete struct {
 // If the email matches a user AND the auth handler has a reset store
 // AND an email notifier, we:
 //  1. generate a 32-byte random token, hex-encoded
-//  2. persist hex(sha256(token)) + a snapshot of the user's current
+//  2. persist the shared opaque-token hash + a snapshot of the user's current
 //     password hash; a password change before consume invalidates
 //     this token
 //  3. enqueue a `password_reset` email with the reset URL
@@ -91,7 +90,7 @@ func (h *AuthHandler) PasswordResetRequest(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	tokenHash := hashToken(tokenPlain)
+	tokenHash := auth.HashOpaqueToken(tokenPlain)
 
 	if _, err := h.passwordResets.CreatePasswordResetToken(r.Context(), sqlc.CreatePasswordResetTokenParams{
 		UserID:              user.ID,
@@ -160,7 +159,7 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tokenHash := hashToken(req.Token)
+	tokenHash := auth.HashOpaqueToken(req.Token)
 	row, err := h.passwordResets.GetPasswordResetTokenByHash(r.Context(), tokenHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -245,11 +244,6 @@ func randomToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf[:]), nil
-}
-
-func hashToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
 }
 
 // buildResetURL composes the dashboard URL the user clicks. We use

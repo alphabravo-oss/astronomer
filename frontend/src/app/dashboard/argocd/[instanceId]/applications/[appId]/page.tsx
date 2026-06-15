@@ -14,14 +14,16 @@
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   ArrowLeft,
   ChevronRight,
   ExternalLink,
   Loader2,
   RefreshCw,
+  RotateCcw,
   Rocket,
+  SearchCheck,
   Zap,
 } from 'lucide-react';
 import api, {
@@ -30,10 +32,13 @@ import api, {
   refreshArgoApplicationById,
   listArgoOperations,
   listArgoApplicationsLive,
+  syncArgoApplicationById,
 } from '@/lib/api';
+import { queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SyncStatusBadge, HealthStatusBadge } from '@/components/argocd/sync-status-badge';
 import { SyncAppDialog } from '@/components/argocd/sync-app-dialog';
 import { flattenArgoApp, shortRepo } from '@/components/argocd/argo-utils';
@@ -64,7 +69,7 @@ export default function ApplicationDetailPage() {
 
   // Resolve the DB app to learn its name (needed for the live-app lookup).
   const { data: dbApp } = useQuery({
-    queryKey: ['argocd', 'db-app', appId],
+    queryKey: queryKeys.argocd.dbApp(appId),
     queryFn: async () => {
       const res = await api.get<DBApp>(`/argocd/applications/${appId}`);
       return res.data;
@@ -77,7 +82,7 @@ export default function ApplicationDetailPage() {
   // (The backend doesn't expose a single live-app endpoint; the list query
   // is cheap and ArgoCD already paginates.)
   const { data: liveApps } = useQuery({
-    queryKey: ['argocd', 'live-apps', instanceId],
+    queryKey: queryKeys.argocd.liveApps(instanceId),
     queryFn: () => listArgoApplicationsLive(instanceId),
     refetchInterval: 15000,
   });
@@ -89,7 +94,7 @@ export default function ApplicationDetailPage() {
 
   // Operations specific to this app — used to drive the convergence poll.
   const opsForApp = useQuery({
-    queryKey: ['argocd', 'operations', 'for-app', appId],
+    queryKey: queryKeys.argocd.appOperations(appId),
     queryFn: () => listArgoOperations({ targetType: 'application', targetKey: appId, limit: 25 }),
     refetchInterval: (q) => {
       const ops = (q.state.data as ArgoOperation[] | undefined) ?? [];
@@ -101,20 +106,20 @@ export default function ApplicationDetailPage() {
   useLiveQueryInvalidation(
     ['cluster.k8s_changed', 'cluster.connected', 'cluster.disconnected'],
     [
-      ['argocd', 'live-apps', instanceId],
-      ['argocd', 'operations', 'for-app', appId],
-      ['argocd', 'app-manifests', appId],
-      ['argocd', 'app-history', appId],
+      queryKeys.argocd.liveApps(instanceId),
+      queryKeys.argocd.appOperations(appId),
+      queryKeys.argocd.appManifests(appId),
+      queryKeys.argocd.appHistory(appId),
     ],
   );
 
   const refresh = useMutation({
     mutationFn: (hard: boolean) => refreshArgoApplicationById(appId, hard),
     onSuccess: (_data, hard) => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'live-apps', instanceId] });
-      toast.success(hard ? 'Hard refresh requested' : 'Refresh requested');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.liveApps(instanceId) });
+      toastSuccess(hard ? 'Hard refresh requested' : 'Refresh requested');
     },
-    onError: (err: Error) => toast.error(`Refresh failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Refresh failed', err),
   });
 
   if (!dbApp) {
@@ -243,7 +248,7 @@ export default function ApplicationDetailPage() {
 
 function ResourcesTab({ appId }: { appId: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['argocd', 'app-manifests', appId],
+    queryKey: queryKeys.argocd.appManifests(appId),
     queryFn: () => getArgoAppManifests(appId),
     refetchInterval: 30000,
   });
@@ -281,10 +286,24 @@ function ResourcesTab({ appId }: { appId: string }) {
 // ============================================================
 
 function HistoryTab({ appId }: { appId: string }) {
+  const queryClient = useQueryClient();
+  const [rollbackTarget, setRollbackTarget] = useState<ArgoAppHistoryEntry | null>(null);
   const { data: history = [], isLoading } = useQuery({
-    queryKey: ['argocd', 'app-history', appId],
+    queryKey: queryKeys.argocd.appHistory(appId),
     queryFn: () => getArgoAppHistory(appId),
     refetchInterval: 60000,
+  });
+
+  const syncRevision = useMutation({
+    mutationFn: ({ revision, dryRun }: { revision: string; dryRun: boolean }) =>
+      syncArgoApplicationById(appId, { revision, dryRun, prune: true }),
+    onSuccess: (_op, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.appOperations(appId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.liveApps() });
+      toastSuccess(variables.dryRun ? 'Rollback preview queued' : 'Rollback queued');
+      setRollbackTarget(null);
+    },
+    onError: (err: Error) => toastApiError('Rollback failed', err),
   });
 
   const columns: Column<ArgoAppHistoryEntry>[] = [
@@ -319,16 +338,70 @@ function HistoryTab({ appId }: { appId: string }) {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      align: 'center',
+      accessor: (row) => {
+        const revision = row.revision?.trim();
+        if (!revision) return null;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              title="Preview rollback"
+              onClick={(event) => {
+                event.stopPropagation();
+                syncRevision.mutate({ revision, dryRun: true });
+              }}
+              disabled={syncRevision.isPending}
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              <SearchCheck className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Rollback to revision"
+              onClick={(event) => {
+                event.stopPropagation();
+                setRollbackTarget(row);
+              }}
+              disabled={syncRevision.isPending}
+              className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        );
+      },
+    },
   ];
+  const rollbackRevision = rollbackTarget?.revision?.trim() ?? '';
+  const confirmValue = rollbackRevision.slice(0, 12);
   return (
-    <DataTable
-      data={history}
-      columns={columns}
-      keyExtractor={(row) => String(row.id)}
-      searchable={false}
-      loading={isLoading}
-      emptyMessage="No deploy history yet."
-    />
+    <>
+      <DataTable
+        data={history}
+        columns={columns}
+        keyExtractor={(row) => String(row.id)}
+        searchable={false}
+        loading={isLoading}
+        emptyMessage="No deploy history yet."
+      />
+      <ConfirmDialog
+        open={!!rollbackTarget}
+        onClose={() => setRollbackTarget(null)}
+        onConfirm={() => {
+          if (rollbackRevision) syncRevision.mutate({ revision: rollbackRevision, dryRun: false });
+        }}
+        title="Rollback Application"
+        description={`Queue an audited ArgoCD sync to revision ${confirmValue}. Run the preview action first when you need a dry-run.`}
+        confirmText="Rollback"
+        confirmValue={confirmValue}
+        loading={syncRevision.isPending}
+      />
+    </>
   );
 }
 

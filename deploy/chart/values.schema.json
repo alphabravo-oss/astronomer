@@ -1,0 +1,556 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Astronomer Helm values",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "createNamespace": { "type": "boolean" },
+    "namespace": { "type": "string", "minLength": 1 },
+    "image": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "registry": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pullSecrets": { "type": "array" },
+        "server": { "$ref": "#/definitions/imageRef" },
+        "worker": { "$ref": "#/definitions/imageRef" },
+        "agent": { "$ref": "#/definitions/imageRef" },
+        "migrate": { "$ref": "#/definitions/imageRef" }
+      }
+    },
+    "frontend": { "$ref": "#/definitions/workload" },
+    "server": { "$ref": "#/definitions/workload" },
+    "worker": { "$ref": "#/definitions/workload" },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "bundled": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "external": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "dsn": { "type": "string" },
+            "dsnSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "productionRequirements": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "externalManagedOrHA": { "type": "boolean" },
+            "tlsRequired": { "type": "boolean" },
+            "pitrRequired": { "type": "boolean" },
+            "logicalBackupsRequired": { "type": "boolean" },
+            "restoreDrillRequired": { "type": "boolean" },
+            "minimumDailyBackups": { "type": "integer", "minimum": 0 },
+            "minimumWeeklyBackups": { "type": "integer", "minimum": 0 },
+            "minimumMonthlyBackups": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "bundled": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "external": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "address": { "type": "string" },
+            "tls": { "type": "boolean" },
+            "database": { "type": "integer", "minimum": 0 },
+            "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "migrate": { "$ref": "#/definitions/workload" },
+    "preflight": { "$ref": "#/definitions/workload" },
+    "dex": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "clientSecret": { "type": "string" },
+        "image": { "$ref": "#/definitions/imageRef" }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "env": { "type": "string", "enum": ["development", "test", "staging", "production"] },
+        "debug": { "type": "string", "enum": ["true", "false"] },
+        "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "warning", "error"] },
+        "serverURL": { "type": "string" },
+        "corsAllowedOrigins": { "type": "string" },
+        "loginFailureThreshold": { "type": "integer", "minimum": 1 },
+        "lockoutDurationMinutes": { "type": "integer", "minimum": 1 },
+        "auth": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "localPasswordOnly": { "type": "boolean" },
+            "totp": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "issuer": { "type": "string" },
+                "require": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "secretKey": { "type": "string" },
+        "encryptionKey": { "type": "string" }
+      }
+    },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "username": { "type": "string", "minLength": 1 },
+        "email": { "type": "string" },
+        "password": { "type": "string" }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source": { "type": "string", "enum": ["none", "selfSigned", "letsEncrypt", "secret"] },
+        "secretName": { "type": "string" },
+        "requireCertManager": { "type": "boolean" },
+        "letsEncrypt": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "email": { "type": "string" },
+            "environment": { "type": "string", "enum": ["production", "staging"] }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "hosts": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "defaultDeny": { "type": "boolean" },
+        "allowPublicIngress": { "type": "boolean" },
+        "allowMetricsIngress": { "type": "boolean" },
+        "externalEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "externalHTTPSEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "externalPostgresEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "externalRedisEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "identityProviderEgressCIDRs": { "$ref": "#/definitions/stringArray" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" }
+          }
+        }
+      }
+    },
+    "managementBackup": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "s3": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "bucket": { "type": "string" },
+            "credentialsSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        }
+      }
+    },
+    "managementRestoreDrill": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "crds": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": {
+              "env": { "const": "production" }
+            },
+            "required": ["env"]
+          }
+        },
+        "required": ["config"]
+      },
+      "then": {
+        "properties": {
+          "postgres": {
+            "properties": {
+              "bundled": {
+                "properties": {
+                  "enabled": { "const": false }
+                },
+                "required": ["enabled"]
+              },
+              "external": {
+                "anyOf": [
+                  { "required": ["dsn"], "properties": { "dsn": { "type": "string", "minLength": 1 } } },
+                  { "required": ["dsnSecretRef"], "properties": { "dsnSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+                ]
+              }
+            },
+            "required": ["bundled", "external"]
+          },
+          "redis": {
+            "properties": {
+              "bundled": {
+                "properties": {
+                  "enabled": { "const": false }
+                },
+                "required": ["enabled"]
+              },
+              "external": {
+                "properties": {
+                  "address": { "type": "string", "minLength": 1 }
+                },
+                "required": ["address"]
+              }
+            },
+            "required": ["bundled", "external"]
+          },
+          "config": {
+            "properties": {
+              "serverURL": { "type": "string", "pattern": "^https://" }
+            },
+            "required": ["serverURL"]
+          },
+          "gateway": {
+            "properties": {
+              "enabled": { "const": true },
+              "hosts": { "type": "array", "minItems": 1 }
+            },
+            "required": ["enabled", "hosts"]
+          },
+          "tls": {
+            "properties": {
+              "source": { "enum": ["selfSigned", "letsEncrypt", "secret"] }
+            },
+            "required": ["source"]
+          },
+          "secrets": {
+            "properties": {
+              "secretKey": {
+                "type": "string",
+                "minLength": 1,
+                "not": { "const": "local-dev-secret-key-change-in-production" }
+              },
+              "encryptionKey": {
+                "type": "string",
+                "minLength": 1,
+                "not": { "const": "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }
+              }
+            },
+            "required": ["secretKey", "encryptionKey"]
+          },
+          "bootstrap": {
+            "properties": {
+              "email": { "type": "string", "format": "email", "minLength": 1 }
+            },
+            "required": ["email"]
+          },
+          "managementBackup": {
+            "properties": {
+              "s3": {
+                "properties": {
+                  "bucket": { "type": "string", "minLength": 1 },
+                  "credentialsSecretRef": {
+                    "required": ["name"],
+                    "properties": {
+                      "name": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                },
+                "required": ["bucket", "credentialsSecretRef"]
+              }
+            },
+            "required": ["s3"]
+          },
+          "networkPolicy": {
+            "properties": {
+              "enabled": { "const": true },
+              "defaultDeny": { "const": true },
+              "externalPostgresEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
+              "externalRedisEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" }
+            },
+            "required": ["enabled", "defaultDeny", "externalPostgresEgressCIDRs", "externalRedisEgressCIDRs"]
+          }
+        },
+        "required": ["postgres", "redis", "gateway", "tls", "secrets", "bootstrap", "networkPolicy"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": {
+              "env": { "const": "production" }
+            },
+            "required": ["env"]
+          },
+          "dex": {
+            "properties": {
+              "enabled": { "const": true }
+            },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["config", "dex"]
+      },
+      "then": {
+        "properties": {
+          "dex": {
+            "properties": {
+              "clientSecret": { "type": "string", "minLength": 1 }
+            },
+            "required": ["clientSecret"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": {
+              "env": { "const": "production" }
+            },
+            "required": ["env"]
+          },
+          "tls": {
+            "properties": {
+              "source": { "const": "letsEncrypt" }
+            },
+            "required": ["source"]
+          }
+        },
+        "required": ["config", "tls"]
+      },
+      "then": {
+        "properties": {
+          "tls": {
+            "properties": {
+              "letsEncrypt": {
+                "properties": {
+                  "email": { "type": "string", "format": "email", "minLength": 1 }
+                },
+                "required": ["email"]
+              }
+            },
+            "required": ["letsEncrypt"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": {
+              "env": { "const": "production" }
+            },
+            "required": ["env"]
+          },
+          "tls": {
+            "properties": {
+              "source": { "const": "secret" }
+            },
+            "required": ["source"]
+          }
+        },
+        "required": ["config", "tls"]
+      },
+      "then": {
+        "properties": {
+          "tls": {
+            "properties": {
+              "secretName": { "type": "string", "minLength": 1 }
+            },
+            "required": ["secretName"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "config": {
+            "properties": {
+              "env": { "const": "production" }
+            },
+            "required": ["env"]
+          }
+        },
+        "required": ["config"]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "dex": {
+                "properties": {
+                  "enabled": { "const": true }
+                },
+                "required": ["enabled"]
+              }
+            },
+            "required": ["dex"]
+          },
+          {
+            "properties": {
+              "config": {
+                "properties": {
+                  "auth": {
+                    "properties": {
+                      "localPasswordOnly": { "const": true }
+                    },
+                    "required": ["localPasswordOnly"]
+                  }
+                },
+                "required": ["auth"]
+              }
+            },
+            "required": ["config"]
+          }
+        ]
+      }
+    }
+  ],
+  "definitions": {
+    "imageRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "registry": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "strategy": { "type": "object" },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minAvailable": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "affinity": { "type": "object" },
+        "topologySpread": { "type": "object" },
+        "image": { "$ref": "#/definitions/imageRef" },
+        "resources": { "type": "object" },
+        "podSecurityContext": { "type": "object" },
+        "securityContext": { "type": "object" },
+        "env": { "type": "object" }
+      }
+    },
+    "secretKeyRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "key": { "type": "string" }
+      }
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nonEmptyStringArray": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

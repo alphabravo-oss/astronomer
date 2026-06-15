@@ -226,7 +226,9 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, event Event) (Outco
 	if err != nil {
 		return Outcome{Err: err}, len(body), nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read up to MaxResponseBodyBytes + 1 so the truncation flag is
 	// honest about whether we dropped content.
@@ -248,12 +250,12 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, event Event) (Outco
 // buildBody applies the template (if any) and returns the bytes that
 // will be hashed + shipped. Resolution precedence (highest first):
 //
-//   1. sub.PayloadTemplate — per-subscription override set by the
-//      operator at subscription create/update time.
-//   2. notify override on key webhook.<family> — operator-tunable
-//      default-per-event-family (migration 059).
-//   3. json.Marshal(event) — the pre-migration default; byte-
-//      identical when neither 1 nor 2 is present.
+//  1. sub.PayloadTemplate — per-subscription override set by the
+//     operator at subscription create/update time.
+//  2. notify override on key webhook.<family> — operator-tunable
+//     default-per-event-family (migration 059).
+//  3. json.Marshal(event) — the pre-migration default; byte-
+//     identical when neither 1 nor 2 is present.
 func (s *Sender) buildBody(ctx context.Context, sub Subscription, event Event) ([]byte, error) {
 	if strings.TrimSpace(sub.PayloadTemplate) == "" {
 		// Level 2: notify override.

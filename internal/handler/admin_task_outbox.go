@@ -181,12 +181,20 @@ func taskOutboxToWire(row sqlc.TaskOutbox) TaskOutboxResponse {
 	if row.DedupeKey.Valid {
 		resp.DedupeKey = row.DedupeKey.String
 	}
-	resp.NextAttemptAt = pgTimePtr(row.NextAttemptAt)
+	resp.NextAttemptAt = taskOutboxTimePtr(row.NextAttemptAt)
 	resp.LockedUntil = pgTimePtr(row.LockedUntil)
 	resp.DeliveredAt = pgTimePtr(row.DeliveredAt)
-	resp.CreatedAt = pgTimePtr(row.CreatedAt)
-	resp.UpdatedAt = pgTimePtr(row.UpdatedAt)
+	resp.CreatedAt = taskOutboxTimePtr(row.CreatedAt)
+	resp.UpdatedAt = taskOutboxTimePtr(row.UpdatedAt)
 	return resp
+}
+
+func taskOutboxTimePtr(v time.Time) *time.Time {
+	if v.IsZero() {
+		return nil
+	}
+	t := v.UTC()
+	return &t
 }
 
 func pgTimePtr(v pgtype.Timestamptz) *time.Time {

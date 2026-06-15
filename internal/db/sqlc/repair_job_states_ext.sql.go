@@ -3,23 +3,7 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type RepairJobState struct {
-	JobName                   string             `json:"job_name"`
-	Scope                     string             `json:"scope"`
-	Status                    string             `json:"status"`
-	LastSuccessfulReconcileAt pgtype.Timestamptz `json:"last_successful_reconcile_at"`
-	LastErrorAt               pgtype.Timestamptz `json:"last_error_at"`
-	LastError                 string             `json:"last_error"`
-	SuccessCount              int64              `json:"success_count"`
-	ErrorCount                int64              `json:"error_count"`
-	Metadata                  json.RawMessage    `json:"metadata"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
-}
 
 const repairJobStateSelectColumns = `
     job_name, scope, status, last_successful_reconcile_at, last_error_at,

@@ -41,7 +41,7 @@ export function PodLogsViewer({
 
   const activePod = pods.find((p) => p.name === selectedPod) || pods[0];
   const podName = activePod?.name || '';
-  const containers = activePod?.containers || [];
+  const containers = useMemo(() => activePod?.containers ?? [], [activePod]);
   const [selectedContainer, setSelectedContainer] = useState(containers[0]?.name || '');
 
   // Update container when pod changes

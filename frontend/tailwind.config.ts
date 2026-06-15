@@ -84,10 +84,6 @@ const config: Config = {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
         },
-        shimmer: {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
-        },
         'slide-up': {
           '0%': { transform: 'translateY(100%)' },
           '100%': { transform: 'translateY(0)' },
@@ -97,13 +93,10 @@ const config: Config = {
         'fade-in': 'fade-in 0.3s ease-out',
         'slide-in-right': 'slide-in-right 0.3s ease-out',
         'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
-        shimmer: 'shimmer 2s linear infinite',
         'slide-up': 'slide-up 0.3s ease-out',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'shimmer-gradient':
-          'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%)',
       },
     },
   },

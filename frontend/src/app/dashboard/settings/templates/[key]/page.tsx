@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/templates/[key] — split-view template editor.
  *
@@ -16,7 +17,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Eye, FileText, Loader2, RotateCcw, Save } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -64,7 +65,7 @@ function NotificationTemplateEditor() {
         setEnabled(d.enabled);
         setSamples(seedSamples(d));
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to load template');
+        toastApiError('', err, 'Failed to load template');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -85,9 +86,9 @@ function NotificationTemplateEditor() {
         enabled,
       });
       setDetail(updated);
-      toast.success('Template override saved');
+      toastSuccess('Template override saved');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed');
+      toastApiError('', err, 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -107,9 +108,9 @@ function NotificationTemplateEditor() {
       setSubject(d.subject);
       setBody(d.body);
       setEnabled(true);
-      toast.success('Reverted to default');
+      toastSuccess('Reverted to default');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Reset failed');
+      toastApiError('', err, 'Reset failed');
     } finally {
       setSaving(false);
     }
@@ -266,31 +267,31 @@ function NotificationTemplateEditor() {
             Variables
           </label>
           <div className="rounded-md border border-border overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-3 py-1.5 text-left font-medium">Name</th>
-                  <th className="px-3 py-1.5 text-left font-medium">Description</th>
-                  <th className="px-3 py-1.5 text-left font-medium">Required</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-xs">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="px-3 py-1.5 text-left font-medium">Name</TableHead>
+                  <TableHead className="px-3 py-1.5 text-left font-medium">Description</TableHead>
+                  <TableHead className="px-3 py-1.5 text-left font-medium">Required</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {variableList.map((v) => (
-                  <tr key={v.name} className="border-t border-border">
-                    <td className="px-3 py-1.5 font-mono">{v.name}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">{v.description}</td>
-                    <td className="px-3 py-1.5">{v.required ? 'yes' : 'no'}</td>
-                  </tr>
+                  <TableRow key={v.name} className="border-t border-border">
+                    <TableCell className="px-3 py-1.5 font-mono">{v.name}</TableCell>
+                    <TableCell className="px-3 py-1.5 text-muted-foreground">{v.description}</TableCell>
+                    <TableCell className="px-3 py-1.5">{v.required ? 'yes' : 'no'}</TableCell>
+                  </TableRow>
                 ))}
                 {variableList.length === 0 && (
-                  <tr>
-                    <td className="px-3 py-3 text-center text-muted-foreground" colSpan={3}>
+                  <TableRow>
+                    <TableCell className="px-3 py-3 text-center text-muted-foreground" colSpan={3}>
                       No declared variables.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
 

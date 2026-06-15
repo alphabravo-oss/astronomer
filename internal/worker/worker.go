@@ -207,6 +207,8 @@ func NewTunnelWorker(redisURL string, log *slog.Logger) (*Worker, error) {
 func (w *Worker) RegisterTunnelHandlers() {
 	w.mux.HandleFunc(TypeClusterTemplateApply, instrumentTask(TypeClusterTemplateApply, tasks.HandleClusterTemplateApply))
 	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
+	w.mux.HandleFunc(tasks.MeshDetectType, instrumentTask(tasks.MeshDetectType, tasks.HandleMeshDetect))
+	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
 	w.log.Info("registered tunnel-queue task handlers")
 }
 

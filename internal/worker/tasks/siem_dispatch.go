@@ -18,6 +18,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 )
 
@@ -71,10 +72,10 @@ type SIEMTransportFactory func(sub sqlc.SiemForwarder, secret authBlob) (siem.Tr
 // server at startup; stays in a package-level var so the asynq
 // HandleFunc signature can stay standard.
 type SIEMDeps struct {
-	Queries           SIEMQuerier
-	Encryptor         *auth.Encryptor
-	TransportFactory  SIEMTransportFactory
-	HTTPClient        *http.Client
+	Queries          SIEMQuerier
+	Encryptor        *auth.Encryptor
+	TransportFactory SIEMTransportFactory
+	HTTPClient       *http.Client
 }
 
 var siemDeps SIEMDeps
@@ -106,7 +107,7 @@ func lockForForwarder(id uuid.UUID) *sync.Mutex {
 func ConfigureSIEM(deps SIEMDeps) {
 	siemDeps = deps
 	if siemDeps.HTTPClient == nil {
-		siemDeps.HTTPClient = http.DefaultClient
+		siemDeps.HTTPClient = httpclient.New(10 * time.Second)
 	}
 	if siemDeps.TransportFactory == nil {
 		siemDeps.TransportFactory = defaultSIEMTransportFactory
@@ -216,7 +217,7 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 			"forwarder", sub.Name, "error", err)
 		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
-			LastError:   truncate("decrypt auth: "+err.Error(), 1024),
+			LastError:   truncateDispatchLastError("decrypt auth: "+err.Error(), 1024),
 		})
 		return
 	}
@@ -227,11 +228,13 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 			"forwarder", sub.Name, "error", err)
 		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
-			LastError:   truncate("transport: "+err.Error(), 1024),
+			LastError:   truncateDispatchLastError("transport: "+err.Error(), 1024),
 		})
 		return
 	}
-	defer transport.Close()
+	defer func() {
+		_ = transport.Close()
+	}()
 
 	formatID := sub.Format
 	if formatID == "" {
@@ -280,7 +283,7 @@ func dispatchForwarder(ctx context.Context, sub sqlc.SiemForwarder) {
 		siem.RecordQueueDepth(sub.Name, int(depth))
 		_ = siemDeps.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
-			LastError:   truncate(sendErr.Error(), 1024),
+			LastError:   truncateDispatchLastError(sendErr.Error(), 1024),
 			QueueDepth:  int32(depth),
 		})
 		runtimeLogger().WarnContext(ctx, "siem: dispatch failed",

@@ -50,14 +50,14 @@ Implemented on 2026-06-12:
 - Added `argocd_cluster_proxy_tokens` with encrypted token storage and hash-based validation.
 - Added `/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*` as a dedicated ArgoCD-only proxy route.
 - Decommission now deletes ArgoCD cluster-proxy tokens with other cluster credentials.
-- Added built-in ArgoCD ApplicationSets for the five platform baseline components.
+- Added built-in ArgoCD ApplicationSets for the platform baseline components.
 - Added `argocd.manage_platform_baseline` platform setting, default `true`.
 - Added `argocd.auto_adopt_clusters` platform setting, default `true`; the auto-registration worker skips all adoption work when disabled.
 - Cluster-template apply now skips ArgoCD-owned baseline component installs for adopted clusters when `argocd.manage_platform_baseline=true`, preventing Helm-over-tunnel and ArgoCD from managing the same baseline tools.
 - Added `Cluster` CRD fields for declarative ArgoCD adoption, baseline profile, agent privilege profile, and ArgoCD adoption status.
 - Added `scripts/validate-live-argocd-auto-adoption.sh` and `make validate-live-argocd-auto-adoption` to validate managed-cluster auto-adoption, baseline ApplicationSet fan-out, and ArgoCD cluster Secret label refresh.
 - Cluster detail now surfaces GitOps ownership: ArgoCD registration count, ArgoCD cluster Secret names, and whether the platform baseline is ArgoCD-owned, pending, local, or legacy Helm-over-tunnel.
-- Cluster detail now also shows per-component ownership for the five built-in baseline ApplicationSets, including component slug/name, namespace, ApplicationSet name, and whether that component is ArgoCD-owned, pending, local, or Helm-over-tunnel.
+- Cluster detail now also shows per-component ownership for the built-in baseline ApplicationSets, including component slug/name, namespace, ApplicationSet name, and whether that component is ArgoCD-owned, pending, local, or Helm-over-tunnel.
 - ArgoCD auto-adoption now writes `argocd_registering`, `argocd_registered`, `argocd_registration_failed`, and `baseline_appsets_matched` registration timeline steps, plus an `ArgoCDAdopted` cluster condition. Failed ArgoCD adoption steps retry the `argocd:auto_register_cluster` worker instead of the platform-baseline template worker.
 - The ArgoCD instance cluster tab now exposes operator actions to refresh ArgoCD cluster Secret labels from the current cluster row and to reopen the registration flow for an existing registration.
 - The label refresh path now removes stale Astronomer-owned labels from the ArgoCD cluster Secret, so deleted or changed cluster labels stop targeting old ApplicationSets.
@@ -237,6 +237,7 @@ Create built-in ApplicationSets for platform baseline components:
 - [x] `kube-state-metrics`
 - [x] `prometheus-node-exporter` with stable ApplicationSet name `astronomer-baseline-node-exporter`
 - [x] `fluent-bit`
+- [x] `ingress-nginx`
 - [x] `cert-manager`
 
 Target selector:
@@ -256,6 +257,7 @@ astronomer-baseline-trivy
 astronomer-baseline-kube-state-metrics
 astronomer-baseline-node-exporter
 astronomer-baseline-fluent-bit
+astronomer-baseline-ingress-nginx
 astronomer-baseline-cert-manager
 ```
 
@@ -501,7 +503,7 @@ This temporarily changes the selected ArgoCD cluster Secret's selector labels so
 ## Open Questions
 
 - Should ArgoCD always use the Astronomer proxy URL for adopted clusters, or prefer direct `api_server_url` when present?
-- Answered: baseline ownership is modeled per component for the five built-in ApplicationSets, and the cluster API/UI now expose each component's owner, namespace, and ApplicationSet name.
+- Answered: baseline ownership is modeled per component for the built-in ApplicationSets, and the cluster API/UI now expose each component's owner, namespace, and ApplicationSet name.
 - Should existing Helm-over-tunnel baseline installs be adopted by ArgoCD or left alone until re-registration?
 - How narrow can the ArgoCD cluster ServiceAccount permissions be while still supporting the baseline components?
 - Should the operator be allowed to disable auto-adoption per cluster during registration?

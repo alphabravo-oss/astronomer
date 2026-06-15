@@ -116,10 +116,18 @@ func TestLogin(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "valid login with username",
-			body:       LoginRequest{Username: "testuser", Password: "testpassword"},
+			name:       "rejects username login",
+			body:       map[string]string{"username": "testuser", "password": "testpassword"},
 			users:      []sqlc.User{makeTestUser(t, true)},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusBadRequest,
+			wantError:  "missing_credentials",
+		},
+		{
+			name:       "rejects malformed email",
+			body:       LoginRequest{Email: "testuser", Password: "testpassword"},
+			users:      []sqlc.User{makeTestUser(t, true)},
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_email",
 		},
 		{
 			name:       "wrong password",
@@ -355,6 +363,82 @@ func TestRefresh(t *testing.T) {
 	})
 }
 
+func TestBrowserSessionCookieAttributes(t *testing.T) {
+	cases := []struct {
+		name  string
+		https bool
+	}{
+		{name: "plain http", https: false},
+		{name: "forwarded https", https: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", nil)
+			if tc.https {
+				req.Header.Set("X-Forwarded-Proto", "https")
+			}
+			rec := httptest.NewRecorder()
+			setBrowserSessionCookies(rec, req, "access-token", "refresh-token")
+			resp := rec.Result()
+
+			session := cookieByName(t, resp, middleware.SessionCookieName)
+			assertCookieSecurity(t, session, cookieSecurityWant{
+				value:    "access-token",
+				path:     "/",
+				httpOnly: true,
+				secure:   tc.https,
+				sameSite: http.SameSiteLaxMode,
+			})
+			if session.MaxAge != 0 {
+				t.Fatalf("session MaxAge = %d, want session cookie MaxAge 0", session.MaxAge)
+			}
+
+			refresh := cookieByName(t, resp, middleware.RefreshCookieName)
+			assertCookieSecurity(t, refresh, cookieSecurityWant{
+				value:    "refresh-token",
+				path:     "/",
+				httpOnly: true,
+				secure:   tc.https,
+				sameSite: http.SameSiteLaxMode,
+				maxAge:   browserRefreshCookieMaxAge,
+			})
+
+			csrf := cookieByName(t, resp, middleware.CSRFCookieName)
+			assertCookieSecurity(t, csrf, cookieSecurityWant{
+				value:    csrf.Value,
+				path:     "/",
+				httpOnly: false,
+				secure:   tc.https,
+				sameSite: http.SameSiteLaxMode,
+			})
+			if csrf.Value == "" {
+				t.Fatal("csrf cookie value is empty")
+			}
+		})
+	}
+}
+
+func TestClearBrowserSessionCookiesClearsAllSessionCookies(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	clearBrowserSessionCookies(rec, req)
+	resp := rec.Result()
+
+	for _, name := range []string{middleware.SessionCookieName, middleware.RefreshCookieName, middleware.CSRFCookieName} {
+		cookie := cookieByName(t, resp, name)
+		assertCookieSecurity(t, cookie, cookieSecurityWant{
+			value:    "",
+			path:     "/",
+			httpOnly: true,
+			secure:   true,
+			sameSite: http.SameSiteLaxMode,
+			maxAge:   -1,
+		})
+	}
+}
+
 func responseHasCookie(resp *http.Response, name string, httpOnly bool) bool {
 	for _, c := range resp.Cookies() {
 		if c.Name == name && c.Value != "" && c.HttpOnly == httpOnly {
@@ -362,6 +446,48 @@ func responseHasCookie(resp *http.Response, name string, httpOnly bool) bool {
 		}
 	}
 	return false
+}
+
+type cookieSecurityWant struct {
+	value    string
+	path     string
+	httpOnly bool
+	secure   bool
+	sameSite http.SameSite
+	maxAge   int
+}
+
+func cookieByName(t *testing.T, resp *http.Response, name string) *http.Cookie {
+	t.Helper()
+	for _, c := range resp.Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("cookie %s not found in %v", name, resp.Cookies())
+	return nil
+}
+
+func assertCookieSecurity(t *testing.T, c *http.Cookie, want cookieSecurityWant) {
+	t.Helper()
+	if c.Value != want.value {
+		t.Fatalf("%s value = %q, want %q", c.Name, c.Value, want.value)
+	}
+	if c.Path != want.path {
+		t.Fatalf("%s path = %q, want %q", c.Name, c.Path, want.path)
+	}
+	if c.HttpOnly != want.httpOnly {
+		t.Fatalf("%s HttpOnly = %v, want %v", c.Name, c.HttpOnly, want.httpOnly)
+	}
+	if c.Secure != want.secure {
+		t.Fatalf("%s Secure = %v, want %v", c.Name, c.Secure, want.secure)
+	}
+	if c.SameSite != want.sameSite {
+		t.Fatalf("%s SameSite = %v, want %v", c.Name, c.SameSite, want.sameSite)
+	}
+	if c.MaxAge != want.maxAge {
+		t.Fatalf("%s MaxAge = %d, want %d", c.Name, c.MaxAge, want.maxAge)
+	}
 }
 
 // --- Token CRUD Tests ---

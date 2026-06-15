@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	"github.com/spf13/viper"
+	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
 
 // AgentConfig holds configuration for the agent process.
@@ -19,27 +19,28 @@ type AgentConfig struct {
 	HeartbeatInterval int    `mapstructure:"heartbeat_interval"` // Seconds (default 30)
 	MetricsInterval   int    `mapstructure:"metrics_interval"`   // Seconds (default 60)
 	HealthAddr        string `mapstructure:"health_addr"`        // Health server address (default :8081)
+	PrivilegeProfile  string `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
 }
 
 // LoadAgentConfig reads agent configuration from environment variables with
 // sensible defaults. Environment variables are prefixed with ASTRONOMER_,
 // e.g. ASTRONOMER_SERVER_URL, ASTRONOMER_CLUSTER_ID.
 func LoadAgentConfig() (*AgentConfig, error) {
-	v := viper.New()
-	v.SetEnvPrefix("ASTRONOMER")
-	v.AutomaticEnv()
-
-	v.SetDefault("server_url", "")
-	v.SetDefault("cluster_id", "")
-	v.SetDefault("agent_token", "")
-	v.SetDefault("agent_id", "")
-	v.SetDefault("token_secret_name", "astronomer-agent-token")
-	v.SetDefault("token_secret_key", "token")
-	v.SetDefault("reconnect_backoff", 5)
-	v.SetDefault("max_reconnect", 300)
-	v.SetDefault("heartbeat_interval", 30)
-	v.SetDefault("metrics_interval", 60)
-	v.SetDefault("health_addr", ":8081")
+	v := envconfig.NewViper("ASTRONOMER")
+	envconfig.SetDefaults(v,
+		envconfig.Default{Key: "server_url", Value: ""},
+		envconfig.Default{Key: "cluster_id", Value: ""},
+		envconfig.Default{Key: "agent_token", Value: ""},
+		envconfig.Default{Key: "agent_id", Value: ""},
+		envconfig.Default{Key: "token_secret_name", Value: "astronomer-agent-token"},
+		envconfig.Default{Key: "token_secret_key", Value: "token"},
+		envconfig.Default{Key: "reconnect_backoff", Value: 5},
+		envconfig.Default{Key: "max_reconnect", Value: 300},
+		envconfig.Default{Key: "heartbeat_interval", Value: 30},
+		envconfig.Default{Key: "metrics_interval", Value: 60},
+		envconfig.Default{Key: "health_addr", Value: ":8081"},
+		envconfig.Default{Key: "privilege_profile", Value: "admin"},
+	)
 
 	cfg := &AgentConfig{}
 	if err := v.Unmarshal(cfg); err != nil {

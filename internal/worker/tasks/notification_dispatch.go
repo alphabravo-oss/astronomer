@@ -38,6 +38,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
 // Recognized channel-type strings. Comparison is case-insensitive
@@ -65,14 +67,14 @@ var SupportedNotificationChannels = []string{
 // optional but recommended — Slack + MS Teams render with a colour
 // swatch based on it, PagerDuty maps it onto the event severity field.
 type NotificationSendPayload struct {
-	Channel    string   `json:"channel"`               // canonical type string (slack|pagerduty|msteams|webhook|email)
-	Subject    string   `json:"subject"`               // short title — alert rule name
-	Body       string   `json:"body"`                  // long-form text — what fired, links, etc.
-	Recipients []string `json:"recipients"`            // destination URL(s) / routing key(s); shape depends on channel
-	Severity   string   `json:"severity,omitempty"`    // critical|warning|info — drives styling
-	ClusterID  string   `json:"cluster_id,omitempty"`  // optional source cluster, surfaced as a field
-	RuleID     string   `json:"rule_id,omitempty"`     // optional alert-rule UUID
-	FiredAt    string   `json:"fired_at,omitempty"`    // RFC3339; defaults to time.Now() inside the formatter
+	Channel    string   `json:"channel"`              // canonical type string (slack|pagerduty|msteams|webhook|email)
+	Subject    string   `json:"subject"`              // short title — alert rule name
+	Body       string   `json:"body"`                 // long-form text — what fired, links, etc.
+	Recipients []string `json:"recipients"`           // destination URL(s) / routing key(s); shape depends on channel
+	Severity   string   `json:"severity,omitempty"`   // critical|warning|info — drives styling
+	ClusterID  string   `json:"cluster_id,omitempty"` // optional source cluster, surfaced as a field
+	RuleID     string   `json:"rule_id,omitempty"`    // optional alert-rule UUID
+	FiredAt    string   `json:"fired_at,omitempty"`   // RFC3339; defaults to time.Now() inside the formatter
 }
 
 // NewNotificationSendTask builds an asynq task. MaxRetry=3 with the
@@ -104,7 +106,7 @@ func HandleNotificationSend(ctx context.Context, t *asynq.Task) error {
 	}
 	client := runtimeDeps.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = runtimeHTTPClient()
 	}
 
 	slog.InfoContext(ctx, "sending notification",
@@ -221,8 +223,8 @@ func postPagerDuty(ctx context.Context, client *http.Client, routingKey string, 
 		"event_action": "trigger",
 		"dedup_key":    pagerDutyDedupKey(p),
 		"payload": map[string]any{
-			"summary":   firstNonEmpty(p.Subject, p.Body, "Astronomer alert"),
-			"source":    firstNonEmpty(p.ClusterID, "astronomer"),
+			"summary":   strutil.FirstNonBlank(p.Subject, p.Body, "Astronomer alert"),
+			"source":    strutil.FirstNonBlank(p.ClusterID, "astronomer"),
 			"severity":  pagerDutySeverity(p.Severity),
 			"timestamp": p.FiredAt,
 			"component": "astronomer-alerting",
@@ -354,11 +356,16 @@ func postGenericWebhook(ctx context.Context, client *http.Client, url string, p 
 // so logs are clearer when an upstream silently returns 200 instead
 // of 202 etc.
 func postJSON(ctx context.Context, client *http.Client, url string, body any, acceptStatus int) error {
+	if client == nil {
+		client = runtimeHTTPClient()
+	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	postCtx, cancel := context.WithTimeout(ctx, notificationPostTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(postCtx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
@@ -368,12 +375,16 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ac
 	if err != nil {
 		return fmt.Errorf("post %s: %w", redactURL(url), err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("%s returned status %d (expected 2xx, e.g. %d)", redactURL(url), resp.StatusCode, acceptStatus)
 	}
 	return nil
 }
+
+const notificationPostTimeout = 10 * time.Second
 
 // redactURL hides everything after the third path segment of a webhook
 // URL so accidental log leaks don't expose the secret token (Slack
@@ -391,13 +402,4 @@ func redactURL(u string) string {
 	}
 	parts[5] = "<redacted>"
 	return strings.Join(parts, "/")
-}
-
-func firstNonEmpty(vs ...string) string {
-	for _, v := range vs {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

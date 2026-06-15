@@ -151,39 +151,39 @@ func (r *report) WriteFile(path string) error {
 	var sb strings.Builder
 
 	sb.WriteString("# Astronomer Go — load-test report\n\n")
-	sb.WriteString(fmt.Sprintf("- Generated: `%s`\n", time.Now().UTC().Format(time.RFC3339)))
-	sb.WriteString(fmt.Sprintf("- Server: `%s`\n", r.cfg.server))
+	fmt.Fprintf(&sb, "- Generated: `%s`\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&sb, "- Server: `%s`\n", r.cfg.server)
 	if r.cfg.profileName != "" {
-		sb.WriteString(fmt.Sprintf("- Profile: `%s`\n", r.cfg.profileName))
+		fmt.Fprintf(&sb, "- Profile: `%s`\n", r.cfg.profileName)
 	}
-	sb.WriteString(fmt.Sprintf("- Clusters: `%d`\n", r.cfg.clusters))
-	sb.WriteString(fmt.Sprintf("- Target RPS: `%d`\n", r.cfg.rps))
-	sb.WriteString(fmt.Sprintf("- Configured duration: `%s`\n", r.cfg.duration))
-	sb.WriteString(fmt.Sprintf("- Resources per cluster: pods `%d`, deployments `%d`, services `%d`\n",
+	fmt.Fprintf(&sb, "- Clusters: `%d`\n", r.cfg.clusters)
+	fmt.Fprintf(&sb, "- Target RPS: `%d`\n", r.cfg.rps)
+	fmt.Fprintf(&sb, "- Configured duration: `%s`\n", r.cfg.duration)
+	fmt.Fprintf(&sb, "- Resources per cluster: pods `%d`, deployments `%d`, services `%d`\n",
 		r.cfg.resources.PodsPerCluster,
 		r.cfg.resources.DeploymentsPerCluster,
 		r.cfg.resources.ServicesPerCluster,
-	))
+	)
 	if r.cfg.reconnectStorm.Enabled {
-		sb.WriteString(fmt.Sprintf("- Reconnect storm: `%d%%` of agents at `%s` with `%s` jitter\n",
+		fmt.Fprintf(&sb, "- Reconnect storm: `%d%%` of agents at `%s` with `%s` jitter\n",
 			r.cfg.reconnectStorm.BatchPercent,
 			r.cfg.reconnectStorm.AtDuration,
 			r.cfg.reconnectStorm.JitterDuration,
-		))
+		)
 	}
 	r.rec.mu.Lock()
 	if !r.rec.startedAt.IsZero() && !r.rec.endedAt.IsZero() {
-		sb.WriteString(fmt.Sprintf("- Observed run window: `%s` (%s → %s)\n",
+		fmt.Fprintf(&sb, "- Observed run window: `%s` (%s → %s)\n",
 			r.rec.endedAt.Sub(r.rec.startedAt).Round(time.Second),
 			r.rec.startedAt.UTC().Format(time.RFC3339),
-			r.rec.endedAt.UTC().Format(time.RFC3339)))
+			r.rec.endedAt.UTC().Format(time.RFC3339))
 	}
 	r.rec.mu.Unlock()
 	sb.WriteString("\n")
 
 	// ── Verdict block — surfaced first so a grep on the file reads as a
 	//    quick pass/fail without parsing the rest.
-	sb.WriteString(fmt.Sprintf("VERDICT: %s\n\n", r.Verdict))
+	fmt.Fprintf(&sb, "VERDICT: %s\n\n", r.Verdict)
 	if len(r.Reasons) > 0 {
 		sb.WriteString("## Notes\n\n")
 		for _, reason := range r.Reasons {
@@ -198,7 +198,7 @@ func (r *report) WriteFile(path string) error {
 		sb.WriteString("## Day-2 failure drills in profile\n\n")
 		sb.WriteString("| Drill | Status |\n|---|---|\n")
 		for _, drill := range r.cfg.day2FailureDrill {
-			sb.WriteString(fmt.Sprintf("| %s | planned |\n", drill))
+			fmt.Fprintf(&sb, "| %s | planned |\n", drill)
 		}
 		sb.WriteString("\n")
 	}
@@ -206,12 +206,12 @@ func (r *report) WriteFile(path string) error {
 	// ── Thresholds applied
 	sb.WriteString("## Thresholds\n\n")
 	sb.WriteString("| Threshold | Value |\n|---|---|\n")
-	sb.WriteString(fmt.Sprintf("| cluster_list p99 | <= %dms |\n", r.thresh.clusterListP99Ms))
-	sb.WriteString(fmt.Sprintf("| cluster_pods p99 | <= %dms |\n", r.thresh.resourcesP99Ms))
-	sb.WriteString(fmt.Sprintf("| connected agents fraction | >= %.2f |\n", r.thresh.connectedAgentsMin))
-	sb.WriteString(fmt.Sprintf("| worker pending depth | <= %.0f |\n", r.thresh.dlqDepthMax))
-	sb.WriteString(fmt.Sprintf("| db pool empty-acquire rate | <= %.3f /s |\n", r.thresh.emptyAcquireMaxQPS))
-	sb.WriteString(fmt.Sprintf("| goroutine peak/start ratio | <= %.2fx |\n", r.thresh.goroutineLeakRatio))
+	fmt.Fprintf(&sb, "| cluster_list p99 | <= %dms |\n", r.thresh.clusterListP99Ms)
+	fmt.Fprintf(&sb, "| cluster_pods p99 | <= %dms |\n", r.thresh.resourcesP99Ms)
+	fmt.Fprintf(&sb, "| connected agents fraction | >= %.2f |\n", r.thresh.connectedAgentsMin)
+	fmt.Fprintf(&sb, "| worker pending depth | <= %.0f |\n", r.thresh.dlqDepthMax)
+	fmt.Fprintf(&sb, "| db pool empty-acquire rate | <= %.3f /s |\n", r.thresh.emptyAcquireMaxQPS)
+	fmt.Fprintf(&sb, "| goroutine peak/start ratio | <= %.2fx |\n", r.thresh.goroutineLeakRatio)
 	sb.WriteString("\n")
 
 	// ── Per-scenario latency table
@@ -226,14 +226,14 @@ func (r *report) WriteFile(path string) error {
 	sb.WriteString("| Scenario | Requests | Errors | p50 | p95 | p99 |\n|---|---:|---:|---:|---:|---:|\n")
 	for _, name := range scenarioNames {
 		samples := r.rec.httpSamples[name]
-		sb.WriteString(fmt.Sprintf("| %s | %d | %d | %v | %v | %v |\n",
+		fmt.Fprintf(&sb, "| %s | %d | %d | %v | %v | %v |\n",
 			name,
 			r.rec.httpCount[name],
 			r.rec.httpErrors[name],
 			percentile(samples, 0.50).Round(time.Millisecond),
 			percentile(samples, 0.95).Round(time.Millisecond),
 			percentile(samples, 0.99).Round(time.Millisecond),
-		))
+		)
 	}
 	sb.WriteString("\n")
 
@@ -243,7 +243,7 @@ func (r *report) WriteFile(path string) error {
 	for _, name := range scenarioNames {
 		codes := r.rec.httpStatus[name]
 		if len(codes) == 0 {
-			sb.WriteString(fmt.Sprintf("| %s | (no responses) |\n", name))
+			fmt.Fprintf(&sb, "| %s | (no responses) |\n", name)
 			continue
 		}
 		codeList := make([]int, 0, len(codes))
@@ -255,17 +255,17 @@ func (r *report) WriteFile(path string) error {
 		for _, code := range codeList {
 			parts = append(parts, fmt.Sprintf("%d=%d", code, codes[code]))
 		}
-		sb.WriteString(fmt.Sprintf("| %s | %s |\n", name, strings.Join(parts, " ")))
+		fmt.Fprintf(&sb, "| %s | %s |\n", name, strings.Join(parts, " "))
 	}
 	sb.WriteString("\n")
 
 	// ── Agent fleet
 	sb.WriteString("## Agent fleet\n\n")
 	sb.WriteString("| Metric | Value |\n|---|---:|\n")
-	sb.WriteString(fmt.Sprintf("| Synthetic agents launched | %d |\n", r.cfg.clusters))
-	sb.WriteString(fmt.Sprintf("| Successful CONNECT_ACKs | %d |\n", r.rec.connectCount))
-	sb.WriteString(fmt.Sprintf("| Disconnects (reconnect attempts) | %d |\n", r.rec.disconnectCount))
-	sb.WriteString(fmt.Sprintf("| Connected at end (gauge) | %.0f |\n", lastValue(r.rec.scrapeSeries["agent_connections"])))
+	fmt.Fprintf(&sb, "| Synthetic agents launched | %d |\n", r.cfg.clusters)
+	fmt.Fprintf(&sb, "| Successful CONNECT_ACKs | %d |\n", r.rec.connectCount)
+	fmt.Fprintf(&sb, "| Disconnects (reconnect attempts) | %d |\n", r.rec.disconnectCount)
+	fmt.Fprintf(&sb, "| Connected at end (gauge) | %.0f |\n", lastValue(r.rec.scrapeSeries["agent_connections"]))
 	sb.WriteString("\n")
 
 	// ── Server resource peaks
@@ -282,15 +282,15 @@ func (r *report) WriteFile(path string) error {
 		"dropped_events_total",
 	} {
 		s := r.rec.scrapeSeries[m]
-		sb.WriteString(fmt.Sprintf("| %s | %.0f | %.0f | %.0f |\n", m, peakValue(s), firstValue(s), lastValue(s)))
+		fmt.Fprintf(&sb, "| %s | %.0f | %.0f | %.0f |\n", m, peakValue(s), firstValue(s), lastValue(s))
 	}
 	sb.WriteString("\n")
 
 	// ── Driver resource peaks
 	sb.WriteString("## Driver resource peaks\n\n")
 	sb.WriteString("| Metric | Value |\n|---|---:|\n")
-	sb.WriteString(fmt.Sprintf("| Driver peak goroutines | %d |\n", r.rec.driverGoroutines))
-	sb.WriteString(fmt.Sprintf("| Driver peak heap bytes | %d |\n", r.rec.driverHeapBytes))
+	fmt.Fprintf(&sb, "| Driver peak goroutines | %d |\n", r.rec.driverGoroutines)
+	fmt.Fprintf(&sb, "| Driver peak heap bytes | %d |\n", r.rec.driverHeapBytes)
 	sb.WriteString("\n")
 	r.rec.mu.Unlock()
 

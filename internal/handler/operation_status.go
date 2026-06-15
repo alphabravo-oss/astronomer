@@ -1,5 +1,7 @@
 package handler
 
+import "github.com/alphabravocompany/astronomer-go/internal/operationstate"
+
 // OperationStatus values stored in the *_operations tables. Reconcilers
 // and dispatchers read/write these via the constants so a typo can't
 // silently break a state transition.
@@ -18,9 +20,9 @@ package handler
 // happen to overlap on some strings — do NOT swap those call sites to
 // these constants.
 const (
-	OpStatusPending    = "pending"
-	OpStatusRunning    = "running"
-	OpStatusCompleted  = "completed"
-	OpStatusFailed     = "failed"
-	OpStatusSuperseded = "superseded"
+	OpStatusPending    = operationstate.Pending
+	OpStatusRunning    = operationstate.Running
+	OpStatusCompleted  = operationstate.Completed
+	OpStatusFailed     = operationstate.Failed
+	OpStatusSuperseded = operationstate.Superseded
 )

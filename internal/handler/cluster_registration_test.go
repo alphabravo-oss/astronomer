@@ -114,30 +114,42 @@ func (f *fakeRegistrationQuerier) GetClusterRegistrationRecord(ctx context.Conte
 	return *r, nil
 }
 
-func (f *fakeRegistrationQuerier) UpdateClusterRegistrationPhase(ctx context.Context, arg sqlc.UpdateClusterRegistrationPhaseParams) (sqlc.ClusterRegistrationRecord, error) {
+func (f *fakeRegistrationQuerier) UpdateClusterRegistrationPhase(ctx context.Context, arg sqlc.UpdateClusterRegistrationPhaseParams) (sqlc.UpdateClusterRegistrationPhaseRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	r, ok := f.regs[arg.ID]
 	if !ok {
-		return sqlc.ClusterRegistrationRecord{}, pgx.ErrNoRows
+		return sqlc.UpdateClusterRegistrationPhaseRow{}, pgx.ErrNoRows
 	}
-	r.RegistrationPhase = arg.Phase
-	if !r.RegistrationStartedAt.Valid && arg.StartedAt.Valid {
-		r.RegistrationStartedAt = arg.StartedAt
+	r.RegistrationPhase = arg.RegistrationPhase
+	if !r.RegistrationStartedAt.Valid && arg.RegistrationStartedAt.Valid {
+		r.RegistrationStartedAt = arg.RegistrationStartedAt
 	}
-	r.RegistrationCompletedAt = arg.CompletedAt
-	return *r, nil
+	r.RegistrationCompletedAt = arg.RegistrationCompletedAt
+	return sqlc.UpdateClusterRegistrationPhaseRow{
+		ID:                      r.ID,
+		RegistrationPhase:       r.RegistrationPhase,
+		RegistrationStartedAt:   r.RegistrationStartedAt,
+		RegistrationCompletedAt: r.RegistrationCompletedAt,
+		InstallBaseline:         r.InstallBaseline,
+	}, nil
 }
 
-func (f *fakeRegistrationQuerier) SetClusterInstallBaseline(ctx context.Context, arg sqlc.SetClusterInstallBaselineParams) (sqlc.ClusterRegistrationRecord, error) {
+func (f *fakeRegistrationQuerier) SetClusterInstallBaseline(ctx context.Context, arg sqlc.SetClusterInstallBaselineParams) (sqlc.SetClusterInstallBaselineRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	r, ok := f.regs[arg.ID]
 	if !ok {
-		return sqlc.ClusterRegistrationRecord{}, pgx.ErrNoRows
+		return sqlc.SetClusterInstallBaselineRow{}, pgx.ErrNoRows
 	}
 	r.InstallBaseline = arg.InstallBaseline
-	return *r, nil
+	return sqlc.SetClusterInstallBaselineRow{
+		ID:                      r.ID,
+		RegistrationPhase:       r.RegistrationPhase,
+		RegistrationStartedAt:   r.RegistrationStartedAt,
+		RegistrationCompletedAt: r.RegistrationCompletedAt,
+		InstallBaseline:         r.InstallBaseline,
+	}, nil
 }
 
 func (f *fakeRegistrationQuerier) InsertClusterRegistrationStep(ctx context.Context, arg sqlc.InsertClusterRegistrationStepParams) (sqlc.ClusterRegistrationStep, error) {
@@ -150,7 +162,7 @@ func (f *fakeRegistrationQuerier) InsertClusterRegistrationStep(ctx context.Cont
 		Label:        arg.Label,
 		Status:       arg.Status,
 		ProgressPct:  arg.ProgressPct,
-		DetailJSON:   arg.DetailJSON,
+		DetailJson:   arg.DetailJson,
 		StartedAt:    arg.StartedAt,
 		CompletedAt:  arg.CompletedAt,
 		ErrorMessage: arg.ErrorMessage,
@@ -167,8 +179,8 @@ func (f *fakeRegistrationQuerier) UpdateClusterRegistrationStep(ctx context.Cont
 		if f.steps[i].ID == arg.ID {
 			f.steps[i].Status = arg.Status
 			f.steps[i].ProgressPct = arg.ProgressPct
-			if len(arg.DetailJSON) > 0 {
-				f.steps[i].DetailJSON = arg.DetailJSON
+			if len(arg.DetailJson) > 0 {
+				f.steps[i].DetailJson = arg.DetailJson
 			}
 			f.steps[i].CompletedAt = arg.CompletedAt
 			f.steps[i].ErrorMessage = arg.ErrorMessage
@@ -223,7 +235,7 @@ func setupHandler(t *testing.T) (*ClusterRegistrationHandler, *fakeRegistrationQ
 	id := uuid.New()
 	q.clusters[id] = sqlc.Cluster{ID: id, Name: "test-cluster"}
 	q.regs[id] = &sqlc.ClusterRegistrationRecord{
-		ClusterID:         id,
+		ID:                id,
 		RegistrationPhase: string(registration.PhaseCreated),
 	}
 	bus := events.NewBus()

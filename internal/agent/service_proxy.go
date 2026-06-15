@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -95,6 +96,9 @@ func (sp *ServiceProxy) HandleRequest(ctx context.Context, msg *protocol.Message
 		return sp.errorResponse(msg, http.StatusInternalServerError, err), nil
 	}
 	for k, v := range req.Headers {
+		if isServiceProxyClientOnlyHeader(k) {
+			continue
+		}
 		httpReq.Header.Set(k, v)
 	}
 
@@ -106,7 +110,9 @@ func (sp *ServiceProxy) HandleRequest(ctx context.Context, msg *protocol.Message
 		}
 		return sp.errorResponse(msg, http.StatusBadGateway, err), nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	limited := io.LimitReader(resp.Body, MaxServiceProxyResponseSize+1)
 	body, err := io.ReadAll(limited)
@@ -150,4 +156,21 @@ func (sp *ServiceProxy) wrapResponse(msg *protocol.Message, out *protocol.Servic
 		Timestamp: time.Now().UTC(),
 		Payload:   payload,
 	}
+}
+
+func isServiceProxyClientOnlyHeader(name string) bool {
+	lower := strings.ToLower(name)
+	switch lower {
+	case "authorization", "cookie", "host", "proxy-authorization":
+		return true
+	case "connection", "keep-alive", "proxy-authenticate", "te", "trailers", "transfer-encoding", "upgrade":
+		return true
+	}
+	if strings.HasPrefix(lower, "x-forwarded-") {
+		return true
+	}
+	if strings.HasPrefix(lower, "impersonate-") {
+		return true
+	}
+	return false
 }

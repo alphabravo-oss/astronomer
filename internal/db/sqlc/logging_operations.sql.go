@@ -63,6 +63,47 @@ func (q *Queries) CreateLoggingOperation(ctx context.Context, arg CreateLoggingO
 	return i, err
 }
 
+const createLoggingOperationEvent = `-- name: CreateLoggingOperationEvent :one
+INSERT INTO logging_operation_events (
+    operation_id,
+    level,
+    stage,
+    message,
+    detail
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, operation_id, level, stage, message, detail, created_at
+`
+
+type CreateLoggingOperationEventParams struct {
+	OperationID uuid.UUID       `json:"operation_id"`
+	Level       string          `json:"level"`
+	Stage       string          `json:"stage"`
+	Message     string          `json:"message"`
+	Detail      json.RawMessage `json:"detail"`
+}
+
+func (q *Queries) CreateLoggingOperationEvent(ctx context.Context, arg CreateLoggingOperationEventParams) (LoggingOperationEvent, error) {
+	row := q.db.QueryRow(ctx, createLoggingOperationEvent,
+		arg.OperationID,
+		arg.Level,
+		arg.Stage,
+		arg.Message,
+		arg.Detail,
+	)
+	var i LoggingOperationEvent
+	err := row.Scan(
+		&i.ID,
+		&i.OperationID,
+		&i.Level,
+		&i.Stage,
+		&i.Message,
+		&i.Detail,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getLoggingOperation = `-- name: GetLoggingOperation :one
 SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at FROM logging_operations WHERE id = $1
 `
@@ -86,6 +127,40 @@ func (q *Queries) GetLoggingOperation(ctx context.Context, id uuid.UUID) (Loggin
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listLoggingOperationEvents = `-- name: ListLoggingOperationEvents :many
+SELECT id, operation_id, level, stage, message, detail, created_at FROM logging_operation_events
+WHERE operation_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]LoggingOperationEvent, error) {
+	rows, err := q.db.Query(ctx, listLoggingOperationEvents, operationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LoggingOperationEvent{}
+	for rows.Next() {
+		var i LoggingOperationEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperationID,
+			&i.Level,
+			&i.Stage,
+			&i.Message,
+			&i.Detail,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLoggingOperations = `-- name: ListLoggingOperations :many
@@ -190,39 +265,6 @@ func (q *Queries) ListPendingLoggingOperations(ctx context.Context, limit int32)
 	return items, nil
 }
 
-const markLoggingOperationRunning = `-- name: MarkLoggingOperationRunning :one
-UPDATE logging_operations
-SET
-    status = 'running',
-    attempt_count = attempt_count + 1,
-    started_at = now(),
-    error_message = '',
-    updated_at = now()
-WHERE id = $1
-RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
-`
-
-func (q *Queries) MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error) {
-	row := q.db.QueryRow(ctx, markLoggingOperationRunning, id)
-	var i LoggingOperation
-	err := row.Scan(
-		&i.ID,
-		&i.TargetType,
-		&i.TargetKey,
-		&i.OperationType,
-		&i.Payload,
-		&i.Status,
-		&i.AttemptCount,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ErrorMessage,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const markLoggingOperationCompleted = `-- name: MarkLoggingOperationCompleted :one
 UPDATE logging_operations
 SET
@@ -273,6 +315,39 @@ type MarkLoggingOperationFailedParams struct {
 
 func (q *Queries) MarkLoggingOperationFailed(ctx context.Context, arg MarkLoggingOperationFailedParams) (LoggingOperation, error) {
 	row := q.db.QueryRow(ctx, markLoggingOperationFailed, arg.ID, arg.ErrorMessage)
+	var i LoggingOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markLoggingOperationRunning = `-- name: MarkLoggingOperationRunning :one
+UPDATE logging_operations
+SET
+    status = 'running',
+    attempt_count = attempt_count + 1,
+    started_at = now(),
+    error_message = '',
+    updated_at = now()
+WHERE id = $1
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+func (q *Queries) MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error) {
+	row := q.db.QueryRow(ctx, markLoggingOperationRunning, id)
 	var i LoggingOperation
 	err := row.Scan(
 		&i.ID,
@@ -360,79 +435,4 @@ func (q *Queries) RequeueLoggingOperation(ctx context.Context, id uuid.UUID) (Lo
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const createLoggingOperationEvent = `-- name: CreateLoggingOperationEvent :one
-INSERT INTO logging_operation_events (
-    operation_id,
-    level,
-    stage,
-    message,
-    detail
-)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, operation_id, level, stage, message, detail, created_at
-`
-
-type CreateLoggingOperationEventParams struct {
-	OperationID uuid.UUID       `json:"operation_id"`
-	Level       string          `json:"level"`
-	Stage       string          `json:"stage"`
-	Message     string          `json:"message"`
-	Detail      json.RawMessage `json:"detail"`
-}
-
-func (q *Queries) CreateLoggingOperationEvent(ctx context.Context, arg CreateLoggingOperationEventParams) (LoggingOperationEvent, error) {
-	row := q.db.QueryRow(ctx, createLoggingOperationEvent,
-		arg.OperationID,
-		arg.Level,
-		arg.Stage,
-		arg.Message,
-		arg.Detail,
-	)
-	var i LoggingOperationEvent
-	err := row.Scan(
-		&i.ID,
-		&i.OperationID,
-		&i.Level,
-		&i.Stage,
-		&i.Message,
-		&i.Detail,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const listLoggingOperationEvents = `-- name: ListLoggingOperationEvents :many
-SELECT id, operation_id, level, stage, message, detail, created_at FROM logging_operation_events
-WHERE operation_id = $1
-ORDER BY created_at ASC
-`
-
-func (q *Queries) ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]LoggingOperationEvent, error) {
-	rows, err := q.db.Query(ctx, listLoggingOperationEvents, operationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []LoggingOperationEvent{}
-	for rows.Next() {
-		var i LoggingOperationEvent
-		if err := rows.Scan(
-			&i.ID,
-			&i.OperationID,
-			&i.Level,
-			&i.Stage,
-			&i.Message,
-			&i.Detail,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

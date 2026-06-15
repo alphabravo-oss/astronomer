@@ -63,7 +63,7 @@ type APIRateLimitConfig struct {
 // Operators override via chart values.
 var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
 	ClassSearch:   {RatePerSecond: 10.0 / 60.0, Burst: 5}, // 10/min sustained, brief burst of 5
-	ClassK8sProxy: {RatePerSecond: 60.0 / 60.0, Burst: 20},
+	ClassK8sProxy: {RatePerSecond: 1.0, Burst: 20},
 	ClassExecLogs: {RatePerSecond: 30.0 / 60.0, Burst: 5}, // 30 new sessions/min
 	ClassHelm:     {RatePerSecond: 5.0 / 60.0, Burst: 2},
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/anomaly"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
 // anomalyEvalQuerier is the narrow interface needed by
@@ -155,7 +156,7 @@ func evaluateAnomalyForCluster(ctx context.Context, q anomalyEvalQuerier, rule s
 		blob, _ := json.Marshal(details)
 		return false, "", blob, pgClusterID, nil
 	}
-	displayName := firstNonEmptyString(cluster.DisplayName, cluster.Name)
+	displayName := strutil.FirstNonBlank(cluster.DisplayName, cluster.Name)
 	message := fmt.Sprintf(
 		"Cluster %s %s=%.3f deviates from baseline mean=%.3f stddev=%.3f (threshold=%.1fσ, direction=%s)",
 		displayName, cfg.Metric, current, baseline.Mean, baseline.Stddev, cfg.StddevMult, cfg.Direction,

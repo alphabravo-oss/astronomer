@@ -12,9 +12,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+const defaultWorkerHTTPTimeout = httpclient.DefaultExternalTimeout
 
 // K8sRequester is the local mirror of handler.K8sRequester used by tasks
 // that need to round-trip CRDs through the tunnel (Phase B2 Velero, Phase
@@ -157,7 +160,7 @@ func init() {
 func ConfigureRuntime(deps RuntimeDependencies) {
 	runtimeDeps = deps
 	if runtimeDeps.HTTPClient == nil {
-		runtimeDeps.HTTPClient = http.DefaultClient
+		runtimeDeps.HTTPClient = httpclient.New(defaultWorkerHTTPTimeout)
 	}
 	if runtimeDeps.Log == nil {
 		runtimeDeps.Log = slog.Default()
@@ -174,6 +177,13 @@ func ConfigureRuntime(deps RuntimeDependencies) {
 	if runtimeDeps.AuditLogRetentionMonths <= 0 {
 		runtimeDeps.AuditLogRetentionMonths = 13
 	}
+}
+
+func runtimeHTTPClient() *http.Client {
+	if runtimeDeps.HTTPClient != nil {
+		return runtimeDeps.HTTPClient
+	}
+	return httpclient.DefaultExternal()
 }
 
 func resetRuntime() {

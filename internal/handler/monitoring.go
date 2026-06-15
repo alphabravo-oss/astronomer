@@ -972,7 +972,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
-	backendID := uuid.Nil
+	var backendID uuid.UUID
 	if req.BackendID != nil {
 		backendID = *req.BackendID
 	} else {

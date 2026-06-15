@@ -120,8 +120,8 @@ type promVectorResult struct {
 // We don't share across skip-verify=true and skip-verify=false because
 // the transport's TLS config is connection-pool-scoped.
 var (
-	clientMu      sync.Mutex
-	httpClients   = map[bool]*http.Client{}
+	clientMu    sync.Mutex
+	httpClients = map[bool]*http.Client{}
 )
 
 func httpClientFor(skipVerify bool) *http.Client {
@@ -250,11 +250,11 @@ func (c *promCache) putStat(k string, v float64, ok bool) {
 
 // ── Query helpers ─────────────────────────────────────────────────────
 
-// parseDuration accepts Prometheus-style suffixes (s, m, h, d, w) and
+// parsePromDuration accepts Prometheus-style suffixes (s, m, h, d, w) and
 // returns a time.Duration. Used both for the lookback window and the
 // step size. Unknown suffixes fall back to time.ParseDuration so
 // callers can use the standard Go format too.
-func parseDuration(s string) (time.Duration, error) {
+func parsePromDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("empty duration")
@@ -288,11 +288,11 @@ func parseDuration(s string) (time.Duration, error) {
 // time.Now() in production; tests pin it to a fixed time for golden
 // matrix shapes.
 func QueryRange(ctx context.Context, cache *Cache, ds Datasource, query, duration, step string, now time.Time) (PromMatrix, error) {
-	dur, err := parseDuration(duration)
+	dur, err := parsePromDuration(duration)
 	if err != nil {
 		return PromMatrix{}, fmt.Errorf("invalid duration: %w", err)
 	}
-	stepDur, err := parseDuration(step)
+	stepDur, err := parsePromDuration(step)
 	if err != nil {
 		return PromMatrix{}, fmt.Errorf("invalid step: %w", err)
 	}
@@ -323,13 +323,15 @@ func QueryRange(ctx context.Context, cache *Cache, ds Datasource, query, duratio
 	if err != nil {
 		return PromMatrix{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return PromMatrix{}, err
 	}
 	if resp.StatusCode/100 != 2 {
-		return PromMatrix{}, fmt.Errorf("prometheus %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return PromMatrix{}, fmt.Errorf("prometheus %d: %s", resp.StatusCode, truncatePromErrorBody(string(body), 200))
 	}
 	var env promQueryResp
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -384,13 +386,15 @@ func EvalStat(ctx context.Context, cache *Cache, ds Datasource, query string) (f
 	if err != nil {
 		return 0, false, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, false, err
 	}
 	if resp.StatusCode/100 != 2 {
-		return 0, false, fmt.Errorf("prometheus %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return 0, false, fmt.Errorf("prometheus %d: %s", resp.StatusCode, truncatePromErrorBody(string(body), 200))
 	}
 	var env promQueryResp
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -474,7 +478,7 @@ func toFloat(v any) (float64, bool) {
 	return 0, false
 }
 
-func truncate(s string, n int) string {
+func truncatePromErrorBody(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}

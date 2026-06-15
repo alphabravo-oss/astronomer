@@ -305,6 +305,7 @@ func (w *Writer) flushBatch(batch []sqlc.CreateAuditLogV1Params, reason string) 
 
 	if err := w.q.BatchInsertAuditLog(ctx, batch); err != nil {
 		recordBatchInsert("error", len(batch))
+		recordWriteFailure("async_batch")
 		w.log.Warn("audit writer batch insert failed",
 			"event", "audit_batch_insert_failed",
 			"batch_size", len(batch),

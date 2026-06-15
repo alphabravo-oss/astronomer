@@ -15,9 +15,9 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Gauge,
-  Loader2,
 } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ErrorState, LoadingState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { useQuotaUsage } from '@/components/settings/hooks';
@@ -65,17 +65,15 @@ function UsageInner() {
   const { data, isLoading, error } = useQuotaUsage();
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState title="Loading quota usage" description="Fetching current utilization across projects and clusters." className="h-48 py-0" />;
   }
   if (error || !data) {
     return (
-      <div className="rounded-xl border border-border bg-card p-6">
-        <p className="text-sm text-status-error">Failed to load quota usage.</p>
-      </div>
+      <ErrorState
+        title="Failed to load quota usage"
+        description="Refresh the page or retry after the settings API is reachable."
+        className="rounded-xl border border-border bg-card p-6"
+      />
     );
   }
 

@@ -92,8 +92,8 @@ func (f *fakeReapQuerier) SetKubectlSessionStatus(_ context.Context, arg sqlc.Se
 	defer f.mu.Unlock()
 	if r, ok := f.sessions[arg.ID]; ok {
 		r.Status = arg.Status
-		if arg.LastError.Valid {
-			r.LastError = arg.LastError.String
+		if arg.LastError != "" {
+			r.LastError = arg.LastError
 		}
 		if arg.Status == "closed" || arg.Status == "expired" || arg.Status == "failed" {
 			r.ClosedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}

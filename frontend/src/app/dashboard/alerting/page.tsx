@@ -17,6 +17,7 @@ import {
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type {
   AlertRule,
@@ -563,8 +564,7 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
   const isPending = createRule.isPending || updateRule.isPending;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">
@@ -815,7 +815,7 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -888,8 +888,7 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Add Notification Channel</h3>
@@ -981,7 +980,7 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -1032,8 +1031,7 @@ function SilenceModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Silence</h3>
@@ -1138,6 +1136,6 @@ function SilenceModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

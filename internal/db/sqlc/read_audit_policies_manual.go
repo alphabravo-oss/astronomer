@@ -12,25 +12,10 @@ package sqlc
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// ReadAuditPolicy mirrors the read_audit_policies row.
-type ReadAuditPolicy struct {
-	ID          uuid.UUID   `json:"id"`
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	PathPattern string      `json:"path_pattern"`
-	Verbs       string      `json:"verbs"`
-	SampleRate  float64     `json:"sample_rate"`
-	Enabled     bool        `json:"enabled"`
-	CreatedBy   pgtype.UUID `json:"created_by"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
-}
 
 const readAuditPolicyColumns = `id, name, description, path_pattern, verbs, sample_rate, enabled, created_by, created_at, updated_at`
 

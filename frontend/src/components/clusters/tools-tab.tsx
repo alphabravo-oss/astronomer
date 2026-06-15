@@ -3,10 +3,13 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useTools, useClusterToolsStatus, useInstallTool, useUninstallTool, useAdoptTool } from '@/lib/hooks';
+import { usePermissionDecision } from '@/lib/permission-hooks';
+import type { PermissionDecision } from '@/lib/permissions';
 import { ToolCard } from '@/components/clusters/tool-card';
 import { ToolPreviewModal } from '@/components/clusters/tool-preview-modal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loader2, Wrench, Sparkles } from 'lucide-react';
+import { toastWarning } from '@/lib/toast';
 
 interface ToolsTabProps {
   clusterId: string;
@@ -14,10 +17,21 @@ interface ToolsTabProps {
   clusterStatus?: string;
 }
 
+function permissionDeniedReason(decision: PermissionDecision): string {
+  return decision.disabledReason || decision.reason;
+}
+
+function toastPermissionDenied(decision: PermissionDecision) {
+  toastWarning(permissionDeniedReason(decision));
+}
+
 export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: ToolsTabProps) {
   const isDisconnected = clusterStatus === 'disconnected';
   const { data: tools, isLoading: toolsLoading } = useTools();
   const { data: statuses } = useClusterToolsStatus(clusterId);
+  const catalogScope = { type: 'cluster' as const, id: clusterId };
+  const catalogCreateDecision = usePermissionDecision('catalog', 'create', catalogScope);
+  const catalogDeleteDecision = usePermissionDecision('catalog', 'delete', catalogScope);
 
   const installMutation = useInstallTool();
   const uninstallMutation = useUninstallTool();
@@ -34,6 +48,10 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
     : 'development';
 
   const handleInstall = (slug: string, preset: string) => {
+    if (!catalogCreateDecision.allowed) {
+      toastPermissionDenied(catalogCreateDecision);
+      return;
+    }
     const tool = tools?.find((t) => t.slug === slug);
     if (tool) {
       setPreviewTool({ slug, name: tool.name, preset });
@@ -42,6 +60,10 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
 
   const handleConfirmInstall = (valuesOverride?: string) => {
     if (!previewTool) return;
+    if (!catalogCreateDecision.allowed) {
+      toastPermissionDenied(catalogCreateDecision);
+      return;
+    }
     installMutation.mutate(
       {
         slug: previewTool.slug,
@@ -56,11 +78,19 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
   };
 
   const handleUninstall = (slug: string) => {
+    if (!catalogDeleteDecision.allowed) {
+      toastPermissionDenied(catalogDeleteDecision);
+      return;
+    }
     setUninstallSlug(slug);
   };
 
   const handleConfirmUninstall = () => {
     if (!uninstallSlug) return;
+    if (!catalogDeleteDecision.allowed) {
+      toastPermissionDenied(catalogDeleteDecision);
+      return;
+    }
     uninstallMutation.mutate(
       { slug: uninstallSlug, cluster_id: clusterId },
       {
@@ -70,6 +100,10 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
   };
 
   const handleAdopt = (slug: string, releaseName: string) => {
+    if (!catalogCreateDecision.allowed) {
+      toastPermissionDenied(catalogCreateDecision);
+      return;
+    }
     adoptMutation.mutate({ slug, cluster_id: clusterId, release_name: releaseName });
   };
 
@@ -96,7 +130,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
   // cluster, surface a prominent "Apply Platform Baseline template"
   // pointer at the cluster's template-attach page. The baseline (sprint
   // 074 seed) wires trivy-operator + kube-state-metrics + node-exporter
-  // + fluent-bit + cert-manager in one click. Operators registered
+  // + fluent-bit + ingress-nginx + cert-manager + gatekeeper in one click. Operators registered
   // BEFORE sprint 074 don't have the auto-attach for free — this banner
   // bridges them.
   const noToolsInstalled =
@@ -114,8 +148,8 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
             <p className="text-xs text-muted-foreground mt-1">
               Apply the <strong>Platform Baseline</strong> template to install Astronomer&apos;s
               recommended operators in one step: image-scanning (trivy-operator), metrics
-              (kube-state-metrics, node-exporter), log forwarding (fluent-bit), and TLS
-              (cert-manager). New clusters get this automatically.
+              (kube-state-metrics, node-exporter), log forwarding (fluent-bit), ingress
+              (ingress-nginx), TLS (cert-manager), and policy (Gatekeeper). New clusters get this automatically.
             </p>
             <Link
               href={`/dashboard/clusters/${clusterId}/template`}
@@ -137,6 +171,9 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
             onInstall={handleInstall}
             onUninstall={handleUninstall}
             onAdopt={handleAdopt}
+            installDisabledReason={!catalogCreateDecision.allowed ? permissionDeniedReason(catalogCreateDecision) : undefined}
+            adoptDisabledReason={!catalogCreateDecision.allowed ? permissionDeniedReason(catalogCreateDecision) : undefined}
+            uninstallDisabledReason={!catalogDeleteDecision.allowed ? permissionDeniedReason(catalogDeleteDecision) : undefined}
             installing={installMutation.isPending && installMutation.variables?.slug === tool.slug}
             uninstalling={uninstallMutation.isPending && uninstallMutation.variables?.slug === tool.slug}
             clusterDisconnected={isDisconnected}
@@ -154,6 +191,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
           onConfirm={handleConfirmInstall}
           onClose={() => setPreviewTool(null)}
           installing={installMutation.isPending}
+          confirmDecision={catalogCreateDecision}
         />
       )}
 
@@ -165,6 +203,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
         title="Disable Tool"
         description={`This will uninstall ${uninstallTool?.name || 'this tool'} from the cluster. All related resources will be removed.`}
         confirmText="Disable"
+        confirmDisabledReason={!catalogDeleteDecision.allowed ? permissionDeniedReason(catalogDeleteDecision) : undefined}
         variant="destructive"
         loading={uninstallMutation.isPending}
       />

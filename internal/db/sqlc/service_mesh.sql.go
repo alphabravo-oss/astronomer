@@ -11,29 +11,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// ClusterServiceMesh mirrors the cluster_service_mesh row. One row per
-// cluster; populated by the mesh:detect worker on a 5m cadence and on
-// the on-demand POST .../service-mesh/detect/ handler.
-type ClusterServiceMesh struct {
-	ClusterID               uuid.UUID          `json:"cluster_id"`
-	DetectedMesh            string             `json:"detected_mesh"`
-	DetectedVersion         string             `json:"detected_version"`
-	ControlPlaneNamespace   string             `json:"control_plane_namespace"`
-	GatewayCount            int32              `json:"gateway_count"`
-	VirtualServiceCount     int32              `json:"virtual_service_count"`
-	DestinationRuleCount    int32              `json:"destination_rule_count"`
-	PeerAuthenticationCount int32              `json:"peer_authentication_count"`
-	ServiceProfileCount     int32              `json:"service_profile_count"`
-	ServerAuthCount         int32              `json:"server_auth_count"`
-	MtlsCoveragePct         int32              `json:"mtls_coverage_pct"`
-	LastDetectedAt          pgtype.Timestamptz `json:"last_detected_at"`
-	LastError               string             `json:"last_error"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-}
 
 const clusterServiceMeshColumns = `cluster_id, detected_mesh, detected_version, control_plane_namespace,
     gateway_count, virtual_service_count, destination_rule_count,

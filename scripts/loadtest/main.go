@@ -26,9 +26,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
-	"nhooyr.io/websocket"
 )
 
 // Build-time defaults. All overridable via flags.
@@ -314,7 +314,9 @@ func verifyServer(server, token string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("auth/me/ returned %d — token missing or invalid", resp.StatusCode)
 	}
@@ -782,7 +784,9 @@ func doRequest(ctx context.Context, client *http.Client, server, token string, s
 		rec.RecordHTTP(sc.name, 0, elapsed, err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	// Drain the body — readers that don't drain leak the connection in the
 	// underlying transport.
 	_, _ = io.Copy(io.Discard, resp.Body)

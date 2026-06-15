@@ -37,6 +37,7 @@ Anything reachable from a `runbook_url` annotation on a PrometheusRule
 | OIDC / SSO outage | [oidc-outage.md](oidc-outage.md) |
 | License expiry | [license-expiry.md](license-expiry.md) |
 | Postgres PVC near full | [postgres-disk-full.md](postgres-disk-full.md) |
+| CRD stuck deleting / finalizer recovery | [crd-finalizer-recovery.md](crd-finalizer-recovery.md) |
 
 ## Cross-references
 

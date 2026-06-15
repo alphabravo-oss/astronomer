@@ -309,16 +309,27 @@ type ErrorPayload struct {
 	Message string `json:"message"`
 }
 
+const HeartbeatSchemaVersion = 2
+
 // HeartbeatPayload from agent health reports.
 type HeartbeatPayload struct {
-	Timestamp          string  `json:"timestamp"`
-	KubernetesVersion  string  `json:"kubernetes_version"`
-	Distribution       string  `json:"distribution"`
-	NodeCount          int     `json:"node_count"`
-	PodCount           int     `json:"pod_count"`
-	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
-	MemoryUsagePercent float64 `json:"memory_usage_percent"`
-	AgentVersion       string  `json:"agent_version"`
+	SchemaVersion          int      `json:"schema_version"`
+	Timestamp              string   `json:"timestamp"`
+	KubernetesVersion      string   `json:"kubernetes_version"`
+	Distribution           string   `json:"distribution"`
+	NodeCount              int      `json:"node_count"`
+	PodCount               int      `json:"pod_count"`
+	CPUUsagePercent        float64  `json:"cpu_usage_percent"`
+	MemoryUsagePercent     float64  `json:"memory_usage_percent"`
+	AgentVersion           string   `json:"agent_version"`
+	AgentBuildSHA          string   `json:"agent_build_sha,omitempty"`
+	PrivilegeProfile       string   `json:"privilege_profile,omitempty"`
+	AvailableAPIs          []string `json:"available_apis,omitempty"`
+	EnabledFeatures        []string `json:"enabled_features,omitempty"`
+	DeniedFeatures         []string `json:"denied_features,omitempty"`
+	LastSuccessfulAction   string   `json:"last_successful_action,omitempty"`
+	LastSuccessfulActionAt string   `json:"last_successful_action_at,omitempty"`
+	DegradedReasons        []string `json:"degraded_reasons,omitempty"`
 }
 
 // ExecStartPayload to initiate pod exec.

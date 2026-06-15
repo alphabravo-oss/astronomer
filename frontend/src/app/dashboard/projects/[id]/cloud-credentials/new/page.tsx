@@ -23,6 +23,7 @@ import {
 } from '@/components/projects/hooks';
 import { CredentialForm } from '@/components/projects/cloud-credentials/credential-form';
 import { ProviderBadge } from '@/components/projects/cloud-credentials/provider-badge';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import type { CloudCredentialProviderSpec } from '@/lib/api/project-detail';
 import { cn } from '@/lib/utils';
 
@@ -155,7 +156,7 @@ export default function NewCloudCredentialPage({ params }: NewPageProps) {
                 await createMutation.mutateAsync(body);
                 router.push(backToList);
               } catch (err) {
-                const msg = extractAxiosError(err) ?? 'Failed to create credential.';
+                const msg = extractApiErrorMessage(err) ?? 'Failed to create credential.';
                 setServerError(msg);
               }
             }}
@@ -163,22 +164,5 @@ export default function NewCloudCredentialPage({ params }: NewPageProps) {
         </div>
       )}
     </div>
-  );
-}
-
-// Same shape used by the Dex wizard: surface the server's
-// `error.message` so missing-fields lists land inline.
-function extractAxiosError(err: unknown): string | null {
-  if (!err) return null;
-  type ResponseShape = {
-    response?: { data?: { error?: { message?: string }; message?: string } };
-    message?: string;
-  };
-  const obj = err as ResponseShape;
-  return (
-    obj.response?.data?.error?.message ??
-    obj.response?.data?.message ??
-    obj.message ??
-    null
   );
 }

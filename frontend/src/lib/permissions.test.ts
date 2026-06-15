@@ -1,4 +1,4 @@
-import { can, isSuperuser } from './permissions';
+import { can, explainPermission, isSuperuser } from './permissions';
 import type { User } from '@/types';
 
 const baseUser: User = {
@@ -72,5 +72,39 @@ describe('permissions', () => {
 
     expect(can(user, 'workloads', 'read', { type: 'cluster', id: 'cluster-a' })).toBe(true);
     expect(can(user, 'workloads', 'read', { type: 'cluster', id: 'cluster-b' })).toBe(false);
+  });
+
+  it('explains denied scoped permissions with the required grant and request path', () => {
+    const decision = explainPermission(baseUser, 'clusters', 'update', { type: 'cluster', id: 'cluster-a' });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.permission).toBe('clusters:update');
+    expect(decision.scopeLabel).toBe('cluster:cluster-a');
+    expect(decision.disabledReason).toContain('Requires clusters:update for cluster cluster-a');
+    expect(decision.disabledReason).toContain('Request access from a cluster owner or platform administrator.');
+  });
+
+  it('reports the role binding that grants a scoped permission', () => {
+    const user: User = {
+      ...baseUser,
+      roles: {
+        global: [],
+        cluster: [
+          {
+            id: 'b1',
+            roleName: 'Cluster Operator',
+            clusterId: 'cluster-a',
+            roleRules: [{ resource: 'clusters', verbs: ['update'] }],
+          },
+        ],
+        project: [],
+      },
+    };
+
+    const decision = explainPermission(user, 'clusters', 'update', { type: 'cluster', id: 'cluster-a' });
+
+    expect(decision.allowed).toBe(true);
+    expect(decision.grantedBy).toEqual(['Cluster Operator (cluster:cluster-a)']);
+    expect(decision.reason).toBe('Granted by Cluster Operator (cluster:cluster-a).');
   });
 });

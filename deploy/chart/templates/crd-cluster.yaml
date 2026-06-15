@@ -103,7 +103,12 @@ spec:
                       enum:
                         - viewer
                         - operator
+                        - namespace-viewer
+                        - namespace-operator
+                        - custom
                         - admin
+                    profileRef:
+                      type: string
                 adoptionPolicy:
                   type: object
                   properties:

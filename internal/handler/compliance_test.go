@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -56,7 +55,7 @@ func readZipFiles(t *testing.T, body []byte) map[string][]byte {
 			t.Fatalf("open %s: %v", f.Name, err)
 		}
 		b, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			t.Fatalf("read %s: %v", f.Name, err)
 		}
@@ -73,7 +72,7 @@ func TestCompliance_StreamSmallRange(t *testing.T) {
 
 	// Seed a tiny audit log and one binding so each section has at
 	// least one row to write.
-	q.auditRows = []sqlc.AuditLog{
+	q.auditRows = []sqlc.ListAuditLogV1ForRangeRow{
 		{
 			ID:        uuid.New(),
 			CreatedAt: time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC),
@@ -103,7 +102,7 @@ func TestCompliance_StreamSmallRange(t *testing.T) {
 		Environment: "production",
 		Status:      "active",
 	}}
-	q.tokens = []sqlc.ComplianceAPITokenRow{{
+	q.tokens = []sqlc.ListAPITokensForComplianceRow{{
 		ID:           uuid.New(),
 		UserID:       callerID,
 		Username:     "alice",
@@ -111,10 +110,10 @@ func TestCompliance_StreamSmallRange(t *testing.T) {
 		Name:         "ci-token",
 		Prefix:       "ast_abc",
 		Scopes:       []byte(`["read"]`),
-		AllowedCIDRs: "10.0.0.0/8",
+		AllowedCidrs: "10.0.0.0/8",
 		CreatedAt:    time.Now().UTC(),
 	}}
-	q.projects = []sqlc.ComplianceProjectRow{{
+	q.projects = []sqlc.ListAllProjectsForComplianceRow{{
 		ID:                       uuid.New(),
 		Name:                     "p1",
 		ClusterID:                uuid.New(),
@@ -178,7 +177,7 @@ func TestCompliance_StreamSmallRange(t *testing.T) {
 func TestCompliance_AuthEventsCSV_Filters(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeComplianceQuerier(callerID, true)
-	q.auditRows = []sqlc.AuditLog{
+	q.auditRows = []sqlc.ListAuditLogV1ForRangeRow{
 		{ID: uuid.New(), CreatedAt: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC), Action: "auth.login.succeeded", Detail: []byte(`{}`)},
 		{ID: uuid.New(), CreatedAt: time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC), Action: "auth.totp.enrolled", Detail: []byte(`{}`)},
 		{ID: uuid.New(), CreatedAt: time.Date(2026, 4, 10, 2, 0, 0, 0, time.UTC), Action: "auth.group_sync.added", Detail: []byte(`{}`)},
@@ -269,7 +268,7 @@ func TestCompliance_PolicySnapshot_StructuredJSON(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeComplianceQuerier(callerID, true)
 	projID := uuid.New()
-	q.projects = []sqlc.ComplianceProjectRow{{
+	q.projects = []sqlc.ListAllProjectsForComplianceRow{{
 		ID:                       projID,
 		Name:                     "platform-team",
 		DisplayName:              "Platform team",
@@ -370,61 +369,44 @@ func TestCompliance_RejectsInvalidDateRange(t *testing.T) {
 	}
 }
 
-func TestCompliance_AsyncPathTriggered_LargeRange(t *testing.T) {
+func TestCompliance_LargeRangeStreamsInlineUntilDurableAsyncExists(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeComplianceQuerier(callerID, true)
-	q.countOverride = 200_000 // > the default 100K threshold
+	q.countOverride = 200_000
 
-	tasks := &fakeEnqueuer{}
-	h := NewComplianceHandler(q, tasks)
+	h := NewComplianceHandler(q, nil)
 	w := httptest.NewRecorder()
 	req := makeComplianceRequest("/api/v1/admin/compliance/export/?from=2026-01-01&to=2026-05-01", callerID)
 	h.Export(w, req)
 
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
 	}
-	if len(tasks.tasks) != 1 {
-		t.Fatalf("enqueued tasks = %d, want 1", len(tasks.tasks))
-	}
-	if tasks.tasks[0].Type() != TaskTypeComplianceExport {
-		t.Errorf("task type = %q, want %q", tasks.tasks[0].Type(), TaskTypeComplianceExport)
-	}
-	var body struct {
-		Data struct {
-			ID        string `json:"id"`
-			Status    string `json:"status"`
-			OutputKey string `json:"output_key"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Data.ID == "" {
-		t.Fatalf("missing job id in response: %s", w.Body.String())
-	}
-	if body.Data.Status != ComplianceExportStatusPending {
-		t.Errorf("status = %q, want %q", body.Data.Status, ComplianceExportStatusPending)
+	files := readZipFiles(t, w.Body.Bytes())
+	if files["README.md"] == nil {
+		t.Fatalf("README.md missing from inline large export")
 	}
 
-	// And the status endpoint should now find it.
 	statusW := httptest.NewRecorder()
-	statusReq := makeComplianceRequest("/api/v1/admin/compliance/exports/"+body.Data.ID+"/", callerID)
+	statusReq := makeComplianceRequest("/api/v1/admin/compliance/exports/old-job/", callerID)
 	h.GetExportStatus(statusW, statusReq)
-	if statusW.Code != http.StatusOK {
-		t.Fatalf("status endpoint = %d, want 200; body=%s", statusW.Code, statusW.Body.String())
+	if statusW.Code != http.StatusNotFound {
+		t.Fatalf("status endpoint = %d, want 404; body=%s", statusW.Code, statusW.Body.String())
+	}
+	if !strings.Contains(statusW.Body.String(), "Async compliance exports are not enabled") {
+		t.Fatalf("status endpoint did not explain async-disabled state: %s", statusW.Body.String())
 	}
 }
 
 // TestCompliance_AccessTokensCSV_OmitsHash is the per-spec assertion
 // that the bundle MUST NOT include any decrypted secret material —
-// even the bcrypt-style token_hash. The ComplianceAPITokenRow struct
+// even the bcrypt-style token_hash. The generated compliance token row
 // has no TokenHash field; this test additionally asserts the CSV
 // header doesn't mention it.
 func TestCompliance_AccessTokensCSV_OmitsHash(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeComplianceQuerier(callerID, true)
-	q.tokens = []sqlc.ComplianceAPITokenRow{{
+	q.tokens = []sqlc.ListAPITokensForComplianceRow{{
 		ID: uuid.New(), UserID: callerID, Name: "leaked-by-mistake",
 	}}
 	h := NewComplianceHandler(q, nil)
@@ -453,11 +435,11 @@ func TestCompliance_AccessTokensCSV_OmitsHash(t *testing.T) {
 // which keeps the tests trivially deterministic.
 type fakeComplianceQuerier struct {
 	user            sqlc.User
-	auditRows       []sqlc.AuditLog
+	auditRows       []sqlc.ListAuditLogV1ForRangeRow
 	bindings        []sqlc.ListAllRoleBindingsWithRoleNamesRow
 	clusters        []sqlc.Cluster
-	tokens          []sqlc.ComplianceAPITokenRow
-	projects        []sqlc.ComplianceProjectRow
+	tokens          []sqlc.ListAPITokensForComplianceRow
+	projects        []sqlc.ListAllProjectsForComplianceRow
 	drillRows       []sqlc.BackupDrillResult
 	drillCount      int64
 	projectBindings map[uuid.UUID][]sqlc.ProjectRoleBinding
@@ -481,23 +463,23 @@ func (f *fakeComplianceQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sq
 	}
 	return f.user, nil
 }
-func (f *fakeComplianceQuerier) CountAuditLogV1ForRange(_ context.Context, _, _ time.Time) (int64, error) {
+func (f *fakeComplianceQuerier) CountAuditLogV1ForRange(_ context.Context, _ sqlc.CountAuditLogV1ForRangeParams) (int64, error) {
 	if f.countOverride != 0 {
 		return f.countOverride, nil
 	}
 	return int64(len(f.auditRows)), nil
 }
-func (f *fakeComplianceQuerier) ListAuditLogV1ForRange(_ context.Context, arg sqlc.ListAuditLogV1ForRangeParams) ([]sqlc.AuditLog, error) {
+func (f *fakeComplianceQuerier) ListAuditLogV1ForRange(_ context.Context, arg sqlc.ListAuditLogV1ForRangeParams) ([]sqlc.ListAuditLogV1ForRangeRow, error) {
 	// Honour the keyset cursor so the streamer's pagination contract
 	// is actually tested rather than handed a free pass. Sort by
 	// (created_at, id) ASC and filter to rows strictly after the
 	// cursor, in [from, to).
-	out := []sqlc.AuditLog{}
+	out := []sqlc.ListAuditLogV1ForRangeRow{}
 	for _, r := range f.auditRows {
-		if r.CreatedAt.Before(arg.From) {
+		if r.CreatedAt.Before(arg.FromTime) {
 			continue
 		}
-		if !r.CreatedAt.Before(arg.To) {
+		if !r.CreatedAt.Before(arg.ToTime) {
 			continue
 		}
 		if r.CreatedAt.Before(arg.AfterCreatedAt) {
@@ -519,8 +501,8 @@ func (f *fakeComplianceQuerier) ListAuditLogV1ForRange(_ context.Context, arg sq
 			}
 		}
 	}
-	if int32(len(out)) > arg.Limit {
-		out = out[:arg.Limit]
+	if int32(len(out)) > arg.PageLimit {
+		out = out[:arg.PageLimit]
 	}
 	return out, nil
 }
@@ -533,7 +515,7 @@ func (f *fakeComplianceQuerier) ListClusters(_ context.Context, _ sqlc.ListClust
 func (f *fakeComplianceQuerier) GetClusterAgentTokenByClusterID(_ context.Context, _ uuid.UUID) (sqlc.ClusterAgentToken, error) {
 	return sqlc.ClusterAgentToken{}, errPgxNoRowsForTest
 }
-func (f *fakeComplianceQuerier) ListAPITokensForCompliance(_ context.Context) ([]sqlc.ComplianceAPITokenRow, error) {
+func (f *fakeComplianceQuerier) ListAPITokensForCompliance(_ context.Context) ([]sqlc.ListAPITokensForComplianceRow, error) {
 	return f.tokens, nil
 }
 func (f *fakeComplianceQuerier) ListBackupDrillResults(_ context.Context, _ sqlc.ListBackupDrillResultsParams) ([]sqlc.BackupDrillResult, error) {
@@ -542,7 +524,7 @@ func (f *fakeComplianceQuerier) ListBackupDrillResults(_ context.Context, _ sqlc
 func (f *fakeComplianceQuerier) CountBackupDrillResults(_ context.Context) (int64, error) {
 	return f.drillCount, nil
 }
-func (f *fakeComplianceQuerier) ListAllProjectsForCompliance(_ context.Context) ([]sqlc.ComplianceProjectRow, error) {
+func (f *fakeComplianceQuerier) ListAllProjectsForCompliance(_ context.Context) ([]sqlc.ListAllProjectsForComplianceRow, error) {
 	return f.projects, nil
 }
 func (f *fakeComplianceQuerier) ListProjectRoleBindingsByProject(_ context.Context, arg sqlc.ListProjectRoleBindingsByProjectParams) ([]sqlc.ProjectRoleBinding, error) {
@@ -557,20 +539,6 @@ func (f *fakeComplianceQuerier) ListProjectRoleBindingsByProject(_ context.Conte
 // the surface keeps the audit code paths exercised.
 func (f *fakeComplianceQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
 	return nil
-}
-
-// fakeEnqueuer is the asynq.Client stand-in used by the async-path
-// test. Captures every Enqueue call so the test can assert on the
-// task type + payload without standing up a Redis.
-type fakeEnqueuer struct {
-	tasks []*asynq.Task
-	opts  [][]asynq.Option
-}
-
-func (f *fakeEnqueuer) Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
-	f.tasks = append(f.tasks, task)
-	f.opts = append(f.opts, opts)
-	return &asynq.TaskInfo{ID: uuid.NewString(), Type: task.Type()}, nil
 }
 
 // ── tiny utilities used by the assertions ──────────────────────────────

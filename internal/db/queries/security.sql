@@ -3,9 +3,6 @@
 -- name: GetPodSecurityTemplateByID :one
 SELECT * FROM pod_security_templates WHERE id = $1;
 
--- name: GetPodSecurityTemplateByName :one
-SELECT * FROM pod_security_templates WHERE name = $1;
-
 -- name: GetDefaultPodSecurityTemplate :one
 SELECT * FROM pod_security_templates WHERE is_default = true LIMIT 1;
 
@@ -56,19 +53,8 @@ INSERT INTO cluster_security_policies (cluster_id, template_id, sync_status)
 VALUES ($1, $2, $3)
 RETURNING *;
 
--- name: UpdateClusterSecurityPolicy :one
-UPDATE cluster_security_policies SET
-    template_id = $2,
-    sync_status = $3,
-    error_message = $4
-WHERE id = $1
-RETURNING *;
-
 -- name: UpdateClusterSecurityPolicyApplied :exec
 UPDATE cluster_security_policies SET applied_at = now(), sync_status = 'synced', error_message = '' WHERE id = $1;
-
--- name: UpdateClusterSecurityPolicyFailed :exec
-UPDATE cluster_security_policies SET sync_status = 'failed', error_message = $2 WHERE id = $1;
 
 -- name: DeleteClusterSecurityPolicy :exec
 DELETE FROM cluster_security_policies WHERE id = $1;
@@ -105,9 +91,6 @@ INSERT INTO security_scan_results (
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
--- name: UpdateSecurityScanCompleted :exec
-UPDATE security_scan_results SET status = 'completed', summary = $2, results = $3, completed_at = now() WHERE id = $1;
-
 -- Phase B5: full report ingestion. Writes flattened counts + findings in one
 -- statement so the row reaches its terminal state atomically and the UI never
 -- sees a half-populated scan.
@@ -124,9 +107,6 @@ UPDATE security_scan_results SET
     completed_at = now()
 WHERE id = $1;
 
--- name: UpdateSecurityScanFailed :exec
-UPDATE security_scan_results SET status = 'failed', completed_at = now() WHERE id = $1;
-
 -- Phase B5: failure path that preserves the operator/agent message so users
 -- can see *why* an ingest timed out, instead of a blank "failed" badge.
 -- name: UpdateSecurityScanFailedWithMessage :exec
@@ -135,9 +115,6 @@ UPDATE security_scan_results SET
     summary = jsonb_set(coalesce(summary, '{}'::jsonb), '{error}', to_jsonb(sqlc.arg(error_message)::text), true),
     completed_at = now()
 WHERE id = sqlc.arg(id);
-
--- name: DeleteSecurityScanResult :exec
-DELETE FROM security_scan_results WHERE id = $1;
 
 -- name: CountSecurityScanResults :one
 SELECT count(*) FROM security_scan_results;

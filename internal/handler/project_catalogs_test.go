@@ -41,6 +41,7 @@ type fakeProjectCatalogQuerier struct {
 	subscriptions map[uuid.UUID]map[uuid.UUID]sqlc.ProjectCatalogSubscription // by project then catalog
 	chartsByRepo  map[uuid.UUID][]sqlc.HelmChart
 	createErr     error
+	audits        []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeProjectCatalogQuerier() *fakeProjectCatalogQuerier {
@@ -210,6 +211,11 @@ func (f *fakeProjectCatalogQuerier) ListChartsByRepository(_ context.Context, ar
 	return f.chartsByRepo[arg.RepositoryID], nil
 }
 
+func (f *fakeProjectCatalogQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.audits = append(f.audits, arg)
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -218,6 +224,7 @@ func newProjectCatalogTestEnv(t *testing.T) (*ProjectCatalogHandler, *fakeProjec
 	t.Helper()
 	q := newFakeProjectCatalogQuerier()
 	h := NewProjectCatalogHandler(q)
+	h.SetAuditor(q)
 	projectA := uuid.New()
 	projectB := uuid.New()
 	q.projects[projectA] = sqlc.Project{ID: projectA, Name: "project-a"}
@@ -256,6 +263,23 @@ func mustMarshal(t *testing.T, v any) []byte {
 		t.Fatalf("marshal: %v", err)
 	}
 	return b
+}
+
+func assertProjectCatalogAudit(t *testing.T, rows []sqlc.CreateAuditLogV1Params, action, resourceID, resourceName string) {
+	t.Helper()
+	if len(rows) != 1 {
+		t.Fatalf("audit rows=%d, want 1", len(rows))
+	}
+	row := rows[0]
+	if row.Action != action {
+		t.Fatalf("audit action=%q want %q; row=%+v", row.Action, action, row)
+	}
+	if row.ResourceType != "helm_repository" {
+		t.Fatalf("audit resource_type=%q want helm_repository; row=%+v", row.ResourceType, row)
+	}
+	if row.ResourceID != resourceID || row.ResourceName != resourceName {
+		t.Fatalf("audit target=(%q,%q), want (%q,%q)", row.ResourceID, row.ResourceName, resourceID, resourceName)
+	}
 }
 
 func seedGlobal(q *fakeProjectCatalogQuerier, name string) uuid.UUID {
@@ -418,6 +442,12 @@ func TestCreateProjectCatalog_AutoSubscribes(t *testing.T) {
 	if len(q.catalogs) != 1 {
 		t.Errorf("expected one catalog row; got %d", len(q.catalogs))
 	}
+	var created sqlc.HelmRepositoryWithOwner
+	for _, cat := range q.catalogs {
+		created = cat
+	}
+	assertProjectCatalogAudit(t, q.audits, "project.catalog.owned_created", created.ID.String(), "byo")
+	assertAuditDetail(t, q.audits[0].Detail, "project_id", projectA.String())
 }
 
 // ---------------------------------------------------------------------------
@@ -456,6 +486,8 @@ func TestSubscribe_SuperuserBypassesPrivateRule(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201; got %d body=%s", rec.Code, rec.Body.String())
 	}
+	assertProjectCatalogAudit(t, q.audits, "project.catalog.subscribed_foreign", foreignID.String(), "b-private")
+	assertAuditDetail(t, q.audits[0].Detail, "project_id", projectA.String())
 }
 
 // ---------------------------------------------------------------------------

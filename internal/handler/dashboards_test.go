@@ -74,7 +74,7 @@ func (f *fakeDashboardQuerier) CreateDashboardWidget(_ context.Context, arg sqlc
 		WidgetType:     arg.WidgetType,
 		Spec:           arg.Spec,
 		Scope:          arg.Scope,
-		ScopeIDs:       arg.ScopeIDs,
+		ScopeIds:       arg.ScopeIds,
 		GridX:          arg.GridX,
 		GridY:          arg.GridY,
 		GridW:          arg.GridW,
@@ -101,7 +101,7 @@ func (f *fakeDashboardQuerier) UpdateDashboardWidget(_ context.Context, arg sqlc
 	w.WidgetType = arg.WidgetType
 	w.Spec = arg.Spec
 	w.Scope = arg.Scope
-	w.ScopeIDs = arg.ScopeIDs
+	w.ScopeIds = arg.ScopeIds
 	w.GridX = arg.GridX
 	w.GridY = arg.GridY
 	w.GridW = arg.GridW
@@ -128,16 +128,16 @@ func (f *fakeDashboardQuerier) ListWidgetsForScope(_ context.Context, arg sqlc.L
 		if !w.Enabled {
 			continue
 		}
-		switch {
-		case w.Scope == "global":
+		switch w.Scope {
+		case "global":
 			out = append(out, w)
-		case w.Scope == arg.Scope:
-			if len(w.ScopeIDs) == 0 {
+		case arg.Scope:
+			if len(w.ScopeIds) == 0 {
 				out = append(out, w)
 				continue
 			}
-			for _, sid := range w.ScopeIDs {
-				if sid == arg.ScopeID {
+			for _, sid := range w.ScopeIds {
+				if uuidInSlice(sid, arg.ScopeIds) {
 					out = append(out, w)
 					break
 				}
@@ -196,9 +196,9 @@ func (f *fakeDashboardQuerier) CreatePrometheusDatasource(_ context.Context, arg
 	d := sqlc.PrometheusDatasource{
 		ID:            uuid.New(),
 		Name:          arg.Name,
-		URL:           arg.URL,
+		Url:           arg.Url,
 		AuthEncrypted: arg.AuthEncrypted,
-		TLSSkipVerify: arg.TLSSkipVerify,
+		TlsSkipVerify: arg.TlsSkipVerify,
 		Enabled:       arg.Enabled,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
@@ -214,9 +214,9 @@ func (f *fakeDashboardQuerier) UpdatePrometheusDatasource(_ context.Context, arg
 	if !ok {
 		return sqlc.PrometheusDatasource{}, pgx.ErrNoRows
 	}
-	d.URL = arg.URL
+	d.Url = arg.Url
 	d.AuthEncrypted = arg.AuthEncrypted
-	d.TLSSkipVerify = arg.TLSSkipVerify
+	d.TlsSkipVerify = arg.TlsSkipVerify
 	d.Enabled = arg.Enabled
 	d.UpdatedAt = time.Now()
 	f.datasources[arg.ID] = d
@@ -364,13 +364,13 @@ func TestWidget_ScopeMatching(t *testing.T) {
 	clusterB := uuid.New()
 	projectA := uuid.New()
 
-	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "global-1", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "global", ScopeIDs: []uuid.UUID{}, Enabled: true}
-	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "cluster-all", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "cluster", ScopeIDs: []uuid.UUID{}, Enabled: true}
-	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "cluster-A-only", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "cluster", ScopeIDs: []uuid.UUID{clusterA}, Enabled: true}
-	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "project-A-only", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "project", ScopeIDs: []uuid.UUID{projectA}, Enabled: true}
-	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "disabled", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "global", ScopeIDs: []uuid.UUID{}, Enabled: false}
+	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "global-1", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "global", ScopeIds: []uuid.UUID{}, Enabled: true}
+	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "cluster-all", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "cluster", ScopeIds: []uuid.UUID{}, Enabled: true}
+	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "cluster-A-only", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "cluster", ScopeIds: []uuid.UUID{clusterA}, Enabled: true}
+	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "project-A-only", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "project", ScopeIds: []uuid.UUID{projectA}, Enabled: true}
+	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "disabled", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "global", ScopeIds: []uuid.UUID{}, Enabled: false}
 
-	rowsA, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeID: clusterA})
+	rowsA, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeIds: []uuid.UUID{clusterA}})
 	namesA := setOfNames(rowsA)
 	for _, want := range []string{"global-1", "cluster-all", "cluster-A-only"} {
 		if !namesA[want] {
@@ -384,7 +384,7 @@ func TestWidget_ScopeMatching(t *testing.T) {
 		t.Errorf("disabled widget leaked into list")
 	}
 
-	rowsB, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeID: clusterB})
+	rowsB, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeIds: []uuid.UUID{clusterB}})
 	namesB := setOfNames(rowsB)
 	if namesB["cluster-A-only"] {
 		t.Errorf("cluster B should not see cluster-A-only widgets")
@@ -393,7 +393,7 @@ func TestWidget_ScopeMatching(t *testing.T) {
 		t.Errorf("cluster B missing cluster-all widget")
 	}
 
-	rowsP, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "project", ScopeID: projectA})
+	rowsP, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "project", ScopeIds: []uuid.UUID{projectA}})
 	namesP := setOfNames(rowsP)
 	if !namesP["project-A-only"] {
 		t.Errorf("project list missing project-A-only")
@@ -412,6 +412,15 @@ func setOfNames(rows []sqlc.DashboardWidget) map[string]bool {
 		out[r.Name] = true
 	}
 	return out
+}
+
+func uuidInSlice(id uuid.UUID, ids []uuid.UUID) bool {
+	for _, candidate := range ids {
+		if candidate == id {
+			return true
+		}
+	}
+	return false
 }
 
 // TestSpecResolve_ClusterUIDTemplating verifies {{cluster_uid}} and
@@ -445,7 +454,7 @@ func TestRender_GrafanaPanel_NoServerFetch(t *testing.T) {
 		WidgetType: "grafana_panel",
 		Spec:       json.RawMessage(`{"base_url":"https://grafana.example.com","dashboard_uid":"x","panel_id":1,"vars":{"cluster":"$cluster_uid"}}`),
 		Scope:      "cluster",
-		ScopeIDs:   []uuid.UUID{},
+		ScopeIds:   []uuid.UUID{},
 		Enabled:    true,
 	}
 	h := NewDashboardHandler(q)
@@ -519,14 +528,14 @@ func TestRender_PromSparkline_RoundTrip(t *testing.T) {
 	cid, user := dashboardCallerIDSuperuser()
 	q := newFakeDashboardQuerier(user)
 	dsID := uuid.New()
-	q.datasources[dsID] = sqlc.PrometheusDatasource{ID: dsID, Name: "default", URL: srv.URL, Enabled: true}
+	q.datasources[dsID] = sqlc.PrometheusDatasource{ID: dsID, Name: "default", Url: srv.URL, Enabled: true}
 	q.widgets[uuid.New()] = sqlc.DashboardWidget{
 		ID:         uuid.New(),
 		Name:       "spark",
 		WidgetType: "prom_sparkline",
 		Spec:       json.RawMessage(`{"datasource":"default","query":"up","duration":"5m","step":"60s"}`),
 		Scope:      "global",
-		ScopeIDs:   []uuid.UUID{},
+		ScopeIds:   []uuid.UUID{},
 		Enabled:    true,
 	}
 	h := NewDashboardHandler(q)
@@ -564,14 +573,14 @@ func TestRender_PromStat_RoundTrip(t *testing.T) {
 	cid, user := dashboardCallerIDSuperuser()
 	q := newFakeDashboardQuerier(user)
 	dsID := uuid.New()
-	q.datasources[dsID] = sqlc.PrometheusDatasource{ID: dsID, Name: "default", URL: srv.URL, Enabled: true}
+	q.datasources[dsID] = sqlc.PrometheusDatasource{ID: dsID, Name: "default", Url: srv.URL, Enabled: true}
 	q.widgets[uuid.New()] = sqlc.DashboardWidget{
 		ID:         uuid.New(),
 		Name:       "stat",
 		WidgetType: "prom_stat",
 		Spec:       json.RawMessage(`{"datasource":"default","query":"up","unit":"%","format":".2f"}`),
 		Scope:      "global",
-		ScopeIDs:   []uuid.UUID{},
+		ScopeIds:   []uuid.UUID{},
 		Enabled:    true,
 	}
 	h := NewDashboardHandler(q)
@@ -653,7 +662,7 @@ func TestPublicRender_RequiresClusterRead(t *testing.T) {
 	_, user := dashboardCallerIDSuperuser()
 	user.IsSuperuser = false
 	q := newFakeDashboardQuerier(user)
-	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "g", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{"datasource":"missing","query":"up"}`), Scope: "global", ScopeIDs: []uuid.UUID{}, Enabled: true}
+	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "g", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{"datasource":"missing","query":"up"}`), Scope: "global", ScopeIds: []uuid.UUID{}, Enabled: true}
 	h := NewDashboardHandler(q)
 	cid := uuid.New()
 	w := httptest.NewRecorder()

@@ -409,6 +409,17 @@ func (h *ServiceMeshHandler) ValidatePolicy(w http.ResponseWriter, r *http.Reque
 	}
 	out.Valid = len(out.Errors) == 0
 	out.ApplyAllowed = out.Valid && !out.ReadOnly
+	recordAudit(r, h.auditor, "cluster.service_mesh.policy_validated", "cluster", clusterID.String(), "", map[string]any{
+		"kind":          out.Kind,
+		"name":          out.Name,
+		"namespace":     out.Namespace,
+		"valid":         out.Valid,
+		"apply_allowed": out.ApplyAllowed,
+		"managed_by":    out.ManagedBy,
+		"read_only":     out.ReadOnly,
+		"error_count":   len(out.Errors),
+		"warning_count": len(out.Warnings),
+	})
 	RespondJSON(w, http.StatusOK, out)
 }
 

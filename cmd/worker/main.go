@@ -207,7 +207,9 @@ func main() {
 		os.Exit(1)
 	}
 	taskOutboxClient := asynq.NewClient(redisOpt)
-	defer taskOutboxClient.Close()
+	defer func() {
+		_ = taskOutboxClient.Close()
+	}()
 	tasks.ConfigureTaskOutboxDispatch(tasks.TaskOutboxDispatchDeps{
 		Queries:  sqlc.New(database.Pool()),
 		Enqueuer: taskOutboxClient,
@@ -229,7 +231,9 @@ func main() {
 	defer stop()
 	db.StartMetricsReporter(ctx, database.Pool(), log)
 	inspector := asynq.NewInspector(redisOpt)
-	defer inspector.Close()
+	defer func() {
+		_ = inspector.Close()
+	}()
 	worker.StartQueueMetricsReporter(ctx, inspector, log)
 
 	// Start worker and scheduler in background goroutines.

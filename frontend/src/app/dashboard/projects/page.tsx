@@ -10,6 +10,7 @@ import {
   useClusterNamespaces,
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Project } from '@/types';
 import {
@@ -20,7 +21,7 @@ import {
   Loader2,
   Users,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -264,7 +265,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
 
   const handleSave = async () => {
     if (!form.name || !form.displayName) {
-      toast.error('Name and display name are required');
+      toastError('Name and display name are required');
       return;
     }
 
@@ -283,8 +284,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Project</h3>
@@ -398,6 +398,6 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

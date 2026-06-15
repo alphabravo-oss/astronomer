@@ -8,26 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type TaskOutbox struct {
-	ID                  uuid.UUID          `json:"id"`
-	DedupeKey           pgtype.Text        `json:"dedupe_key"`
-	TaskType            string             `json:"task_type"`
-	Payload             []byte             `json:"payload"`
-	QueueName           string             `json:"queue_name"`
-	MaxRetry            int32              `json:"max_retry"`
-	TimeoutSeconds      int32              `json:"timeout_seconds"`
-	UniqueSeconds       int32              `json:"unique_seconds"`
-	MaxDeliveryAttempts int32              `json:"max_delivery_attempts"`
-	Status              string             `json:"status"`
-	AttemptCount        int32              `json:"attempt_count"`
-	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
-	LockedUntil         pgtype.Timestamptz `json:"locked_until"`
-	DeliveredAt         pgtype.Timestamptz `json:"delivered_at"`
-	LastError           string             `json:"last_error"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-}
-
 const taskOutboxSelectColumns = `
     id, dedupe_key, task_type, payload, queue_name, max_retry,
     timeout_seconds, unique_seconds, max_delivery_attempts, status,

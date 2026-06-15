@@ -12,7 +12,7 @@ import {
   type TotpChallenge,
 } from '@/lib/api/account-security';
 import type { SSOProvider, User } from '@/types';
-import { toast } from 'sonner';
+import { toastApiError, toastError } from '@/lib/toast';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,7 +48,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.email || !form.password) {
-      toast.error('Please enter your email/username and password');
+      toastError('Please enter your email address and password');
       return;
     }
 
@@ -62,7 +62,7 @@ export default function LoginPage() {
       login(result.user);
       router.push('/dashboard');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Login failed');
+      toastApiError('', error, 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,7 @@ export default function LoginPage() {
     try {
       window.location.href = `/api/v1/auth/login/${provider}/`;
     } catch {
-      toast.error(`Failed to initiate ${provider} login`);
+      toastError(`Failed to initiate ${provider} login`);
       setSsoLoading(null);
     }
   };
@@ -234,19 +234,19 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="identifier" className="text-sm font-medium text-foreground">
-                Email or username
+                Email
               </label>
               <input
                 id="identifier"
-                type="text"
+                type="email"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="admin or you@example.com"
+                placeholder="you@example.com"
                 className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
                   text-foreground placeholder:text-muted-foreground
                   focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
                   transition-colors"
-                autoComplete="username"
+                autoComplete="email"
                 autoFocus
               />
             </div>
@@ -384,7 +384,7 @@ function TotpChallengeForm({
       const data = await verifyTotpChallenge(challenge.challengeToken, code);
       onSuccess(data.token, data.refresh, data.user);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Invalid code');
+      toastApiError('', err, 'Invalid code');
     } finally {
       setBusy(false);
     }

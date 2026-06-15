@@ -133,12 +133,12 @@ func (h *HelmHandler) locateChart(req *protocol.HelmRequestPayload) (string, err
 	// requires either a "repo_name/chart" prefix (we don't register repos
 	// in helm config) or a fully-qualified chart URL.
 	if repoURL != "" && !isOCI {
-		install.ChartPathOptions.RepoURL = repoURL
+		install.RepoURL = repoURL
 	}
 	if req.Version != "" {
-		install.ChartPathOptions.Version = req.Version
+		install.Version = req.Version
 	}
-	cp, err := install.ChartPathOptions.LocateChart(chartName, h.settings)
+	cp, err := install.LocateChart(chartName, h.settings)
 	if err != nil {
 		return "", fmt.Errorf("locate chart %s: %w", chartName, err)
 	}

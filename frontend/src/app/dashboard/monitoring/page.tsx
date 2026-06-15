@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useClusters, useClusterMetrics, useClusterMetricsSummary, useClusterNodes, useClusterNamespaces } from '@/lib/hooks';
 import { MetricCard } from '@/components/ui/metric-card';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
@@ -29,7 +29,7 @@ export default function MonitoringPage() {
   const [timeRange, setTimeRange] = useState('1h');
 
   const { data: clustersData } = useClusters({ pageSize: 100 });
-  const clusters = clustersData?.data || [];
+  const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
 
   // Auto-select first cluster once data arrives so the page is useful on first
   // navigation without forcing the user to open the picker.

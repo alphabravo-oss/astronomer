@@ -94,13 +94,12 @@ type VaultProbe interface {
 // succeeded. The secret value never appears here — only timing + a
 // short human-readable message.
 type TestResult struct {
-	OK         bool          `json:"ok"`
-	Reachable  bool          `json:"reachable"`
-	AuthOK     bool          `json:"auth_ok"`
-	LatencyMS  int64         `json:"latency_ms"`
-	Message    string        `json:"message"`
-	ProbePath  string        `json:"probe_path,omitempty"`
-	durationNs time.Duration // for tests
+	OK        bool   `json:"ok"`
+	Reachable bool   `json:"reachable"`
+	AuthOK    bool   `json:"auth_ok"`
+	LatencyMS int64  `json:"latency_ms"`
+	Message   string `json:"message"`
+	ProbePath string `json:"probe_path,omitempty"`
 }
 
 // VaultHandler owns the admin + project-default endpoints.
@@ -613,7 +612,7 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 		ptr = pgtype.UUID{Bytes: id, Valid: true}
 	}
 	if err := h.queries.SetProjectDefaultVaultConnection(r.Context(), sqlc.SetProjectDefaultVaultConnectionParams{
-		ProjectID:                projectID,
+		ID:                       projectID,
 		DefaultVaultConnectionID: ptr,
 	}); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update project default vault connection")

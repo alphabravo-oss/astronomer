@@ -5,18 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type OperationIdempotencyKey struct {
-	Scope          string             `json:"scope"`
-	IdempotencyKey string             `json:"idempotency_key"`
-	OperationTable string             `json:"operation_table"`
-	OperationID    pgtype.UUID        `json:"operation_id"`
-	Response       json.RawMessage    `json:"response"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-}
 
 const operationIdempotencyKeySelectColumns = `
     scope, idempotency_key, operation_table, operation_id, response, created_at, updated_at`

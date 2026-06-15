@@ -95,6 +95,7 @@ var argoCDManagedBaselineToolSlugs = map[string]struct{}{
 	"kube-state-metrics":       {},
 	"prometheus-node-exporter": {},
 	"fluent-bit":               {},
+	"ingress-nginx":            {},
 	"cert-manager":             {},
 }
 

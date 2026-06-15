@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Project · Policy tab.
  *
@@ -312,47 +313,47 @@ export default function PolicyPage({ params }: PolicyPageProps) {
           </p>
         </header>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-muted-foreground border-b border-border">
-                <th className="text-left font-medium py-2 px-3">Cluster</th>
-                <th className="text-left font-medium py-2 px-3">Namespace</th>
-                <th className="text-left font-medium py-2 px-3">CPU</th>
-                <th className="text-left font-medium py-2 px-3">Memory</th>
-                <th className="text-left font-medium py-2 px-3">Pods</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="text-xs text-muted-foreground border-b border-border">
+                <TableHead className="text-left font-medium py-2 px-3">Cluster</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Namespace</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">CPU</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Memory</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Pods</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {usage?.rows.length ? (
                 usage.rows.map((row) => (
-                  <tr
+                  <TableRow
                     key={`${row.clusterId}/${row.namespace}`}
                     className="border-b border-border last:border-0"
                   >
-                    <td className="py-2 px-3 text-foreground">{row.clusterName}</td>
-                    <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
+                    <TableCell className="py-2 px-3 text-foreground">{row.clusterName}</TableCell>
+                    <TableCell className="py-2 px-3 font-mono text-xs text-muted-foreground">
                       {row.namespace}
-                    </td>
-                    <td className="py-2 px-3 tabular-nums">
+                    </TableCell>
+                    <TableCell className="py-2 px-3 tabular-nums">
                       {row.cpuUsed || '0'} / {row.cpuLimit || '—'}
-                    </td>
-                    <td className="py-2 px-3 tabular-nums">
+                    </TableCell>
+                    <TableCell className="py-2 px-3 tabular-nums">
                       {row.memoryUsed || '0'} / {row.memoryLimit || '—'}
-                    </td>
-                    <td className="py-2 px-3 tabular-nums">
+                    </TableCell>
+                    <TableCell className="py-2 px-3 tabular-nums">
                       {row.podsUsed ?? 0} / {row.podsLimit ?? '—'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
                     No quotas applied yet.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </section>
     </div>

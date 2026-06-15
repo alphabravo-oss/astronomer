@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@/types';
+import { clearLegacyTokenStorage } from '@/lib/auth/session';
 
 // ============================================================
 // Auth Store
@@ -27,8 +28,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         // Migration cleanup for pre-HttpOnly-cookie builds. The active
         // browser session is cleared by POST /auth/logout on the backend.
-        localStorage.removeItem('astronomer_token');
-        localStorage.removeItem('astronomer_refresh');
+        clearLegacyTokenStorage();
         set({
           user: null,
           isAuthenticated: false,

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -45,11 +44,11 @@ func (f *fakeAuthQuerier) UpdateUserLastLogin(_ context.Context, _ uuid.UUID) er
 
 // fakePasswordResetStore captures the writes the reset flow makes.
 type fakePasswordResetStore struct {
-	createCalls atomic.Int32
-	consumed    atomic.Int32
-	updates     atomic.Int32
-	deletes     atomic.Int32
-	tokensByHash map[string]sqlc.PasswordResetToken
+	createCalls           atomic.Int32
+	consumed              atomic.Int32
+	updates               atomic.Int32
+	deletes               atomic.Int32
+	tokensByHash          map[string]sqlc.PasswordResetToken
 	currentPasswordByUser map[uuid.UUID]string
 }
 
@@ -265,10 +264,10 @@ func TestPasswordReset_CompleteRejectsExpiredToken(t *testing.T) {
 	// Manually inject an expired token row.
 	tokenPlain := "deadbeefcafebabefeedfacecafef00dcafebabefeedfacedeadbeefcafef00d"
 	store.tokensByHash = map[string]sqlc.PasswordResetToken{
-		hashToken(tokenPlain): {
+		auth.HashOpaqueToken(tokenPlain): {
 			ID:                  uuid.New(),
 			UserID:              user.ID,
-			TokenHash:           hashToken(tokenPlain),
+			TokenHash:           auth.HashOpaqueToken(tokenPlain),
 			PasswordHashAtIssue: user.Password,
 			ExpiresAt:           time.Now().Add(-time.Minute),
 		},
@@ -287,10 +286,10 @@ func TestPasswordReset_CompleteRejectsTokenAfterPasswordChange(t *testing.T) {
 	user := seedUser(t, q, "OriginalPass123")
 	tokenPlain := "1111111111111111111111111111111111111111111111111111111111111111"
 	store.tokensByHash = map[string]sqlc.PasswordResetToken{
-		hashToken(tokenPlain): {
-			ID:                  uuid.New(),
-			UserID:              user.ID,
-			TokenHash:           hashToken(tokenPlain),
+		auth.HashOpaqueToken(tokenPlain): {
+			ID:        uuid.New(),
+			UserID:    user.ID,
+			TokenHash: auth.HashOpaqueToken(tokenPlain),
 			// Snapshot is the OLD password hash.
 			PasswordHashAtIssue: user.Password,
 			ExpiresAt:           time.Now().Add(time.Hour),
@@ -307,8 +306,5 @@ func TestPasswordReset_CompleteRejectsTokenAfterPasswordChange(t *testing.T) {
 	h.PasswordResetComplete(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("token whose snapshot doesn't match current hash should be 400, got %d", rec.Code)
-	}
-	if !errors.Is(nil, nil) {
-		// noop
 	}
 }

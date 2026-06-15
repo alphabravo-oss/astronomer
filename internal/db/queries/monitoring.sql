@@ -4,9 +4,6 @@ WHERE is_default = true OR name = 'default'
 ORDER BY is_default DESC, created_at ASC
 LIMIT 1;
 
--- name: ListMonitoringBackends :many
-SELECT * FROM monitoring_backends ORDER BY created_at DESC;
-
 -- name: UpsertDefaultMonitoringBackend :one
 WITH clear_default AS (
     UPDATE monitoring_backends SET is_default = false WHERE is_default = true AND name <> 'default'

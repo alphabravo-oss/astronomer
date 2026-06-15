@@ -18,7 +18,7 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
@@ -216,7 +216,7 @@ function QuotaPlanInner() {
     );
   }
   if (error || !data) {
-    toast.error('Failed to load quota plan');
+    toastError('Failed to load quota plan');
     return (
       <EmptyState
         icon={Gauge}

@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster Snapshots tab — Velero-backed snapshots and scheduled snapshots.
  *
@@ -7,18 +8,16 @@
  * in background). Write paths fan through TanStack mutations that invalidate
  * the relevant query keys.
  *
- * RBAC: `clusters:write` gates all create/update/delete buttons. We don't
- * yet have a per-permission helper, so we approximate it via the
- * `globalRoles` array on the current user — admins (or any role containing
- * "admin"/"write") get the buttons enabled, everyone else sees them disabled
- * with the spec'd tooltip.
+ * RBAC: `clusters:update` gates all create/update/delete buttons through the
+ * shared permission decision helper so disabled tooltips name the missing
+ * permission and where to request access.
  */
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   AlertTriangle,
   Archive,
@@ -36,8 +35,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useCluster, useClusterNamespaces, useClusters } from '@/lib/hooks';
-import { useAuthStore } from '@/lib/store';
+import { queryKeys, useCluster, useClusterNamespaces, useClusters } from '@/lib/hooks';
+import { usePermissionDecision } from '@/lib/permission-hooks';
 import {
   createSnapshot,
   createSnapshotSchedule,
@@ -55,24 +54,15 @@ import {
 } from '@/lib/api/cluster-detail';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 
-// ─── Permission helper ──────────────────────────────────────────────────────
-function useClustersWrite(): { canWrite: boolean; reason: string } {
-  const user = useAuthStore((s) => s.user);
-  const roles = user?.globalRoles ?? [];
-  const canWrite = roles.some((r) => /admin|write|owner|platform/i.test(r));
+function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
+  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
   return {
-    canWrite,
-    reason: canWrite ? '' : 'requires clusters:write',
+    canWrite: decision.allowed,
+    reason: decision.disabledReason ?? '',
   };
 }
-
-// ─── Query keys (local — avoids modifying the giant queryKeys object) ───────
-const qk = {
-  veleroStatus: (id: string) => ['clusters', id, 'velero-status'] as const,
-  snapshots: (id: string) => ['clusters', id, 'snapshots'] as const,
-  schedules: (id: string) => ['clusters', id, 'snapshot-schedules'] as const,
-};
 
 // ─── Phase pill ─────────────────────────────────────────────────────────────
 function PhasePill({ phase }: { phase: SnapshotPhase }) {
@@ -138,11 +128,11 @@ export default function ClusterSnapshotsPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const queryClient = useQueryClient();
-  const { canWrite, reason } = useClustersWrite();
+  const { canWrite, reason } = useClustersUpdate(clusterId);
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: veleroStatus } = useQuery({
-    queryKey: qk.veleroStatus(clusterId),
+    queryKey: queryKeys.clusterPages.veleroStatus(clusterId),
     queryFn: () => getVeleroStatus(clusterId),
     enabled: !!clusterId,
     refetchInterval: 30000,
@@ -152,14 +142,14 @@ export default function ClusterSnapshotsPage() {
   const veleroReady = !!veleroStatus?.installed;
 
   const { data: snapshots, isLoading: snapsLoading } = useQuery({
-    queryKey: qk.snapshots(clusterId),
+    queryKey: queryKeys.clusterPages.snapshots(clusterId),
     queryFn: () => listSnapshots(clusterId),
     enabled: !!clusterId && veleroReady,
     refetchInterval: 30000,
     refetchIntervalInBackground: false,
   });
   const { data: schedules, isLoading: schedLoading } = useQuery({
-    queryKey: qk.schedules(clusterId),
+    queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId),
     queryFn: () => listSnapshotSchedules(clusterId),
     enabled: !!clusterId && veleroReady,
     refetchInterval: 60000,
@@ -177,28 +167,28 @@ export default function ClusterSnapshotsPage() {
   const deleteSnap = useMutation({
     mutationFn: (snapshotId: string) => deleteSnapshot(clusterId, snapshotId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.snapshots(clusterId) });
-      toast.success('Snapshot delete initiated');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
+      toastSuccess('Snapshot delete initiated');
       setDeleteOpen(null);
     },
-    onError: (e: Error) => toast.error(`Delete failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Delete failed', e),
   });
   const deleteSched = useMutation({
     mutationFn: (scheduleId: string) => deleteSnapshotSchedule(clusterId, scheduleId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.schedules(clusterId) });
-      toast.success('Schedule deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
+      toastSuccess('Schedule deleted');
       setScheduleDeleteOpen(null);
     },
-    onError: (e: Error) => toast.error(`Delete failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Delete failed', e),
   });
   const toggleSched = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       updateSnapshotSchedule(clusterId, id, { enabled }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.schedules(clusterId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
     },
-    onError: (e: Error) => toast.error(`Toggle failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Toggle failed', e),
   });
 
   // ─── Loading / not-found ────────────────────────────────────────────────
@@ -428,23 +418,23 @@ function SchedulesTable({
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/30 text-xs text-muted-foreground">
-          <tr>
-            <th className="text-left font-medium px-4 py-2.5">Name</th>
-            <th className="text-left font-medium px-4 py-2.5">Cron</th>
-            <th className="text-left font-medium px-4 py-2.5">Namespaces</th>
-            <th className="text-left font-medium px-4 py-2.5">Enabled</th>
-            <th className="text-left font-medium px-4 py-2.5">Last run</th>
-            <th className="text-right font-medium px-4 py-2.5">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
+      <Table className="w-full text-sm">
+        <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+          <TableRow>
+            <TableHead className="text-left font-medium px-4 py-2.5">Name</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Cron</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Namespaces</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Enabled</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Last run</TableHead>
+            <TableHead className="text-right font-medium px-4 py-2.5">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="divide-y divide-border">
           {schedules.map((s) => (
-            <tr key={s.id} className="hover:bg-accent/30">
-              <td className="px-4 py-2.5 font-medium text-foreground">{s.name}</td>
-              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{s.cron}</td>
-              <td className="px-4 py-2.5">
+            <TableRow key={s.id} className="hover:bg-accent/30">
+              <TableCell className="px-4 py-2.5 font-medium text-foreground">{s.name}</TableCell>
+              <TableCell className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{s.cron}</TableCell>
+              <TableCell className="px-4 py-2.5">
                 <div className="flex flex-wrap gap-1">
                   {(s.spec.includedNamespaces && s.spec.includedNamespaces.length > 0
                     ? s.spec.includedNamespaces
@@ -458,8 +448,8 @@ function SchedulesTable({
                     </span>
                   ))}
                 </div>
-              </td>
-              <td className="px-4 py-2.5">
+              </TableCell>
+              <TableCell className="px-4 py-2.5">
                 <button
                   type="button"
                   role="switch"
@@ -480,9 +470,9 @@ function SchedulesTable({
                     )}
                   />
                 </button>
-              </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.lastRun)}</td>
-              <td className="px-4 py-2.5">
+              </TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.lastRun)}</TableCell>
+              <TableCell className="px-4 py-2.5">
                 <div className="flex items-center justify-end gap-1.5">
                   <button
                     onClick={() => onEdit(s)}
@@ -505,11 +495,11 @@ function SchedulesTable({
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -551,23 +541,23 @@ function SnapshotsTable({
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/30 text-xs text-muted-foreground">
-          <tr>
-            <th className="text-left font-medium px-4 py-2.5">Name</th>
-            <th className="text-left font-medium px-4 py-2.5">Source</th>
-            <th className="text-left font-medium px-4 py-2.5">Phase</th>
-            <th className="text-left font-medium px-4 py-2.5">Started</th>
-            <th className="text-left font-medium px-4 py-2.5">Completed</th>
-            <th className="text-left font-medium px-4 py-2.5">W / E</th>
-            <th className="text-right font-medium px-4 py-2.5">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
+      <Table className="w-full text-sm">
+        <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+          <TableRow>
+            <TableHead className="text-left font-medium px-4 py-2.5">Name</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Source</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Phase</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Started</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">Completed</TableHead>
+            <TableHead className="text-left font-medium px-4 py-2.5">W / E</TableHead>
+            <TableHead className="text-right font-medium px-4 py-2.5">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="divide-y divide-border">
           {snapshots.map((s) => (
-            <tr key={s.id} className="hover:bg-accent/30">
-              <td className="px-4 py-2.5 font-medium text-foreground">{s.name}</td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+            <TableRow key={s.id} className="hover:bg-accent/30">
+              <TableCell className="px-4 py-2.5 font-medium text-foreground">{s.name}</TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
                 {s.source === 'schedule' ? (
                   <span title={s.scheduleName}>
                     schedule
@@ -576,16 +566,16 @@ function SnapshotsTable({
                 ) : (
                   'ad-hoc'
                 )}
-              </td>
-              <td className="px-4 py-2.5"><PhasePill phase={s.phase} /></td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.startTimestamp)}</td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.completionTimestamp)}</td>
-              <td className="px-4 py-2.5 text-xs">
+              </TableCell>
+              <TableCell className="px-4 py-2.5"><PhasePill phase={s.phase} /></TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.startTimestamp)}</TableCell>
+              <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">{fmt(s.completionTimestamp)}</TableCell>
+              <TableCell className="px-4 py-2.5 text-xs">
                 <span className="text-muted-foreground">
                   {s.warnings ?? 0} / <span className={s.errors ? 'text-status-error' : ''}>{s.errors ?? 0}</span>
                 </span>
-              </td>
-              <td className="px-4 py-2.5">
+              </TableCell>
+              <TableCell className="px-4 py-2.5">
                 <div className="flex items-center justify-end gap-1.5">
                   <button
                     onClick={() => onRestore(s)}
@@ -615,11 +605,11 @@ function SnapshotsTable({
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -656,11 +646,11 @@ function NewSnapshotDialog({
       return createSnapshot(clusterId, { spec });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.snapshots(clusterId) });
-      toast.success('Snapshot queued');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
+      toastSuccess('Snapshot queued');
       onClose();
     },
-    onError: (e: Error) => toast.error(`Snapshot failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Snapshot failed', e),
   });
 
   return (
@@ -743,11 +733,11 @@ function RestoreSnapshotDialog({
         },
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.snapshots(clusterId) });
-      toast.success('Restore queued');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
+      toastSuccess('Restore queued');
       onClose();
     },
-    onError: (e: Error) => toast.error(`Restore failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Restore failed', e),
   });
 
   return (
@@ -849,11 +839,11 @@ function ScheduleDialog({
       return createSnapshotSchedule(clusterId, { name, cron, enabled, spec });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.schedules(clusterId) });
-      toast.success(isEdit ? 'Schedule updated' : 'Schedule created');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
+      toastSuccess(isEdit ? 'Schedule updated' : 'Schedule created');
       onClose();
     },
-    onError: (e: Error) => toast.error(`Schedule failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Schedule failed', e),
   });
 
   return (
@@ -1015,8 +1005,7 @@ function Modal({
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -1037,7 +1026,7 @@ function Modal({
         </div>
         <div className="p-6 space-y-4 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 

@@ -139,6 +139,34 @@ func TestSetAgentVersion(t *testing.T) {
 	}
 }
 
+func TestSetPrivilegeProfileBuildsCapabilityFeatureContract(t *testing.T) {
+	hr := NewHealthReporter(nil, slog.Default(), 30, 60)
+	hr.SetPrivilegeProfile("namespace_operator")
+	if hr.privilegeProfile != "namespace-operator" {
+		t.Fatalf("privilegeProfile = %q, want namespace-operator", hr.privilegeProfile)
+	}
+	if !containsString(hr.enabledFeatures, "watch") || !containsString(hr.enabledFeatures, "namespace_scoped") {
+		t.Fatalf("enabledFeatures = %+v, want watch/namespace_scoped", hr.enabledFeatures)
+	}
+	if !containsString(hr.deniedFeatures, "cluster_scope") || !containsString(hr.deniedFeatures, "secrets") {
+		t.Fatalf("deniedFeatures = %+v, want cluster_scope/secrets", hr.deniedFeatures)
+	}
+}
+
+func TestSetCustomPrivilegeProfileReportsUnknownCapabilities(t *testing.T) {
+	hr := NewHealthReporter(nil, slog.Default(), 30, 60)
+	hr.SetPrivilegeProfile("custom")
+	if hr.privilegeProfile != "custom" {
+		t.Fatalf("privilegeProfile = %q, want custom", hr.privilegeProfile)
+	}
+	if !containsString(hr.enabledFeatures, "custom_rbac") {
+		t.Fatalf("enabledFeatures = %+v, want custom_rbac", hr.enabledFeatures)
+	}
+	if !containsString(hr.deniedFeatures, "capability_inference") {
+		t.Fatalf("deniedFeatures = %+v, want capability_inference", hr.deniedFeatures)
+	}
+}
+
 func TestSetConnected(t *testing.T) {
 	hr := NewHealthReporter(nil, slog.Default(), 30, 60)
 
@@ -155,4 +183,13 @@ func TestSetConnected(t *testing.T) {
 	if hr.connected.Load() {
 		t.Error("expected connected to be false after SetConnected(false)")
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

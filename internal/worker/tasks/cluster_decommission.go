@@ -50,13 +50,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgtype"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -84,10 +84,10 @@ const (
 
 // PhaseStatus values written to the phases JSONB.
 const (
-	PhaseStatusPending   = "pending"
-	PhaseStatusRunning   = "running"
+	PhaseStatusPending   = operationstate.Pending
+	PhaseStatusRunning   = operationstate.Running
 	PhaseStatusSucceeded = "succeeded"
-	PhaseStatusFailed    = "failed"
+	PhaseStatusFailed    = operationstate.Failed
 	PhaseStatusSkipped   = "skipped"
 )
 
@@ -310,7 +310,7 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 	if err != nil {
 		return fmt.Errorf("load cluster_decommission: %w", err)
 	}
-	if row.Status == "succeeded" {
+	if row.Status == PhaseStatusSucceeded {
 		// Idempotent re-entry — nothing to do.
 		return nil
 	}
@@ -332,7 +332,7 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		detail, phaseErr := phaseCleanupManagedSide(ctx, deps, row)
 		if phaseErr != nil {
 			finishPhase(phases, PhaseCleanupManagedSide, PhaseStatusFailed, phaseErr.Error(), detail)
-			recordPhaseAudit(ctx, q, row, PhaseCleanupManagedSide, "failed", phaseErr.Error(), detail)
+			recordPhaseAudit(ctx, q, row, PhaseCleanupManagedSide, PhaseStatusFailed, phaseErr.Error(), detail)
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseCleanupManagedSide, phaseErr))
 		}
 		status := PhaseStatusSucceeded
@@ -356,11 +356,11 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		detail, phaseErr := phaseRevokeAgentToken(ctx, deps, row)
 		if phaseErr != nil {
 			finishPhase(phases, PhaseRevokeAgentToken, PhaseStatusFailed, phaseErr.Error(), detail)
-			recordPhaseAudit(ctx, q, row, PhaseRevokeAgentToken, "failed", phaseErr.Error(), detail)
+			recordPhaseAudit(ctx, q, row, PhaseRevokeAgentToken, PhaseStatusFailed, phaseErr.Error(), detail)
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseRevokeAgentToken, phaseErr))
 		}
 		finishPhase(phases, PhaseRevokeAgentToken, PhaseStatusSucceeded, "", detail)
-		recordPhaseAudit(ctx, q, row, PhaseRevokeAgentToken, "succeeded", "", detail)
+		recordPhaseAudit(ctx, q, row, PhaseRevokeAgentToken, PhaseStatusSucceeded, "", detail)
 		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseRevokeAgentToken, err))
 		}
@@ -372,11 +372,11 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		detail, phaseErr := phaseArchiveAudit(ctx, deps, row)
 		if phaseErr != nil {
 			finishPhase(phases, PhaseArchiveAudit, PhaseStatusFailed, phaseErr.Error(), detail)
-			recordPhaseAudit(ctx, q, row, PhaseArchiveAudit, "failed", phaseErr.Error(), detail)
+			recordPhaseAudit(ctx, q, row, PhaseArchiveAudit, PhaseStatusFailed, phaseErr.Error(), detail)
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseArchiveAudit, phaseErr))
 		}
 		finishPhase(phases, PhaseArchiveAudit, PhaseStatusSucceeded, "", detail)
-		recordPhaseAudit(ctx, q, row, PhaseArchiveAudit, "succeeded", "", detail)
+		recordPhaseAudit(ctx, q, row, PhaseArchiveAudit, PhaseStatusSucceeded, "", detail)
 		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseArchiveAudit, err))
 		}
@@ -388,11 +388,11 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		detail, phaseErr := phaseDeleteDependents(ctx, deps, row)
 		if phaseErr != nil {
 			finishPhase(phases, PhaseDeleteDependents, PhaseStatusFailed, phaseErr.Error(), detail)
-			recordPhaseAudit(ctx, q, row, PhaseDeleteDependents, "failed", phaseErr.Error(), detail)
+			recordPhaseAudit(ctx, q, row, PhaseDeleteDependents, PhaseStatusFailed, phaseErr.Error(), detail)
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseDeleteDependents, phaseErr))
 		}
 		finishPhase(phases, PhaseDeleteDependents, PhaseStatusSucceeded, "", detail)
-		recordPhaseAudit(ctx, q, row, PhaseDeleteDependents, "succeeded", "", detail)
+		recordPhaseAudit(ctx, q, row, PhaseDeleteDependents, PhaseStatusSucceeded, "", detail)
 		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseDeleteDependents, err))
 		}
@@ -404,11 +404,11 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		detail, phaseErr := phaseTombstoneCluster(ctx, deps, row)
 		if phaseErr != nil {
 			finishPhase(phases, PhaseTombstoneCluster, PhaseStatusFailed, phaseErr.Error(), detail)
-			recordPhaseAudit(ctx, q, row, PhaseTombstoneCluster, "failed", phaseErr.Error(), detail)
+			recordPhaseAudit(ctx, q, row, PhaseTombstoneCluster, PhaseStatusFailed, phaseErr.Error(), detail)
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseTombstoneCluster, phaseErr))
 		}
 		finishPhase(phases, PhaseTombstoneCluster, PhaseStatusSucceeded, "", detail)
-		recordPhaseAudit(ctx, q, row, PhaseTombstoneCluster, "succeeded", "", detail)
+		recordPhaseAudit(ctx, q, row, PhaseTombstoneCluster, PhaseStatusSucceeded, "", detail)
 	}
 
 	if _, err := q.MarkClusterDecommissionSucceeded(ctx, sqlc.MarkClusterDecommissionSucceededParams{
@@ -567,12 +567,22 @@ func phaseRevokeAgentToken(ctx context.Context, deps ClusterDecommissionDeps, ro
 	if deps.Tunnel != nil {
 		disconnected = deps.Tunnel.Disconnect(row.ClusterID.String())
 	}
-	return map[string]any{
+	detail := map[string]any{
 		"registration_tokens_removed": regRows,
 		"agent_tokens_removed":        agentRows,
 		"argocd_proxy_tokens_removed": argoRows,
 		"tunnel_disconnected":         disconnected,
-	}, nil
+	}
+	audit.Record(ctx, deps.Queries, audit.Event{
+		Source:          "worker",
+		ActorAuthMethod: "system",
+		Action:          "agent.token.revoked",
+		ResourceType:    "cluster",
+		ResourceID:      row.ClusterID.String(),
+		ResourceName:    row.ClusterName,
+		Detail:          detail,
+	})
+	return detail, nil
 }
 
 func phaseArchiveAudit(ctx context.Context, deps ClusterDecommissionDeps, row sqlc.ClusterDecommission) (map[string]any, error) {
@@ -663,7 +673,7 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 				continue
 			}
 			orphan["cluster_secret_name"] = secret.Name
-			if err := deps.K8s.CoreV1().Secrets(argoCDNamespace).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			if err := deps.K8s.CoreV1().Secrets(argoCDNamespace).Delete(ctx, secret.Name, kubeutil.DeleteOptions()); err != nil && !apierrors.IsNotFound(err) {
 				orphan["reason"] = "delete_failed"
 				orphan["error"] = err.Error()
 				orphans = append(orphans, orphan)
@@ -754,9 +764,3 @@ var errNoRows = errors.New("no rows in result set")
 // the new audit.Writer is a struct; the original interface is now
 // audit.Querier.)
 var _ audit.Querier = (ClusterDecommissionQuerier)(nil)
-
-// pgtypeUUIDFromUUID is a small convenience helper kept here so tests can
-// reuse it for fixture construction.
-func pgtypeUUIDFromUUID(u uuid.UUID) pgtype.UUID {
-	return pgtype.UUID{Bytes: u, Valid: true}
-}

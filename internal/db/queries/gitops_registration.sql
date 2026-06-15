@@ -99,12 +99,6 @@ FROM gitops_registered_clusters
 WHERE source_id = $1
 ORDER BY repo_path ASC;
 
--- name: GetGitOpsRegisteredCluster :one
-SELECT cluster_id, source_id, repo_path, last_yaml_sha, last_applied_at,
-       status, tombstoned_at, created_at, updated_at
-FROM gitops_registered_clusters
-WHERE cluster_id = $1;
-
 -- name: UpsertGitOpsRegisteredCluster :one
 -- The sync worker calls this after a YAML's contents have been applied
 -- so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT

@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +14,7 @@ import (
 )
 
 // fakeTokenQuerier is an in-memory TokenQuerier for tests. Token rows are
-// keyed by sha256 hex hash; user rows are keyed by ID.
+// keyed by the shared opaque-token hash; user rows are keyed by ID.
 type fakeTokenQuerier struct {
 	tokens map[string]sqlc.ApiToken
 	users  map[uuid.UUID]sqlc.User
@@ -40,11 +38,6 @@ func (f *fakeTokenQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.Us
 		return sqlc.User{}, errors.New("not found")
 	}
 	return u, nil
-}
-
-func hashAstroToken(tok string) string {
-	sum := sha256.Sum256([]byte(tok))
-	return hex.EncodeToString(sum[:])
 }
 
 func TestBearerFromHeader(t *testing.T) {
@@ -167,10 +160,10 @@ func TestAuthorizeStreamRequest_APIToken_OK(t *testing.T) {
 	rawToken := "astro_abcdef"
 	q := &fakeTokenQuerier{
 		tokens: map[string]sqlc.ApiToken{
-			hashAstroToken(rawToken): {
+			HashOpaqueToken(rawToken): {
 				ID:        uuid.New(),
 				UserID:    userID,
-				TokenHash: hashAstroToken(rawToken),
+				TokenHash: HashOpaqueToken(rawToken),
 				IsRevoked: false,
 			},
 		},
@@ -207,9 +200,9 @@ func TestAuthorizeStreamRequest_APIToken_Revoked_Rejects(t *testing.T) {
 	rawToken := "astro_revoked"
 	q := &fakeTokenQuerier{
 		tokens: map[string]sqlc.ApiToken{
-			hashAstroToken(rawToken): {
+			HashOpaqueToken(rawToken): {
 				UserID:    userID,
-				TokenHash: hashAstroToken(rawToken),
+				TokenHash: HashOpaqueToken(rawToken),
 				IsRevoked: true,
 			},
 		},
@@ -231,9 +224,9 @@ func TestAuthorizeStreamRequest_APIToken_Expired_Rejects(t *testing.T) {
 	rawToken := "astro_expired"
 	q := &fakeTokenQuerier{
 		tokens: map[string]sqlc.ApiToken{
-			hashAstroToken(rawToken): {
+			HashOpaqueToken(rawToken): {
 				UserID:    userID,
-				TokenHash: hashAstroToken(rawToken),
+				TokenHash: HashOpaqueToken(rawToken),
 				ExpiresAt: pgtype.Timestamptz{
 					Time:  time.Now().Add(-1 * time.Hour),
 					Valid: true,
@@ -258,9 +251,9 @@ func TestAuthorizeStreamRequest_APIToken_InactiveUser_Rejects(t *testing.T) {
 	rawToken := "astro_inactive"
 	q := &fakeTokenQuerier{
 		tokens: map[string]sqlc.ApiToken{
-			hashAstroToken(rawToken): {
+			HashOpaqueToken(rawToken): {
 				UserID:    userID,
-				TokenHash: hashAstroToken(rawToken),
+				TokenHash: HashOpaqueToken(rawToken),
 			},
 		},
 		users: map[uuid.UUID]sqlc.User{

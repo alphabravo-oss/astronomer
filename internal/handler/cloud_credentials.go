@@ -461,7 +461,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, "immutable_name", "Credential name cannot be changed")
 		return
 	}
-	if req.Provider != "" && strings.ToLower(req.Provider) != strings.ToLower(existing.Provider) {
+	if req.Provider != "" && !strings.EqualFold(req.Provider, existing.Provider) {
 		RespondRequestError(w, r, http.StatusBadRequest, "immutable_provider", "Credential provider cannot be changed")
 		return
 	}
@@ -811,25 +811,6 @@ func (h *CloudCredentialHandler) canonicaliseTargetRefs(ctx context.Context, in 
 		})
 	}
 	return out, nil
-}
-
-// upsertMaterializations writes one row per target_ref so the drift
-// sweep can drive convergence. Removes rows that no longer match a
-// target_ref entry — the orphan-cleanup query reads the JSONB the
-// handler just stored.
-func (h *CloudCredentialHandler) upsertMaterializations(ctx context.Context, credentialID uuid.UUID, refs []TargetRef, refsJSON []byte) {
-	for _, ref := range refs {
-		_, _ = h.queries.UpsertCloudCredentialMaterialization(ctx, sqlc.UpsertCloudCredentialMaterializationParams{
-			CredentialID: credentialID,
-			ClusterID:    ref.ClusterID,
-			Namespace:    ref.Namespace,
-			SecretName:   ref.SecretName,
-		})
-	}
-	_ = h.queries.DeleteOrphanCloudCredentialMaterializations(ctx, sqlc.DeleteOrphanCloudCredentialMaterializationsParams{
-		CredentialID: credentialID,
-		TargetRefs:   refsJSON,
-	})
 }
 
 func (h *CloudCredentialHandler) materializeCredentialRefs(ctx context.Context, cred sqlc.CloudCredential, refs []TargetRef, op string) {

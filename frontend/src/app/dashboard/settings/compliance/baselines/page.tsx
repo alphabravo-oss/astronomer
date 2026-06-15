@@ -1,5 +1,8 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DrawerShell } from '@/components/ui/drawer-shell';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 /**
  * /dashboard/settings/compliance/baselines — sprint 17, migration 064.
  *
@@ -10,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, History, Loader2, Shield, Undo2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   applyComplianceBaseline,
@@ -124,42 +127,38 @@ function DiffDrawer({
 }) {
   if (!diff) return null;
   return (
-    <div className="fixed inset-0 z-30 bg-black/40 flex items-end sm:items-center sm:justify-end">
-      <div className="bg-card border-l w-full sm:max-w-lg h-full overflow-auto p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold">{diff.baseline_name} — change preview</h2>
-          <button onClick={onClose} className="text-sm">
-            Close
-          </button>
-        </div>
+    <DrawerShell
+      title={`${diff.baseline_name} - change preview`}
+      onClose={onClose}
+      panelClassName="sm:max-w-lg bg-card"
+    >
         {diff.changes.length === 0 ? (
           <p className="text-sm text-muted-foreground">No changes — baseline already matches current state.</p>
         ) : (
-          <table className="text-sm w-full">
-            <thead className="text-xs text-muted-foreground">
-              <tr>
-                <th className="text-left py-1">Field</th>
-                <th className="text-left py-1">Current</th>
-                <th className="text-left py-1">Target</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="text-sm w-full">
+            <TableHeader className="text-xs text-muted-foreground">
+              <TableRow>
+                <TableHead className="text-left py-1">Field</TableHead>
+                <TableHead className="text-left py-1">Current</TableHead>
+                <TableHead className="text-left py-1">Target</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {diff.changes.map((key) => (
-                <tr key={key} className="border-t">
-                  <td className="py-1 pr-2 font-mono text-xs">{key}</td>
-                  <td className="py-1 pr-2 font-mono text-xs text-muted-foreground break-all">
+                <TableRow key={key} className="border-t">
+                  <TableCell className="py-1 pr-2 font-mono text-xs">{key}</TableCell>
+                  <TableCell className="py-1 pr-2 font-mono text-xs text-muted-foreground break-all">
                     {JSON.stringify(diff.current[key] ?? null)}
-                  </td>
-                  <td className="py-1 font-mono text-xs break-all">
+                  </TableCell>
+                  <TableCell className="py-1 font-mono text-xs break-all">
                     {JSON.stringify(diff.target[key] ?? null)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
-    </div>
+    </DrawerShell>
   );
 }
 
@@ -194,7 +193,7 @@ export default function ComplianceBaselinesPage() {
       setBaselines(bs);
       setHistory(hist);
     } catch (err) {
-      toast.error('Failed to load compliance baselines');
+      toastError('Failed to load compliance baselines');
     } finally {
       setLoading(false);
     }
@@ -209,7 +208,7 @@ export default function ComplianceBaselinesPage() {
       const d = await getComplianceBaselineDiff(b.id);
       setDiff(d);
     } catch {
-      toast.error(`Failed to compute diff for ${b.name}`);
+      toastError(`Failed to compute diff for ${b.name}`);
     }
   };
 
@@ -218,15 +217,15 @@ export default function ComplianceBaselinesPage() {
     setBusy(true);
     try {
       await applyComplianceBaseline(b.id);
-      toast.success(`Applied ${b.name}`);
+      toastSuccess(`Applied ${b.name}`);
       await reload();
     } catch (err) {
       const status = (err as { response?: { status?: number; data?: { error?: string } } })?.response?.status;
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
       if (status === 409) {
-        toast.error(msg ?? 'Apply refused — guardrail triggered (audit retention downgrade?)');
+        toastError(msg ?? 'Apply refused — guardrail triggered (audit retention downgrade?)');
       } else {
-        toast.error('Apply failed');
+        toastError('Apply failed');
       }
     } finally {
       setBusy(false);
@@ -238,14 +237,14 @@ export default function ComplianceBaselinesPage() {
     setBusy(true);
     try {
       await revertComplianceBaselineApplication(id);
-      toast.success('Reverted');
+      toastSuccess('Reverted');
       await reload();
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
-        toast.error('Cannot revert — a newer application exists. Revert the latest first.');
+        toastError('Cannot revert — a newer application exists. Revert the latest first.');
       } else {
-        toast.error('Revert failed');
+        toastError('Revert failed');
       }
     } finally {
       setBusy(false);
@@ -308,9 +307,9 @@ export default function ComplianceBaselinesPage() {
 
         <DiffDrawer diff={diff} onClose={() => setDiff(null)} />
         {busy ? (
-          <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center">
+          <OverlayShell onClose={() => undefined} closeOnBackdrop={false}>
             <Loader2 className="w-6 h-6 animate-spin text-white" />
-          </div>
+          </OverlayShell>
         ) : null}
       </div>
     </SettingsAuthGate>

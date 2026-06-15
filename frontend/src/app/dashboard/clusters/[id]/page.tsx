@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -62,8 +63,8 @@ import {
   Package,
   GitBranch,
 } from 'lucide-react';
-import type { ArgoBaselineComponentOwnership, Cluster, ClusterCondition } from '@/types';
-import { toast } from 'sonner';
+import type { ArgoBaselineComponentOwnership, ArgoClusterOwnershipResponse, Cluster, ClusterCondition } from '@/types';
+import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
 import { renderForCluster } from '@/lib/api/dashboards';
 
@@ -82,7 +83,7 @@ export default function ClusterDetailPage() {
   // see "you have 47 criticals" at a glance instead of having to
   // navigate two clicks deep.
   const { data: vulnSummary } = useQuery({
-    queryKey: ['clusters', clusterId, 'vulnerabilities', 'summary'] as const,
+    queryKey: queryKeys.clusterPages.vulnerabilitySummary(clusterId),
     queryFn: () => getImageVulnSummary(clusterId),
     enabled: !!clusterId,
     refetchInterval: 5 * 60 * 1000,
@@ -95,7 +96,7 @@ export default function ClusterDetailPage() {
   // SELECT keyed by cluster_id; if no detection has run yet the API
   // returns an "unknown" stub so we can render "—" without a 404 dance.
   const { data: meshDetection } = useQuery({
-    queryKey: ['clusters', clusterId, 'service-mesh', 'header'] as const,
+    queryKey: queryKeys.clusterPages.serviceMeshHeader(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
     enabled: !!clusterId,
     refetchInterval: 5 * 60 * 1000,
@@ -591,7 +592,7 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
 function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
   const queryClient = useQueryClient();
   const ownershipQuery = useQuery({
-    queryKey: ['argocd', 'clusters', cluster.id, 'ownership'] as const,
+    queryKey: queryKeys.argocd.clusterOwnership(cluster.id),
     queryFn: () => getArgoClusterOwnership(cluster.id),
     enabled: !!cluster.id,
     refetchInterval: 60_000,
@@ -600,17 +601,19 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
     mutationFn: ({ slug, decision, reason }: { slug: string; decision: 'adopt' | 'leave_local' | 'replace'; reason: string }) =>
       setArgoClusterOwnershipDecision(cluster.id, slug, { decision, reason }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'clusters', cluster.id, 'ownership'] });
-      toast.success('Ownership decision recorded');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.clusterOwnership(cluster.id) });
+      toastSuccess('Ownership decision recorded');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to record ownership decision: ${err.message}`);
+      toastApiError('Failed to record ownership decision', err);
     },
   });
   const argo = cluster.argocd;
-  const ownership = ownershipQuery.data;
+  const ownership = isArgoClusterOwnershipResponse(ownershipQuery.data) ? ownershipQuery.data : undefined;
+  const ownershipManagedClusters = Array.isArray(ownership?.managedClusters) ? ownership.managedClusters : [];
+  const ownershipComponents = Array.isArray(ownership?.components) ? ownership.components : [];
   const registered = ownership?.registered ?? argo?.registered ?? false;
-  const components: ArgoBaselineComponentOwnership[] = ownership?.components ?? (argo?.baselineComponents ?? []).map((component) => ({
+  const components: ArgoBaselineComponentOwnership[] = ownershipComponents.length > 0 ? ownershipComponents : (argo?.baselineComponents ?? []).map((component) => ({
     slug: component.slug,
     name: component.name,
     namespace: component.namespace,
@@ -621,11 +624,16 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
     options: ['adopt', 'leave_local', 'replace'],
   }));
   const owner = ownership
-    ? summarizeOwnershipState(ownership.components)
+    ? summarizeOwnershipState(ownershipComponents)
     : (argo?.baselineManagedBy ?? 'unknown');
+  const drift = argo?.drift;
   const isArgoOwned = owner === 'argocd_owned' || owner === 'argocd';
   const isPending = owner === 'migration_required' || owner === 'argocd_pending';
   const isHelm = owner === 'legacy_helm' || owner === 'helm';
+  const resourceCreatedCount = drift?.resourceCreatedCount ?? 0;
+  const resourceChangedCount = drift?.resourceChangedCount ?? 0;
+  const resourcePrunedCount = drift?.resourcePrunedCount ?? 0;
+  const hasResourceDrift = resourceCreatedCount > 0 || resourceChangedCount > 0 || resourcePrunedCount > 0;
   const ownerLabel =
     owner === 'argocd_owned' || owner === 'argocd'
       ? 'ArgoCD'
@@ -643,6 +651,13 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
       : isHelm
         ? 'border-status-info/30 bg-status-info/10 text-status-info'
         : 'border-border bg-muted/30 text-muted-foreground';
+  const driftTone = !drift || drift.appCount === 0
+    ? 'border-border bg-muted/30 text-muted-foreground'
+    : drift.degradedCount > 0
+      ? 'border-status-danger/30 bg-status-danger/10 text-status-danger'
+      : drift.outOfSyncCount > 0
+        ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+        : 'border-status-success/30 bg-status-success/10 text-status-success';
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -660,11 +675,11 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>
-                Cluster registration: {registered ? `${ownership?.managedClusters.length ?? argo?.instanceCount ?? 0} ArgoCD instance${(ownership?.managedClusters.length ?? argo?.instanceCount ?? 0) === 1 ? '' : 's'}` : 'not registered'}
+                Cluster registration: {registered ? `${ownershipManagedClusters.length || argo?.instanceCount || 0} ArgoCD instance${(ownershipManagedClusters.length || argo?.instanceCount || 0) === 1 ? '' : 's'}` : 'not registered'}
               </span>
-              {ownership?.managedClusters?.length ? (
+              {ownershipManagedClusters.length ? (
                 <span className="truncate">
-                  Secret: <code className="font-mono">{ownership.managedClusters.map((row) => row.clusterSecretName).filter(Boolean).join(', ')}</code>
+                  Secret: <code className="font-mono">{ownershipManagedClusters.map((row) => row.clusterSecretName).filter(Boolean).join(', ')}</code>
                 </span>
               ) : argo?.clusterSecretNames?.length ? (
                 <span className="truncate">
@@ -672,6 +687,40 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
                 </span>
               ) : null}
             </div>
+            {drift ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className={`inline-flex items-center rounded border px-2 py-0.5 font-medium ${driftTone}`}>
+                  {drift.appCount === 0
+                    ? 'No cached apps'
+                    : `${drift.syncedCount}/${drift.appCount} synced`}
+                </span>
+                {drift.appCount > 0 ? (
+                  <>
+                    <span>
+                      Health: {drift.healthyCount} healthy
+                      {drift.progressingCount > 0 ? ` · ${drift.progressingCount} progressing` : ''}
+                      {drift.degradedCount > 0 ? ` · ${drift.degradedCount} degraded` : ''}
+                      {drift.unknownHealthCount > 0 ? ` · ${drift.unknownHealthCount} unknown` : ''}
+                    </span>
+                    {hasResourceDrift ? (
+                      <span>
+                        Resources: {resourceCreatedCount} created
+                        {` · ${resourceChangedCount} changed`}
+                        {` · ${resourcePrunedCount} pruned`}
+                      </span>
+                    ) : null}
+                    {drift.lastSynced ? (
+                      <span>Last sync: {formatRelativeTime(drift.lastSynced)}</span>
+                    ) : null}
+                    {drift.lastError ? (
+                      <span className={drift.degradedCount > 0 ? 'text-status-danger' : 'text-status-warning'}>
+                        {drift.lastError}
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -742,6 +791,10 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
                           onClick={() => {
                             const reason = window.prompt(`Reason for ${decisionLabel(option)} ${component.name}`);
                             if (reason === null) return;
+                            if (option === 'replace' && reason.trim() === '') {
+                              toastError('Replace decisions require a reason');
+                              return;
+                            }
                             decisionMutation.mutate({
                               slug: component.slug,
                               decision: option as 'adopt' | 'leave_local' | 'replace',
@@ -766,7 +819,17 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
   );
 }
 
-function summarizeOwnershipState(components: ArgoBaselineComponentOwnership[]): string {
+function isArgoClusterOwnershipResponse(value: unknown): value is ArgoClusterOwnershipResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<ArgoClusterOwnershipResponse>;
+  return (
+    typeof candidate.registered === 'boolean' &&
+    Array.isArray(candidate.managedClusters) &&
+    Array.isArray(candidate.components)
+  );
+}
+
+function summarizeOwnershipState(components: ArgoBaselineComponentOwnership[] = []): string {
   if (components.length === 0) return 'unknown';
   if (components.some((component) => component.state === 'migration_required')) return 'migration_required';
   if (components.every((component) => component.state === 'argocd_owned')) return 'argocd_owned';
@@ -901,14 +964,13 @@ function MeshHeaderBadge({ clusterId, mesh }: { clusterId: string; mesh: Service
   );
 }
 
-// Sprint 23: compact pill showing the cluster's registration phase
-// next to its status badge. Yellow spinner on awaiting_agent +
-// provisioning, green check on ready, red X on failed. Links to the
-// Provisioning tab so one click drills into the full timeline. Hidden
-// when the cluster has no registration record (pre-sprint-22 rows).
+// Compact pill showing the cluster's adoption phase next to its status badge.
+// Yellow spinner on awaiting_agent + baseline apply, green check on ready,
+// red X on failed. Links to the Adoption tab so one click drills into the
+// full timeline. Hidden when the cluster has no registration record.
 function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
   const { data } = useQuery<RegistrationStatus | null>({
-    queryKey: ['cluster-registration-status', clusterId],
+    queryKey: queryKeys.clusterPages.registrationStatus(clusterId),
     queryFn: async () => {
       try {
         return await getRegistrationStatus(clusterId);
@@ -928,14 +990,14 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
         : 'border-border text-muted-foreground bg-muted/30';
   const label =
     phase === 'awaiting_agent' ? 'waiting for agent' :
-    phase === 'provisioning' ? 'provisioning' :
+    phase === 'provisioning' ? 'applying baseline' :
     phase === 'connected' ? 'connected' :
     phase === 'failed' ? 'failed' :
     phase;
   return (
     <Link
-      href={`/dashboard/clusters/${clusterId}/provisioning`}
-      title="Registration phase — click for step timeline"
+      href={`/dashboard/clusters/${clusterId}/adoption`}
+      title="Adoption phase - click for step timeline"
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
@@ -981,32 +1043,32 @@ function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
     <div>
       <h3 className="text-sm font-medium text-muted-foreground mb-3">Anomaly Baselines</h3>
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/30 text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Metric</th>
-              <th className="px-3 py-2 text-right font-medium">Mean</th>
-              <th className="px-3 py-2 text-right font-medium">Stddev</th>
-              <th className="px-3 py-2 text-right font-medium">Samples</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
+        <Table className="w-full text-sm">
+          <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+            <TableRow>
+              <TableHead className="px-3 py-2 text-left font-medium">Metric</TableHead>
+              <TableHead className="px-3 py-2 text-right font-medium">Mean</TableHead>
+              <TableHead className="px-3 py-2 text-right font-medium">Stddev</TableHead>
+              <TableHead className="px-3 py-2 text-right font-medium">Samples</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-border">
             {rows.map((b) => (
-              <tr key={b.id}>
-                <td className="px-3 py-2 font-mono text-xs text-foreground">{b.metric}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-foreground">
+              <TableRow key={b.id}>
+                <TableCell className="px-3 py-2 font-mono text-xs text-foreground">{b.metric}</TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums text-foreground">
                   {b.mean.toFixed(2)}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                   ±{b.stddev.toFixed(2)}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                   {b.sampleCount}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

@@ -41,7 +41,9 @@ func TestAstronomerChartArchiveContainsChartFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gzip reader: %v", err)
 	}
-	defer gzr.Close()
+	defer func() {
+		_ = gzr.Close()
+	}()
 
 	tr := tar.NewReader(gzr)
 	seen := map[string]bool{}
@@ -59,6 +61,7 @@ func TestAstronomerChartArchiveContainsChartFiles(t *testing.T) {
 	for _, want := range []string{
 		"astronomer/Chart.yaml",
 		"astronomer/values.yaml",
+		"astronomer/values.schema.json",
 		"astronomer/templates/server-deployment.yaml",
 	} {
 		if !seen[want] {

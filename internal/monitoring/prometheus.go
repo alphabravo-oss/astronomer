@@ -103,7 +103,9 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 	}
 	resp, err := c.httpClient.Do(req)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		if resp.StatusCode < http.StatusBadRequest {
 			return nil
 		}
@@ -139,7 +141,9 @@ func (c *Client) doQuery(ctx context.Context, path string, values url.Values) (p
 	if err != nil {
 		return promResponseData{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return promResponseData{}, err

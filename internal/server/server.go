@@ -110,10 +110,10 @@ func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryp
 		errs = append(errs, "config is nil")
 	} else {
 		secretKey := strings.TrimSpace(cfg.SecretKey)
-		switch {
-		case secretKey == "":
+		switch secretKey {
+		case "":
 			errs = append(errs, "secret_key is empty")
-		case secretKey == devSecretKey:
+		case devSecretKey:
 			errs = append(errs, "secret_key is still the known development value")
 		}
 		encryptionKey := strings.TrimSpace(cfg.EncryptionKey)
@@ -413,6 +413,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	projectHandler := handler.NewProjectHandler(queries)
 	projectHandler.SetEncryptor(encryptor)
 	projectHandler.SetTaskQueue(queue)
+	projectHandler.SetTaskOutbox(queries)
 	projectHandler.SetK8sRequester(requester)
 	projectHandler.SetLogger(logger)
 	// Cluster templates (migration 049). Owns /api/v1/cluster-templates/*
@@ -428,6 +429,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// member cluster's network from the management plane.
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
 	clusterRegistriesHandler.SetApplyEnqueue(queue)
+	clusterRegistriesHandler.SetTaskOutbox(queries)
 	clusterRegistriesHandler.SetRequester(requester)
 	clusterRegistriesHandler.SetEncryptor(encryptor)
 	tasks.ConfigurePlaintextCredentialMigration(tasks.PlaintextCredentialMigrationDeps{
@@ -933,6 +935,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		ResourcesSearch: func() *handler.ResourcesSearchHandler {
 			h := handler.NewResourcesSearchHandler(queries, requester)
 			h.SetAuthorization(rbacEngine, rbacQuerier)
+			h.SetAuditWriter(queries)
 			return h
 		}(),
 		AgentFleet: func() *handler.AgentFleetHandler {
@@ -1043,10 +1046,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetDBPool(database.Pool())
 			return h
 		}(),
-		// SOC 2 / ISO 27001 audit-prep bundle. Streams inline for
-		// small ranges; enqueues onto the asynq `compliance:export`
-		// queue for ranges over ~100K audit rows. Superuser-gated
-		// inside the handler.
+		// SOC 2 / ISO 27001 audit-prep bundle. Streams inline; the
+		// former async `compliance:export` path is disabled until it has
+		// durable status/output state and a registered worker.
 		Compliance:        handler.NewComplianceHandler(queries, queue),
 		CompliancePosture: handler.NewCompliancePostureHandler(queries, cfg.AuditLogRetentionMonths),
 		License:           handler.NewLicenseHandler(),
@@ -1223,9 +1225,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		deps.GroupMappings.SetRBACCacheInvalidator(cache)
 	}
 	// Browser WebSocket clients can't set Authorization either; wire the
-	// same stream-ticket and legacy query-param auth into pod exec.
+	// same stream-ticket and header-auth validation into pod exec.
 	deps.Exec.SetAuth(jwtManager, queries)
 	deps.Exec.SetStreamTickets(deps.StreamTicketStore)
+	deps.Exec.SetAuditWriter(queries)
 
 	// Browser `new WebSocket(...)` cannot set Authorization either — the pod
 	// logs WS handler accepts one-use stream tickets and the legacy fallback.
@@ -1234,6 +1237,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if deps.Logs != nil {
 		deps.Logs.SetAuth(jwtManager, queries)
 		deps.Logs.SetStreamTickets(deps.StreamTicketStore)
+		deps.Logs.SetAuditWriter(queries)
 	}
 
 	// Sprint 17+/082+: same fix for the kubectl-shell session-aware WS
@@ -1283,6 +1287,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				log:       logger,
 			})
 		}
+		argoUIProxy.SetAuditWriter(queries)
 		deps.ArgoCDUIProxy = argoUIProxy
 	}
 
@@ -1444,6 +1449,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// age past the threshold (with cluster.status_changed fan-out).
 	livemetrics.New(bus, queries, clusterHandler.MetricsProvider(), logger).Start(reconcileCtx)
 	tunnel.StartConnectionMetricsReporter(reconcileCtx, queries, logger)
+	handler.StartArgoCDApplicationMetricsReporter(reconcileCtx, queries, logger)
 
 	// Local cluster auto-registration (Rancher pattern). Both calls are
 	// best-effort: when running outside a kubernetes cluster (laptop dev,
@@ -1481,7 +1487,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Migration 075 seeds three well-known helm_repositories rows; without
 	// this kick, the cluster_template reconciler can't resolve its baseline
 	// slugs (trivy-operator, kube-state-metrics, node-exporter, fluent-bit,
-	// cert-manager) until the periodic catalog:sync ticker fires — which is
+	// ingress-nginx, cert-manager, gatekeeper) until the periodic
+	// catalog:sync ticker fires — which is
 	// once every 6h (see internal/worker/scheduler.go). Enqueueing here
 	// turns "wait 6 hours after fresh install" into "wait ~30s for the
 	// worker to drain the queue".
@@ -1611,7 +1618,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.db.Close()
 	}
 	if s.queue != nil {
-		s.queue.Close()
+		_ = s.queue.Close()
 	}
 	return err
 }

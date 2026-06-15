@@ -22,6 +22,7 @@ package handler
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -880,7 +881,7 @@ func (h *DexHandler) syncAstronomerPublicClient(ctx context.Context, settings sq
 			continue
 		}
 		found = true
-		clients[i]["name"] = firstNonEmpty(asString(clients[i]["name"]), "Astronomer")
+		clients[i]["name"] = cmp.Or(asString(clients[i]["name"]), "Astronomer")
 		if clientSecret != "" {
 			clients[i]["secret"] = clientSecret
 		}
@@ -1080,7 +1081,7 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 		out = append(out, map[string]any{
 			"type":   c.Type,
 			"id":     c.Name,
-			"name":   firstNonEmpty(c.DisplayName, c.Name),
+			"name":   cmp.Or(c.DisplayName, c.Name),
 			"config": raw,
 		})
 	}
@@ -1092,15 +1093,6 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 	}
 	buf.Write(yamlBytes)
 	return buf.Bytes(), nil
-}
-
-func firstNonEmpty(s ...string) string {
-	for _, v := range s {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func containsField(items []string, want string) bool {

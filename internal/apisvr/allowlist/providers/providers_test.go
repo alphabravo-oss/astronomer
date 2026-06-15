@@ -59,7 +59,7 @@ func TestProvider_EKSApplyIsIdempotent(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/clusters/test-eks", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&describeCalls, 1)
-		json.NewEncoder(w).Encode(eksDescribeClusterResponse{
+		_ = json.NewEncoder(w).Encode(eksDescribeClusterResponse{
 			Cluster: struct {
 				ResourcesVpcConfig struct {
 					PublicAccessCidrs []string `json:"publicAccessCidrs"`
@@ -105,7 +105,7 @@ func TestProvider_EKSGetEffective(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/clusters/test-eks", func(w http.ResponseWriter, r *http.Request) {
 		// Return entries in mixed order + duplicate to verify canonicalisation.
-		json.NewEncoder(w).Encode(eksDescribeClusterResponse{
+		_ = json.NewEncoder(w).Encode(eksDescribeClusterResponse{
 			Cluster: struct {
 				ResourcesVpcConfig struct {
 					PublicAccessCidrs []string `json:"publicAccessCidrs"`
@@ -143,7 +143,7 @@ func TestProvider_GKEApplyIsIdempotent(t *testing.T) {
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			json.NewEncoder(w).Encode(gkeClusterResponse{
+			_ = json.NewEncoder(w).Encode(gkeClusterResponse{
 				MasterAuthorizedNetworksConfig: gkeMasterAuthorizedNetworksConfig{
 					Enabled:    true,
 					CidrBlocks: []gkeCidrBlock{{CidrBlock: "10.0.0.0/8"}, {CidrBlock: "192.168.0.0/16"}},

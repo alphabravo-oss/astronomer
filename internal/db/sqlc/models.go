@@ -30,6 +30,24 @@ type AgentConnection struct {
 	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
+type AgentLifecycleOperation struct {
+	ID             uuid.UUID          `json:"id"`
+	ClusterID      uuid.UUID          `json:"cluster_id"`
+	OperationType  string             `json:"operation_type"`
+	Status         string             `json:"status"`
+	TargetVersion  string             `json:"target_version"`
+	TargetImage    string             `json:"target_image"`
+	CurrentVersion string             `json:"current_version"`
+	Strategy       string             `json:"strategy"`
+	OperationSpec  json.RawMessage    `json:"operation_spec"`
+	RequestedBy    pgtype.UUID        `json:"requested_by"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+	LastError      string             `json:"last_error"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
 type AlertEvent struct {
 	ID               uuid.UUID          `json:"id"`
 	RuleID           uuid.UUID          `json:"rule_id"`
@@ -46,17 +64,22 @@ type AlertEvent struct {
 }
 
 type AlertRule struct {
-	ID              uuid.UUID       `json:"id"`
-	Name            string          `json:"name"`
-	ClusterID       pgtype.UUID     `json:"cluster_id"`
-	RuleType        string          `json:"rule_type"`
-	Configuration   json.RawMessage `json:"configuration"`
-	Severity        string          `json:"severity"`
-	Enabled         bool            `json:"enabled"`
-	CooldownMinutes int32           `json:"cooldown_minutes"`
-	CreatedByID     pgtype.UUID     `json:"created_by_id"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ID                   uuid.UUID       `json:"id"`
+	Name                 string          `json:"name"`
+	ClusterID            pgtype.UUID     `json:"cluster_id"`
+	RuleType             string          `json:"rule_type"`
+	Configuration        json.RawMessage `json:"configuration"`
+	Severity             string          `json:"severity"`
+	Enabled              bool            `json:"enabled"`
+	CooldownMinutes      int32           `json:"cooldown_minutes"`
+	CreatedByID          pgtype.UUID     `json:"created_by_id"`
+	CreatedAt            time.Time       `json:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+	RuleKind             string          `json:"rule_kind"`
+	AnomalyStddev        pgtype.Float8   `json:"anomaly_stddev"`
+	AnomalyWindowSeconds pgtype.Int4     `json:"anomaly_window_seconds"`
+	AnomalyMinSamples    int32           `json:"anomaly_min_samples"`
+	AnomalyDirection     string          `json:"anomaly_direction"`
 }
 
 type AlertRuleChannel struct {
@@ -76,6 +99,25 @@ type AlertSilence struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+type AnomalyBaseline struct {
+	ID            uuid.UUID          `json:"id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	MetricName    string             `json:"metric_name"`
+	WindowSeconds int32              `json:"window_seconds"`
+	SampleCount   int32              `json:"sample_count"`
+	Mean          float64            `json:"mean"`
+	Stddev        float64            `json:"stddev"`
+	MinValue      float64            `json:"min_value"`
+	MaxValue      float64            `json:"max_value"`
+	P50           float64            `json:"p50"`
+	P95           float64            `json:"p95"`
+	P99           float64            `json:"p99"`
+	LastValue     float64            `json:"last_value"`
+	LastValueAt   pgtype.Timestamptz `json:"last_value_at"`
+	RecentSamples json.RawMessage    `json:"recent_samples"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
 type ApiToken struct {
 	ID               uuid.UUID          `json:"id"`
 	UserID           uuid.UUID          `json:"user_id"`
@@ -92,6 +134,28 @@ type ApiToken struct {
 	LastSeenRemoteIp string             `json:"last_seen_remote_ip"`
 }
 
+type ApiserverAllowlist struct {
+	ClusterID        uuid.UUID          `json:"cluster_id"`
+	Cidrs            json.RawMessage    `json:"cidrs"`
+	Mode             string             `json:"mode"`
+	DetectedProvider string             `json:"detected_provider"`
+	LastReconciledAt pgtype.Timestamptz `json:"last_reconciled_at"`
+	SyncStatus       string             `json:"sync_status"`
+	LastError        string             `json:"last_error"`
+	EffectiveCidrs   json.RawMessage    `json:"effective_cidrs"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
+type ApiserverAllowlistSnapshot struct {
+	ID             int64           `json:"id"`
+	ClusterID      uuid.UUID       `json:"cluster_id"`
+	CapturedAt     time.Time       `json:"captured_at"`
+	EffectiveCidrs json.RawMessage `json:"effective_cidrs"`
+	DesiredCidrs   json.RawMessage `json:"desired_cidrs"`
+	Drift          bool            `json:"drift"`
+}
+
 type ArgocdApplication struct {
 	ID                   uuid.UUID          `json:"id"`
 	ArgocdInstanceID     uuid.UUID          `json:"argocd_instance_id"`
@@ -104,9 +168,38 @@ type ArgocdApplication struct {
 	DestinationNamespace string             `json:"destination_namespace"`
 	SyncStatus           string             `json:"sync_status"`
 	HealthStatus         string             `json:"health_status"`
+	ResourceCreatedCount int32              `json:"resource_created_count"`
+	ResourceChangedCount int32              `json:"resource_changed_count"`
+	ResourcePrunedCount  int32              `json:"resource_pruned_count"`
 	LastSynced           pgtype.Timestamptz `json:"last_synced"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type ArgocdBaselineOwnershipDecision struct {
+	ID            uuid.UUID          `json:"id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	ComponentSlug string             `json:"component_slug"`
+	Decision      string             `json:"decision"`
+	Reason        string             `json:"reason"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	DecidedByID   pgtype.UUID        `json:"decided_by_id"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type ArgocdClusterProxyToken struct {
+	ID             uuid.UUID          `json:"id"`
+	ClusterID      uuid.UUID          `json:"cluster_id"`
+	Purpose        string             `json:"purpose"`
+	TokenHash      string             `json:"token_hash"`
+	TokenPrefix    string             `json:"token_prefix"`
+	TokenEncrypted string             `json:"token_encrypted"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt     pgtype.Timestamptz `json:"last_used_at"`
+	IsRevoked      bool               `json:"is_revoked"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
 type ArgocdInstance struct {
@@ -209,9 +302,7 @@ type AuditLog struct {
 	Detail          json.RawMessage `json:"detail"`
 	Source          string          `json:"source"`
 	CorrelationID   string          `json:"correlation_id"`
-	// ActionClass classifies the row as mutation / read / auth / system.
-	// Added in migration 063 to support read-side audit filtering.
-	ActionClass string `json:"action_class"`
+	ActionClass     string          `json:"action_class"`
 }
 
 type AuditLogDefault struct {
@@ -335,39 +426,105 @@ type CatalogOperationEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
+type ChartCoInstallation struct {
+	ChartAID  uuid.UUID `json:"chart_a_id"`
+	ChartBID  uuid.UUID `json:"chart_b_id"`
+	Weight    int32     `json:"weight"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ChartRating struct {
+	ID             uuid.UUID   `json:"id"`
+	ChartID        uuid.UUID   `json:"chart_id"`
+	InstallationID pgtype.UUID `json:"installation_id"`
+	UserID         uuid.UUID   `json:"user_id"`
+	Stars          int16       `json:"stars"`
+	Note           string      `json:"note"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
+type ChartRatingAggregate struct {
+	ChartID       uuid.UUID      `json:"chart_id"`
+	RatingCount   int32          `json:"rating_count"`
+	RatingSum     int32          `json:"rating_sum"`
+	AvgStars      pgtype.Numeric `json:"avg_stars"`
+	BayesianScore pgtype.Numeric `json:"bayesian_score"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+type CloudCredential struct {
+	ID            uuid.UUID       `json:"id"`
+	ProjectID     uuid.UUID       `json:"project_id"`
+	Name          string          `json:"name"`
+	Provider      string          `json:"provider"`
+	Description   string          `json:"description"`
+	DataEncrypted string          `json:"data_encrypted"`
+	TargetRefs    json.RawMessage `json:"target_refs"`
+	CreatedBy     pgtype.UUID     `json:"created_by"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type CloudCredentialMaterialization struct {
+	ID            uuid.UUID          `json:"id"`
+	CredentialID  uuid.UUID          `json:"credential_id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Namespace     string             `json:"namespace"`
+	SecretName    string             `json:"secret_name"`
+	Status        string             `json:"status"`
+	LastAppliedAt pgtype.Timestamptz `json:"last_applied_at"`
+	LastError     string             `json:"last_error"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
 type Cluster struct {
-	ID                uuid.UUID          `json:"id"`
-	Name              string             `json:"name"`
-	DisplayName       string             `json:"display_name"`
-	Description       string             `json:"description"`
-	Status            string             `json:"status"`
-	ApiServerUrl      string             `json:"api_server_url"`
-	CaCertificate     string             `json:"ca_certificate"`
-	Environment       string             `json:"environment"`
-	Region            string             `json:"region"`
-	Provider          string             `json:"provider"`
-	Labels            json.RawMessage    `json:"labels"`
-	Annotations       json.RawMessage    `json:"annotations"`
-	Distribution      string             `json:"distribution"`
-	AgentVersion      string             `json:"agent_version"`
-	LastHeartbeat     pgtype.Timestamptz `json:"last_heartbeat"`
-	KubernetesVersion string             `json:"kubernetes_version"`
-	NodeCount         int32              `json:"node_count"`
-	CreatedByID       pgtype.UUID        `json:"created_by_id"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
-	IsLocal           bool               `json:"is_local"`
-	DecommissionedAt  pgtype.Timestamptz `json:"decommissioned_at"`
+	ID                      uuid.UUID          `json:"id"`
+	Name                    string             `json:"name"`
+	DisplayName             string             `json:"display_name"`
+	Description             string             `json:"description"`
+	Status                  string             `json:"status"`
+	ApiServerUrl            string             `json:"api_server_url"`
+	CaCertificate           string             `json:"ca_certificate"`
+	Environment             string             `json:"environment"`
+	Region                  string             `json:"region"`
+	Provider                string             `json:"provider"`
+	Labels                  json.RawMessage    `json:"labels"`
+	Annotations             json.RawMessage    `json:"annotations"`
+	Distribution            string             `json:"distribution"`
+	AgentVersion            string             `json:"agent_version"`
+	LastHeartbeat           pgtype.Timestamptz `json:"last_heartbeat"`
+	KubernetesVersion       string             `json:"kubernetes_version"`
+	NodeCount               int32              `json:"node_count"`
+	CreatedByID             pgtype.UUID        `json:"created_by_id"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               time.Time          `json:"updated_at"`
+	IsLocal                 bool               `json:"is_local"`
+	DecommissionedAt        pgtype.Timestamptz `json:"decommissioned_at"`
+	ClusterUid              string             `json:"cluster_uid"`
+	GroupID                 pgtype.UUID        `json:"group_id"`
+	RegistrationPhase       string             `json:"registration_phase"`
+	RegistrationStartedAt   pgtype.Timestamptz `json:"registration_started_at"`
+	RegistrationCompletedAt pgtype.Timestamptz `json:"registration_completed_at"`
+	InstallBaseline         pgtype.Bool        `json:"install_baseline"`
+	ManagedBy               string             `json:"managed_by"`
+	ExternalRefApiVersion   string             `json:"external_ref_api_version"`
+	ExternalRefKind         string             `json:"external_ref_kind"`
+	ExternalRefNamespace    string             `json:"external_ref_namespace"`
+	ExternalRefName         string             `json:"external_ref_name"`
+	ObservedGeneration      int64              `json:"observed_generation"`
 }
 
 type ClusterAgentToken struct {
 	ID         uuid.UUID          `json:"id"`
 	ClusterID  uuid.UUID          `json:"cluster_id"`
 	Token      string             `json:"token"`
-	TokenHash  string             `json:"token_hash"`
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt  time.Time          `json:"created_at"`
 	UpdatedAt  time.Time          `json:"updated_at"`
+	TokenHash  string             `json:"token_hash"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
 }
 
 type ClusterCondition struct {
@@ -383,6 +540,17 @@ type ClusterCondition struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
+type ClusterConditionRemediationAttempt struct {
+	ID            uuid.UUID       `json:"id"`
+	ClusterID     uuid.UUID       `json:"cluster_id"`
+	ConditionType string          `json:"condition_type"`
+	Action        string          `json:"action"`
+	Outcome       string          `json:"outcome"`
+	Error         string          `json:"error"`
+	Detail        json.RawMessage `json:"detail"`
+	AttemptedAt   time.Time       `json:"attempted_at"`
+}
+
 type ClusterDecommission struct {
 	ID            uuid.UUID          `json:"id"`
 	ClusterID     uuid.UUID          `json:"cluster_id"`
@@ -396,6 +564,20 @@ type ClusterDecommission struct {
 	ClusterName   string             `json:"cluster_name"`
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type ClusterGroup struct {
+	ID          uuid.UUID   `json:"id"`
+	Name        string      `json:"name"`
+	Slug        string      `json:"slug"`
+	Description string      `json:"description"`
+	ParentID    pgtype.UUID `json:"parent_id"`
+	Color       string      `json:"color"`
+	Icon        string      `json:"icon"`
+	Enabled     bool        `json:"enabled"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
 type ClusterHealthStatus struct {
@@ -446,6 +628,21 @@ type ClusterRegistrationPolicy struct {
 	UpdatedAt         time.Time   `json:"updated_at"`
 }
 
+type ClusterRegistrationStep struct {
+	ID           uuid.UUID          `json:"id"`
+	ClusterID    uuid.UUID          `json:"cluster_id"`
+	StepName     string             `json:"step_name"`
+	Label        string             `json:"label"`
+	Status       string             `json:"status"`
+	ProgressPct  int32              `json:"progress_pct"`
+	DetailJson   json.RawMessage    `json:"detail_json"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+	ErrorMessage string             `json:"error_message"`
+	CreatedAt    time.Time          `json:"created_at"`
+	StepOrder    int32              `json:"step_order"`
+}
+
 type ClusterRegistrationToken struct {
 	ID        uuid.UUID `json:"id"`
 	ClusterID uuid.UUID `json:"cluster_id"`
@@ -454,34 +651,7 @@ type ClusterRegistrationToken struct {
 	IsUsed    bool      `json:"is_used"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// ClusterTemplate is migration-049's operator-defined "Production Web App"
-// style template. spec is JSONB; the handler validates the shape at
-// write time so a future schema evolution doesn't require an ALTER TABLE.
-type ClusterTemplate struct {
-	ID          uuid.UUID       `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Spec        json.RawMessage `json:"spec"`
-	CreatedBy   pgtype.UUID     `json:"created_by"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-}
-
-// ClusterTemplateApplication tracks "which template is bound to this
-// cluster, and how did the most recent apply go?". One row per cluster
-// (cluster_id is the PK). spec_snapshot is the template body at the time
-// of the last apply — drift detection compares the live state to this.
-type ClusterTemplateApplication struct {
-	ClusterID    uuid.UUID          `json:"cluster_id"`
-	TemplateID   uuid.UUID          `json:"template_id"`
-	Status       string             `json:"status"`
-	SpecSnapshot json.RawMessage    `json:"spec_snapshot"`
-	LastError    string             `json:"last_error"`
-	AppliedAt    pgtype.Timestamptz `json:"applied_at"`
-	CreatedAt    time.Time          `json:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at"`
+	TokenHash string    `json:"token_hash"`
 }
 
 type ClusterRegistryConfig struct {
@@ -490,7 +660,6 @@ type ClusterRegistryConfig struct {
 	PrivateRegistryUrl        string             `json:"private_registry_url"`
 	RegistryUsername          string             `json:"registry_username"`
 	RegistryPassword          string             `json:"registry_password"`
-	RegistryPasswordEncrypted string             `json:"registry_password_encrypted"`
 	Insecure                  bool               `json:"insecure"`
 	CaBundle                  string             `json:"ca_bundle"`
 	CreatedAt                 time.Time          `json:"created_at"`
@@ -500,6 +669,26 @@ type ClusterRegistryConfig struct {
 	SecretName                string             `json:"secret_name"`
 	LastAppliedAt             pgtype.Timestamptz `json:"last_applied_at"`
 	LastApplyError            string             `json:"last_apply_error"`
+	RegistryPasswordEncrypted string             `json:"registry_password_encrypted"`
+}
+
+type ClusterRestore struct {
+	ID              uuid.UUID          `json:"id"`
+	SnapshotID      uuid.UUID          `json:"snapshot_id"`
+	TargetClusterID uuid.UUID          `json:"target_cluster_id"`
+	VeleroName      string             `json:"velero_name"`
+	VeleroNamespace string             `json:"velero_namespace"`
+	Spec            json.RawMessage    `json:"spec"`
+	Phase           string             `json:"phase"`
+	StartTime       pgtype.Timestamptz `json:"start_time"`
+	CompletionTime  pgtype.Timestamptz `json:"completion_time"`
+	WarningsCount   int32              `json:"warnings_count"`
+	ErrorsCount     int32              `json:"errors_count"`
+	LastPollAt      pgtype.Timestamptz `json:"last_poll_at"`
+	LastPollError   string             `json:"last_poll_error"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
 type ClusterRole struct {
@@ -536,6 +725,79 @@ type ClusterSecurityPolicy struct {
 	UpdatedAt    time.Time          `json:"updated_at"`
 }
 
+type ClusterServiceMesh struct {
+	ClusterID               uuid.UUID          `json:"cluster_id"`
+	DetectedMesh            string             `json:"detected_mesh"`
+	DetectedVersion         string             `json:"detected_version"`
+	ControlPlaneNamespace   string             `json:"control_plane_namespace"`
+	GatewayCount            int32              `json:"gateway_count"`
+	VirtualServiceCount     int32              `json:"virtual_service_count"`
+	DestinationRuleCount    int32              `json:"destination_rule_count"`
+	PeerAuthenticationCount int32              `json:"peer_authentication_count"`
+	ServiceProfileCount     int32              `json:"service_profile_count"`
+	ServerAuthCount         int32              `json:"server_auth_count"`
+	MtlsCoveragePct         int32              `json:"mtls_coverage_pct"`
+	LastDetectedAt          pgtype.Timestamptz `json:"last_detected_at"`
+	LastError               string             `json:"last_error"`
+	CreatedAt               time.Time          `json:"created_at"`
+	UpdatedAt               time.Time          `json:"updated_at"`
+}
+
+type ClusterSnapshot struct {
+	ID              uuid.UUID          `json:"id"`
+	ClusterID       uuid.UUID          `json:"cluster_id"`
+	VeleroName      string             `json:"velero_name"`
+	VeleroNamespace string             `json:"velero_namespace"`
+	Source          string             `json:"source"`
+	Spec            json.RawMessage    `json:"spec"`
+	Phase           string             `json:"phase"`
+	StartTime       pgtype.Timestamptz `json:"start_time"`
+	CompletionTime  pgtype.Timestamptz `json:"completion_time"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	WarningsCount   int32              `json:"warnings_count"`
+	ErrorsCount     int32              `json:"errors_count"`
+	LastPollAt      pgtype.Timestamptz `json:"last_poll_at"`
+	LastPollError   string             `json:"last_poll_error"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+type ClusterSnapshotSchedule struct {
+	ID            uuid.UUID          `json:"id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Name          string             `json:"name"`
+	CronSchedule  string             `json:"cron_schedule"`
+	Spec          json.RawMessage    `json:"spec"`
+	Enabled       bool               `json:"enabled"`
+	LastRunAt     pgtype.Timestamptz `json:"last_run_at"`
+	LastRunStatus string             `json:"last_run_status"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type ClusterTemplate struct {
+	ID          uuid.UUID       `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Spec        json.RawMessage `json:"spec"`
+	CreatedBy   pgtype.UUID     `json:"created_by"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+type ClusterTemplateApplication struct {
+	ClusterID    uuid.UUID          `json:"cluster_id"`
+	TemplateID   uuid.UUID          `json:"template_id"`
+	Status       string             `json:"status"`
+	SpecSnapshot json.RawMessage    `json:"spec_snapshot"`
+	LastError    string             `json:"last_error"`
+	AppliedAt    pgtype.Timestamptz `json:"applied_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
 type ClusterTool struct {
 	ID                uuid.UUID       `json:"id"`
 	Slug              string          `json:"slug"`
@@ -556,6 +818,30 @@ type ClusterTool struct {
 	SubServices       json.RawMessage `json:"sub_services"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
+}
+
+type ComplianceBaseline struct {
+	ID          uuid.UUID       `json:"id"`
+	Slug        string          `json:"slug"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Version     string          `json:"version"`
+	Spec        json.RawMessage `json:"spec"`
+	Enabled     bool            `json:"enabled"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+type ComplianceBaselineApplication struct {
+	ID            uuid.UUID          `json:"id"`
+	BaselineID    uuid.UUID          `json:"baseline_id"`
+	PreviousState json.RawMessage    `json:"previous_state"`
+	AppliedBy     pgtype.UUID        `json:"applied_by"`
+	AppliedAt     time.Time          `json:"applied_at"`
+	Status        string             `json:"status"`
+	RevertedAt    pgtype.Timestamptz `json:"reverted_at"`
+	RevertedBy    pgtype.UUID        `json:"reverted_by"`
+	Notes         string             `json:"notes"`
 }
 
 type ControlPlaneAlert struct {
@@ -605,6 +891,42 @@ type ControlPlaneSilence struct {
 	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
+type DashboardWidget struct {
+	ID             uuid.UUID       `json:"id"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	WidgetType     string          `json:"widget_type"`
+	Spec           json.RawMessage `json:"spec"`
+	Scope          string          `json:"scope"`
+	ScopeIds       []uuid.UUID     `json:"scope_ids"`
+	GridX          int32           `json:"grid_x"`
+	GridY          int32           `json:"grid_y"`
+	GridW          int32           `json:"grid_w"`
+	GridH          int32           `json:"grid_h"`
+	RefreshSeconds int32           `json:"refresh_seconds"`
+	Enabled        bool            `json:"enabled"`
+	CreatedBy      pgtype.UUID     `json:"created_by"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
+type DeferredOperation struct {
+	ID              uuid.UUID          `json:"id"`
+	WindowID        uuid.UUID          `json:"window_id"`
+	OperationType   string             `json:"operation_type"`
+	OperationSpec   json.RawMessage    `json:"operation_spec"`
+	TargetClusterID pgtype.UUID        `json:"target_cluster_id"`
+	TargetProjectID pgtype.UUID        `json:"target_project_id"`
+	Status          string             `json:"status"`
+	DeferredUntil   pgtype.Timestamptz `json:"deferred_until"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	RequestedBy     pgtype.UUID        `json:"requested_by"`
+	LastError       string             `json:"last_error"`
+	DispatchedAt    pgtype.Timestamptz `json:"dispatched_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
 type DexConnector struct {
 	ID          uuid.UUID       `json:"id"`
 	Name        string          `json:"name"`
@@ -628,6 +950,93 @@ type DexSetting struct {
 	Extra         json.RawMessage `json:"extra"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type EmailMessage struct {
+	ID        uuid.UUID          `json:"id"`
+	ToAddress string             `json:"to_address"`
+	CcAddress string             `json:"cc_address"`
+	Subject   string             `json:"subject"`
+	Template  string             `json:"template"`
+	BodyText  string             `json:"body_text"`
+	BodyHtml  string             `json:"body_html"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Status    string             `json:"status"`
+	Attempts  int32              `json:"attempts"`
+	LastError string             `json:"last_error"`
+	SentAt    pgtype.Timestamptz `json:"sent_at"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt time.Time          `json:"updated_at"`
+}
+
+type FleetOperation struct {
+	ID                        uuid.UUID          `json:"id"`
+	Name                      string             `json:"name"`
+	Description               string             `json:"description"`
+	OperationType             string             `json:"operation_type"`
+	OperationSpec             json.RawMessage    `json:"operation_spec"`
+	Selector                  json.RawMessage    `json:"selector"`
+	Strategy                  string             `json:"strategy"`
+	MaxConcurrent             int32              `json:"max_concurrent"`
+	OnError                   string             `json:"on_error"`
+	RespectMaintenanceWindows bool               `json:"respect_maintenance_windows"`
+	Status                    string             `json:"status"`
+	TotalClusters             int32              `json:"total_clusters"`
+	CompletedClusters         int32              `json:"completed_clusters"`
+	FailedClusters            int32              `json:"failed_clusters"`
+	SkippedClusters           int32              `json:"skipped_clusters"`
+	StartedAt                 pgtype.Timestamptz `json:"started_at"`
+	CompletedAt               pgtype.Timestamptz `json:"completed_at"`
+	LastError                 string             `json:"last_error"`
+	CreatedBy                 pgtype.UUID        `json:"created_by"`
+	CreatedAt                 time.Time          `json:"created_at"`
+	UpdatedAt                 time.Time          `json:"updated_at"`
+}
+
+type FleetOperationTarget struct {
+	ID               uuid.UUID          `json:"id"`
+	OperationID      uuid.UUID          `json:"operation_id"`
+	ClusterID        uuid.UUID          `json:"cluster_id"`
+	Status           string             `json:"status"`
+	SubOperationID   pgtype.UUID        `json:"sub_operation_id"`
+	SubOperationType string             `json:"sub_operation_type"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	LastError        string             `json:"last_error"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
+type GitopsRegisteredCluster struct {
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	SourceID      uuid.UUID          `json:"source_id"`
+	RepoPath      string             `json:"repo_path"`
+	LastYamlSha   string             `json:"last_yaml_sha"`
+	LastAppliedAt time.Time          `json:"last_applied_at"`
+	Status        string             `json:"status"`
+	TombstonedAt  pgtype.Timestamptz `json:"tombstoned_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type GitopsRegistrationSource struct {
+	ID                  uuid.UUID          `json:"id"`
+	Name                string             `json:"name"`
+	RepoUrl             string             `json:"repo_url"`
+	Branch              string             `json:"branch"`
+	PathPrefix          string             `json:"path_prefix"`
+	AuthMode            string             `json:"auth_mode"`
+	AuthEncrypted       string             `json:"auth_encrypted"`
+	SyncMode            string             `json:"sync_mode"`
+	SyncIntervalSeconds int32              `json:"sync_interval_seconds"`
+	OnDelete            string             `json:"on_delete"`
+	LastSyncedAt        pgtype.Timestamptz `json:"last_synced_at"`
+	LastSyncedSha       string             `json:"last_synced_sha"`
+	LastError           string             `json:"last_error"`
+	Enabled             bool               `json:"enabled"`
+	CreatedBy           pgtype.UUID        `json:"created_by"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
 }
 
 type GlobalRole struct {
@@ -668,6 +1077,11 @@ type HelmChart struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
+type HelmChartTag struct {
+	ChartID uuid.UUID `json:"chart_id"`
+	Tag     string    `json:"tag"`
+}
+
 type HelmChartVersion struct {
 	ID                uuid.UUID          `json:"id"`
 	ChartID           uuid.UUID          `json:"chart_id"`
@@ -684,19 +1098,84 @@ type HelmChartVersion struct {
 }
 
 type HelmRepository struct {
-	ID           uuid.UUID          `json:"id"`
-	Name         string             `json:"name"`
-	Url          string             `json:"url"`
-	RepoType     string             `json:"repo_type"`
-	Description  string             `json:"description"`
-	IsDefault    bool               `json:"is_default"`
-	AuthType     string             `json:"auth_type"`
-	AuthConfig   json.RawMessage    `json:"auth_config"`
-	Enabled      bool               `json:"enabled"`
-	LastSyncedAt pgtype.Timestamptz `json:"last_synced_at"`
-	CreatedByID  pgtype.UUID        `json:"created_by_id"`
-	CreatedAt    time.Time          `json:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at"`
+	ID             uuid.UUID          `json:"id"`
+	Name           string             `json:"name"`
+	Url            string             `json:"url"`
+	RepoType       string             `json:"repo_type"`
+	Description    string             `json:"description"`
+	IsDefault      bool               `json:"is_default"`
+	AuthType       string             `json:"auth_type"`
+	AuthConfig     json.RawMessage    `json:"auth_config"`
+	Enabled        bool               `json:"enabled"`
+	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
+	CreatedByID    pgtype.UUID        `json:"created_by_id"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+	OwnerProjectID pgtype.UUID        `json:"owner_project_id"`
+}
+
+type IdentityGroupMapping struct {
+	ID          uuid.UUID   `json:"id"`
+	ConnectorID pgtype.UUID `json:"connector_id"`
+	GroupName   string      `json:"group_name"`
+	Scope       string      `json:"scope"`
+	RoleID      uuid.UUID   `json:"role_id"`
+	ClusterID   pgtype.UUID `json:"cluster_id"`
+	ProjectID   pgtype.UUID `json:"project_id"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type ImageVulnerability struct {
+	ID               uuid.UUID      `json:"id"`
+	ReportID         uuid.UUID      `json:"report_id"`
+	VulnerabilityID  string         `json:"vulnerability_id"`
+	Severity         string         `json:"severity"`
+	PkgName          string         `json:"pkg_name"`
+	InstalledVersion string         `json:"installed_version"`
+	FixedVersion     string         `json:"fixed_version"`
+	PrimaryLink      string         `json:"primary_link"`
+	CvssScore        pgtype.Numeric `json:"cvss_score"`
+	Title            string         `json:"title"`
+	Description      string         `json:"description"`
+	CreatedAt        time.Time      `json:"created_at"`
+}
+
+type ImageVulnerabilityReport struct {
+	ID             uuid.UUID `json:"id"`
+	ClusterID      uuid.UUID `json:"cluster_id"`
+	ReportName     string    `json:"report_name"`
+	Namespace      string    `json:"namespace"`
+	WorkloadKind   string    `json:"workload_kind"`
+	WorkloadName   string    `json:"workload_name"`
+	ContainerName  string    `json:"container_name"`
+	ImageRegistry  string    `json:"image_registry"`
+	ImageRepo      string    `json:"image_repo"`
+	ImageTag       string    `json:"image_tag"`
+	ImageDigest    string    `json:"image_digest"`
+	Scanner        string    `json:"scanner"`
+	ScannerVersion string    `json:"scanner_version"`
+	CriticalCount  int32     `json:"critical_count"`
+	HighCount      int32     `json:"high_count"`
+	MediumCount    int32     `json:"medium_count"`
+	LowCount       int32     `json:"low_count"`
+	UnknownCount   int32     `json:"unknown_count"`
+	ScannedAt      time.Time `json:"scanned_at"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type ImageVulnerabilityReportSnapshot struct {
+	ID            uuid.UUID `json:"id"`
+	ReportID      uuid.UUID `json:"report_id"`
+	ClusterID     uuid.UUID `json:"cluster_id"`
+	CriticalCount int32     `json:"critical_count"`
+	HighCount     int32     `json:"high_count"`
+	MediumCount   int32     `json:"medium_count"`
+	LowCount      int32     `json:"low_count"`
+	UnknownCount  int32     `json:"unknown_count"`
+	ScannedAt     time.Time `json:"scanned_at"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type InstalledChart struct {
@@ -723,6 +1202,31 @@ type JwtRevocation struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	RevokedAt time.Time `json:"revoked_at"`
 	Reason    string    `json:"reason"`
+}
+
+type KubectlSession struct {
+	ID           uuid.UUID          `json:"id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	ClusterID    uuid.UUID          `json:"cluster_id"`
+	SaNamespace  string             `json:"sa_namespace"`
+	SaName       string             `json:"sa_name"`
+	PodNamespace string             `json:"pod_namespace"`
+	PodName      string             `json:"pod_name"`
+	Status       string             `json:"status"`
+	StartedAt    time.Time          `json:"started_at"`
+	LastInputAt  time.Time          `json:"last_input_at"`
+	ClosedAt     pgtype.Timestamptz `json:"closed_at"`
+	ExpiresAt    time.Time          `json:"expires_at"`
+	LastError    string             `json:"last_error"`
+	ClientIp     *netip.Addr        `json:"client_ip"`
+	UserAgent    string             `json:"user_agent"`
+}
+
+type KubectlSessionCommand struct {
+	ID          int64     `json:"id"`
+	SessionID   uuid.UUID `json:"session_id"`
+	CommandAt   time.Time `json:"command_at"`
+	CommandLine string    `json:"command_line"`
 }
 
 type LoggingOperation struct {
@@ -781,6 +1285,97 @@ type LoggingPipelineOutput struct {
 	LoggingOutputID   uuid.UUID `json:"logging_output_id"`
 }
 
+type MaintenanceWindow struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	Mode            string          `json:"mode"`
+	CronOpen        string          `json:"cron_open"`
+	DurationMinutes int32           `json:"duration_minutes"`
+	Timezone        string          `json:"timezone"`
+	ClusterSelector json.RawMessage `json:"cluster_selector"`
+	OperationTypes  json.RawMessage `json:"operation_types"`
+	OnBlock         string          `json:"on_block"`
+	Enabled         bool            `json:"enabled"`
+	CreatedBy       pgtype.UUID     `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+type MirroredGatewayClass struct {
+	ID             uuid.UUID       `json:"id"`
+	ClusterID      uuid.UUID       `json:"cluster_id"`
+	Name           string          `json:"name"`
+	ControllerName string          `json:"controller_name"`
+	Description    string          `json:"description"`
+	Parameters     json.RawMessage `json:"parameters"`
+	AcceptedStatus string          `json:"accepted_status"`
+	Labels         json.RawMessage `json:"labels"`
+	Annotations    json.RawMessage `json:"annotations"`
+	LastSeenAt     time.Time       `json:"last_seen_at"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
+type MirroredIngressClass struct {
+	ID          uuid.UUID       `json:"id"`
+	ClusterID   uuid.UUID       `json:"cluster_id"`
+	Name        string          `json:"name"`
+	Controller  string          `json:"controller"`
+	Parameters  json.RawMessage `json:"parameters"`
+	IsDefault   bool            `json:"is_default"`
+	Labels      json.RawMessage `json:"labels"`
+	Annotations json.RawMessage `json:"annotations"`
+	LastSeenAt  time.Time       `json:"last_seen_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+type MirroredLimitRange struct {
+	ID          uuid.UUID       `json:"id"`
+	ClusterID   uuid.UUID       `json:"cluster_id"`
+	Namespace   string          `json:"namespace"`
+	Name        string          `json:"name"`
+	Limits      json.RawMessage `json:"limits"`
+	Labels      json.RawMessage `json:"labels"`
+	Annotations json.RawMessage `json:"annotations"`
+	LastSeenAt  time.Time       `json:"last_seen_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+type MirroredNetworkPolicy struct {
+	ID           uuid.UUID       `json:"id"`
+	ClusterID    uuid.UUID       `json:"cluster_id"`
+	Namespace    string          `json:"namespace"`
+	Name         string          `json:"name"`
+	PodSelector  json.RawMessage `json:"pod_selector"`
+	PolicyTypes  json.RawMessage `json:"policy_types"`
+	IngressRules json.RawMessage `json:"ingress_rules"`
+	EgressRules  json.RawMessage `json:"egress_rules"`
+	Labels       json.RawMessage `json:"labels"`
+	Annotations  json.RawMessage `json:"annotations"`
+	IsManaged    bool            `json:"is_managed"`
+	LastSeenAt   time.Time       `json:"last_seen_at"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+}
+
+type MirroredResourceQuota struct {
+	ID          uuid.UUID       `json:"id"`
+	ClusterID   uuid.UUID       `json:"cluster_id"`
+	Namespace   string          `json:"namespace"`
+	Name        string          `json:"name"`
+	Hard        json.RawMessage `json:"hard"`
+	Used        json.RawMessage `json:"used"`
+	Scopes      json.RawMessage `json:"scopes"`
+	Labels      json.RawMessage `json:"labels"`
+	Annotations json.RawMessage `json:"annotations"`
+	LastSeenAt  time.Time       `json:"last_seen_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
 type MonitoringBackend struct {
 	ID                 uuid.UUID       `json:"id"`
 	Name               string          `json:"name"`
@@ -824,6 +1419,33 @@ type MonitoringOperationEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
+type NetworkPolicyApplication struct {
+	ID            uuid.UUID          `json:"id"`
+	TemplateID    uuid.UUID          `json:"template_id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Namespace     string             `json:"namespace"`
+	PolicyName    string             `json:"policy_name"`
+	Status        string             `json:"status"`
+	LastAppliedAt pgtype.Timestamptz `json:"last_applied_at"`
+	LastError     string             `json:"last_error"`
+	AppliedBy     pgtype.UUID        `json:"applied_by"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+type NetworkPolicyTemplate struct {
+	ID           uuid.UUID   `json:"id"`
+	Slug         string      `json:"slug"`
+	Name         string      `json:"name"`
+	Description  string      `json:"description"`
+	Kind         string      `json:"kind"`
+	SpecTemplate string      `json:"spec_template"`
+	Enabled      bool        `json:"enabled"`
+	CreatedBy    pgtype.UUID `json:"created_by"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+}
+
 type NotificationChannel struct {
 	ID            uuid.UUID       `json:"id"`
 	Name          string          `json:"name"`
@@ -835,21 +1457,47 @@ type NotificationChannel struct {
 	UpdatedAt     time.Time       `json:"updated_at"`
 }
 
+type NotificationTemplate struct {
+	ID          uuid.UUID   `json:"id"`
+	TemplateKey string      `json:"template_key"`
+	Channel     string      `json:"channel"`
+	SubjectTpl  string      `json:"subject_tpl"`
+	BodyTpl     string      `json:"body_tpl"`
+	BodyFormat  string      `json:"body_format"`
+	Enabled     bool        `json:"enabled"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type OperationIdempotencyKey struct {
+	Scope          string          `json:"scope"`
+	IdempotencyKey string          `json:"idempotency_key"`
+	OperationTable string          `json:"operation_table"`
+	OperationID    pgtype.UUID     `json:"operation_id"`
+	Response       json.RawMessage `json:"response"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
+type PasswordResetToken struct {
+	ID                  uuid.UUID          `json:"id"`
+	UserID              uuid.UUID          `json:"user_id"`
+	TokenHash           string             `json:"token_hash"`
+	PasswordHashAtIssue string             `json:"password_hash_at_issue"`
+	ExpiresAt           time.Time          `json:"expires_at"`
+	UsedAt              pgtype.Timestamptz `json:"used_at"`
+	CreatedAt           time.Time          `json:"created_at"`
+}
+
 type PlatformConfiguration struct {
-	ID               int32              `json:"id"`
-	ServerUrl        string             `json:"server_url"`
-	PlatformName     string             `json:"platform_name"`
-	TelemetryEnabled bool               `json:"telemetry_enabled"`
-	BootstrappedAt   pgtype.Timestamptz `json:"bootstrapped_at"`
-	InstanceID       uuid.UUID          `json:"instance_id"`
-	// DefaultClusterTemplateID is migration-074's auto-attach default.
-	// When Valid, the cluster Create handler records a
-	// cluster_template_applications row pointing at this template so the
-	// sprint-049 apply worker installs the baseline (trivy-operator,
-	// kube-state-metrics, node-exporter, fluent-bit, cert-manager) on
-	// every newly-registered cluster. ON DELETE SET NULL in the FK so
-	// removing the template gracefully degrades to "no auto-attach".
-	DefaultClusterTemplateID pgtype.UUID `json:"default_cluster_template_id"`
+	ID                       int32              `json:"id"`
+	ServerUrl                string             `json:"server_url"`
+	PlatformName             string             `json:"platform_name"`
+	TelemetryEnabled         bool               `json:"telemetry_enabled"`
+	BootstrappedAt           pgtype.Timestamptz `json:"bootstrapped_at"`
+	InstanceID               uuid.UUID          `json:"instance_id"`
+	DefaultClusterTemplateID pgtype.UUID        `json:"default_cluster_template_id"`
 }
 
 type PlatformSetting struct {
@@ -899,6 +1547,21 @@ type Project struct {
 	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
 	QuotaPlan                string          `json:"quota_plan"`
 	QuotaOverrides           json.RawMessage `json:"quota_overrides"`
+	DefaultVaultConnectionID pgtype.UUID     `json:"default_vault_connection_id"`
+	ManagedBy                string          `json:"managed_by"`
+	ExternalRefApiVersion    string          `json:"external_ref_api_version"`
+	ExternalRefKind          string          `json:"external_ref_kind"`
+	ExternalRefNamespace     string          `json:"external_ref_namespace"`
+	ExternalRefName          string          `json:"external_ref_name"`
+	ObservedGeneration       int64           `json:"observed_generation"`
+}
+
+type ProjectCatalogSubscription struct {
+	ID        uuid.UUID   `json:"id"`
+	ProjectID uuid.UUID   `json:"project_id"`
+	CatalogID uuid.UUID   `json:"catalog_id"`
+	CreatedBy pgtype.UUID `json:"created_by"`
+	CreatedAt time.Time   `json:"created_at"`
 }
 
 type ProjectNamespace struct {
@@ -935,53 +1598,58 @@ type ProjectRoleBinding struct {
 	Source    string      `json:"source"`
 }
 
-// IdentityGroupMapping is the row shape for identity_group_mappings.
-// Mapping an external IdP group name to one or more RBAC role bindings;
-// resolved on every SSO login by internal/auth.SyncUserGroups.
-type IdentityGroupMapping struct {
+type PrometheusDatasource struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Url           string    `json:"url"`
+	AuthEncrypted string    `json:"auth_encrypted"`
+	TlsSkipVerify bool      `json:"tls_skip_verify"`
+	Enabled       bool      `json:"enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type QuotaPlan struct {
+	Name                    string    `json:"name"`
+	Enforcement             string    `json:"enforcement"`
+	Description             string    `json:"description"`
+	MaxClustersPerProject   int32     `json:"max_clusters_per_project"`
+	MaxNamespacesPerProject int32     `json:"max_namespaces_per_project"`
+	MaxMembersPerProject    int32     `json:"max_members_per_project"`
+	MaxProjectsPerUser      int32     `json:"max_projects_per_user"`
+	MaxTokensPerUser        int32     `json:"max_tokens_per_user"`
+	MaxStreamsPerUser       int32     `json:"max_streams_per_user"`
+	MaxTotalClusters        int32     `json:"max_total_clusters"`
+	MaxTotalUsers           int32     `json:"max_total_users"`
+	CreatedAt               time.Time `json:"created_at"`
+	UpdatedAt               time.Time `json:"updated_at"`
+}
+
+type ReadAuditPolicy struct {
 	ID          uuid.UUID   `json:"id"`
-	ConnectorID pgtype.UUID `json:"connector_id"`
-	GroupName   string      `json:"group_name"`
-	Scope       string      `json:"scope"`
-	RoleID      uuid.UUID   `json:"role_id"`
-	ClusterID   pgtype.UUID `json:"cluster_id"`
-	ProjectID   pgtype.UUID `json:"project_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	PathPattern string      `json:"path_pattern"`
+	Verbs       string      `json:"verbs"`
+	SampleRate  float64     `json:"sample_rate"`
+	Enabled     bool        `json:"enabled"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
-// UserIdpGroup is the row shape for user_idp_groups — the per-user
-// snapshot of the groups slice last claimed by the IdP. Persisted so
-// admin-triggered re-sync can run without fresh claims.
-type UserIdpGroup struct {
-	UserID      uuid.UUID       `json:"user_id"`
-	ConnectorID pgtype.UUID     `json:"connector_id"`
-	Groups      json.RawMessage `json:"groups"`
-	SyncedAt    time.Time       `json:"synced_at"`
-}
-
-// UserTotpEnrollment is the row shape for user_totp_enrollments — the
-// per-user TOTP secret (Fernet-encrypted) plus the metadata surfaced
-// in /auth/totp/status. Migration 043.
-type UserTotpEnrollment struct {
-	UserID          uuid.UUID          `json:"user_id"`
-	SecretEncrypted string             `json:"secret_encrypted"`
-	Label           string             `json:"label"`
-	ConfirmedAt     time.Time          `json:"confirmed_at"`
-	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
-	CreatedAt       time.Time          `json:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
-}
-
-// UserTotpRecoveryCode is one of N one-time-use recovery codes for a
-// TOTP-enrolled user. Only the sha256 hash of the displayed code is
-// stored; the literal is shown once at enrollment. Migration 043.
-type UserTotpRecoveryCode struct {
-	ID        uuid.UUID          `json:"id"`
-	UserID    uuid.UUID          `json:"user_id"`
-	CodeHash  string             `json:"code_hash"`
-	UsedAt    pgtype.Timestamptz `json:"used_at"`
-	CreatedAt time.Time          `json:"created_at"`
+type RepairJobState struct {
+	JobName                   string             `json:"job_name"`
+	Scope                     string             `json:"scope"`
+	Status                    string             `json:"status"`
+	LastSuccessfulReconcileAt pgtype.Timestamptz `json:"last_successful_reconcile_at"`
+	LastErrorAt               pgtype.Timestamptz `json:"last_error_at"`
+	LastError                 string             `json:"last_error"`
+	SuccessCount              int64              `json:"success_count"`
+	ErrorCount                int64              `json:"error_count"`
+	Metadata                  json.RawMessage    `json:"metadata"`
+	CreatedAt                 time.Time          `json:"created_at"`
+	UpdatedAt                 time.Time          `json:"updated_at"`
 }
 
 type RestoreOperation struct {
@@ -1023,35 +1691,107 @@ type SecurityScanResult struct {
 	Findings        json.RawMessage    `json:"findings"`
 }
 
-type SsoConfiguration struct {
-	ID                    uuid.UUID       `json:"id"`
-	Provider              string          `json:"provider"`
-	IsEnabled             bool            `json:"is_enabled"`
-	DisplayName           string          `json:"display_name"`
-	Config                json.RawMessage `json:"config"`
-	ClientID              string          `json:"client_id"`
-	ClientSecretEncrypted string          `json:"client_secret_encrypted"`
-	AllowedOrganizations  json.RawMessage `json:"allowed_organizations"`
-	AllowedDomains        json.RawMessage `json:"allowed_domains"`
-	AutoCreateUsers       bool            `json:"auto_create_users"`
-	DefaultGlobalRoleID   pgtype.UUID     `json:"default_global_role_id"`
-	CreatedAt             time.Time       `json:"created_at"`
-	UpdatedAt             time.Time       `json:"updated_at"`
+type SiemForwardQueue struct {
+	ID          int64           `json:"id"`
+	ForwarderID uuid.UUID       `json:"forwarder_id"`
+	EventName   string          `json:"event_name"`
+	Payload     json.RawMessage `json:"payload"`
+	Severity    string          `json:"severity"`
+	Attempts    int32           `json:"attempts"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 
-// SsoSession is the row shape for sso_sessions — single sign-out
-// (SLO) tracking from migration 054. One row per active Astronomer
-// JWT issued via an upstream OIDC handshake. The Logout handler joins
-// this against the access JWT's JTI to mint the RP-initiated logout
-// redirect URL. The upstream_id_token is Fernet-encrypted at rest.
+type SiemForwarder struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Transport       string          `json:"transport"`
+	Endpoint        string          `json:"endpoint"`
+	AuthEncrypted   string          `json:"auth_encrypted"`
+	EventFilters    json.RawMessage `json:"event_filters"`
+	Format          string          `json:"format"`
+	TlsSkipVerify   bool            `json:"tls_skip_verify"`
+	CaCertPem       string          `json:"ca_cert_pem"`
+	BatchSize       int32           `json:"batch_size"`
+	FlushIntervalMs int32           `json:"flush_interval_ms"`
+	TimeoutSeconds  int32           `json:"timeout_seconds"`
+	Enabled         bool            `json:"enabled"`
+	CreatedBy       pgtype.UUID     `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+type SiemForwarderStatus struct {
+	ForwarderID     uuid.UUID          `json:"forwarder_id"`
+	LastSentAt      pgtype.Timestamptz `json:"last_sent_at"`
+	LastError       string             `json:"last_error"`
+	QueueDepth      int32              `json:"queue_depth"`
+	DroppedTotal    int64              `json:"dropped_total"`
+	DispatchedTotal int64              `json:"dispatched_total"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+type SmtpSetting struct {
+	ID                uuid.UUID `json:"id"`
+	Enabled           bool      `json:"enabled"`
+	Host              string    `json:"host"`
+	Port              int32     `json:"port"`
+	Username          string    `json:"username"`
+	PasswordEncrypted string    `json:"password_encrypted"`
+	FromAddress       string    `json:"from_address"`
+	FromName          string    `json:"from_name"`
+	AuthMechanism     string    `json:"auth_mechanism"`
+	Encryption        string    `json:"encryption"`
+	RequireTls        bool      `json:"require_tls"`
+	TimeoutSeconds    int32     `json:"timeout_seconds"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type SsoConfiguration struct {
+	ID                    uuid.UUID          `json:"id"`
+	Provider              string             `json:"provider"`
+	IsEnabled             bool               `json:"is_enabled"`
+	DisplayName           string             `json:"display_name"`
+	Config                json.RawMessage    `json:"config"`
+	ClientID              string             `json:"client_id"`
+	ClientSecretEncrypted string             `json:"client_secret_encrypted"`
+	AllowedOrganizations  json.RawMessage    `json:"allowed_organizations"`
+	AllowedDomains        json.RawMessage    `json:"allowed_domains"`
+	AutoCreateUsers       bool               `json:"auto_create_users"`
+	DefaultGlobalRoleID   pgtype.UUID        `json:"default_global_role_id"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	MigratedToDexAt       pgtype.Timestamptz `json:"migrated_to_dex_at"`
+}
+
 type SsoSession struct {
 	Jti                      string    `json:"jti"`
 	UserID                   uuid.UUID `json:"user_id"`
 	ProviderName             string    `json:"provider_name"`
-	UpstreamIdTokenEncrypted string    `json:"upstream_id_token_encrypted"`
+	UpstreamIDTokenEncrypted string    `json:"upstream_id_token_encrypted"`
 	EndSessionEndpoint       string    `json:"end_session_endpoint"`
 	ExpiresAt                time.Time `json:"expires_at"`
 	CreatedAt                time.Time `json:"created_at"`
+}
+
+type TaskOutbox struct {
+	ID                  uuid.UUID          `json:"id"`
+	DedupeKey           pgtype.Text        `json:"dedupe_key"`
+	TaskType            string             `json:"task_type"`
+	Payload             []byte             `json:"payload"`
+	QueueName           string             `json:"queue_name"`
+	MaxRetry            int32              `json:"max_retry"`
+	TimeoutSeconds      int32              `json:"timeout_seconds"`
+	UniqueSeconds       int32              `json:"unique_seconds"`
+	MaxDeliveryAttempts int32              `json:"max_delivery_attempts"`
+	Status              string             `json:"status"`
+	AttemptCount        int32              `json:"attempt_count"`
+	NextAttemptAt       time.Time          `json:"next_attempt_at"`
+	LockedUntil         pgtype.Timestamptz `json:"locked_until"`
+	DeliveredAt         pgtype.Timestamptz `json:"delivered_at"`
+	LastError           string             `json:"last_error"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
 }
 
 type ToolOperation struct {
@@ -1080,6 +1820,21 @@ type ToolOperationEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
+type UiExtension struct {
+	ID                  uuid.UUID       `json:"id"`
+	Name                string          `json:"name"`
+	DisplayName         string          `json:"display_name"`
+	Version             string          `json:"version"`
+	Source              string          `json:"source"`
+	Checksum            string          `json:"checksum"`
+	Enabled             bool            `json:"enabled"`
+	CompatibilityStatus string          `json:"compatibility_status"`
+	Manifest            json.RawMessage `json:"manifest"`
+	InstalledBy         pgtype.UUID     `json:"installed_by"`
+	InstalledAt         time.Time       `json:"installed_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+}
+
 type User struct {
 	ID                  uuid.UUID          `json:"id"`
 	Email               string             `json:"email"`
@@ -1102,6 +1857,85 @@ type User struct {
 	TokensInvalidatedAt pgtype.Timestamptz `json:"tokens_invalidated_at"`
 	QuotaPlan           string             `json:"quota_plan"`
 	QuotaOverrides      json.RawMessage    `json:"quota_overrides"`
+}
+
+type UserIdpGroup struct {
+	UserID      uuid.UUID       `json:"user_id"`
+	ConnectorID pgtype.UUID     `json:"connector_id"`
+	Groups      json.RawMessage `json:"groups"`
+	SyncedAt    time.Time       `json:"synced_at"`
+}
+
+type UserTotpEnrollment struct {
+	UserID          uuid.UUID          `json:"user_id"`
+	SecretEncrypted string             `json:"secret_encrypted"`
+	Label           string             `json:"label"`
+	ConfirmedAt     time.Time          `json:"confirmed_at"`
+	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+type UserTotpRecoveryCode struct {
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	CodeHash  string             `json:"code_hash"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt time.Time          `json:"created_at"`
+}
+
+type VaultConnection struct {
+	ID                   uuid.UUID          `json:"id"`
+	Name                 string             `json:"name"`
+	Description          string             `json:"description"`
+	Addr                 string             `json:"addr"`
+	AuthMethod           string             `json:"auth_method"`
+	AuthEncrypted        string             `json:"auth_encrypted"`
+	Namespace            string             `json:"namespace"`
+	TlsSkipVerify        bool               `json:"tls_skip_verify"`
+	CaCertPem            string             `json:"ca_cert_pem"`
+	DefaultMount         string             `json:"default_mount"`
+	Enabled              bool               `json:"enabled"`
+	CachedTokenExpiresAt pgtype.Timestamptz `json:"cached_token_expires_at"`
+	LastHealthAt         pgtype.Timestamptz `json:"last_health_at"`
+	LastHealthOk         bool               `json:"last_health_ok"`
+	LastError            string             `json:"last_error"`
+	CreatedBy            pgtype.UUID        `json:"created_by"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type WebhookDelivery struct {
+	ID             uuid.UUID          `json:"id"`
+	SubscriptionID uuid.UUID          `json:"subscription_id"`
+	EventName      string             `json:"event_name"`
+	EventID        string             `json:"event_id"`
+	Payload        json.RawMessage    `json:"payload"`
+	PayloadSize    int32              `json:"payload_size"`
+	Status         string             `json:"status"`
+	Attempts       int32              `json:"attempts"`
+	ResponseStatus int32              `json:"response_status"`
+	ResponseBody   string             `json:"response_body"`
+	LastError      string             `json:"last_error"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+}
+
+type WebhookSubscription struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Url             string          `json:"url"`
+	SecretEncrypted string          `json:"secret_encrypted"`
+	EventFilters    json.RawMessage `json:"event_filters"`
+	PayloadTemplate string          `json:"payload_template"`
+	ExtraHeaders    json.RawMessage `json:"extra_headers"`
+	Enabled         bool            `json:"enabled"`
+	MaxRetries      int32           `json:"max_retries"`
+	TimeoutSeconds  int32           `json:"timeout_seconds"`
+	CreatedBy       pgtype.UUID     `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type WorkloadOperation struct {
@@ -1128,148 +1962,4 @@ type WorkloadOperationEvent struct {
 	Message     string          `json:"message"`
 	Detail      json.RawMessage `json:"detail"`
 	CreatedAt   time.Time       `json:"created_at"`
-}
-
-// SmtpSettings is the singleton row carrying SMTP host/port/from/auth
-// for the email delivery worker. Migration 047. password_encrypted is
-// Fernet-encrypted under auth.Encryptor.
-type SmtpSettings struct {
-	ID                uuid.UUID `json:"id"`
-	Enabled           bool      `json:"enabled"`
-	Host              string    `json:"host"`
-	Port              int32     `json:"port"`
-	Username          string    `json:"username"`
-	PasswordEncrypted string    `json:"password_encrypted"`
-	FromAddress       string    `json:"from_address"`
-	FromName          string    `json:"from_name"`
-	AuthMechanism     string    `json:"auth_mechanism"`
-	Encryption        string    `json:"encryption"`
-	RequireTls        bool      `json:"require_tls"`
-	TimeoutSeconds    int32     `json:"timeout_seconds"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-}
-
-// EmailMessage records every email the platform has tried (or skipped
-// while SMTP was disabled). The dispatcher worker drains queued rows;
-// the admin audit view reads from here. Migration 047.
-type EmailMessage struct {
-	ID        uuid.UUID          `json:"id"`
-	ToAddress string             `json:"to_address"`
-	CcAddress string             `json:"cc_address"`
-	Subject   string             `json:"subject"`
-	Template  string             `json:"template"`
-	BodyText  string             `json:"body_text"`
-	BodyHtml  string             `json:"body_html"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	Status    string             `json:"status"`
-	Attempts  int32              `json:"attempts"`
-	LastError string             `json:"last_error"`
-	SentAt    pgtype.Timestamptz `json:"sent_at"`
-	CreatedAt time.Time          `json:"created_at"`
-	UpdatedAt time.Time          `json:"updated_at"`
-}
-
-// PasswordResetToken backs the password-reset flow. The literal token
-// is sent in the email link only; we store hex(sha256(token)) and a
-// snapshot of the user's password hash so a successful password change
-// invalidates every outstanding link. Migration 047.
-type PasswordResetToken struct {
-	ID                  uuid.UUID          `json:"id"`
-	UserID              uuid.UUID          `json:"user_id"`
-	TokenHash           string             `json:"token_hash"`
-	PasswordHashAtIssue string             `json:"password_hash_at_issue"`
-	ExpiresAt           time.Time          `json:"expires_at"`
-	UsedAt              pgtype.Timestamptz `json:"used_at"`
-	CreatedAt           time.Time          `json:"created_at"`
-}
-
-// WebhookSubscription is migration-048's operator-managed outbound
-// webhook config. secret_encrypted is Fernet-encrypted under
-// auth.Encryptor (same key set as smtp_settings.password_encrypted).
-type WebhookSubscription struct {
-	ID              uuid.UUID       `json:"id"`
-	Name            string          `json:"name"`
-	Url             string          `json:"url"`
-	SecretEncrypted string          `json:"secret_encrypted"`
-	EventFilters    json.RawMessage `json:"event_filters"`
-	PayloadTemplate string          `json:"payload_template"`
-	ExtraHeaders    json.RawMessage `json:"extra_headers"`
-	Enabled         bool            `json:"enabled"`
-	MaxRetries      int32           `json:"max_retries"`
-	TimeoutSeconds  int32           `json:"timeout_seconds"`
-	CreatedBy       pgtype.UUID     `json:"created_by"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-}
-
-// WebhookDelivery is one POST attempt for a (subscription, event) pair.
-// Migration 048. The dispatcher reads queued/failed rows and ships them
-// to the subscription URL; status transitions to delivered/dropped.
-type WebhookDelivery struct {
-	ID             uuid.UUID          `json:"id"`
-	SubscriptionID uuid.UUID          `json:"subscription_id"`
-	EventName      string             `json:"event_name"`
-	EventID        string             `json:"event_id"`
-	Payload        json.RawMessage    `json:"payload"`
-	PayloadSize    int32              `json:"payload_size"`
-	Status         string             `json:"status"`
-	Attempts       int32              `json:"attempts"`
-	ResponseStatus int32              `json:"response_status"`
-	ResponseBody   string             `json:"response_body"`
-	LastError      string             `json:"last_error"`
-	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
-	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
-	CreatedAt      time.Time          `json:"created_at"`
-}
-
-// SiemForwarder is migration-055's operator-managed external SIEM sink.
-// auth_encrypted is the Fernet ciphertext of the JSON auth blob ({token,
-// username, password}) under auth.Encryptor — same key set as
-// webhook_subscriptions.secret_encrypted.
-type SiemForwarder struct {
-	ID              uuid.UUID       `json:"id"`
-	Name            string          `json:"name"`
-	Transport       string          `json:"transport"`
-	Endpoint        string          `json:"endpoint"`
-	AuthEncrypted   string          `json:"auth_encrypted"`
-	EventFilters    json.RawMessage `json:"event_filters"`
-	Format          string          `json:"format"`
-	TlsSkipVerify   bool            `json:"tls_skip_verify"`
-	CaCertPem       string          `json:"ca_cert_pem"`
-	BatchSize       int32           `json:"batch_size"`
-	FlushIntervalMs int32           `json:"flush_interval_ms"`
-	TimeoutSeconds  int32           `json:"timeout_seconds"`
-	Enabled         bool            `json:"enabled"`
-	CreatedBy       pgtype.UUID     `json:"created_by"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-}
-
-// SiemForwardQueue is one queued event row destined for a forwarder.
-// Migration 055. The dispatcher batches up to forwarder.batch_size of
-// these per tick and DELETEs them on a successful send. attempts is
-// bumped on every failure; rows that cross the retry cap (100) are
-// dropped and the forwarder's dropped_total counter is incremented.
-type SiemForwardQueue struct {
-	ID          int64           `json:"id"`
-	ForwarderID uuid.UUID       `json:"forwarder_id"`
-	EventName   string          `json:"event_name"`
-	Payload     json.RawMessage `json:"payload"`
-	Severity    string          `json:"severity"`
-	Attempts    int32           `json:"attempts"`
-	CreatedAt   time.Time       `json:"created_at"`
-}
-
-// SiemForwarderStatus is the per-forwarder health + lag row updated by
-// the dispatcher on every tick. The admin status endpoint reads it
-// without scanning the queue table.
-type SiemForwarderStatus struct {
-	ForwarderID     uuid.UUID          `json:"forwarder_id"`
-	LastSentAt      pgtype.Timestamptz `json:"last_sent_at"`
-	LastError       string             `json:"last_error"`
-	QueueDepth      int32              `json:"queue_depth"`
-	DroppedTotal    int64              `json:"dropped_total"`
-	DispatchedTotal int64              `json:"dispatched_total"`
-	UpdatedAt       time.Time          `json:"updated_at"`
 }

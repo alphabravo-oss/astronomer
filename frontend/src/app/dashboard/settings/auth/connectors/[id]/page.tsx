@@ -14,6 +14,7 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import {
   useDexConnector,
   useDexConnectorTypes,
@@ -83,7 +84,7 @@ export default function EditConnectorPage({ params }: PageProps) {
       });
       // Stay on the page so the operator can immediately apply.
     } catch (err) {
-      const message = extractAxiosError(err) ?? 'Failed to update connector.';
+      const message = extractApiErrorMessage(err) ?? 'Failed to update connector.';
       setServerError(message);
     }
   };
@@ -176,17 +177,5 @@ export default function EditConnectorPage({ params }: PageProps) {
         loading={deleteMutation.isPending}
       />
     </div>
-  );
-}
-
-function extractAxiosError(err: unknown): string | null {
-  if (!err) return null;
-  type ResponseShape = { response?: { data?: { error?: { message?: string }; message?: string } }; message?: string };
-  const obj = err as ResponseShape;
-  return (
-    obj.response?.data?.error?.message ??
-    obj.response?.data?.message ??
-    obj.message ??
-    null
   );
 }

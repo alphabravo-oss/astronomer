@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -75,10 +72,10 @@ var skipPaths = map[string]bool{
 	// 2FA endpoints emit their own explicit audit rows from the
 	// TOTP handler (auth.totp.enrolled / verified / disabled / etc.)
 	// — let the middleware skip them to avoid double-counting.
-	"/api/v1/auth/totp/enroll/start":             true,
-	"/api/v1/auth/totp/enroll/confirm":           true,
-	"/api/v1/auth/totp/disable":                  true,
-	"/api/v1/auth/totp/verify":                   true,
+	"/api/v1/auth/totp/enroll/start":              true,
+	"/api/v1/auth/totp/enroll/confirm":            true,
+	"/api/v1/auth/totp/disable":                   true,
+	"/api/v1/auth/totp/verify":                    true,
 	"/api/v1/auth/totp/recovery-codes/regenerate": true,
 }
 
@@ -177,37 +174,23 @@ func writeAuditLog(r *http.Request, status int, writer any, resourceType, resour
 		"auth_method": authMethod(r.Context()),
 	}
 	if writerV1, ok := writer.(AuditWriterV1); ok && writerV1 != nil {
-		audit.Record(r.Context(), writerV1, audit.Event{
+		audit.Record(r.Context(), writerV1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+			Request:         r,
 			Source:          "http",
 			CorrelationID:   GetCorrelationID(r.Context()),
-			UserID:          currentUserUUID(r.Context()),
+			UserID:          AuthenticatedUserUUID(r.Context()),
 			ActorAuthMethod: authMethod(r.Context()),
 			Action:          action,
 			ResourceType:    resourceType,
 			ResourceID:      resourceID,
 			ResourceName:    "",
-			HTTPMethod:      r.Method,
-			Path:            r.URL.Path,
-			StatusCode:      int32(status),
+			StatusCode:      status,
 			DurationMs:      durationMs,
 			RequestID:       GetRequestID(r.Context()),
-			IPAddress:       remoteIPAddr(r),
-			UserAgent:       r.UserAgent(),
+			IPAddress:       RemoteIPAddr(r),
 			Detail:          detail,
-		})
+		}))
 	}
-}
-
-func currentUserUUID(ctx context.Context) pgtype.UUID {
-	user, ok := GetAuthenticatedUser(ctx)
-	if !ok || user == nil {
-		return pgtype.UUID{}
-	}
-	id, err := uuid.Parse(user.ID)
-	if err != nil {
-		return pgtype.UUID{}
-	}
-	return pgtype.UUID{Bytes: id, Valid: true}
 }
 
 func authMethod(ctx context.Context) string {
@@ -218,7 +201,7 @@ func authMethod(ctx context.Context) string {
 	return user.AuthMethod
 }
 
-func remoteIPAddr(r *http.Request) *netip.Addr {
+func RemoteIPAddr(r *http.Request) *netip.Addr {
 	if r == nil {
 		return nil
 	}

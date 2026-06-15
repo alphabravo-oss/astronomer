@@ -40,8 +40,8 @@ import type {
   NetworkPolicy,
   Project,
 } from '@/types';
-import type { GeneralSettings } from './api';
-import { toast } from 'sonner';
+import type { AuditLogQueryParams, GeneralSettings } from './api';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 
 // ============================================================
 // Query Key Factories
@@ -67,6 +67,44 @@ export const queryKeys = {
     metrics: (id: string, range?: string) => ['clusters', id, 'metrics', range] as const,
     metricsSummary: (id: string) => ['clusters', id, 'metrics', 'summary'] as const,
   },
+  clusterPages: {
+    appsInstalled: (id: string) => ['clusters', id, 'apps', 'installed'] as const,
+    appCatalogBrowse: (query: string) => ['catalog', 'browse', query] as const,
+    appCatalogRecommended: ['catalog', 'recommended'] as const,
+    imageVulnSummary: (id: string) => ['clusters', id, 'image-vulns', 'summary'] as const,
+    imageVulnImages: (id: string, namespace: string) =>
+      ['clusters', id, 'image-vulns', 'images', namespace] as const,
+    imageVulnReport: (id: string, reportId: string, severity: string) =>
+      ['clusters', id, 'image-vulns', 'report', reportId, severity] as const,
+    imageVulnHistory: (id: string, hours: number) =>
+      ['clusters', id, 'image-vulns', 'history', hours] as const,
+    imageVulnReportHistory: (id: string, reportId: string) =>
+      ['clusters', id, 'image-vulns', 'report-history', reportId] as const,
+    imageVulnDiff: (id: string, hours: number) =>
+      ['clusters', id, 'image-vulns', 'diff', hours] as const,
+    imageVulnProgress: (id: string) => ['clusters', id, 'image-vulns', 'progress'] as const,
+    apiserverAllowlist: (id: string) => ['clusters', id, 'apiserver-allowlist'] as const,
+    apiserverAllowlistSnapshots: (id: string) =>
+      ['clusters', id, 'apiserver-allowlist-snapshots'] as const,
+    registries: (id: string) => ['clusters', id, 'registries'] as const,
+    mirroredIngressClasses: (id: string) => ['clusters', id, 'mirrored', 'ingress-classes'] as const,
+    mirroredGatewayClasses: (id: string) => ['clusters', id, 'mirrored', 'gateway-classes'] as const,
+    mirroredNetworkPolicies: (id: string) => ['clusters', id, 'mirrored', 'network-policies'] as const,
+    mirroredResourceQuotas: (id: string) => ['clusters', id, 'mirrored', 'resource-quotas'] as const,
+    mirroredLimitRanges: (id: string) => ['clusters', id, 'mirrored', 'limit-ranges'] as const,
+    serviceMeshDetection: (id: string) => ['clusters', id, 'service-mesh'] as const,
+    serviceMeshInventory: (id: string) => ['clusters', id, 'service-mesh', 'inventory'] as const,
+    serviceMeshMtls: (id: string) => ['clusters', id, 'service-mesh', 'mtls'] as const,
+    veleroStatus: (id: string) => ['clusters', id, 'velero-status'] as const,
+    snapshots: (id: string) => ['clusters', id, 'snapshots'] as const,
+    snapshotSchedules: (id: string) => ['clusters', id, 'snapshot-schedules'] as const,
+    templates: ['cluster-templates'] as const,
+    templateBinding: (id: string) => ['clusters', id, 'template'] as const,
+    workloadKind: (id: string, kind: string) => ['clusters', id, 'workloads', kind] as const,
+    vulnerabilitySummary: (id: string) => ['clusters', id, 'vulnerabilities', 'summary'] as const,
+    serviceMeshHeader: (id: string) => ['clusters', id, 'service-mesh', 'header'] as const,
+    registrationStatus: (id: string) => ['cluster-registration-status', id] as const,
+  },
   workloads: {
     list: (clusterId: string, params?: Record<string, unknown>) =>
       ['workloads', clusterId, 'list', params] as const,
@@ -80,7 +118,26 @@ export const queryKeys = {
   podLogs: (clusterId: string, ns: string, pod: string, container?: string) =>
     ['pod-logs', clusterId, ns, pod, container] as const,
   argocd: {
+    all: ['argocd'] as const,
     instances: (clusterId?: string) => ['argocd', 'instances', clusterId] as const,
+    instance: (instanceId: string) => ['argocd', 'instance', instanceId] as const,
+    instanceHealth: (instanceId: string) => ['argocd', 'instance', instanceId, 'health'] as const,
+    liveApps: (instanceId?: string) =>
+      instanceId ? (['argocd', 'live-apps', instanceId] as const) : (['argocd', 'live-apps'] as const),
+    cachedApplications: (params?: { instanceId?: string; limit?: number; offset?: number }) =>
+      ['argocd', 'cached-applications', params] as const,
+    dbApps: (instanceId: string) => ['argocd', 'db-apps', instanceId] as const,
+    dbApp: (appId: string) => ['argocd', 'db-app', appId] as const,
+    appManifests: (appId: string) => ['argocd', 'app-manifests', appId] as const,
+    appHistory: (appId: string) => ['argocd', 'app-history', appId] as const,
+    operations: ['argocd', 'operations'] as const,
+    appOperations: (appId: string) => ['argocd', 'operations', 'for-app', appId] as const,
+    projects: (instanceId: string) => ['argocd', 'projects', instanceId] as const,
+    repos: (instanceId: string) => ['argocd', 'repos', instanceId] as const,
+    managedClusters: (instanceId: string) => ['argocd', 'managed-clusters', instanceId] as const,
+    orphanReport: (instanceId: string) => ['argocd', 'orphan-report', instanceId] as const,
+    appsets: (instanceId: string) => ['argocd', 'appsets', instanceId] as const,
+    clusterOwnership: (clusterId: string) => ['argocd', 'clusters', clusterId, 'ownership'] as const,
     applications: (params?: Record<string, unknown>) => ['argocd', 'applications', params] as const,
   },
   rbac: {
@@ -88,6 +145,7 @@ export const queryKeys = {
     clusterRoles: (clusterId?: string) => ['rbac', 'cluster-roles', clusterId] as const,
     projectRoles: (projectId?: string) => ['rbac', 'project-roles', projectId] as const,
     bindings: (params?: Record<string, unknown>) => ['rbac', 'bindings', params] as const,
+    myPermissions: (params?: apiClient.EffectivePermissionParams) => ['rbac', 'my-permissions', params] as const,
   },
   users: {
     current: ['users', 'current'] as const,
@@ -112,10 +170,30 @@ export const queryKeys = {
     detail: (id: string) => ['anomaly-baselines', 'detail', id] as const,
   },
   logging: {
+    all: ['logging'] as const,
     outputs: ['logging', 'outputs'] as const,
     pipelines: ['logging', 'pipelines'] as const,
     operations: (params?: Record<string, unknown>) => ['logging', 'operations', params] as const,
     operation: (id: string) => ['logging', 'operations', 'detail', id] as const,
+  },
+  clusterGroups: {
+    all: ['cluster-groups'] as const,
+  },
+  vault: {
+    connections: ['vault-connections'] as const,
+  },
+  agents: {
+    fleet: ['agents', 'fleet'] as const,
+    diagnostics: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'diagnostics'] as const,
+    operations: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'operations'] as const,
+  },
+  extensions: {
+    list: ['extensions'] as const,
+  },
+  adminOperations: {
+    queues: ['admin', 'queues'] as const,
+    dlq: (queue: string) => ['admin', 'queues', queue, 'dlq'] as const,
+    outbox: (status: string) => ['admin', 'task-outbox', status] as const,
   },
   storage: {
     pvs: (clusterId: string) => ['storage', clusterId, 'pvs'] as const,
@@ -278,10 +356,10 @@ export function useCreateCluster() {
     mutationFn: (data: ClusterRegistration) => apiClient.createCluster(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
-      toast.success('Cluster registration initiated');
+      toastSuccess('Cluster registration initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to register cluster: ${error.message}`);
+      toastApiError('Failed to register cluster', error);
     },
   });
 }
@@ -294,10 +372,10 @@ export function useUpdateCluster() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.detail(variables.id) });
-      toast.success('Cluster updated');
+      toastSuccess('Cluster updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update cluster: ${error.message}`);
+      toastApiError('Failed to update cluster', error);
     },
   });
 }
@@ -309,10 +387,10 @@ export function useTakeoverClusterOwnership() {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.detail(id) });
-      toast.success('Cluster ownership transferred');
+      toastSuccess('Cluster ownership transferred');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to transfer cluster ownership: ${error.message}`);
+      toastApiError('Failed to transfer cluster ownership', error);
     },
   });
 }
@@ -323,10 +401,10 @@ export function useDeleteCluster() {
     mutationFn: (id: string) => apiClient.deleteCluster(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
-      toast.success('Cluster deleted');
+      toastSuccess('Cluster deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete cluster: ${error.message}`);
+      toastApiError('Failed to delete cluster', error);
     },
   });
 }
@@ -338,10 +416,10 @@ export function useDeletePod() {
       apiClient.deletePod(clusterId, namespace, name),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.pods(variables.clusterId) });
-      toast.success('Pod deleted');
+      toastSuccess('Pod deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete pod: ${error.message}`);
+      toastApiError('Failed to delete pod', error);
     },
   });
 }
@@ -399,10 +477,10 @@ export function useScaleWorkload() {
           variables.name
         ),
       });
-      toast.success(`Scaled to ${variables.replicas} replicas`);
+      toastSuccess(`Scaled to ${variables.replicas} replicas`);
     },
     onError: (error: Error) => {
-      toast.error(`Failed to scale workload: ${error.message}`);
+      toastApiError('Failed to scale workload', error);
     },
   });
 }
@@ -425,10 +503,10 @@ export function useRestartWorkload() {
           variables.name
         ),
       });
-      toast.success('Workload restart initiated');
+      toastSuccess('Workload restart initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to restart workload: ${error.message}`);
+      toastApiError('Failed to restart workload', error);
     },
   });
 }
@@ -539,7 +617,7 @@ export function usePodLogs(
         // doesn't spam the corner of the screen.
         if (!errorShownRef.current) {
           errorShownRef.current = true;
-          toast.error(`Log stream: ${err.message}`);
+          toastApiError('Log stream', err);
         }
       },
       {
@@ -651,11 +729,11 @@ export function useSyncArgoApp() {
     mutationFn: (params: { instanceId: string; appName: string }) =>
       apiClient.syncArgoApplication(params.instanceId, params.appName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd'] });
-      toast.success('Sync initiated');
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.all });
+      toastSuccess('Sync initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Sync failed: ${error.message}`);
+      toastApiError('Sync failed', error);
     },
   });
 }
@@ -692,6 +770,13 @@ export function useRoleBindings(params?: { roleType?: string; scope?: string }) 
   });
 }
 
+export function useMyEffectivePermissions(params?: apiClient.EffectivePermissionParams) {
+  return useQuery({
+    queryKey: queryKeys.rbac.myPermissions(params),
+    queryFn: () => apiClient.getMyEffectivePermissions(params),
+  });
+}
+
 export function useCreateRole() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -714,10 +799,10 @@ export function useCreateRole() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rbac'] });
-      toast.success('Role created successfully');
+      toastSuccess('Role created successfully');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create role: ${error.message}`);
+      toastApiError('Failed to create role', error);
     },
   });
 }
@@ -733,10 +818,10 @@ export function useCreateRoleBinding() {
     }) => apiClient.createRoleBinding(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rbac'] });
-      toast.success('Role binding created');
+      toastSuccess('Role binding created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create role binding: ${error.message}`);
+      toastApiError('Failed to create role binding', error);
     },
   });
 }
@@ -778,10 +863,10 @@ export function useSaveGeneralSettings() {
     mutationFn: (data: GeneralSettings) => apiClient.saveGeneralSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.general });
-      toast.success('Settings saved successfully');
+      toastSuccess('Settings saved successfully');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to save settings: ${error.message}`);
+      toastApiError('Failed to save settings', error);
     },
   });
 }
@@ -810,10 +895,10 @@ export function useCreateSSOProvider() {
     }) => apiClient.createSSOProvider(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.sso });
-      toast.success('SSO provider created successfully');
+      toastSuccess('SSO provider created successfully');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create SSO provider: ${error.message}`);
+      toastApiError('Failed to create SSO provider', error);
     },
   });
 }
@@ -832,10 +917,10 @@ export function useCreateAPIToken() {
       apiClient.createAPIToken(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.tokens });
-      toast.success('API token created');
+      toastSuccess('API token created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create token: ${error.message}`);
+      toastApiError('Failed to create token', error);
     },
   });
 }
@@ -846,25 +931,19 @@ export function useDeleteAPIToken() {
     mutationFn: (id: string) => apiClient.deleteAPIToken(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.tokens });
-      toast.success('API token deleted');
+      toastSuccess('API token deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete token: ${error.message}`);
+      toastApiError('Failed to delete token', error);
     },
   });
 }
 
-export function useAuditLogs(params?: {
-  page?: number;
-  pageSize?: number;
-  action?: string;
-  user?: string;
-  // migration 063 — read/mutation/auth/system filter.
-  action_class?: string;
-}) {
+export function useAuditLogs(params?: AuditLogQueryParams, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.settings.auditLogs(params),
     queryFn: () => apiClient.getAuditLogs(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -898,10 +977,10 @@ export function useCreateAlertRule() {
     mutationFn: (data: Partial<AlertRule>) => apiClient.createAlertRule(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
-      toast.success('Alert rule created');
+      toastSuccess('Alert rule created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create alert rule: ${error.message}`);
+      toastApiError('Failed to create alert rule', error);
     },
   });
 }
@@ -913,10 +992,10 @@ export function useUpdateAlertRule() {
       apiClient.updateAlertRule(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
-      toast.success('Alert rule updated');
+      toastSuccess('Alert rule updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update alert rule: ${error.message}`);
+      toastApiError('Failed to update alert rule', error);
     },
   });
 }
@@ -927,10 +1006,10 @@ export function useDeleteAlertRule() {
     mutationFn: (id: string) => apiClient.deleteAlertRule(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alerting.rules });
-      toast.success('Alert rule deleted');
+      toastSuccess('Alert rule deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete alert rule: ${error.message}`);
+      toastApiError('Failed to delete alert rule', error);
     },
   });
 }
@@ -949,10 +1028,10 @@ export function useAcknowledgeAlert() {
     mutationFn: (id: string) => apiClient.acknowledgeAlert(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alerting'] });
-      toast.success('Alert acknowledged');
+      toastSuccess('Alert acknowledged');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to acknowledge alert: ${error.message}`);
+      toastApiError('Failed to acknowledge alert', error);
     },
   });
 }
@@ -963,10 +1042,10 @@ export function useResolveAlert() {
     mutationFn: (id: string) => apiClient.resolveAlert(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alerting'] });
-      toast.success('Alert resolved');
+      toastSuccess('Alert resolved');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to resolve alert: ${error.message}`);
+      toastApiError('Failed to resolve alert', error);
     },
   });
 }
@@ -984,10 +1063,10 @@ export function useCreateNotificationChannel() {
     mutationFn: (data: Partial<NotificationChannel>) => apiClient.createNotificationChannel(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alerting.channels });
-      toast.success('Notification channel created');
+      toastSuccess('Notification channel created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create notification channel: ${error.message}`);
+      toastApiError('Failed to create notification channel', error);
     },
   });
 }
@@ -997,13 +1076,13 @@ export function useTestNotificationChannel() {
     mutationFn: (id: string) => apiClient.testNotificationChannel(id),
     onSuccess: (data) => {
       if (data.success) {
-        toast.success('Test notification sent successfully');
+        toastSuccess('Test notification sent successfully');
       } else {
-        toast.error(`Test failed: ${data.message}`);
+        toastApiError('Test failed', data.message);
       }
     },
     onError: (error: Error) => {
-      toast.error(`Test failed: ${error.message}`);
+      toastApiError('Test failed', error);
     },
   });
 }
@@ -1022,10 +1101,10 @@ export function useCreateAlertSilence() {
     mutationFn: (data: Partial<AlertSilence>) => apiClient.createAlertSilence(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.alerting.silences });
-      toast.success('Silence created');
+      toastSuccess('Silence created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create silence: ${error.message}`);
+      toastApiError('Failed to create silence', error);
     },
   });
 }
@@ -1070,10 +1149,10 @@ export function useCreateLoggingOutput() {
     mutationFn: (data: Partial<LoggingOutput>) => apiClient.createLoggingOutput(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.outputs });
-      toast.success('Logging output created');
+      toastSuccess('Logging output created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create logging output: ${error.message}`);
+      toastApiError('Failed to create logging output', error);
     },
   });
 }
@@ -1083,13 +1162,13 @@ export function useTestLoggingOutput() {
     mutationFn: (id: string) => apiClient.testLoggingOutput(id),
     onSuccess: (data) => {
       if (data.success) {
-        toast.success('Test connection successful');
+        toastSuccess('Test connection successful');
       } else {
-        toast.error(`Test failed: ${data.message}`);
+        toastApiError('Test failed', data.message);
       }
     },
     onError: (error: Error) => {
-      toast.error(`Test failed: ${error.message}`);
+      toastApiError('Test failed', error);
     },
   });
 }
@@ -1107,10 +1186,10 @@ export function useCreateLoggingPipeline() {
     mutationFn: (data: Partial<LoggingPipeline>) => apiClient.createLoggingPipeline(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.pipelines });
-      toast.success('Logging pipeline created');
+      toastSuccess('Logging pipeline created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create logging pipeline: ${error.message}`);
+      toastApiError('Failed to create logging pipeline', error);
     },
   });
 }
@@ -1148,10 +1227,10 @@ export function useRetryLoggingOperation() {
     onSuccess: () => {
       // Invalidate every cached list (parameterized keys) and the detail rows.
       queryClient.invalidateQueries({ queryKey: ['logging', 'operations'] });
-      toast.success('Operation retry queued');
+      toastSuccess('Operation retry queued');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to retry operation: ${error.message}`);
+      toastApiError('Failed to retry operation', error);
     },
   });
 }
@@ -1191,10 +1270,10 @@ export function useCreatePVC() {
       apiClient.createPersistentVolumeClaim(clusterId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['storage'] });
-      toast.success('PVC created');
+      toastSuccess('PVC created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create PVC: ${error.message}`);
+      toastApiError('Failed to create PVC', error);
     },
   });
 }
@@ -1206,10 +1285,10 @@ export function useDeletePVC() {
       apiClient.deletePersistentVolumeClaim(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['storage'] });
-      toast.success('PVC deleted');
+      toastSuccess('PVC deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete PVC: ${error.message}`);
+      toastApiError('Failed to delete PVC', error);
     },
   });
 }
@@ -1221,10 +1300,10 @@ export function useDeletePV() {
       apiClient.deletePersistentVolume(clusterId, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['storage'] });
-      toast.success('PV deleted');
+      toastSuccess('PV deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete PV: ${error.message}`);
+      toastApiError('Failed to delete PV', error);
     },
   });
 }
@@ -1264,10 +1343,10 @@ export function useDeleteService() {
       apiClient.deleteService(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['networking'] });
-      toast.success('Service deleted');
+      toastSuccess('Service deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete service: ${error.message}`);
+      toastApiError('Failed to delete service', error);
     },
   });
 }
@@ -1279,10 +1358,10 @@ export function useDeleteIngress() {
       apiClient.deleteIngress(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['networking'] });
-      toast.success('Ingress deleted');
+      toastSuccess('Ingress deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete ingress: ${error.message}`);
+      toastApiError('Failed to delete ingress', error);
     },
   });
 }
@@ -1294,10 +1373,10 @@ export function useDeleteNetworkPolicy() {
       apiClient.deleteNetworkPolicy(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['networking'] });
-      toast.success('Network policy deleted');
+      toastSuccess('Network policy deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete network policy: ${error.message}`);
+      toastApiError('Failed to delete network policy', error);
     },
   });
 }
@@ -1399,10 +1478,10 @@ export function useCreateProject() {
     mutationFn: (data: Partial<Project>) => apiClient.createProject(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-      toast.success('Project created');
+      toastSuccess('Project created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create project: ${error.message}`);
+      toastApiError('Failed to create project', error);
     },
   });
 }
@@ -1413,10 +1492,10 @@ export function useDeleteProject() {
     mutationFn: (id: string) => apiClient.deleteProject(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-      toast.success('Project deleted');
+      toastSuccess('Project deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete project: ${error.message}`);
+      toastApiError('Failed to delete project', error);
     },
   });
 }
@@ -1428,10 +1507,10 @@ export function useTakeoverProjectOwnership() {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(id) });
-      toast.success('Project ownership transferred');
+      toastSuccess('Project ownership transferred');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to transfer project ownership: ${error.message}`);
+      toastApiError('Failed to transfer project ownership', error);
     },
   });
 }
@@ -1452,10 +1531,10 @@ export function useCreateUser() {
     }) => apiClient.createUser(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User created');
+      toastSuccess('User created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create user: ${error.message}`);
+      toastApiError('Failed to create user', error);
     },
   });
 }
@@ -1467,10 +1546,10 @@ export function useUpdateUser() {
       apiClient.updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User updated');
+      toastSuccess('User updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update user: ${error.message}`);
+      toastApiError('Failed to update user', error);
     },
   });
 }
@@ -1481,10 +1560,10 @@ export function useDeleteUser() {
     mutationFn: (id: string) => apiClient.deleteUser(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User deleted');
+      toastSuccess('User deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete user: ${error.message}`);
+      toastApiError('Failed to delete user', error);
     },
   });
 }
@@ -1493,10 +1572,10 @@ export function useResetUserPassword() {
   return useMutation({
     mutationFn: (id: string) => apiClient.resetUserPassword(id),
     onSuccess: () => {
-      toast.success('Password reset email sent');
+      toastSuccess('Password reset email sent');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to reset password: ${error.message}`);
+      toastApiError('Failed to reset password', error);
     },
   });
 }
@@ -1525,10 +1604,10 @@ export function useCreateHelmRepository() {
     }) => apiClient.createHelmRepository(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Repository added');
+      toastSuccess('Repository added');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to add repository: ${error.message}`);
+      toastApiError('Failed to add repository', error);
     },
   });
 }
@@ -1539,10 +1618,10 @@ export function useSyncHelmRepository() {
     mutationFn: (id: string) => apiClient.syncHelmRepository(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Repository sync initiated');
+      toastSuccess('Repository sync initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to sync repository: ${error.message}`);
+      toastApiError('Failed to sync repository', error);
     },
   });
 }
@@ -1553,10 +1632,10 @@ export function useDeleteHelmRepository() {
     mutationFn: (id: string) => apiClient.deleteHelmRepository(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Repository deleted');
+      toastSuccess('Repository deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete repository: ${error.message}`);
+      toastApiError('Failed to delete repository', error);
     },
   });
 }
@@ -1596,10 +1675,10 @@ export function useInstallHelmChart() {
     }) => apiClient.installHelmChart(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Chart installation initiated');
+      toastSuccess('Chart installation initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to install chart: ${error.message}`);
+      toastApiError('Failed to install chart', error);
     },
   });
 }
@@ -1611,10 +1690,10 @@ export function useUpgradeInstalledChart() {
       apiClient.upgradeInstalledChart(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Chart upgrade initiated');
+      toastSuccess('Chart upgrade initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to upgrade chart: ${error.message}`);
+      toastApiError('Failed to upgrade chart', error);
     },
   });
 }
@@ -1625,10 +1704,10 @@ export function useUninstallChart() {
     mutationFn: (id: string) => apiClient.uninstallChart(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Chart uninstalled');
+      toastSuccess('Chart uninstalled');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to uninstall chart: ${error.message}`);
+      toastApiError('Failed to uninstall chart', error);
     },
   });
 }
@@ -1640,10 +1719,10 @@ export function useRollbackChart() {
       apiClient.rollbackChart(id, revision),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
-      toast.success('Chart rollback initiated');
+      toastSuccess('Chart rollback initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to rollback chart: ${error.message}`);
+      toastApiError('Failed to rollback chart', error);
     },
   });
 }
@@ -1676,10 +1755,10 @@ export function useCreateBackupStorageConfig() {
     }) => apiClient.createBackupStorageConfig(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Storage configuration created');
+      toastSuccess('Storage configuration created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create storage config: ${error.message}`);
+      toastApiError('Failed to create storage config', error);
     },
   });
 }
@@ -1689,13 +1768,13 @@ export function useTestBackupStorage() {
     mutationFn: (id: string) => apiClient.testBackupStorage(id),
     onSuccess: (data) => {
       if (data.success) {
-        toast.success('Storage connection test successful');
+        toastSuccess('Storage connection test successful');
       } else {
-        toast.error(`Storage test failed: ${data.message}`);
+        toastApiError('Storage test failed', data.message);
       }
     },
     onError: (error: Error) => {
-      toast.error(`Storage test failed: ${error.message}`);
+      toastApiError('Storage test failed', error);
     },
   });
 }
@@ -1706,10 +1785,10 @@ export function useDeleteBackupStorageConfig() {
     mutationFn: (id: string) => apiClient.deleteBackupStorageConfig(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Storage configuration deleted');
+      toastSuccess('Storage configuration deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete storage config: ${error.message}`);
+      toastApiError('Failed to delete storage config', error);
     },
   });
 }
@@ -1732,10 +1811,10 @@ export function useCreateBackup() {
     }) => apiClient.createBackup(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Backup initiated');
+      toastSuccess('Backup initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create backup: ${error.message}`);
+      toastApiError('Failed to create backup', error);
     },
   });
 }
@@ -1746,10 +1825,10 @@ export function useRestoreFromBackup() {
     mutationFn: (id: string) => apiClient.restoreFromBackup(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Restore initiated');
+      toastSuccess('Restore initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to restore backup: ${error.message}`);
+      toastApiError('Failed to restore backup', error);
     },
   });
 }
@@ -1760,10 +1839,10 @@ export function useDeleteBackup() {
     mutationFn: (id: string) => apiClient.deleteBackup(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Backup deleted');
+      toastSuccess('Backup deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete backup: ${error.message}`);
+      toastApiError('Failed to delete backup', error);
     },
   });
 }
@@ -1788,10 +1867,10 @@ export function useCreateBackupSchedule() {
     }) => apiClient.createBackupSchedule(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Backup schedule created');
+      toastSuccess('Backup schedule created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create schedule: ${error.message}`);
+      toastApiError('Failed to create schedule', error);
     },
   });
 }
@@ -1809,10 +1888,10 @@ export function useUpdateBackupSchedule() {
     }> }) => apiClient.updateBackupSchedule(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Backup schedule updated');
+      toastSuccess('Backup schedule updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update schedule: ${error.message}`);
+      toastApiError('Failed to update schedule', error);
     },
   });
 }
@@ -1823,10 +1902,10 @@ export function useDeleteBackupSchedule() {
     mutationFn: (id: string) => apiClient.deleteBackupSchedule(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
-      toast.success('Backup schedule deleted');
+      toastSuccess('Backup schedule deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete schedule: ${error.message}`);
+      toastApiError('Failed to delete schedule', error);
     },
   });
 }
@@ -1849,10 +1928,10 @@ export function useCreatePodSecurityTemplate() {
       apiClient.createPodSecurityTemplate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('PSA template created');
+      toastSuccess('PSA template created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create template: ${error.message}`);
+      toastApiError('Failed to create template', error);
     },
   });
 }
@@ -1864,10 +1943,10 @@ export function useUpdatePodSecurityTemplate() {
       apiClient.updatePodSecurityTemplate(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('PSA template updated');
+      toastSuccess('PSA template updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update template: ${error.message}`);
+      toastApiError('Failed to update template', error);
     },
   });
 }
@@ -1878,10 +1957,10 @@ export function useDeletePodSecurityTemplate() {
     mutationFn: (id: string) => apiClient.deletePodSecurityTemplate(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('PSA template deleted');
+      toastSuccess('PSA template deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete template: ${error.message}`);
+      toastApiError('Failed to delete template', error);
     },
   });
 }
@@ -1901,10 +1980,10 @@ export function useAssignSecurityPolicy() {
       apiClient.assignSecurityPolicy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('Security policy assigned');
+      toastSuccess('Security policy assigned');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to assign policy: ${error.message}`);
+      toastApiError('Failed to assign policy', error);
     },
   });
 }
@@ -1915,10 +1994,10 @@ export function useApplySecurityPolicy() {
     mutationFn: (id: string) => apiClient.applySecurityPolicy(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('Security policy applied to cluster');
+      toastSuccess('Security policy applied to cluster');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to apply policy: ${error.message}`);
+      toastApiError('Failed to apply policy', error);
     },
   });
 }
@@ -1929,10 +2008,10 @@ export function useRemoveSecurityPolicy() {
     mutationFn: (id: string) => apiClient.removeSecurityPolicy(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('Security policy removed');
+      toastSuccess('Security policy removed');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to remove policy: ${error.message}`);
+      toastApiError('Failed to remove policy', error);
     },
   });
 }
@@ -1952,10 +2031,10 @@ export function useTriggerSecurityScan() {
       apiClient.triggerSecurityScan(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security'] });
-      toast.success('Security scan initiated');
+      toastSuccess('Security scan initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to start scan: ${error.message}`);
+      toastApiError('Failed to start scan', error);
     },
   });
 }
@@ -1988,10 +2067,10 @@ export function useInstallTool() {
       apiClient.installTool(slug, data),
     onSuccess: (_, { cluster_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tools.clusterStatus(cluster_id) });
-      toast.success('Tool installation initiated');
+      toastSuccess('Tool installation initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to install tool: ${error.message}`);
+      toastApiError('Failed to install tool', error);
     },
   });
 }
@@ -2003,10 +2082,10 @@ export function useUninstallTool() {
       apiClient.uninstallTool(slug, { cluster_id }),
     onSuccess: (_, { cluster_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tools.clusterStatus(cluster_id) });
-      toast.success('Tool uninstall initiated');
+      toastSuccess('Tool uninstall initiated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to uninstall tool: ${error.message}`);
+      toastApiError('Failed to uninstall tool', error);
     },
   });
 }
@@ -2018,10 +2097,10 @@ export function useAdoptTool() {
       apiClient.adoptTool(slug, data),
     onSuccess: (_, { cluster_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tools.clusterStatus(cluster_id) });
-      toast.success('Tool adopted successfully');
+      toastSuccess('Tool adopted successfully');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to adopt tool: ${error.message}`);
+      toastApiError('Failed to adopt tool', error);
     },
   });
 }
@@ -2047,10 +2126,10 @@ export function useGenerateKubeconfig() {
   return useMutation({
     mutationFn: (clusterId: string) => apiClient.generateKubeconfig(clusterId),
     onSuccess: () => {
-      toast.success('Kubeconfig downloaded');
+      toastSuccess('Kubeconfig downloaded');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to generate kubeconfig: ${error.message}`);
+      toastApiError('Failed to generate kubeconfig', error);
     },
   });
 }
@@ -2086,10 +2165,10 @@ export function useK8sDelete() {
       queryClient.invalidateQueries({ queryKey: ['storage'] });
       queryClient.invalidateQueries({ queryKey: ['workloads'] });
       queryClient.invalidateQueries({ queryKey: ['generic'] });
-      toast.success('Resource deleted');
+      toastSuccess('Resource deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete resource: ${error.message}`);
+      toastApiError('Failed to delete resource', error);
     },
   });
 }
@@ -2106,10 +2185,10 @@ export function useK8sApplyYaml() {
       queryClient.invalidateQueries({ queryKey: ['storage'] });
       queryClient.invalidateQueries({ queryKey: ['workloads'] });
       queryClient.invalidateQueries({ queryKey: ['generic'] });
-      toast.success('Resource updated');
+      toastSuccess('Resource updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update resource: ${error.message}`);
+      toastApiError('Failed to update resource', error);
     },
   });
 }
@@ -2119,10 +2198,10 @@ export function useK8sDryRunYaml() {
     mutationFn: ({ clusterId, path, yaml }: { clusterId: string; path: string; yaml: string }) =>
       apiClient.k8sDryRunYaml(clusterId, path, yaml),
     onSuccess: () => {
-      toast.success('Dry run passed');
+      toastSuccess('Dry run passed');
     },
     onError: (error: Error) => {
-      toast.error(`Dry run failed: ${error.message}`);
+      toastApiError('Dry run failed', error);
     },
   });
 }
@@ -2139,10 +2218,10 @@ export function useK8sCreate() {
       queryClient.invalidateQueries({ queryKey: ['storage'] });
       queryClient.invalidateQueries({ queryKey: ['workloads'] });
       queryClient.invalidateQueries({ queryKey: ['generic'] });
-      toast.success('Resource created');
+      toastSuccess('Resource created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create resource: ${error.message}`);
+      toastApiError('Failed to create resource', error);
     },
   });
 }
@@ -2165,10 +2244,10 @@ export function useK8sPatch() {
       queryClient.invalidateQueries({ queryKey: ['k8s'] });
       queryClient.invalidateQueries({ queryKey: ['clusters'] });
       queryClient.invalidateQueries({ queryKey: ['generic'] });
-      toast.success('Resource updated');
+      toastSuccess('Resource updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to patch resource: ${error.message}`);
+      toastApiError('Failed to patch resource', error);
     },
   });
 }
@@ -2230,10 +2309,10 @@ export function useCreateCISScan() {
     onSuccess: (scan) => {
       queryClient.invalidateQueries({ queryKey: ['cis', 'scans'] });
       queryClient.setQueryData(cisQueryKeys.scan(scan.id), scan);
-      toast.success('CIS scan queued');
+      toastSuccess('CIS scan queued');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to start scan: ${error.message}`);
+      toastApiError('Failed to start scan', error);
     },
   });
 }

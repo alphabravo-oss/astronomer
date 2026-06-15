@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-
-const SESSION_COOKIE = 'astronomer_session';
+import { SESSION_COOKIE } from '@/lib/auth/session';
 
 export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/dashboard')) {

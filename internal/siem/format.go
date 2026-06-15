@@ -121,7 +121,7 @@ func FormatRFC5424(event SIEMEvent) []byte {
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<%d>1 %s %s %s - %s %s %s", pri, ts, host, AppName, msgID, sd, msg)
-	return truncate(buf.Bytes())
+	return truncateEventPayload(buf.Bytes())
 }
 
 // renderRFC5424StructuredData emits the STRUCTURED-DATA element for
@@ -211,7 +211,7 @@ func FormatRFC3164(event SIEMEvent) []byte {
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<%d>%s %s %s: %s", pri, ts, host, tag, msg)
-	return truncate(buf.Bytes())
+	return truncateEventPayload(buf.Bytes())
 }
 
 // FormatCEF renders the ArcSight CEF format:
@@ -267,7 +267,7 @@ func FormatCEF(event SIEMEvent) []byte {
 		// with a JSON tokenizer.
 		writeCEFExt(&buf, "msg", string(event.Detail))
 	}
-	return truncate(buf.Bytes())
+	return truncateEventPayload(buf.Bytes())
 }
 
 // writeCEFExt writes ` key=val` if val is non-empty, applying the
@@ -372,7 +372,7 @@ func FormatNDJSON(event SIEMEvent) []byte {
 		return []byte(fmt.Sprintf(`{"event_name":%q,"error":"marshal failed"}`+"\n", event.EventName))
 	}
 	buf = append(buf, '\n')
-	return truncate(buf)
+	return truncateEventPayload(buf)
 }
 
 // FormatForID dispatches to the appropriate formatter. Empty / unknown
@@ -404,9 +404,9 @@ func DefaultFormatForTransport(transport string) string {
 	}
 }
 
-// truncate is the per-event cap. We append a literal "[truncated]"
+// truncateEventPayload is the per-event cap. We append a literal "[truncated]"
 // marker so a receiver scanning for the tail sees that data was lost.
-func truncate(b []byte) []byte {
+func truncateEventPayload(b []byte) []byte {
 	if len(b) <= MaxSingleEventBytes {
 		return b
 	}

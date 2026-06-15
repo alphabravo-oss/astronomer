@@ -40,6 +40,7 @@ type fakeVaultQuerier struct {
 	conns    map[uuid.UUID]sqlc.VaultConnection
 	byName   map[string]uuid.UUID
 	defaults map[uuid.UUID]pgtype.UUID // projectID → connectionID
+	audits   []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeVaultQuerier() *fakeVaultQuerier {
@@ -151,7 +152,7 @@ func (f *fakeVaultQuerier) UpdateVaultConnectionHealth(_ context.Context, arg sq
 	return nil
 }
 func (f *fakeVaultQuerier) SetProjectDefaultVaultConnection(_ context.Context, arg sqlc.SetProjectDefaultVaultConnectionParams) error {
-	f.defaults[arg.ProjectID] = arg.DefaultVaultConnectionID
+	f.defaults[arg.ID] = arg.DefaultVaultConnectionID
 	return nil
 }
 func (f *fakeVaultQuerier) GetProjectDefaultVaultConnection(_ context.Context, projectID uuid.UUID) (pgtype.UUID, error) {
@@ -162,12 +163,51 @@ func (f *fakeVaultQuerier) GetProjectDefaultVaultConnection(_ context.Context, p
 	return v, nil
 }
 
+func (f *fakeVaultQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.audits = append(f.audits, arg)
+	return nil
+}
+
+func (f *fakeVaultQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
+	t.Helper()
+	if len(f.audits) <= idx {
+		t.Fatalf("audit rows=%d, want index %d", len(f.audits), idx)
+	}
+	return f.audits[idx]
+}
+
+func assertVaultAudit(t *testing.T, row sqlc.CreateAuditLogV1Params, action, resourceID, resourceName string) {
+	t.Helper()
+	if row.Action != action {
+		t.Fatalf("audit action=%q want %q; row=%+v", row.Action, action, row)
+	}
+	if row.ResourceType != "vault_connection" {
+		t.Fatalf("audit resource_type=%q want vault_connection; row=%+v", row.ResourceType, row)
+	}
+	if row.ResourceID != resourceID || row.ResourceName != resourceName {
+		t.Fatalf("audit target=(%q,%q), want (%q,%q)", row.ResourceID, row.ResourceName, resourceID, resourceName)
+	}
+}
+
 var errNotFound = stringError("not found")
 var errDuplicateKey = stringError("duplicate key value violates unique constraint")
 
 type stringError string
 
 func (s stringError) Error() string { return string(s) }
+
+type fakeVaultProbe struct {
+	result TestResult
+	err    error
+}
+
+func (f fakeVaultProbe) Health(context.Context, sqlc.VaultConnection, string) error {
+	return f.err
+}
+
+func (f fakeVaultProbe) Test(context.Context, sqlc.VaultConnection, string, string) (TestResult, error) {
+	return f.result, f.err
+}
 
 // makeVaultRequest builds a request with the supplied auth context.
 func makeVaultRequest(t *testing.T, method, path string, callerID uuid.UUID, body any) *http.Request {
@@ -288,6 +328,12 @@ func TestVaultHandler_CreateGetUpdate(t *testing.T) {
 	if strings.Contains(w.Body.String(), "root-secret") {
 		t.Fatalf("response leaked cleartext token")
 	}
+	createAudit := fq.auditRowAt(t, 0)
+	assertVaultAudit(t, createAudit, "admin.vault_connection.created", created.ID.String(), "prod")
+	assertAuditDetail(t, createAudit.Detail, "addr", "https://vault.example.com")
+	assertAuditDetail(t, createAudit.Detail, "auth_method", "token")
+	assertAuditDetailOmit(t, createAudit.Detail, "token")
+	assertAuditDetailOmit(t, createAudit.Detail, "auth")
 
 	// Get echoes the same redaction.
 	req = makeVaultRequest(t, "GET", "/api/v1/admin/vault-connections/"+created.ID.String()+"/", caller, nil)
@@ -325,6 +371,123 @@ func TestVaultHandler_CreateGetUpdate(t *testing.T) {
 	if !strings.Contains(plain, "root-secret") {
 		t.Fatalf("stored token lost after update; got %q", plain)
 	}
+	updateAudit := fq.auditRowAt(t, 1)
+	assertVaultAudit(t, updateAudit, "admin.vault_connection.updated", created.ID.String(), "prod")
+	assertAuditDetail(t, updateAudit.Detail, "addr", "https://vault.example.com")
+	assertAuditDetail(t, updateAudit.Detail, "auth_method", "token")
+	assertAuditDetailOmit(t, updateAudit.Detail, "token")
+	assertAuditDetailOmit(t, updateAudit.Detail, "auth")
+}
+
+func TestVaultHandler_DeleteAuditsConnection(t *testing.T) {
+	fq := newFakeVaultQuerier()
+	caller := uuid.New()
+	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
+	connID := uuid.New()
+	fq.conns[connID] = sqlc.VaultConnection{
+		ID:         connID,
+		Name:       "prod",
+		Addr:       "https://vault.example.com",
+		AuthMethod: "token",
+		Enabled:    true,
+	}
+	fq.byName["prod"] = connID
+
+	h := NewVaultHandler(fq)
+	r := chi.NewRouter()
+	r.Delete("/api/v1/admin/vault-connections/{id}/", h.Delete)
+
+	req := makeVaultRequest(t, "DELETE", "/api/v1/admin/vault-connections/"+connID.String()+"/", caller, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete want 204, got %d: %s", w.Code, w.Body.String())
+	}
+	deleteAudit := fq.auditRowAt(t, 0)
+	assertVaultAudit(t, deleteAudit, "admin.vault_connection.deleted", connID.String(), "prod")
+	assertAuditDetailOmit(t, deleteAudit.Detail, "token")
+	assertAuditDetailOmit(t, deleteAudit.Detail, "auth")
+}
+
+func TestVaultHandler_TestEndpointAuditsProbeResult(t *testing.T) {
+	fq := newFakeVaultQuerier()
+	caller := uuid.New()
+	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
+	enc := newVaultTestEncryptor(t)
+	authBlob, err := avault.EncodeAuthBlob("token", map[string]string{"token": "root-secret"})
+	if err != nil {
+		t.Fatalf("EncodeAuthBlob: %v", err)
+	}
+	encrypted, err := enc.Encrypt(authBlob)
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	connID := uuid.New()
+	fq.conns[connID] = sqlc.VaultConnection{
+		ID:            connID,
+		Name:          "prod",
+		Addr:          "https://vault.example.com",
+		AuthMethod:    "token",
+		AuthEncrypted: encrypted,
+		DefaultMount:  "secret",
+		Enabled:       true,
+	}
+
+	h := NewVaultHandler(fq)
+	h.SetEncryptor(enc)
+	h.SetProbe(fakeVaultProbe{result: TestResult{
+		OK:        true,
+		Reachable: true,
+		AuthOK:    true,
+		LatencyMS: 12,
+		Message:   "ok",
+	}})
+	r := chi.NewRouter()
+	r.Post("/api/v1/admin/vault-connections/{id}/test/", h.Test)
+
+	req := makeVaultRequest(t, "POST", "/api/v1/admin/vault-connections/"+connID.String()+"/test/", caller, map[string]any{
+		"probe_path": "secret/data/health",
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("test want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	testAudit := fq.auditRowAt(t, 0)
+	assertVaultAudit(t, testAudit, "admin.vault_connection.tested", connID.String(), "prod")
+	assertAuditDetail(t, testAudit.Detail, "probe_path", "secret/data/health")
+	assertAuditDetailOmit(t, testAudit.Detail, "token")
+	assertAuditDetailOmit(t, testAudit.Detail, "auth")
+}
+
+func TestVaultHandler_ProjectDefaultVaultAssignmentIsAudited(t *testing.T) {
+	fq := newFakeVaultQuerier()
+	caller := uuid.New()
+	projectID := uuid.New()
+	connID := uuid.New()
+	fq.projects[projectID] = sqlc.Project{ID: projectID, Name: "team-a"}
+	fq.conns[connID] = sqlc.VaultConnection{ID: connID, Name: "prod", Addr: "https://vault.example.com", AuthMethod: "token"}
+
+	h := NewVaultHandler(fq)
+	r := chi.NewRouter()
+	r.Put("/api/v1/projects/{id}/default-vault-connection/", h.PutProjectDefault)
+
+	req := makeVaultRequest(t, "PUT", "/api/v1/projects/"+projectID.String()+"/default-vault-connection/", caller, map[string]any{
+		"connection_id": connID.String(),
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("project default vault assignment want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	auditRow := fq.auditRowAt(t, 0)
+	if auditRow.Action != "project.default_vault_connection.set" {
+		t.Fatalf("audit action=%q want project.default_vault_connection.set; row=%+v", auditRow.Action, auditRow)
+	}
+	if auditRow.ResourceType != "project" || auditRow.ResourceID != projectID.String() {
+		t.Fatalf("audit target=(%q,%q), want project %s", auditRow.ResourceType, auditRow.ResourceID, projectID)
+	}
+	assertAuditDetail(t, auditRow.Detail, "connection_id", connID.String())
 }
 
 // TestVaultHandler_RejectsInsecureAddr verifies the http:// gate.

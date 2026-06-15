@@ -168,3 +168,27 @@ func TestRedactURL(t *testing.T) {
 		t.Errorf("redactURL ate too much: %q", got)
 	}
 }
+
+func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
+	resetRuntime()
+	defer resetRuntime()
+
+	var captured map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &captured)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	body := map[string]any{"ok": true}
+	if err := postJSON(context.Background(), nil, srv.URL, body, http.StatusOK); err != nil {
+		t.Fatalf("postJSON: %v", err)
+	}
+	if captured["ok"] != true {
+		t.Fatalf("captured body = %#v, want ok=true", captured)
+	}
+	if runtimeHTTPClient().Timeout != defaultWorkerHTTPTimeout {
+		t.Fatalf("fallback Timeout = %s, want %s", runtimeHTTPClient().Timeout, defaultWorkerHTTPTimeout)
+	}
+}

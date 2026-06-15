@@ -3,8 +3,8 @@ name: release
 # FEATURES-051126 T12: signed images + SBOMs.
 #
 # Fires on tag push (e.g. `v0.2.0`). Builds the four chart-published
-# images, pushes them to GHCR, generates an SPDX SBOM per image with
-# syft, and signs both the image and the attestation with keyless
+# first-party images, pushes them to GHCR, generates an SPDX SBOM per
+# image with syft, and signs both the image and the attestation with keyless
 # cosign (GitHub OIDC → Sigstore Fulcio).
 #
 # Verification runbook: docs/verify-images.md.
@@ -40,10 +40,12 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - { name: server,  dockerfile: deploy/docker/Dockerfile.server,  imageName: astronomer-go-server }
-          - { name: worker,  dockerfile: deploy/docker/Dockerfile.worker,  imageName: astronomer-go-worker }
-          - { name: agent,   dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
-          - { name: migrate, dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
+          - { name: server,   context: .,        dockerfile: deploy/docker/Dockerfile.server,  imageName: astronomer-go-server }
+          - { name: worker,   context: .,        dockerfile: deploy/docker/Dockerfile.worker,  imageName: astronomer-go-worker }
+          - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
+          - { name: migrate,  context: .,        dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
+          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell }
+          - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              imageName: astronomer-frontend }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,7 +75,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
           push: true
           tags: |
@@ -82,7 +84,7 @@ jobs:
           # The digest output is what we'll sign — signing by mutable
           # tag is a forgery risk (the tag could change between push
           # and sign).
-          provenance: false
+          provenance: mode=max
           # We attach our own SBOM below; the build-push-action's
           # default SBOM would duplicate it.
           sbom: false

@@ -8,19 +8,23 @@ through the dashboard.
 ## Phases
 
 ```
-created → awaiting_agent → connected → provisioning → ready
-                      ↓                        ↓
-                      └── failed ←─────────────┘
+created -> awaiting_agent -> connected -> provisioning -> ready
+                      |                        |
+                      +------ failed <---------+
 ```
 
 The current phase lives on `clusters.registration_phase`. A row is
 created with phase=`created` and reaches a terminal phase
 (`ready` or `failed`) via the events documented below.
+The internal `provisioning` phase means Astronomer is applying the
+operator-selected baseline to an existing cluster. It is not
+infrastructure provisioning, and no cloud/node/RKE-style cluster
+creation flow is in scope.
 
 The `install_baseline` column on the clusters row is three-valued:
-- `NULL` — operator hasn't reached step 2 of the wizard yet.
-- `FALSE` — operator opted out of the platform-baseline install.
-- `TRUE`  — operator opted in.
+- `NULL` - operator hasn't reached step 2 of the wizard yet.
+- `FALSE` - operator opted out of the platform-baseline install.
+- `TRUE` - operator opted in.
 
 ## Endpoints
 
@@ -33,8 +37,8 @@ cancel route additionally requires the caller's user row to have
 |--------|-----------------------------------|---------------------------------------------------------------|
 | GET    | `/status/`                        | Phase + step timeline                                         |
 | GET    | `/events/`                        | Server-Sent Events filtered by cluster_id                     |
-| PUT    | `/options/`                       | `{"install_baseline": bool}` — records operator's step-1 pick |
-| POST   | `/confirm/`                       | Advances `created` → `awaiting_agent`                         |
+| PUT    | `/options/`                       | `{"install_baseline": bool}` - records operator's step-1 pick  |
+| POST   | `/confirm/`                       | Advances `created` to `awaiting_agent`                         |
 | POST   | `/retry/{step_id}/`               | Re-queues the apply task for a failed step                    |
 | POST   | `/cancel/`                        | Superuser-only abort                                          |
 
@@ -97,7 +101,7 @@ curl -fsSL -X PUT .../clusters/$cluster_id/registration/options/ \
 # 3. Fetch the agent install manifest and apply it on the target.
 curl -fsSL .../clusters/$cluster_id/manifest/ | kubectl apply -f -
 
-# 4. Confirm — moves to awaiting_agent. The first heartbeat from the
+# 4. Confirm - moves to awaiting_agent. The first heartbeat from the
 #    agent advances it to connected.
 curl -fsSL -X POST .../clusters/$cluster_id/registration/confirm/
 
@@ -107,12 +111,17 @@ curl -fsSL -N .../clusters/$cluster_id/registration/events/
 
 ## Agent privilege profile
 
-The agent manifest supports `viewer`, `operator`, and `admin` RBAC
-profiles. The selected profile is stored on the cluster as annotation
+The agent manifest supports `viewer`, `operator`, `namespace-viewer`,
+`namespace-operator`, `custom`, and `admin` RBAC profiles. The selected profile
+is stored on the cluster as annotation
 `astronomer.io/agent-privilege-profile` before the manifest is rendered.
 Missing or invalid values default to `admin` for compatibility.
 
-Declarative operators can set `Cluster.spec.agent.privilegeProfile`.
+Declarative operators can set `Cluster.spec.agent.privilegeProfile` directly or
+set `Cluster.spec.agent.profileRef` to a same-namespace `AgentProfile`.
+Referenced `AgentProfile` objects can also project `install.image`,
+`install.serviceAccountName`, and `install.podLabels` into the rendered
+manifest.
 API automation can set the reserved annotation when creating or updating
 the cluster row, then fetch `/clusters/{id}/manifest/`.
 
@@ -123,7 +132,10 @@ feature/profile matrix.
 
 Migration 078 backfills `registration_phase = 'ready'` for every
 clusters row older than one minute. Existing operators with already-
-registered clusters see no Provisioning tab and no wizard prompt.
+registered clusters see no adoption prompt. `/dashboard/clusters/{id}/adoption`
+is the canonical registration and baseline-application timeline; the historical
+`/dashboard/clusters/{id}/provisioning` redirect alias has been removed so the
+UI does not imply that Astronomer creates infrastructure.
 
 ## Deferred / known caveats
 
@@ -139,7 +151,7 @@ registered clusters see no Provisioning tab and no wizard prompt.
   are emitted opportunistically when the StepLabel helper sees the
   name; wiring the worker to write them on each EnsureInstalled call
   is straightforward but pending the tool-installer interface change.
-- **Cluster-detail Provisioning tab**: the wizard route at
+- **Cluster-detail Adoption tab**: the wizard route at
   `/dashboard/clusters/register/{id}/progress` renders the same
   timeline the in-detail tab will show; reading status + steps from
   the same `/registration/status/` endpoint keeps the two views in

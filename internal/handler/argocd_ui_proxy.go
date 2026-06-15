@@ -54,10 +54,11 @@ type ArgoCDUIProxy struct {
 	proxy  *httputil.ReverseProxy
 	log    *slog.Logger
 
-	mu         sync.RWMutex
-	tokens     SessionTokenSource
-	cached     string
-	cachedExp  time.Time
+	mu        sync.RWMutex
+	tokens    SessionTokenSource
+	audit     any
+	cached    string
+	cachedExp time.Time
 }
 
 // argocdTokenCacheTTL caps how long a decrypted upstream session token is
@@ -77,6 +78,15 @@ func (p *ArgoCDUIProxy) SetSessionTokenSource(src SessionTokenSource) {
 	p.tokens = src
 	p.cached = ""
 	p.cachedExp = time.Time{}
+	p.mu.Unlock()
+}
+
+func (p *ArgoCDUIProxy) SetAuditWriter(audit any) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.audit = audit
 	p.mu.Unlock()
 }
 
@@ -255,7 +265,9 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 			if err != nil {
 				return nil // fall through with original 404
 			}
-			defer indexResp.Body.Close()
+			defer func() {
+				_ = indexResp.Body.Close()
+			}()
 			body, err := io.ReadAll(indexResp.Body)
 			if err != nil {
 				return nil
@@ -272,6 +284,7 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 			resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 			resp.Header.Del("Content-Length")
 			resp.Header.Del("Content-Encoding") // we re-emitted plaintext
+			sanitizeArgoCDUIResponseHeaders(resp)
 			return nil
 		}
 
@@ -281,7 +294,7 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 		// our prefix.
 		if isHTML && resp.StatusCode == http.StatusOK && !isAPI {
 			body, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if err != nil {
 				return err
 			}
@@ -291,6 +304,7 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 			resp.Header.Del("Content-Length")
 			resp.Header.Del("Content-Encoding")
 		}
+		sanitizeArgoCDUIResponseHeaders(resp)
 		return nil
 	}
 
@@ -352,6 +366,63 @@ func safePrefix(s string) string {
 func hasArgoCDCookie(r *http.Request) bool {
 	c, err := r.Cookie("argocd.token")
 	return err == nil && c != nil && c.Value != ""
+}
+
+func sanitizeArgoCDUIResponseHeaders(resp *http.Response) {
+	if resp == nil {
+		return
+	}
+	cookies := resp.Cookies()
+	for key := range resp.Header {
+		if !argoCDUIResponseHeaderAllowed(key) {
+			resp.Header.Del(key)
+		}
+	}
+	resp.Header.Del("Set-Cookie")
+	for _, cookie := range cookies {
+		if !argoCDUIResponseCookieAllowed(cookie.Name) {
+			continue
+		}
+		sanitized := sanitizeArgoCDUIResponseCookie(cookie, resp)
+		resp.Header.Add("Set-Cookie", sanitized.String())
+	}
+}
+
+func argoCDUIResponseHeaderAllowed(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	switch lower {
+	case "":
+		return false
+	case "authorization", "clear-site-data", "content-length", "cookie", "proxy-authenticate", "proxy-authorization", "set-cookie", "set-cookie2", "www-authenticate":
+		return false
+	case "connection", "keep-alive", "te", "trailer", "trailers", "transfer-encoding", "upgrade":
+		return false
+	default:
+		return true
+	}
+}
+
+func argoCDUIResponseCookieAllowed(name string) bool {
+	return name == "argocd.token"
+}
+
+func sanitizeArgoCDUIResponseCookie(cookie *http.Cookie, resp *http.Response) *http.Cookie {
+	sanitized := *cookie
+	sanitized.Domain = ""
+	sanitized.Path = "/argocd"
+	sanitized.HttpOnly = true
+	sanitized.SameSite = http.SameSiteLaxMode
+	if argoCDUIExternalHTTPS(resp) {
+		sanitized.Secure = true
+	}
+	return &sanitized
+}
+
+func argoCDUIExternalHTTPS(resp *http.Response) bool {
+	if resp == nil || resp.Request == nil {
+		return false
+	}
+	return strings.EqualFold(resp.Request.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // appendCookie appends `value` (a single `name=value` pair) to the request's
@@ -456,6 +527,7 @@ func (p *ArgoCDUIProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// log line, which is rate-bounded by slog level filtering.
 	sw := &statusRecorder{ResponseWriter: w, status: 0}
 	p.proxy.ServeHTTP(sw, r)
+	p.recordProxyAudit(r, sw.status)
 	p.log.Debug("argocd UI proxy",
 		"method", r.Method,
 		"path", r.URL.Path,
@@ -463,6 +535,40 @@ func (p *ArgoCDUIProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"upstream", p.target.String(),
 		"upgrade", strings.EqualFold(r.Header.Get("Connection"), "upgrade"),
 	)
+}
+
+func (p *ArgoCDUIProxy) recordProxyAudit(r *http.Request, status int) {
+	action, ok := argoCDUIProxyAuditAction(r)
+	if !ok {
+		return
+	}
+	p.mu.RLock()
+	audit := p.audit
+	p.mu.RUnlock()
+	if audit == nil {
+		return
+	}
+	recordAudit(r, audit, action, "argocd_proxy", "", r.URL.Path, map[string]any{
+		"path":        r.URL.Path,
+		"status_code": status,
+		"is_api":      strings.HasPrefix(r.URL.Path, "/argocd/api/"),
+		"upgrade":     strings.EqualFold(r.Header.Get("Connection"), "upgrade"),
+	})
+}
+
+func argoCDUIProxyAuditAction(r *http.Request) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		if wantsHTMLNav(r) {
+			return "argocd.ui_proxy.opened", true
+		}
+		return "", false
+	default:
+		return "argocd.ui_proxy.forwarded", true
+	}
 }
 
 // statusRecorder is a minimal http.ResponseWriter wrapper that captures the

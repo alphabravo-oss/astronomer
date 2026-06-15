@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
 // AlertEvaluationPayload contains parameters for alert evaluation.
@@ -331,7 +332,7 @@ func activeSilenceForRule(ctx context.Context, rule sqlc.AlertRule, clusterID pg
 }
 
 func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
-	displayName := firstNonEmptyString(cluster.DisplayName, cluster.Name)
+	displayName := strutil.FirstNonBlank(cluster.DisplayName, cluster.Name)
 	clusterID := pgtype.UUID{Bytes: cluster.ID, Valid: true}
 	comparison := stringFromWorkerMap(config, "comparison")
 	if comparison == "" {
@@ -524,15 +525,6 @@ func anomalyScore(metric string, value float64) float64 {
 	}
 }
 
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func nullableWorkerTime(ts pgtype.Timestamptz) any {
 	if !ts.Valid {
 		return nil
@@ -675,7 +667,7 @@ func evaluatePromQLRule(ctx context.Context, rule sqlc.AlertRule, config map[str
 	if !triggered {
 		return false, "", blob, clusterID, true, nil
 	}
-	return true, fmt.Sprintf("Cluster %s query matched %s %.2f (value %.2f)", firstNonEmptyString(cluster.DisplayName, cluster.Name), comparison, threshold, value), blob, clusterID, true, nil
+	return true, fmt.Sprintf("Cluster %s query matched %s %.2f (value %.2f)", strutil.FirstNonBlank(cluster.DisplayName, cluster.Name), comparison, threshold, value), blob, clusterID, true, nil
 }
 
 func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imonitoring.Client, monitoringSelector, bool, error) {
@@ -744,7 +736,7 @@ func renderAlertQuery(query string, cluster sqlc.Cluster, selector monitoringSel
 	rendered = strings.ReplaceAll(rendered, "{{cluster_label}}", label)
 	rendered = strings.ReplaceAll(rendered, "{{cluster_value}}", escapePromWorkerLabel(value))
 	rendered = strings.ReplaceAll(rendered, "{{cluster_id}}", cluster.ID.String())
-	rendered = strings.ReplaceAll(rendered, "{{cluster_name}}", firstNonEmptyString(cluster.DisplayName, cluster.Name))
+	rendered = strings.ReplaceAll(rendered, "{{cluster_name}}", strutil.FirstNonBlank(cluster.DisplayName, cluster.Name))
 	return rendered
 }
 

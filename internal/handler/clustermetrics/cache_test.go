@@ -108,13 +108,13 @@ type fakeRequester struct {
 	calls      int32
 }
 
-func (f *fakeRequester) Do(_ context.Context, _, _ , path string, _ []byte, _ map[string]string) (*RawResponse, error) {
+func (f *fakeRequester) Do(_ context.Context, _, _, path string, _ []byte, _ map[string]string) (*RawResponse, error) {
 	atomic.AddInt32(&f.calls, 1)
-	switch {
-	case path == "/api/v1/nodes":
+	switch path {
+	case "/api/v1/nodes":
 		body, _ := json.Marshal(f.nodes)
 		return &RawResponse{StatusCode: http.StatusOK, Body: body}, nil
-	case path == "/apis/metrics.k8s.io/v1beta1/nodes":
+	case "/apis/metrics.k8s.io/v1beta1/nodes":
 		if f.metricsErr {
 			return &RawResponse{StatusCode: http.StatusNotFound, Body: []byte(`{}`)}, nil
 		}

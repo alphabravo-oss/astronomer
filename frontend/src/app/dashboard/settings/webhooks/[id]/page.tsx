@@ -17,7 +17,7 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -326,9 +326,9 @@ function TestTab({ webhookId }: { webhookId: string }) {
       const result = await test.mutateAsync(webhookId);
       setLastResult(result);
       if (result.success) {
-        toast.success(`Test delivered in ${result.durationMs}ms`);
+        toastSuccess(`Test delivered in ${result.durationMs}ms`);
       } else {
-        toast.error(`Test failed: ${result.errorMessage ?? `HTTP ${result.responseCode}`}`);
+        toastError(`Test failed: ${result.errorMessage ?? `HTTP ${result.responseCode}`}`);
       }
     } catch {
       // mutation toasts

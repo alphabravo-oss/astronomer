@@ -91,7 +91,9 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	// Initial comment to flush headers and prove the stream is alive.
-	fmt.Fprint(w, ": connected\n\n")
+	if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil {
+		return
+	}
 	flusher.Flush()
 
 	// Keepalive comment every 25s. EventSource auto-reconnects on close, but
@@ -106,7 +108,9 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-keepalive.C:
-			fmt.Fprint(w, ": ping\n\n")
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		case ev, ok := <-ch:
 			if !ok {
@@ -117,7 +121,9 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			// SSE frame: id + event + data + blank line.
-			fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.Type, payload)
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.Type, payload); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

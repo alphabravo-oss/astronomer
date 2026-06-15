@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/read-audit — operator UI for the read-side audit
  * policies (migration 063). Each row is a path-prefix + verbs +
@@ -14,6 +15,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, FileSearch, Loader2, Plus, Trash2 } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import {
   listReadAuditPolicies,
   createReadAuditPolicy,
@@ -130,27 +132,27 @@ function ReadAuditPoliciesList() {
         </div>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Path pattern</th>
-                <th className="px-4 py-2 font-medium">Verbs</th>
-                <th className="px-4 py-2 font-medium">Sample</th>
-                <th className="px-4 py-2 font-medium">Enabled</th>
-                <th className="px-4 py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-2 font-medium">Name</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Path pattern</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Verbs</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Sample</TableHead>
+                <TableHead className="px-4 py-2 font-medium">Enabled</TableHead>
+                <TableHead className="px-4 py-2 font-medium" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {(items ?? []).map((p) => (
-                <tr key={p.id} className="border-t border-border hover:bg-muted/30">
-                  <td className="px-4 py-2 font-mono text-xs">{p.name}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{p.path_pattern}</td>
-                  <td className="px-4 py-2 text-xs">{p.verbs}</td>
-                  <td className="px-4 py-2 text-xs">
+                <TableRow key={p.id} className="border-t border-border hover:bg-muted/30">
+                  <TableCell className="px-4 py-2 font-mono text-xs">{p.name}</TableCell>
+                  <TableCell className="px-4 py-2 font-mono text-xs">{p.path_pattern}</TableCell>
+                  <TableCell className="px-4 py-2 text-xs">{p.verbs}</TableCell>
+                  <TableCell className="px-4 py-2 text-xs">
                     {Math.round(p.sample_rate * 100)}%
-                  </td>
-                  <td className="px-4 py-2">
+                  </TableCell>
+                  <TableCell className="px-4 py-2">
                     <button
                       disabled={busyId === p.id}
                       onClick={() => toggleEnabled(p)}
@@ -162,8 +164,8 @@ function ReadAuditPoliciesList() {
                     >
                       {p.enabled ? 'enabled' : 'disabled'}
                     </button>
-                  </td>
-                  <td className="px-4 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="px-4 py-2 text-right">
                     <button
                       disabled={busyId === p.id}
                       onClick={() => remove(p)}
@@ -172,18 +174,18 @@ function ReadAuditPoliciesList() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {items && items.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-muted-foreground" colSpan={6}>
+                <TableRow>
+                  <TableCell className="px-4 py-6 text-center text-muted-foreground" colSpan={6}>
                     No policies configured. Read-side audit is currently disabled.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -237,8 +239,7 @@ function CreatePolicyModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-4">
         <h3 className="text-lg font-semibold text-foreground">New read-audit policy</h3>
         {error && (
@@ -310,7 +311,7 @@ function CreatePolicyModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 

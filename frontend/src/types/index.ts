@@ -13,6 +13,9 @@ export interface APIResponse<T> {
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
+  count?: number;
+  next?: string | null;
+  previous?: string | null;
   page: number;
   pageSize: number;
   totalPages: number;
@@ -81,11 +84,20 @@ export interface Cluster {
   // shell, image-scan rescan, etc. — are hidden / disabled for is_local
   // clusters because the in-cluster local-agent path is best-effort.
   isLocal?: boolean;
-  agentPrivilegeProfile?: 'viewer' | 'operator' | 'admin' | string;
+  agentPrivilegeProfile?: 'viewer' | 'operator' | 'namespace-viewer' | 'namespace-operator' | 'custom' | 'admin' | string;
   argocd?: ClusterArgoCDSummary;
 }
 
 export type AgentFleetStatus = 'connected' | 'degraded' | 'disconnected';
+
+export interface AgentOfflineBehavior {
+  state: 'offline' | string;
+  lastKnownAt?: string;
+  stale: boolean;
+  message: string;
+  permittedQueuedOperations: string[];
+  blockedOperations: string[];
+}
 
 export interface AgentFleetSummary {
   totalClusters: number;
@@ -95,6 +107,10 @@ export interface AgentFleetSummary {
   versions: Record<string, number>;
   profiles: Record<string, number>;
   statuses: Record<string, number>;
+  compatibility: Record<string, number>;
+  serverVersion: string;
+  minimumSupportedAgentVersion: string;
+  minimumCompatibleAgentVersion: string;
   generatedAt: string;
 }
 
@@ -120,8 +136,11 @@ export interface AgentFleetItem {
   channelName?: string;
   privilegeProfile: 'viewer' | 'operator' | 'admin' | string;
   capabilities: Record<string, boolean>;
+  compatibilityStatus: 'supported' | 'deprecated' | 'blocked' | 'unknown' | string;
+  compatibilityMessage?: string;
   degradedReasons?: string[];
   recommendedAction?: string;
+  offlineBehavior?: AgentOfflineBehavior;
 }
 
 export interface AgentFleetResponse {
@@ -160,20 +179,78 @@ export interface AgentUpgradeRecommendation {
   message: string;
 }
 
+export interface AgentArgoCDDiagnostic {
+  registered: boolean;
+  instanceCount: number;
+  clusterSecretNames?: string[];
+  serverUrls?: string[];
+  lastUpdatedAt?: string;
+}
+
+export interface AgentLiveDiagnosticCheck {
+  name: string;
+  status: 'passed' | 'warning' | 'failed' | string;
+  message: string;
+}
+
+export interface AgentLivePodDiagnostic {
+  name: string;
+  namespace: string;
+  phase: string;
+  nodeName?: string;
+  ready: boolean;
+  restartCount: number;
+  containerImages?: string[];
+}
+
+export interface AgentLiveDiagnostics {
+  collectedAt: string;
+  deployment?: Record<string, unknown>;
+  pods?: AgentLivePodDiagnostic[];
+  events?: Array<Record<string, unknown>>;
+  logs?: Array<Record<string, unknown>>;
+  discovery?: Record<string, unknown>;
+  checks?: AgentLiveDiagnosticCheck[];
+  errors?: string[];
+}
+
 export interface AgentDiagnosticsResponse {
   generatedAt: string;
   agent: AgentFleetItem;
   recentConnections: AgentConnectionDiagnostic[];
   conditions: AgentClusterConditionDiagnostic[];
+  argocd: AgentArgoCDDiagnostic;
+  live?: AgentLiveDiagnostics;
   recommendations: string[];
   redactions: string[];
   upgradeRecommendation: AgentUpgradeRecommendation;
+}
+
+export type AgentSelfTestStatus = 'passed' | 'warning' | 'failed' | string;
+
+export interface AgentSelfTestCheck {
+  name: string;
+  status: AgentSelfTestStatus;
+  message: string;
+}
+
+export interface AgentSelfTestResponse {
+  generatedAt: string;
+  clusterId: string;
+  clusterName: string;
+  status: AgentSelfTestStatus;
+  checks: AgentSelfTestCheck[];
+  recommendations?: string[];
 }
 
 export interface AgentUpgradePlanRequest {
   targetVersion?: string;
   targetImage?: string;
   strategy?: string;
+  canaryClusterIds?: string[];
+  batchSize?: number;
+  maxUnavailable?: number;
+  rollbackImage?: string;
 }
 
 export interface AgentUpgradePlanResponse {
@@ -183,11 +260,17 @@ export interface AgentUpgradePlanResponse {
   targetVersion: string;
   currentImage?: string;
   targetImage: string;
+  rollbackImage?: string;
   privilegeProfile: string;
   strategy: string;
+  canaryClusterIds?: string[];
+  batchSize: number;
+  maxUnavailable: number;
   ready: boolean;
   blockers?: string[];
+  preflightChecks: string[];
   steps: string[];
+  postUpgradeHealthChecks: string[];
   validation: string[];
   rollback: string[];
 }
@@ -227,6 +310,23 @@ export interface ClusterArgoCDSummary {
   clusterSecretNames: string[];
   baselineManagedBy: 'argocd' | 'argocd_pending' | 'helm' | 'local' | 'unknown' | string;
   baselineComponents?: ClusterBaselineComponentOwner[];
+  drift?: ClusterArgoCDDriftSummary;
+}
+
+export interface ClusterArgoCDDriftSummary {
+  appCount: number;
+  syncedCount: number;
+  outOfSyncCount: number;
+  unknownSyncCount: number;
+  healthyCount: number;
+  progressingCount: number;
+  degradedCount: number;
+  unknownHealthCount: number;
+  resourceCreatedCount: number;
+  resourceChangedCount: number;
+  resourcePrunedCount: number;
+  lastSynced?: string;
+  lastError?: string;
 }
 
 export interface ClusterBaselineComponentOwner {
@@ -556,11 +656,10 @@ export interface User {
   enabled: boolean;
   lastLogin: string;
   createdAt: string;
-  // True for the bootstrap admin until its password has been rotated via
-  // POST /api/v1/auth/change-password/. The dashboard middleware redirects
-  // any other route to /auth/change-password while this is set. Backend
-  // emits the field as `must_change_password` (snake_case); the user object
-  // is stored as-received, so callers read the snake_case key.
+  // True when an admin has forced a password rotation. The dashboard
+  // middleware redirects any other route to /auth/change-password while this
+  // is set. Backend emits the field as `must_change_password` (snake_case);
+  // the user object is stored as-received, so callers read the snake_case key.
   must_change_password?: boolean;
   mustChangePassword?: boolean;
 }
@@ -659,6 +758,7 @@ export interface EffectivePermissionSource {
 export interface EffectivePermissionGrant {
   resource: string;
   verb: string;
+  appliesToContext?: boolean;
   sources: EffectivePermissionSource[];
 }
 
@@ -673,11 +773,20 @@ export interface EffectivePermissionBinding {
   rules: RBACEngineRule[];
 }
 
+export interface EffectivePermissionContext {
+  clusterId?: string;
+  projectId?: string;
+  namespace?: string;
+  namespaceScopedBindingsSupported: boolean;
+  warnings?: string[];
+}
+
 export interface EffectivePermissionResponse {
   subject: {
     userId: string;
     self: boolean;
   };
+  context: EffectivePermissionContext;
   bindings: EffectivePermissionBinding[];
   permissions: EffectivePermissionGrant[];
 }
@@ -881,16 +990,30 @@ export interface APIToken {
 
 export interface AuditLogEntry {
   id: string;
+  userId?: string | null;
   action: string;
   // Migration 063 — action_class distinguishes read-side from mutation rows.
   actionClass?: 'mutation' | 'read' | 'auth' | 'system';
   resourceType: string;
+  resourceId?: string;
   resourceName: string;
+  source?: string;
+  correlationId?: string;
+  actorAuthMethod?: string;
+  httpMethod?: string;
+  path?: string;
+  statusCode?: number;
+  durationMs?: number;
+  requestId?: string;
+  ipAddress?: string | null;
   user: string;
   userAgent?: string;
   sourceIP: string;
-  status: 'success' | 'failure';
+  status: 'success' | 'failure' | 'error';
+  detail?: Record<string, unknown>;
   details?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
   timestamp: string;
 }
 
@@ -1618,12 +1741,21 @@ export interface LiveClusterHeartbeatData {
   cluster_id: string;
   last_heartbeat: string;
   agent_version?: string;
+  agent_build_sha?: string;
+  heartbeat_schema_version?: number;
   kubernetes_version?: string;
   node_count?: number;
   pod_count?: number;
   cpu_usage_percent?: number;
   memory_usage_percent?: number;
   distribution?: string;
+  privilege_profile?: string;
+  available_apis?: string[];
+  enabled_features?: string[];
+  denied_features?: string[];
+  last_successful_action?: string;
+  last_successful_action_at?: string;
+  degraded_reasons?: string[];
 }
 
 export interface LiveClusterStatusChangedData {
@@ -1743,6 +1875,8 @@ export interface ArgoSyncOptions {
   revision?: string;
   prune?: boolean;
   dryRun?: boolean;
+  reason?: string;
+  syncWindowOverride?: boolean;
 }
 
 export interface ArgoAppHistoryEntry {
@@ -1768,6 +1902,21 @@ export interface ArgoProjectSpec {
   destinations?: { server?: string; name?: string; namespace?: string }[];
   clusterResourceWhitelist?: { group: string; kind: string }[];
   namespaceResourceWhitelist?: { group: string; kind: string }[];
+  syncWindows?: ArgoProjectSyncWindow[];
+}
+
+export interface ArgoProjectSyncWindow {
+  kind: 'allow' | 'deny' | string;
+  schedule: string;
+  duration: string;
+  applications?: string[];
+  namespaces?: string[];
+  clusters?: string[];
+  manualSync?: boolean;
+  syncOverrun?: boolean;
+  timeZone?: string;
+  useAndOperator?: boolean;
+  description?: string;
 }
 
 export interface ArgoProject {
@@ -1830,6 +1979,36 @@ export interface ArgoManagedCluster {
   clusterSecretName?: string;
   labels?: Record<string, string>;
   createdAt: string;
+}
+
+export interface ArgoOrphanApplication {
+  id?: string;
+  name: string;
+  componentSlug?: string;
+  applicationSetName?: string;
+  destinationCluster: string;
+  destinationNamespace?: string;
+  reason:
+    | 'missing_destination'
+    | 'stale_destination_cluster'
+    | 'live_missing_destination'
+    | 'live_stale_destination_cluster'
+    | 'stale_applicationset_metadata'
+    | string;
+  source: 'cache' | 'live' | string;
+  message: string;
+}
+
+export interface ArgoOrphanReport {
+  instanceId: string;
+  applicationCount: number;
+  cachedApplicationCount: number;
+  liveApplicationCount: number;
+  managedTargetCount: number;
+  orphanApplicationCount: number;
+  orphanApplications: ArgoOrphanApplication[];
+  liveError?: string;
+  generatedAt: string;
 }
 
 export interface ArgoManagedClusterRegisterRequest {

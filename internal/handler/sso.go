@@ -360,7 +360,7 @@ func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provid
 		Jti:                      claims.ID,
 		UserID:                   userID,
 		ProviderName:             provider,
-		UpstreamIdTokenEncrypted: cipher,
+		UpstreamIDTokenEncrypted: cipher,
 		EndSessionEndpoint:       info.EndSessionEndpoint,
 		ExpiresAt:                claims.ExpiresAt.Time,
 	}); err != nil {

@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -69,11 +70,11 @@ var ErrAuditRetentionDowngrade = errors.New("baseline would downgrade audit rete
 // DiffResult is what Diff() returns — three views of the proposed
 // change that the UI renders as a side-by-side table.
 type DiffResult struct {
-	BaselineID    uuid.UUID      `json:"baseline_id"`
-	BaselineSlug  string         `json:"baseline_slug"`
-	BaselineName  string         `json:"baseline_name"`
-	Current       map[string]any `json:"current"`
-	Target        map[string]any `json:"target"`
+	BaselineID   uuid.UUID      `json:"baseline_id"`
+	BaselineSlug string         `json:"baseline_slug"`
+	BaselineName string         `json:"baseline_name"`
+	Current      map[string]any `json:"current"`
+	Target       map[string]any `json:"target"`
 	// Changes is the keys that differ. Ordered alphabetically so the
 	// UI renders a stable list (registry map iteration is otherwise
 	// random).
@@ -332,7 +333,7 @@ func writeSpec(ctx context.Context, q Querier, spec BaselineSpec, userID uuid.UU
 		}
 		params := sqlc.UpsertQuotaPlanParams{
 			Name:                    qp.Name,
-			Enforcement:             defaultStr(qp.Enforcement, "hard"),
+			Enforcement:             cmp.Or(qp.Enforcement, "hard"),
 			Description:             qp.Description,
 			MaxClustersPerProject:   int32(qp.MaxClustersPerProject),
 			MaxNamespacesPerProject: int32(qp.MaxNamespacesPerProject),
@@ -621,13 +622,6 @@ func readStringSliceSetting(ctx context.Context, q Querier, key string) []string
 }
 
 // ── misc helpers ──────────────────────────────────────────────────────
-
-func defaultStr(v, def string) string {
-	if v == "" {
-		return def
-	}
-	return v
-}
 
 func pgtypeUUID(id uuid.UUID) pgtype.UUID {
 	if id == uuid.Nil {

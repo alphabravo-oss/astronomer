@@ -16,43 +16,10 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// ── models ────────────────────────────────────────────────────────────
-
-// ComplianceBaseline mirrors a row in the `compliance_baselines` table
-// from migration 064. The spec column is opaque to the DB layer — the
-// internal/compliance package owns its schema.
-type ComplianceBaseline struct {
-	ID          uuid.UUID       `json:"id"`
-	Slug        string          `json:"slug"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Version     string          `json:"version"`
-	Spec        json.RawMessage `json:"spec"`
-	Enabled     bool            `json:"enabled"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-}
-
-// ComplianceBaselineApplication mirrors a row in the
-// `compliance_baseline_applications` table. Each row is one
-// operator-clicked Apply or Revert event.
-type ComplianceBaselineApplication struct {
-	ID            uuid.UUID          `json:"id"`
-	BaselineID    uuid.UUID          `json:"baseline_id"`
-	PreviousState json.RawMessage    `json:"previous_state"`
-	AppliedBy     pgtype.UUID        `json:"applied_by"`
-	AppliedAt     time.Time          `json:"applied_at"`
-	Status        string             `json:"status"`
-	RevertedAt    pgtype.Timestamptz `json:"reverted_at"`
-	RevertedBy    pgtype.UUID        `json:"reverted_by"`
-	Notes         string             `json:"notes"`
-}
 
 // ── baseline registry CRUD ────────────────────────────────────────────
 

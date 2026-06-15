@@ -48,6 +48,7 @@
 package handler
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -388,7 +389,7 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 		WidgetType:     req.WidgetType,
 		Spec:           defaultJSONObject(req.Spec),
 		Scope:          req.Scope,
-		ScopeIDs:       scopeIDs,
+		ScopeIds:       scopeIDs,
 		GridX:          req.Grid.X,
 		GridY:          req.Grid.Y,
 		GridW:          defaultInt32(req.Grid.W, 4),
@@ -442,7 +443,7 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 		WidgetType:     req.WidgetType,
 		Spec:           defaultJSONObject(req.Spec),
 		Scope:          req.Scope,
-		ScopeIDs:       scopeIDs,
+		ScopeIds:       scopeIDs,
 		GridX:          req.Grid.X,
 		GridY:          req.Grid.Y,
 		GridW:          defaultInt32(req.Grid.W, 4),
@@ -536,9 +537,9 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 	}
 	row, err := h.queries.CreatePrometheusDatasource(r.Context(), sqlc.CreatePrometheusDatasourceParams{
 		Name:          req.Name,
-		URL:           req.URL,
+		Url:           req.URL,
 		AuthEncrypted: encrypted,
-		TLSSkipVerify: req.TLSSkipVerify,
+		TlsSkipVerify: req.TLSSkipVerify,
 		Enabled:       enabled,
 	})
 	if err != nil {
@@ -546,7 +547,7 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 		return
 	}
 	recordAudit(r, h.auditor, "admin.prometheus_datasource.created", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
-		"url": row.URL,
+		"url": row.Url,
 	})
 	RespondJSON(w, http.StatusCreated, datasourceToResponse(row))
 }
@@ -596,9 +597,9 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 	}
 	row, err := h.queries.UpdatePrometheusDatasource(r.Context(), sqlc.UpdatePrometheusDatasourceParams{
 		ID:            id,
-		URL:           req.URL,
+		Url:           req.URL,
 		AuthEncrypted: encrypted,
-		TLSSkipVerify: req.TLSSkipVerify,
+		TlsSkipVerify: req.TLSSkipVerify,
 		Enabled:       enabled,
 	})
 	if err != nil {
@@ -606,7 +607,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		return
 	}
 	recordAudit(r, h.auditor, "admin.prometheus_datasource.updated", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
-		"url": row.URL,
+		"url": row.Url,
 	})
 	RespondJSON(w, http.StatusOK, datasourceToResponse(row))
 }
@@ -685,8 +686,8 @@ func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
-		Scope:   "global",
-		ScopeID: uuid.Nil,
+		Scope:    "global",
+		ScopeIds: []uuid.UUID{},
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
@@ -717,8 +718,8 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
-		Scope:   "cluster",
-		ScopeID: id,
+		Scope:    "cluster",
+		ScopeIds: []uuid.UUID{id},
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
@@ -743,8 +744,8 @@ func (h *DashboardHandler) RenderProject(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
-		Scope:   "project",
-		ScopeID: id,
+		Scope:    "project",
+		ScopeIds: []uuid.UUID{id},
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
@@ -857,7 +858,7 @@ func (h *DashboardHandler) renderSparkline(ctx context.Context, spec json.RawMes
 		return &WidgetData{Error: err.Error()}
 	}
 	start := time.Now()
-	matrix, err := dashboards.QueryRange(ctx, h.cache, ds, s.Query, defaultStr(s.Duration, "1h"), defaultStr(s.Step, "60s"), time.Now())
+	matrix, err := dashboards.QueryRange(ctx, h.cache, ds, s.Query, cmp.Or(s.Duration, "1h"), cmp.Or(s.Step, "60s"), time.Now())
 	dashPromDuration(dsRow.Name).Observe(time.Since(start).Seconds())
 	if err != nil {
 		dashRenderCounter("prom_sparkline", "error").Inc()
@@ -911,8 +912,8 @@ func (h *DashboardHandler) resolveDatasource(row sqlc.PrometheusDatasource) (das
 	out := dashboards.Datasource{
 		ID:            row.ID.String(),
 		Name:          row.Name,
-		URL:           row.URL,
-		TLSSkipVerify: row.TLSSkipVerify,
+		URL:           row.Url,
+		TLSSkipVerify: row.TlsSkipVerify,
 	}
 	if row.AuthEncrypted == "" {
 		return out, nil
@@ -1205,7 +1206,7 @@ func widgetToResponse(row sqlc.DashboardWidget) WidgetResponse {
 		WidgetType:     row.WidgetType,
 		Spec:           row.Spec,
 		Scope:          row.Scope,
-		ScopeIDs:       row.ScopeIDs,
+		ScopeIDs:       row.ScopeIds,
 		Grid:           widgetGrid(row),
 		RefreshSeconds: row.RefreshSeconds,
 		Enabled:        row.Enabled,
@@ -1222,9 +1223,9 @@ func datasourceToResponse(row sqlc.PrometheusDatasource) DatasourceResponse {
 	return DatasourceResponse{
 		ID:            row.ID,
 		Name:          row.Name,
-		URL:           row.URL,
+		URL:           row.Url,
 		HasAuth:       row.AuthEncrypted != "",
-		TLSSkipVerify: row.TLSSkipVerify,
+		TLSSkipVerify: row.TlsSkipVerify,
 		Enabled:       row.Enabled,
 		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
@@ -1232,13 +1233,6 @@ func datasourceToResponse(row sqlc.PrometheusDatasource) DatasourceResponse {
 }
 
 // defaultInt32 lives in monitoring.go — reuse it.
-
-func defaultStr(v, fallback string) string {
-	if v == "" {
-		return fallback
-	}
-	return v
-}
 
 func defaultJSONObject(b json.RawMessage) json.RawMessage {
 	if len(b) == 0 {

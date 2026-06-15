@@ -37,7 +37,7 @@ func TestLiteralAuditActionsMatchContract(t *testing.T) {
 				return true
 			}
 
-			actionArgIndex := -1
+			var actionArgIndex int
 			switch ident.Name {
 			case "recordAudit":
 				actionArgIndex = 2

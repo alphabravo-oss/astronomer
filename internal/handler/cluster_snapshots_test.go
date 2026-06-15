@@ -44,6 +44,7 @@ type fakeSnapshotQuerier struct {
 	snapshots map[uuid.UUID]sqlc.ClusterSnapshot
 	restores  map[uuid.UUID]sqlc.ClusterRestore
 	schedules map[uuid.UUID]sqlc.ClusterSnapshotSchedule
+	audits    []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeSnapshotQuerier(clusterID uuid.UUID, name string) *fakeSnapshotQuerier {
@@ -233,6 +234,23 @@ func (f *fakeSnapshotQuerier) DeleteClusterSnapshotSchedule(_ context.Context, i
 	return nil
 }
 
+func (f *fakeSnapshotQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
+	return nil
+}
+
+func (f *fakeSnapshotQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.audits) <= idx {
+		t.Fatalf("audit rows=%d, want index %d", len(f.audits), idx)
+	}
+	return f.audits[idx]
+}
+
 // fakeSnapshotRequester captures every tunnel call made by the handler.
 // Returns a configurable status/body. By default it returns 201 for
 // POSTs so the handler's "Velero accepted the CRD" path is exercised.
@@ -393,6 +411,11 @@ func TestSnapshot_CreatesVeleroBackupCRD(t *testing.T) {
 	if resp.ExpiresAt == nil {
 		t.Fatalf("expected expires_at to be set when ttl='168h'")
 	}
+	createAudit := q.auditRowAt(t, 0)
+	if createAudit.Action != "cluster.snapshot.created" || createAudit.ResourceType != "cluster_snapshot" || createAudit.ResourceID != resp.ID.String() || createAudit.ResourceName != "prod-cluster" {
+		t.Fatalf("create audit row=%+v, want cluster.snapshot.created on snapshot %s", createAudit, resp.ID)
+	}
+	assertAuditDetail(t, createAudit.Detail, "cluster_id", clusterID.String())
 
 	calls := req.snapshot()
 	if len(calls) != 1 {
@@ -514,6 +537,11 @@ func TestRestore_CreatesVeleroRestoreCRD(t *testing.T) {
 	if resp.SnapshotID != snap.ID {
 		t.Fatalf("snapshot_id mismatch")
 	}
+	restoreAudit := q.auditRowAt(t, 0)
+	if restoreAudit.Action != "cluster.snapshot.restore_requested" || restoreAudit.ResourceType != "cluster_restore" || restoreAudit.ResourceID != resp.ID.String() || restoreAudit.ResourceName != "prod-cluster" {
+		t.Fatalf("restore audit row=%+v, want cluster.snapshot.restore_requested on restore %s", restoreAudit, resp.ID)
+	}
+	assertAuditDetail(t, restoreAudit.Detail, "snapshot_id", snap.ID.String())
 
 	calls := req.snapshot()
 	if len(calls) != 1 {
@@ -656,6 +684,11 @@ func TestSchedule_CRUD(t *testing.T) {
 	if !created.Enabled {
 		t.Fatalf("expected enabled=true by default")
 	}
+	createAudit := q.auditRowAt(t, 0)
+	if createAudit.Action != "cluster.snapshot.schedule_created" || createAudit.ResourceType != "cluster_snapshot_schedule" || createAudit.ResourceID != created.ID.String() || createAudit.ResourceName != "prod-cluster" {
+		t.Fatalf("schedule audit row=%+v, want cluster.snapshot.schedule_created on schedule %s", createAudit, created.ID)
+	}
+	assertAuditDetail(t, createAudit.Detail, "cluster_id", clusterID.String())
 
 	// LIST
 	rr = httptest.NewRecorder()
@@ -892,8 +925,8 @@ func TestPerClusterBackupRender_LabelSelector(t *testing.T) {
 
 func TestParseCronExpression(t *testing.T) {
 	cases := []struct {
-		expr    string
-		ok      bool
+		expr string
+		ok   bool
 	}{
 		{"0 2 * * *", true},
 		{"*/5 * * * *", true},
@@ -911,12 +944,12 @@ func TestParseCronExpression(t *testing.T) {
 
 func TestValidVeleroResourceName(t *testing.T) {
 	cases := map[string]bool{
-		"my-snap":  true,
-		"snap1":    true,
-		"":         false,
-		"-leading": false,
+		"my-snap":   true,
+		"snap1":     true,
+		"":          false,
+		"-leading":  false,
 		"trailing-": false,
-		"Upper":    false,
+		"Upper":     false,
 	}
 	for name, want := range cases {
 		got := validVeleroResourceName(name)
@@ -936,12 +969,12 @@ func TestSanitizeForName(t *testing.T) {
 // correctly translates a Velero-style TTL into the DB's
 // pgtype.Timestamptz expires_at column.
 func TestCreateSnapshot_PgtypeExpiresAt(t *testing.T) {
-	d, ok := parseDuration("48h")
+	d, ok := parseSnapshotTTLDuration("48h")
 	if !ok || d != 48*time.Hour {
-		t.Fatalf("parseDuration(48h)=%v ok=%v", d, ok)
+		t.Fatalf("parseSnapshotTTLDuration(48h)=%v ok=%v", d, ok)
 	}
-	if _, ok := parseDuration("not-a-duration"); ok {
-		t.Fatalf("parseDuration must reject malformed input")
+	if _, ok := parseSnapshotTTLDuration("not-a-duration"); ok {
+		t.Fatalf("parseSnapshotTTLDuration must reject malformed input")
 	}
 }
 

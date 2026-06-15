@@ -101,7 +101,9 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	for k, v := range resp.Headers {
-		w.Header().Set(k, v)
+		if serviceProxyResponseHeaderAllowed(k) {
+			w.Header().Set(k, v)
+		}
 	}
 	body, _ = decodeResponseBody(resp)
 	if resp.StatusCode == 0 {
@@ -240,6 +242,20 @@ func isValidServiceProxyPort(port string) bool {
 func isServiceProxyAuditMethod(method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+func serviceProxyResponseHeaderAllowed(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	switch lower {
+	case "":
+		return false
+	case "authorization", "clear-site-data", "content-length", "cookie", "proxy-authenticate", "proxy-authorization", "set-cookie", "set-cookie2", "www-authenticate":
+		return false
+	case "connection", "keep-alive", "te", "trailer", "trailers", "transfer-encoding", "upgrade":
 		return false
 	default:
 		return true

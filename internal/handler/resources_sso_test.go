@@ -95,7 +95,8 @@ func TestCreateSSOProviderRegistersGenericOIDCProvider(t *testing.T) {
 		byProvider: map[string]sqlc.SsoConfiguration{},
 		byID:       map[uuid.UUID]sqlc.SsoConfiguration{},
 	}
-	h := &ResourceHandler{sso: q, encryptor: enc, ssoMgr: ssoMgr}
+	audit := &resourceAuditQuerier{}
+	h := &ResourceHandler{queries: audit, sso: q, encryptor: enc, ssoMgr: ssoMgr}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/sso/", stringsReader(`{
 		"type":"oidc",
@@ -131,6 +132,18 @@ func TestCreateSSOProviderRegistersGenericOIDCProvider(t *testing.T) {
 	if !ssoMgr.HasProvider("corporate-sso") {
 		t.Fatal("expected provider to be registered in SSO manager")
 	}
+	if len(audit.rows) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(audit.rows))
+	}
+	row := audit.rows[0]
+	if row.Action != "sso.provider.create" || row.ResourceType != "sso_provider" {
+		t.Fatalf("audit row=%+v, want sso.provider.create on sso_provider", row)
+	}
+	if row.ResourceName != "Corporate SSO" {
+		t.Fatalf("audit resource_name=%q want Corporate SSO", row.ResourceName)
+	}
+	assertAuditDetail(t, row.Detail, "provider", "corporate-sso")
+	assertAuditDetail(t, row.Detail, "type", "oidc")
 }
 
 func TestListSSOProvidersReturnsEnabledRows(t *testing.T) {
@@ -195,7 +208,8 @@ func TestDeleteSSOProviderRemovesProviderFromManager(t *testing.T) {
 	q := &fakeSSOSettingsQuerier{
 		byID: map[uuid.UUID]sqlc.SsoConfiguration{row.ID: row},
 	}
-	h := &ResourceHandler{sso: q, ssoMgr: ssoMgr}
+	audit := &resourceAuditQuerier{}
+	h := &ResourceHandler{queries: audit, sso: q, ssoMgr: ssoMgr}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/settings/sso/"+row.ID.String()+"/", nil)
 	rctx := chi.NewRouteContext()
@@ -214,10 +228,36 @@ func TestDeleteSSOProviderRemovesProviderFromManager(t *testing.T) {
 	if ssoMgr.HasProvider("github") {
 		t.Fatal("expected provider to be removed from SSO manager")
 	}
+	if len(audit.rows) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(audit.rows))
+	}
+	auditRow := audit.rows[0]
+	if auditRow.Action != "sso.provider.delete" || auditRow.ResourceType != "sso_provider" {
+		t.Fatalf("audit row=%+v, want sso.provider.delete on sso_provider", auditRow)
+	}
+	if auditRow.ResourceID != row.ID.String() || auditRow.ResourceName != "GitHub" {
+		t.Fatalf("audit target=(%q,%q), want (%q,GitHub)", auditRow.ResourceID, auditRow.ResourceName, row.ID.String())
+	}
+	assertAuditDetail(t, auditRow.Detail, "provider", "github")
 }
 
 func stringsReader(s string) *strings.Reader {
 	return strings.NewReader(s)
+}
+
+func assertAuditDetail(t *testing.T, raw json.RawMessage, key, want string) {
+	t.Helper()
+	var detail map[string]any
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		t.Fatalf("decode audit detail %s: %v", raw, err)
+	}
+	got, ok := detail[key].(string)
+	if !ok {
+		t.Fatalf("audit detail[%q]=%#v, want %q; detail=%v", key, detail[key], want, detail)
+	}
+	if got != want {
+		t.Fatalf("audit detail[%q]=%q, want %q", key, got, want)
+	}
 }
 
 func newOIDCTestIssuer(t *testing.T) *httptest.Server {

@@ -53,6 +53,15 @@ func TestRegisterHandlers(t *testing.T) {
 	w.RegisterHandlers()
 }
 
+func TestRegisterTunnelHandlers(t *testing.T) {
+	w, err := NewTunnelWorker("redis://localhost:6379/0", testLogger())
+	if err != nil {
+		t.Fatalf("NewTunnelWorker: %v", err)
+	}
+	// Should not panic.
+	w.RegisterTunnelHandlers()
+}
+
 func TestNewScheduler(t *testing.T) {
 	s, err := NewScheduler("redis://localhost:6379/0", testLogger())
 	if err != nil {

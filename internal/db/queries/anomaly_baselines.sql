@@ -61,8 +61,5 @@ RETURNING id, cluster_id, metric_name, window_seconds, sample_count, mean, stdde
           min_value, max_value, p50, p95, p99, last_value, last_value_at,
           recent_samples, updated_at;
 
--- name: DeleteAnomalyBaseline :exec
-DELETE FROM anomaly_baselines WHERE id = $1;
-
 -- name: CountAnomalyBaselines :one
 SELECT count(*) FROM anomaly_baselines;

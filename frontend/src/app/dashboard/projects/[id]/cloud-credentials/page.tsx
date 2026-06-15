@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Project · Cloud Credentials tab — list view.
  *
@@ -102,24 +103,24 @@ export default function CloudCredentialsListPage({ params }: ListPageProps) {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-                <th className="text-left font-medium py-2 px-3">Name</th>
-                <th className="text-left font-medium py-2 px-3">Provider</th>
-                <th className="text-left font-medium py-2 px-3">Targets</th>
-                <th className="text-left font-medium py-2 px-3">Created by</th>
-                <th className="text-left font-medium py-2 px-3">Test</th>
-                <th className="text-right font-medium py-2 px-3 pr-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
+                <TableHead className="text-left font-medium py-2 px-3">Name</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Provider</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Targets</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Created by</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Test</TableHead>
+                <TableHead className="text-right font-medium py-2 px-3 pr-4">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {credentials.map((cred) => {
                 const result = testResults[cred.id];
                 const testing = testingId === cred.id;
                 return (
-                  <tr key={cred.id} className="border-b border-border last:border-0 hover:bg-accent/20">
-                    <td className="py-2 px-3">
+                  <TableRow key={cred.id} className="border-b border-border last:border-0 hover:bg-accent/20">
+                    <TableCell className="py-2 px-3">
                       <div>
                         <p className="text-sm font-medium text-foreground">{cred.name}</p>
                         {cred.description && (
@@ -128,24 +129,24 @@ export default function CloudCredentialsListPage({ params }: ListPageProps) {
                           </p>
                         )}
                       </div>
-                    </td>
-                    <td className="py-2 px-3">
+                    </TableCell>
+                    <TableCell className="py-2 px-3">
                       <ProviderBadge provider={cred.provider} />
-                    </td>
-                    <td className="py-2 px-3">
+                    </TableCell>
+                    <TableCell className="py-2 px-3">
                       <span className="text-xs text-muted-foreground tabular-nums">
                         {cred.targetRefs.length} cluster
                         {cred.targetRefs.length === 1 ? '' : 's'}
                       </span>
-                    </td>
-                    <td className="py-2 px-3">
+                    </TableCell>
+                    <TableCell className="py-2 px-3">
                       <span className="text-xs text-muted-foreground">
                         {cred.createdBy || '—'}
                         <br />
                         <span className="text-2xs">{formatRelativeTime(cred.createdAt)}</span>
                       </span>
-                    </td>
-                    <td className="py-2 px-3">
+                    </TableCell>
+                    <TableCell className="py-2 px-3">
                       <button
                         type="button"
                         onClick={() => handleTest(cred)}
@@ -176,8 +177,8 @@ export default function CloudCredentialsListPage({ params }: ListPageProps) {
                             : result.message || 'Test failed'}
                         </p>
                       )}
-                    </td>
-                    <td className="py-2 px-3 pr-4">
+                    </TableCell>
+                    <TableCell className="py-2 px-3 pr-4">
                       <div className="flex items-center justify-end gap-1">
                         {canEdit && (
                           <button
@@ -204,12 +205,12 @@ export default function CloudCredentialsListPage({ params }: ListPageProps) {
                           </button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

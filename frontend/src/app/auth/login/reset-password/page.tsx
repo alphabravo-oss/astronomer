@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Orbit, Loader2, Eye, EyeOff, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import { completePasswordReset } from '@/lib/api/account-security';
 
 export default function ResetPasswordPage() {
@@ -49,10 +49,10 @@ export default function ResetPasswordPage() {
     setLoading(true);
     try {
       await completePasswordReset(token, next);
-      toast.success('Password reset — sign in with your new password.');
+      toastSuccess('Password reset — sign in with your new password.');
       setDone(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Reset failed. The link may have expired.');
+      toastApiError('', err, 'Reset failed. The link may have expired.');
     } finally {
       setLoading(false);
     }

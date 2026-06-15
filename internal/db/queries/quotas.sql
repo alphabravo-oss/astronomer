@@ -76,22 +76,6 @@ FROM projects pr
 JOIN quota_plans p ON p.name = pr.quota_plan
 WHERE pr.id = $1;
 
--- name: SetProjectQuotaPlan :one
-UPDATE projects
-SET quota_plan      = $2,
-    quota_overrides = $3,
-    updated_at      = now()
-WHERE id = $1
-RETURNING *;
-
--- name: SetUserQuotaPlan :one
-UPDATE users
-SET quota_plan      = $2,
-    quota_overrides = $3,
-    updated_at      = now()
-WHERE id = $1
-RETURNING *;
-
 -- Per-tenant usage counters ----------------------------------------------
 
 -- name: CountClustersInProject :one
@@ -110,7 +94,7 @@ WHERE project_id = $1 AND user_id IS NOT NULL;
 -- name: CountProjectsForUser :one
 SELECT count(DISTINCT project_id)::bigint AS count
 FROM project_role_bindings
-WHERE user_id = $1;
+WHERE user_id = sqlc.arg(user_id)::uuid;
 
 -- name: CountActiveTokensForUser :one
 SELECT count(*)::bigint AS count

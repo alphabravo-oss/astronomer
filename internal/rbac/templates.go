@@ -6,7 +6,7 @@
 //
 // Storage model: templates live as YAML files under
 // internal/rbac/templates/*.yaml and are embedded into the binary via
-// go:embed. They are NOT persisted to the DB — applying a template
+// embed. They are NOT persisted to the DB — applying a template
 // creates real cluster_roles / project_roles / cluster_role_bindings
 // rows from the embedded definition, so the live state stays in
 // Postgres while the catalog stays version-controlled.

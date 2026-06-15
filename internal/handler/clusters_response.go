@@ -26,28 +26,40 @@ import (
 // optional enrichment populated by ClusterHandler.enrichClusterFromCache /
 // enrichClusterFresh; they default to zero when no metrics provider is wired.
 type ClusterResponse struct {
-	ID                string          `json:"id"`
-	Name              string          `json:"name"`
-	DisplayName       string          `json:"display_name"`
-	Description       string          `json:"description"`
-	Status            string          `json:"status"`
-	ApiServerUrl      string          `json:"api_server_url"`
-	CaCertificate     string          `json:"ca_certificate"`
-	Environment       string          `json:"environment"`
-	Region            string          `json:"region"`
-	Provider          string          `json:"provider"`
-	Labels            json.RawMessage `json:"labels"`
-	Annotations       json.RawMessage `json:"annotations"`
-	Distribution      string          `json:"distribution"`
-	AgentVersion      string          `json:"agent_version"`
-	LastHeartbeat     *string         `json:"last_heartbeat"`
-	KubernetesVersion string          `json:"kubernetes_version"`
-	NodeCount         int32           `json:"node_count"`
-	CreatedByID       *string         `json:"created_by_id"`
-	CreatedAt         string          `json:"created_at"`
-	UpdatedAt         string          `json:"updated_at"`
-	IsLocal           bool            `json:"is_local"`
-	DecommissionedAt  *string         `json:"decommissioned_at"`
+	ID                      string          `json:"id"`
+	Name                    string          `json:"name"`
+	DisplayName             string          `json:"display_name"`
+	Description             string          `json:"description"`
+	Status                  string          `json:"status"`
+	ApiServerUrl            string          `json:"api_server_url"`
+	CaCertificate           string          `json:"ca_certificate"`
+	Environment             string          `json:"environment"`
+	Region                  string          `json:"region"`
+	Provider                string          `json:"provider"`
+	Labels                  json.RawMessage `json:"labels"`
+	Annotations             json.RawMessage `json:"annotations"`
+	Distribution            string          `json:"distribution"`
+	AgentVersion            string          `json:"agent_version"`
+	LastHeartbeat           *string         `json:"last_heartbeat"`
+	KubernetesVersion       string          `json:"kubernetes_version"`
+	NodeCount               int32           `json:"node_count"`
+	CreatedByID             *string         `json:"created_by_id"`
+	CreatedAt               string          `json:"created_at"`
+	UpdatedAt               string          `json:"updated_at"`
+	IsLocal                 bool            `json:"is_local"`
+	DecommissionedAt        *string         `json:"decommissioned_at"`
+	ClusterUid              string          `json:"cluster_uid"`
+	GroupID                 *string         `json:"group_id"`
+	RegistrationPhase       string          `json:"registration_phase"`
+	RegistrationStartedAt   *string         `json:"registration_started_at"`
+	RegistrationCompletedAt *string         `json:"registration_completed_at"`
+	InstallBaseline         *bool           `json:"install_baseline"`
+	ManagedBy               string          `json:"managed_by"`
+	ExternalRefApiVersion   string          `json:"external_ref_api_version"`
+	ExternalRefKind         string          `json:"external_ref_kind"`
+	ExternalRefNamespace    string          `json:"external_ref_namespace"`
+	ExternalRefName         string          `json:"external_ref_name"`
+	ObservedGeneration      int64           `json:"observed_generation"`
 
 	// Metric enrichment (added by clusterWithMetrics historically).
 	CPUPercentage    float64 `json:"cpu_percentage"`
@@ -64,6 +76,23 @@ type ClusterArgoCDSummary struct {
 	ClusterSecretNames []string                        `json:"cluster_secret_names"`
 	BaselineManagedBy  string                          `json:"baseline_managed_by"`
 	BaselineComponents []ClusterBaselineComponentOwner `json:"baseline_components"`
+	Drift              ClusterArgoCDDriftSummary       `json:"drift"`
+}
+
+type ClusterArgoCDDriftSummary struct {
+	AppCount             int     `json:"app_count"`
+	SyncedCount          int     `json:"synced_count"`
+	OutOfSyncCount       int     `json:"out_of_sync_count"`
+	UnknownSyncCount     int     `json:"unknown_sync_count"`
+	HealthyCount         int     `json:"healthy_count"`
+	ProgressingCount     int     `json:"progressing_count"`
+	DegradedCount        int     `json:"degraded_count"`
+	UnknownHealthCount   int     `json:"unknown_health_count"`
+	ResourceCreatedCount int     `json:"resource_created_count"`
+	ResourceChangedCount int     `json:"resource_changed_count"`
+	ResourcePrunedCount  int     `json:"resource_pruned_count"`
+	LastSynced           *string `json:"last_synced,omitempty"`
+	LastError            string  `json:"last_error,omitempty"`
 }
 
 type ClusterBaselineComponentOwner struct {
@@ -98,6 +127,14 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		CreatedAt:             c.CreatedAt.Format(time.RFC3339Nano),
 		UpdatedAt:             c.UpdatedAt.Format(time.RFC3339Nano),
 		IsLocal:               c.IsLocal,
+		ClusterUid:            c.ClusterUid,
+		RegistrationPhase:     c.RegistrationPhase,
+		ManagedBy:             c.ManagedBy,
+		ExternalRefApiVersion: c.ExternalRefApiVersion,
+		ExternalRefKind:       c.ExternalRefKind,
+		ExternalRefNamespace:  c.ExternalRefNamespace,
+		ExternalRefName:       c.ExternalRefName,
+		ObservedGeneration:    c.ObservedGeneration,
 		AgentPrivilegeProfile: clusterAgentPrivilegeProfile(c.Annotations),
 		ArgoCD: ClusterArgoCDSummary{
 			BaselineManagedBy:  "unknown",
@@ -115,6 +152,22 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 	if c.CreatedByID.Valid {
 		s := uuid.UUID(c.CreatedByID.Bytes).String()
 		resp.CreatedByID = &s
+	}
+	if c.GroupID.Valid {
+		s := uuid.UUID(c.GroupID.Bytes).String()
+		resp.GroupID = &s
+	}
+	if c.RegistrationStartedAt.Valid {
+		s := c.RegistrationStartedAt.Time.Format(time.RFC3339Nano)
+		resp.RegistrationStartedAt = &s
+	}
+	if c.RegistrationCompletedAt.Valid {
+		s := c.RegistrationCompletedAt.Time.Format(time.RFC3339Nano)
+		resp.RegistrationCompletedAt = &s
+	}
+	if c.InstallBaseline.Valid {
+		b := c.InstallBaseline.Bool
+		resp.InstallBaseline = &b
 	}
 	return resp
 }

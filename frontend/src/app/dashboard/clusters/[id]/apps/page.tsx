@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Per-cluster Apps tab — sprint 082+.
  *
@@ -21,15 +22,15 @@
  * matches the explicit decision in the planning conversation: Apps +
  * Tools coexist, share installed_charts, surface provenance to user.
  *
- * No install modal lives here yet (#27). The install/upgrade buttons
- * are wired to a placeholder that emits a console hint + toast; the
- * real modal lands in the next slice.
+ * Install, upgrade, uninstall, and failed-row cleanup actions mirror
+ * the backend catalog RBAC contract so the UI does not advertise
+ * operations that the API will reject.
  */
 
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   Package,
   Loader2,
@@ -44,7 +45,11 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-import { useCluster } from '@/lib/hooks';
+import { queryKeys, useCluster } from '@/lib/hooks';
+import { usePermissionDecision } from '@/lib/permission-hooks';
+import type { PermissionDecision } from '@/lib/permissions';
+import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ActionButton } from '@/components/ui/action-button';
 import {
   listClusterApps,
   listCatalogCharts,
@@ -57,11 +62,13 @@ import { AppInstallModal, AppUninstallModal } from '@/components/clusters/app-in
 
 type Section = 'installed' | 'browse' | 'recommended';
 
-const qk = {
-  installed: (id: string) => ['clusters', id, 'apps', 'installed'] as const,
-  browse: (q: string) => ['catalog', 'browse', q] as const,
-  recommended: () => ['catalog', 'recommended'] as const,
-};
+function permissionDeniedReason(decision: PermissionDecision): string {
+  return decision.disabledReason || decision.reason;
+}
+
+function toastPermissionDenied(decision: PermissionDecision) {
+  toastWarning(permissionDeniedReason(decision));
+}
 
 // Coarse status → tone mapping. We don't try to enumerate every
 // helm-release state; just bucket into the four colors operators
@@ -158,9 +165,13 @@ export default function ClusterAppsPage() {
   );
   const [searchQ, setSearchQ] = useState(requestedInstall || '');
   const [modal, setModal] = useState<ModalState>({ kind: 'none' });
+  const catalogScope = { type: 'cluster' as const, id: clusterId };
+  const catalogCreateDecision = usePermissionDecision('catalog', 'create', catalogScope);
+  const catalogUpdateDecision = usePermissionDecision('catalog', 'update', catalogScope);
+  const catalogDeleteDecision = usePermissionDecision('catalog', 'delete', catalogScope);
 
   const installed = useQuery({
-    queryKey: qk.installed(clusterId),
+    queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
     queryFn: () => listClusterApps(clusterId, { limit: 100 }),
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -169,21 +180,21 @@ export default function ClusterAppsPage() {
   const uninstall = useMutation({
     mutationFn: (id: string) => uninstallCatalogRelease(id),
     onSuccess: () => {
-      toast.success('Uninstall dispatched');
-      qc.invalidateQueries({ queryKey: qk.installed(clusterId) });
+      toastSuccess('Uninstall dispatched');
+      qc.invalidateQueries({ queryKey: queryKeys.clusterPages.appsInstalled(clusterId) });
       setModal({ kind: 'none' });
     },
-    onError: (err) => toast.error(`Uninstall failed: ${(err as Error).message}`),
+    onError: (err) => toastApiError('Uninstall failed', err),
   });
 
   const deleteFailed = useMutation({
     mutationFn: () => deleteFailedClusterApps(clusterId),
     onSuccess: ({ deleted }) => {
-      toast.success(deleted === 1 ? 'Deleted 1 failed install' : `Deleted ${deleted} failed installs`);
-      qc.invalidateQueries({ queryKey: qk.installed(clusterId) });
+      toastSuccess(deleted === 1 ? 'Deleted 1 failed install' : `Deleted ${deleted} failed installs`);
+      qc.invalidateQueries({ queryKey: queryKeys.clusterPages.appsInstalled(clusterId) });
       setShowDeleteFailed(false);
     },
-    onError: (err) => toast.error(`Delete failed: ${(err as Error).message}`),
+    onError: (err) => toastApiError('Delete failed', err),
   });
   const [showDeleteFailed, setShowDeleteFailed] = useState(false);
 
@@ -191,13 +202,13 @@ export default function ClusterAppsPage() {
   // typing in the search box re-fetches. 200ms debounce would be nicer
   // but a single useState read is fine for this scale.
   const browse = useQuery({
-    queryKey: qk.browse(searchQ),
+    queryKey: queryKeys.clusterPages.appCatalogBrowse(searchQ),
     queryFn: () => listCatalogCharts({ limit: 60, search: searchQ || undefined }),
     enabled: section === 'browse',
   });
 
   const recommended = useQuery({
-    queryKey: qk.recommended(),
+    queryKey: queryKeys.clusterPages.appCatalogRecommended,
     queryFn: () => listRecommendedCharts(12),
     enabled: section === 'recommended',
   });
@@ -213,11 +224,63 @@ export default function ClusterAppsPage() {
     if (browse.isLoading || !browse.data) return;
     const match = browse.data.items.find((c) => c.name === requestedInstall);
     if (match) {
+      if (!catalogCreateDecision.allowed) {
+        toastPermissionDenied(catalogCreateDecision);
+        router.replace(`/dashboard/clusters/${clusterId}/apps`);
+        return;
+      }
       setModal({ kind: 'install', chartId: match.id, chartName: match.name });
       // Drop the query param so a back-button + re-navigate doesn't loop.
       router.replace(`/dashboard/clusters/${clusterId}/apps`);
     }
-  }, [requestedInstall, browse.data, browse.isLoading, modal.kind, router, clusterId]);
+  }, [requestedInstall, browse.data, browse.isLoading, modal.kind, router, clusterId, catalogCreateDecision]);
+
+  const openInstall = (chartId: string, chartName: string) => {
+    if (!catalogCreateDecision.allowed) {
+      toastPermissionDenied(catalogCreateDecision);
+      return;
+    }
+    setModal({ kind: 'install', chartId, chartName });
+  };
+
+  const openUpgrade = (row: ClusterAppRow) => {
+    if (!catalogUpdateDecision.allowed) {
+      toastPermissionDenied(catalogUpdateDecision);
+      return;
+    }
+    setModal({
+      kind: 'upgrade',
+      installedChartId: row.id,
+      chartId: row.chartId,
+      chartName: row.chartName || row.toolSlug || row.releaseName,
+      currentVersionId: row.chartVersionId,
+      currentValues: row.valuesOverride,
+      releaseName: row.releaseName,
+      namespace: row.namespace,
+    });
+  };
+
+  const openUninstall = (row: ClusterAppRow) => {
+    if (!catalogDeleteDecision.allowed) {
+      toastPermissionDenied(catalogDeleteDecision);
+      return;
+    }
+    setModal({
+      kind: 'uninstall',
+      installedChartId: row.id,
+      releaseName: row.releaseName,
+      chartName: row.chartName || row.toolSlug || row.releaseName,
+      namespace: row.namespace,
+    });
+  };
+
+  const openDeleteFailed = () => {
+    if (!catalogDeleteDecision.allowed) {
+      toastPermissionDenied(catalogDeleteDecision);
+      return;
+    }
+    setShowDeleteFailed(true);
+  };
 
   return (
     <div className="space-y-6 p-4">
@@ -273,28 +336,11 @@ export default function ClusterAppsPage() {
         <InstalledView
           clusterId={clusterId}
           q={installed}
-          onUpgrade={(row) =>
-            setModal({
-              kind: 'upgrade',
-              installedChartId: row.id,
-              chartId: row.chartId,
-              chartName: row.chartName || row.toolSlug || row.releaseName,
-              currentVersionId: row.chartVersionId,
-              currentValues: row.valuesOverride,
-              releaseName: row.releaseName,
-              namespace: row.namespace,
-            })
-          }
-          onUninstall={(row) =>
-            setModal({
-              kind: 'uninstall',
-              installedChartId: row.id,
-              releaseName: row.releaseName,
-              chartName: row.chartName || row.toolSlug || row.releaseName,
-              namespace: row.namespace,
-            })
-          }
-          onDeleteFailed={() => setShowDeleteFailed(true)}
+          updateDecision={catalogUpdateDecision}
+          deleteDecision={catalogDeleteDecision}
+          onUpgrade={openUpgrade}
+          onUninstall={openUninstall}
+          onDeleteFailed={openDeleteFailed}
         />
       )}
       {section === 'browse' && (
@@ -304,18 +350,16 @@ export default function ClusterAppsPage() {
           setSearch={setSearchQ}
           installed={installed.data?.items ?? []}
           clusterId={clusterId}
-          onInstall={(chartId, chartName) =>
-            setModal({ kind: 'install', chartId, chartName })
-          }
+          installDecision={catalogCreateDecision}
+          onInstall={openInstall}
         />
       )}
       {section === 'recommended' && (
         <RecommendedView
           q={recommended}
           installed={installed.data?.items ?? []}
-          onInstall={(chartId, chartName) =>
-            setModal({ kind: 'install', chartId, chartName })
-          }
+          installDecision={catalogCreateDecision}
+          onInstall={openInstall}
         />
       )}
 
@@ -324,6 +368,7 @@ export default function ClusterAppsPage() {
         <AppInstallModal
           clusterId={clusterId}
           mode={{ kind: 'install', chartId: modal.chartId, chartName: modal.chartName }}
+          submitDecision={catalogCreateDecision}
           onClose={() => setModal({ kind: 'none' })}
         />
       )}
@@ -340,6 +385,7 @@ export default function ClusterAppsPage() {
             releaseName: modal.releaseName,
             namespace: modal.namespace,
           }}
+          submitDecision={catalogUpdateDecision}
           onClose={() => setModal({ kind: 'none' })}
         />
       )}
@@ -351,6 +397,7 @@ export default function ClusterAppsPage() {
           chartName={modal.chartName}
           namespace={modal.namespace}
           pending={uninstall.isPending}
+          confirmDecision={catalogDeleteDecision}
           onClose={() => setModal({ kind: 'none' })}
           onConfirm={() => uninstall.mutate(modal.installedChartId)}
         />
@@ -364,6 +411,7 @@ export default function ClusterAppsPage() {
             }).length ?? 0
           }
           pending={deleteFailed.isPending}
+          confirmDecision={catalogDeleteDecision}
           onClose={() => setShowDeleteFailed(false)}
           onConfirm={() => deleteFailed.mutate()}
         />
@@ -380,14 +428,18 @@ function DeleteFailedModal({
   pending,
   onClose,
   onConfirm,
+  confirmDecision,
 }: {
   count: number;
   pending: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  confirmDecision: PermissionDecision;
 }) {
+  const blockedReason = !confirmDecision.allowed ? permissionDeniedReason(confirmDecision) : undefined;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <OverlayShell onClose={onClose}>
       <div className="bg-popover border border-border rounded-lg shadow-xl max-w-md w-full mx-4 p-5 space-y-3">
         <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
           <Trash2 className="h-4 w-4 text-red-600" /> Delete failed installs
@@ -409,8 +461,15 @@ function DeleteFailedModal({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={pending}
+            onClick={() => {
+              if (!confirmDecision.allowed) {
+                toastPermissionDenied(confirmDecision);
+                return;
+              }
+              onConfirm();
+            }}
+            disabled={pending || !confirmDecision.allowed || count === 0}
+            title={blockedReason}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -418,7 +477,7 @@ function DeleteFailedModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -431,12 +490,16 @@ function InstalledView({
   onUpgrade,
   onUninstall,
   onDeleteFailed,
+  updateDecision,
+  deleteDecision,
 }: {
   clusterId: string;
   q: ReturnType<typeof useQuery<{ items: ClusterAppRow[]; total: number }>>;
   onUpgrade: (row: ClusterAppRow) => void;
   onUninstall: (row: ClusterAppRow) => void;
   onDeleteFailed: () => void;
+  updateDecision: PermissionDecision;
+  deleteDecision: PermissionDecision;
 }) {
   if (q.isLoading) {
     return (
@@ -459,7 +522,7 @@ function InstalledView({
         <p className="text-xs text-muted-foreground max-w-md mx-auto">
           Browse the catalog and install your first chart. The
           Platform Baseline tools (trivy-operator, kube-state-metrics,
-          fluent-bit, cert-manager) are managed via the Tools tab and
+          fluent-bit, ingress-nginx, cert-manager, gatekeeper) are managed via the Tools tab and
           will also appear here once installed.
         </p>
         <div className="flex items-center justify-center gap-2 pt-2">
@@ -497,13 +560,17 @@ function InstalledView({
               Releases in <code className="font-mono">failed_install</code> / <code className="font-mono">failed_uninstall</code> never deployed cleanly. The helm release itself is either missing or already gone, so they can&apos;t be uninstalled through the normal flow — use the bulk delete to clear them.
             </p>
           </div>
-          <button
+          <ActionButton
             type="button"
             onClick={onDeleteFailed}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-red-500/40 bg-background text-xs font-medium text-red-600 hover:bg-red-500/10"
+            size="sm"
+            icon={<Trash2 className="h-3 w-3" />}
+            disabled={!deleteDecision.allowed}
+            disabledReason={!deleteDecision.allowed ? permissionDeniedReason(deleteDecision) : undefined}
+            className="border-red-500/40 text-red-600 hover:bg-red-500/10"
           >
-            <Trash2 className="h-3 w-3" /> Delete {failedCount} failed
-          </button>
+            Delete {failedCount} failed
+          </ActionButton>
         </div>
       )}
       {staleCount > 0 && (
@@ -522,18 +589,18 @@ function InstalledView({
         </div>
       )}
     <div className="border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <tr>
-            <th className="px-3 py-2">Release</th>
-            <th className="px-3 py-2">Chart</th>
-            <th className="px-3 py-2">Namespace</th>
-            <th className="px-3 py-2">Version</th>
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="w-full text-sm">
+        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+          <TableRow>
+            <TableHead className="px-3 py-2">Release</TableHead>
+            <TableHead className="px-3 py-2">Chart</TableHead>
+            <TableHead className="px-3 py-2">Namespace</TableHead>
+            <TableHead className="px-3 py-2">Version</TableHead>
+            <TableHead className="px-3 py-2">Status</TableHead>
+            <TableHead className="px-3 py-2 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {items.map((row) => (
             <InstalledRow
               key={row.id}
@@ -541,10 +608,12 @@ function InstalledView({
               clusterId={clusterId}
               onUpgrade={onUpgrade}
               onUninstall={onUninstall}
+              updateDecision={updateDecision}
+              deleteDecision={deleteDecision}
             />
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
     </div>
   );
@@ -555,11 +624,15 @@ function InstalledRow({
   clusterId,
   onUpgrade,
   onUninstall,
+  updateDecision,
+  deleteDecision,
 }: {
   row: ClusterAppRow;
   clusterId: string;
   onUpgrade: (row: ClusterAppRow) => void;
   onUninstall: (row: ClusterAppRow) => void;
+  updateDecision: PermissionDecision;
+  deleteDecision: PermissionDecision;
 }) {
   const isTool = row.sourceKind === 'tool';
   // Upgrade requires the parent chartId; Tools installs (chart_version_id
@@ -567,9 +640,9 @@ function InstalledRow({
   const canUpgrade = !isTool && !!row.chartId;
   const { stale, ageMin } = isStale(row);
   return (
-    <tr className="border-t border-border hover:bg-muted/40">
-      <td className="px-3 py-2 font-mono text-xs">{row.releaseName}</td>
-      <td className="px-3 py-2">
+    <TableRow className="border-t border-border hover:bg-muted/40">
+      <TableCell className="px-3 py-2 font-mono text-xs">{row.releaseName}</TableCell>
+      <TableCell className="px-3 py-2">
         <div className="flex items-center gap-2">
           {row.chartIconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -607,12 +680,12 @@ function InstalledRow({
             {row.repoName}{row.chartCategory ? ` · ${row.chartCategory}` : ''}
           </div>
         )}
-      </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground font-mono">{row.namespace}</td>
-      <td className="px-3 py-2 text-xs tabular-nums">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-xs text-muted-foreground font-mono">{row.namespace}</TableCell>
+      <TableCell className="px-3 py-2 text-xs tabular-nums">
         {row.chartVersion || <span className="text-muted-foreground">—</span>}
-      </td>
-      <td className="px-3 py-2">
+      </TableCell>
+      <TableCell className="px-3 py-2">
         <div className="inline-flex items-center gap-1.5">
           <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-medium ${statusTone(row.status)}`}>
             {row.status}
@@ -626,8 +699,8 @@ function InstalledRow({
             </span>
           )}
         </div>
-      </td>
-      <td className="px-3 py-2 text-right">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-right">
         {isTool ? (
           <Link
             href={`/dashboard/clusters/${clusterId}/tools`}
@@ -637,25 +710,38 @@ function InstalledRow({
           </Link>
         ) : (
           <div className="inline-flex items-center gap-1">
-            <button
+            <ActionButton
               onClick={() => onUpgrade(row)}
-              disabled={!canUpgrade}
-              title={canUpgrade ? 'Upgrade to a newer chart version or edit values' : 'Upgrade unavailable for this release'}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted disabled:opacity-40"
+              disabled={!canUpgrade || !updateDecision.allowed}
+              disabledReason={
+                !canUpgrade
+                  ? 'Upgrade unavailable for this release'
+                  : !updateDecision.allowed
+                    ? permissionDeniedReason(updateDecision)
+                    : undefined
+              }
+              title="Upgrade to a newer chart version or edit values"
+              size="sm"
+              icon={<ArrowUpCircle className="h-3 w-3" />}
+              className="h-7 px-2"
             >
-              <ArrowUpCircle className="h-3 w-3" /> Upgrade
-            </button>
-            <button
+              Upgrade
+            </ActionButton>
+            <ActionButton
               onClick={() => onUninstall(row)}
+              disabled={!deleteDecision.allowed}
+              disabledReason={!deleteDecision.allowed ? permissionDeniedReason(deleteDecision) : undefined}
               title="Uninstall this release"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border text-red-600 hover:bg-red-500/10"
+              size="sm"
+              icon={<Trash2 className="h-3 w-3" />}
+              className="h-7 px-2 border-red-500/40 text-red-600 hover:bg-red-500/10"
             >
-              <Trash2 className="h-3 w-3" /> Uninstall
-            </button>
+              Uninstall
+            </ActionButton>
           </div>
         )}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -668,6 +754,7 @@ function BrowseView({
   setSearch,
   installed,
   clusterId,
+  installDecision,
   onInstall,
 }: {
   q: ReturnType<typeof useQuery<{ items: import('@/lib/api/cluster-detail').CatalogChartSummary[]; total: number }>>;
@@ -675,6 +762,7 @@ function BrowseView({
   setSearch: (s: string) => void;
   installed: ClusterAppRow[];
   clusterId: string;
+  installDecision: PermissionDecision;
   onInstall: (chartId: string, chartName: string) => void;
 }) {
   // Build a name→releases index so each Browse card knows whether
@@ -754,7 +842,9 @@ function BrowseView({
                       </span>
                     ) : (
                       <button
-                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline"
+                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                        disabled={!installDecision.allowed}
+                        title={!installDecision.allowed ? permissionDeniedReason(installDecision) : 'Install chart'}
                         onClick={() => onInstall(c.id, c.name)}
                       >
                         Install →
@@ -787,10 +877,12 @@ function BrowseView({
 function RecommendedView({
   q,
   installed,
+  installDecision,
   onInstall,
 }: {
   q: ReturnType<typeof useQuery<import('@/lib/api/cluster-detail').RecommendedChart[]>>;
   installed: ClusterAppRow[];
+  installDecision: PermissionDecision;
   onInstall: (chartId: string, chartName: string) => void;
 }) {
   const installedByChart = new Set(installed.map((r) => r.chartName).filter(Boolean));
@@ -840,7 +932,9 @@ function RecommendedView({
               <span className="text-[11px] text-emerald-600 font-medium">Already installed</span>
             ) : (
               <button
-                className="text-[11px] text-primary hover:underline"
+                className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                disabled={!installDecision.allowed}
+                title={!installDecision.allowed ? permissionDeniedReason(installDecision) : 'Install chart'}
                 onClick={() => onInstall(c.chartId, c.name)}
               >
                 Install →

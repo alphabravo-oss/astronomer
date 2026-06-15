@@ -16,7 +16,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,6 +27,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { listArgoManagedClusters, createArgoApplicationSet } from '@/lib/api';
+import { queryKeys } from '@/lib/hooks';
 import type {
   ArgoApplicationSetGenerator,
   ArgoCreateApplicationSetRequest,
@@ -34,11 +35,13 @@ import type {
 } from '@/types';
 
 type GeneratorKind = 'list' | 'clusters' | 'git';
+type ClusterSelectorPreset = 'all' | 'environment' | 'label' | 'canary' | 'custom';
 
 interface WizardState {
-  name: string;
-  project: string;
-  generatorKind: GeneratorKind;
+ name: string;
+ project: string;
+ generatorKind: GeneratorKind;
+  clusterSelectorPreset: ClusterSelectorPreset;
   // cluster generator fields
   clusterMatchLabels: { key: string; value: string }[];
   // git generator fields
@@ -61,7 +64,11 @@ const DEFAULT_STATE: WizardState = {
   name: '',
   project: 'default',
   generatorKind: 'clusters',
-  clusterMatchLabels: [{ key: 'astronomer.io/environment', value: 'production' }],
+  clusterSelectorPreset: 'environment',
+  clusterMatchLabels: [
+    { key: 'astronomer.io/managed-by', value: 'astronomer' },
+    { key: 'astronomer.io/environment', value: 'production' },
+  ],
   gitRepoURL: '',
   gitRevision: 'HEAD',
   gitPath: 'apps/*',
@@ -85,7 +92,7 @@ export default function ApplicationSetWizardPage() {
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);
 
   const { data: managed = [] } = useQuery({
-    queryKey: ['argocd', 'managed-clusters', instanceId],
+    queryKey: queryKeys.argocd.managedClusters(instanceId),
     queryFn: () => listArgoManagedClusters(instanceId),
   });
 
@@ -97,11 +104,11 @@ export default function ApplicationSetWizardPage() {
     mutationFn: (body: ArgoCreateApplicationSetRequest) =>
       createArgoApplicationSet(instanceId, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['argocd', 'appsets', instanceId] });
-      toast.success(`ApplicationSet ${state.name} created`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.argocd.appsets(instanceId) });
+      toastSuccess(`ApplicationSet ${state.name} created`);
       router.push(`/dashboard/argocd/${instanceId}`);
     },
-    onError: (err: Error) => toast.error(`Create failed: ${err.message}`),
+    onError: (err: Error) => toastApiError('Create failed', err),
   });
 
   const submit = () => create.mutate(buildBody(state));
@@ -283,6 +290,33 @@ function Step2({
 
       {state.generatorKind === 'clusters' && (
         <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ['all', 'All adopted'],
+              ['environment', 'Environment'],
+              ['label', 'Label'],
+              ['canary', 'Canary'],
+            ] as const).map(([preset, label]) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() =>
+                  setState({
+                    ...state,
+                    clusterSelectorPreset: preset,
+                    clusterMatchLabels: clusterPresetLabels(preset, labelOptions),
+                  })
+                }
+                className={`h-8 rounded border px-3 text-xs font-medium transition-colors ${
+                  state.clusterSelectorPreset === preset
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <label className="text-sm font-medium text-foreground">Cluster label match</label>
           {state.clusterMatchLabels.map((row, i) => {
             const choices = labelOptions.find((o) => o.key === row.key);
@@ -295,7 +329,7 @@ function Step2({
                   onChange={(e) => {
                     const next = [...state.clusterMatchLabels];
                     next[i] = { ...next[i], key: e.target.value };
-                    setState({ ...state, clusterMatchLabels: next });
+                    setState({ ...state, clusterSelectorPreset: 'custom', clusterMatchLabels: next });
                   }}
                   placeholder="astronomer.io/environment"
                   className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
@@ -306,7 +340,7 @@ function Step2({
                   onChange={(e) => {
                     const next = [...state.clusterMatchLabels];
                     next[i] = { ...next[i], value: e.target.value };
-                    setState({ ...state, clusterMatchLabels: next });
+                    setState({ ...state, clusterSelectorPreset: 'custom', clusterMatchLabels: next });
                   }}
                   className="h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
                     focus:outline-none focus:ring-1 focus:ring-ring min-w-[140px]"
@@ -323,6 +357,7 @@ function Step2({
                   onClick={() =>
                     setState({
                       ...state,
+                      clusterSelectorPreset: 'custom',
                       clusterMatchLabels: state.clusterMatchLabels.filter((_, j) => j !== i),
                     })
                   }
@@ -342,6 +377,7 @@ function Step2({
             onClick={() =>
               setState({
                 ...state,
+                clusterSelectorPreset: 'custom',
                 clusterMatchLabels: [...state.clusterMatchLabels, { key: '', value: '' }],
               })
             }
@@ -608,6 +644,51 @@ function buildBody(s: WizardState): ArgoCreateApplicationSetRequest {
       },
     },
   };
+}
+
+function clusterPresetLabels(
+  preset: Exclude<ClusterSelectorPreset, 'custom'>,
+  labelOptions: { key: string; values: Set<string> }[],
+): { key: string; value: string }[] {
+  const guarded = [{ key: 'astronomer.io/managed-by', value: 'astronomer' }];
+  if (preset === 'all') return guarded;
+  if (preset === 'environment') {
+    return [
+      ...guarded,
+      {
+        key: 'astronomer.io/environment',
+        value: firstKnownLabelValue(labelOptions, 'astronomer.io/environment', 'production'),
+      },
+    ];
+  }
+  if (preset === 'canary') {
+    return [...guarded, { key: 'astronomer.io/label-canary', value: 'true' }];
+  }
+  const userLabel = labelOptions.find((option) => option.key.startsWith('astronomer.io/label-'));
+  return [
+    ...guarded,
+    {
+      key: userLabel?.key ?? 'astronomer.io/label-tier',
+      value: firstSetValue(userLabel?.values) ?? 'prod',
+    },
+  ];
+}
+
+function firstKnownLabelValue(
+  labelOptions: { key: string; values: Set<string> }[],
+  key: string,
+  fallback: string,
+): string {
+  const option = labelOptions.find((item) => item.key === key);
+  return firstSetValue(option?.values) ?? fallback;
+}
+
+function firstSetValue(values?: Set<string>): string | undefined {
+  if (!values) return undefined;
+  for (const value of values) {
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function collectLabelOptions(

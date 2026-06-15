@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 	"golang.org/x/oauth2/google"
@@ -109,7 +110,7 @@ func NewSSOManager(encryptor *Encryptor, jwtManager *JWTManager, callbackBaseURL
 		jwtManager:  jwtManager,
 		providers:   make(map[string]*SSOProvider),
 		callbackURL: strings.TrimRight(callbackBaseURL, "/"),
-		httpClient:  http.DefaultClient,
+		httpClient:  httpclient.New(defaultOIDCHTTPTimeout),
 	}
 }
 
@@ -606,7 +607,9 @@ func (m *SSOManager) doAPIRequest(ctx context.Context, url string, token *oauth2
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

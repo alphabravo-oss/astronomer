@@ -21,7 +21,7 @@ interface TargetRefsEditorProps {
 
 export function TargetRefsEditor({ value, onChange }: TargetRefsEditorProps) {
   const { data: clustersPage } = useClusters({ pageSize: 100 });
-  const clusters = clustersPage?.data || [];
+  const clusters = useMemo(() => clustersPage?.data ?? [], [clustersPage]);
 
   // Used to drive the "add cluster" picker dropdown.
   const remainingClusters = useMemo(

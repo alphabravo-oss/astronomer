@@ -26,6 +26,7 @@ type argocdManagedClusterQueryStub struct {
 	instance sqlc.ArgocdInstance
 	cluster  sqlc.Cluster
 	managed  sqlc.ArgocdManagedCluster
+	projects []sqlc.Project
 
 	decisions   map[string]sqlc.ArgocdBaselineOwnershipDecision
 	createCalls []sqlc.CreateArgoCDManagedClusterParams
@@ -129,6 +130,9 @@ func (q *argocdManagedClusterQueryStub) ListArgoCDOperationEvents(context.Contex
 func (q *argocdManagedClusterQueryStub) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {
 	return q.cluster, nil
 }
+func (q *argocdManagedClusterQueryStub) ListProjectsByCluster(context.Context, sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
+	return q.projects, nil
+}
 func (q *argocdManagedClusterQueryStub) CreateArgoCDManagedCluster(_ context.Context, arg sqlc.CreateArgoCDManagedClusterParams) (sqlc.ArgocdManagedCluster, error) {
 	q.createCalls = append(q.createCalls, arg)
 	q.managed.ClusterSecretName = arg.ClusterSecretName
@@ -221,7 +225,7 @@ func TestRegisterManagedClusterLocalAutoToken(t *testing.T) {
 	defer upstream.Close()
 	queries.instance.ApiUrl = upstream.URL
 
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: argocdNamespace,
@@ -308,7 +312,7 @@ func TestRegisterManagedClusterRemoteDefaultsToTunnelProxyURL(t *testing.T) {
 	defer upstream.Close()
 	queries.instance.ApiUrl = upstream.URL
 
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-dev",
 			Namespace: argocdNamespace,
@@ -353,10 +357,14 @@ func TestRefreshManagedClusterLabelsRestampsSecretAndDB(t *testing.T) {
 	queries := &argocdManagedClusterQueryStub{
 		instance: sqlc.ArgocdInstance{ID: instanceID, ApiUrl: "http://argocd.example.test", AuthTokenEncrypted: "upstream-token"},
 		cluster: sqlc.Cluster{
-			ID:          clusterID,
-			Name:        "prod-1",
-			Environment: "production",
-			Labels:      json.RawMessage(`{"tier":"prod","Team Name":"platform"}`),
+			ID:           clusterID,
+			Name:         "prod-1",
+			Environment:  "production",
+			Region:       "us-east-1",
+			Provider:     "aws",
+			Distribution: "eks",
+			Annotations:  json.RawMessage(`{"astronomer.io/agent-privilege-profile":"viewer"}`),
+			Labels:       json.RawMessage(`{"tier":"prod","Team Name":"platform"}`),
 		},
 		managed: sqlc.ArgocdManagedCluster{
 			ID:                uuid.New(),
@@ -369,7 +377,7 @@ func TestRefreshManagedClusterLabelsRestampsSecretAndDB(t *testing.T) {
 			UpdatedAt:         time.Now(),
 		},
 	}
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: argocdNamespace,
@@ -403,15 +411,19 @@ func TestRefreshManagedClusterLabelsRestampsSecretAndDB(t *testing.T) {
 		t.Fatalf("get patched secret: %v", err)
 	}
 	want := map[string]string{
-		"owner":                         "platform",
-		argocdClusterSecretTypeLabelKey: argocdClusterSecretTypeLabelValue,
-		"astronomer.io/managed-by":      "astronomer",
-		"astronomer.io/cluster-id":      clusterID.String(),
-		"astronomer.io/cluster-name":    "prod-1",
-		"astronomer.io/is-local":        "false",
-		"astronomer.io/environment":     "production",
-		"astronomer.io/label-tier":      "prod",
-		"astronomer.io/label-team-name": "platform",
+		"owner":                                 "platform",
+		argocdClusterSecretTypeLabelKey:         argocdClusterSecretTypeLabelValue,
+		"astronomer.io/managed-by":              "astronomer",
+		"astronomer.io/cluster-id":              clusterID.String(),
+		"astronomer.io/cluster-name":            "prod-1",
+		"astronomer.io/is-local":                "false",
+		"astronomer.io/environment":             "production",
+		"astronomer.io/region":                  "us-east-1",
+		"astronomer.io/provider":                "aws",
+		"astronomer.io/distribution":            "eks",
+		"astronomer.io/agent-privilege-profile": "viewer",
+		"astronomer.io/label-tier":              "prod",
+		"astronomer.io/label-team-name":         "platform",
 	}
 	for k, v := range want {
 		if got := secret.Labels[k]; got != v {
@@ -443,21 +455,40 @@ func TestRefreshLocalManagedClusterRegistrationMigratesServerAndSecretName(t *te
 	newServer := "https://10.43.0.1:443"
 	newSecretName := "cluster-10.43.0.1-1704193794"
 	queries := &argocdManagedClusterQueryStub{
-		cluster: sqlc.Cluster{ID: clusterID, Name: "local", ApiServerUrl: newServer, CaCertificate: "ca-bytes", Environment: "production", IsLocal: true},
+		cluster: sqlc.Cluster{
+			ID:            clusterID,
+			Name:          "local",
+			ApiServerUrl:  newServer,
+			CaCertificate: "ca-bytes",
+			Environment:   "production",
+			Region:        "us-east-1",
+			Provider:      "local",
+			Distribution:  "k3s",
+			Annotations:   json.RawMessage(`{"astronomer.io/agent-privilege-profile":"operator"}`),
+			IsLocal:       true,
+		},
 		managed: sqlc.ArgocdManagedCluster{
 			ArgocdInstanceID:  instanceID,
 			ClusterID:         clusterID,
 			ClusterSecretName: "local",
 			ServerUrl:         oldServer,
-			Labels:            []byte(`{"team":"platform"}`),
+			Labels:            []byte(`{"team":"platform","astronomer.io/managed-by":"other","argocd.argoproj.io/secret-type":"not-cluster"}`),
 		},
 	}
 
 	var requests []string
+	var seenLabels map[string]string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost {
+			var reg struct {
+				Labels map[string]string `json:"labels"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&reg); err != nil {
+				t.Fatalf("decode upstream registration: %v", err)
+			}
+			seenLabels = reg.Labels
 			_, _ = w.Write([]byte(`{"name":"local","server":"` + newServer + `"}`))
 			return
 		}
@@ -465,7 +496,7 @@ func TestRefreshLocalManagedClusterRegistrationMigratesServerAndSecretName(t *te
 	}))
 	defer upstream.Close()
 
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      newSecretName,
 			Namespace: argocdNamespace,
@@ -503,6 +534,27 @@ func TestRefreshLocalManagedClusterRegistrationMigratesServerAndSecretName(t *te
 	if queries.createCalls[0].ClusterSecretName != newSecretName {
 		t.Fatalf("cluster_secret_name = %q", queries.createCalls[0].ClusterSecretName)
 	}
+	if got := seenLabels["astronomer.io/managed-by"]; got != "astronomer" {
+		t.Fatalf("managed-by label = %q, want astronomer (labels=%v)", got, seenLabels)
+	}
+	if got := seenLabels["team"]; got != "platform" {
+		t.Fatalf("team label = %q, want platform (labels=%v)", got, seenLabels)
+	}
+	if got := seenLabels["astronomer.io/region"]; got != "us-east-1" {
+		t.Fatalf("region label = %q, want us-east-1 (labels=%v)", got, seenLabels)
+	}
+	if got := seenLabels["astronomer.io/provider"]; got != "local" {
+		t.Fatalf("provider label = %q, want local (labels=%v)", got, seenLabels)
+	}
+	if got := seenLabels["astronomer.io/distribution"]; got != "k3s" {
+		t.Fatalf("distribution label = %q, want k3s (labels=%v)", got, seenLabels)
+	}
+	if got := seenLabels["astronomer.io/agent-privilege-profile"]; got != "operator" {
+		t.Fatalf("agent profile label = %q, want operator (labels=%v)", got, seenLabels)
+	}
+	if _, exists := seenLabels["argocd.argoproj.io/secret-type"]; exists {
+		t.Fatalf("reserved ArgoCD label replayed: %v", seenLabels)
+	}
 	if len(requests) != 2 || requests[0] != "POST /api/v1/clusters" || requests[1] != "DELETE /api/v1/clusters/https://kubernetes.default.svc" {
 		t.Fatalf("unexpected upstream requests: %#v", requests)
 	}
@@ -511,7 +563,7 @@ func TestRefreshLocalManagedClusterRegistrationMigratesServerAndSecretName(t *te
 func TestLocalManagedClusterNeedsRefreshWhenTokenNearExpiry(t *testing.T) {
 	exp := time.Now().Add(30 * time.Minute).Unix()
 	token := `header.` + mustJWTClaims(t, map[string]any{"exp": exp}) + `.sig`
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-local",
 			Namespace: argocdNamespace,

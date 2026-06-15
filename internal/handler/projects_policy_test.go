@@ -11,11 +11,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -31,6 +33,7 @@ type policyTestQuerier struct {
 
 	lastUpdatePolicy *sqlc.UpdateProjectPolicyParams
 	updatePolicyErr  error
+	audits           []sqlc.CreateAuditLogV1Params
 }
 
 func newPolicyTestQuerier() *policyTestQuerier {
@@ -64,13 +67,59 @@ func (q *policyTestQuerier) ListProjects(context.Context, sqlc.ListProjectsParam
 	return nil, nil
 }
 func (q *policyTestQuerier) ListProjectsByCluster(context.Context, sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
-	return nil, nil
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	out := make([]sqlc.Project, 0, len(q.projects))
+	for _, p := range q.projects {
+		out = append(out, p)
+	}
+	return out, nil
 }
-func (q *policyTestQuerier) CreateProject(context.Context, sqlc.CreateProjectParams) (sqlc.Project, error) {
-	return sqlc.Project{}, nil
+func (q *policyTestQuerier) CreateProject(_ context.Context, arg sqlc.CreateProjectParams) (sqlc.Project, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	now := time.Now()
+	row := sqlc.Project{
+		ID:                       uuid.New(),
+		Name:                     arg.Name,
+		DisplayName:              arg.DisplayName,
+		Description:              arg.Description,
+		ClusterID:                arg.ClusterID,
+		Namespaces:               arg.Namespaces,
+		ResourceQuota:            arg.ResourceQuota,
+		CreatedByID:              arg.CreatedByID,
+		CreatedAt:                now,
+		UpdatedAt:                now,
+		LimitRange:               arg.LimitRange,
+		NetworkPolicyMode:        arg.NetworkPolicyMode,
+		PodSecurityProfile:       arg.PodSecurityProfile,
+		ResourceQuotaCpuLimit:    arg.ResourceQuotaCpuLimit,
+		ResourceQuotaMemoryLimit: arg.ResourceQuotaMemoryLimit,
+		ResourceQuotaPodCount:    arg.ResourceQuotaPodCount,
+	}
+	q.projects[row.ID] = row
+	return row, nil
 }
-func (q *policyTestQuerier) UpdateProject(context.Context, sqlc.UpdateProjectParams) (sqlc.Project, error) {
-	return sqlc.Project{}, nil
+func (q *policyTestQuerier) UpdateProject(_ context.Context, arg sqlc.UpdateProjectParams) (sqlc.Project, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	existing, ok := q.projects[arg.ID]
+	if !ok {
+		return sqlc.Project{}, errors.New("no rows in result set")
+	}
+	existing.DisplayName = arg.DisplayName
+	existing.Description = arg.Description
+	existing.Namespaces = arg.Namespaces
+	existing.ResourceQuota = arg.ResourceQuota
+	existing.LimitRange = arg.LimitRange
+	existing.NetworkPolicyMode = arg.NetworkPolicyMode
+	existing.PodSecurityProfile = arg.PodSecurityProfile
+	existing.ResourceQuotaCpuLimit = arg.ResourceQuotaCpuLimit
+	existing.ResourceQuotaMemoryLimit = arg.ResourceQuotaMemoryLimit
+	existing.ResourceQuotaPodCount = arg.ResourceQuotaPodCount
+	existing.UpdatedAt = time.Now()
+	q.projects[arg.ID] = existing
+	return existing, nil
 }
 func (q *policyTestQuerier) UpdateProjectPolicy(_ context.Context, arg sqlc.UpdateProjectPolicyParams) (sqlc.Project, error) {
 	q.mu.Lock()
@@ -87,8 +136,16 @@ func (q *policyTestQuerier) UpdateProjectPolicy(_ context.Context, arg sqlc.Upda
 	q.projects[arg.ID] = existing
 	return existing, nil
 }
-func (q *policyTestQuerier) DeleteProject(context.Context, uuid.UUID) error  { return nil }
-func (q *policyTestQuerier) CountProjects(context.Context) (int64, error)    { return 0, nil }
+func (q *policyTestQuerier) DeleteProject(_ context.Context, id uuid.UUID) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if _, ok := q.projects[id]; !ok {
+		return errors.New("no rows in result set")
+	}
+	delete(q.projects, id)
+	return nil
+}
+func (q *policyTestQuerier) CountProjects(context.Context) (int64, error) { return 0, nil }
 func (q *policyTestQuerier) CountProjectsByCluster(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
@@ -120,6 +177,12 @@ func (q *policyTestQuerier) ClaimProjectNamespaceReconcile(context.Context, sqlc
 func (q *policyTestQuerier) MarkProjectNamespaceReconciled(context.Context, sqlc.MarkProjectNamespaceReconciledParams) error {
 	return nil
 }
+func (q *policyTestQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.audits = append(q.audits, arg)
+	return nil
+}
 
 // RBAC-matrix surface — the policy tests don't exercise this path,
 // but the interface needs satisfying. Return empty slices / NotFound
@@ -140,6 +203,122 @@ func patchURLParam(req *http.Request, key, value string) *http.Request {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add(key, value)
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
+func authedProjectRequest(t *testing.T, method, path string, callerID uuid.UUID, body any) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("encode request body: %v", err)
+		}
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	return req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		ID: callerID.String(),
+	}))
+}
+
+func assertProjectAudit(t *testing.T, rows []sqlc.CreateAuditLogV1Params, action, resourceID, resourceName string) {
+	t.Helper()
+	if len(rows) != 1 {
+		t.Fatalf("audit rows=%d, want 1", len(rows))
+	}
+	row := rows[0]
+	if row.Action != action {
+		t.Fatalf("audit action=%q want %q; row=%+v", row.Action, action, row)
+	}
+	if row.ResourceType != "project" {
+		t.Fatalf("audit resource_type=%q want project; row=%+v", row.ResourceType, row)
+	}
+	if row.ResourceID != resourceID || row.ResourceName != resourceName {
+		t.Fatalf("audit target=(%q,%q), want (%q,%q)", row.ResourceID, row.ResourceName, resourceID, resourceName)
+	}
+}
+
+func TestProjectMutationsAreAudited(t *testing.T) {
+	q := newPolicyTestQuerier()
+	h := NewProjectHandler(q)
+	callerID := uuid.New()
+	clusterID := uuid.New()
+
+	createReq := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/", callerID, map[string]any{
+		"name":                "team-a",
+		"display_name":        "Team A",
+		"description":         "primary project",
+		"cluster_id":          clusterID.String(),
+		"namespaces":          []string{"team-a"},
+		"network_policy_mode": "none",
+	})
+	createRec := httptest.NewRecorder()
+	h.Create(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var createdEnvelope struct {
+		Data ProjectResponse `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &createdEnvelope); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	projectID, err := uuid.Parse(createdEnvelope.Data.ID)
+	if err != nil {
+		t.Fatalf("parse created project id: %v", err)
+	}
+	assertProjectAudit(t, q.audits, "project.create", projectID.String(), "team-a")
+	assertAuditDetail(t, q.audits[0].Detail, "clusterId", clusterID.String())
+	q.audits = nil
+
+	updateReq := authedProjectRequest(t, http.MethodPut, "/api/v1/projects/"+projectID.String()+"/", callerID, map[string]any{
+		"display_name":        "Team A Updated",
+		"description":         "updated project",
+		"namespaces":          []string{"team-b"},
+		"network_policy_mode": "none",
+	})
+	updateReq = patchURLParam(updateReq, "id", projectID.String())
+	updateRec := httptest.NewRecorder()
+	h.Update(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+	assertProjectAudit(t, q.audits, "project.update", projectID.String(), "team-a")
+	q.audits = nil
+
+	addReq := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+projectID.String()+"/add-namespace/", callerID, map[string]any{
+		"namespace": "team-c",
+	})
+	addReq = patchURLParam(addReq, "id", projectID.String())
+	addRec := httptest.NewRecorder()
+	h.AddNamespace(addRec, addReq)
+	if addRec.Code != http.StatusOK {
+		t.Fatalf("add namespace status=%d body=%s", addRec.Code, addRec.Body.String())
+	}
+	assertProjectAudit(t, q.audits, "project.add_namespace", projectID.String(), "team-a")
+	assertAuditDetail(t, q.audits[0].Detail, "namespace", "team-c")
+	q.audits = nil
+
+	removeReq := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+projectID.String()+"/remove-namespace/", callerID, map[string]any{
+		"namespace": "team-c",
+	})
+	removeReq = patchURLParam(removeReq, "id", projectID.String())
+	removeRec := httptest.NewRecorder()
+	h.RemoveNamespace(removeRec, removeReq)
+	if removeRec.Code != http.StatusOK {
+		t.Fatalf("remove namespace status=%d body=%s", removeRec.Code, removeRec.Body.String())
+	}
+	assertProjectAudit(t, q.audits, "project.remove_namespace", projectID.String(), "team-a")
+	assertAuditDetail(t, q.audits[0].Detail, "namespace", "team-c")
+	q.audits = nil
+
+	deleteReq := authedProjectRequest(t, http.MethodDelete, "/api/v1/projects/"+projectID.String()+"/", callerID, nil)
+	deleteReq = patchURLParam(deleteReq, "id", projectID.String())
+	deleteRec := httptest.NewRecorder()
+	h.Delete(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", deleteRec.Code, deleteRec.Body.String())
+	}
+	assertProjectAudit(t, q.audits, "project.delete", projectID.String(), "team-a")
+	assertAuditDetail(t, q.audits[0].Detail, "clusterId", clusterID.String())
 }
 
 func TestPatchProjectPolicy_UpdatesFields(t *testing.T) {
@@ -196,6 +375,8 @@ func TestPatchProjectPolicy_UpdatesFields(t *testing.T) {
 	if envelope.Data.PodSecurityProfile != "restricted" {
 		t.Errorf("response profile: got %q, want restricted", envelope.Data.PodSecurityProfile)
 	}
+	assertProjectAudit(t, q.audits, "project.update_policy", projectID.String(), "team-a")
+	assertAuditDetail(t, q.audits[0].Detail, "pod_security_profile", "restricted")
 }
 
 // TestPatchProjectPolicy_OmittedFieldsPreserved checks that a partial PATCH

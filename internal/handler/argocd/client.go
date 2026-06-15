@@ -17,13 +17,54 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // Default timeout for all client requests. Kept short because the reconciler
 // loop holds its own mutex while these calls are in flight.
 const DefaultTimeout = 10 * time.Second
+
+var (
+	clientTracer = otel.Tracer("astronomer/argocd-client")
+
+	clientMetricsOnce = sync.Once{}
+
+	clientRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Subsystem: "argocd_client",
+			Name:      "requests_total",
+			Help:      "Total upstream Argo CD API requests by method, path family, and status.",
+		},
+		observability.MetricLabels("method", "path_family", "status"),
+	)
+	clientRequestDurationSeconds = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "astronomer",
+			Subsystem: "argocd_client",
+			Name:      "request_duration_seconds",
+			Help:      "Upstream Argo CD API request latency by method, path family, and status.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		observability.MetricLabels("method", "path_family", "status"),
+	)
+)
+
+func registerClientMetrics() {
+	clientMetricsOnce.Do(func() {
+		prometheus.MustRegister(clientRequestsTotal, clientRequestDurationSeconds)
+	})
+}
 
 // ErrorKind classifies upstream ArgoCD errors so callers can react.
 type ErrorKind int
@@ -147,10 +188,13 @@ type OperationState struct {
 // Application is the trimmed projection of /api/v1/applications/{name}.
 type Application struct {
 	Metadata struct {
-		Name      string `json:"name"`
-		UID       string `json:"uid,omitempty"`
-		Namespace string `json:"namespace,omitempty"`
+		Name            string            `json:"name"`
+		UID             string            `json:"uid,omitempty"`
+		Namespace       string            `json:"namespace,omitempty"`
+		Labels          map[string]string `json:"labels,omitempty"`
+		OwnerReferences []OwnerReference  `json:"ownerReferences,omitempty"`
 	} `json:"metadata"`
+	Spec   ApplicationSpec `json:"spec,omitempty"`
 	Status struct {
 		Sync struct {
 			Status   string `json:"status,omitempty"`
@@ -159,8 +203,30 @@ type Application struct {
 		Health struct {
 			Status string `json:"status,omitempty"`
 		} `json:"health"`
-		OperationState *OperationState `json:"operationState,omitempty"`
+		OperationState *OperationState  `json:"operationState,omitempty"`
+		Resources      []ResourceStatus `json:"resources,omitempty"`
 	} `json:"status"`
+}
+
+// OwnerReference is the subset of Kubernetes ownerReferences needed to detect
+// ApplicationSet-generated Applications with stale ownership metadata.
+type OwnerReference struct {
+	APIVersion string `json:"apiVersion,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Name       string `json:"name,omitempty"`
+	UID        string `json:"uid,omitempty"`
+	Controller *bool  `json:"controller,omitempty"`
+}
+
+// ResourceStatus mirrors the subset of ArgoCD's per-resource status used for
+// cluster-level drift summaries.
+type ResourceStatus struct {
+	Group           string `json:"group,omitempty"`
+	Kind            string `json:"kind,omitempty"`
+	Namespace       string `json:"namespace,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Status          string `json:"status,omitempty"`
+	RequiresPruning bool   `json:"requiresPruning,omitempty"`
 }
 
 // ServerStatus mirrors /api/version.
@@ -225,9 +291,30 @@ func (c *Client) Health(ctx context.Context) (*ServerStatus, error) {
 	return &status, nil
 }
 
-// do is the single HTTP funnel; it owns auth, error classification, and
-// JSON decoding.
-func (c *Client) do(ctx context.Context, method, path string, body []byte, out any) error {
+// do is the single HTTP funnel; it owns auth, error classification,
+// tracing, and JSON decoding.
+func (c *Client) do(ctx context.Context, method, path string, body []byte, out any) (retErr error) {
+	registerClientMetrics()
+	start := time.Now()
+	pathFamily := argoCDPathFamily(path)
+	statusCode := 0
+	ctx, span := clientTracer.Start(ctx, "argocd "+method)
+	span.SetAttributes(
+		attribute.String("http.request.method", method),
+		attribute.String("argocd.path_family", pathFamily),
+	)
+	defer func() {
+		statusLabel := argocdMetricStatus(statusCode, retErr)
+		labels := observability.MetricValues(method, pathFamily, statusLabel)
+		clientRequestsTotal.WithLabelValues(labels...).Inc()
+		clientRequestDurationSeconds.WithLabelValues(labels...).Observe(time.Since(start).Seconds())
+		if retErr != nil {
+			span.RecordError(retErr)
+			span.SetStatus(codes.Error, retErr.Error())
+			return
+		}
+		span.SetStatus(codes.Ok, "")
+	}()
 	if c == nil || c.baseURL == "" {
 		return &APIError{Kind: ErrUnreachable, Message: "argocd client not configured"}
 	}
@@ -253,7 +340,11 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, out a
 	if err != nil {
 		return &APIError{Kind: ErrUnreachable, Message: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	statusCode = resp.StatusCode
+	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= http.StatusBadRequest {
 		return classifyError(resp.StatusCode, raw)
@@ -265,6 +356,53 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, out a
 		return &APIError{Kind: ErrUnknown, Status: resp.StatusCode, Message: "decode error: " + err.Error(), Body: string(raw)}
 	}
 	return nil
+}
+
+func argocdMetricStatus(statusCode int, err error) string {
+	if statusCode > 0 {
+		return strconv.Itoa(statusCode)
+	}
+	if err != nil {
+		return "error"
+	}
+	return "unknown"
+}
+
+func argoCDPathFamily(path string) string {
+	clean := strings.Split(path, "?")[0]
+	parts := strings.Split(strings.Trim(clean, "/"), "/")
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "v1" {
+		if clean == "" {
+			return "/"
+		}
+		return clean
+	}
+	switch parts[2] {
+	case "applications":
+		if len(parts) >= 5 && parts[4] == "sync" {
+			return "/api/v1/applications/*/sync"
+		}
+		if len(parts) >= 4 {
+			return "/api/v1/applications/*"
+		}
+	case "applicationsets":
+		if len(parts) >= 4 {
+			return "/api/v1/applicationsets/*"
+		}
+	case "projects":
+		if len(parts) >= 4 {
+			return "/api/v1/projects/*"
+		}
+	case "clusters":
+		if len(parts) >= 4 {
+			return "/api/v1/clusters/*"
+		}
+	case "repositories":
+		if len(parts) >= 4 {
+			return "/api/v1/repositories/*"
+		}
+	}
+	return "/" + strings.Join(parts, "/")
 }
 
 // classifyError maps an HTTP status + body into an *APIError of the right

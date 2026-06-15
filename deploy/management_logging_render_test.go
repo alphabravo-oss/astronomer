@@ -22,6 +22,10 @@ import (
 // helmTemplate runs `helm template astronomer <chart> -f values.yaml --set ...`
 // and returns the stdout. Fails the test on any non-zero exit.
 func helmTemplate(t *testing.T, sets ...string) string {
+	return helmTemplateWithValueFiles(t, nil, sets...)
+}
+
+func helmTemplateWithValueFiles(t *testing.T, valueFiles []string, sets ...string) string {
 	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skipf("helm binary not on PATH (%v); skipping chart-render test", err)
@@ -37,6 +41,9 @@ func helmTemplate(t *testing.T, sets ...string) string {
 	valuesFile := filepath.Join(chartDir, "values.yaml")
 
 	args := []string{"template", "astronomer", chartDir, "-f", valuesFile}
+	for _, file := range valueFiles {
+		args = append(args, "-f", file)
+	}
 	for _, s := range sets {
 		args = append(args, "--set", s)
 	}

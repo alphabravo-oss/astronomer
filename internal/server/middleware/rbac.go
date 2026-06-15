@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -44,7 +45,7 @@ func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.R
 						"message": "Authentication is required to access this resource",
 					},
 				}
-				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(resp)
 				return
 			}
 
@@ -58,7 +59,7 @@ func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.R
 						"message": "Failed to retrieve user permissions",
 					},
 				}
-				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(resp)
 				return
 			}
 
@@ -83,8 +84,9 @@ func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.R
 					projectID = parsed
 				}
 			}
+			namespace := namespaceContext(r)
 
-			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID) {
+			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				resp := map[string]interface{}{
@@ -93,11 +95,23 @@ func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.R
 						"message": "You do not have permission to perform this action",
 					},
 				}
-				json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(resp)
 				return
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func namespaceContext(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	for _, key := range []string{"namespace", "namespace_name", "ns"} {
+		if value := strings.TrimSpace(chi.URLParam(r, key)); value != "" {
+			return value
+		}
+	}
+	return strings.TrimSpace(r.URL.Query().Get("namespace"))
 }

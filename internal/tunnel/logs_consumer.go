@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"nhooyr.io/websocket"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -32,11 +32,12 @@ import (
 // Without `SetAuth`, the handler accepts unauthenticated connections
 // (dev/test mode).
 type LogsConsumer struct {
-	hub     *Hub
-	log     *slog.Logger
-	jwt     *auth.JWTManager
-	queries middleware.TokenUserQuerier
-	tickets *auth.StreamTicketStore
+	hub         *Hub
+	log         *slog.Logger
+	jwt         *auth.JWTManager
+	queries     middleware.TokenUserQuerier
+	tickets     *auth.StreamTicketStore
+	auditWriter any
 }
 
 // NewLogsConsumer creates a new LogsConsumer.
@@ -65,19 +66,18 @@ func (lc *LogsConsumer) SetStreamTickets(tickets *auth.StreamTicketStore) {
 	lc.tickets = tickets
 }
 
-// authenticate validates the request via a one-use stream ticket or
-// Authorization header. Delegates to the shared auth.AuthorizeStreamRequest
-// helper so the long-lived stream endpoints share a single validation path.
-func (lc *LogsConsumer) authenticate(r *http.Request) bool {
-	clusterID, _ := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	_, ok := auth.AuthorizeStreamRequestWithTickets(r, lc.queries, lc.jwt, lc.tickets, auth.StreamKindLogs, clusterID)
-	return ok
+func (lc *LogsConsumer) SetAuditWriter(auditWriter any) {
+	if lc == nil {
+		return
+	}
+	lc.auditWriter = auditWriter
 }
 
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent
 // to the frontend client.
 func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
-	if !lc.authenticate(r) {
+	userID, ok := authenticateStreamRequest(r, lc.queries, lc.jwt, lc.tickets, auth.StreamKindLogs)
+	if !ok {
 		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
 		return
 	}
@@ -108,7 +108,10 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		lc.log.Error("websocket accept failed", slog.String("error", err.Error()))
 		return
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "closed")
+	defer func() {
+		_ = conn.Close(websocket.StatusNormalClosure, "closed")
+	}()
+	recordStreamOpenAudit(r, lc.auditWriter, userID, "pod.logs.opened", clusterID, namespace, pod, container)
 
 	// Get agent connection from hub.
 	agent := lc.hub.GetAgent(clusterID)
@@ -117,7 +120,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		// Send a structured error frame to the client before closing so the UI
 		// can surface "agent not connected" instead of a silent hang.
 		_ = logsWriteFrontendError(r.Context(), conn, "agent_not_connected", "Cluster agent is not connected")
-		conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
+		_ = conn.Close(websocket.StatusInternalError, "Cluster agent not connected")
 		return
 	}
 
@@ -130,7 +133,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			slog.String("error", err.Error()),
 		)
 		_ = logsWriteFrontendError(r.Context(), conn, "stream_create_failed", err.Error())
-		conn.Close(websocket.StatusInternalError, "failed to create stream")
+		_ = conn.Close(websocket.StatusInternalError, "failed to create stream")
 		return
 	}
 	defer agent.Streams.CloseStream(streamID)
@@ -190,7 +193,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			slog.String("error", err.Error()),
 		)
 		_ = logsWriteFrontendError(r.Context(), conn, "log_start_failed", err.Error())
-		conn.Close(websocket.StatusInternalError, "failed to start log stream")
+		_ = conn.Close(websocket.StatusInternalError, "failed to start log stream")
 		return
 	}
 

@@ -35,6 +35,42 @@ func (q *Queries) CountArgoCDApplications(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countArgoCDApplicationsBySyncHealth = `-- name: CountArgoCDApplicationsBySyncHealth :many
+SELECT
+    COALESCE(NULLIF(sync_status, ''), 'Unknown')::text AS sync_status,
+    COALESCE(NULLIF(health_status, ''), 'Unknown')::text AS health_status,
+    count(*)::bigint AS app_count
+FROM argocd_applications
+GROUP BY 1, 2
+ORDER BY 1, 2
+`
+
+type CountArgoCDApplicationsBySyncHealthRow struct {
+	SyncStatus   string `json:"sync_status"`
+	HealthStatus string `json:"health_status"`
+	AppCount     int64  `json:"app_count"`
+}
+
+func (q *Queries) CountArgoCDApplicationsBySyncHealth(ctx context.Context) ([]CountArgoCDApplicationsBySyncHealthRow, error) {
+	rows, err := q.db.Query(ctx, countArgoCDApplicationsBySyncHealth)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountArgoCDApplicationsBySyncHealthRow{}
+	for rows.Next() {
+		var i CountArgoCDApplicationsBySyncHealthRow
+		if err := rows.Scan(&i.SyncStatus, &i.HealthStatus, &i.AppCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countArgoCDInstances = `-- name: CountArgoCDInstances :one
 SELECT count(*) FROM argocd_instances
 `
@@ -44,58 +80,6 @@ func (q *Queries) CountArgoCDInstances(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
-}
-
-const createArgoCDApplication = `-- name: CreateArgoCDApplication :one
-INSERT INTO argocd_applications (argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at
-`
-
-type CreateArgoCDApplicationParams struct {
-	ArgocdInstanceID     uuid.UUID `json:"argocd_instance_id"`
-	Name                 string    `json:"name"`
-	Project              string    `json:"project"`
-	RepoUrl              string    `json:"repo_url"`
-	Path                 string    `json:"path"`
-	TargetRevision       string    `json:"target_revision"`
-	DestinationCluster   string    `json:"destination_cluster"`
-	DestinationNamespace string    `json:"destination_namespace"`
-	SyncStatus           string    `json:"sync_status"`
-	HealthStatus         string    `json:"health_status"`
-}
-
-func (q *Queries) CreateArgoCDApplication(ctx context.Context, arg CreateArgoCDApplicationParams) (ArgocdApplication, error) {
-	row := q.db.QueryRow(ctx, createArgoCDApplication,
-		arg.ArgocdInstanceID,
-		arg.Name,
-		arg.Project,
-		arg.RepoUrl,
-		arg.Path,
-		arg.TargetRevision,
-		arg.DestinationCluster,
-		arg.DestinationNamespace,
-		arg.SyncStatus,
-		arg.HealthStatus,
-	)
-	var i ArgocdApplication
-	err := row.Scan(
-		&i.ID,
-		&i.ArgocdInstanceID,
-		&i.Name,
-		&i.Project,
-		&i.RepoUrl,
-		&i.Path,
-		&i.TargetRevision,
-		&i.DestinationCluster,
-		&i.DestinationNamespace,
-		&i.SyncStatus,
-		&i.HealthStatus,
-		&i.LastSynced,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const createArgoCDInstance = `-- name: CreateArgoCDInstance :one
@@ -183,13 +167,16 @@ func (q *Queries) CreateArgoCDManagedCluster(ctx context.Context, arg CreateArgo
 	return i, err
 }
 
-const deleteArgoCDApplication = `-- name: DeleteArgoCDApplication :exec
-DELETE FROM argocd_applications WHERE id = $1
+const deleteArgoCDClusterProxyTokensByCluster = `-- name: DeleteArgoCDClusterProxyTokensByCluster :execrows
+DELETE FROM argocd_cluster_proxy_tokens WHERE cluster_id = $1
 `
 
-func (q *Queries) DeleteArgoCDApplication(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteArgoCDApplication, id)
-	return err
+func (q *Queries) DeleteArgoCDClusterProxyTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteArgoCDClusterProxyTokensByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteArgoCDInstance = `-- name: DeleteArgoCDInstance :exec
@@ -219,6 +206,11 @@ const deleteArgoCDManagedClustersByCluster = `-- name: DeleteArgoCDManagedCluste
 DELETE FROM argocd_managed_clusters WHERE cluster_id = $1
 `
 
+// Bulk-delete every (instance, cluster) mapping for one cluster. Used by
+// the decommission worker to drop local rows after a cluster is tombstoned.
+// Upstream Argo cluster Secrets (the actual k8s resource in each Argo
+// namespace) need a separate unregister flow; the orphans are surfaced via
+// the cluster.decommission.argocd_secret_orphan audit row.
 func (q *Queries) DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteArgoCDManagedClustersByCluster, clusterID)
 	if err != nil {
@@ -227,9 +219,40 @@ func (q *Queries) DeleteArgoCDManagedClustersByCluster(ctx context.Context, clus
 	return result.RowsAffected(), nil
 }
 
+const getActiveArgoCDClusterProxyTokenByClusterID = `-- name: GetActiveArgoCDClusterProxyTokenByClusterID :one
+
+SELECT id, cluster_id, purpose, token_hash, token_prefix, token_encrypted, expires_at, last_used_at, is_revoked, created_at, updated_at FROM argocd_cluster_proxy_tokens
+WHERE cluster_id = $1
+  AND purpose = 'argocd_cluster_proxy'
+  AND is_revoked = false
+  AND (expires_at IS NULL OR expires_at > now())
+`
+
+// ArgoCD cluster-proxy service tokens. These are not user API tokens:
+// they are cluster-scoped machine identities used only by built-in ArgoCD
+// to reach an adopted cluster through Astronomer's tunnel-backed proxy.
+func (q *Queries) GetActiveArgoCDClusterProxyTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ArgocdClusterProxyToken, error) {
+	row := q.db.QueryRow(ctx, getActiveArgoCDClusterProxyTokenByClusterID, clusterID)
+	var i ArgocdClusterProxyToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Purpose,
+		&i.TokenHash,
+		&i.TokenPrefix,
+		&i.TokenEncrypted,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.IsRevoked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getArgoCDApplicationByID = `-- name: GetArgoCDApplicationByID :one
 
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at FROM argocd_applications WHERE id = $1
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications WHERE id = $1
 `
 
 // ArgoCD Applications
@@ -248,6 +271,9 @@ func (q *Queries) GetArgoCDApplicationByID(ctx context.Context, id uuid.UUID) (A
 		&i.DestinationNamespace,
 		&i.SyncStatus,
 		&i.HealthStatus,
+		&i.ResourceCreatedCount,
+		&i.ResourceChangedCount,
+		&i.ResourcePrunedCount,
 		&i.LastSynced,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -256,7 +282,7 @@ func (q *Queries) GetArgoCDApplicationByID(ctx context.Context, id uuid.UUID) (A
 }
 
 const getArgoCDApplicationByName = `-- name: GetArgoCDApplicationByName :one
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 AND name = $2
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 AND name = $2
 `
 
 type GetArgoCDApplicationByNameParams struct {
@@ -279,7 +305,37 @@ func (q *Queries) GetArgoCDApplicationByName(ctx context.Context, arg GetArgoCDA
 		&i.DestinationNamespace,
 		&i.SyncStatus,
 		&i.HealthStatus,
+		&i.ResourceCreatedCount,
+		&i.ResourceChangedCount,
+		&i.ResourcePrunedCount,
 		&i.LastSynced,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getArgoCDClusterProxyTokenByHash = `-- name: GetArgoCDClusterProxyTokenByHash :one
+SELECT id, cluster_id, purpose, token_hash, token_prefix, token_encrypted, expires_at, last_used_at, is_revoked, created_at, updated_at FROM argocd_cluster_proxy_tokens
+WHERE token_hash = $1
+  AND purpose = 'argocd_cluster_proxy'
+  AND is_revoked = false
+  AND (expires_at IS NULL OR expires_at > now())
+`
+
+func (q *Queries) GetArgoCDClusterProxyTokenByHash(ctx context.Context, tokenHash string) (ArgocdClusterProxyToken, error) {
+	row := q.db.QueryRow(ctx, getArgoCDClusterProxyTokenByHash, tokenHash)
+	var i ArgocdClusterProxyToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Purpose,
+		&i.TokenHash,
+		&i.TokenPrefix,
+		&i.TokenEncrypted,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.IsRevoked,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -358,7 +414,7 @@ func (q *Queries) GetArgoCDManagedCluster(ctx context.Context, arg GetArgoCDMana
 }
 
 const listAppsByInstance = `-- name: ListAppsByInstance :many
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3
 `
 
 type ListAppsByInstanceParams struct {
@@ -388,57 +444,9 @@ func (q *Queries) ListAppsByInstance(ctx context.Context, arg ListAppsByInstance
 			&i.DestinationNamespace,
 			&i.SyncStatus,
 			&i.HealthStatus,
-			&i.LastSynced,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAppsByInstanceAndProject = `-- name: ListAppsByInstanceAndProject :many
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 AND project = $2 ORDER BY name ASC LIMIT $3 OFFSET $4
-`
-
-type ListAppsByInstanceAndProjectParams struct {
-	ArgocdInstanceID uuid.UUID `json:"argocd_instance_id"`
-	Project          string    `json:"project"`
-	Limit            int32     `json:"limit"`
-	Offset           int32     `json:"offset"`
-}
-
-func (q *Queries) ListAppsByInstanceAndProject(ctx context.Context, arg ListAppsByInstanceAndProjectParams) ([]ArgocdApplication, error) {
-	rows, err := q.db.Query(ctx, listAppsByInstanceAndProject,
-		arg.ArgocdInstanceID,
-		arg.Project,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ArgocdApplication{}
-	for rows.Next() {
-		var i ArgocdApplication
-		if err := rows.Scan(
-			&i.ID,
-			&i.ArgocdInstanceID,
-			&i.Name,
-			&i.Project,
-			&i.RepoUrl,
-			&i.Path,
-			&i.TargetRevision,
-			&i.DestinationCluster,
-			&i.DestinationNamespace,
-			&i.SyncStatus,
-			&i.HealthStatus,
+			&i.ResourceCreatedCount,
+			&i.ResourceChangedCount,
+			&i.ResourcePrunedCount,
 			&i.LastSynced,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -454,7 +462,7 @@ func (q *Queries) ListAppsByInstanceAndProject(ctx context.Context, arg ListApps
 }
 
 const listArgoCDApplications = `-- name: ListArgoCDApplications :many
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at FROM argocd_applications ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListArgoCDApplicationsParams struct {
@@ -483,6 +491,59 @@ func (q *Queries) ListArgoCDApplications(ctx context.Context, arg ListArgoCDAppl
 			&i.DestinationNamespace,
 			&i.SyncStatus,
 			&i.HealthStatus,
+			&i.ResourceCreatedCount,
+			&i.ResourceChangedCount,
+			&i.ResourcePrunedCount,
+			&i.LastSynced,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArgoCDApplicationsByManagedClusterTargets = `-- name: ListArgoCDApplicationsByManagedClusterTargets :many
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications
+WHERE argocd_instance_id = ANY($1::uuid[])
+  AND destination_cluster = ANY($2::text[])
+ORDER BY name ASC
+`
+
+type ListArgoCDApplicationsByManagedClusterTargetsParams struct {
+	ArgocdInstanceIds   []uuid.UUID `json:"argocd_instance_ids"`
+	DestinationClusters []string    `json:"destination_clusters"`
+}
+
+func (q *Queries) ListArgoCDApplicationsByManagedClusterTargets(ctx context.Context, arg ListArgoCDApplicationsByManagedClusterTargetsParams) ([]ArgocdApplication, error) {
+	rows, err := q.db.Query(ctx, listArgoCDApplicationsByManagedClusterTargets, arg.ArgocdInstanceIds, arg.DestinationClusters)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArgocdApplication{}
+	for rows.Next() {
+		var i ArgocdApplication
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArgocdInstanceID,
+			&i.Name,
+			&i.Project,
+			&i.RepoUrl,
+			&i.Path,
+			&i.TargetRevision,
+			&i.DestinationCluster,
+			&i.DestinationNamespace,
+			&i.SyncStatus,
+			&i.HealthStatus,
+			&i.ResourceCreatedCount,
+			&i.ResourceChangedCount,
+			&i.ResourcePrunedCount,
 			&i.LastSynced,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -574,7 +635,7 @@ const listArgoCDManagedClustersByCluster = `-- name: ListArgoCDManagedClustersBy
 SELECT id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at FROM argocd_managed_clusters WHERE cluster_id = $1 ORDER BY created_at ASC
 `
 
-// Reverse index of ListArgoCDManagedClusters: every ArgoCD instance into which a given
+// Reverse index of the above: every ArgoCD instance into which a given
 // Astronomer cluster is registered. Used by the
 // "argocd:refresh_managed_cluster_labels" worker task to re-stamp the
 // astronomer.io/label-* keys on every relevant cluster Secret after a
@@ -649,6 +710,15 @@ func (q *Queries) ListInstancesByCluster(ctx context.Context, arg ListInstancesB
 	return items, nil
 }
 
+const touchArgoCDClusterProxyToken = `-- name: TouchArgoCDClusterProxyToken :exec
+UPDATE argocd_cluster_proxy_tokens SET last_used_at = now() WHERE id = $1
+`
+
+func (q *Queries) TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchArgoCDClusterProxyToken, id)
+	return err
+}
+
 const updateArgoCDApplication = `-- name: UpdateArgoCDApplication :one
 UPDATE argocd_applications SET
     project = $2,
@@ -659,9 +729,12 @@ UPDATE argocd_applications SET
     destination_namespace = $7,
     sync_status = $8,
     health_status = $9,
-    last_synced = $10
+    resource_created_count = $10,
+    resource_changed_count = $11,
+    resource_pruned_count = $12,
+    last_synced = $13
 WHERE id = $1
-RETURNING id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, last_synced, created_at, updated_at
+RETURNING id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at
 `
 
 type UpdateArgoCDApplicationParams struct {
@@ -674,6 +747,9 @@ type UpdateArgoCDApplicationParams struct {
 	DestinationNamespace string             `json:"destination_namespace"`
 	SyncStatus           string             `json:"sync_status"`
 	HealthStatus         string             `json:"health_status"`
+	ResourceCreatedCount int32              `json:"resource_created_count"`
+	ResourceChangedCount int32              `json:"resource_changed_count"`
+	ResourcePrunedCount  int32              `json:"resource_pruned_count"`
 	LastSynced           pgtype.Timestamptz `json:"last_synced"`
 }
 
@@ -688,6 +764,9 @@ func (q *Queries) UpdateArgoCDApplication(ctx context.Context, arg UpdateArgoCDA
 		arg.DestinationNamespace,
 		arg.SyncStatus,
 		arg.HealthStatus,
+		arg.ResourceCreatedCount,
+		arg.ResourceChangedCount,
+		arg.ResourcePrunedCount,
 		arg.LastSynced,
 	)
 	var i ArgocdApplication
@@ -703,6 +782,9 @@ func (q *Queries) UpdateArgoCDApplication(ctx context.Context, arg UpdateArgoCDA
 		&i.DestinationNamespace,
 		&i.SyncStatus,
 		&i.HealthStatus,
+		&i.ResourceCreatedCount,
+		&i.ResourceChangedCount,
+		&i.ResourcePrunedCount,
 		&i.LastSynced,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -789,6 +871,53 @@ func (q *Queries) UpdateArgoCDManagedClusterLabels(ctx context.Context, arg Upda
 		&i.ClusterSecretName,
 		&i.ServerUrl,
 		&i.Labels,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertArgoCDClusterProxyToken = `-- name: UpsertArgoCDClusterProxyToken :one
+INSERT INTO argocd_cluster_proxy_tokens
+    (cluster_id, token_hash, token_prefix, token_encrypted, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (cluster_id, purpose) DO UPDATE SET
+    token_hash = EXCLUDED.token_hash,
+    token_prefix = EXCLUDED.token_prefix,
+    token_encrypted = EXCLUDED.token_encrypted,
+    expires_at = EXCLUDED.expires_at,
+    is_revoked = false,
+    updated_at = now()
+RETURNING id, cluster_id, purpose, token_hash, token_prefix, token_encrypted, expires_at, last_used_at, is_revoked, created_at, updated_at
+`
+
+type UpsertArgoCDClusterProxyTokenParams struct {
+	ClusterID      uuid.UUID          `json:"cluster_id"`
+	TokenHash      string             `json:"token_hash"`
+	TokenPrefix    string             `json:"token_prefix"`
+	TokenEncrypted string             `json:"token_encrypted"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) UpsertArgoCDClusterProxyToken(ctx context.Context, arg UpsertArgoCDClusterProxyTokenParams) (ArgocdClusterProxyToken, error) {
+	row := q.db.QueryRow(ctx, upsertArgoCDClusterProxyToken,
+		arg.ClusterID,
+		arg.TokenHash,
+		arg.TokenPrefix,
+		arg.TokenEncrypted,
+		arg.ExpiresAt,
+	)
+	var i ArgocdClusterProxyToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Purpose,
+		&i.TokenHash,
+		&i.TokenPrefix,
+		&i.TokenEncrypted,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.IsRevoked,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

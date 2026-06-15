@@ -71,7 +71,7 @@ func (f *fakeShellQuerier) CreateKubectlSession(_ context.Context, arg sqlc.Crea
 		StartedAt:   time.Now(),
 		LastInputAt: time.Now(),
 		ExpiresAt:   time.Now().Add(4 * time.Hour),
-		ClientIP:    arg.ClientIP, UserAgent: arg.UserAgent,
+		ClientIp:    arg.ClientIp, UserAgent: arg.UserAgent,
 	}
 	f.sessions[row.ID] = &row
 	return row, nil
@@ -115,8 +115,8 @@ func (f *fakeShellQuerier) SetKubectlSessionStatus(_ context.Context, arg sqlc.S
 	defer f.mu.Unlock()
 	if r, ok := f.sessions[arg.ID]; ok {
 		r.Status = arg.Status
-		if arg.LastError.Valid {
-			r.LastError = arg.LastError.String
+		if arg.LastError != "" {
+			r.LastError = arg.LastError
 		}
 		if arg.Status == "closed" || arg.Status == "expired" || arg.Status == "failed" {
 			r.ClosedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
@@ -182,7 +182,7 @@ func (f *fakeShellRequester) Do(_ context.Context, _, method, path string, _ []b
 		// Pod is Ready immediately.
 		return &kubectl.K8sResponse{
 			StatusCode: 200,
-			Body: []byte(`{"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}}`),
+			Body:       []byte(`{"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}}`),
 		}, nil
 	}
 	if method == "POST" {

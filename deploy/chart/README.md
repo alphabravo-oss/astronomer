@@ -32,18 +32,26 @@ helm upgrade --install astronomer ./deploy/chart \
   --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
   --set postgres.external.dsnSecretRef.key=dsn \
   --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
+  --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
+  --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
+  --set bootstrap.email=admin@example.com \
+  --set dex.clientSecret=<random-dex-client-secret> \
+  --set managementBackup.s3.bucket=my-astronomer-backups \
+  --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
   --set-file secrets.encryptionKey=./prod-fernet-key \
   --set-file secrets.secretKey=./prod-jwt-key \
   --set-file bootstrap.password=./prod-bootstrap-password
 ```
 
-`values-production.yaml` will **fail to render** sensibly if any of the
-following are still unset — they're the bare minimum a production install
-needs:
+`values.schema.json` validates common types before Helm renders templates, and
+`values-production.yaml` will fail if any of the following are still unset —
+they're the bare minimum a production install needs:
 
 - `postgres.external.dsnSecretRef.name` or `postgres.external.dsn`
 - `redis.external.address` (and `passwordSecretRef.name` if your Redis is
   password-gated)
+- `networkPolicy.externalPostgresEgressCIDRs` and
+  `networkPolicy.externalRedisEgressCIDRs` when NetworkPolicy is enabled
 - `gateway.hosts` (at least one hostname)
 - `tls.source` — must be `selfSigned`, `letsEncrypt`, or `secret` (not `none`)
 - `tls.letsEncrypt.email` — required when `tls.source=letsEncrypt`
@@ -51,6 +59,27 @@ needs:
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 - `secrets.secretKey` — JWT signing material
 - `config.serverURL` — external URL; seeds the Argo self-management hostname
+- `bootstrap.email` — the bootstrap admin login email
+- `dex.clientSecret` when bundled Dex is enabled
+- `managementBackup.s3.bucket` and `managementBackup.s3.credentialsSecretRef.name`
+  when the production backup CronJob is enabled
+
+### Bootstrap credentials
+
+The bootstrap admin logs in with `bootstrap.email`. If `bootstrap.password` is
+set, the server uses that initial password. If it is empty, the chart generates
+a random password once, stores it in the `<release>-bootstrap` Secret, and keeps
+that Secret across upgrades.
+
+Retrieve the generated password with:
+
+```bash
+kubectl -n <namespace> get secret <release>-bootstrap \
+  -o jsonpath='{.data.password}' | base64 -d
+```
+
+The bootstrap admin is not forced through a first-login password reset. Rotate
+the password later through the profile or admin password-change flow.
 
 ### Management-plane disaster recovery
 

@@ -40,6 +40,7 @@ type fakeServiceMeshQuerier struct {
 	clusters map[uuid.UUID]sqlc.Cluster
 	rows     map[uuid.UUID]sqlc.ClusterServiceMesh
 	upserts  []sqlc.UpsertClusterServiceMeshParams
+	audits   []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeServiceMeshQuerier(clusterID uuid.UUID, name string) *fakeServiceMeshQuerier {
@@ -89,6 +90,13 @@ func (f *fakeServiceMeshQuerier) UpsertClusterServiceMesh(_ context.Context, arg
 	}
 	f.rows[arg.ClusterID] = row
 	return row, nil
+}
+
+func (f *fakeServiceMeshQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
+	return nil
 }
 
 // stubServiceMeshDetector records the detect calls and writes a
@@ -419,6 +427,7 @@ func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing
 	clusterID := uuid.New()
 	q := newFakeServiceMeshQuerier(clusterID, "c1")
 	h := NewServiceMeshHandler(q)
+	h.SetAuditor(q)
 	body := `{
 		"apiVersion":"networking.istio.io/v1beta1",
 		"kind":"VirtualService",
@@ -456,6 +465,19 @@ func TestServiceMeshHandler_ValidatePolicyFlagsBadWeightsAndArgoOwned(t *testing
 	if len(resp.Warnings) == 0 {
 		t.Fatalf("expected Argo ownership warning, got none")
 	}
+	q.mu.Lock()
+	audits := append([]sqlc.CreateAuditLogV1Params(nil), q.audits...)
+	q.mu.Unlock()
+	if len(audits) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(audits))
+	}
+	row := audits[0]
+	if row.Action != "cluster.service_mesh.policy_validated" || row.ResourceType != "cluster" || row.ResourceID != clusterID.String() {
+		t.Fatalf("audit row=%+v, want cluster.service_mesh.policy_validated on cluster %s", row, clusterID)
+	}
+	assertAuditDetail(t, row.Detail, "kind", "VirtualService")
+	assertAuditDetail(t, row.Detail, "namespace", "payments")
+	assertAuditDetail(t, row.Detail, "managed_by", "argocd")
 }
 
 func TestServiceMeshHandler_RequiresClusterRead(t *testing.T) {

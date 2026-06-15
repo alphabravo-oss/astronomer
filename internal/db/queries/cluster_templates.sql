@@ -51,13 +51,6 @@ DELETE FROM cluster_templates WHERE id = $1;
 -- FK-restricted delete.
 SELECT count(*) FROM cluster_template_applications WHERE template_id = $1;
 
--- name: ListClusterTemplateApplicationsByTemplate :many
--- Reverse-lookup for the cluster-template detail view that lists every
--- cluster currently using a template (and its application status).
-SELECT * FROM cluster_template_applications
-WHERE template_id = $1
-ORDER BY updated_at DESC;
-
 -- name: GetClusterTemplateApplication :one
 SELECT * FROM cluster_template_applications WHERE cluster_id = $1;
 
@@ -111,9 +104,6 @@ LIMIT $2;
 -- Registration policy table (per-cluster). The apply worker stamps this
 -- when spec.registration_policy is set; the existing token cleanup task
 -- can read token_rotation_days when rotating.
-
--- name: GetClusterRegistrationPolicy :one
-SELECT * FROM cluster_registration_policies WHERE cluster_id = $1;
 
 -- name: UpsertClusterRegistrationPolicy :one
 INSERT INTO cluster_registration_policies (

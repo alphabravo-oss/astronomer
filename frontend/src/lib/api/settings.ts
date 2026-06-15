@@ -18,6 +18,66 @@
 import api from '@/lib/api';
 import type { APIResponse, PaginatedResponse } from '@/types';
 
+function unwrapData<T>(value: T | APIResponse<T> | null | undefined): T | undefined {
+  if (value && typeof value === 'object' && 'data' in value) {
+    return (value as APIResponse<T>).data;
+  }
+  return value ?? undefined;
+}
+
+interface ItemsEnvelope<T> {
+  items?: T[];
+  total?: number;
+  limit?: number;
+  offset?: number;
+}
+
+function toPaginatedResponse<T>(
+  envelope: ItemsEnvelope<T> | PaginatedResponse<T> | T[] | undefined,
+  params?: { page?: number; page_size?: number },
+): PaginatedResponse<T> {
+  if (Array.isArray(envelope)) {
+    const pageSize = params?.page_size ?? envelope.length;
+    return {
+      data: envelope,
+      total: envelope.length,
+      count: envelope.length,
+      next: null,
+      previous: null,
+      page: params?.page ?? 1,
+      pageSize,
+      totalPages: pageSize > 0 ? Math.max(1, Math.ceil(envelope.length / pageSize)) : 1,
+    };
+  }
+
+  const data = Array.isArray((envelope as PaginatedResponse<T> | undefined)?.data)
+    ? (envelope as PaginatedResponse<T>).data
+    : ((envelope as ItemsEnvelope<T> | undefined)?.items ?? []);
+  const total = (envelope as ItemsEnvelope<T> | undefined)?.total ?? data.length;
+  const limit = (envelope as ItemsEnvelope<T> | undefined)?.limit
+    ?? (envelope as PaginatedResponse<T> | undefined)?.pageSize
+    ?? params?.page_size
+    ?? data.length
+    ?? 0;
+  const offset = (envelope as ItemsEnvelope<T> | undefined)?.offset ?? 0;
+  const page = (envelope as PaginatedResponse<T> | undefined)?.page
+    ?? params?.page
+    ?? (limit > 0 ? Math.floor(offset / limit) + 1 : 1);
+  const totalPages = (envelope as PaginatedResponse<T> | undefined)?.totalPages
+    ?? (limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1);
+
+  return {
+    data,
+    total,
+    count: (envelope as PaginatedResponse<T> | undefined)?.count ?? total,
+    next: (envelope as PaginatedResponse<T> | undefined)?.next ?? null,
+    previous: (envelope as PaginatedResponse<T> | undefined)?.previous ?? null,
+    page,
+    pageSize: limit,
+    totalPages,
+  };
+}
+
 // ============================================================
 // Types — Platform Settings
 // ============================================================
@@ -235,7 +295,7 @@ export interface QuotaPlanWriteRequest {
 
 export interface QuotaUsageRow {
   planName: string;
-  scope: 'global' | 'project' | 'cluster';
+  scope: 'global' | 'project' | 'cluster' | 'user';
   scopeId?: string;
   scopeName?: string;
   /** Map of `max_*` field → current usage. */
@@ -249,6 +309,84 @@ export interface QuotaUsageSummary {
   fleetTotals: Record<string, number>;
   /** Entities at >80% of any cap. */
   topOffenders: QuotaUsageRow[];
+}
+
+interface QuotaUsageWireOffender {
+  projectId?: string;
+  project_id?: string;
+  projectName?: string;
+  project_name?: string;
+  userId?: string;
+  user_id?: string;
+  username?: string;
+  quotaPlan?: string;
+  quota_plan?: string;
+  limit?: string;
+  current?: number;
+  maximum?: number;
+  usagePct?: number;
+  usage_pct?: number;
+}
+
+interface QuotaUsageWire {
+  rows?: QuotaUsageRow[];
+  fleetTotals?: Record<string, number>;
+  fleet_totals?: Record<string, number>;
+  topOffenders?: QuotaUsageRow[];
+  top_offenders?: QuotaUsageRow[];
+  global?: {
+    totalClusters?: number;
+    total_clusters?: number;
+    maxTotalClusters?: number;
+    max_total_clusters?: number;
+    totalUsers?: number;
+    total_users?: number;
+    maxTotalUsers?: number;
+    max_total_users?: number;
+  };
+  projectOffenders?: QuotaUsageWireOffender[];
+  project_offenders?: QuotaUsageWireOffender[];
+  userOffenders?: QuotaUsageWireOffender[];
+  user_offenders?: QuotaUsageWireOffender[];
+}
+
+function quotaOffenderToRow(
+  kind: 'project' | 'user',
+  offender: QuotaUsageWireOffender,
+): QuotaUsageRow {
+  const limit = offender.limit || 'unknown';
+  return {
+    planName: offender.quotaPlan ?? offender.quota_plan ?? 'default',
+    scope: kind,
+    scopeId: kind === 'project'
+      ? offender.projectId ?? offender.project_id
+      : offender.userId ?? offender.user_id,
+    scopeName: kind === 'project'
+      ? offender.projectName ?? offender.project_name
+      : offender.username,
+    usage: { [limit]: offender.current ?? 0 },
+    utilization: { [limit]: offender.usagePct ?? offender.usage_pct ?? 0 },
+  };
+}
+
+function normalizeQuotaUsage(wire: QuotaUsageWire | undefined): QuotaUsageSummary {
+  if (!wire) {
+    return { rows: [], fleetTotals: {}, topOffenders: [] };
+  }
+  const projectRows = (wire.projectOffenders ?? wire.project_offenders ?? []).map((row) =>
+    quotaOffenderToRow('project', row),
+  );
+  const userRows = (wire.userOffenders ?? wire.user_offenders ?? []).map((row) =>
+    quotaOffenderToRow('user', row),
+  );
+  const topOffenders = wire.topOffenders ?? wire.top_offenders ?? [...projectRows, ...userRows];
+  const rows = wire.rows ?? topOffenders;
+  const global = wire.global ?? {};
+  const fleetTotals = wire.fleetTotals ?? wire.fleet_totals ?? {
+    max_clusters: global.totalClusters ?? global.total_clusters ?? 0,
+    max_users: global.totalUsers ?? global.total_users ?? 0,
+  };
+  return { rows, fleetTotals, topOffenders };
 }
 
 // ============================================================
@@ -287,7 +425,7 @@ export interface ComplianceExportSummary {
   id: string;
   from: string;
   to: string;
-  /** Set when the export is large enough to require background work. */
+  /** Forward-compatible status for future durable background exports. */
   status?: 'pending' | 'running' | 'ready' | 'failed';
   progress?: number;
   sizeBytes?: number;
@@ -391,8 +529,16 @@ export async function listSentEmails(params?: {
   page_size?: number;
   status?: EmailStatus;
 }) {
-  const res = await api.get<PaginatedResponse<SentEmail>>('/admin/emails', { params });
-  return res.data;
+  const pageSize = params?.page_size ?? 25;
+  const page = params?.page ?? 1;
+  const res = await api.get<PaginatedResponse<SentEmail> | APIResponse<ItemsEnvelope<SentEmail>>>('/admin/emails', {
+    params: {
+      limit: pageSize,
+      offset: Math.max(0, page - 1) * pageSize,
+      status: params?.status,
+    },
+  });
+  return toPaginatedResponse(unwrapData(res.data), { page, page_size: pageSize });
 }
 
 // ============================================================
@@ -400,8 +546,10 @@ export async function listSentEmails(params?: {
 // ============================================================
 
 export async function listWebhooks(): Promise<WebhookSubscription[]> {
-  const res = await api.get<APIResponse<WebhookSubscription[]>>('/admin/webhooks');
-  return res.data.data ?? (res.data as unknown as WebhookSubscription[]);
+  const res = await api.get<APIResponse<WebhookSubscription[] | ItemsEnvelope<WebhookSubscription>>>('/admin/webhooks');
+  const data = unwrapData(res.data);
+  if (Array.isArray(data)) return data;
+  return data?.items ?? [];
 }
 
 export async function getWebhook(id: string): Promise<WebhookSubscription> {
@@ -487,8 +635,8 @@ export async function deleteQuotaPlan(name: string): Promise<void> {
 }
 
 export async function getQuotaUsage(): Promise<QuotaUsageSummary> {
-  const res = await api.get<APIResponse<QuotaUsageSummary>>('/admin/quota-usage');
-  return res.data.data ?? (res.data as unknown as QuotaUsageSummary);
+  const res = await api.get<APIResponse<QuotaUsageWire>>('/admin/quota-usage');
+  return normalizeQuotaUsage(unwrapData(res.data));
 }
 
 // ============================================================
@@ -525,10 +673,9 @@ export async function resyncUserGroups(userId: string): Promise<{ synced: number
 /**
  * Trigger or fetch a compliance export.
  *
- * Small ranges (< 30 days, < ~100MB) return the ZIP body directly with a
- * 200 status. Larger ranges return 202 with an `ExportSummary` payload
- * pointing at a background job — callers should poll
- * `getComplianceExport(id)` until `status === 'ready'`.
+ * The current backend streams the ZIP body directly with a 200 status.
+ * The 202 branch remains for forward compatibility once durable background
+ * export jobs exist.
  */
 export async function requestComplianceExport(params: {
   from: string;
@@ -558,6 +705,12 @@ export async function getComplianceExport(id: string): Promise<ComplianceExportS
     `/admin/compliance/exports/${id}`,
   );
   return res.data.data ?? (res.data as unknown as ComplianceExportSummary);
+}
+
+export async function downloadComplianceExportBlob(downloadUrl: string): Promise<Blob> {
+  const res = await fetch(downloadUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
 }
 
 // ============================================================

@@ -19,6 +19,10 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      {{- with .Values.preflight.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -39,9 +43,15 @@ spec:
       initContainers:
         {{- if eq (include "astronomer.postgresBundledEnabled" .) "false" }}
         - name: db-preflight
+          {{- with .Values.preflight.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: HOME
+              value: /tmp
             {{- if .Values.postgres.external.dsnSecretRef.name }}
             # Operator-provided secret: must already exist in the
             # namespace before `helm install`. Pre-install hooks can
@@ -106,11 +116,21 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
         {{- end }}
       containers:
         - name: preflight
+          {{- with .Values.preflight.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "registry" .Values.preflight.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: HOME
+              value: /tmp
           command:
             - /bin/sh
             - -ec
@@ -217,4 +237,10 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

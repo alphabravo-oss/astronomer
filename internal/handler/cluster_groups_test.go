@@ -35,6 +35,7 @@ type fakeClusterGroupQuerier struct {
 	groups        map[uuid.UUID]sqlc.ClusterGroup
 	clusters      map[uuid.UUID]sqlc.Cluster
 	clusterGroups map[uuid.UUID]uuid.UUID // cluster_id → group_id
+	audits        []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeClusterGroupQuerier() *fakeClusterGroupQuerier {
@@ -248,10 +249,10 @@ func (f *fakeClusterGroupQuerier) AssignClusterGroup(_ context.Context, arg sqlc
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if !arg.GroupID.Valid {
-		delete(f.clusterGroups, arg.ClusterID)
+		delete(f.clusterGroups, arg.ID)
 		return nil
 	}
-	f.clusterGroups[arg.ClusterID] = uuid.UUID(arg.GroupID.Bytes)
+	f.clusterGroups[arg.ID] = uuid.UUID(arg.GroupID.Bytes)
 	return nil
 }
 
@@ -270,6 +271,23 @@ func (f *fakeClusterGroupQuerier) GetClusterByID(_ context.Context, id uuid.UUID
 		return sqlc.Cluster{}, pgx.ErrNoRows
 	}
 	return c, nil
+}
+
+func (f *fakeClusterGroupQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
+	return nil
+}
+
+func (f *fakeClusterGroupQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.audits) <= idx {
+		t.Fatalf("audit rows=%d, want index %d", len(f.audits), idx)
+	}
+	return f.audits[idx]
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -311,6 +329,56 @@ func createGroup(t *testing.T, h *ClusterGroupHandler, body map[string]any) Clus
 // ────────────────────────────────────────────────────────────────────────
 // Tests
 // ────────────────────────────────────────────────────────────────────────
+
+func TestClusterGroupMutationsAreAudited(t *testing.T) {
+	q := newFakeClusterGroupQuerier()
+	h := NewClusterGroupHandler(q)
+	h.SetAuditor(q)
+
+	raw, _ := json.Marshal(map[string]any{"name": "Platform"})
+	rec := httptest.NewRecorder()
+	req := newRouterCtxReq(http.MethodPost, "/api/v1/cluster-groups/", raw, nil)
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Data ClusterGroupResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	groupID := uuid.MustParse(created.Data.ID)
+	createAudit := q.auditRowAt(t, 0)
+	if createAudit.Action != "admin.cluster_group.created" || createAudit.ResourceType != "cluster_group" || createAudit.ResourceID != groupID.String() || createAudit.ResourceName != "Platform" {
+		t.Fatalf("create audit row=%+v, want admin.cluster_group.created on cluster_group %s", createAudit, groupID)
+	}
+	assertAuditDetail(t, createAudit.Detail, "slug", "platform")
+
+	q.mu.Lock()
+	q.audits = nil
+	q.mu.Unlock()
+
+	c1 := uuid.New()
+	c2 := uuid.New()
+	q.clusters[c1] = sqlc.Cluster{ID: c1, Name: "alpha"}
+	q.clusters[c2] = sqlc.Cluster{ID: c2, Name: "bravo"}
+
+	body, _ := json.Marshal(map[string]any{"cluster_ids": []string{c1.String(), c2.String()}})
+	rec = httptest.NewRecorder()
+	req = newRouterCtxReq(http.MethodPost, "/api/v1/cluster-groups/"+groupID.String()+"/move/", body, map[string]string{"id": groupID.String()})
+	h.MoveClusters(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("move: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	for idx, clusterID := range []uuid.UUID{c1, c2} {
+		row := q.auditRowAt(t, idx)
+		if row.Action != "admin.cluster_group.moved_cluster" || row.ResourceType != "cluster" || row.ResourceID != clusterID.String() {
+			t.Fatalf("move audit row=%+v, want admin.cluster_group.moved_cluster on cluster %s", row, clusterID)
+		}
+		assertAuditDetail(t, row.Detail, "to_group", groupID.String())
+	}
+}
 
 // TestCreateGroup_EnforcesDepthCap verifies that a group can be created
 // at depth 0, depth 1, depth 2 — but a depth-3 create is rejected with

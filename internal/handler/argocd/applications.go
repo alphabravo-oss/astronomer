@@ -23,9 +23,9 @@ import (
 // ApplicationSpec is the writable subset of an ArgoCD Application's spec
 // section. Names match the upstream JSON shape.
 type ApplicationSpec struct {
-	Project     string                 `json:"project"`
-	Source      *ApplicationSource     `json:"source,omitempty"`
-	Sources     []ApplicationSource    `json:"sources,omitempty"`
+	Project     string                  `json:"project"`
+	Source      *ApplicationSource      `json:"source,omitempty"`
+	Sources     []ApplicationSource     `json:"sources,omitempty"`
 	Destination *ApplicationDestination `json:"destination,omitempty"`
 	SyncPolicy  *SyncPolicy             `json:"syncPolicy,omitempty"`
 }
@@ -33,22 +33,22 @@ type ApplicationSpec struct {
 // ApplicationSource is one of the source definitions on an Application.
 // Either Helm or Kustomize (or neither for raw manifests) may be set.
 type ApplicationSource struct {
-	RepoURL        string             `json:"repoURL"`
-	Path           string             `json:"path,omitempty"`
-	TargetRevision string             `json:"targetRevision,omitempty"`
-	Chart          string             `json:"chart,omitempty"`
-	Helm           *HelmSource        `json:"helm,omitempty"`
-	Kustomize      *KustomizeSource   `json:"kustomize,omitempty"`
-	Directory      *DirectorySource   `json:"directory,omitempty"`
+	RepoURL        string           `json:"repoURL"`
+	Path           string           `json:"path,omitempty"`
+	TargetRevision string           `json:"targetRevision,omitempty"`
+	Chart          string           `json:"chart,omitempty"`
+	Helm           *HelmSource      `json:"helm,omitempty"`
+	Kustomize      *KustomizeSource `json:"kustomize,omitempty"`
+	Directory      *DirectorySource `json:"directory,omitempty"`
 }
 
 // HelmSource carries Helm-specific source overrides.
 type HelmSource struct {
-	ValueFiles  []string         `json:"valueFiles,omitempty"`
-	Values      string           `json:"values,omitempty"`
-	Parameters  []HelmParameter  `json:"parameters,omitempty"`
-	ReleaseName string           `json:"releaseName,omitempty"`
-	Version     string           `json:"version,omitempty"`
+	ValueFiles  []string        `json:"valueFiles,omitempty"`
+	Values      string          `json:"values,omitempty"`
+	Parameters  []HelmParameter `json:"parameters,omitempty"`
+	ReleaseName string          `json:"releaseName,omitempty"`
+	Version     string          `json:"version,omitempty"`
 }
 
 // HelmParameter is a single --set-style override.
@@ -94,10 +94,10 @@ type SyncPolicyAutomated struct {
 // applicationEnvelope is the Kubernetes-shaped wrapper ArgoCD expects on
 // create/patch/replace. Status is omitted on writes — the server fills it in.
 type applicationEnvelope struct {
-	APIVersion string            `json:"apiVersion,omitempty"`
-	Kind       string            `json:"kind,omitempty"`
+	APIVersion string              `json:"apiVersion,omitempty"`
+	Kind       string              `json:"kind,omitempty"`
 	Metadata   ApplicationMetadata `json:"metadata"`
-	Spec       ApplicationSpec   `json:"spec"`
+	Spec       ApplicationSpec     `json:"spec"`
 }
 
 // ApplicationMetadata is the minimal metadata we expose on writes.
@@ -134,6 +134,17 @@ func (c *Client) CreateApplication(ctx context.Context, name string, spec Applic
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ListApplications returns the live Applications visible to this ArgoCD token.
+func (c *Client) ListApplications(ctx context.Context) ([]Application, error) {
+	var out struct {
+		Items []Application `json:"items"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/applications", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Items, nil
 }
 
 // PatchApplication applies a JSON merge patch to an existing Application.

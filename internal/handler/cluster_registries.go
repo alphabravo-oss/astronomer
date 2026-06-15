@@ -37,6 +37,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -79,6 +80,7 @@ type ClusterRegistryQuerier interface {
 type ClusterRegistriesHandler struct {
 	queries      ClusterRegistryQuerier
 	applyEnqueue ClusterRegistryEnqueuer
+	taskOutbox   tasks.TaskOutboxWriter
 	requester    K8sRequester
 	encryptor    *auth.Encryptor
 }
@@ -97,6 +99,14 @@ func (h *ClusterRegistriesHandler) SetApplyEnqueue(q ClusterRegistryEnqueuer) {
 		return
 	}
 	h.applyEnqueue = q
+}
+
+// SetTaskOutbox wires durable task delivery for registry delete cleanup.
+func (h *ClusterRegistriesHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
+	if h == nil {
+		return
+	}
+	h.taskOutbox = q
 }
 
 // SetRequester wires the tunnel-backed K8sRequester used by the /test/
@@ -467,14 +477,25 @@ func (h *ClusterRegistriesHandler) Delete(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Enqueue cleanup BEFORE the row goes away — the worker reads from the
-	// passed-in payload (secret_name + namespaces snapshot) so it doesn't
-	// matter that the row vanishes during the worker's run.
-	h.enqueueUnapply(r, existing)
-
-	if err := h.queries.DeleteClusterRegistryConfigByID(r.Context(), registryID); err != nil {
+	task, err := h.newUnapplyTask(r, existing)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "task_error", "Failed to build registry cleanup task")
+		return
+	}
+	deletedWithOutbox, err := h.deleteWithUnapplyOutbox(r.Context(), existing, task)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete registry config")
 		return
+	}
+	if !deletedWithOutbox {
+		// Enqueue cleanup BEFORE the row goes away — the worker reads from the
+		// passed-in payload (secret_name + namespaces snapshot) so it doesn't
+		// matter that the row vanishes during the worker's run.
+		h.enqueueUnapplyTask(task)
+		if err := h.queries.DeleteClusterRegistryConfigByID(r.Context(), registryID); err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete registry config")
+			return
+		}
 	}
 
 	recordAudit(r, h.queries, "cluster.registry.deleted", "cluster_registry_config", registryID.String(), "", map[string]any{
@@ -545,6 +566,13 @@ func (h *ClusterRegistriesHandler) Test(w http.ResponseWriter, r *http.Request) 
 	// passing the full URL as the "path" — the agent dials it directly.
 	resp, err := h.requester.Do(r.Context(), clusterID.String(), http.MethodGet, url, nil, headers)
 	if err != nil {
+		recordAudit(r, h.queries, "cluster.registry.tested", "cluster_registry_config", existing.ID.String(), existing.PrivateRegistryUrl, map[string]any{
+			"cluster_id":           clusterID.String(),
+			"private_registry_url": existing.PrivateRegistryUrl,
+			"ok":                   false,
+			"status_code":          0,
+			"result":               "tunnel_error",
+		})
 		RespondJSON(w, http.StatusOK, ClusterRegistryTestResponse{
 			OK:      false,
 			Message: fmt.Sprintf("Tunnel error: %s", err.Error()),
@@ -572,6 +600,12 @@ func (h *ClusterRegistriesHandler) Test(w http.ResponseWriter, r *http.Request) 
 		out.OK = false
 		out.Message = fmt.Sprintf("Registry returned unexpected status %d.", resp.StatusCode)
 	}
+	recordAudit(r, h.queries, "cluster.registry.tested", "cluster_registry_config", existing.ID.String(), existing.PrivateRegistryUrl, map[string]any{
+		"cluster_id":           clusterID.String(),
+		"private_registry_url": existing.PrivateRegistryUrl,
+		"ok":                   out.OK,
+		"status_code":          resp.StatusCode,
+	})
 	RespondJSON(w, http.StatusOK, out)
 }
 
@@ -659,13 +693,7 @@ func (a clusterRegistryRequesterAdapter) Do(ctx context.Context, clusterID, meth
 	return &tasks.ProjectK8sResponse{StatusCode: resp.StatusCode, Body: bodyBytes}, nil
 }
 
-// enqueueUnapply schedules the "delete Secret + de-patch SA" worker run.
-// It snapshots the row's secret_name + namespaces JSON into the payload
-// so the worker doesn't depend on the row still existing.
-func (h *ClusterRegistriesHandler) enqueueUnapply(r *http.Request, row sqlc.ClusterRegistryConfig) {
-	if h == nil || h.applyEnqueue == nil {
-		return
-	}
+func (h *ClusterRegistriesHandler) newUnapplyTask(r *http.Request, row sqlc.ClusterRegistryConfig) (*asynq.Task, error) {
 	task, err := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
 		RegistryID:        row.ID.String(),
 		ClusterID:         row.ClusterID.String(),
@@ -675,9 +703,40 @@ func (h *ClusterRegistriesHandler) enqueueUnapply(r *http.Request, row sqlc.Clus
 		SnapshotInjectSA:  row.InjectDefaultSa,
 	})
 	if err != nil {
-		return
+		return nil, err
 	}
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+	return asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3)), nil
+}
+
+func (h *ClusterRegistriesHandler) enqueueUnapplyTask(task *asynq.Task) {
+	if h == nil || h.applyEnqueue == nil || task == nil {
+		return
+	}
 	_, _ = h.applyEnqueue.Enqueue(task)
+}
+
+type clusterRegistryDeleteTaskOutboxQuerier interface {
+	DeleteClusterRegistryConfigByIDWithTaskOutbox(ctx context.Context, arg sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams) error
+}
+
+func (h *ClusterRegistriesHandler) deleteWithUnapplyOutbox(ctx context.Context, row sqlc.ClusterRegistryConfig, task *asynq.Task) (bool, error) {
+	if h == nil || h.taskOutbox == nil || task == nil {
+		return false, nil
+	}
+	atomicQ, ok := h.queries.(clusterRegistryDeleteTaskOutboxQuerier)
+	if !ok {
+		return false, nil
+	}
+	err := atomicQ.DeleteClusterRegistryConfigByIDWithTaskOutbox(ctx, sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams{
+		ID:                  row.ID,
+		DedupeKey:           pgtype.Text{String: fmt.Sprintf("cluster_registry_unapply:%s", row.ID.String()), Valid: true},
+		TaskType:            task.Type(),
+		Payload:             task.Payload(),
+		QueueName:           "default",
+		MaxRetry:            3,
+		MaxDeliveryAttempts: 20,
+		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	})
+	return true, err
 }

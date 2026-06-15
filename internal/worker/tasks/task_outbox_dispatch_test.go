@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -174,7 +173,7 @@ func TestTaskOutboxOptionDefaults(t *testing.T) {
 	row := makeTaskOutboxRow()
 	row.TimeoutSeconds = 0
 	row.UniqueSeconds = 0
-	row.NextAttemptAt = pgtype.Timestamptz{}
+	row.NextAttemptAt = time.Time{}
 
 	opts := taskOutboxOptions(row)
 	if len(opts) != 3 {

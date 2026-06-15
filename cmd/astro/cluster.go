@@ -1,4 +1,4 @@
-// Cluster subcommands: list / get / create / delete / manifest / shell.
+// Cluster subcommands: list / get / create / delete / manifest / self-test / shell.
 
 package main
 
@@ -40,6 +40,25 @@ type singleCluster struct {
 	Data clusterRow `json:"data"`
 }
 
+type agentSelfTestEnvelope struct {
+	Data agentSelfTestResult `json:"data"`
+}
+
+type agentSelfTestResult struct {
+	GeneratedAt     string               `json:"generated_at"`
+	ClusterID       string               `json:"cluster_id"`
+	ClusterName     string               `json:"cluster_name"`
+	Status          string               `json:"status"`
+	Checks          []agentSelfTestCheck `json:"checks"`
+	Recommendations []string             `json:"recommendations"`
+}
+
+type agentSelfTestCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
 func newClusterCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "cluster",
@@ -52,6 +71,7 @@ func newClusterCmd() *cobra.Command {
 		newClusterCreateCmd(),
 		newClusterDeleteCmd(),
 		newClusterManifestCmd(),
+		newClusterSelfTestCmd(),
 		newClusterShellCmd(),
 	)
 	return cmd
@@ -150,9 +170,11 @@ advance.`,
 			if err := client.Do(cmd.Context(), "POST", "/api/v1/clusters/", body, &out); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Created cluster %s (%s)\n", out.Data.Name, out.Data.ID)
-			fmt.Fprintf(cmd.OutOrStdout(), "Next: astro cluster manifest %s | kubectl apply -f -\n", out.Data.ID)
-			return nil
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created cluster %s (%s)\n", out.Data.Name, out.Data.ID); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Next: astro cluster manifest %s | kubectl apply -f -\n", out.Data.ID)
+			return err
 		},
 	}
 	cmd.Flags().StringVar(&displayName, "display-name", "", "human-readable name")
@@ -177,7 +199,9 @@ func newClusterDeleteCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				fmt.Fprintf(cmd.OutOrStdout(), "About to decommission cluster %s. The underlying Kubernetes cluster is NOT destroyed.\nProceed? [y/N] ", args[0])
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to decommission cluster %s. The underlying Kubernetes cluster is NOT destroyed.\nProceed? [y/N] ", args[0]); err != nil {
+					return err
+				}
 				var resp string
 				_, _ = fmt.Scanln(&resp)
 				resp = strings.ToLower(strings.TrimSpace(resp))
@@ -191,8 +215,8 @@ func newClusterDeleteCmd() *cobra.Command {
 			if err := client.Do(cmd.Context(), "DELETE", "/api/v1/clusters/"+args[0]+"/", nil, nil); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Decommission queued for %s.\n", args[0])
-			return nil
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Decommission queued for %s.\n", args[0])
+			return err
 		},
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
@@ -226,13 +250,40 @@ Each call mints a fresh 24h registration token; safe to re-run.`,
 	return cmd
 }
 
+func newClusterSelfTestCmd() *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "self-test <id>",
+		Short: "Run agent health checks for a cluster",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, _, err := authedClient(cmd)
+			if err != nil {
+				return err
+			}
+			var out agentSelfTestEnvelope
+			if err := client.Do(cmd.Context(), "POST", "/api/v1/agents/fleet/"+args[0]+"/self-test/", map[string]any{}, &out); err != nil {
+				return err
+			}
+			if jsonOut {
+				return writeJSON(cmd.OutOrStdout(), out.Data)
+			}
+			return writeAgentSelfTest(cmd.OutOrStdout(), out.Data)
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
 
 func writeClusterTable(w io.Writer, rows []clusterRow) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tPHASE\tPROVIDER\tNODES\tPODS\tK8S\tHEARTBEAT")
+	if _, err := fmt.Fprintln(tw, "ID\tNAME\tSTATUS\tPHASE\tPROVIDER\tNODES\tPODS\tK8S\tHEARTBEAT"); err != nil {
+		return err
+	}
 	for _, r := range rows {
 		hb := "—"
 		if r.LastHeartbeat != nil {
@@ -240,12 +291,59 @@ func writeClusterTable(w io.Writer, rows []clusterRow) error {
 				hb = humanize(time.Since(t))
 			}
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
 			truncate(r.ID, 8), r.Name, r.Status, defaultStr(r.RegistrationPhase, "—"),
 			defaultStr(r.Provider, "—"), r.NodeCount, r.PodCount,
-			defaultStr(r.KubernetesVersion, "—"), hb)
+			defaultStr(r.KubernetesVersion, "—"), hb); err != nil {
+			return err
+		}
 	}
 	return tw.Flush()
+}
+
+func writeAgentSelfTest(w io.Writer, result agentSelfTestResult) error {
+	name := defaultStr(result.ClusterName, result.ClusterID)
+	if _, err := fmt.Fprintf(w, "Cluster:   %s\n", name); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "Self-test: %s\n", strings.ToUpper(defaultStr(result.Status, "unknown"))); err != nil {
+		return err
+	}
+	if result.GeneratedAt != "" {
+		if _, err := fmt.Fprintf(w, "Generated: %s\n", result.GeneratedAt); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "CHECK\tSTATUS\tMESSAGE"); err != nil {
+		return err
+	}
+	for _, check := range result.Checks {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\n", check.Name, strings.ToUpper(defaultStr(check.Status, "unknown")), check.Message); err != nil {
+			return err
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if len(result.Recommendations) > 0 {
+		if _, err := fmt.Fprintln(w); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, "Recommendations:"); err != nil {
+			return err
+		}
+		for _, recommendation := range result.Recommendations {
+			if _, err := fmt.Fprintf(w, "- %s\n", recommendation); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func writeJSON(w io.Writer, v any) error {
@@ -297,14 +395,14 @@ func humanize(d time.Duration) string {
 
 type shellSession struct {
 	Data struct {
-		ID            string `json:"id"`
-		ClusterID     string `json:"cluster_id"`
-		Status        string `json:"status"`
-		PodName       string `json:"pod_name"`
-		PodNamespace  string `json:"pod_namespace"`
-		Container     string `json:"container"`
-		StartedAt     string `json:"started_at"`
-		ExpiresAt     string `json:"expires_at"`
+		ID           string `json:"id"`
+		ClusterID    string `json:"cluster_id"`
+		Status       string `json:"status"`
+		PodName      string `json:"pod_name"`
+		PodNamespace string `json:"pod_namespace"`
+		Container    string `json:"container"`
+		StartedAt    string `json:"started_at"`
+		ExpiresAt    string `json:"expires_at"`
 	} `json:"data"`
 }
 
@@ -332,12 +430,20 @@ xterm. Interactive in-terminal attachment will land in a follow-up.`,
 				return err
 			}
 			wsBase := strings.TrimSuffix(strings.Replace(strings.Replace(cfg.ServerURL, "https://", "wss://", 1), "http://", "ws://", 1), "/")
-			fmt.Fprintf(cmd.OutOrStdout(), "Session: %s\n", sess.Data.ID)
-			fmt.Fprintf(cmd.OutOrStdout(), "Pod:     %s/%s (container: %s)\n", sess.Data.PodNamespace, sess.Data.PodName, sess.Data.Container)
-			fmt.Fprintf(cmd.OutOrStdout(), "Expires: %s\n", sess.Data.ExpiresAt)
-			fmt.Fprintf(cmd.OutOrStdout(), "WS URL:  %s/api/v1/ws/clusters/%s/shell/sessions/%s/\n", wsBase, args[0], sess.Data.ID)
-			fmt.Fprintf(cmd.OutOrStdout(), "         (use Bearer %s in the Authorization header)\n", "<your token from ~/.config/astronomer/config.yaml>")
-			return nil
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Session: %s\n", sess.Data.ID); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Pod:     %s/%s (container: %s)\n", sess.Data.PodNamespace, sess.Data.PodName, sess.Data.Container); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Expires: %s\n", sess.Data.ExpiresAt); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "WS URL:  %s/api/v1/ws/clusters/%s/shell/sessions/%s/\n", wsBase, args[0], sess.Data.ID); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "         (use Bearer %s in the Authorization header)\n", "<your token from ~/.config/astronomer/config.yaml>")
+			return err
 		},
 	}
 	return cmd

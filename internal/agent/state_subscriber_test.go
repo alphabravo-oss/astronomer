@@ -191,7 +191,7 @@ func TestStateSubscriberEmitsOnPodCreate(t *testing.T) {
 	// finish quickly without flaking.
 	defer setStateSubscriberTunables(50*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
 
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	sender := &recordingSender{}
 	logger := slog.New(slog.NewTextHandler(testWriter{t}, nil))
 
@@ -268,7 +268,7 @@ func TestStateSubscriberSuppressesBootstrapReplay(t *testing.T) {
 
 	defer setStateSubscriberTunables(50*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
 
-	client := fake.NewSimpleClientset(&corev1.Pod{
+	client := fake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "existing",
 			Namespace:       "default",

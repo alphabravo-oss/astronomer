@@ -110,7 +110,12 @@ RETURNING *;
 
 -- name: CreateClusterRegistrationToken :one
 INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
-VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), $4)
+VALUES (
+    sqlc.arg(cluster_id),
+    sqlc.arg(token)::text,
+    COALESCE(NULLIF(sqlc.arg(token_hash)::text, ''), encode(digest(sqlc.arg(token)::text, 'sha256'), 'hex')),
+    sqlc.arg(expires_at)
+)
 RETURNING *;
 
 -- name: GetRegistrationTokenByToken :one
@@ -119,31 +124,38 @@ RETURNING *;
 -- only credential the agent has, and reconnect attempts must succeed up to
 -- expires_at. is_used remains a tracking column for the future flow.
 SELECT * FROM cluster_registration_tokens
-WHERE (token_hash = encode(digest($1, 'sha256'), 'hex') OR (token_hash = '' AND token = $1))
+WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex') OR (token_hash = '' AND token = $1::text))
   AND expires_at > now();
 
 -- name: MarkRegistrationTokenUsed :exec
 UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
 
 -- name: GetClusterAgentTokenByClusterID :one
-SELECT * FROM cluster_agent_tokens WHERE cluster_id = $1;
+SELECT * FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL;
 
 -- name: GetClusterAgentTokenByToken :one
 SELECT * FROM cluster_agent_tokens
-WHERE token_hash = encode(digest($1, 'sha256'), 'hex')
-   OR (token_hash = '' AND token = $1);
+WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
+   OR (token_hash = '' AND token = $1::text))
+  AND revoked_at IS NULL;
 
 -- name: UpsertClusterAgentToken :one
 INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
-VALUES ($1, $2, COALESCE(NULLIF($3, ''), encode(digest($2, 'sha256'), 'hex')), now())
+VALUES (
+    sqlc.arg(cluster_id),
+    sqlc.arg(token)::text,
+    COALESCE(NULLIF(sqlc.arg(token_hash)::text, ''), encode(digest(sqlc.arg(token)::text, 'sha256'), 'hex')),
+    now()
+)
 ON CONFLICT (cluster_id) DO UPDATE SET
     token = EXCLUDED.token,
     token_hash = EXCLUDED.token_hash,
-    last_used_at = now()
+    last_used_at = now(),
+    revoked_at = NULL
 RETURNING *;
 
 -- name: TouchClusterAgentToken :exec
-UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1;
+UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1 AND revoked_at IS NULL;
 
 -- name: DeleteExpiredRegistrationTokens :execrows
 DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = true AND updated_at < now() - INTERVAL '7 days');
@@ -254,6 +266,3 @@ ON CONFLICT (cluster_id, type) DO UPDATE SET
         END,
     updated_at           = now()
 RETURNING *;
-
--- name: DeleteClusterConditionsForCluster :exec
-DELETE FROM cluster_conditions WHERE cluster_id = $1;

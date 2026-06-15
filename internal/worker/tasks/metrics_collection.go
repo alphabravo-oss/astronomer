@@ -40,7 +40,7 @@ func HandleMetricsAggregation(ctx context.Context, t *asynq.Task) error {
 		}
 
 		if runtimeDeps.Queries != nil {
-			task, err := NewHealthCheckTask(HealthCheckPayload{ClusterID: p.ClusterID})
+			task, err := NewHealthCheckTask(HealthCheckPayload(p))
 			if err != nil {
 				return err
 			}

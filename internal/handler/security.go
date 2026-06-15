@@ -13,14 +13,11 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 )
-
-// cisOperatorNamespace is the namespace cis-operator installs into and reads
-// its CRDs from. See migration 022 for the matching tool catalog entry.
-const cisOperatorNamespace = "cis-operator-system"
 
 // SecurityIngestEnqueuer is the slice of asynq.Client we actually need. Defined
 // as an interface so tests can stub it without spinning up Redis. We keep
@@ -1194,21 +1191,21 @@ func flattenCISReport(report map[string]any) (CISCounts, json.RawMessage, json.R
 	findings := make([]CISFinding, 0)
 
 	spec, _ := report["spec"].(map[string]any)
-	payload := decodeReportJSON(spec)
+	payload := scanner.DecodeCISReportJSON(spec)
 
-	if v, ok := numericField(payload, "total"); ok {
+	if v, ok := scanner.NumericField(payload, "total"); ok {
 		counts.Total = v
 	}
-	if v, ok := numericField(payload, "pass"); ok {
+	if v, ok := scanner.NumericField(payload, "pass"); ok {
 		counts.Pass = v
 	}
-	if v, ok := numericField(payload, "fail"); ok {
+	if v, ok := scanner.NumericField(payload, "fail"); ok {
 		counts.Fail = v
 	}
-	if v, ok := numericField(payload, "warn"); ok {
+	if v, ok := scanner.NumericField(payload, "warn"); ok {
 		counts.Warn = v
 	}
-	if v, ok := numericField(payload, "skip"); ok {
+	if v, ok := scanner.NumericField(payload, "skip"); ok {
 		counts.Skip = v
 	}
 
@@ -1234,11 +1231,11 @@ func flattenCISReport(report map[string]any) (CISCounts, json.RawMessage, json.R
 				continue
 			}
 			findings = append(findings, CISFinding{
-				TestID:      stringField(test, "id", "test_number", "number"),
-				Severity:    stringField(test, "scored_severity", "severity"),
-				Status:      stringField(test, "state", "status"),
-				Description: stringField(test, "test_desc", "description", "desc"),
-				Remediation: stringField(test, "remediation"),
+				TestID:      scanner.StringField(test, "id", "test_number", "number"),
+				Severity:    scanner.StringField(test, "scored_severity", "severity"),
+				Status:      scanner.StringField(test, "state", "status"),
+				Description: scanner.StringField(test, "test_desc", "description", "desc"),
+				Remediation: scanner.StringField(test, "remediation"),
 			})
 		}
 	}
@@ -1258,62 +1255,10 @@ func flattenCISReport(report map[string]any) (CISCounts, json.RawMessage, json.R
 	summaryRaw, _ := json.Marshal(summary)
 	resultsRaw, _ := json.Marshal(map[string]any{
 		"source":  "cis-operator",
-		"profile": stringField(spec, "scanProfileName"),
+		"profile": scanner.StringField(spec, "scanProfileName"),
 	})
 	findingsRaw, _ := json.Marshal(findings)
 	return counts, findingsRaw, summaryRaw, resultsRaw
-}
-
-func decodeReportJSON(spec map[string]any) map[string]any {
-	if spec == nil {
-		return map[string]any{}
-	}
-	if raw, ok := spec["reportJSON"].(string); ok && raw != "" {
-		var out map[string]any
-		if err := json.Unmarshal([]byte(raw), &out); err == nil {
-			return out
-		}
-	}
-	if obj, ok := spec["report"].(map[string]any); ok {
-		return obj
-	}
-	if obj, ok := spec["reportJSON"].(map[string]any); ok {
-		return obj
-	}
-	return map[string]any{}
-}
-
-func stringField(m map[string]any, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func numericField(m map[string]any, key string) (int32, bool) {
-	v, ok := m[key]
-	if !ok {
-		return 0, false
-	}
-	switch n := v.(type) {
-	case float64:
-		return int32(n), true
-	case int:
-		return int32(n), true
-	case int64:
-		return int32(n), true
-	case json.Number:
-		i, err := n.Int64()
-		if err != nil {
-			return 0, false
-		}
-		return int32(i), true
-	}
-	return 0, false
 }
 
 func staticCISProfiles() []map[string]any {

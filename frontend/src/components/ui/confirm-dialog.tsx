@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { cn } from '@/lib/utils';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { ActionButton } from '@/components/ui/action-button';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -12,6 +13,7 @@ interface ConfirmDialogProps {
   description: string;
   confirmText?: string;
   confirmValue?: string;
+  confirmDisabledReason?: string;
   variant?: 'destructive';
   loading?: boolean;
 }
@@ -24,6 +26,7 @@ export function ConfirmDialog({
   description,
   confirmText = 'Delete',
   confirmValue,
+  confirmDisabledReason,
   variant,
   loading,
 }: ConfirmDialogProps) {
@@ -34,29 +37,12 @@ export function ConfirmDialog({
     if (!open) setInputValue('');
   }, [open]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const canConfirm = confirmValue ? inputValue === confirmValue : true;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Dialog */}
+    <OverlayShell onClose={onClose}>
       <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in">
         <div className="p-6">
           <div className="flex items-start gap-3">
@@ -90,29 +76,30 @@ export function ConfirmDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-          <button
+          <ActionButton
             onClick={onClose}
             disabled={loading}
-            className="inline-flex items-center h-8 px-3 rounded text-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            intent="ghost"
+            size="sm"
           >
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             onClick={onConfirm}
-            disabled={!canConfirm || loading}
-            className={cn(
-              'inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium transition-colors',
-              variant === 'destructive'
-                ? 'bg-status-error text-white hover:bg-status-error/90 disabled:opacity-50 disabled:cursor-not-allowed'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
+            disabled={!canConfirm || loading || !!confirmDisabledReason}
+            disabledReason={
+              confirmDisabledReason ||
+              (!canConfirm ? 'Type the confirmation value to continue' : undefined)
+            }
+            intent={variant === 'destructive' ? 'destructive' : 'primary'}
+            loading={loading}
+            loadingLabel={confirmText}
+            size="sm"
           >
-            {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {confirmText}
-          </button>
+          </ActionButton>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

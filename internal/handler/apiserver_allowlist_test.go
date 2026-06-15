@@ -16,10 +16,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// fakeAllowlistQuerier captures every interaction. The tests assert
-// on the final state and the audit recording is exercised through the
-// recordAudit helper which type-asserts on a non-nil auditor — we pass
-// nil to keep these tests narrow.
+// fakeAllowlistQuerier captures every interaction, including audit rows
+// emitted through the handler's optional auditor surface.
 type fakeAllowlistQuerier struct {
 	clusterErr  error
 	row         *sqlc.ApiserverAllowlist
@@ -28,6 +26,7 @@ type fakeAllowlistQuerier struct {
 	upsertErr   error
 	snapshots   []sqlc.ApiserverAllowlistSnapshot
 	snapshotErr error
+	audits      []sqlc.CreateAuditLogV1Params
 }
 
 func (f *fakeAllowlistQuerier) GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -66,6 +65,11 @@ func (f *fakeAllowlistQuerier) ListApiserverAllowlistSnapshots(ctx context.Conte
 		return nil, f.snapshotErr
 	}
 	return f.snapshots, nil
+}
+
+func (f *fakeAllowlistQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.audits = append(f.audits, arg)
+	return nil
 }
 
 func newRouterWithHandler(h *ApiserverAllowlistHandler) chi.Router {
@@ -115,6 +119,7 @@ func TestApiserverAllowlistHandler_PUTHappyPath(t *testing.T) {
 	clusterID := uuid.New()
 	q := &fakeAllowlistQuerier{}
 	h := NewApiserverAllowlistHandler(q)
+	h.SetAuditor(q)
 	router := newRouterWithHandler(h)
 
 	body, _ := json.Marshal(AllowlistUpdateRequest{
@@ -133,6 +138,27 @@ func TestApiserverAllowlistHandler_PUTHappyPath(t *testing.T) {
 	}
 	if q.upserted.Mode != "monitor" {
 		t.Fatalf("expected mode=monitor; got %q", q.upserted.Mode)
+	}
+	if len(q.audits) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(q.audits))
+	}
+	row := q.audits[0]
+	if row.Action != "cluster.apiserver_allowlist.updated" || row.ResourceType != "cluster" || row.ResourceID != clusterID.String() {
+		t.Fatalf("audit row=%+v, want cluster.apiserver_allowlist.updated on cluster %s", row, clusterID)
+	}
+	assertAuditDetail(t, row.Detail, "mode", "monitor")
+	if bytes.Contains(row.Detail, []byte("10.0.0.0/8")) || bytes.Contains(row.Detail, []byte("192.168.0.0/16")) {
+		t.Fatalf("audit detail leaked cleartext CIDR list: %s", row.Detail)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil {
+		t.Fatalf("decode audit detail: %v", err)
+	}
+	if detail["cidrs_hash"] == "" {
+		t.Fatalf("audit detail missing cidrs_hash: %v", detail)
+	}
+	if got := detail["cidrs_count"]; got != float64(2) {
+		t.Fatalf("audit cidrs_count=%v want 2", got)
 	}
 }
 

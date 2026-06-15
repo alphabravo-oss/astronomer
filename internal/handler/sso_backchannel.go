@@ -68,7 +68,9 @@ func (c *defaultSSOBackchannelClient) PostEndSession(ctx context.Context, endpoi
 	if err != nil {
 		return fmt.Errorf("backchannel logout: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	// Drain the body so the conn can be reused; cap so a 1GB
 	// response from a misconfigured IdP can't OOM us.
 	_, _ = io.CopyN(io.Discard, resp.Body, 1<<20)

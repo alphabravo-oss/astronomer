@@ -5,6 +5,7 @@ import { useSSOProviders, useAPITokens, useCreateAPIToken, useDeleteAPIToken, us
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { CodeBlock } from '@/components/ui/code-block';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, formatDate, cn } from '@/lib/utils';
 import type { SSOProvider, APIToken, AuditLogEntry } from '@/types';
 import {
@@ -23,7 +24,7 @@ import {
   LifeBuoy,
   Download,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 type TabKey = 'sso' | 'general' | 'tokens' | 'audit' | 'support';
 
@@ -81,6 +82,8 @@ export default function SettingsPage() {
   const { data: auditData, isLoading: auditLoading } = useAuditLogs({
     pageSize: 50,
     ...(auditClassFilter !== 'all' ? { action_class: auditClassFilter } : {}),
+  }, {
+    enabled: activeTab === 'audit',
   });
   const createToken = useCreateAPIToken();
   const deleteToken = useDeleteAPIToken();
@@ -89,7 +92,7 @@ export default function SettingsPage() {
 
   const handleCreateToken = async () => {
     if (!newTokenForm.name) {
-      toast.error('Token name is required');
+      toastError('Token name is required');
       return;
     }
     try {
@@ -114,11 +117,11 @@ export default function SettingsPage() {
 
   const handleCreateSSOProvider = async () => {
     if (!ssoForm.name) {
-      toast.error('Provider name is required');
+      toastError('Provider name is required');
       return;
     }
     if (!ssoForm.clientId) {
-      toast.error('Client ID is required');
+      toastError('Client ID is required');
       return;
     }
     try {
@@ -520,8 +523,7 @@ export default function SettingsPage() {
 
       {/* Add SSO Provider Modal */}
       {showAddSSO && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowAddSSO(false)} />
+        <OverlayShell onClose={() => setShowAddSSO(false)}>
           <div className="relative mx-4 w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-foreground">Add SSO Provider</h3>
@@ -652,13 +654,12 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-        </div>
+        </OverlayShell>
       )}
 
       {/* Create Token Modal */}
       {showCreateToken && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateToken(false)} />
+        <OverlayShell onClose={() => setShowCreateToken(false)}>
           <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-foreground">
@@ -749,7 +750,7 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
-        </div>
+        </OverlayShell>
       )}
     </div>
   );
@@ -782,10 +783,10 @@ function SupportTab() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      toast.success('Support bundle downloaded');
+      toastSuccess('Support bundle downloaded');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to download support bundle';
-      toast.error(message);
+      toastError(message);
     } finally {
       setDownloading(false);
     }
@@ -805,10 +806,9 @@ function SupportTab() {
               support.
             </p>
             <p className="text-xs text-muted-foreground">
-              Passwords, CA certs, and encrypted Argo tokens are redacted.
-              Emails, audit payloads, and pod log contents are <em>not</em> —
-              share the bundle only with people authorized to triage this
-              install.
+              Passwords, CA certs, encrypted tokens, credential-shaped values,
+              and sensitive pod log lines are redacted. Share the bundle only
+              with people authorized to triage this install.
             </p>
           </div>
         </div>

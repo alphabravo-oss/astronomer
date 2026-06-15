@@ -298,9 +298,48 @@ func TestWriter_RecordUsesAsyncWriter(t *testing.T) {
 	})
 }
 
+func TestWriter_BatchInsertErrorRecordsWriteFailure(t *testing.T) {
+	oldInstance := observability.InstanceID()
+	observability.SetInstanceID("test-audit-async-write-failure")
+	t.Cleanup(func() {
+		observability.SetInstanceID(oldInstance)
+	})
+	before := auditWriteFailureCounterValue(t, "async_batch")
+
+	q := &fakeBatchQuerier{err: errors.New("boom")}
+	w := NewWriter(q, nil,
+		WithBatchSize(1),
+		WithFlushInterval(10*time.Second),
+		WithBufferSize(4),
+	)
+	w.Start(context.Background())
+	t.Cleanup(func() {
+		_ = w.Shutdown(context.Background())
+	})
+
+	if !w.Enqueue(makeRow(1)) {
+		t.Fatal("enqueue unexpectedly dropped")
+	}
+	waitUntil(t, time.Second, func() bool {
+		return q.batchCount() >= 1
+	})
+
+	after := auditWriteFailureCounterValue(t, "async_batch")
+	if after < before+1 {
+		t.Fatalf("write failure counter = %v, want >= %v", after, before+1)
+	}
+}
+
 // TestWriter_SyncFallbackOnInsertError is a sanity check that the sync
 // path tolerates a DB error without panicking.
 func TestWriter_SyncFallbackOnInsertError(t *testing.T) {
+	oldInstance := observability.InstanceID()
+	observability.SetInstanceID("test-audit-sync-write-failure")
+	t.Cleanup(func() {
+		observability.SetInstanceID(oldInstance)
+	})
+	before := auditWriteFailureCounterValue(t, "sync")
+
 	previous := getDefaultWriter()
 	SetWriter(nil)
 	t.Cleanup(func() { SetWriter(previous) })
@@ -313,6 +352,10 @@ func TestWriter_SyncFallbackOnInsertError(t *testing.T) {
 
 	if sync.calls != 1 {
 		t.Fatalf("calls = %d, want 1", sync.calls)
+	}
+	after := auditWriteFailureCounterValue(t, "sync")
+	if after < before+1 {
+		t.Fatalf("write failure counter = %v, want >= %v", after, before+1)
 	}
 }
 
@@ -343,6 +386,29 @@ func auditDroppedCounterValue(t *testing.T, reason string) float64 {
 	}
 	for _, family := range families {
 		if family.GetName() != "astronomer_audit_dropped_total" {
+			continue
+		}
+		for _, m := range family.GetMetric() {
+			if labelsMatch(m.GetLabel(), want) && m.Counter != nil {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+func auditWriteFailureCounterValue(t *testing.T, path string) float64 {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	want := map[string]string{
+		"astronomer_instance_id": observability.InstanceID(),
+		"path":                   path,
+	}
+	for _, family := range families {
+		if family.GetName() != "astronomer_audit_write_failures_total" {
 			continue
 		}
 		for _, m := range family.GetMetric() {

@@ -319,7 +319,9 @@ func probeOCICatalog(ctx context.Context, repoURL, username, password string) ([
 	if err != nil {
 		return nil, fmt.Errorf("call /v2/_catalog: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("registry %s does not support /v2/_catalog (status %d): set auth_config.charts to enumerate manually", host, resp.StatusCode)
 	}

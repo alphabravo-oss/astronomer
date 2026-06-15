@@ -56,6 +56,15 @@ func (s stubSearchRBACQuerier) GetUserBindings(context.Context, string) ([]rbac.
 	return s.bindings, s.err
 }
 
+type stubResourcesSearchAuditWriter struct {
+	rows []sqlc.CreateAuditLogV1Params
+}
+
+func (s *stubResourcesSearchAuditWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	s.rows = append(s.rows, arg)
+	return nil
+}
+
 func TestResourcesSearchAuthorizedSearchClustersFiltersByResourceType(t *testing.T) {
 	clusterA := uuid.New()
 	clusterB := uuid.New()
@@ -120,6 +129,64 @@ func TestResourcesSearchSearchReturnsForbiddenWhenNoClusterPermission(t *testing
 	}
 }
 
+func TestResourcesSearchSplitResourceFamiliesDoNotFallBackToWorkloads(t *testing.T) {
+	clusterA := uuid.New()
+	families := []struct {
+		resourceType string
+		allowed      rbac.Resource
+	}{
+		{resourceType: "services", allowed: rbac.ResourceServices},
+		{resourceType: "configmaps", allowed: rbac.ResourceConfigMaps},
+		{resourceType: "persistentvolumeclaims", allowed: rbac.ResourceStorage},
+		{resourceType: "ingresses", allowed: rbac.ResourceIngresses},
+		{resourceType: "networkpolicies", allowed: rbac.ResourceNetworkPolicies},
+		{resourceType: "nodes", allowed: rbac.ResourceNodes},
+	}
+
+	for _, tc := range families {
+		t.Run(tc.resourceType, func(t *testing.T) {
+			h := NewResourcesSearchHandler(
+				stubResourcesSearchQuerier{clusters: []sqlc.Cluster{{ID: clusterA, Name: "a"}}},
+				stubResourcesSearchRequester{},
+			)
+			h.SetAuthorization(rbac.NewEngine(), stubSearchRBACQuerier{
+				bindings: []rbac.RoleBinding{{
+					ClusterID: clusterA.String(),
+					RoleRules: []rbac.Rule{{
+						Resource: string(rbac.ResourceWorkloads),
+						Verbs:    []string{string(rbac.VerbList)},
+					}},
+				}},
+			})
+
+			deniedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type="+tc.resourceType, nil)
+			deniedReq = deniedReq.WithContext(middleware.SetAuthenticatedUserForTest(deniedReq.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+			deniedRec := httptest.NewRecorder()
+			h.Search(deniedRec, deniedReq)
+			if deniedRec.Code != http.StatusForbidden {
+				t.Fatalf("workloads:list status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
+			}
+
+			h.SetAuthorization(rbac.NewEngine(), stubSearchRBACQuerier{
+				bindings: []rbac.RoleBinding{{
+					ClusterID: clusterA.String(),
+					RoleRules: []rbac.Rule{{
+						Resource: string(tc.allowed),
+						Verbs:    []string{string(rbac.VerbList)},
+					}},
+				}},
+			})
+			allowedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type="+tc.resourceType, nil)
+			allowedReq = allowedReq.WithContext(middleware.SetAuthenticatedUserForTest(allowedReq.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+			allowedRec := httptest.NewRecorder()
+			h.Search(allowedRec, allowedReq)
+			if allowedRec.Code != http.StatusOK {
+				t.Fatalf("%s:list status = %d, want %d; body=%s", tc.allowed, allowedRec.Code, http.StatusOK, allowedRec.Body.String())
+			}
+		})
+	}
+}
+
 func TestResourcesSearchSearchAllowsAuthorizedType(t *testing.T) {
 	clusterA := uuid.New()
 	h := NewResourcesSearchHandler(
@@ -155,6 +222,73 @@ func TestResourcesSearchSearchAllowsAuthorizedType(t *testing.T) {
 	results, _ := body["results"].([]any)
 	if len(results) != 0 {
 		t.Fatalf("expected empty results, got %+v", results)
+	}
+}
+
+func TestResourcesSearchSecretsRequireSecretsListAndAudit(t *testing.T) {
+	clusterA := uuid.New()
+	userID := uuid.NewString()
+	h := NewResourcesSearchHandler(
+		stubResourcesSearchQuerier{clusters: []sqlc.Cluster{{ID: clusterA, Name: "a"}}},
+		stubResourcesSearchRequester{},
+	)
+	h.SetAuthorization(rbac.NewEngine(), stubSearchRBACQuerier{
+		bindings: []rbac.RoleBinding{
+			{
+				ClusterID: clusterA.String(),
+				RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceWorkloads), Verbs: []string{string(rbac.VerbList)}}},
+			},
+		},
+	})
+
+	deniedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=secrets", nil)
+	deniedReq = deniedReq.WithContext(middleware.SetAuthenticatedUserForTest(deniedReq.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	deniedRec := httptest.NewRecorder()
+	h.Search(deniedRec, deniedReq)
+	if deniedRec.Code != http.StatusForbidden {
+		t.Fatalf("workloads-list secret search status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
+	}
+
+	audit := &stubResourcesSearchAuditWriter{}
+	h = NewResourcesSearchHandler(
+		stubResourcesSearchQuerier{clusters: []sqlc.Cluster{{ID: clusterA, Name: "a"}}},
+		stubResourcesSearchRequester{},
+	)
+	h.SetAuthorization(rbac.NewEngine(), stubSearchRBACQuerier{
+		bindings: []rbac.RoleBinding{
+			{
+				ClusterID: clusterA.String(),
+				RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceSecrets), Verbs: []string{string(rbac.VerbList)}}},
+			},
+		},
+	})
+	h.SetAuditWriter(audit)
+
+	allowedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=secrets&namespace=default&label=app%3Ddb&name=password&limit=10", nil)
+	allowedReq = allowedReq.WithContext(middleware.SetAuthenticatedUserForTest(allowedReq.Context(), &middleware.AuthenticatedUser{ID: userID, AuthMethod: "jwt"}))
+	allowedRec := httptest.NewRecorder()
+	h.Search(allowedRec, allowedReq)
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("secrets-list search status = %d, want %d; body=%s", allowedRec.Code, http.StatusOK, allowedRec.Body.String())
+	}
+	if len(audit.rows) != 1 {
+		t.Fatalf("audit rows = %d, want 1", len(audit.rows))
+	}
+	row := audit.rows[0]
+	if row.Action != "cluster.secret.read" || row.ResourceType != "cluster" || row.ResourceID != "*" || row.ResourceName != "secrets" {
+		t.Fatalf("audit row = action %q resource %q/%q/%q", row.Action, row.ResourceType, row.ResourceID, row.ResourceName)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil {
+		t.Fatalf("unmarshal audit detail: %v", err)
+	}
+	if detail["scope"] != "cross_cluster_search" ||
+		detail["resource_type"] != "secrets" ||
+		detail["namespace"] != "default" ||
+		detail["label_selector"] != "app=db" ||
+		detail["name_filter"] != "password" ||
+		detail["clusters_authorized"] != float64(1) {
+		t.Fatalf("audit detail = %#v", detail)
 	}
 }
 
@@ -251,25 +385,25 @@ func TestRBACResourceForTypeMapping(t *testing.T) {
 	cases := map[string]rbac.Resource{
 		"pods":                   rbac.ResourcePods,
 		"events":                 rbac.ResourcePods,
-		"endpoints":              rbac.ResourcePods,
+		"endpoints":              rbac.ResourceServices,
 		"deployments":            rbac.ResourceWorkloads,
 		"statefulsets":           rbac.ResourceWorkloads,
 		"daemonsets":             rbac.ResourceWorkloads,
 		"replicasets":            rbac.ResourceWorkloads,
 		"jobs":                   rbac.ResourceWorkloads,
 		"cronjobs":               rbac.ResourceWorkloads,
-		"services":               rbac.ResourceWorkloads,
-		"ingresses":              rbac.ResourceWorkloads,
-		"networkpolicies":        rbac.ResourceWorkloads,
-		"gateways":               rbac.ResourceWorkloads,
-		"httproutes":             rbac.ResourceWorkloads,
-		"secrets":                rbac.ResourceWorkloads,
-		"configmaps":             rbac.ResourceWorkloads,
-		"persistentvolumes":      rbac.ResourceWorkloads,
-		"persistentvolumeclaims": rbac.ResourceWorkloads,
-		"storageclasses":         rbac.ResourceWorkloads,
+		"services":               rbac.ResourceServices,
+		"ingresses":              rbac.ResourceIngresses,
+		"networkpolicies":        rbac.ResourceNetworkPolicies,
+		"gateways":               rbac.ResourceIngresses,
+		"httproutes":             rbac.ResourceIngresses,
+		"secrets":                rbac.ResourceSecrets,
+		"configmaps":             rbac.ResourceConfigMaps,
+		"persistentvolumes":      rbac.ResourceStorage,
+		"persistentvolumeclaims": rbac.ResourceStorage,
+		"storageclasses":         rbac.ResourceStorage,
 		"namespaces":             rbac.ResourceClusters,
-		"nodes":                  rbac.ResourceClusters,
+		"nodes":                  rbac.ResourceNodes,
 		"completely-unknown":     rbac.ResourceWorkloads, // default fallback
 		"":                       rbac.ResourceWorkloads, // default fallback
 	}

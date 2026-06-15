@@ -111,7 +111,7 @@ func (h *ExecHandler) HandleExecStart(ctx context.Context, msg *protocol.Message
 			h.mu.Lock()
 			delete(h.sessions, streamID)
 			h.mu.Unlock()
-			stdinW.Close()
+			_ = stdinW.Close()
 
 			endPayload, _ := json.Marshal(map[string]string{"reason": "completed"})
 			_ = sendFn(&protocol.Message{

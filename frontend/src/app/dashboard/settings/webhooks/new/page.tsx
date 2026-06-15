@@ -20,7 +20,7 @@ import {
   Settings2,
   Webhook,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { CodeBlock } from '@/components/ui/code-block';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
@@ -120,7 +120,7 @@ function NewWebhookWizard() {
   const handleCreate = async () => {
     if (!selected) return;
     if (!name || !url) {
-      toast.error('Name and URL required');
+      toastError('Name and URL required');
       return;
     }
     try {

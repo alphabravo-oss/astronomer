@@ -67,10 +67,11 @@ func TestAttachOperationIdempotencyKeyParamsKeepResponseJSON(t *testing.T) {
 
 func TestOperationIdempotencySQLClaimsWithAtomicUpsert(t *testing.T) {
 	queries := map[string]string{
-		"common":   operationIdempotencyClaimCTE,
-		"fleet":    createFleetOperationIdempotent,
-		"restore":  createRestoreOperationIdempotent,
-		"deferred": createDeferredOperationIdempotent,
+		"common":          operationIdempotencyClaimCTE,
+		"fleet":           createFleetOperationIdempotent,
+		"restore":         createRestoreOperationIdempotent,
+		"deferred":        createDeferredOperationIdempotent,
+		"agent_lifecycle": createAgentLifecycleOperationIdempotent,
 	}
 	for name, query := range queries {
 		t.Run(name, func(t *testing.T) {

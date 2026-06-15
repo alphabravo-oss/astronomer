@@ -205,6 +205,9 @@ func (q *fakeAutoAttachClusterQuerier) GetPlatformSetting(context.Context, strin
 func (q *fakeAutoAttachClusterQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
 	return nil, nil
 }
+func (q *fakeAutoAttachClusterQuerier) ListArgoCDApplicationsByManagedClusterTargets(context.Context, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error) {
+	return nil, nil
+}
 func (q *fakeAutoAttachClusterQuerier) ListClusterConditionRemediationByCluster(context.Context, uuid.UUID) ([]sqlc.ClusterConditionRemediationAttempt, error) {
 	return nil, nil
 }

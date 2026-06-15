@@ -28,3 +28,5 @@ sql:
             go_type:
               import: "time"
               type: "Time"
+          - column: "read_audit_policies.sample_rate"
+            go_type: "float64"

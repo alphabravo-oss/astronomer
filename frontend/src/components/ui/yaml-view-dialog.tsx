@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useK8sGetYaml, useK8sApplyYaml, useK8sDryRunYaml } from '@/lib/hooks';
 import { YamlEditor } from '@/components/ui/yaml-editor';
-import { Loader2, X, Pencil, Eye, GitCompare, AlertTriangle } from 'lucide-react';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { Loader2, Pencil, Eye, GitCompare, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as apiClient from '@/lib/api';
-import { toast } from 'sonner';
+import { toastWarning } from '@/lib/toast';
 
 interface YamlViewDialogProps {
   open: boolean;
@@ -56,21 +57,11 @@ export function YamlViewDialog({
     }
   }, [open, initialEditMode, refetch]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
   const handleSave = (yamlStr: string) => {
     if (!preview || preview.previewFor !== yamlStr) {
-      toast.warning('Run dry run and review the diff before saving.');
+      toastWarning('Run dry run and review the diff before saving.');
       void handleDryRun(yamlStr);
       return;
     }
@@ -111,47 +102,36 @@ export function YamlViewDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Dialog */}
-      <div className="relative bg-card border border-border rounded-lg shadow-xl
-        w-[90vw] max-w-4xl h-[80vh] flex flex-col animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-3 min-w-0">
-            <h3 className="text-sm font-semibold text-foreground truncate">{title}</h3>
-            {allowEdit && (
-              <div className="flex items-center bg-muted rounded p-0.5">
-                <button
-                  onClick={() => setEditMode(false)}
-                  className={cn(
-                    'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-                    !editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Eye className="h-3 w-3" /> View
-                </button>
-                <button
-                  onClick={() => setEditMode(true)}
-                  className={cn(
-                    'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-                    editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Pencil className="h-3 w-3" /> Edit
-                </button>
-              </div>
+    <ModalShell
+      title={title}
+      onClose={onClose}
+      size="xl"
+      panelClassName="w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden"
+      bodyClassName="flex-1 min-h-0 p-0 space-y-0"
+      headerActions={allowEdit ? (
+        <div className="flex items-center bg-muted rounded p-0.5">
+          <button
+            onClick={() => setEditMode(false)}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+              !editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
-          </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
-            <X className="h-4 w-4" />
+          >
+            <Eye className="h-3 w-3" /> View
+          </button>
+          <button
+            onClick={() => setEditMode(true)}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+              editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Pencil className="h-3 w-3" /> Edit
           </button>
         </div>
-
-        {/* Body */}
-        <div className="flex-1 min-h-0">
+      ) : undefined}
+    >
+      <div className="flex-1 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -181,9 +161,8 @@ export function YamlViewDialog({
               {editMode && preview && <YamlDiffPreview preview={preview} />}
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 

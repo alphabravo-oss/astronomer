@@ -1,9 +1,9 @@
 'use client';
 
-// Wizard page 3 — live progress timeline. Subscribes to the wizard's
+// Wizard page 3 - live progress timeline. Subscribes to the wizard's
 // per-cluster SSE stream and renders one row per step via the shared
 // RegistrationTimeline component (sprint 23). When the cluster reaches
-// `ready`, the "Take me to the cluster →" CTA appears.
+// `ready`, the "Take me to the cluster" CTA appears.
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -23,8 +23,10 @@ export default function ProgressStepPage() {
           <Server className="h-5 w-5 text-muted-foreground" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Provisioning</h1>
-          <p className="text-sm text-muted-foreground">Step 3 of 3 — Watch your cluster come online</p>
+          <h1 className="text-2xl font-semibold text-foreground">Adoption progress</h1>
+          <p className="text-sm text-muted-foreground">
+            Step 3 of 3 - Watch the existing cluster connect and apply its baseline
+          </p>
         </div>
       </div>
 
@@ -40,7 +42,7 @@ export default function ProgressStepPage() {
             onClick={() => router.push(`/dashboard/clusters/${clusterId}`)}
             className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
           >
-            Take me to the cluster →
+            Take me to the cluster
           </button>
         </div>
       )}

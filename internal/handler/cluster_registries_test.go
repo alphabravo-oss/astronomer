@@ -35,9 +35,12 @@ type fakeRegistryQuerier struct {
 	// applied/applyError record the most recent worker stamps; the tests
 	// don't always exercise the worker path, but when they do the rows
 	// + stamps are useful assertions.
-	applied     map[uuid.UUID]bool
-	applyErrors map[uuid.UUID]string
-	projectNS   []sqlc.ProjectNamespace
+	applied        map[uuid.UUID]bool
+	applyErrors    map[uuid.UUID]string
+	projectNS      []sqlc.ProjectNamespace
+	auditRows      []sqlc.CreateAuditLogV1Params
+	outboxDeletes  []sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams
+	taskOutboxRows []sqlc.UpsertTaskOutboxParams
 }
 
 func newFakeRegistryQuerier(clusterID uuid.UUID) *fakeRegistryQuerier {
@@ -141,6 +144,21 @@ func (f *fakeRegistryQuerier) DeleteClusterRegistryConfigByID(_ context.Context,
 	return nil
 }
 
+func (f *fakeRegistryQuerier) DeleteClusterRegistryConfigByIDWithTaskOutbox(_ context.Context, arg sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.outboxDeletes = append(f.outboxDeletes, arg)
+	delete(f.rows, arg.ID)
+	return nil
+}
+
+func (f *fakeRegistryQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.taskOutboxRows = append(f.taskOutboxRows, arg)
+	return sqlc.TaskOutbox{ID: uuid.New()}, nil
+}
+
 func (f *fakeRegistryQuerier) ListProjectNamespaces(_ context.Context, _ uuid.UUID) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
 }
@@ -175,6 +193,23 @@ func (f *fakeRegistryQuerier) MarkClusterRegistryApplyError(_ context.Context, a
 	}
 	f.applyErrors[arg.ID] = arg.LastApplyError
 	return nil
+}
+
+func (f *fakeRegistryQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.auditRows = append(f.auditRows, arg)
+	return nil
+}
+
+func (f *fakeRegistryQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.auditRows) <= idx {
+		t.Fatalf("audit rows=%d, want index %d", len(f.auditRows), idx)
+	}
+	return f.auditRows[idx]
 }
 
 // recordEnqueuer captures every enqueued task for assertion.
@@ -221,6 +256,30 @@ func decodeTestResp(t *testing.T, rr *httptest.ResponseRecorder) ClusterRegistry
 		t.Fatalf("decode test response: %v body=%s", err, rr.Body.String())
 	}
 	return wrapped.Data
+}
+
+func assertRegistryAudit(t *testing.T, row sqlc.CreateAuditLogV1Params, action, resourceType, resourceID string) {
+	t.Helper()
+	if row.Action != action {
+		t.Fatalf("audit action=%q want %q; row=%+v", row.Action, action, row)
+	}
+	if row.ResourceType != resourceType {
+		t.Fatalf("audit resource_type=%q want %q; row=%+v", row.ResourceType, resourceType, row)
+	}
+	if row.ResourceID != resourceID {
+		t.Fatalf("audit resource_id=%q want %q; row=%+v", row.ResourceID, resourceID, row)
+	}
+}
+
+func assertAuditDetailOmit(t *testing.T, raw json.RawMessage, key string) {
+	t.Helper()
+	var detail map[string]any
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		t.Fatalf("decode audit detail %s: %v", raw, err)
+	}
+	if _, ok := detail[key]; ok {
+		t.Fatalf("audit detail contains %q: %v", key, detail)
+	}
 }
 
 // requestWithChiParams adds the chi URL params and a chi context so the
@@ -272,6 +331,12 @@ func TestRegistry_CRUD(t *testing.T) {
 	if len(enq.snapshot()) != 1 {
 		t.Fatalf("Create did not enqueue apply task; got %d", len(enq.snapshot()))
 	}
+	createAudit := q.auditRowAt(t, 0)
+	assertRegistryAudit(t, createAudit, "cluster.registry.created", "cluster_registry_config", created.ID.String())
+	assertAuditDetail(t, createAudit.Detail, "cluster_id", clusterID.String())
+	assertAuditDetail(t, createAudit.Detail, "private_registry_url", "https://registry.example.com")
+	assertAuditDetailOmit(t, createAudit.Detail, "registry_password")
+	assertAuditDetailOmit(t, createAudit.Detail, "ca_bundle")
 
 	// LIST
 	listReq := requestWithChiParams(t, http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/registries/", nil, map[string]string{"cluster_id": clusterID.String()})
@@ -340,6 +405,11 @@ func TestRegistry_CRUD(t *testing.T) {
 	if !bytes.Contains(storedNS, []byte("prod")) {
 		t.Fatalf("Update did not persist new namespace list: %s", storedNS)
 	}
+	updateAudit := q.auditRowAt(t, 1)
+	assertRegistryAudit(t, updateAudit, "cluster.registry.updated", "cluster_registry_config", created.ID.String())
+	assertAuditDetail(t, updateAudit.Detail, "cluster_id", clusterID.String())
+	assertAuditDetailOmit(t, updateAudit.Detail, "registry_password")
+	assertAuditDetailOmit(t, updateAudit.Detail, "ca_bundle")
 
 	// DELETE
 	delReq := requestWithChiParams(t, http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/registries/"+created.ID.String()+"/", nil, map[string]string{
@@ -356,6 +426,69 @@ func TestRegistry_CRUD(t *testing.T) {
 	q.mu.Unlock()
 	if stillThere {
 		t.Fatalf("Delete did not remove row")
+	}
+	deleteAudit := q.auditRowAt(t, 2)
+	assertRegistryAudit(t, deleteAudit, "cluster.registry.deleted", "cluster_registry_config", created.ID.String())
+	assertAuditDetail(t, deleteAudit.Detail, "cluster_id", clusterID.String())
+	assertAuditDetailOmit(t, deleteAudit.Detail, "registry_password")
+}
+
+func TestRegistry_DeleteUsesTaskOutboxWhenConfigured(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeRegistryQuerier(clusterID)
+	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
+		ClusterID:          clusterID,
+		PrivateRegistryUrl: "https://registry.example.com",
+		RegistryUsername:   "alice",
+		RegistryPassword:   "s3cr3t",
+		Namespaces:         json.RawMessage(`["prod"]`),
+		InjectDefaultSa:    true,
+		SecretName:         "astronomer-registry-x",
+	})
+	enq := &recordEnqueuer{}
+	h := NewClusterRegistriesHandler(q)
+	h.SetApplyEnqueue(enq)
+	h.SetTaskOutbox(q)
+
+	req := requestWithChiParams(t, http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/registries/"+row.ID.String()+"/", nil, map[string]string{
+		"cluster_id": clusterID.String(),
+		"id":         row.ID.String(),
+	})
+	rr := httptest.NewRecorder()
+	h.Delete(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("Delete status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := len(enq.snapshot()); got != 0 {
+		t.Fatalf("direct enqueues = %d, want 0 when task_outbox is configured", got)
+	}
+
+	q.mu.Lock()
+	_, stillThere := q.rows[row.ID]
+	outboxDeletes := append([]sqlc.DeleteClusterRegistryConfigByIDWithTaskOutboxParams(nil), q.outboxDeletes...)
+	q.mu.Unlock()
+	if stillThere {
+		t.Fatalf("Delete did not remove row")
+	}
+	if len(outboxDeletes) != 1 {
+		t.Fatalf("outbox deletes = %d, want 1", len(outboxDeletes))
+	}
+	params := outboxDeletes[0]
+	if params.ID != row.ID {
+		t.Fatalf("outbox delete id = %s, want %s", params.ID, row.ID)
+	}
+	if !params.DedupeKey.Valid || params.DedupeKey.String != "cluster_registry_unapply:"+row.ID.String() {
+		t.Fatalf("dedupe key = %+v", params.DedupeKey)
+	}
+	if params.TaskType != tasks.ClusterApplyRegistrySecretType || params.QueueName != "default" || params.MaxRetry != 3 || params.MaxDeliveryAttempts != 20 {
+		t.Fatalf("outbox params = %+v", params)
+	}
+	var payload tasks.ClusterApplyRegistrySecretPayload
+	if err := json.Unmarshal(params.Payload, &payload); err != nil {
+		t.Fatalf("decode outbox payload: %v", err)
+	}
+	if payload.Op != "unapply" || payload.SnapshotSecret != "astronomer-registry-x" || len(payload.SnapshotNamespace) != 1 || payload.SnapshotNamespace[0] != "prod" || !payload.SnapshotInjectSA {
+		t.Fatalf("payload = %+v", payload)
 	}
 }
 
@@ -795,6 +928,11 @@ func TestRegistry_TestEndpointReachesUpstream(t *testing.T) {
 	if string(decoded) != "alice:s3cr3t" {
 		t.Fatalf("Test endpoint sent wrong creds; decoded=%q", decoded)
 	}
+	auditRow := q.auditRowAt(t, 0)
+	assertRegistryAudit(t, auditRow, "cluster.registry.tested", "cluster_registry_config", row.ID.String())
+	assertAuditDetail(t, auditRow.Detail, "cluster_id", clusterID.String())
+	assertAuditDetail(t, auditRow.Detail, "private_registry_url", "https://registry.example.com")
+	assertAuditDetailOmit(t, auditRow.Detail, "registry_password")
 }
 
 func TestRegistry_TestEndpointReportsAuthFailure(t *testing.T) {

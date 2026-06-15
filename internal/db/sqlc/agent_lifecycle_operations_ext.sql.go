@@ -3,32 +3,26 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AgentLifecycleOperation struct {
-	ID             uuid.UUID          `json:"id"`
-	ClusterID      uuid.UUID          `json:"cluster_id"`
-	OperationType  string             `json:"operation_type"`
-	Status         string             `json:"status"`
-	TargetVersion  string             `json:"target_version"`
-	TargetImage    string             `json:"target_image"`
-	CurrentVersion string             `json:"current_version"`
-	Strategy       string             `json:"strategy"`
-	OperationSpec  json.RawMessage    `json:"operation_spec"`
-	RequestedBy    pgtype.UUID        `json:"requested_by"`
-	StartedAt      pgtype.Timestamptz `json:"started_at"`
-	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
-	LastError      string             `json:"last_error"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
+type CreateAgentLifecycleOperationParams struct {
+	ClusterID      uuid.UUID       `json:"cluster_id"`
+	OperationType  string          `json:"operation_type"`
+	TargetVersion  string          `json:"target_version"`
+	TargetImage    string          `json:"target_image"`
+	CurrentVersion string          `json:"current_version"`
+	Strategy       string          `json:"strategy"`
+	OperationSpec  json.RawMessage `json:"operation_spec"`
+	RequestedBy    pgtype.UUID     `json:"requested_by"`
 }
 
-type CreateAgentLifecycleOperationParams struct {
+type CreateAgentLifecycleOperationIdempotentParams struct {
+	Scope          string          `json:"scope"`
+	IdempotencyKey string          `json:"idempotency_key"`
 	ClusterID      uuid.UUID       `json:"cluster_id"`
 	OperationType  string          `json:"operation_type"`
 	TargetVersion  string          `json:"target_version"`
@@ -99,6 +93,63 @@ RETURNING ` + agentLifecycleOperationColumns
 
 func (q *Queries) CreateAgentLifecycleOperation(ctx context.Context, arg CreateAgentLifecycleOperationParams) (AgentLifecycleOperation, error) {
 	row := q.db.QueryRow(ctx, createAgentLifecycleOperation,
+		arg.ClusterID,
+		arg.OperationType,
+		arg.TargetVersion,
+		arg.TargetImage,
+		arg.CurrentVersion,
+		arg.Strategy,
+		arg.OperationSpec,
+		arg.RequestedBy,
+	)
+	return scanAgentLifecycleOperation(row)
+}
+
+const createAgentLifecycleOperationIdempotent = `-- name: CreateAgentLifecycleOperationIdempotent :one
+WITH claimed AS (
+    INSERT INTO operation_idempotency_keys (scope, idempotency_key)
+    VALUES ($1, $2)
+    ON CONFLICT (scope, idempotency_key) DO UPDATE
+    SET operation_table = CASE WHEN operation_table = '' THEN 'agent_lifecycle_operations' ELSE operation_table END,
+        operation_id = COALESCE(operation_id, gen_random_uuid()),
+        updated_at = now()
+    RETURNING operation_table, operation_id
+),
+inserted AS (
+    INSERT INTO agent_lifecycle_operations (
+        id,
+        cluster_id,
+        operation_type,
+        target_version,
+        target_image,
+        current_version,
+        strategy,
+        operation_spec,
+        requested_by
+    )
+    SELECT operation_id, $3, $4, $5, $6, $7, $8, $9, $10
+    FROM claimed
+    WHERE operation_table = 'agent_lifecycle_operations'
+    ON CONFLICT (id) DO NOTHING
+    RETURNING ` + agentLifecycleOperationColumns + `
+),
+attached AS (
+    UPDATE operation_idempotency_keys
+    SET response = COALESCE((SELECT to_jsonb(inserted) FROM inserted LIMIT 1), response),
+        updated_at = now()
+    WHERE scope = $1 AND idempotency_key = $2
+)
+SELECT ` + agentLifecycleOperationColumns + ` FROM inserted
+UNION ALL
+SELECT ` + agentLifecycleOperationColumns + ` FROM agent_lifecycle_operations
+JOIN claimed ON agent_lifecycle_operations.id = claimed.operation_id
+WHERE claimed.operation_table = 'agent_lifecycle_operations'
+LIMIT 1`
+
+func (q *Queries) CreateAgentLifecycleOperationIdempotent(ctx context.Context, arg CreateAgentLifecycleOperationIdempotentParams) (AgentLifecycleOperation, error) {
+	row := q.db.QueryRow(ctx, createAgentLifecycleOperationIdempotent,
+		arg.Scope,
+		arg.IdempotencyKey,
 		arg.ClusterID,
 		arg.OperationType,
 		arg.TargetVersion,

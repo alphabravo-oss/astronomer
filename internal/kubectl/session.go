@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -156,7 +155,7 @@ func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error)
 		PodNamespace: names.PodNamespace,
 		PodName:      names.PodName,
 		Status:       "starting",
-		ClientIP:     req.ClientIP,
+		ClientIp:     req.ClientIP,
 		UserAgent:    req.UserAgent,
 	})
 	if err != nil {
@@ -170,7 +169,7 @@ func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error)
 		_ = deps.Queries.SetKubectlSessionStatus(ctx, sqlc.SetKubectlSessionStatusParams{
 			ID:        row.ID,
 			Status:    "failed",
-			LastError: pgtype.Text{String: stepErr.Error(), Valid: true},
+			LastError: stepErr.Error(),
 		})
 		_ = tearDownK8s(ctx, deps, clusterID, names)
 		return nil, stepErr
@@ -299,12 +298,12 @@ func Reap(ctx context.Context, deps Deps) error {
 				ResourceType: "kubectl_session",
 				ResourceID:   row.ID.String(),
 				Detail: map[string]any{
-					"reason":      reason,
-					"cluster_id":  row.ClusterID.String(),
-					"pod_name":    row.PodName,
-					"started_at":  row.StartedAt.UTC().Format(time.RFC3339),
-					"expires_at":  row.ExpiresAt.UTC().Format(time.RFC3339),
-					"last_input":  row.LastInputAt.UTC().Format(time.RFC3339),
+					"reason":     reason,
+					"cluster_id": row.ClusterID.String(),
+					"pod_name":   row.PodName,
+					"started_at": row.StartedAt.UTC().Format(time.RFC3339),
+					"expires_at": row.ExpiresAt.UTC().Format(time.RFC3339),
+					"last_input": row.LastInputAt.UTC().Format(time.RFC3339),
 				},
 			})
 		}
@@ -407,7 +406,7 @@ func applyJSON(ctx context.Context, r K8sRequester, clusterID, path string, body
 		// Already exists from a previous Open() retry.
 		return nil
 	}
-	return fmt.Errorf("apply %s: status %d body=%s", path, resp.StatusCode, truncate(string(resp.Body), 256))
+	return fmt.Errorf("apply %s: status %d body=%s", path, resp.StatusCode, truncateSessionResponseBody(string(resp.Body), 256))
 }
 
 // deleteJSON best-effort DELETE. 404 is treated as success (already
@@ -423,7 +422,7 @@ func deleteJSON(ctx context.Context, r K8sRequester, clusterID, path string) err
 	if resp.StatusCode == 404 {
 		return nil
 	}
-	return fmt.Errorf("delete %s: status %d body=%s", path, resp.StatusCode, truncate(string(resp.Body), 256))
+	return fmt.Errorf("delete %s: status %d body=%s", path, resp.StatusCode, truncateSessionResponseBody(string(resp.Body), 256))
 }
 
 // tearDownK8s removes (in reverse order of creation) Pod → Binding →
@@ -550,7 +549,7 @@ func sweepOrphanPods(ctx context.Context, deps Deps, clusterID string, keep map[
 	return nil
 }
 
-func truncate(s string, n int) string {
+func truncateSessionResponseBody(s string, n int) string {
 	if len(s) > n {
 		return s[:n] + "..."
 	}

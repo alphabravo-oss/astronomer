@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Project · Catalogs tab (migration 061 / sprint 16 — BYO Helm catalogs).
  *
@@ -27,6 +28,7 @@ import {
   canEditProject,
 } from '@/components/projects/hooks';
 import { useCurrentUser } from '@/lib/hooks';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import type { ProjectCatalog } from '@/lib/api/project-detail';
 import { cn, formatRelativeTime } from '@/lib/utils';
 
@@ -107,33 +109,33 @@ export default function ProjectCatalogsPage({ params }: CatalogsPageProps) {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-                <th className="text-left font-medium py-2 px-3">Name</th>
-                <th className="text-left font-medium py-2 px-3">URL</th>
-                <th className="text-left font-medium py-2 px-3">Visibility</th>
-                <th className="text-left font-medium py-2 px-3">Last sync</th>
-                <th className="text-right font-medium py-2 px-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
+                <TableHead className="text-left font-medium py-2 px-3">Name</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">URL</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Visibility</TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">Last sync</TableHead>
+                <TableHead className="text-right font-medium py-2 px-3">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {catalogs.map((cat) => (
-                <tr key={cat.id} className="border-b border-border last:border-0">
-                  <td className="py-2 px-3">
+                <TableRow key={cat.id} className="border-b border-border last:border-0">
+                  <TableCell className="py-2 px-3">
                     <div className="font-medium text-foreground">{cat.name}</div>
                     {cat.description ? (
                       <div className="text-xs text-muted-foreground">{cat.description}</div>
                     ) : null}
-                  </td>
-                  <td className="py-2 px-3 text-xs font-mono text-muted-foreground">{cat.url}</td>
-                  <td className="py-2 px-3">
+                  </TableCell>
+                  <TableCell className="py-2 px-3 text-xs font-mono text-muted-foreground">{cat.url}</TableCell>
+                  <TableCell className="py-2 px-3">
                     <VisibilityBadge visibility={cat.visibility} />
-                  </td>
-                  <td className="py-2 px-3 text-xs text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="py-2 px-3 text-xs text-muted-foreground">
                     {cat.lastSyncedAt ? formatRelativeTime(cat.lastSyncedAt) : 'never'}
-                  </td>
-                  <td className="py-2 px-3 text-right">
+                  </TableCell>
+                  <TableCell className="py-2 px-3 text-right">
                     {canEdit && cat.visibility === 'public' && (
                       <button
                         onClick={() => handleSubscribe(cat)}
@@ -152,16 +154,16 @@ export default function ProjectCatalogsPage({ params }: CatalogsPageProps) {
                         {cat.visibility === 'own' ? 'Delete' : 'Unsubscribe'}
                       </button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <OverlayShell onClose={() => setShowAdd(false)}>
           <form
             onSubmit={handleAdd}
             className="bg-card rounded-xl border border-border p-6 w-full max-w-md space-y-4"
@@ -220,7 +222,7 @@ export default function ProjectCatalogsPage({ params }: CatalogsPageProps) {
               </button>
             </div>
           </form>
-        </div>
+        </OverlayShell>
       )}
     </div>
   );

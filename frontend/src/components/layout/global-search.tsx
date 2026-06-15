@@ -8,37 +8,29 @@ import { cn } from '@/lib/utils';
 /**
  * GlobalSearch is the topbar input that opens the cross-cluster search
  * page. It is intentionally light-weight: typing alone does NOT issue a
- * search request — the user must press Enter (or Cmd+K to focus) to
+ * search request — the user must press Enter (or "/" to focus) to
  * navigate to /dashboard/search?name=<query>. This keeps every keystroke
  * cheap and avoids competing with the search page's own debounce.
  *
- * Keyboard shortcut: Cmd+K (macOS) / Ctrl+K (other) focuses the input.
- * The global command palette uses the same chord, so we only intercept
- * when the input itself is mountable (the listener is owned here, not
- * by a router-level handler).
+ * Keyboard shortcut: "/" focuses the input. Cmd/Ctrl+K is reserved for
+ * the global command palette.
  */
 export function GlobalSearch() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState('');
-  const [mac, setMac] = useState(false);
-
-  // Detect macOS once on the client so the placeholder hint matches the
-  // chord the user would actually press.
-  useEffect(() => {
-    if (typeof navigator !== 'undefined') {
-      setMac(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
-    }
-  }, []);
-
-  // Cmd+K / Ctrl+K — focus the input. We only call preventDefault when
-  // the input isn't already focused so other handlers (a focused
-  // textarea, etc.) keep their normal behaviour.
+  // "/" focuses the search input unless the user is already typing in a
+  // form control.
   useEffect(() => {
     function onKeydown(e: KeyboardEvent) {
-      const isCmd = e.metaKey || e.ctrlKey;
-      if (isCmd && e.key.toLowerCase() === 'k') {
-        if (document.activeElement === inputRef.current) return;
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const active = document.activeElement;
+      const isTypingTarget =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement ||
+        active?.getAttribute('contenteditable') === 'true';
+      if (!isTypingTarget) {
         e.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -86,7 +78,7 @@ export function GlobalSearch() {
         className="absolute right-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5
           px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground font-mono pointer-events-none"
       >
-        {mac ? '⌘' : 'Ctrl'}K
+        /
       </kbd>
     </div>
   );

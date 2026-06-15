@@ -116,7 +116,9 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 	if err != nil {
 		return nil, true, err
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		_ = httpResp.Body.Close()
+	}()
 	// Helm result bodies are small (HelmResultPayload has a few strings and
 	// an error string), but cap the read at 16 MiB so a misbehaving sibling
 	// can't OOM us.

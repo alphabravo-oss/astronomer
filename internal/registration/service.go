@@ -18,14 +18,22 @@ import (
 // Postgres. *sqlc.Queries satisfies it natively.
 type Querier interface {
 	GetClusterRegistrationRecord(ctx context.Context, id uuid.UUID) (sqlc.ClusterRegistrationRecord, error)
-	UpdateClusterRegistrationPhase(ctx context.Context, arg sqlc.UpdateClusterRegistrationPhaseParams) (sqlc.ClusterRegistrationRecord, error)
-	SetClusterInstallBaseline(ctx context.Context, arg sqlc.SetClusterInstallBaselineParams) (sqlc.ClusterRegistrationRecord, error)
+	UpdateClusterRegistrationPhase(ctx context.Context, arg sqlc.UpdateClusterRegistrationPhaseParams) (sqlc.UpdateClusterRegistrationPhaseRow, error)
+	SetClusterInstallBaseline(ctx context.Context, arg sqlc.SetClusterInstallBaselineParams) (sqlc.SetClusterInstallBaselineRow, error)
 	InsertClusterRegistrationStep(ctx context.Context, arg sqlc.InsertClusterRegistrationStepParams) (sqlc.ClusterRegistrationStep, error)
 	UpdateClusterRegistrationStep(ctx context.Context, arg sqlc.UpdateClusterRegistrationStepParams) (sqlc.ClusterRegistrationStep, error)
 	ListClusterRegistrationSteps(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterRegistrationStep, error)
 	GetClusterRegistrationStep(ctx context.Context, id uuid.UUID) (sqlc.ClusterRegistrationStep, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
 	CloseRunningStepsForCluster(ctx context.Context, arg sqlc.CloseRunningStepsForClusterParams) error
+}
+
+func recordFromPhaseRow(row sqlc.UpdateClusterRegistrationPhaseRow) sqlc.ClusterRegistrationRecord {
+	return sqlc.ClusterRegistrationRecord(row)
+}
+
+func recordFromBaselineRow(row sqlc.SetClusterInstallBaselineRow) sqlc.ClusterRegistrationRecord {
+	return sqlc.ClusterRegistrationRecord(row)
 }
 
 // Publisher is the SSE fan-out surface the service uses. *events.Bus
@@ -84,17 +92,17 @@ var ErrNotFound = errors.New("cluster registration not found")
 // is created or updated. Mirrors the protocol shape called out in the
 // sprint plan.
 type stepWriteResult struct {
-	ClusterID   uuid.UUID  `json:"cluster_id"`
-	StepID      uuid.UUID  `json:"step_id"`
-	StepName    string     `json:"step_name"`
-	Label       string     `json:"label"`
-	Status      string     `json:"status"`
-	Progress    int        `json:"progress"`
+	ClusterID   uuid.UUID       `json:"cluster_id"`
+	StepID      uuid.UUID       `json:"step_id"`
+	StepName    string          `json:"step_name"`
+	Label       string          `json:"label"`
+	Status      string          `json:"status"`
+	Progress    int             `json:"progress"`
 	Detail      json.RawMessage `json:"detail,omitempty"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	Error       string     `json:"error,omitempty"`
-	StepOrder   int        `json:"step_order"`
+	StartedAt   *time.Time      `json:"started_at,omitempty"`
+	CompletedAt *time.Time      `json:"completed_at,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	StepOrder   int             `json:"step_order"`
 }
 
 // phaseChangeResult is published when the cluster's phase column moves.
@@ -154,7 +162,7 @@ func (s *Service) WriteStep(ctx context.Context, clusterID uuid.UUID, in StepInp
 		Label:        StepLabel(in.StepName),
 		Status:       in.Status,
 		ProgressPct:  progress,
-		DetailJSON:   detail,
+		DetailJson:   detail,
 		StartedAt:    startedAt,
 		CompletedAt:  completedAt,
 		ErrorMessage: in.ErrorMessage,
@@ -204,7 +212,7 @@ func (s *Service) UpdateStep(ctx context.Context, in UpdateStepInput) (sqlc.Clus
 		ID:           in.StepID,
 		Status:       in.Status,
 		ProgressPct:  progress,
-		DetailJSON:   detail,
+		DetailJson:   detail,
 		StartedAt:    startedAt,
 		CompletedAt:  completedAt,
 		ErrorMessage: in.ErrorMessage,
@@ -273,14 +281,15 @@ func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, op
 	}
 
 	updated, err := s.q.UpdateClusterRegistrationPhase(ctx, sqlc.UpdateClusterRegistrationPhaseParams{
-		ID:          clusterID,
-		Phase:       string(next),
-		StartedAt:   startedAt,
-		CompletedAt: completedAt,
+		ID:                      clusterID,
+		RegistrationPhase:       string(next),
+		RegistrationStartedAt:   startedAt,
+		RegistrationCompletedAt: completedAt,
 	})
 	if err != nil {
 		return record, err
 	}
+	updatedRecord := recordFromPhaseRow(updated)
 
 	// Side-effect step rows. Skip when the caller has already written
 	// the step themselves (cluster_template:apply writes a tool-
@@ -322,7 +331,7 @@ func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, op
 			}
 		}
 	}
-	return updated, nil
+	return updatedRecord, nil
 }
 
 // AdvanceOption tweaks the side-effects of Advance. Used by the apply
@@ -519,10 +528,14 @@ func (s *Service) SetInstallBaseline(ctx context.Context, clusterID uuid.UUID, v
 	if s == nil || s.q == nil {
 		return sqlc.ClusterRegistrationRecord{}, fmt.Errorf("registration service not configured")
 	}
-	return s.q.SetClusterInstallBaseline(ctx, sqlc.SetClusterInstallBaselineParams{
+	row, err := s.q.SetClusterInstallBaseline(ctx, sqlc.SetClusterInstallBaselineParams{
 		ID:              clusterID,
 		InstallBaseline: pgtype.Bool{Bool: value, Valid: true},
 	})
+	if err != nil {
+		return sqlc.ClusterRegistrationRecord{}, err
+	}
+	return recordFromBaselineRow(row), nil
 }
 
 // publishStep fans a step row out to SSE subscribers. Best-effort.
@@ -531,15 +544,15 @@ func (s *Service) publishStep(step sqlc.ClusterRegistrationStep) {
 		return
 	}
 	payload := stepWriteResult{
-		ClusterID:    step.ClusterID,
-		StepID:       step.ID,
-		StepName:     step.StepName,
-		Label:        step.Label,
-		Status:       step.Status,
-		Progress:     int(step.ProgressPct),
-		Detail:       step.DetailJSON,
-		Error:        step.ErrorMessage,
-		StepOrder:    int(step.StepOrder),
+		ClusterID: step.ClusterID,
+		StepID:    step.ID,
+		StepName:  step.StepName,
+		Label:     step.Label,
+		Status:    step.Status,
+		Progress:  int(step.ProgressPct),
+		Detail:    step.DetailJson,
+		Error:     step.ErrorMessage,
+		StepOrder: int(step.StepOrder),
 	}
 	if step.StartedAt.Valid {
 		t := step.StartedAt.Time.UTC()
@@ -626,7 +639,7 @@ func (s *Service) LoadStatus(ctx context.Context, clusterID uuid.UUID) (Status, 
 			Label:        r.Label,
 			Status:       r.Status,
 			ProgressPct:  int(r.ProgressPct),
-			Detail:       r.DetailJSON,
+			Detail:       r.DetailJson,
 			ErrorMessage: r.ErrorMessage,
 			StepOrder:    int(r.StepOrder),
 			CreatedAt:    r.CreatedAt.UTC(),

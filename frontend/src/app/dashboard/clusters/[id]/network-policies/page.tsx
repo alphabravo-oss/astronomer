@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster detail → Network policies tab. Lists every applied
  * NetworkPolicy template for this cluster, grouped by namespace. The
@@ -11,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 
 import {
   listNetworkPolicyApplications,
@@ -60,7 +61,7 @@ export default function ClusterNetworkPoliciesPage() {
       setApps(a);
       setTemplates(t);
     } catch (err: unknown) {
-      toast.error(`Load failed: ${(err as Error).message}`);
+      toastApiError('Load failed', err);
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ export default function ClusterNetworkPoliciesPage() {
 
   const handleApply = async () => {
     if (!pickedTemplate) {
-      toast.error('Pick a template first');
+      toastError('Pick a template first');
       return;
     }
     const list = namespaces
@@ -81,19 +82,19 @@ export default function ClusterNetworkPoliciesPage() {
       .map((s) => s.trim())
       .filter(Boolean);
     if (list.length === 0) {
-      toast.error('Enter at least one namespace');
+      toastError('Enter at least one namespace');
       return;
     }
     setSubmitting(true);
     try {
       await applyNetworkPolicy(clusterID, { template_id: pickedTemplate, namespaces: list });
-      toast.success(`Applied to ${list.length} namespace(s)`);
+      toastSuccess(`Applied to ${list.length} namespace(s)`);
       setOpenApply(false);
       setPickedTemplate('');
       setNamespaces('');
       await refresh();
     } catch (err: unknown) {
-      toast.error(`Apply failed: ${(err as Error).message}`);
+      toastApiError('Apply failed', err);
     } finally {
       setSubmitting(false);
     }
@@ -103,20 +104,20 @@ export default function ClusterNetworkPoliciesPage() {
     if (!confirm(`Revoke ${app.template_slug} from ${app.namespace}?`)) return;
     try {
       await deleteNetworkPolicyApplication(clusterID, app.id);
-      toast.success('Application revoked');
+      toastSuccess('Application revoked');
       await refresh();
     } catch (err: unknown) {
-      toast.error(`Revoke failed: ${(err as Error).message}`);
+      toastApiError('Revoke failed', err);
     }
   };
 
   const handleReapply = async (app: NetworkPolicyApplication) => {
     try {
       await reapplyNetworkPolicyApplication(clusterID, app.id);
-      toast.success('Reapply queued');
+      toastSuccess('Reapply queued');
       await refresh();
     } catch (err: unknown) {
-      toast.error(`Reapply failed: ${(err as Error).message}`);
+      toastApiError('Reapply failed', err);
     }
   };
 
@@ -196,31 +197,31 @@ export default function ClusterNetworkPoliciesPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted">
-              <tr className="text-left">
-                <th className="px-3 py-2 font-medium">Template</th>
-                <th className="px-3 py-2 font-medium">Namespace</th>
-                <th className="px-3 py-2 font-medium">Policy name</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Last applied</th>
-                <th className="px-3 py-2 text-right" />
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted">
+              <TableRow className="text-left">
+                <TableHead className="px-3 py-2 font-medium">Template</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Namespace</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Policy name</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Status</TableHead>
+                <TableHead className="px-3 py-2 font-medium">Last applied</TableHead>
+                <TableHead className="px-3 py-2 text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {apps.map((a) => (
-                <tr key={a.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs">{a.template_slug ?? a.template_id}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{a.namespace}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{a.policy_name}</td>
-                  <td className="px-3 py-2">
+                <TableRow key={a.id} className="border-b border-border last:border-0">
+                  <TableCell className="px-3 py-2 font-mono text-xs">{a.template_slug ?? a.template_id}</TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs">{a.namespace}</TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs">{a.policy_name}</TableCell>
+                  <TableCell className="px-3 py-2">
                     <StatusPill status={a.status} />
                     {a.last_error && (
                       <div className="text-xs text-rose-600 dark:text-rose-400 mt-0.5">{a.last_error}</div>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{a.last_applied_at ?? '—'}</td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">{a.last_applied_at ?? '—'}</TableCell>
+                  <TableCell className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
                         type="button"
@@ -237,12 +238,12 @@ export default function ClusterNetworkPoliciesPage() {
                         <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {apps.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
                     <div className="space-y-3">
                       <p>No network policies applied yet.</p>
                       <p className="text-xs">
@@ -253,11 +254,11 @@ export default function ClusterNetworkPoliciesPage() {
                         and click <em>Apply template</em> to roll one out.
                       </p>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>

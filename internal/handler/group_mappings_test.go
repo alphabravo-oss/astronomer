@@ -25,9 +25,9 @@ import (
 // production *sqlc.Queries would satisfy, scoped to what the admin
 // handler reaches for.
 type fakeGroupMappings struct {
-	user     sqlc.User
-	userErr  error
-	mappings map[uuid.UUID]sqlc.IdentityGroupMapping
+	user      sqlc.User
+	userErr   error
+	mappings  map[uuid.UUID]sqlc.IdentityGroupMapping
 	createErr error
 	deleteErr error
 
@@ -119,12 +119,7 @@ func (f *fakeGroupMappings) ListGroupMappingsForConnector(_ context.Context, con
 	return out, nil
 }
 func (f *fakeGroupMappings) UpsertUserIDPGroups(_ context.Context, arg sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
-	f.snapshot = sqlc.UserIdpGroup{
-		UserID:      arg.UserID,
-		ConnectorID: arg.ConnectorID,
-		Groups:      arg.Groups,
-		SyncedAt:    arg.SyncedAt,
-	}
+	f.snapshot = sqlc.UserIdpGroup(arg)
 	return f.snapshot, nil
 }
 func (f *fakeGroupMappings) GetUserIDPGroups(_ context.Context, _ uuid.UUID) (sqlc.UserIdpGroup, error) {

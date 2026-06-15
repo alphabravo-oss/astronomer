@@ -80,7 +80,7 @@ func authError(w http.ResponseWriter, code, message string) {
 			"message": message,
 		},
 	}
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func isSafeMethod(method string) bool {
@@ -252,6 +252,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 			if apiTokenForCtx != nil {
 				ctx = context.WithValue(ctx, apiTokenContextKey, apiTokenForCtx)
 			}
+			setRequestLogActor(ctx, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

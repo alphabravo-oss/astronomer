@@ -6,14 +6,8 @@ SELECT * FROM api_tokens WHERE id = $1;
 -- name: GetTokenByHash :one
 SELECT * FROM api_tokens WHERE token_hash = $1 AND is_revoked = false;
 
--- name: ListAPITokens :many
-SELECT * FROM api_tokens ORDER BY created_at DESC LIMIT $1 OFFSET $2;
-
 -- name: ListTokensByUser :many
 SELECT * FROM api_tokens WHERE user_id = $1 AND is_revoked = false ORDER BY created_at DESC LIMIT $2 OFFSET $3;
-
--- name: ListAllTokensByUser :many
-SELECT * FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateAPIToken :one
 INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at, scopes, allowed_cidrs)
@@ -32,12 +26,6 @@ UPDATE api_tokens SET last_used_at = now() WHERE id = $1;
 -- informational (operator UI / forensic review) and must NEVER cause a
 -- 5xx on the request path.
 UPDATE api_tokens SET last_seen_remote_ip = $2 WHERE id = $1;
-
--- name: DeleteAPIToken :exec
-DELETE FROM api_tokens WHERE id = $1;
-
--- name: CountAPITokens :one
-SELECT count(*) FROM api_tokens;
 
 -- name: CountTokensByUser :one
 SELECT count(*) FROM api_tokens WHERE user_id = $1 AND is_revoked = false;
@@ -148,9 +136,6 @@ RETURNING *;
 
 -- name: DeleteSSOConfiguration :exec
 DELETE FROM sso_configurations WHERE id = $1;
-
--- name: CountSSOConfigurations :one
-SELECT count(*) FROM sso_configurations;
 
 -- name: CountActiveUnmigratedSSORows :one
 -- Drives the startup-time deprecation warning (migration 045). Counts

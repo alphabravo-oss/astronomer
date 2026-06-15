@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster Templates · Detail.
  *
@@ -9,7 +10,8 @@
  */
 import { use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, PencilLine, Layers, AlertCircle } from 'lucide-react';
+import { ArrowLeft, PencilLine, Layers } from 'lucide-react';
+import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
 import { useCurrentUser } from '@/lib/hooks';
 import {
   useClusterTemplate,
@@ -50,23 +52,20 @@ export default function ClusterTemplateDetailPage({ params }: DetailPageProps) {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to templates
         </Link>
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>You need <span className="font-mono">cluster_templates:read</span> to view this template.</p>
-        </div>
+        <PermissionState
+          permission="cluster_templates:read"
+          description={<>You need <span className="font-mono">cluster_templates:read</span> to view this template.</>}
+          className="rounded-lg border border-border bg-muted/30 p-6"
+        />
       </div>
     );
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState title="Loading cluster template" className="h-32 py-0" />;
   }
   if (!template) {
-    return <p className="text-sm text-muted-foreground">Template not found.</p>;
+    return <ErrorState title="Template not found" description="The requested cluster template does not exist or is no longer available." />;
   }
 
   return (
@@ -172,34 +171,34 @@ export default function ClusterTemplateDetailPage({ params }: DetailPageProps) {
             Clusters created from or attached to this template.
           </p>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-              <th className="text-left font-medium py-2 px-4">Cluster</th>
-              <th className="text-left font-medium py-2 px-4">Status</th>
-              <th className="text-left font-medium py-2 px-4">Last applied</th>
-              <th className="text-left font-medium py-2 px-4">Detail</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="w-full text-sm">
+          <TableHeader>
+            <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
+              <TableHead className="text-left font-medium py-2 px-4">Cluster</TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">Status</TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">Last applied</TableHead>
+              <TableHead className="text-left font-medium py-2 px-4">Detail</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {bound.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-xs text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={4} className="py-6 text-center text-xs text-muted-foreground">
                   No clusters bound yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               bound.map((row) => (
-                <tr key={row.clusterId} className="border-b border-border last:border-0">
-                  <td className="py-2 px-4">
+                <TableRow key={row.clusterId} className="border-b border-border last:border-0">
+                  <TableCell className="py-2 px-4">
                     <Link
                       href={`/dashboard/clusters/${row.clusterId}`}
                       className="text-foreground hover:underline underline-offset-2"
                     >
                       {row.clusterName}
                     </Link>
-                  </td>
-                  <td className="py-2 px-4">
+                  </TableCell>
+                  <TableCell className="py-2 px-4">
                     <span
                       className={cn(
                         'inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize',
@@ -208,18 +207,18 @@ export default function ClusterTemplateDetailPage({ params }: DetailPageProps) {
                     >
                       {row.status}
                     </span>
-                  </td>
-                  <td className="py-2 px-4 text-xs text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="py-2 px-4 text-xs text-muted-foreground">
                     {row.lastAppliedAt ? formatRelativeTime(row.lastAppliedAt) : '—'}
-                  </td>
-                  <td className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
+                  </TableCell>
+                  <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
                     {row.message || '—'}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </section>
     </div>
   );

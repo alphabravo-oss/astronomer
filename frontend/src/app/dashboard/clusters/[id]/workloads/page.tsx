@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Unified Workloads tab — aggregates every workload kind into one
  * filterable table.
@@ -39,6 +40,7 @@ import {
 } from 'lucide-react';
 
 import { k8sGet } from '@/lib/api';
+import { queryKeys } from '@/lib/hooks';
 import { formatRelativeTime } from '@/lib/utils';
 
 // ---------------------------------------------------------------------
@@ -128,31 +130,31 @@ export default function WorkloadsPage() {
   // others down with it. enabled: !!clusterId guards against null
   // before the page params resolve.
   const deployments = useQuery({
-    queryKey: ['clusters', clusterId, 'workloads', 'deployments'] as const,
+    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'deployments'),
     queryFn: () => k8sGet(clusterId, 'apis/apps/v1/deployments') as Promise<K8sList<DeploymentLike>>,
     enabled: !!clusterId,
     refetchInterval: 30 * 1000,
   });
   const statefulsets = useQuery({
-    queryKey: ['clusters', clusterId, 'workloads', 'statefulsets'] as const,
+    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'statefulsets'),
     queryFn: () => k8sGet(clusterId, 'apis/apps/v1/statefulsets') as Promise<K8sList<DeploymentLike>>,
     enabled: !!clusterId,
     refetchInterval: 30 * 1000,
   });
   const daemonsets = useQuery({
-    queryKey: ['clusters', clusterId, 'workloads', 'daemonsets'] as const,
+    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'daemonsets'),
     queryFn: () => k8sGet(clusterId, 'apis/apps/v1/daemonsets') as Promise<K8sList<DaemonSetLike>>,
     enabled: !!clusterId,
     refetchInterval: 30 * 1000,
   });
   const jobs = useQuery({
-    queryKey: ['clusters', clusterId, 'workloads', 'jobs'] as const,
+    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'jobs'),
     queryFn: () => k8sGet(clusterId, 'apis/batch/v1/jobs') as Promise<K8sList<JobLike>>,
     enabled: !!clusterId,
     refetchInterval: 30 * 1000,
   });
   const cronjobs = useQuery({
-    queryKey: ['clusters', clusterId, 'workloads', 'cronjobs'] as const,
+    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'cronjobs'),
     queryFn: () => k8sGet(clusterId, 'apis/batch/v1/cronjobs') as Promise<K8sList<CronJobLike>>,
     enabled: !!clusterId,
     refetchInterval: 30 * 1000,
@@ -261,26 +263,26 @@ export default function WorkloadsPage() {
       )}
 
       <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium w-32">Kind</th>
-              <th className="px-3 py-2 text-left font-medium">Name</th>
-              <th className="px-3 py-2 text-left font-medium w-48">Namespace</th>
-              <th className="px-3 py-2 text-left font-medium w-32">Status</th>
-              <th className="px-3 py-2 text-left font-medium w-28">Age</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
+        <Table className="w-full text-sm">
+          <TableHeader className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+            <TableRow>
+              <TableHead className="px-3 py-2 text-left font-medium w-32">Kind</TableHead>
+              <TableHead className="px-3 py-2 text-left font-medium">Name</TableHead>
+              <TableHead className="px-3 py-2 text-left font-medium w-48">Namespace</TableHead>
+              <TableHead className="px-3 py-2 text-left font-medium w-32">Status</TableHead>
+              <TableHead className="px-3 py-2 text-left font-medium w-28">Age</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-border">
             {isLoading && rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                   Loading…
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                   {search || namespace || kindFilter ? (
                     <>No workloads match the filters.</>
                   ) : (
@@ -299,13 +301,13 @@ export default function WorkloadsPage() {
                       </p>
                     </div>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               filtered.map((r) => <WorkloadRow key={`${r.kind}/${r.item.metadata.namespace}/${r.item.metadata.name}`} clusterId={clusterId} workload={r} />)
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -323,34 +325,34 @@ function WorkloadRow({ clusterId, workload }: { clusterId: string; workload: Wor
   const status = computeStatus(workload);
   const kindMeta = KIND_META[workload.kind];
   return (
-    <tr className="hover:bg-muted/30">
-      <td className="px-3 py-2">
+    <TableRow className="hover:bg-muted/30">
+      <TableCell className="px-3 py-2">
         <span className="inline-flex items-center gap-1.5 text-foreground">
           <kindMeta.icon className="h-3.5 w-3.5 text-muted-foreground" />
           {workload.kind}
         </span>
-      </td>
-      <td className="px-3 py-2">
+      </TableCell>
+      <TableCell className="px-3 py-2">
         <Link
           href={`/dashboard/clusters/${clusterId}/workloads/${kindMeta.urlSegment}/${workload.item.metadata.namespace}/${workload.item.metadata.name}`}
           className="text-foreground hover:underline"
         >
           {workload.item.metadata.name}
         </Link>
-      </td>
-      <td className="px-3 py-2 text-muted-foreground">{workload.item.metadata.namespace}</td>
-      <td className="px-3 py-2">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-muted-foreground">{workload.item.metadata.namespace}</TableCell>
+      <TableCell className="px-3 py-2">
         <span className={`inline-flex items-center gap-1 ${status.tone}`}>
           {status.icon}
           {status.label}
         </span>
-      </td>
-      <td className="px-3 py-2 text-muted-foreground">
+      </TableCell>
+      <TableCell className="px-3 py-2 text-muted-foreground">
         {workload.item.metadata.creationTimestamp
           ? formatRelativeTime(workload.item.metadata.creationTimestamp)
           : '—'}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 

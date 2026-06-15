@@ -223,7 +223,14 @@ func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
 			"status": {
 				"sync": {"status": "OutOfSync", "revision": "abc123"},
 				"health": {"status": "Progressing"},
-				"operationState": {"phase": "Running", "message": "syncing"}
+				"operationState": {"phase": "Running", "message": "syncing"},
+				"resources": [
+					{"kind": "Deployment", "namespace": "default", "name": "web", "status": "Missing"},
+					{"kind": "ConfigMap", "namespace": "default", "name": "web-config", "status": "OutOfSync"},
+					{"kind": "Job", "namespace": "default", "name": "migrate", "status": "Modified"},
+					{"kind": "Secret", "namespace": "default", "name": "old-secret", "status": "Synced", "requiresPruning": true},
+					{"kind": "Service", "namespace": "default", "name": "web", "status": "Synced"}
+				]
 			}
 		}`))
 	})
@@ -264,8 +271,152 @@ func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
 	if rec.appUpdate[0].HealthStatus != "Progressing" {
 		t.Errorf("cached HealthStatus = %s; want Progressing", rec.appUpdate[0].HealthStatus)
 	}
+	if rec.appUpdate[0].ResourceCreatedCount != 1 || rec.appUpdate[0].ResourceChangedCount != 2 || rec.appUpdate[0].ResourcePrunedCount != 1 {
+		t.Errorf("cached resource counts = created:%d changed:%d pruned:%d", rec.appUpdate[0].ResourceCreatedCount, rec.appUpdate[0].ResourceChangedCount, rec.appUpdate[0].ResourcePrunedCount)
+	}
 	if rec.appUpdate[0].LastSynced.Valid {
 		t.Errorf("LastSynced should not be stamped while sync is in flight")
+	}
+}
+
+func TestBuildArgoCDOrphanReportDetectsStaleBaselineApplications(t *testing.T) {
+	instanceID := uuid.New()
+	managedClusterID := uuid.New()
+	report := buildArgoCDOrphanReport(instanceID, []sqlc.ArgocdApplication{
+		{
+			ID:                   uuid.New(),
+			Name:                 "astronomer-cert-manager-prod",
+			DestinationCluster:   "https://proxy.example.test/clusters/prod",
+			DestinationNamespace: "cert-manager",
+		},
+		{
+			ID:                   uuid.New(),
+			Name:                 "astronomer-trivy-deleted",
+			DestinationCluster:   "https://proxy.example.test/clusters/deleted",
+			DestinationNamespace: "trivy-system",
+		},
+		{
+			ID:                 uuid.New(),
+			Name:               "astronomer-fluent-bit-empty",
+			DestinationCluster: "",
+		},
+		{
+			ID:                 uuid.New(),
+			Name:               "user-owned-app",
+			DestinationCluster: "https://proxy.example.test/clusters/deleted",
+		},
+	}, nil, []sqlc.ArgocdManagedCluster{
+		{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         managedClusterID,
+			ClusterSecretName: "prod",
+			ServerUrl:         "https://proxy.example.test/clusters/prod",
+			Labels:            mustJSON(t, map[string]string{"astronomer.io/cluster-name": "prod", "astronomer.io/cluster-id": managedClusterID.String()}),
+		},
+	})
+
+	if report.InstanceID != instanceID.String() {
+		t.Fatalf("instance id = %q, want %q", report.InstanceID, instanceID.String())
+	}
+	if report.ApplicationCount != 4 {
+		t.Fatalf("application count = %d, want 4", report.ApplicationCount)
+	}
+	if report.CachedApplicationCount != 4 || report.LiveApplicationCount != 0 {
+		t.Fatalf("cache/live counts = %d/%d, want 4/0", report.CachedApplicationCount, report.LiveApplicationCount)
+	}
+	if report.ManagedTargetCount != 3 {
+		t.Fatalf("managed target count = %d, want 3", report.ManagedTargetCount)
+	}
+	if report.OrphanApplicationCount != 2 {
+		t.Fatalf("orphan count = %d, want 2 (%+v)", report.OrphanApplicationCount, report.OrphanApplications)
+	}
+	if report.OrphanApplications[0].Name != "astronomer-trivy-deleted" || report.OrphanApplications[0].ComponentSlug != "trivy-operator" {
+		t.Fatalf("first orphan = %+v, want trivy baseline app", report.OrphanApplications[0])
+	}
+	if report.OrphanApplications[0].Source != argoCDOrphanSourceCache {
+		t.Fatalf("first orphan source = %q, want cache", report.OrphanApplications[0].Source)
+	}
+	if report.OrphanApplications[0].Reason != argoCDOrphanReasonStaleDestination {
+		t.Fatalf("first orphan reason = %q, want %q", report.OrphanApplications[0].Reason, argoCDOrphanReasonStaleDestination)
+	}
+	if report.OrphanApplications[1].Reason != argoCDOrphanReasonMissingDestination {
+		t.Fatalf("second orphan reason = %q, want %q", report.OrphanApplications[1].Reason, argoCDOrphanReasonMissingDestination)
+	}
+}
+
+func TestBuildArgoCDOrphanReportDetectsLiveArgoApplications(t *testing.T) {
+	instanceID := uuid.New()
+	managedClusterID := uuid.New()
+	report := buildArgoCDOrphanReport(instanceID, nil, []argocdclient.Application{
+		mustArgoApplication(t, `{
+			"metadata": {
+				"name": "astronomer-cert-manager-prod",
+				"labels": {
+					"app.kubernetes.io/managed-by": "astronomer",
+					"astronomer.io/baseline": "platform",
+					"astronomer.io/tool-slug": "cert-manager"
+				},
+				"ownerReferences": [{"apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet", "name": "astronomer-baseline-cert-manager"}]
+			},
+			"spec": {"destination": {"server": "https://proxy.example.test/clusters/prod", "namespace": "cert-manager"}}
+		}`),
+		mustArgoApplication(t, `{
+			"metadata": {
+				"name": "astronomer-externally-managed",
+				"labels": {"app.kubernetes.io/managed-by": "astronomer"}
+			},
+			"spec": {"destination": {"server": "https://proxy.example.test/clusters/deleted", "namespace": "default"}}
+		}`),
+		mustArgoApplication(t, `{
+			"metadata": {
+				"name": "astronomer-trivy-prod",
+				"labels": {
+					"app.kubernetes.io/managed-by": "astronomer",
+					"astronomer.io/baseline": "platform",
+					"astronomer.io/tool-slug": "fluent-bit"
+				},
+				"ownerReferences": [{"apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet", "name": "stale-trivy-owner"}]
+			},
+			"spec": {"destination": {"server": "https://proxy.example.test/clusters/prod", "namespace": "trivy-system"}}
+		}`),
+		mustArgoApplication(t, `{
+			"metadata": {"name": "user-owned-app"},
+			"spec": {"destination": {"server": "https://proxy.example.test/clusters/deleted", "namespace": "default"}}
+		}`),
+		mustArgoApplication(t, `{
+			"metadata": {
+				"name": "user-appset-owned-app",
+				"ownerReferences": [{"apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet", "name": "customer-appset"}]
+			},
+			"spec": {"destination": {"server": "https://proxy.example.test/clusters/deleted", "namespace": "default"}}
+		}`),
+	}, []sqlc.ArgocdManagedCluster{
+		{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         managedClusterID,
+			ClusterSecretName: "prod",
+			ServerUrl:         "https://proxy.example.test/clusters/prod",
+			Labels:            mustJSON(t, map[string]string{"astronomer.io/cluster-name": "prod", "astronomer.io/cluster-id": managedClusterID.String()}),
+		},
+	})
+
+	if report.CachedApplicationCount != 0 || report.LiveApplicationCount != 5 || report.ApplicationCount != 5 {
+		t.Fatalf("counts = cache:%d live:%d total:%d, want 0/5/5", report.CachedApplicationCount, report.LiveApplicationCount, report.ApplicationCount)
+	}
+	if report.OrphanApplicationCount != 2 {
+		t.Fatalf("orphan count = %d, want 2 (%+v)", report.OrphanApplicationCount, report.OrphanApplications)
+	}
+	if report.OrphanApplications[0].Name != "astronomer-externally-managed" || report.OrphanApplications[0].Reason != argoCDOrphanReasonLiveStaleDestination {
+		t.Fatalf("first orphan = %+v, want live stale destination", report.OrphanApplications[0])
+	}
+	if report.OrphanApplications[0].Source != argoCDOrphanSourceLive {
+		t.Fatalf("first orphan source = %q, want live", report.OrphanApplications[0].Source)
+	}
+	if report.OrphanApplications[1].Name != "astronomer-trivy-prod" || report.OrphanApplications[1].Reason != argoCDOrphanReasonStaleApplicationSetOwner {
+		t.Fatalf("second orphan = %+v, want stale ApplicationSet metadata", report.OrphanApplications[1])
+	}
+	if report.OrphanApplications[1].ApplicationSetName != "astronomer-baseline-trivy" {
+		t.Fatalf("second orphan appset = %q, want astronomer-baseline-trivy", report.OrphanApplications[1].ApplicationSetName)
 	}
 }
 
@@ -377,6 +528,15 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatalf("marshal: %v", err)
 	}
 	return raw
+}
+
+func mustArgoApplication(t *testing.T, raw string) argocdclient.Application {
+	t.Helper()
+	var app argocdclient.Application
+	if err := json.Unmarshal([]byte(raw), &app); err != nil {
+		t.Fatalf("unmarshal Argo application fixture: %v", err)
+	}
+	return app
 }
 
 func contains(s, sub string) bool {

@@ -110,10 +110,10 @@ DELETE FROM cluster_conditions WHERE cluster_id = $1;
 DELETE FROM agent_connections WHERE cluster_id = $1;
 
 -- name: DeleteAlertRulesByCluster :execrows
-DELETE FROM alert_rules WHERE cluster_id = $1;
+DELETE FROM alert_rules WHERE cluster_id = sqlc.arg(cluster_id)::uuid;
 
 -- name: DeleteAlertSilencesByCluster :execrows
-DELETE FROM alert_silences WHERE cluster_id = $1;
+DELETE FROM alert_silences WHERE cluster_id = sqlc.arg(cluster_id)::uuid;
 
 -- name: DeleteInstalledChartsByCluster :execrows
 DELETE FROM installed_charts WHERE cluster_id = $1;

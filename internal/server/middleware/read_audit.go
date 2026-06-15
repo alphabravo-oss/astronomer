@@ -40,10 +40,10 @@ import (
 // policy), but the explicit skip shaves cycles and protects against
 // an operator mistakenly adding a wildcard policy.
 var readAuditSkipPaths = map[string]bool{
-	"/healthz":            true,
-	"/readyz":             true,
-	"/metrics":            true,
-	"/api/v1/version/":    true,
+	"/healthz":         true,
+	"/readyz":          true,
+	"/metrics":         true,
+	"/api/v1/version/": true,
 }
 
 // PolicyLister is the narrow DB surface the evaluator needs.
@@ -408,7 +408,7 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 	return sqlc.CreateAuditLogV1Params{
 		Source:          "http",
 		CorrelationID:   GetCorrelationID(r.Context()),
-		UserID:          currentUserUUID(r.Context()),
+		UserID:          AuthenticatedUserUUID(r.Context()),
 		ActorAuthMethod: authMethod(r.Context()),
 		Action:          action,
 		ResourceType:    "",
@@ -419,10 +419,9 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 		StatusCode:      int32(status),
 		DurationMs:      0,
 		RequestID:       GetRequestID(r.Context()),
-		IpAddress:       remoteIPAddr(r),
+		IpAddress:       RemoteIPAddr(r),
 		UserAgent:       r.UserAgent(),
 		Detail:          js,
 		ActionClass:     "read",
 	}
 }
-

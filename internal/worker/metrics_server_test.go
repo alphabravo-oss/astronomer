@@ -44,7 +44,7 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	addr := ln.Addr().String()
-	ln.Close()
+	_ = ln.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -59,7 +59,7 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 		resp, err := http.Get("http://" + addr)
 		if err == nil {
 			body, readErr := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if readErr != nil {
 				t.Fatalf("read metrics body: %v", readErr)
 			}

@@ -105,9 +105,6 @@ func TestMigration_FleetOperations_DownContent(t *testing.T) {
 		t.Fatalf("missing one of the expected DROP statements")
 	}
 	if posOps < posTargets {
-		// Defensive — current file has targets-before-operations.
-		// (If anyone flips that order, the FK CASCADE makes it
-		// work anyway, but the explicit ordering is the contract.)
-		// We use <= to allow them on the same line.
+		t.Fatalf("down migration drops operations before targets")
 	}
 }

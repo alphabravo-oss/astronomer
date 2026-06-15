@@ -2,24 +2,11 @@ package sqlc
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type ArgocdBaselineOwnershipDecision struct {
-	ID            uuid.UUID          `json:"id"`
-	ClusterID     uuid.UUID          `json:"cluster_id"`
-	ComponentSlug string             `json:"component_slug"`
-	Decision      string             `json:"decision"`
-	Reason        string             `json:"reason"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	DecidedByID   pgtype.UUID        `json:"decided_by_id"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
-}
 
 type UpsertArgoCDBaselineOwnershipDecisionParams struct {
 	ClusterID     uuid.UUID          `json:"cluster_id"`

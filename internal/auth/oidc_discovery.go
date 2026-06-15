@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // defaultDiscoveryTTL controls how long a fetched OIDC discovery document is
@@ -30,6 +32,8 @@ const defaultDiscoveryTTL = 10 * time.Minute
 // discovery TTL is deliberate: most IdPs rotate keys far more frequently than
 // they change endpoints. On signature failure we always re-fetch.
 const defaultJWKSTTL = 5 * time.Minute
+
+const defaultOIDCHTTPTimeout = 10 * time.Second
 
 // OIDCDiscovery is a subset of the OpenID Connect discovery document, covering
 // only the fields astronomer-go consumes today.
@@ -82,11 +86,9 @@ type jwksEntry struct {
 }
 
 // NewOIDCDiscoveryClient builds a client with sensible defaults. Pass nil to
-// httpClient to use http.DefaultClient.
+// httpClient to use a bounded external-call client.
 func NewOIDCDiscoveryClient(httpClient *http.Client) *OIDCDiscoveryClient {
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient = httpclient.WithDefault(httpClient, defaultOIDCHTTPTimeout)
 	return &OIDCDiscoveryClient{
 		httpClient:   httpClient,
 		discoveryTTL: defaultDiscoveryTTL,
@@ -126,7 +128,9 @@ func (c *OIDCDiscoveryClient) FetchDiscovery(ctx context.Context, issuer string)
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery: fetch %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB cap
 	if err != nil {
@@ -195,7 +199,9 @@ func (c *OIDCDiscoveryClient) fetchJWKS(ctx context.Context, jwksURI string) (ma
 	if err != nil {
 		return nil, fmt.Errorf("jwks: fetch %s: %w", jwksURI, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {

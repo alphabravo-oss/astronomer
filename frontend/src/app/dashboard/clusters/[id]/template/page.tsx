@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -26,8 +26,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useCluster } from '@/lib/hooks';
-import { useAuthStore } from '@/lib/store';
+import { queryKeys, useCluster } from '@/lib/hooks';
+import { usePermissionDecision } from '@/lib/permission-hooks';
 import {
   bindClusterTemplate,
   detachClusterTemplate,
@@ -48,17 +48,10 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react').then((m) => m.
   ),
 });
 
-function useClustersWrite(): { canWrite: boolean; reason: string } {
-  const user = useAuthStore((s) => s.user);
-  const roles = user?.globalRoles ?? [];
-  const canWrite = roles.some((r) => /admin|write|owner|platform/i.test(r));
-  return { canWrite, reason: canWrite ? '' : 'requires clusters:write' };
+function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
+  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
+  return { canWrite: decision.allowed, reason: decision.disabledReason ?? '' };
 }
-
-const qk = {
-  templates: ['cluster-templates'] as const,
-  binding: (id: string) => ['clusters', id, 'template'] as const,
-};
 
 function fmt(iso?: string) {
   if (!iso) return '—';
@@ -69,7 +62,7 @@ function fmt(iso?: string) {
   }
 }
 
-function StatusBadge({ status }: { status: ClusterTemplateStatus }) {
+function TemplateStatusBadge({ status }: { status: ClusterTemplateStatus }) {
   const cfg = (() => {
     switch (status) {
       case 'applied':
@@ -119,19 +112,19 @@ export default function ClusterTemplatePage() {
   const params = useParams();
   const clusterId = params.id as string;
   const queryClient = useQueryClient();
-  const { canWrite, reason } = useClustersWrite();
+  const { canWrite, reason } = useClustersUpdate(clusterId);
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
 
   const { data: templatesPage, isLoading: tplsLoading } = useQuery({
-    queryKey: qk.templates,
+    queryKey: queryKeys.clusterPages.templates,
     queryFn: () => listClusterTemplates({ pageSize: 200 }),
     staleTime: 60_000,
   });
   const templates = templatesPage?.data;
 
   const { data: binding, isLoading: bindingLoading } = useQuery({
-    queryKey: qk.binding(clusterId),
+    queryKey: queryKeys.clusterPages.templateBinding(clusterId),
     queryFn: () => getClusterTemplateBinding(clusterId),
     enabled: !!clusterId,
     refetchInterval: (q) => {
@@ -149,28 +142,28 @@ export default function ClusterTemplatePage() {
   const bindMutation = useMutation({
     mutationFn: (templateId: string) => bindClusterTemplate(clusterId, { template_id: templateId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.binding(clusterId) });
-      toast.success('Template applied');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.templateBinding(clusterId) });
+      toastSuccess('Template applied');
     },
-    onError: (e: Error) => toast.error(`Apply failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Apply failed', e),
   });
   const reapplyMutation = useMutation({
     mutationFn: () => reapplyClusterTemplate(clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.binding(clusterId) });
-      toast.success('Reapply queued');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.templateBinding(clusterId) });
+      toastSuccess('Reapply queued');
       setConfirmReapply(false);
     },
-    onError: (e: Error) => toast.error(`Reapply failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Reapply failed', e),
   });
   const detachMutation = useMutation({
     mutationFn: () => detachClusterTemplate(clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.binding(clusterId) });
-      toast.success('Template detached');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.templateBinding(clusterId) });
+      toastSuccess('Template detached');
       setConfirmDetach(false);
     },
-    onError: (e: Error) => toast.error(`Detach failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Detach failed', e),
   });
 
   const specJson = useMemo(() => {
@@ -260,7 +253,7 @@ export default function ClusterTemplatePage() {
                   <h2 className="text-lg font-semibold text-foreground truncate">
                     {binding.templateDisplayName || binding.templateName}
                   </h2>
-                  <StatusBadge status={binding.status} />
+                  <TemplateStatusBadge status={binding.status} />
                 </div>
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
                   <div className="flex gap-2">

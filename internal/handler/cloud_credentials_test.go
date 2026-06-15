@@ -328,7 +328,7 @@ func TestCloudCreds_CRUD_AWS(t *testing.T) {
 	h, q, enq, pid, _ := newTestHandler(t)
 
 	// CREATE
-	body := fmt.Sprintf(`{
+	body := `{
 		"name": "prod-aws",
 		"provider": "aws",
 		"description": "production AWS credentials",
@@ -337,7 +337,7 @@ func TestCloudCreds_CRUD_AWS(t *testing.T) {
 			"secret_access_key": "shhh",
 			"region": "us-east-1"
 		}
-	}`)
+	}`
 	resp := callRoute(t, http.HandlerFunc(h.Create), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/", pid), body)
 	if resp.StatusCode != http.StatusCreated {
 		dumpResponse(t, resp)

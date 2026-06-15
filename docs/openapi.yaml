@@ -71,9 +71,9 @@ components:
 
     LoginRequest:
       type: object
-      required: [username, password]
+      required: [email, password]
       properties:
-        username: { type: string }
+        email: { type: string, format: email }
         password: { type: string, format: password }
 
     LoginResponse:
@@ -133,7 +133,7 @@ components:
         decommissioned_at: { type: string, format: date-time, nullable: true }
         agent_privilege_profile:
           type: string
-          enum: [viewer, operator, admin]
+          enum: [viewer, operator, namespace-viewer, namespace-operator, custom, admin]
         cpu_percentage: { type: number }
         memory_percentage: { type: number }
         pod_count: { type: integer }
@@ -148,6 +148,22 @@ components:
             baseline_managed_by:
               type: string
               enum: [argocd, argocd_pending, helm, local, unknown]
+            drift:
+              type: object
+              properties:
+                app_count: { type: integer }
+                synced_count: { type: integer }
+                out_of_sync_count: { type: integer }
+                unknown_sync_count: { type: integer }
+                healthy_count: { type: integer }
+                progressing_count: { type: integer }
+                degraded_count: { type: integer }
+                unknown_health_count: { type: integer }
+                resource_created_count: { type: integer }
+                resource_changed_count: { type: integer }
+                resource_pruned_count: { type: integer }
+                last_synced: { type: string, format: date-time, nullable: true }
+                last_error: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -193,6 +209,43 @@ components:
         error_message: { type: string }
         step_order: { type: integer }
         created_at: { type: string, format: date-time }
+
+    ArgoOrphanApplication:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        component_slug: { type: string }
+        application_set_name: { type: string }
+        destination_cluster: { type: string }
+        destination_namespace: { type: string }
+        reason:
+          type: string
+          enum:
+            - missing_destination
+            - stale_destination_cluster
+            - live_missing_destination
+            - live_stale_destination_cluster
+            - stale_applicationset_metadata
+        source:
+          type: string
+          enum: [cache, live]
+        message: { type: string }
+
+    ArgoOrphanReport:
+      type: object
+      properties:
+        instance_id: { type: string, format: uuid }
+        application_count: { type: integer }
+        cached_application_count: { type: integer }
+        live_application_count: { type: integer }
+        managed_target_count: { type: integer }
+        orphan_application_count: { type: integer }
+        orphan_applications:
+          type: array
+          items: { $ref: "#/components/schemas/ArgoOrphanApplication" }
+        live_error: { type: string }
+        generated_at: { type: string, format: date-time }
 
     SetOptionsRequest:
       type: object
@@ -366,6 +419,20 @@ components:
           type: array
           items: { type: object, additionalProperties: true }
 
+    AgentOfflineBehavior:
+      type: object
+      properties:
+        state: { type: string }
+        last_known_at: { type: string, format: date-time, nullable: true }
+        stale: { type: boolean }
+        message: { type: string }
+        permitted_queued_operations:
+          type: array
+          items: { type: string }
+        blocked_operations:
+          type: array
+          items: { type: string }
+
     AgentFleetItem:
       type: object
       properties:
@@ -388,12 +455,15 @@ components:
         pod_name: { type: string }
         node_name: { type: string }
         channel_name: { type: string }
-        privilege_profile: { type: string, enum: [viewer, operator, admin] }
+        privilege_profile: { type: string, enum: [viewer, operator, namespace-viewer, namespace-operator, custom, admin] }
         capabilities: { type: object, additionalProperties: { type: boolean } }
+        compatibility_status: { type: string, enum: [supported, deprecated, blocked, unknown] }
+        compatibility_message: { type: string }
         degraded_reasons:
           type: array
           items: { type: string }
         recommended_action: { type: string }
+        offline_behavior: { $ref: "#/components/schemas/AgentOfflineBehavior" }
 
     AgentFleetResponse:
       type: object
@@ -408,6 +478,10 @@ components:
             versions: { type: object, additionalProperties: { type: integer } }
             profiles: { type: object, additionalProperties: { type: integer } }
             statuses: { type: object, additionalProperties: { type: integer } }
+            compatibility: { type: object, additionalProperties: { type: integer } }
+            server_version: { type: string }
+            minimum_supported_agent_version: { type: string }
+            minimum_compatible_agent_version: { type: string }
             generated_at: { type: string, format: date-time }
         items:
           type: array
@@ -426,6 +500,18 @@ components:
         conditions:
           type: array
           items: { type: object, additionalProperties: true }
+        argocd:
+          type: object
+          properties:
+            registered: { type: boolean }
+            instance_count: { type: integer }
+            cluster_secret_names:
+              type: array
+              items: { type: string }
+            server_urls:
+              type: array
+              items: { type: string }
+            last_updated_at: { type: string, format: date-time, nullable: true }
         live:
           type: object
           additionalProperties: true
@@ -438,6 +524,25 @@ components:
         upgrade_recommendation:
           type: object
           additionalProperties: true
+
+    AgentSelfTest:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        cluster_id: { type: string, format: uuid }
+        cluster_name: { type: string }
+        status: { type: string, enum: [passed, warning, failed] }
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              status: { type: string, enum: [passed, warning, failed] }
+              message: { type: string }
+        recommendations:
+          type: array
+          items: { type: string }
 
     AgentDiagnosticsBundle:
       type: object
@@ -457,6 +562,12 @@ components:
         target_version: { type: string }
         target_image: { type: string }
         strategy: { type: string, default: agent_self_rollout }
+        canary_cluster_ids:
+          type: array
+          items: { type: string }
+        batch_size: { type: integer, default: 1, minimum: 1 }
+        max_unavailable: { type: integer, default: 1, minimum: 1 }
+        rollback_image: { type: string }
 
     AgentUpgradePlan:
       type: object
@@ -467,13 +578,25 @@ components:
         target_version: { type: string }
         current_image: { type: string }
         target_image: { type: string }
+        rollback_image: { type: string }
         privilege_profile: { type: string }
         strategy: { type: string, default: agent_self_rollout }
+        canary_cluster_ids:
+          type: array
+          items: { type: string }
+        batch_size: { type: integer }
+        max_unavailable: { type: integer }
         ready: { type: boolean }
         blockers:
           type: array
           items: { type: string }
+        preflight_checks:
+          type: array
+          items: { type: string }
         steps:
+          type: array
+          items: { type: string }
+        post_upgrade_health_checks:
           type: array
           items: { type: string }
         validation:
@@ -662,7 +785,7 @@ paths:
   /api/v1/auth/login/:
     post:
       tags: [Auth]
-      summary: Username/password login
+      summary: Email/password login
       description: |
         Returns a JWT access token + refresh token. Rate-limited at
         5/minute per source IP. If TOTP is required for the account
@@ -999,6 +1122,24 @@ paths:
                 properties:
                   data: { $ref: "#/components/schemas/AgentLifecycleOperationsResponse" }
 
+  /api/v1/agents/fleet/{cluster_id}/self-test/:
+    parameters:
+      - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Agents]
+      summary: Run an agent self-test
+      responses:
+        "200":
+          description: Deterministic pass/warn/fail checks from inventory and live diagnostics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AgentSelfTest" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/agents/fleet/{cluster_id}/upgrade-plan/:
     parameters:
       - { name: cluster_id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1097,6 +1238,28 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /api/v1/argocd/instances/{id}/orphan-report/:
+    get:
+      tags: [ArgoCD]
+      summary: Report cached Astronomer baseline Applications with stale ArgoCD targets
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 1000 }
+      responses:
+        "200":
+          description: Orphaned baseline Application report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ArgoOrphanReport" }
+
   # -- Alerting ----------------------------------------------------------
 
   /api/v1/alerting/events/:
@@ -1143,7 +1306,8 @@ paths:
         cluster template (typically Platform baseline) if one is
         configured — the apply worker installs trivy-operator,
         kube-state-metrics, prometheus-node-exporter, fluent-bit,
-        cert-manager via helm through the tunnel. Returns the cluster
+        ingress-nginx, cert-manager, and gatekeeper via helm/Argo baseline
+        management. Returns the cluster
         with `registration_phase=created` so the wizard can drive the
         next step.
       requestBody:

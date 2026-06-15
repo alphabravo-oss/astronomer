@@ -1,14 +1,18 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useNodeDetail } from '@/lib/hooks';
 import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ActionButton } from '@/components/ui/action-button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { k8sResourcePath } from '@/lib/k8s-paths';
+import { usePermissionDecision } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { NodePod, NodeEvent, NodeTaint, NodeImage, NodeDetailCondition } from '@/types';
 import {
@@ -28,7 +32,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 
 // ── Tabs ──
 
@@ -296,48 +300,65 @@ export default function NodeDetailPage() {
   const [showAddAnnotation, setShowAddAnnotation] = useState(false);
   const [newAnnotation, setNewAnnotation] = useState({ key: '', value: '' });
   const [nodeActionPending, setNodeActionPending] = useState(false);
+  const nodeScope = { type: 'cluster' as const, id: clusterId };
+  const nodeUpdateDecision = usePermissionDecision('nodes', 'update', nodeScope);
+  const nodeManageDecision = usePermissionDecision('nodes', 'manage', nodeScope);
+  const nodeUpdateBlockedReason = nodeUpdateDecision.allowed ? undefined : nodeUpdateDecision.disabledReason;
+  const nodeManageBlockedReason = nodeManageDecision.allowed ? undefined : nodeManageDecision.disabledReason;
 
   const handleCordon = async () => {
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.cordonNode(clusterId, nodeName);
       refetch();
-      toast.success('Node cordoned');
+      toastSuccess('Node cordoned');
     } catch (error) {
-      toast.error(`Failed to cordon node: ${(error as Error).message}`);
+      toastApiError('Failed to cordon node', error);
     } finally {
       setNodeActionPending(false);
     }
   };
 
   const handleUncordon = async () => {
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.uncordonNode(clusterId, nodeName);
       refetch();
-      toast.success('Node uncordoned');
+      toastSuccess('Node uncordoned');
     } catch (error) {
-      toast.error(`Failed to uncordon node: ${(error as Error).message}`);
+      toastApiError('Failed to uncordon node', error);
     } finally {
       setNodeActionPending(false);
     }
   };
 
   const handleDrain = async () => {
+    if (!nodeManageDecision.allowed) {
+      toastWarning(nodeManageDecision.disabledReason || 'Requires nodes:manage');
+      return;
+    }
     setNodeActionPending(true);
     try {
       const result = await apiClient.drainNode(clusterId, nodeName);
       if (result.status === 'blocked') {
-        toast.warning(result.message || `Drain blocked for ${nodeName}`);
+        toastWarning(result.message || `Drain blocked for ${nodeName}`);
       } else if (result.status === 'partial') {
-        toast.warning(result.message || `Node ${nodeName} partially drained`);
+        toastWarning(result.message || `Node ${nodeName} partially drained`);
       } else {
-        toast.success(result.message || `Node ${nodeName} drained`);
+        toastSuccess(result.message || `Node ${nodeName} drained`);
       }
       setShowDrain(false);
       refetch();
     } catch (error) {
-      toast.error(`Failed to drain: ${(error as Error).message}`);
+      toastApiError('Failed to drain', error);
     } finally {
       setNodeActionPending(false);
     }
@@ -345,28 +366,36 @@ export default function NodeDetailPage() {
 
   const handleAddTaint = async () => {
     if (!newTaint.key) return;
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.addNodeTaint(clusterId, nodeName, newTaint);
       refetch();
       setShowAddTaint(false);
       setNewTaint({ key: '', value: '', effect: 'NoSchedule' });
-      toast.success('Taint added');
+      toastSuccess('Taint added');
     } catch (error) {
-      toast.error(`Failed to add taint: ${(error as Error).message}`);
+      toastApiError('Failed to add taint', error);
     } finally {
       setNodeActionPending(false);
     }
   };
 
   const handleRemoveTaint = async (taint: NodeTaint) => {
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.removeNodeTaint(clusterId, nodeName, { key: taint.key, effect: taint.effect });
       refetch();
-      toast.success('Taint removed');
+      toastSuccess('Taint removed');
     } catch (error) {
-      toast.error(`Failed to remove taint: ${(error as Error).message}`);
+      toastApiError('Failed to remove taint', error);
     } finally {
       setNodeActionPending(false);
     }
@@ -374,28 +403,36 @@ export default function NodeDetailPage() {
 
   const handleAddLabel = async () => {
     if (!newLabel.key) return;
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.setNodeLabel(clusterId, nodeName, newLabel);
       refetch();
       setShowAddLabel(false);
       setNewLabel({ key: '', value: '' });
-      toast.success('Label added');
+      toastSuccess('Label added');
     } catch (error) {
-      toast.error(`Failed to add label: ${(error as Error).message}`);
+      toastApiError('Failed to add label', error);
     } finally {
       setNodeActionPending(false);
     }
   };
 
   const handleRemoveLabel = async (key: string) => {
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.removeNodeLabel(clusterId, nodeName, { key });
       refetch();
-      toast.success('Label removed');
+      toastSuccess('Label removed');
     } catch (error) {
-      toast.error(`Failed to remove label: ${(error as Error).message}`);
+      toastApiError('Failed to remove label', error);
     } finally {
       setNodeActionPending(false);
     }
@@ -403,28 +440,36 @@ export default function NodeDetailPage() {
 
   const handleAddAnnotation = async () => {
     if (!newAnnotation.key) return;
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.setNodeAnnotation(clusterId, nodeName, newAnnotation);
       refetch();
       setShowAddAnnotation(false);
       setNewAnnotation({ key: '', value: '' });
-      toast.success('Annotation added');
+      toastSuccess('Annotation added');
     } catch (error) {
-      toast.error(`Failed to add annotation: ${(error as Error).message}`);
+      toastApiError('Failed to add annotation', error);
     } finally {
       setNodeActionPending(false);
     }
   };
 
   const handleRemoveAnnotation = async (key: string) => {
+    if (!nodeUpdateDecision.allowed) {
+      toastWarning(nodeUpdateDecision.disabledReason || 'Requires nodes:update');
+      return;
+    }
     setNodeActionPending(true);
     try {
       await apiClient.removeNodeAnnotation(clusterId, nodeName, { key });
       refetch();
-      toast.success('Annotation removed');
+      toastSuccess('Annotation removed');
     } catch (error) {
-      toast.error(`Failed to remove annotation: ${(error as Error).message}`);
+      toastApiError('Failed to remove annotation', error);
     } finally {
       setNodeActionPending(false);
     }
@@ -491,32 +536,38 @@ export default function NodeDetailPage() {
             <Code className="h-3.5 w-3.5" /> YAML
           </button>
           {node.unschedulable ? (
-            <button
+            <ActionButton
               onClick={handleUncordon}
-              disabled={nodeActionPending}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-                border border-status-success/30 text-status-success hover:bg-status-success/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+              disabledReason={nodeUpdateBlockedReason}
+              size="sm"
+              icon={<ShieldCheck className="h-3.5 w-3.5" />}
+              className="border-status-success/30 text-status-success hover:bg-status-success/10"
             >
-              <ShieldCheck className="h-3.5 w-3.5" /> Uncordon
-            </button>
+              Uncordon
+            </ActionButton>
           ) : (
-            <button
+            <ActionButton
               onClick={handleCordon}
-              disabled={nodeActionPending}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-                border border-status-warning/30 text-status-warning hover:bg-status-warning/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+              disabledReason={nodeUpdateBlockedReason}
+              size="sm"
+              icon={<ShieldBan className="h-3.5 w-3.5" />}
+              className="border-status-warning/30 text-status-warning hover:bg-status-warning/10"
             >
-              <ShieldBan className="h-3.5 w-3.5" /> Cordon
-            </button>
+              Cordon
+            </ActionButton>
           )}
-          <button
+          <ActionButton
             onClick={() => setShowDrain(true)}
-            disabled={nodeActionPending}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-              border border-status-error/30 text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={nodeActionPending || !nodeManageDecision.allowed}
+            disabledReason={nodeManageBlockedReason}
+            size="sm"
+            icon={<Unplug className="h-3.5 w-3.5" />}
+            className="border-status-error/30 text-status-error hover:bg-status-error/10"
           >
-            <Unplug className="h-3.5 w-3.5" /> Drain
-          </button>
+            Drain
+          </ActionButton>
         </div>
       </div>
 
@@ -592,7 +643,8 @@ export default function NodeDetailPage() {
               </div>
               <button
                 onClick={() => setShowAddLabel(true)}
-                disabled={nodeActionPending}
+                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                title={nodeUpdateBlockedReason}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
                   text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -605,7 +657,8 @@ export default function NodeDetailPage() {
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
                   <button
-                    disabled={nodeActionPending}
+                    disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                    title={nodeUpdateBlockedReason}
                     onClick={() => handleRemoveLabel(k)}
                     className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
                   >
@@ -626,7 +679,8 @@ export default function NodeDetailPage() {
               </div>
               <button
                 onClick={() => setShowAddAnnotation(true)}
-                disabled={nodeActionPending}
+                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                title={nodeUpdateBlockedReason}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
                   text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -639,7 +693,8 @@ export default function NodeDetailPage() {
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
                   <button
-                    disabled={nodeActionPending}
+                    disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                    title={nodeUpdateBlockedReason}
                     onClick={() => handleRemoveAnnotation(k)}
                     className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
                   >
@@ -673,8 +728,8 @@ export default function NodeDetailPage() {
 
       {activeTab === 'info' && (
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <table className="w-full">
-            <tbody className="divide-y divide-border">
+          <Table className="w-full">
+            <TableBody className="divide-y divide-border">
               {[
                 ['Machine ID', node.nodeInfo.machineId],
                 ['System UUID', node.nodeInfo.systemUuid],
@@ -687,13 +742,13 @@ export default function NodeDetailPage() {
                 ['Operating System', node.nodeInfo.operatingSystem],
                 ['Architecture', node.nodeInfo.architecture],
               ].map(([label, value]) => (
-                <tr key={label}>
-                  <td className="px-4 py-2.5 text-xs font-medium text-muted-foreground w-48">{label}</td>
-                  <td className="px-4 py-2.5 text-xs text-foreground font-mono">{value || '-'}</td>
-                </tr>
+                <TableRow key={label}>
+                  <TableCell className="px-4 py-2.5 text-xs font-medium text-muted-foreground w-48">{label}</TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs text-foreground font-mono">{value || '-'}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -702,7 +757,8 @@ export default function NodeDetailPage() {
           <div className="flex justify-end">
             <button
               onClick={() => setShowAddTaint(true)}
-              disabled={nodeActionPending}
+              disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+              title={nodeUpdateBlockedReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
                 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -719,7 +775,8 @@ export default function NodeDetailPage() {
                 accessor: (row) => (
                   <button
                     onClick={() => handleRemoveTaint(row)}
-                    disabled={nodeActionPending}
+                    disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                    title={nodeUpdateBlockedReason}
                     className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -762,7 +819,7 @@ export default function NodeDetailPage() {
         clusterId={clusterId}
         k8sPath={k8sResourcePath('nodes', nodeName)}
         title={`Node: ${nodeName}`}
-        allowEdit
+        allowEdit={nodeUpdateDecision.allowed}
       />
 
       {/* Drain Confirm Dialog */}
@@ -780,8 +837,7 @@ export default function NodeDetailPage() {
 
       {/* Add Taint Dialog */}
       {showAddTaint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddTaint(false)} />
+        <OverlayShell onClose={() => setShowAddTaint(false)}>
           <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
             <h3 className="text-base font-semibold text-foreground mb-4">Add Taint</h3>
             <div className="space-y-3">
@@ -812,20 +868,20 @@ export default function NodeDetailPage() {
                 className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                 Cancel
               </button>
-              <button onClick={handleAddTaint} disabled={!newTaint.key || nodeActionPending}
+              <button onClick={handleAddTaint} disabled={!newTaint.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                title={nodeUpdateBlockedReason}
                 className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 Add Taint
               </button>
             </div>
           </div>
-        </div>
+        </OverlayShell>
       )}
 
       {/* Add Label Dialog */}
       {showAddLabel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddLabel(false)} />
+        <OverlayShell onClose={() => setShowAddLabel(false)}>
           <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
             <h3 className="text-base font-semibold text-foreground mb-4">Add Label</h3>
             <div className="space-y-3">
@@ -847,20 +903,20 @@ export default function NodeDetailPage() {
                 className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                 Cancel
               </button>
-              <button onClick={handleAddLabel} disabled={!newLabel.key || nodeActionPending}
+              <button onClick={handleAddLabel} disabled={!newLabel.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                title={nodeUpdateBlockedReason}
                 className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 Add Label
               </button>
             </div>
           </div>
-        </div>
+        </OverlayShell>
       )}
 
       {/* Add Annotation Dialog */}
       {showAddAnnotation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAddAnnotation(false)} />
+        <OverlayShell onClose={() => setShowAddAnnotation(false)}>
           <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4 animate-fade-in p-6">
             <h3 className="text-base font-semibold text-foreground mb-4">Add Annotation</h3>
             <div className="space-y-3">
@@ -882,14 +938,15 @@ export default function NodeDetailPage() {
                 className="h-8 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                 Cancel
               </button>
-              <button onClick={handleAddAnnotation} disabled={!newAnnotation.key || nodeActionPending}
+              <button onClick={handleAddAnnotation} disabled={!newAnnotation.key || nodeActionPending || !nodeUpdateDecision.allowed}
+                title={nodeUpdateBlockedReason}
                 className="h-8 px-4 rounded text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90
                   disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 Add Annotation
               </button>
             </div>
           </div>
-        </div>
+        </OverlayShell>
       )}
     </div>
   );

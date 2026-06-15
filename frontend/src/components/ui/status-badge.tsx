@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { cn, statusBgColor, statusDotColor } from '@/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
@@ -22,6 +23,7 @@ const statusBadgeVariants = cva(
 interface StatusBadgeProps extends VariantProps<typeof statusBadgeVariants> {
   status: string;
   label?: string;
+  icon?: ReactNode;
   showDot?: boolean;
   pulse?: boolean;
   className?: string;
@@ -30,6 +32,7 @@ interface StatusBadgeProps extends VariantProps<typeof statusBadgeVariants> {
 export function StatusBadge({
   status,
   label,
+  icon,
   showDot = true,
   pulse = false,
   size,
@@ -42,7 +45,8 @@ export function StatusBadge({
 
   return (
     <span className={cn(statusBadgeVariants({ size }), statusBgColor(status), className)}>
-      {showDot && (
+      {icon ? <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">{icon}</span> : null}
+      {!icon && showDot && (
         <span className="relative flex h-1.5 w-1.5">
           {(pulse || isActive) && (
             <span

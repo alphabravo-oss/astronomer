@@ -42,6 +42,7 @@ type fakeDexQuerier struct {
 	ssoByProv  map[string]sqlc.SsoConfiguration
 	createErr  error
 	upsertErr  error
+	auditRows  []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeDexQuerier() *fakeDexQuerier {
@@ -212,6 +213,29 @@ func (f *fakeDexQuerier) UpdateSSOConfiguration(_ context.Context, arg sqlc.Upda
 		}
 	}
 	return sqlc.SsoConfiguration{}, errors.New("not found")
+}
+
+func (f *fakeDexQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.auditRows = append(f.auditRows, arg)
+	return nil
+}
+
+func (f *fakeDexQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
+	t.Helper()
+	if len(f.auditRows) <= idx {
+		t.Fatalf("audit rows=%d, want index %d", len(f.auditRows), idx)
+	}
+	return f.auditRows[idx]
+}
+
+func assertDexAudit(t *testing.T, row sqlc.CreateAuditLogV1Params, action, resourceType string) {
+	t.Helper()
+	if row.Action != action {
+		t.Fatalf("audit action=%q want %q; row=%+v", row.Action, action, row)
+	}
+	if row.ResourceType != resourceType {
+		t.Fatalf("audit resource_type=%q want %q; row=%+v", row.ResourceType, resourceType, row)
+	}
 }
 
 // ----- 1. validateConnectorConfig --------------------------------------
@@ -479,7 +503,9 @@ func proxyToHTTPTest(srv *httptest.Server) func(req stubReq) (*protocol.K8sRespo
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		respBody, _ := io.ReadAll(resp.Body)
 		return &protocol.K8sResponsePayload{
 			StatusCode: resp.StatusCode,
@@ -575,6 +601,10 @@ func TestApply_PatchesConfigMapOnLiveCluster(t *testing.T) {
 	if !bytes.Contains(seenBody, []byte("kubectl.kubernetes.io/restartedAt")) {
 		t.Errorf("restart patch missing restartedAt annotation: %s", seenBody)
 	}
+	auditRow := q.auditRowAt(t, 0)
+	assertDexAudit(t, auditRow, "dex.config.apply", "dex_settings")
+	assertAuditDetail(t, auditRow.Detail, "cluster_id", clusterID.String())
+	assertAuditDetail(t, auditRow.Detail, "namespace", "dex")
 }
 
 func TestApply_FallsBackToPostOnNotFound(t *testing.T) {
@@ -709,6 +739,14 @@ func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 	if pt, err := enc.Decrypt(storedSecret); err != nil || pt != "supersecret" {
 		t.Errorf("encrypted secret didn't round-trip: pt=%q err=%v", pt, err)
 	}
+	createAudit := q.auditRowAt(t, 0)
+	assertDexAudit(t, createAudit, "dex.connector.create", "dex_connector")
+	if createAudit.ResourceID != stored.ID.String() || createAudit.ResourceName != "azure-prod" {
+		t.Fatalf("connector create audit target=(%q,%q), want (%q,azure-prod)", createAudit.ResourceID, createAudit.ResourceName, stored.ID.String())
+	}
+	assertAuditDetail(t, createAudit.Detail, "type", "microsoft")
+	assertAuditDetailOmit(t, createAudit.Detail, "clientSecret")
+	assertAuditDetailOmit(t, createAudit.Detail, "client_secret")
 
 	// GET by ID — secret should be redacted.
 	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/dex/connectors/"+stored.ID.String()+"/", nil)
@@ -733,6 +771,65 @@ func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 	if gotCfg["__clientSecret_set"] != true {
 		t.Errorf("expected __clientSecret_set marker, got %v", gotCfg["__clientSecret_set"])
 	}
+}
+
+func TestDexConnectorUpdateAndDeleteAreAudited(t *testing.T) {
+	q := newFakeDexQuerier()
+	h := NewDexHandler(q)
+	connectorID := uuid.New()
+	cfg, _ := json.Marshal(map[string]any{
+		"tenant":       "t",
+		"clientID":     "id",
+		"clientSecret": "encrypted",
+	})
+	q.connectors[connectorID] = sqlc.DexConnector{
+		ID:          connectorID,
+		Name:        "azure-prod",
+		Type:        "microsoft",
+		DisplayName: "Azure AD",
+		Config:      cfg,
+		Enabled:     true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	raw, _ := json.Marshal(map[string]any{
+		"display_name": "Azure AD Prod",
+		"enabled":      false,
+	})
+	updateReq := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/dex/connectors/"+connectorID.String()+"/", bytes.NewReader(raw))
+	updateCtx := chi.NewRouteContext()
+	updateCtx.URLParams.Add("id", connectorID.String())
+	updateReq = updateReq.WithContext(context.WithValue(updateReq.Context(), chi.RouteCtxKey, updateCtx))
+	updateRec := httptest.NewRecorder()
+	h.UpdateConnector(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+	updateAudit := q.auditRowAt(t, 0)
+	assertDexAudit(t, updateAudit, "dex.connector.update", "dex_connector")
+	if updateAudit.ResourceID != connectorID.String() || updateAudit.ResourceName != "azure-prod" {
+		t.Fatalf("connector update audit target=(%q,%q), want (%q,azure-prod)", updateAudit.ResourceID, updateAudit.ResourceName, connectorID.String())
+	}
+	assertAuditDetail(t, updateAudit.Detail, "type", "microsoft")
+	assertAuditDetailOmit(t, updateAudit.Detail, "clientSecret")
+	assertAuditDetailOmit(t, updateAudit.Detail, "client_secret")
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/dex/connectors/"+connectorID.String()+"/", nil)
+	deleteCtx := chi.NewRouteContext()
+	deleteCtx.URLParams.Add("id", connectorID.String())
+	deleteReq = deleteReq.WithContext(context.WithValue(deleteReq.Context(), chi.RouteCtxKey, deleteCtx))
+	deleteRec := httptest.NewRecorder()
+	h.DeleteConnector(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", deleteRec.Code, deleteRec.Body.String())
+	}
+	deleteAudit := q.auditRowAt(t, 1)
+	assertDexAudit(t, deleteAudit, "dex.connector.delete", "dex_connector")
+	if deleteAudit.ResourceID != connectorID.String() || deleteAudit.ResourceName != "azure-prod" {
+		t.Fatalf("connector delete audit target=(%q,%q), want (%q,azure-prod)", deleteAudit.ResourceID, deleteAudit.ResourceName, connectorID.String())
+	}
+	assertAuditDetail(t, deleteAudit.Detail, "type", "microsoft")
 }
 
 func TestCreateConnector_400OnMissingRequired(t *testing.T) {
@@ -829,6 +926,14 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	if clients[0]["secret"] != "shared-secret" {
 		t.Fatalf("public client secret not synchronized")
 	}
+	auditRow := q.auditRowAt(t, 0)
+	assertDexAudit(t, auditRow, "dex.register_sso", "sso_configuration")
+	if auditRow.ResourceID != row.ID.String() || auditRow.ResourceName != "dex" {
+		t.Fatalf("register SSO audit target=(%q,%q), want (%q,dex)", auditRow.ResourceID, auditRow.ResourceName, row.ID.String())
+	}
+	assertAuditDetail(t, auditRow.Detail, "client_id", "astronomer")
+	assertAuditDetail(t, auditRow.Detail, "issuer_url", "https://dex.example.com")
+	assertAuditDetailOmit(t, auditRow.Detail, "client_secret")
 }
 
 func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
@@ -896,6 +1001,33 @@ func TestUpdateSettings_RejectsMissingIssuer(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "issuer_url") {
 		t.Errorf("expected error to mention issuer_url, got %s", w.Body.String())
 	}
+}
+
+func TestUpdateSettingsAuditsDexSettingsUpdate(t *testing.T) {
+	q := newFakeDexQuerier()
+	h := NewDexHandler(q)
+	clusterID := uuid.New()
+	body, _ := json.Marshal(map[string]any{
+		"issuer_url":     "https://dex.example.com/",
+		"cluster_id":     clusterID.String(),
+		"namespace":      "dex",
+		"release_name":   "dex",
+		"configmap_name": "astronomer-dex-config",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.UpdateSettings(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	auditRow := q.auditRowAt(t, 0)
+	assertDexAudit(t, auditRow, "dex.settings.update", "dex_settings")
+	if auditRow.ResourceID != dexSettingsSingletonID.String() || auditRow.ResourceName != "dex" {
+		t.Fatalf("settings audit target=(%q,%q), want (%q,dex)", auditRow.ResourceID, auditRow.ResourceName, dexSettingsSingletonID.String())
+	}
+	assertAuditDetail(t, auditRow.Detail, "issuer_url", "https://dex.example.com")
+	assertAuditDetail(t, auditRow.Detail, "namespace", "dex")
+	assertAuditDetail(t, auditRow.Detail, "configmap_name", "astronomer-dex-config")
 }
 
 // base64StdEncode mirrors what the agent does so the handler's

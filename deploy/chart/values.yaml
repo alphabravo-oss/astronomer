@@ -309,6 +309,19 @@ redis:
 # =============================================================================
 migrate:
   enabled: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   resources:
     requests:
       cpu: 50m
@@ -319,6 +332,19 @@ migrate:
 
 preflight:
   enabled: true
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   image:
     # astronomer-shell is built from deploy/docker/Dockerfile.shell —
     # alpine + kubectl pinned at v1.31.0, fetched from dl.k8s.io. It
@@ -457,7 +483,7 @@ secrets:
 # Bootstrap admin (Rancher-style)
 # =============================================================================
 # On a fresh install (empty users table) the server creates an "admin" user
-# and forces a password change on first login.
+# with a usable bootstrap password.
 #
 #  - bootstrap.password set to a non-empty string: server uses it as-is.
 #  - bootstrap.password empty (default): the chart generates a random value
@@ -468,7 +494,11 @@ secrets:
 # Retrieve the generated value:
 #   kubectl -n <ns> get secret <release>-bootstrap \
 #     -o jsonpath='{.data.password}' | base64 -d
+# The bootstrap admin is not forced through a first-login reset. Rotate the
+# password later through the profile/admin password-change flow if needed.
 bootstrap:
+  username: admin
+  email: admin@astronomer.local
   password: ""
 
 # =============================================================================
@@ -563,6 +593,10 @@ gateway:
 # =============================================================================
 networkPolicy:
   enabled: true
+  # Render a namespace-level default deny that selects every pod in the
+  # release namespace. Component policies below add back only the required
+  # frontend/server/worker/Dex/Postgres/Redis flows.
+  defaultDeny: true
   # Gateway/Ingress controllers often run outside the release namespace and
   # have no portable labels. Keep public listener ingress open by default, but
   # only on the frontend/server/Dex HTTP ports selected below.
@@ -571,9 +605,18 @@ networkPolicy:
   # on the dedicated metrics ports without opening application ports.
   allowMetricsIngress: true
   # External dependencies and the Kubernetes API cannot be selected by pod
-  # labels. Restrict them by destination CIDR + port here.
+  # labels. externalEgressCIDRs is the legacy dev-friendly bucket and opens
+  # HTTP(S), Postgres, Redis, and Kubernetes API ports to each CIDR. Production
+  # installs should clear it and use the narrower CIDR buckets below.
   externalEgressCIDRs:
     - 0.0.0.0/0
+  # Narrower external egress buckets. These compose with externalEgressCIDRs
+  # and are intended for production installs with known dependency networks.
+  externalHTTPSEgressCIDRs: []
+  externalPostgresEgressCIDRs: []
+  externalRedisEgressCIDRs: []
+  kubernetesAPIEgressCIDRs: []
+  identityProviderEgressCIDRs: []
 
 # =============================================================================
 # Metrics scraping
@@ -709,6 +752,19 @@ managementBackup:
     limits:
       cpu: 1000m
       memory: 1Gi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   nodeSelector: {}
   tolerations: []
 
@@ -782,6 +838,12 @@ managementRestoreDrill:
     # Throwaway password used between the two containers inside the
     # Job pod only. Never exposed and never persisted.
     password: "drill-throwaway"
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+          - ALL
     resources:
       requests:
         cpu: 100m
@@ -796,6 +858,19 @@ managementRestoreDrill:
     limits:
       cpu: 1000m
       memory: 1Gi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   nodeSelector: {}
   tolerations: []
 
@@ -909,11 +984,12 @@ managementLogging:
 # =============================================================================
 # CRD-mirror management API
 # =============================================================================
-# When `crds.enabled=true`, the chart installs two CustomResourceDefinitions
-# (Cluster, Project) under the management.astronomer.io/v1alpha1 group and the
-# server pod runs a controller that reconciles each CR against the matching DB
-# row. Operators can then manage clusters + projects via kubectl, GitOps, or
-# any standard K8s tooling instead of REST. See docs/crd-api.md.
+# When `crds.enabled=true`, the chart installs the management.astronomer.io
+# v1alpha1 CustomResourceDefinitions and the server pod runs the embedded
+# controller manager. Cluster/Project reconcile to Postgres; ClusterBaseline,
+# ComponentBundle, AgentProfile, and GitOpsTarget validate status and provide
+# the Kubernetes-facing desired-state API for Argo/agent follow-up controllers.
+# See docs/crd-api.md.
 #
 # This is an opt-in feature: defaults to off so existing installs see no
 # change. The REST API is unaffected when the flag is on — both surfaces
@@ -925,6 +1001,9 @@ crds:
   # The namespace itself is NOT created by the chart — operators install
   # the CRD into an existing namespace they own.
   watchNamespace: astronomer-mgmt
+  # Namespace containing the built-in Argo CD ApplicationSet CRDs/resources.
+  # GitOpsTarget materialization writes ApplicationSets here.
+  argoNamespace: argocd
 
 # =============================================================================
 # In-browser kubectl shell (migration 065 / sprint 17)

@@ -67,17 +67,6 @@ func (q *Queries) AdoptInstalledChartByRelease(ctx context.Context, arg AdoptIns
 	return i, err
 }
 
-const countChartVersions = `-- name: CountChartVersions :one
-SELECT count(*) FROM helm_chart_versions WHERE chart_id = $1
-`
-
-func (q *Queries) CountChartVersions(ctx context.Context, chartID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countChartVersions, chartID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countHelmCharts = `-- name: CountHelmCharts :one
 SELECT count(*) FROM helm_charts
 `
@@ -120,20 +109,6 @@ func (q *Queries) CountInstalledChartsByCluster(ctx context.Context, clusterID u
 	var count int64
 	err := row.Scan(&count)
 	return count, err
-}
-
-const deleteFailedInstallationsByCluster = `-- name: DeleteFailedInstallationsByCluster :execrows
-DELETE FROM installed_charts
-WHERE cluster_id = $1
-  AND status IN ('failed_install', 'failed_uninstall')
-`
-
-func (q *Queries) DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteFailedInstallationsByCluster, clusterID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const createHelmChart = `-- name: CreateHelmChart :one
@@ -238,7 +213,7 @@ func (q *Queries) CreateHelmChartVersion(ctx context.Context, arg CreateHelmChar
 const createHelmRepository = `-- name: CreateHelmRepository :one
 INSERT INTO helm_repositories (name, url, repo_type, description, is_default, auth_type, auth_config, enabled, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at
+RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id
 `
 
 type CreateHelmRepositoryParams struct {
@@ -280,6 +255,7 @@ func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmReposi
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OwnerProjectID,
 	)
 	return i, err
 }
@@ -339,6 +315,26 @@ func (q *Queries) CreateInstalledChart(ctx context.Context, arg CreateInstalledC
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteFailedInstallationsByCluster = `-- name: DeleteFailedInstallationsByCluster :execrows
+DELETE FROM installed_charts
+WHERE cluster_id = $1
+  AND status IN ('failed_install', 'failed_uninstall')
+`
+
+// Hard-deletes installed_charts rows that are stuck in a failed_* state
+// on the given cluster. Used by the Apps tab's "Delete failed installs"
+// bulk action; mirrors Rancher's "Force Delete" affordance for orphaned
+// helm release rows that didn't actually deploy (and therefore can't be
+// uninstalled cleanly). Returns the affected-row count so the handler
+// can include it in the response.
+func (q *Queries) DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFailedInstallationsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteHelmChart = `-- name: DeleteHelmChart :exec
@@ -491,7 +487,7 @@ func (q *Queries) GetHelmChartVersionByID(ctx context.Context, id uuid.UUID) (He
 
 const getHelmRepositoryByID = `-- name: GetHelmRepositoryByID :one
 
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at FROM helm_repositories WHERE id = $1
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories WHERE id = $1
 `
 
 // Helm Repositories
@@ -512,31 +508,7 @@ func (q *Queries) GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (Helm
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getHelmRepositoryByName = `-- name: GetHelmRepositoryByName :one
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at FROM helm_repositories WHERE name = $1
-`
-
-func (q *Queries) GetHelmRepositoryByName(ctx context.Context, name string) (HelmRepository, error) {
-	row := q.db.QueryRow(ctx, getHelmRepositoryByName, name)
-	var i HelmRepository
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Url,
-		&i.RepoType,
-		&i.Description,
-		&i.IsDefault,
-		&i.AuthType,
-		&i.AuthConfig,
-		&i.Enabled,
-		&i.LastSyncedAt,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.OwnerProjectID,
 	)
 	return i, err
 }
@@ -604,13 +576,19 @@ func (q *Queries) GetInstalledChartByRelease(ctx context.Context, arg GetInstall
 }
 
 const getLatestChartVersion = `-- name: GetLatestChartVersion :one
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at
-FROM helm_chart_versions
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions
 WHERE chart_id = $1
 ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
 LIMIT 1
 `
 
+// Orders by the upstream chart's publish time (the `created:` field
+// in helm index.yaml, persisted to created_at_upstream during ingest)
+// so the install modal's "default to latest" picks the actual newest
+// version rather than whichever row happened to be inserted last
+// during a backfill sync. Falls back to created_at DESC when the
+// upstream timestamp is NULL (older catalog rows pre-dating the
+// created_at_upstream column or OCI charts without a publish date).
 func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (HelmChartVersion, error) {
 	row := q.db.QueryRow(ctx, getLatestChartVersion, chartID)
 	var i HelmChartVersion
@@ -632,8 +610,7 @@ func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) 
 }
 
 const listChartVersions = `-- name: ListChartVersions :many
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at
-FROM helm_chart_versions
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions
 WHERE chart_id = $1
 ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
 LIMIT $2 OFFSET $3
@@ -645,6 +622,9 @@ type ListChartVersionsParams struct {
 	Offset  int32     `json:"offset"`
 }
 
+// Same ordering rationale as GetLatestChartVersion — the version
+// dropdown in the install/upgrade modal needs newest-first by upstream
+// publish time, not by DB insert order.
 func (q *Queries) ListChartVersions(ctx context.Context, arg ListChartVersionsParams) ([]HelmChartVersion, error) {
 	rows, err := q.db.Query(ctx, listChartVersions, arg.ChartID, arg.Limit, arg.Offset)
 	if err != nil {
@@ -665,50 +645,6 @@ func (q *Queries) ListChartVersions(ctx context.Context, arg ListChartVersionsPa
 			&i.DefaultValues,
 			&i.Readme,
 			&i.CreatedAtUpstream,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listChartsByCategory = `-- name: ListChartsByCategory :many
-SELECT id, repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated, created_at, updated_at FROM helm_charts WHERE category = $1 AND deprecated = false ORDER BY name ASC LIMIT $2 OFFSET $3
-`
-
-type ListChartsByCategoryParams struct {
-	Category string `json:"category"`
-	Limit    int32  `json:"limit"`
-	Offset   int32  `json:"offset"`
-}
-
-func (q *Queries) ListChartsByCategory(ctx context.Context, arg ListChartsByCategoryParams) ([]HelmChart, error) {
-	rows, err := q.db.Query(ctx, listChartsByCategory, arg.Category, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []HelmChart{}
-	for rows.Next() {
-		var i HelmChart
-		if err := rows.Scan(
-			&i.ID,
-			&i.RepositoryID,
-			&i.Name,
-			&i.DisplayName,
-			&i.Description,
-			&i.IconUrl,
-			&i.HomeUrl,
-			&i.Category,
-			&i.Keywords,
-			&i.Maintainers,
-			&i.Deprecated,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -767,7 +703,7 @@ func (q *Queries) ListChartsByRepository(ctx context.Context, arg ListChartsByRe
 }
 
 const listEnabledHelmRepositories = `-- name: ListEnabledHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at FROM helm_repositories WHERE enabled = true ORDER BY name ASC
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories WHERE enabled = true ORDER BY name ASC
 `
 
 func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error) {
@@ -793,6 +729,7 @@ func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmReposi
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OwnerProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -848,7 +785,7 @@ func (q *Queries) ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) 
 }
 
 const listHelmRepositories = `-- name: ListHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListHelmRepositoriesParams struct {
@@ -879,6 +816,7 @@ func (q *Queries) ListHelmRepositories(ctx context.Context, arg ListHelmReposito
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OwnerProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -981,109 +919,6 @@ func (q *Queries) ListInstalledChartsByCluster(ctx context.Context, arg ListInst
 	return items, nil
 }
 
-const listInstalledChartsByToolSlug = `-- name: ListInstalledChartsByToolSlug :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at FROM installed_charts WHERE tool_slug = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
-`
-
-type ListInstalledChartsByToolSlugParams struct {
-	ToolSlug pgtype.Text `json:"tool_slug"`
-	Limit    int32       `json:"limit"`
-	Offset   int32       `json:"offset"`
-}
-
-func (q *Queries) ListInstalledChartsByToolSlug(ctx context.Context, arg ListInstalledChartsByToolSlugParams) ([]InstalledChart, error) {
-	rows, err := q.db.Query(ctx, listInstalledChartsByToolSlug, arg.ToolSlug, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []InstalledChart{}
-	for rows.Next() {
-		var i InstalledChart
-		if err := rows.Scan(
-			&i.ID,
-			&i.ClusterID,
-			&i.ChartVersionID,
-			&i.ReleaseName,
-			&i.Namespace,
-			&i.ValuesOverride,
-			&i.Status,
-			&i.Revision,
-			&i.Notes,
-			&i.InstalledByID,
-			&i.RequestID,
-			&i.ToolSlug,
-			&i.PresetUsed,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const updateHelmChart = `-- name: UpdateHelmChart :one
-UPDATE helm_charts SET
-    display_name = $2,
-    description = $3,
-    icon_url = $4,
-    home_url = $5,
-    category = $6,
-    keywords = $7,
-    maintainers = $8,
-    deprecated = $9
-WHERE id = $1
-RETURNING id, repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated, created_at, updated_at
-`
-
-type UpdateHelmChartParams struct {
-	ID          uuid.UUID       `json:"id"`
-	DisplayName string          `json:"display_name"`
-	Description string          `json:"description"`
-	IconUrl     string          `json:"icon_url"`
-	HomeUrl     string          `json:"home_url"`
-	Category    string          `json:"category"`
-	Keywords    json.RawMessage `json:"keywords"`
-	Maintainers json.RawMessage `json:"maintainers"`
-	Deprecated  bool            `json:"deprecated"`
-}
-
-func (q *Queries) UpdateHelmChart(ctx context.Context, arg UpdateHelmChartParams) (HelmChart, error) {
-	row := q.db.QueryRow(ctx, updateHelmChart,
-		arg.ID,
-		arg.DisplayName,
-		arg.Description,
-		arg.IconUrl,
-		arg.HomeUrl,
-		arg.Category,
-		arg.Keywords,
-		arg.Maintainers,
-		arg.Deprecated,
-	)
-	var i HelmChart
-	err := row.Scan(
-		&i.ID,
-		&i.RepositoryID,
-		&i.Name,
-		&i.DisplayName,
-		&i.Description,
-		&i.IconUrl,
-		&i.HomeUrl,
-		&i.Category,
-		&i.Keywords,
-		&i.Maintainers,
-		&i.Deprecated,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const updateHelmRepository = `-- name: UpdateHelmRepository :one
 UPDATE helm_repositories SET
     name = $2,
@@ -1095,7 +930,7 @@ UPDATE helm_repositories SET
     auth_config = $8,
     enabled = $9
 WHERE id = $1
-RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at
+RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id
 `
 
 type UpdateHelmRepositoryParams struct {
@@ -1137,6 +972,7 @@ func (q *Queries) UpdateHelmRepository(ctx context.Context, arg UpdateHelmReposi
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OwnerProjectID,
 	)
 	return i, err
 }

@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/spf13/viper"
+	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
 
 // Config holds all configuration for the application.
@@ -110,69 +110,74 @@ func (c *Config) CORSOrigins() []string {
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() (*Config, error) {
-	v := viper.New()
-	v.AutomaticEnv()
+	v := envconfig.NewViper("")
 
 	// Bind env vars for secret/optional fields without defaults so AutomaticEnv resolves them.
-	v.BindEnv("astronomer_encryption_key")
-	v.BindEnv("github_client_id")
-	v.BindEnv("github_client_secret")
-	v.BindEnv("google_client_id")
-	v.BindEnv("google_client_secret")
-	v.BindEnv("oidc_issuer")
-	v.BindEnv("oidc_client_id")
-	v.BindEnv("oidc_client_secret")
-	v.BindEnv("agent_image_repository")
-	v.BindEnv("agent_image_tag")
-	v.BindEnv("database_url")
-	v.BindEnv("redis_url")
-	v.BindEnv("secret_key")
-	v.BindEnv("server_url")
-	v.BindEnv("audit_log_retention_months")
-	v.BindEnv("server_metrics_addr")
-	v.BindEnv("worker_metrics_addr")
-	v.BindEnv("login_failure_threshold")
-	v.BindEnv("lockout_duration_minutes")
-	v.BindEnv("totp_issuer")
-	v.BindEnv("totp_require")
-	v.BindEnv("db_max_conns")
-	v.BindEnv("db_min_conns")
-	v.BindEnv("db_max_conn_lifetime_minutes")
-	v.BindEnv("db_max_conn_idle_minutes")
-	v.BindEnv("db_health_check_period_seconds")
+	if err := envconfig.BindEnv(v,
+		"astronomer_encryption_key",
+		"github_client_id",
+		"github_client_secret",
+		"google_client_id",
+		"google_client_secret",
+		"oidc_issuer",
+		"oidc_client_id",
+		"oidc_client_secret",
+		"agent_image_repository",
+		"agent_image_tag",
+		"database_url",
+		"redis_url",
+		"secret_key",
+		"server_url",
+		"audit_log_retention_months",
+		"server_metrics_addr",
+		"worker_metrics_addr",
+		"login_failure_threshold",
+		"lockout_duration_minutes",
+		"totp_issuer",
+		"totp_require",
+		"db_max_conns",
+		"db_min_conns",
+		"db_max_conn_lifetime_minutes",
+		"db_max_conn_idle_minutes",
+		"db_health_check_period_seconds",
+		"kubectl_shell_enabled",
+		"kubectl_shell_image",
+		"kubectl_shell_idle_timeout_minutes",
+		"kubectl_shell_session_hard_cap_hours",
+		"argocd_ui_upstream",
+		"argocd_cluster_proxy_base_url",
+		"dex_bundled_enabled",
+		"auth_local_password_only",
+	); err != nil {
+		return nil, err
+	}
 
-	v.SetDefault("database_url", "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable")
-	v.SetDefault("redis_url", "redis://localhost:6379/0")
-	v.SetDefault("celery_broker_url", "redis://localhost:6379/1")
-	v.SetDefault("env", "development")
-	v.SetDefault("debug", false)
-	v.SetDefault("cors_allowed_origins", "http://localhost:3000")
-	v.SetDefault("session_timeout_minutes", 60)
-	v.SetDefault("agent_token_expiry_hours", 24)
-	v.SetDefault("log_level", "info")
-	v.SetDefault("audit_log_retention_months", 13)
-	v.SetDefault("login_failure_threshold", 5)
-	v.SetDefault("lockout_duration_minutes", 15)
-	v.SetDefault("totp_issuer", "Astronomer")
-	v.SetDefault("totp_require", false)
-	v.SetDefault("kubectl_shell_enabled", false)
-	v.SetDefault("kubectl_shell_image", "astronomer-shell:dev")
-	v.SetDefault("kubectl_shell_idle_timeout_minutes", 30)
-	v.SetDefault("kubectl_shell_session_hard_cap_hours", 4)
-	v.BindEnv("kubectl_shell_enabled")
-	v.BindEnv("kubectl_shell_image")
-	v.BindEnv("kubectl_shell_idle_timeout_minutes")
-	v.BindEnv("kubectl_shell_session_hard_cap_hours")
-	v.SetDefault("server_metrics_addr", ":9090")
-	v.SetDefault("worker_metrics_addr", ":9090")
-	v.SetDefault("argocd_ui_upstream", "http://argocd-server.argocd.svc.cluster.local:80")
-	v.SetDefault("argocd_cluster_proxy_base_url", "http://astronomer-server.astronomer.svc.cluster.local:8000")
-	v.BindEnv("argocd_ui_upstream")
-	v.BindEnv("argocd_cluster_proxy_base_url")
-	v.SetDefault("dex_bundled_enabled", false)
-	v.SetDefault("auth_local_password_only", false)
-	v.BindEnv("dex_bundled_enabled")
-	v.BindEnv("auth_local_password_only")
+	envconfig.SetDefaults(v,
+		envconfig.Default{Key: "database_url", Value: "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable"},
+		envconfig.Default{Key: "redis_url", Value: "redis://localhost:6379/0"},
+		envconfig.Default{Key: "celery_broker_url", Value: "redis://localhost:6379/1"},
+		envconfig.Default{Key: "env", Value: "development"},
+		envconfig.Default{Key: "debug", Value: false},
+		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
+		envconfig.Default{Key: "session_timeout_minutes", Value: 60},
+		envconfig.Default{Key: "agent_token_expiry_hours", Value: 24},
+		envconfig.Default{Key: "log_level", Value: "info"},
+		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
+		envconfig.Default{Key: "login_failure_threshold", Value: 5},
+		envconfig.Default{Key: "lockout_duration_minutes", Value: 15},
+		envconfig.Default{Key: "totp_issuer", Value: "Astronomer"},
+		envconfig.Default{Key: "totp_require", Value: false},
+		envconfig.Default{Key: "kubectl_shell_enabled", Value: false},
+		envconfig.Default{Key: "kubectl_shell_image", Value: "astronomer-shell:dev"},
+		envconfig.Default{Key: "kubectl_shell_idle_timeout_minutes", Value: 30},
+		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
+		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
+		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
+		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://argocd-server.argocd.svc.cluster.local:80"},
+		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8000"},
+		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
+		envconfig.Default{Key: "auth_local_password_only", Value: false},
+	)
 
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {

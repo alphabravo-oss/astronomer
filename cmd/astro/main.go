@@ -38,6 +38,7 @@ Run "astro login" first to authenticate. Then explore:
 
   astro cluster list                 # all managed clusters
   astro cluster manifest <id>        # download agent install YAML
+  astro cluster self-test <id>       # run agent health checks
   astro cluster delete <id>          # decommission a cluster
   astro cluster shell <id>           # interactive kubectl session
   astro k8s <id> get pods -A         # kubectl-equivalent passthrough

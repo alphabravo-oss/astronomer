@@ -63,7 +63,7 @@ func (s *recordingSSOSessionStore) InsertSSOSession(_ context.Context, arg sqlc.
 		Jti:                      arg.Jti,
 		UserID:                   arg.UserID,
 		ProviderName:             arg.ProviderName,
-		UpstreamIdTokenEncrypted: arg.UpstreamIdTokenEncrypted,
+		UpstreamIDTokenEncrypted: arg.UpstreamIDTokenEncrypted,
 		EndSessionEndpoint:       arg.EndSessionEndpoint,
 		ExpiresAt:                arg.ExpiresAt,
 		CreatedAt:                time.Now(),
@@ -232,7 +232,7 @@ func TestLogout_ReturnsRedirectURLWhenSSOSession(t *testing.T) {
 		Jti:                      claims.ID,
 		UserID:                   user.ID,
 		ProviderName:             "dex",
-		UpstreamIdTokenEncrypted: cipher,
+		UpstreamIDTokenEncrypted: cipher,
 		EndSessionEndpoint:       "https://dex.example.com/dex/auth/logout",
 		ExpiresAt:                claims.ExpiresAt.Time,
 		CreatedAt:                time.Now(),
@@ -333,7 +333,7 @@ func TestLogout_DeletesSSOSessionRow(t *testing.T) {
 		Jti:                      claims.ID,
 		UserID:                   user.ID,
 		ProviderName:             "dex",
-		UpstreamIdTokenEncrypted: cipher,
+		UpstreamIDTokenEncrypted: cipher,
 		EndSessionEndpoint:       "https://dex.example.com/end",
 		ExpiresAt:                claims.ExpiresAt.Time,
 	}
@@ -376,7 +376,7 @@ func TestLogout_NoEndpointFallsBackToLocal(t *testing.T) {
 		Jti:                      claims.ID,
 		UserID:                   user.ID,
 		ProviderName:             "github",
-		UpstreamIdTokenEncrypted: cipher,
+		UpstreamIDTokenEncrypted: cipher,
 		EndSessionEndpoint:       "", // IdP doesn't support RP-initiated logout
 		ExpiresAt:                claims.ExpiresAt.Time,
 	}
@@ -430,7 +430,7 @@ func TestForceLogout_DeletesAllUserSSOSessions(t *testing.T) {
 			Jti:                      jti,
 			UserID:                   target.ID,
 			ProviderName:             prov,
-			UpstreamIdTokenEncrypted: cipher,
+			UpstreamIDTokenEncrypted: cipher,
 			EndSessionEndpoint:       "https://" + prov + ".example.com/end",
 			ExpiresAt:                time.Now().Add(time.Hour),
 			CreatedAt:                time.Now().Add(time.Duration(-i) * time.Minute),
@@ -555,10 +555,10 @@ func TestCallback_PersistsSSOSession(t *testing.T) {
 		t.Errorf("EndSessionEndpoint mismatch: %q", got.EndSessionEndpoint)
 	}
 	// id_token is encrypted at rest — plaintext must NOT round-trip.
-	if got.UpstreamIdTokenEncrypted == "raw-id-token" {
+	if got.UpstreamIDTokenEncrypted == "raw-id-token" {
 		t.Errorf("id_token stored in plaintext")
 	}
-	plain, err := enc.Decrypt(got.UpstreamIdTokenEncrypted)
+	plain, err := enc.Decrypt(got.UpstreamIDTokenEncrypted)
 	if err != nil {
 		t.Fatalf("decrypt round-trip: %v", err)
 	}

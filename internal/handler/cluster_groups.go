@@ -634,8 +634,8 @@ func (h *ClusterGroupHandler) MoveClusters(w http.ResponseWriter, r *http.Reques
 			continue
 		}
 		if err := h.queries.AssignClusterGroup(r.Context(), sqlc.AssignClusterGroupParams{
-			ClusterID: cid,
-			GroupID:   pgtype.UUID{Bytes: id, Valid: true},
+			ID:      cid,
+			GroupID: pgtype.UUID{Bytes: id, Valid: true},
 		}); err != nil {
 			skipped = append(skipped, idStr)
 			continue

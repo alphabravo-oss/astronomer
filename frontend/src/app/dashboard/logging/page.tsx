@@ -11,6 +11,7 @@ import {
   useRetryLoggingOperation,
   useClusters,
   useClusterNamespaces,
+  queryKeys,
 } from '@/lib/hooks';
 import {
   deleteLoggingOutput,
@@ -20,6 +21,7 @@ import {
 } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { LoggingOutput, LoggingPipeline, LoggingOutputType, LoggingOperation } from '@/types';
 import {
@@ -37,7 +39,7 @@ import {
   Activity,
   RotateCcw,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { useQueryClient } from '@tanstack/react-query';
 
 type TabKey = 'outputs' | 'pipelines' | 'operations';
@@ -180,20 +182,20 @@ export default function LoggingPage() {
     if (!confirm('Delete this logging output?')) return;
     try {
       await deleteLoggingOutput(id);
-      queryClient.invalidateQueries({ queryKey: ['logging'] });
-      toast.success('Logging output deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
+      toastSuccess('Logging output deleted');
     } catch (error) {
-      toast.error(`Failed to delete output: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toastError(`Failed to delete output: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   const handleToggleOutput = async (output: LoggingOutput) => {
     try {
       await updateLoggingOutput(output.id, { enabled: !output.enabled });
-      queryClient.invalidateQueries({ queryKey: ['logging'] });
-      toast.success(`Output ${output.enabled ? 'disabled' : 'enabled'}`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
+      toastSuccess(`Output ${output.enabled ? 'disabled' : 'enabled'}`);
     } catch (error) {
-      toast.error(`Failed to update output: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toastError(`Failed to update output: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -201,20 +203,20 @@ export default function LoggingPage() {
     if (!confirm('Delete this logging pipeline?')) return;
     try {
       await deleteLoggingPipeline(id);
-      queryClient.invalidateQueries({ queryKey: ['logging'] });
-      toast.success('Logging pipeline deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
+      toastSuccess('Logging pipeline deleted');
     } catch (error) {
-      toast.error(`Failed to delete pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toastError(`Failed to delete pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   const handleTogglePipeline = async (pipeline: LoggingPipeline) => {
     try {
       await updateLoggingPipeline(pipeline.id, { enabled: !pipeline.enabled });
-      queryClient.invalidateQueries({ queryKey: ['logging'] });
-      toast.success(`Pipeline ${pipeline.enabled ? 'disabled' : 'enabled'}`);
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
+      toastSuccess(`Pipeline ${pipeline.enabled ? 'disabled' : 'enabled'}`);
     } catch (error) {
-      toast.error(`Failed to update pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toastError(`Failed to update pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -683,7 +685,7 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
 
   const handleSave = async () => {
     if (!form.name) {
-      toast.error('Name is required');
+      toastError('Name is required');
       return;
     }
 
@@ -702,8 +704,7 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Logging Output</h3>
@@ -812,7 +813,7 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -885,11 +886,11 @@ function CreatePipelineModal({
 
   const handleSave = async () => {
     if (!form.name) {
-      toast.error('Name is required');
+      toastError('Name is required');
       return;
     }
     if (form.outputIds.length === 0) {
-      toast.error('Select at least one output');
+      toastError('Select at least one output');
       return;
     }
 
@@ -916,8 +917,7 @@ function CreatePipelineModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Logging Pipeline</h3>
@@ -1101,6 +1101,6 @@ function CreatePipelineModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

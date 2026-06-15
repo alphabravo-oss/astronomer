@@ -395,7 +395,7 @@ func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request
 					if s.EndSessionEndpoint == "" {
 						continue
 					}
-					idToken, derr := h.encryptor.Decrypt(s.UpstreamIdTokenEncrypted)
+					idToken, derr := h.encryptor.Decrypt(s.UpstreamIDTokenEncrypted)
 					if derr != nil {
 						backchannelFailed++
 						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "encrypt_error")...).Inc()

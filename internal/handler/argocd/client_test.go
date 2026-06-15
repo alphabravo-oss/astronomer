@@ -166,3 +166,33 @@ func TestUnreachable(t *testing.T) {
 		t.Errorf("want ErrUnreachable, got %v", err)
 	}
 }
+
+func TestArgoCDPathFamily(t *testing.T) {
+	cases := map[string]string{
+		"/api/v1/applications/my-app/sync":                       "/api/v1/applications/*/sync",
+		"/api/v1/applications/my-app":                            "/api/v1/applications/*",
+		"/api/v1/applications/my-app?refresh=hard":               "/api/v1/applications/*",
+		"/api/v1/applicationsets/platform":                       "/api/v1/applicationsets/*",
+		"/api/v1/projects/platform":                              "/api/v1/projects/*",
+		"/api/v1/clusters/https:%2F%2Fkubernetes.default.svc":    "/api/v1/clusters/*",
+		"/api/v1/repositories/https:%2F%2Fgithub.com%2Frepo.git": "/api/v1/repositories/*",
+		"/api/version": "/api/version",
+	}
+	for in, want := range cases {
+		if got := argoCDPathFamily(in); got != want {
+			t.Fatalf("argoCDPathFamily(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestArgoCDMetricStatus(t *testing.T) {
+	if got := argocdMetricStatus(http.StatusOK, nil); got != "200" {
+		t.Fatalf("success status = %q", got)
+	}
+	if got := argocdMetricStatus(0, context.DeadlineExceeded); got != "error" {
+		t.Fatalf("error status = %q", got)
+	}
+	if got := argocdMetricStatus(0, nil); got != "unknown" {
+		t.Fatalf("unknown status = %q", got)
+	}
+}

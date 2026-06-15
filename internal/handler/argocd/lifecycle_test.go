@@ -147,6 +147,16 @@ func TestCreateProject(t *testing.T) {
 		Description:  "test",
 		SourceRepos:  []string{"*"},
 		Destinations: []ApplicationDestination{{Server: "*", Namespace: "*"}},
+		SyncWindows: []AppProjectSyncWindow{
+			{
+				Kind:         "deny",
+				Schedule:     "0 22 * * 1-5",
+				Duration:     "10h",
+				Applications: []string{"*-prod"},
+				ManualSync:   true,
+				TimeZone:     "UTC",
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
@@ -167,6 +177,15 @@ func TestCreateProject(t *testing.T) {
 	}
 	if sp, ok := inner["spec"].(map[string]any); !ok || sp["description"] != "test" {
 		t.Errorf("project.spec.description missing: %v", seenBody)
+	} else {
+		windows, ok := sp["syncWindows"].([]any)
+		if !ok || len(windows) != 1 {
+			t.Fatalf("project.spec.syncWindows missing: %v", seenBody)
+		}
+		first, _ := windows[0].(map[string]any)
+		if first["kind"] != "deny" || first["schedule"] != "0 22 * * 1-5" || first["manualSync"] != true {
+			t.Fatalf("project.spec.syncWindows[0] = %v", first)
+		}
 	}
 }
 

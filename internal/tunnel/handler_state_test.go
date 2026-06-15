@@ -50,6 +50,7 @@ type recordingValidator struct {
 	claimErr           error
 	completedOps       []sqlc.CompleteAgentLifecycleOperationParams
 	markSucceededArgs  []sqlc.MarkRunningAgentUpgradeSucceededByVersionParams
+	auditRows          []sqlc.CreateAuditLogV1Params
 }
 
 func (r *recordingValidator) GetRegistrationTokenByToken(context.Context, string) (sqlc.ClusterRegistrationToken, error) {
@@ -172,6 +173,13 @@ func (r *recordingValidator) MarkRunningAgentUpgradeSucceededByVersion(_ context
 	return 0, nil
 }
 
+func (r *recordingValidator) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.auditRows = append(r.auditRows, arg)
+	return nil
+}
+
 func (r *recordingValidator) SnapshotUpserts() []sqlc.UpsertClusterHealthStatusParams {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -236,6 +244,14 @@ func (r *recordingValidator) SnapshotMarkSucceededArgs() []sqlc.MarkRunningAgent
 	return out
 }
 
+func (r *recordingValidator) SnapshotAuditRows() []sqlc.CreateAuditLogV1Params {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.CreateAuditLogV1Params, len(r.auditRows))
+	copy(out, r.auditRows)
+	return out
+}
+
 func (r *recordingPublisher) Publish(eventType string, data any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -287,6 +303,68 @@ func TestHandleHeartbeatClaimsPendingAgentUpgrade(t *testing.T) {
 	}
 	if got := validator.SnapshotMarkSucceededArgs(); len(got) != 1 || got[0].TargetVersion != "v1.0.0" {
 		t.Fatalf("mark succeeded args = %+v", got)
+	}
+}
+
+func TestHandleHeartbeatPersistsSchemaVersionAndPublishes(t *testing.T) {
+	clusterID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	pub := &recordingPublisher{}
+	h.SetPublisher(pub)
+	conn := &AgentConnection{ClusterID: clusterID.String(), sendCh: make(chan *protocol.Message, 1)}
+
+	body, _ := json.Marshal(protocol.HeartbeatPayload{
+		SchemaVersion:          protocol.HeartbeatSchemaVersion,
+		AgentVersion:           "v1.2.3",
+		AgentBuildSHA:          "abc123",
+		KubernetesVersion:      "v1.30.2",
+		NodeCount:              3,
+		PodCount:               27,
+		PrivilegeProfile:       "operator",
+		AvailableAPIs:          []string{"apps/v1", "v1"},
+		EnabledFeatures:        []string{"watch", "logs", "exec"},
+		DeniedFeatures:         []string{"cluster_admin"},
+		LastSuccessfulAction:   "heartbeat.collect",
+		LastSuccessfulActionAt: "2026-06-13T12:00:00Z",
+		DegradedReasons:        []string{"metrics API unavailable"},
+	})
+	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: body})
+
+	upserts := validator.SnapshotUpserts()
+	if len(upserts) != 1 {
+		t.Fatalf("health upserts = %d, want 1", len(upserts))
+	}
+	var conditions map[string]any
+	if err := json.Unmarshal(upserts[0].Conditions, &conditions); err != nil {
+		t.Fatalf("decode conditions: %v", err)
+	}
+	if conditions["heartbeat_schema_version"] != float64(protocol.HeartbeatSchemaVersion) {
+		t.Fatalf("heartbeat_schema_version condition = %#v", conditions["heartbeat_schema_version"])
+	}
+	if conditions["agent_build_sha"] != "abc123" || conditions["privilege_profile"] != "operator" {
+		t.Fatalf("capability conditions = %#v", conditions)
+	}
+	if got, _ := conditions["last_successful_action"].(string); got != "heartbeat.collect" {
+		t.Fatalf("last_successful_action = %#v", conditions["last_successful_action"])
+	}
+
+	events := pub.Snapshot()
+	if len(events) != 1 || events[0].Type != "cluster.heartbeat" {
+		t.Fatalf("events = %+v, want one cluster.heartbeat", events)
+	}
+	data, ok := events[0].Data.(map[string]any)
+	if !ok {
+		t.Fatalf("event data type = %T, want map", events[0].Data)
+	}
+	if data["heartbeat_schema_version"] != protocol.HeartbeatSchemaVersion {
+		t.Fatalf("event heartbeat_schema_version = %#v", data["heartbeat_schema_version"])
+	}
+	if data["agent_build_sha"] != "abc123" || data["privilege_profile"] != "operator" {
+		t.Fatalf("event capability data = %#v", data)
+	}
+	if got, ok := data["enabled_features"].([]string); !ok || len(got) != 3 {
+		t.Fatalf("event enabled_features = %#v", data["enabled_features"])
 	}
 }
 

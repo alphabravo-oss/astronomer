@@ -81,22 +81,6 @@ func (s *bearerTokenSource) Token() string {
 	return s.fallback
 }
 
-// bearerTokenRoundTripper stamps a fresh bearer token on each request.
-type bearerTokenRoundTripper struct {
-	src  *bearerTokenSource
-	base http.RoundTripper
-}
-
-func (rt *bearerTokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if tok := rt.src.Token(); tok != "" {
-		// Clone to avoid mutating the caller's request.
-		clone := req.Clone(req.Context())
-		clone.Header.Set("Authorization", "Bearer "+tok)
-		return rt.base.RoundTrip(clone)
-	}
-	return rt.base.RoundTrip(req)
-}
-
 // NewK8sProxy creates a K8sProxy using the in-cluster configuration.
 //
 // We rely on client-go's built-in projected-token rotation: rest.InClusterConfig
@@ -202,6 +186,9 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 		return p.sendStreamEnd(sendFn, msg.StreamID, fmt.Errorf("new request: %w", err))
 	}
 	for k, v := range req.Headers {
+		if isK8sClientOnlyHeader(k) {
+			continue
+		}
 		httpReq.Header.Set(k, v)
 	}
 
@@ -209,7 +196,9 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 	if err != nil {
 		return p.sendStreamEnd(sendFn, msg.StreamID, fmt.Errorf("execute: %w", err))
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	headers := make(map[string]string, len(resp.Header))
 	for k := range resp.Header {
@@ -386,6 +375,9 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 	}
 
 	for k, v := range req.Headers {
+		if isK8sClientOnlyHeader(k) {
+			continue
+		}
 		httpReq.Header.Set(k, v)
 	}
 
@@ -393,7 +385,9 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("execute k8s request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -405,4 +399,19 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 		respHeaders[k] = resp.Header.Get(k)
 	}
 	return respBody, resp.StatusCode, respHeaders, nil
+}
+
+func isK8sClientOnlyHeader(name string) bool {
+	lower := strings.ToLower(name)
+	switch lower {
+	case "authorization", "cookie", "host":
+		return true
+	}
+	if strings.HasPrefix(lower, "x-forwarded-") {
+		return true
+	}
+	if strings.HasPrefix(lower, "impersonate-") {
+		return true
+	}
+	return false
 }

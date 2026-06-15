@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster Service Mesh tab — Istio / Linkerd / Kuma / Cilium-mesh detection.
  *
@@ -17,7 +18,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -29,7 +30,7 @@ import {
   Shield,
 } from 'lucide-react';
 
-import { useCluster } from '@/lib/hooks';
+import { queryKeys, useCluster } from '@/lib/hooks';
 import {
   getServiceMeshInventory,
   getServiceMeshDetection,
@@ -40,11 +41,6 @@ import {
   type ServiceMeshPolicyValidation,
   type ServiceMeshKind,
 } from '@/lib/api/cluster-detail';
-
-const qk = {
-  detection: (id: string) => ['clusters', id, 'service-mesh'] as const,
-  inventory: (id: string) => ['clusters', id, 'service-mesh', 'inventory'] as const,
-};
 
 // meshLabel maps the backend enum to a human-readable string. Kept as a
 // pure mapping (no JSX) so it can be reused in headers + tile labels.
@@ -196,32 +192,32 @@ function InventoryPanel({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs text-muted-foreground">
-            <tr>
-              <th className="text-left font-medium px-5 py-2.5">Kind</th>
-              <th className="text-left font-medium px-5 py-2.5">API</th>
-              <th className="text-right font-medium px-5 py-2.5">Count</th>
-              <th className="text-left font-medium px-5 py-2.5">Objects</th>
-              <th className="text-left font-medium px-5 py-2.5">Ownership</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="w-full text-sm">
+          <TableHeader className="bg-muted/40 text-xs text-muted-foreground">
+            <TableRow>
+              <TableHead className="text-left font-medium px-5 py-2.5">Kind</TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">API</TableHead>
+              <TableHead className="text-right font-medium px-5 py-2.5">Count</TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">Objects</TableHead>
+              <TableHead className="text-left font-medium px-5 py-2.5">Ownership</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {inventory.resources.map((resource) => {
               const argoOwned = resource.items.filter((item) => item.readOnly).length;
               const preview = resource.items.slice(0, 3);
               return (
-                <tr key={resource.kind} className="border-t border-border">
-                  <td className="px-5 py-3 font-medium text-foreground whitespace-nowrap">
+                <TableRow key={resource.kind} className="border-t border-border">
+                  <TableCell className="px-5 py-3 font-medium text-foreground whitespace-nowrap">
                     {resource.kind}
-                  </td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">
                     {resource.apiVersion}
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums text-foreground">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-right tabular-nums text-foreground">
                     {resource.count}
-                  </td>
-                  <td className="px-5 py-3 min-w-64">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 min-w-64">
                     {resource.count === 0 ? (
                       <span className="text-xs text-muted-foreground">{resource.notice || 'None'}</span>
                     ) : (
@@ -245,8 +241,8 @@ function InventoryPanel({
                         )}
                       </div>
                     )}
-                  </td>
-                  <td className="px-5 py-3 whitespace-nowrap">
+                  </TableCell>
+                  <TableCell className="px-5 py-3 whitespace-nowrap">
                     {argoOwned > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-500">
                         <Shield className="h-3 w-3" />
@@ -255,12 +251,12 @@ function InventoryPanel({
                     ) : (
                       <span className="text-xs text-muted-foreground">Direct edit allowed</span>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
@@ -373,14 +369,14 @@ export default function ClusterServiceMeshPage() {
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: detection, isLoading: detLoading } = useQuery({
-    queryKey: qk.detection(clusterId),
+    queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
     enabled: !!clusterId,
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
   });
   const { data: inventory, isLoading: inventoryLoading } = useQuery({
-    queryKey: qk.inventory(clusterId),
+    queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId),
     queryFn: () => getServiceMeshInventory(clusterId),
     enabled: !!clusterId,
     refetchInterval: 60000,
@@ -390,23 +386,23 @@ export default function ClusterServiceMeshPage() {
   const reDetect = useMutation({
     mutationFn: () => reDetectServiceMesh(clusterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.detection(clusterId) });
-      queryClient.invalidateQueries({ queryKey: qk.inventory(clusterId) });
-      toast.success('Service-mesh detection refreshed');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId) });
+      toastSuccess('Service-mesh detection refreshed');
     },
-    onError: (e: Error) => toast.error(`Re-detect failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Re-detect failed', e),
   });
   const validatePolicy = useMutation({
     mutationFn: () => validateServiceMeshPolicy(clusterId, { yaml: policyYaml }),
     onSuccess: (result) => {
       setValidationResult(result);
       if (result.valid) {
-        toast.success('Policy validation passed');
+        toastSuccess('Policy validation passed');
       } else {
-        toast.warning('Policy validation returned findings');
+        toastWarning('Policy validation returned findings');
       }
     },
-    onError: (e: Error) => toast.error(`Validation failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Validation failed', e),
   });
 
   if (clusterLoading) {

@@ -109,7 +109,7 @@ func (h *CatalogHandler) DeleteFailedClusterApps(w http.ResponseWriter, r *http.
 // to the Tools tab and show "Managed by Tools" pills.
 func enrichedInstalledRowJSON(row sqlc.InstalledChartWithMetadata) map[string]any {
 	sourceKind := "app"
-	if row.ChartVersionID.Valid == false && row.ToolSlug.Valid && row.ToolSlug.String != "" {
+	if !row.ChartVersionID.Valid && row.ToolSlug.Valid && row.ToolSlug.String != "" {
 		sourceKind = "tool"
 	}
 

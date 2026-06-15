@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -48,19 +47,4 @@ func persistRotatedToken(ctx context.Context, cfg *AgentConfig, token string) er
 		return fmt.Errorf("update token secret: %w", err)
 	}
 	return nil
-}
-
-func secretToken(secret *corev1.Secret, key string) string {
-	if secret == nil {
-		return ""
-	}
-	if secret.StringData != nil {
-		if v := secret.StringData[key]; v != "" {
-			return v
-		}
-	}
-	if secret.Data != nil {
-		return string(secret.Data[key])
-	}
-	return ""
 }

@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-//go:embed chart/Chart.yaml chart/README.md chart/values.yaml chart/templates/*
+//go:embed chart/Chart.yaml chart/README.md chart/values.yaml chart/values.schema.json chart/templates/*
 var chartFS embed.FS
 
 type chartMetadata struct {

@@ -73,26 +73,40 @@ export function formatPercentage(value: number | undefined | null, decimals: num
  * Get status color class based on status string
  */
 export function statusColor(status: string): string {
-  const normalized = status.toLowerCase();
+  const normalized = status.toLowerCase().replace(/[\s_-]/g, '');
   const colorMap: Record<string, string> = {
     active: 'text-status-success',
     healthy: 'text-status-success',
     running: 'text-status-success',
     ready: 'text-status-success',
     synced: 'text-status-success',
+    insync: 'text-status-success',
     succeeded: 'text-status-success',
     connected: 'text-status-success',
     success: 'text-status-success',
+    allowed: 'text-status-success',
+    permitted: 'text-status-success',
+    enabled: 'text-status-success',
+    compliant: 'text-status-success',
 
     warning: 'text-status-warning',
     degraded: 'text-status-warning',
     outofsync: 'text-status-warning',
+    drifted: 'text-status-warning',
+    stale: 'text-status-warning',
+    readonly: 'text-status-warning',
+    migrationrequired: 'text-status-warning',
 
     error: 'text-status-error',
     critical: 'text-status-error',
     failed: 'text-status-error',
     unhealthy: 'text-status-error',
     notready: 'text-status-error',
+    denied: 'text-status-error',
+    forbidden: 'text-status-error',
+    blocked: 'text-status-error',
+    missing: 'text-status-error',
+    noncompliant: 'text-status-error',
 
     pending: 'text-status-info',
     connecting: 'text-status-info',
@@ -103,6 +117,8 @@ export function statusColor(status: string): string {
     disconnected: 'text-status-neutral',
     unknown: 'text-status-neutral',
     suspended: 'text-status-neutral',
+    disabled: 'text-status-neutral',
+    unmanaged: 'text-status-neutral',
   };
 
   return colorMap[normalized] || 'text-status-neutral';
@@ -112,32 +128,52 @@ export function statusColor(status: string): string {
  * Get status background color class
  */
 export function statusBgColor(status: string): string {
-  const normalized = status.toLowerCase();
+  const normalized = status.toLowerCase().replace(/[\s_-]/g, '');
   const colorMap: Record<string, string> = {
     active: 'bg-status-success/10 text-status-success',
     healthy: 'bg-status-success/10 text-status-success',
     running: 'bg-status-success/10 text-status-success',
     ready: 'bg-status-success/10 text-status-success',
     synced: 'bg-status-success/10 text-status-success',
+    insync: 'bg-status-success/10 text-status-success',
     succeeded: 'bg-status-success/10 text-status-success',
     connected: 'bg-status-success/10 text-status-success',
+    success: 'bg-status-success/10 text-status-success',
+    allowed: 'bg-status-success/10 text-status-success',
+    permitted: 'bg-status-success/10 text-status-success',
+    enabled: 'bg-status-success/10 text-status-success',
+    compliant: 'bg-status-success/10 text-status-success',
 
     warning: 'bg-status-warning/10 text-status-warning',
     degraded: 'bg-status-warning/10 text-status-warning',
     outofsync: 'bg-status-warning/10 text-status-warning',
+    drifted: 'bg-status-warning/10 text-status-warning',
+    stale: 'bg-status-warning/10 text-status-warning',
+    readonly: 'bg-status-warning/10 text-status-warning',
+    migrationrequired: 'bg-status-warning/10 text-status-warning',
 
     error: 'bg-status-error/10 text-status-error',
     critical: 'bg-status-error/10 text-status-error',
     failed: 'bg-status-error/10 text-status-error',
     unhealthy: 'bg-status-error/10 text-status-error',
+    notready: 'bg-status-error/10 text-status-error',
+    denied: 'bg-status-error/10 text-status-error',
+    forbidden: 'bg-status-error/10 text-status-error',
+    blocked: 'bg-status-error/10 text-status-error',
+    missing: 'bg-status-error/10 text-status-error',
+    noncompliant: 'bg-status-error/10 text-status-error',
 
     pending: 'bg-status-info/10 text-status-info',
     connecting: 'bg-status-info/10 text-status-info',
     provisioning: 'bg-status-info/10 text-status-info',
     progressing: 'bg-status-info/10 text-status-info',
+    info: 'bg-status-info/10 text-status-info',
 
     disconnected: 'bg-status-neutral/10 text-status-neutral',
     unknown: 'bg-status-neutral/10 text-status-neutral',
+    suspended: 'bg-status-neutral/10 text-status-neutral',
+    disabled: 'bg-status-neutral/10 text-status-neutral',
+    unmanaged: 'bg-status-neutral/10 text-status-neutral',
   };
 
   return colorMap[normalized] || 'bg-status-neutral/10 text-status-neutral';
@@ -147,29 +183,51 @@ export function statusBgColor(status: string): string {
  * Get a dot indicator color class for status
  */
 export function statusDotColor(status: string): string {
-  const normalized = status.toLowerCase();
+  const normalized = status.toLowerCase().replace(/[\s_-]/g, '');
   const colorMap: Record<string, string> = {
     active: 'bg-status-success',
     healthy: 'bg-status-success',
     running: 'bg-status-success',
     synced: 'bg-status-success',
+    insync: 'bg-status-success',
     connected: 'bg-status-success',
+    succeeded: 'bg-status-success',
+    success: 'bg-status-success',
+    allowed: 'bg-status-success',
+    permitted: 'bg-status-success',
+    enabled: 'bg-status-success',
+    compliant: 'bg-status-success',
 
     warning: 'bg-status-warning',
     degraded: 'bg-status-warning',
     outofsync: 'bg-status-warning',
+    drifted: 'bg-status-warning',
+    stale: 'bg-status-warning',
+    readonly: 'bg-status-warning',
+    migrationrequired: 'bg-status-warning',
 
     error: 'bg-status-error',
     critical: 'bg-status-error',
     failed: 'bg-status-error',
+    unhealthy: 'bg-status-error',
+    notready: 'bg-status-error',
+    denied: 'bg-status-error',
+    forbidden: 'bg-status-error',
+    blocked: 'bg-status-error',
+    missing: 'bg-status-error',
+    noncompliant: 'bg-status-error',
 
     pending: 'bg-status-info',
     connecting: 'bg-status-info',
     provisioning: 'bg-status-info',
     progressing: 'bg-status-info',
+    info: 'bg-status-info',
 
     disconnected: 'bg-status-neutral',
     unknown: 'bg-status-neutral',
+    suspended: 'bg-status-neutral',
+    disabled: 'bg-status-neutral',
+    unmanaged: 'bg-status-neutral',
   };
 
   return colorMap[normalized] || 'bg-status-neutral';

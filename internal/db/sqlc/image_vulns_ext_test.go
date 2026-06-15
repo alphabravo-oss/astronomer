@@ -31,7 +31,7 @@ func TestAggregateCluster_SumsByCritical(t *testing.T) {
 		"COALESCE(SUM(low_count), 0)::bigint AS low",
 		"COALESCE(SUM(unknown_count), 0)::bigint AS unknown",
 		"COUNT(*)::bigint AS report_count",
-		"MAX(scanned_at) AS last_scanned_at",
+		"COALESCE(MAX(scanned_at), '1970-01-01T00:00:00Z'::timestamptz) AS last_scanned_at",
 		"WHERE cluster_id = $1",
 	}
 	for _, w := range wants {

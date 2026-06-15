@@ -38,6 +38,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -185,7 +186,7 @@ func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *proto
 			time.Sleep(delay)
 			deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			err := h.clientset.AppsV1().Deployments(ns).Delete(deleteCtx, name, metav1.DeleteOptions{})
+			err := h.clientset.AppsV1().Deployments(ns).Delete(deleteCtx, name, kubeutil.DeleteOptions())
 			if err != nil && !apierrors.IsNotFound(err) {
 				h.log.Warn("decommission: failed to delete agent deployment",
 					"namespace", ns, "name", name, "error", err)
@@ -221,7 +222,7 @@ func (h *DecommissionHandler) removeLoggingStack(ctx context.Context, dryRun boo
 		step.Removed = 1
 		return step
 	}
-	err := h.clientset.CoreV1().Namespaces().Delete(ctx, DefaultLoggingNamespace, metav1.DeleteOptions{})
+	err := h.clientset.CoreV1().Namespaces().Delete(ctx, DefaultLoggingNamespace, kubeutil.DeleteOptions())
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			step.Success = true
@@ -270,7 +271,7 @@ func (h *DecommissionHandler) removeVeleroManaged(ctx context.Context, labelSele
 			continue
 		}
 		for _, item := range list.Items {
-			if err := h.dynamicClient.Resource(gvr).Namespace(veleroNamespace).Delete(ctx, item.GetName(), metav1.DeleteOptions{}); err != nil {
+			if err := h.dynamicClient.Resource(gvr).Namespace(veleroNamespace).Delete(ctx, item.GetName(), kubeutil.DeleteOptions()); err != nil {
 				if apierrors.IsNotFound(err) {
 					continue
 				}

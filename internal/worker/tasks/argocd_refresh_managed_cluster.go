@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	corev1 "k8s.io/api/core/v1"
@@ -43,24 +44,29 @@ const argoCDNamespace = "argocd"
 // argoCDClusterSecretTypeLabel marks a Secret as an ArgoCD cluster registration.
 // Mirrors the constants in internal/handler/argocd.go for the same reason as
 // argoCDNamespace above.
-const argoCDClusterSecretTypeLabel = "argocd.argoproj.io/secret-type"
-const argoCDClusterSecretTypeValue = "cluster"
+const argoCDClusterSecretTypeLabel = argolabels.ArgoCDClusterSecretTypeLabel
+const argoCDClusterSecretTypeValue = argolabels.ArgoCDClusterSecretTypeValue
 
 // astronomerLabelPrefix is the prefix Astronomer stamps onto Argo cluster
 // Secrets to mirror the cluster row's user-managed labels. Stripped + rewritten
 // on every refresh.
-const astronomerLabelPrefix = "astronomer.io/label-"
-const astronomerManagedByLabelKey = "astronomer.io/managed-by"
-const astronomerManagedByLabelValue = "astronomer"
-const astronomerClusterIDLabelKey = "astronomer.io/cluster-id"
-const astronomerClusterNameLabelKey = "astronomer.io/cluster-name"
-const astronomerEnvironmentLabelKey = "astronomer.io/environment"
-const astronomerIsLocalLabelKey = "astronomer.io/is-local"
-
-// maxLabelKeyLen is the Kubernetes-enforced maximum for the *name* portion of
-// a label key (the part after the optional prefix/). Mirrors the constant in
-// internal/handler/argocd.go.
-const maxLabelKeyLen = 63
+const astronomerLabelPrefix = argolabels.LabelPrefix
+const astronomerManagedByLabelKey = argolabels.ManagedByLabelKey
+const astronomerManagedByLabelValue = argolabels.ManagedByLabelValue
+const astronomerClusterIDLabelKey = argolabels.ClusterIDLabelKey
+const astronomerClusterNameLabelKey = argolabels.ClusterNameLabelKey
+const astronomerEnvironmentLabelKey = argolabels.EnvironmentLabelKey
+const astronomerIsLocalLabelKey = argolabels.IsLocalLabelKey
+const astronomerRegionLabelKey = argolabels.RegionLabelKey
+const astronomerProviderLabelKey = argolabels.ProviderLabelKey
+const astronomerDistributionLabelKey = argolabels.DistributionLabelKey
+const astronomerAgentProfileLabelKey = argolabels.AgentProfileLabelKey
+const astronomerAgentVersionLabelKey = argolabels.AgentVersionLabelKey
+const astronomerKubernetesVersionLabelKey = argolabels.KubernetesVersionLabelKey
+const astronomerProjectLabelKey = argolabels.ProjectLabelKey
+const astronomerProjectIDLabelKey = argolabels.ProjectIDLabelKey
+const astronomerProjectMembershipLabelPrefix = argolabels.ProjectMembershipPrefix
+const astronomerProjectIDMembershipLabelPrefix = argolabels.ProjectIDMembershipPrefix
 
 // ArgoCDRefreshQuerier is the slice of sqlc.Queries this task needs.
 // Declared locally so tests can stand up a fake without importing the whole
@@ -141,7 +147,11 @@ func HandleArgoCDRefreshManagedClusterLabels(ctx context.Context, t *asynq.Task)
 		// Cluster isn't registered into any ArgoCD; nothing to refresh.
 		return nil
 	}
-	desired := managedClusterArgoLabels(cluster)
+	projects, err := argolabels.ProjectsForCluster(ctx, argoCDRefreshDeps.Queries, cluster.ID)
+	if err != nil {
+		return fmt.Errorf("list cluster projects: %w", err)
+	}
+	desired := managedClusterArgoLabelsForProjects(cluster, projects)
 	desiredJSON, err := json.Marshal(desired)
 	if err != nil {
 		return fmt.Errorf("marshal desired labels: %w", err)
@@ -259,11 +269,7 @@ func refreshSingleManagedClusterSecret(ctx context.Context, k8s kubernetes.Inter
 // isAstronomerOwnedLabel returns true if the label key is one this task owns
 // and must overwrite on every refresh. Anything else is preserved as-is.
 func isAstronomerOwnedLabel(k string) bool {
-	switch k {
-	case astronomerManagedByLabelKey, astronomerClusterIDLabelKey, astronomerClusterNameLabelKey, astronomerEnvironmentLabelKey:
-		return true
-	}
-	return strings.HasPrefix(k, astronomerLabelPrefix)
+	return argolabels.IsOwnedLabel(k)
 }
 
 // labelMapEqual reports whether two label maps are equal as multisets of (k, v)
@@ -310,37 +316,8 @@ func lookupClusterSecret(ctx context.Context, k8s kubernetes.Interface, name, se
 	return nil, nil
 }
 
-// managedClusterArgoLabels builds the desired astronomer-owned label set for
-// the given cluster. Kept in lockstep with handler.managedClusterLabels —
-// duplicated here (rather than imported) to keep the worker/tasks package free
-// of an internal/handler import.
-func managedClusterArgoLabels(cluster sqlc.Cluster) map[string]string {
-	labels := map[string]string{
-		astronomerManagedByLabelKey:   astronomerManagedByLabelValue,
-		astronomerClusterIDLabelKey:   cluster.ID.String(),
-		astronomerClusterNameLabelKey: cluster.Name,
-		astronomerIsLocalLabelKey:     fmt.Sprintf("%t", cluster.IsLocal),
-	}
-	if cluster.Environment != "" {
-		labels[astronomerEnvironmentLabelKey] = cluster.Environment
-	}
-	if len(cluster.Labels) > 0 {
-		var clusterLabels map[string]string
-		if err := json.Unmarshal(cluster.Labels, &clusterLabels); err == nil {
-			for k, v := range clusterLabels {
-				key := SanitizeLabelKey(k)
-				if key == "" {
-					continue
-				}
-				full := astronomerLabelPrefix + key
-				if _, exists := labels[full]; exists {
-					continue
-				}
-				labels[full] = v
-			}
-		}
-	}
-	return labels
+func managedClusterArgoLabelsForProjects(cluster sqlc.Cluster, projects []sqlc.Project) map[string]string {
+	return argolabels.ManagedClusterLabels(cluster, projects)
 }
 
 // SanitizeLabelKey converts an arbitrary user-supplied label key into a form
@@ -354,45 +331,5 @@ func managedClusterArgoLabels(cluster sqlc.Cluster) map[string]string {
 // otherwise structurally identical; we keep them in lockstep manually). See
 // the TestSanitizeLabelKey suite for the contract.
 func SanitizeLabelKey(in string) string {
-	if in == "" {
-		return ""
-	}
-	out := make([]byte, 0, len(in))
-	lastDash := false
-	for i := 0; i < len(in); i++ {
-		c := in[i]
-		switch {
-		case c >= 'A' && c <= 'Z':
-			out = append(out, c+('a'-'A'))
-			lastDash = false
-		case (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-':
-			out = append(out, c)
-			lastDash = c == '-'
-		default:
-			if !lastDash && len(out) > 0 {
-				out = append(out, '-')
-				lastDash = true
-			}
-		}
-	}
-	start := 0
-	for start < len(out) && !isLabelAlnum(out[start]) {
-		start++
-	}
-	end := len(out)
-	for end > start && !isLabelAlnum(out[end-1]) {
-		end--
-	}
-	out = out[start:end]
-	if len(out) > maxLabelKeyLen {
-		out = out[:maxLabelKeyLen]
-		for len(out) > 0 && !isLabelAlnum(out[len(out)-1]) {
-			out = out[:len(out)-1]
-		}
-	}
-	return string(out)
-}
-
-func isLabelAlnum(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+	return argolabels.SanitizeLabelKey(in)
 }

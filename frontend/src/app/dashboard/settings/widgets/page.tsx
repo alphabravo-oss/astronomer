@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/widgets — admin CRUD for dashboard widgets +
  * Prometheus datasources (migration 058).
@@ -314,37 +315,37 @@ export default function WidgetsAdminPage() {
           <div className="text-sm text-muted-foreground">No widgets defined. Click "New widget" to add one.</div>
         ) : (
           <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-3 py-2">Name</th>
-                  <th className="text-left px-3 py-2">Type</th>
-                  <th className="text-left px-3 py-2">Scope</th>
-                  <th className="text-left px-3 py-2">Refresh</th>
-                  <th className="text-left px-3 py-2">Enabled</th>
-                  <th className="text-right px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-sm">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="text-left px-3 py-2">Name</TableHead>
+                  <TableHead className="text-left px-3 py-2">Type</TableHead>
+                  <TableHead className="text-left px-3 py-2">Scope</TableHead>
+                  <TableHead className="text-left px-3 py-2">Refresh</TableHead>
+                  <TableHead className="text-left px-3 py-2">Enabled</TableHead>
+                  <TableHead className="text-right px-3 py-2">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {widgets.map((w) => (
-                  <tr key={w.id} className="border-t border-border">
-                    <td className="px-3 py-2">{w.name}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{w.widgetType}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{w.scope}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{w.refreshSeconds}s</td>
-                    <td className="px-3 py-2">{w.enabled ? 'yes' : 'no'}</td>
-                    <td className="px-3 py-2 text-right">
+                  <TableRow key={w.id} className="border-t border-border">
+                    <TableCell className="px-3 py-2">{w.name}</TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">{w.widgetType}</TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">{w.scope}</TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">{w.refreshSeconds}s</TableCell>
+                    <TableCell className="px-3 py-2">{w.enabled ? 'yes' : 'no'}</TableCell>
+                    <TableCell className="px-3 py-2 text-right">
                       <button onClick={() => startEdit(w)} className="text-xs text-primary hover:underline mr-2">
                         Edit
                       </button>
                       <button onClick={() => remove(w)} className="text-xs text-red-600 hover:underline inline-flex items-center gap-1">
                         <Trash2 className="h-3 w-3" /> Delete
                       </button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </section>
@@ -353,23 +354,23 @@ export default function WidgetsAdminPage() {
         <h2 className="text-lg font-medium">Prometheus datasources</h2>
         {dsError ? <div className="text-sm text-red-600">{dsError}</div> : null}
         <div className="border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-3 py-2">Name</th>
-                <th className="text-left px-3 py-2">URL</th>
-                <th className="text-left px-3 py-2">Auth</th>
-                <th className="text-left px-3 py-2">Status</th>
-                <th className="text-right px-3 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead className="text-left px-3 py-2">Name</TableHead>
+                <TableHead className="text-left px-3 py-2">URL</TableHead>
+                <TableHead className="text-left px-3 py-2">Auth</TableHead>
+                <TableHead className="text-left px-3 py-2">Status</TableHead>
+                <TableHead className="text-right px-3 py-2">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {datasources.map((d) => (
-                <tr key={d.id} className="border-t border-border">
-                  <td className="px-3 py-2">{d.name}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{d.url}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{d.hasAuth ? 'yes' : 'none'}</td>
-                  <td className="px-3 py-2">
+                <TableRow key={d.id} className="border-t border-border">
+                  <TableCell className="px-3 py-2">{d.name}</TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">{d.url}</TableCell>
+                  <TableCell className="px-3 py-2 text-muted-foreground">{d.hasAuth ? 'yes' : 'none'}</TableCell>
+                  <TableCell className="px-3 py-2">
                     {testStatus[d.id] ? (
                       <span className={`inline-flex items-center gap-1 text-xs ${testStatus[d.id].ok ? 'text-emerald-600' : 'text-red-600'}`}>
                         {testStatus[d.id].ok ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
@@ -378,36 +379,36 @@ export default function WidgetsAdminPage() {
                     ) : (
                       <span className="text-xs text-muted-foreground">unknown</span>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right">
                     <button onClick={() => runTest(d.id)} className="text-xs text-primary hover:underline mr-2 inline-flex items-center gap-1">
                       <FlaskConical className="h-3 w-3" /> Test
                     </button>
                     <button onClick={() => removeDS(d.id)} className="text-xs text-red-600 hover:underline">
                       Delete
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-              <tr className="border-t border-border bg-muted/20">
-                <td className="px-3 py-2">
+              <TableRow className="border-t border-border bg-muted/20">
+                <TableCell className="px-3 py-2">
                   <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="name" value={dsName} onChange={(e) => setDsName(e.target.value)} />
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell className="px-3 py-2">
                   <input className="bg-background border border-border rounded px-2 py-1 w-full font-mono text-xs" placeholder="https://prom..." value={dsURL} onChange={(e) => setDsURL(e.target.value)} />
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell className="px-3 py-2">
                   <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="Bearer (optional)" value={dsBearer} onChange={(e) => setDsBearer(e.target.value)} />
-                </td>
-                <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
-                <td className="px-3 py-2 text-right">
+                </TableCell>
+                <TableCell className="px-3 py-2 text-muted-foreground text-xs">—</TableCell>
+                <TableCell className="px-3 py-2 text-right">
                   <button onClick={addDS} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
                     <Plus className="h-3 w-3" /> Add
                   </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
       </section>
     </div>

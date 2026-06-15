@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
@@ -31,6 +33,8 @@ const (
 )
 
 var argoCDProxyTokenTTL = 180 * 24 * time.Hour
+
+var errArgoCDManagedClusterCredentialUnavailable = errors.New("argocd managed-cluster credential unavailable")
 
 type ArgoCDAutoRegisterQuerier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
@@ -156,7 +160,9 @@ func HandleArgoCDAutoRegisterCluster(ctx context.Context, t *asynq.Task) error {
 		"argocd_instances":  len(instances),
 		"duration_ms":       time.Since(runStarted).Milliseconds(),
 	}
-	if err := repairArgoCDManagedClusterIndex(ctx, deps, instances); err != nil {
+	repairStats, err := repairArgoCDManagedClusterIndexWithStats(ctx, deps, instances)
+	repairStats.addToMetadata(metadata)
+	if err != nil {
 		runtimeLogger().WarnContext(ctx, "argocd managed-cluster index repair failed", "error", err)
 		if firstErr == nil {
 			firstErr = err
@@ -169,6 +175,43 @@ func HandleArgoCDAutoRegisterCluster(ctx context.Context, t *asynq.Task) error {
 	}
 	return firstErr
 }
+
+type argoCDManagedClusterIndexRepairStats struct {
+	ClusterSecretsChecked         int `json:"cluster_secrets_checked"`
+	AstronomerManagedSecrets      int `json:"astronomer_managed_secrets"`
+	ExistingRows                  int `json:"existing_rows"`
+	DBRowsRecreated               int `json:"db_rows_recreated"`
+	OrphanSecretsFound            int `json:"orphan_secrets_found"`
+	DecommissionedSecretsFound    int `json:"decommissioned_secrets_found"`
+	InvalidClusterIDSecretsFound  int `json:"invalid_cluster_id_secrets_found"`
+	UnattributedManagedSecretRows int `json:"unattributed_managed_secret_rows"`
+}
+
+func (s argoCDManagedClusterIndexRepairStats) addToMetadata(metadata map[string]any) {
+	if metadata == nil {
+		return
+	}
+	metadata["argocd_cluster_secrets_checked"] = s.ClusterSecretsChecked
+	metadata["argocd_astronomer_managed_secrets"] = s.AstronomerManagedSecrets
+	metadata["argocd_existing_managed_cluster_rows"] = s.ExistingRows
+	metadata["argocd_managed_cluster_rows_recreated"] = s.DBRowsRecreated
+	metadata["argocd_orphan_secrets_found"] = s.OrphanSecretsFound
+	metadata["argocd_decommissioned_secrets_found"] = s.DecommissionedSecretsFound
+	metadata["argocd_invalid_cluster_id_secrets_found"] = s.InvalidClusterIDSecretsFound
+	metadata["argocd_unattributed_managed_secret_rows"] = s.UnattributedManagedSecretRows
+}
+
+type argoCDManagedClusterSecretRepairOutcome string
+
+const (
+	argoCDSecretRepairIgnored             argoCDManagedClusterSecretRepairOutcome = "ignored"
+	argoCDSecretRepairExistingRow         argoCDManagedClusterSecretRepairOutcome = "existing_row"
+	argoCDSecretRepairDBIndexRecreated    argoCDManagedClusterSecretRepairOutcome = "db_index_recreated"
+	argoCDSecretRepairOrphan              argoCDManagedClusterSecretRepairOutcome = "orphan"
+	argoCDSecretRepairDecommissioned      argoCDManagedClusterSecretRepairOutcome = "decommissioned"
+	argoCDSecretRepairInvalidClusterID    argoCDManagedClusterSecretRepairOutcome = "invalid_cluster_id"
+	argoCDSecretRepairUnattributedManaged argoCDManagedClusterSecretRepairOutcome = "unattributed_managed"
+)
 
 func readArgoCDAutoAdoptSetting(ctx context.Context, q ArgoCDAutoRegisterQuerier) (bool, error) {
 	row, err := q.GetPlatformSetting(ctx, platformSettingArgoCDAutoAdoptKey)
@@ -189,7 +232,9 @@ func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterD
 	if !cluster.IsLocal && !cluster.LastHeartbeat.Valid {
 		return nil
 	}
-	alreadyManaged := argoCDClusterAlreadyManaged(ctx, deps, cluster.ID)
+	managedRows := argoCDManagedClusterRows(ctx, deps, cluster.ID)
+	alreadyManaged := len(managedRows) > 0
+	repairReasons := detectArgoCDManagedClusterDrift(ctx, deps, cluster, managedRows)
 	if !alreadyManaged {
 		writeArgoCDRegistrationStep(ctx, deps, cluster.ID, "argocd_registering", "running", nil, "")
 		upsertArgoCDAdoptionCondition(ctx, deps, cluster.ID, "Unknown", "RegistrationInProgress", "Astronomer is registering this cluster into ArgoCD.")
@@ -220,10 +265,21 @@ func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterD
 		}
 	}
 	if firstErr != nil {
+		if alreadyManaged && len(repairReasons) > 0 && errors.Is(firstErr, errArgoCDManagedClusterCredentialUnavailable) {
+			writeArgoCDRegistrationStep(ctx, deps, cluster.ID, "argocd_registration_repair_blocked", "failed", map[string]any{
+				"repairs": repairReasons,
+				"reason":  "credential_unavailable",
+			}, firstErr.Error())
+		}
 		recordArgoCDRegistrationFailure(ctx, deps, cluster.ID, firstErr)
 		return firstErr
 	}
 	upsertArgoCDAdoptionCondition(ctx, deps, cluster.ID, "True", "Registered", "Cluster is registered into ArgoCD for baseline reconciliation.")
+	if alreadyManaged && len(repairReasons) > 0 {
+		writeArgoCDRegistrationStep(ctx, deps, cluster.ID, "argocd_registration_repaired", "success", map[string]any{
+			"repairs": repairReasons,
+		}, "")
+	}
 	if !alreadyManaged {
 		writeArgoCDRegistrationStep(ctx, deps, cluster.ID, "argocd_registered", "success", map[string]any{
 			"instances": len(instances),
@@ -238,31 +294,40 @@ func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterD
 }
 
 func repairArgoCDManagedClusterIndex(ctx context.Context, deps ArgoCDAutoRegisterDeps, instances []sqlc.ArgocdInstance) error {
+	_, err := repairArgoCDManagedClusterIndexWithStats(ctx, deps, instances)
+	return err
+}
+
+func repairArgoCDManagedClusterIndexWithStats(ctx context.Context, deps ArgoCDAutoRegisterDeps, instances []sqlc.ArgocdInstance) (argoCDManagedClusterIndexRepairStats, error) {
+	var stats argoCDManagedClusterIndexRepairStats
 	if deps.K8s == nil {
 		runtimeLogger().InfoContext(ctx, "argocd managed-cluster index repair skipped: kubernetes client not configured")
-		return nil
+		return stats, nil
 	}
 	lister, ok := deps.Queries.(argoCDManagedClusterLister)
 	if !ok {
-		return nil
+		return stats, nil
 	}
 	if len(instances) == 0 {
-		return nil
+		return stats, nil
 	}
 	if len(instances) > 1 {
 		runtimeLogger().WarnContext(ctx, "argocd managed-cluster index repair skipped: multiple argocd instances configured")
-		return nil
+		return stats, nil
 	}
 	instance := instances[0]
 	secrets, err := deps.K8s.CoreV1().Secrets(argoCDNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: argoCDClusterSecretTypeLabel + "=" + argoCDClusterSecretTypeValue,
 	})
 	if err != nil {
-		return fmt.Errorf("list argocd cluster secrets: %w", err)
+		return stats, fmt.Errorf("list argocd cluster secrets: %w", err)
 	}
+	stats.ClusterSecretsChecked = len(secrets.Items)
 	var firstErr error
 	for i := range secrets.Items {
-		if err := repairArgoCDManagedClusterIndexForSecret(ctx, deps, lister, instance, &secrets.Items[i]); err != nil {
+		outcome, err := repairArgoCDManagedClusterIndexForSecret(ctx, deps, lister, instance, &secrets.Items[i])
+		stats.recordSecretOutcome(outcome)
+		if err != nil {
 			runtimeLogger().WarnContext(ctx, "argocd managed-cluster index repair failed for secret",
 				"secret", secrets.Items[i].Name,
 				"error", err)
@@ -271,31 +336,54 @@ func repairArgoCDManagedClusterIndex(ctx context.Context, deps ArgoCDAutoRegiste
 			}
 		}
 	}
-	return firstErr
+	return stats, firstErr
 }
 
-func repairArgoCDManagedClusterIndexForSecret(ctx context.Context, deps ArgoCDAutoRegisterDeps, lister argoCDManagedClusterLister, instance sqlc.ArgocdInstance, secret *corev1.Secret) error {
+func (s *argoCDManagedClusterIndexRepairStats) recordSecretOutcome(outcome argoCDManagedClusterSecretRepairOutcome) {
+	switch outcome {
+	case argoCDSecretRepairExistingRow:
+		s.AstronomerManagedSecrets++
+		s.ExistingRows++
+	case argoCDSecretRepairDBIndexRecreated:
+		s.AstronomerManagedSecrets++
+		s.DBRowsRecreated++
+	case argoCDSecretRepairOrphan:
+		s.AstronomerManagedSecrets++
+		s.OrphanSecretsFound++
+	case argoCDSecretRepairDecommissioned:
+		s.AstronomerManagedSecrets++
+		s.DecommissionedSecretsFound++
+	case argoCDSecretRepairInvalidClusterID:
+		s.AstronomerManagedSecrets++
+		s.InvalidClusterIDSecretsFound++
+	case argoCDSecretRepairUnattributedManaged:
+		s.AstronomerManagedSecrets++
+		s.UnattributedManagedSecretRows++
+	}
+}
+
+func repairArgoCDManagedClusterIndexForSecret(ctx context.Context, deps ArgoCDAutoRegisterDeps, lister argoCDManagedClusterLister, instance sqlc.ArgocdInstance, secret *corev1.Secret) (argoCDManagedClusterSecretRepairOutcome, error) {
 	if secret == nil || secret.Labels[astronomerManagedByLabelKey] != astronomerManagedByLabelValue {
-		return nil
+		return argoCDSecretRepairIgnored, nil
 	}
 	clusterIDRaw := strings.TrimSpace(secret.Labels[astronomerClusterIDLabelKey])
 	if clusterIDRaw == "" {
-		return nil
+		return argoCDSecretRepairUnattributedManaged, nil
 	}
 	clusterID, err := uuid.Parse(clusterIDRaw)
 	if err != nil {
 		runtimeLogger().WarnContext(ctx, "argocd managed-cluster index repair skipped secret with invalid cluster id",
 			"secret", secret.Name,
 			"cluster_id", clusterIDRaw)
-		return nil
+		return argoCDSecretRepairInvalidClusterID, nil
 	}
 	rows, err := lister.ListArgoCDManagedClustersByCluster(ctx, clusterID)
 	if err != nil {
-		return fmt.Errorf("list managed-cluster rows for %s: %w", clusterID, err)
+		return argoCDSecretRepairIgnored, fmt.Errorf("list managed-cluster rows for %s: %w", clusterID, err)
 	}
 	for _, row := range rows {
 		if row.ArgocdInstanceID == instance.ID {
-			return nil
+			return argoCDSecretRepairExistingRow, nil
 		}
 	}
 	cluster, err := deps.Queries.GetClusterByID(ctx, clusterID)
@@ -304,26 +392,30 @@ func repairArgoCDManagedClusterIndexForSecret(ctx context.Context, deps ArgoCDAu
 			runtimeLogger().WarnContext(ctx, "argocd managed-cluster index repair found secret for missing cluster",
 				"secret", secret.Name,
 				"cluster_id", clusterID.String())
-			return nil
+			return argoCDSecretRepairOrphan, nil
 		}
-		return fmt.Errorf("get cluster %s: %w", clusterID, err)
+		return argoCDSecretRepairIgnored, fmt.Errorf("get cluster %s: %w", clusterID, err)
 	}
 	if cluster.DecommissionedAt.Valid {
 		runtimeLogger().WarnContext(ctx, "argocd managed-cluster index repair found secret for decommissioned cluster",
 			"secret", secret.Name,
 			"cluster_id", clusterID.String())
-		return nil
+		return argoCDSecretRepairDecommissioned, nil
 	}
-	desired := managedClusterArgoLabels(cluster)
+	projects, err := argolabels.ProjectsForCluster(ctx, deps.Queries, cluster.ID)
+	if err != nil {
+		return argoCDSecretRepairIgnored, fmt.Errorf("list cluster projects: %w", err)
+	}
+	desired := managedClusterArgoLabelsForProjects(cluster, projects)
 	if err := refreshSingleManagedClusterSecret(ctx, deps.K8s, sqlc.ArgocdManagedCluster{
 		ClusterSecretName: secret.Name,
 		ServerUrl:         strings.TrimSpace(string(secret.Data["server"])),
 	}, desired); err != nil {
-		return fmt.Errorf("refresh repaired secret labels: %w", err)
+		return argoCDSecretRepairIgnored, fmt.Errorf("refresh repaired secret labels: %w", err)
 	}
 	labelsJSON, err := json.Marshal(desired)
 	if err != nil {
-		return fmt.Errorf("marshal repaired labels: %w", err)
+		return argoCDSecretRepairIgnored, fmt.Errorf("marshal repaired labels: %w", err)
 	}
 	_, err = deps.Queries.CreateArgoCDManagedCluster(ctx, sqlc.CreateArgoCDManagedClusterParams{
 		ArgocdInstanceID:  instance.ID,
@@ -333,10 +425,15 @@ func repairArgoCDManagedClusterIndexForSecret(ctx context.Context, deps ArgoCDAu
 		Labels:            labelsJSON,
 	})
 	if err != nil {
-		return fmt.Errorf("recreate managed-cluster row: %w", err)
+		return argoCDSecretRepairIgnored, fmt.Errorf("recreate managed-cluster row: %w", err)
 	}
+	writeArgoCDRegistrationStep(ctx, deps, clusterID, "argocd_registration_repaired", "success", map[string]any{
+		"repair": "db_index_recreated",
+		"secret": secret.Name,
+		"server": strings.TrimSpace(string(secret.Data["server"])),
+	}, "")
 	upsertArgoCDAdoptionCondition(ctx, deps, clusterID, "True", "Registered", "Cluster is registered into ArgoCD for baseline reconciliation.")
-	return nil
+	return argoCDSecretRepairDBIndexRecreated, nil
 }
 
 func autoRegisterClusterIntoInstance(ctx context.Context, deps ArgoCDAutoRegisterDeps, instance sqlc.ArgocdInstance, cluster sqlc.Cluster) error {
@@ -351,7 +448,11 @@ func autoRegisterClusterIntoInstance(ctx context.Context, deps ArgoCDAutoRegiste
 	client := argocdclient.NewClient(instance.ApiUrl, instanceToken, argocdclient.Options{
 		VerifySSL: instance.VerifySsl,
 	})
-	labels := managedClusterArgoLabels(cluster)
+	projects, err := argolabels.ProjectsForCluster(ctx, deps.Queries, cluster.ID)
+	if err != nil {
+		return fmt.Errorf("list cluster projects: %w", err)
+	}
+	labels := managedClusterArgoLabelsForProjects(cluster, projects)
 	upstream, err := client.RegisterCluster(ctx, argocdclient.ClusterRegistration{
 		Server: server,
 		Name:   cluster.Name,
@@ -382,11 +483,11 @@ func autoRegisterClusterIntoInstance(ctx context.Context, deps ArgoCDAutoRegiste
 func managedClusterCredential(ctx context.Context, deps ArgoCDAutoRegisterDeps, cluster sqlc.Cluster) (string, string, *argocdclient.TLSClientConfig, error) {
 	if cluster.IsLocal {
 		if strings.TrimSpace(cluster.ApiServerUrl) == "" {
-			return "", "", nil, fmt.Errorf("local cluster %s has no api_server_url", cluster.ID)
+			return "", "", nil, fmt.Errorf("%w: local cluster %s has no api_server_url", errArgoCDManagedClusterCredentialUnavailable, cluster.ID)
 		}
 		token, err := createArgoCDApplicationControllerToken(ctx, deps.K8s)
 		if err != nil {
-			return "", "", nil, err
+			return "", "", nil, fmt.Errorf("%w: %v", errArgoCDManagedClusterCredentialUnavailable, err)
 		}
 		return token, strings.TrimSpace(cluster.ApiServerUrl), &argocdclient.TLSClientConfig{
 			Insecure: cluster.CaCertificate == "",
@@ -394,14 +495,14 @@ func managedClusterCredential(ctx context.Context, deps ArgoCDAutoRegisterDeps, 
 		}, nil
 	}
 	if deps.Encryptor == nil {
-		return "", "", nil, fmt.Errorf("encryptor not configured for argocd cluster proxy token")
+		return "", "", nil, fmt.Errorf("%w: encryptor not configured for argocd cluster proxy token", errArgoCDManagedClusterCredentialUnavailable)
 	}
 	if deps.ClusterProxyBaseURL == "" {
-		return "", "", nil, fmt.Errorf("argocd cluster proxy base URL is not configured")
+		return "", "", nil, fmt.Errorf("%w: argocd cluster proxy base URL is not configured", errArgoCDManagedClusterCredentialUnavailable)
 	}
 	token, err := ensureArgoCDClusterProxyToken(ctx, deps, cluster.ID)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", nil, fmt.Errorf("%w: %v", errArgoCDManagedClusterCredentialUnavailable, err)
 	}
 	server := fmt.Sprintf("%s/api/v1/internal/argocd/clusters/%s/k8s", deps.ClusterProxyBaseURL, cluster.ID.String())
 	return token, server, nil, nil
@@ -478,13 +579,72 @@ func firstNonEmptyArgoString(values ...string) string {
 	return ""
 }
 
-func argoCDClusterAlreadyManaged(ctx context.Context, deps ArgoCDAutoRegisterDeps, clusterID uuid.UUID) bool {
+func argoCDManagedClusterRows(ctx context.Context, deps ArgoCDAutoRegisterDeps, clusterID uuid.UUID) []sqlc.ArgocdManagedCluster {
 	lister, ok := deps.Queries.(argoCDManagedClusterLister)
 	if !ok {
-		return false
+		return nil
 	}
 	rows, err := lister.ListArgoCDManagedClustersByCluster(ctx, clusterID)
-	return err == nil && len(rows) > 0
+	if err != nil {
+		return nil
+	}
+	return rows
+}
+
+func detectArgoCDManagedClusterDrift(ctx context.Context, deps ArgoCDAutoRegisterDeps, cluster sqlc.Cluster, rows []sqlc.ArgocdManagedCluster) []string {
+	if deps.K8s == nil || len(rows) == 0 {
+		return nil
+	}
+	projects, err := argolabels.ProjectsForCluster(ctx, deps.Queries, cluster.ID)
+	if err != nil {
+		runtimeLogger().WarnContext(ctx, "argocd auto-register project label lookup failed",
+			"cluster_id", cluster.ID.String(),
+			"error", err)
+		return nil
+	}
+	desired := managedClusterArgoLabelsForProjects(cluster, projects)
+	reasons := map[string]struct{}{}
+	for _, row := range rows {
+		secret, err := lookupClusterSecret(ctx, deps.K8s, row.ClusterSecretName, row.ServerUrl)
+		if err != nil {
+			runtimeLogger().WarnContext(ctx, "argocd auto-register drift check failed",
+				"cluster_id", cluster.ID.String(),
+				"argocd_instance_id", row.ArgocdInstanceID.String(),
+				"cluster_secret_name", row.ClusterSecretName,
+				"error", err)
+			continue
+		}
+		if secret == nil {
+			reasons["missing_secret"] = struct{}{}
+			continue
+		}
+		if managedClusterSecretLabelsDrift(secret.Labels, desired) {
+			reasons["stale_labels"] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(reasons))
+	for reason := range reasons {
+		out = append(out, reason)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func managedClusterSecretLabelsDrift(existing, desired map[string]string) bool {
+	for k, v := range desired {
+		if existing[k] != v {
+			return true
+		}
+	}
+	for k := range existing {
+		if !isAstronomerOwnedLabel(k) {
+			continue
+		}
+		if _, ok := desired[k]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 func recordArgoCDRegistrationFailure(ctx context.Context, deps ArgoCDAutoRegisterDeps, clusterID uuid.UUID, cause error) {

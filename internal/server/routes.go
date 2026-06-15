@@ -351,7 +351,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	// Health check (with and without trailing slash)
 	healthHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":  "ok",
 			"version": version.Version,
 			"time":    time.Now().UTC().Format(time.RFC3339),
@@ -405,9 +405,8 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// /bootstrap/ and /bootstrap/complete/ were removed when the server
 		// switched to the Rancher-style admin-on-first-boot model: the
 		// startup hook in cmd/server/main.go (auth.EnsureBootstrapAdmin)
-		// creates the admin user, and POST /auth/change-password/ handles
-		// the forced first-login rotation. No HTTP endpoint is needed for
-		// platform first-setup any more.
+		// creates the admin user. No HTTP endpoint is needed for platform
+		// first-setup any more.
 
 		if deps.Auth != nil {
 			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/login/", deps.Auth.Login)
@@ -464,17 +463,28 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.Get("/activity/", deps.Resources.ListActivity)
 			r.Route("/settings", func(r chi.Router) {
 				r.Get("/general/", deps.Resources.GetGeneralSettings)
-				r.Put("/general/", deps.Resources.UpdateGeneralSettings)
+				r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).
+					Put("/general/", deps.Resources.UpdateGeneralSettings)
 				r.Get("/sso/", deps.Resources.ListSSOProviders)
-				r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/sso/", deps.Resources.CreateSSOProvider)
-				r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/sso/{id}/", deps.Resources.DeleteSSOProvider)
+				r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSSO, rbac.VerbCreate)).
+					Post("/sso/", deps.Resources.CreateSSOProvider)
+				r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSSO, rbac.VerbDelete)).
+					Delete("/sso/{id}/", deps.Resources.DeleteSSOProvider)
 				// Preset catalog (GitHub / Google / Azure AD / GitLab /
 				// Okta). Public-readable so the login page can render
 				// branded buttons before the user is authenticated.
 				if deps.SSOPresets != nil {
 					r.Get("/sso/presets/", deps.SSOPresets.List)
 				}
-				r.Get("/audit-logs/", deps.Resources.ListAuditLogs)
+				r.With(
+					requireAuth(deps.JWT, deps.AuthQueries),
+					requireAnyPermission(
+						deps.RBACEngine,
+						deps.RBACQueries,
+						permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbRead},
+						permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbList},
+					),
+				).Get("/audit-logs/", deps.Resources.ListAuditLogs)
 				if deps.Monitoring != nil {
 					r.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
 					r.Put("/monitoring/backend/", deps.Monitoring.UpdateBackendConfig)
@@ -728,7 +738,8 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// /admin/platform-settings/default-cluster-template/* surface
 		// manages the auto-attach baseline (typically the seeded
 		// "Platform baseline" — trivy-operator, kube-state-metrics,
-		// node-exporter, fluent-bit, cert-manager) that the cluster
+		// node-exporter, fluent-bit, ingress-nginx, cert-manager,
+		// gatekeeper) that the cluster
 		// Create handler binds to every newly-registered cluster.
 		// Superuser-gated inside the handler. Reapply takes a
 		// {cluster_id} path param so an operator can back-fill an
@@ -880,6 +891,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			requireAuth(deps.JWT, deps.AuthQueries),
 			requireK8sProxyScope(),
 			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries),
+			auditK8sProxySecretReads(deps.AuditWriter),
 			auditK8sProxyMutations(deps.AuditWriter),
 		).
 			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
@@ -892,6 +904,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(
 				rateLimit(appmiddleware.ClassK8sProxy),
 				requireArgoCDClusterProxyToken(deps.ArgoCDProxyTokens),
+				auditArgoCDK8sProxyMutations(deps.AuditWriter),
 			).
 				HandleFunc("/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
 		}
@@ -978,18 +991,90 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 	return appmiddleware.RequirePermission(engine, querier, resource, verb)
 }
 
+type permissionRequirement struct {
+	resource rbac.Resource
+	verb     rbac.Verb
+}
+
+func requireAnyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, requirements ...permissionRequirement) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil || len(requirements) == 0 {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := appmiddleware.GetAuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "authentication_required",
+						"message": "Authentication is required to access this resource",
+					},
+				})
+				return
+			}
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "internal_error",
+						"message": "Failed to retrieve user permissions",
+					},
+				})
+				return
+			}
+			clusterID, projectID := permissionScopeIDs(r)
+			for _, requirement := range requirements {
+				if engine.CheckPermission(bindings, requirement.resource, requirement.verb, clusterID, projectID) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]string{
+					"code":    "permission_denied",
+					"message": "You do not have permission to perform this action",
+				},
+			})
+		})
+	}
+}
+
+func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
+	var clusterID, projectID uuid.UUID
+	clusterParam := chi.URLParam(r, "cluster_id")
+	if clusterParam == "" {
+		clusterParam = chi.URLParam(r, "id")
+	}
+	if clusterParam != "" {
+		if parsed, err := uuid.Parse(clusterParam); err == nil {
+			clusterID = parsed
+		}
+	}
+	projectParam := chi.URLParam(r, "project_id")
+	if projectParam == "" {
+		projectParam = chi.URLParam(r, "id")
+	}
+	if projectParam != "" {
+		if parsed, err := uuid.Parse(projectParam); err == nil {
+			projectID = parsed
+		}
+	}
+	return clusterID, projectID
+}
+
 func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isHighRiskPodProxySubresource(r.URL.Path) {
-				requirePermission(engine, querier, rbac.ResourcePods, rbac.VerbExec)(next).ServeHTTP(w, r)
-				return
-			}
-			verb := rbac.VerbRead
-			if isMutatingK8sProxyMethod(r.Method) {
-				verb = rbac.VerbUpdate
-			}
-			requirePermission(engine, querier, rbac.ResourceClusters, verb)(next).ServeHTTP(w, r)
+			resource, verb := k8sProxyPermission(r)
+			requirePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
 		})
 	}
 }
@@ -1008,11 +1093,44 @@ func requireK8sProxyScope() func(http.Handler) http.Handler {
 }
 
 func auditK8sProxyMutations(auditWriter any) func(http.Handler) http.Handler {
+	return auditK8sProxyMutationsWithAction(auditWriter, "cluster.k8s_proxy.forwarded", nil)
+}
+
+func auditK8sProxySecretReads(auditWriter any) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, verb, ok := k8sProxySecretReadPermission(r); ok {
+				clusterID := chi.URLParam(r, "cluster_id")
+				k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+				detail := map[string]any{
+					"method":   r.Method,
+					"k8s_path": k8sPath,
+					"verb":     string(verb),
+				}
+				if ref := parseK8sProxyObjectRef(k8sPath); len(ref) > 0 {
+					for k, v := range ref {
+						detail[k] = v
+					}
+				}
+				handler.RecordAuditFromRequest(r, auditWriter, "cluster.secret.read", "cluster", clusterID, secretAuditResourceName(detail), detail)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func auditArgoCDK8sProxyMutations(auditWriter any) func(http.Handler) http.Handler {
+	return auditK8sProxyMutationsWithAction(auditWriter, "argocd.k8s_proxy.forwarded", map[string]any{
+		"proxy": "argocd_internal",
+	})
+}
+
+func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetail map[string]any) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isMutatingK8sProxyMethod(r.Method) {
 				clusterID := chi.URLParam(r, "cluster_id")
-				k8sPath := "/" + strings.TrimPrefix(chi.URLParam(r, "*"), "/")
+				k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
 				detail := map[string]any{
 					"method":   r.Method,
 					"k8s_path": k8sPath,
@@ -1022,10 +1140,88 @@ func auditK8sProxyMutations(auditWriter any) func(http.Handler) http.Handler {
 						detail[k] = v
 					}
 				}
-				handler.RecordAuditFromRequest(r, auditWriter, "cluster.k8s_proxy.forwarded", "cluster", clusterID, k8sPath, detail)
+				for k, v := range extraDetail {
+					detail[k] = v
+				}
+				handler.RecordAuditFromRequest(r, auditWriter, action, "cluster", clusterID, k8sPath, detail)
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func k8sProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
+	if r == nil || r.URL == nil {
+		return rbac.ResourceClusters, rbac.VerbRead
+	}
+	if isHighRiskPodProxySubresource(r.URL.Path) {
+		return rbac.ResourcePods, rbac.VerbExec
+	}
+
+	k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+	ref := parseK8sProxyObjectRef(k8sPath)
+	verb := k8sProxyVerb(r, ref)
+	resource, verb := namedResourcePermission(ref["resource"], verb)
+	if ref["resource"] == "pods" && ref["subresource"] == "log" && !isMutatingK8sProxyMethod(r.Method) {
+		return rbac.ResourcePods, rbac.VerbLogs
+	}
+	return resource, verb
+}
+
+func k8sProxyVerb(r *http.Request, ref map[string]string) rbac.Verb {
+	if !isMutatingK8sProxyMethod(r.Method) {
+		if isK8sProxyWatchRequest(r) || ref["watch"] == "true" {
+			return rbac.VerbWatch
+		}
+		if ref["name"] == "" {
+			return rbac.VerbList
+		}
+		return rbac.VerbRead
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		if ref["name"] == "" {
+			return rbac.VerbCreate
+		}
+		return rbac.VerbUpdate
+	case http.MethodDelete:
+		return rbac.VerbDelete
+	default:
+		return rbac.VerbUpdate
+	}
+}
+
+func k8sProxySecretReadPermission(r *http.Request) (rbac.Resource, rbac.Verb, bool) {
+	if r == nil || isMutatingK8sProxyMethod(r.Method) {
+		return "", "", false
+	}
+	k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+	ref := parseK8sProxyObjectRef(k8sPath)
+	if ref["resource"] != "secrets" {
+		return "", "", false
+	}
+	verb := rbac.VerbRead
+	if isK8sProxyWatchRequest(r) {
+		verb = rbac.VerbWatch
+	} else if ref["name"] == "" {
+		verb = rbac.VerbList
+	}
+	return rbac.ResourceSecrets, verb, true
+}
+
+func secretAuditResourceName(detail map[string]any) string {
+	namespace, _ := detail["namespace"].(string)
+	name, _ := detail["name"].(string)
+	switch {
+	case namespace != "" && name != "":
+		return namespace + "/" + name
+	case name != "":
+		return name
+	case namespace != "":
+		return namespace + "/secrets"
+	default:
+		return "secrets"
 	}
 }
 
@@ -1047,6 +1243,10 @@ func parseK8sProxyObjectRef(k8sPath string) map[string]string {
 	default:
 		return nil
 	}
+	if idx < len(parts) && parts[idx] == "watch" {
+		out["watch"] = "true"
+		idx++
+	}
 	if idx < len(parts) && parts[idx] == "namespaces" && idx+1 < len(parts) {
 		out["namespace"] = parts[idx+1]
 		idx += 2
@@ -1056,6 +1256,9 @@ func parseK8sProxyObjectRef(k8sPath string) map[string]string {
 	}
 	if idx+1 < len(parts) {
 		out["name"] = parts[idx+1]
+	}
+	if idx+2 < len(parts) {
+		out["subresource"] = parts[idx+2]
 	}
 	return out
 }
@@ -1068,6 +1271,93 @@ func requireServiceProxyPermission(engine *rbac.Engine, querier appmiddleware.RB
 				verb = rbac.VerbUpdate
 			}
 			requirePermission(engine, querier, rbac.ResourceClusters, verb)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+func requireGenericResourceListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbList)
+			requirePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+func requireNamedResourcePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, routeParam string, requestedVerb rbac.Verb) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resource, verb := namedResourcePermission(chi.URLParam(r, routeParam), requestedVerb)
+			requirePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+func namedResourcePermission(resourceType string, requestedVerb rbac.Verb) (rbac.Resource, rbac.Verb) {
+	switch strings.ToLower(strings.TrimSpace(resourceType)) {
+	case "services", "service", "endpoints", "endpoint":
+		return rbac.ResourceServices, requestedVerb
+	case "ingresses", "ingress",
+		"gateways", "gateway",
+		"httproutes", "httproute",
+		"gatewayclasses", "gatewayclass",
+		"grpcroutes", "grpcroute",
+		"tcproutes", "tcproute",
+		"udproutes", "udproute",
+		"tlsroutes", "tlsroute",
+		"referencegrants", "referencegrant":
+		return rbac.ResourceIngresses, requestedVerb
+	case "networkpolicies", "networkpolicy":
+		return rbac.ResourceNetworkPolicies, requestedVerb
+	case "persistentvolumes", "persistentvolume", "pv",
+		"persistentvolumeclaims", "persistentvolumeclaim", "pvc",
+		"storageclasses", "storageclass":
+		return rbac.ResourceStorage, requestedVerb
+	case "configmaps", "configmap":
+		return rbac.ResourceConfigMaps, requestedVerb
+	case "secrets", "secret":
+		return rbac.ResourceSecrets, requestedVerb
+	case "pods", "pod":
+		return rbac.ResourcePods, requestedVerb
+	case "nodes", "node":
+		return rbac.ResourceNodes, requestedVerb
+	case "deployments", "deployment",
+		"daemonsets", "daemonset",
+		"statefulsets", "statefulset",
+		"replicasets", "replicaset",
+		"jobs", "job",
+		"cronjobs", "cronjob",
+		"hpa", "horizontalpodautoscalers", "horizontalpodautoscaler",
+		"poddisruptionbudgets", "poddisruptionbudget":
+		return rbac.ResourceWorkloads, requestedVerb
+	default:
+		if requestedVerb == rbac.VerbRead || requestedVerb == rbac.VerbList || requestedVerb == rbac.VerbWatch {
+			return rbac.ResourceClusters, requestedVerb
+		}
+		return rbac.ResourceClusters, rbac.VerbUpdate
+	}
+}
+
+func auditGenericSecretList(auditWriter any) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.EqualFold(chi.URLParam(r, "resource_type"), "secrets") {
+				clusterID := chi.URLParam(r, "cluster_id")
+				namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+				detail := map[string]any{
+					"method":        r.Method,
+					"resource_type": "secrets",
+					"verb":          string(rbac.VerbList),
+					"scope":         "generic_resource_list",
+				}
+				resourceName := "secrets"
+				if namespace != "" {
+					detail["namespace"] = namespace
+					resourceName = namespace + "/secrets"
+				}
+				handler.RecordAuditFromRequest(r, auditWriter, "cluster.secret.read", "cluster", clusterID, resourceName, detail)
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -1159,6 +1449,19 @@ func isMutatingK8sProxyMethod(method string) bool {
 	default:
 		return true
 	}
+}
+
+func isK8sProxyWatchRequest(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	if v := r.URL.Query().Get("watch"); v == "true" || v == "1" {
+		return true
+	}
+	if strings.Contains(r.Header.Get("Accept"), "stream=watch") {
+		return true
+	}
+	return strings.Contains(r.URL.Path, "/watch/")
 }
 
 func isHighRiskPodProxySubresource(path string) bool {
@@ -1580,16 +1883,24 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
 			Get("/agents/fleet/{cluster_id}/operations/", deps.AgentFleet.Operations)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
+			Post("/agents/fleet/{cluster_id}/self-test/", deps.AgentFleet.SelfTest)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
 			Post("/agents/fleet/{cluster_id}/upgrade-plan/", deps.AgentFleet.UpgradePlan)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
 			Post("/agents/fleet/{cluster_id}/upgrade/", deps.AgentFleet.Upgrade)
 	}
 
 	if deps.Audit != nil {
+		auditReadOrList := requireAnyPermission(
+			deps.RBACEngine,
+			deps.RBACQueries,
+			permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbRead},
+			permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbList},
+		)
 		r.Route("/audit", func(r chi.Router) {
-			r.Get("/", deps.Audit.List)
-			r.Get("/export/", deps.Audit.Export)
-			r.Get("/{id}/", deps.Audit.Get)
+			r.With(auditReadOrList).Get("/", deps.Audit.List)
+			r.With(auditReadOrList).Get("/export/", deps.Audit.Export)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAuditLogs, rbac.VerbRead)).Get("/{id}/", deps.Audit.Get)
 		})
 	}
 
@@ -1647,6 +1958,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Get("/instances/{id}/applications/", deps.ArgoCD.LiveApplications)
 			r.Get("/instances/{id}/cached-applications/", deps.ArgoCD.ListAppsByInstance)
 			r.Get("/instances/{id}/health/", deps.ArgoCD.InstanceHealth)
+			r.Get("/instances/{id}/orphan-report/", deps.ArgoCD.InstanceOrphanReport)
 			r.Get("/applications/", deps.ArgoCD.ListAllApps)
 			r.Get("/applications/{id}/", deps.ArgoCD.GetApp)
 			r.Post("/applications/{id}/sync/", deps.ArgoCD.SyncApp)
@@ -1829,33 +2141,47 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	}
 
 	if deps.Resources != nil {
-		r.Get("/clusters/{cluster_id}/resources/{group}/{version}/{kind}/", deps.Resources.ListResources)
-		r.Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/", deps.Resources.ListNamedResources)
-		r.Post("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/", deps.Resources.CreateNamedResource)
-		r.Delete("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/{namespace}/{name}/", deps.Resources.DeleteNamedResource)
-		r.Delete("/clusters/{cluster_id}/resources/{resource_type:(?:persistentvolumes)}/{name}/", deps.Resources.DeleteNamedResource)
-		r.Get("/clusters/{cluster_id}/resources/generic/{resource_type}/", deps.Resources.ListGenericResources)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
+			Get("/clusters/{cluster_id}/resources/{group}/{version}/{kind}/", deps.Resources.ListResources)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbList)).
+			Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/", deps.Resources.ListNamedResources)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbCreate)).
+			Post("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/", deps.Resources.CreateNamedResource)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbDelete)).
+			Delete("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/{namespace}/{name}/", deps.Resources.DeleteNamedResource)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbDelete)).
+			Delete("/clusters/{cluster_id}/resources/{resource_type:(?:persistentvolumes)}/{name}/", deps.Resources.DeleteNamedResource)
+		r.With(
+			requireGenericResourceListPermission(deps.RBACEngine, deps.RBACQueries),
+			auditGenericSecretList(deps.AuditWriter),
+		).Get("/clusters/{cluster_id}/resources/generic/{resource_type}/", deps.Resources.ListGenericResources)
 		r.Get("/settings/", deps.Resources.GetGeneralSettings)
 		// Per-resource REST verbs (Python: /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/).
-		r.Get("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.GetNamedResource)
-		r.Put("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.UpdateNamedResource)
-		r.Delete("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.DeleteNamedResourceREST)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbRead)).
+			Get("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.GetNamedResource)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbUpdate)).
+			Put("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.UpdateNamedResource)
+		r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "type", rbac.VerbDelete)).
+			Delete("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.Resources.DeleteNamedResourceREST)
 		// Node action endpoints (cordon/uncordon/drain/metadata/taints).
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/cordon/", deps.Resources.CordonNode)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/uncordon/", deps.Resources.UncordonNode)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/drain/", deps.Resources.DrainNode)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/", deps.Resources.SetNodeLabel)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/remove/", deps.Resources.RemoveNodeLabel)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/", deps.Resources.SetNodeAnnotation)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/remove/", deps.Resources.RemoveNodeAnnotation)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/", deps.Resources.AddNodeTaint)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/remove/", deps.Resources.RemoveNodeTaint)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/cordon/", deps.Resources.CordonNode)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/uncordon/", deps.Resources.UncordonNode)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbManage)).Post("/nodes/{cluster_id}/{node_name}/drain/", deps.Resources.DrainNode)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/", deps.Resources.SetNodeLabel)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/remove/", deps.Resources.RemoveNodeLabel)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/", deps.Resources.SetNodeAnnotation)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/remove/", deps.Resources.RemoveNodeAnnotation)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/", deps.Resources.AddNodeTaint)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/remove/", deps.Resources.RemoveNodeTaint)
 		// User CRUD (List/Get already wired above; add Create/Update/Delete + reset-password).
-		r.Post("/users/", deps.Resources.CreateUser)
-		r.Put("/users/{id}/", deps.Resources.UpdateUser)
-		r.Patch("/users/{id}/", deps.Resources.UpdateUser)
-		r.Delete("/users/{id}/", deps.Resources.DeleteUser)
-		r.Post("/users/{id}/reset-password/", deps.Resources.ResetUserPassword)
+		// These identity-plane mutations require both users:* RBAC and an
+		// admin-scoped API token when token auth is used. Browser sessions rely
+		// on the RBAC gate.
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceUsers, rbac.VerbCreate)).Post("/users/", deps.Resources.CreateUser)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceUsers, rbac.VerbUpdate)).Put("/users/{id}/", deps.Resources.UpdateUser)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceUsers, rbac.VerbUpdate)).Patch("/users/{id}/", deps.Resources.UpdateUser)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceUsers, rbac.VerbDelete)).Delete("/users/{id}/", deps.Resources.DeleteUser)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceUsers, rbac.VerbUpdate)).Post("/users/{id}/reset-password/", deps.Resources.ResetUserPassword)
 		// Admin-only auth hardening endpoints (migration 039).
 		//
 		// Superuser gating lives inside the handler — same pattern as the
@@ -1933,8 +2259,8 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRestart)).Post("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/", deps.Workloads.Restart)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbDelete)).Delete("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.Workloads.Delete)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/namespaces/", deps.Workloads.ListNamespaces)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/nodes/", deps.Workloads.ListNodes)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/nodes/{node_name}/", deps.Workloads.GetNode)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbList)).Get("/clusters/{cluster_id}/nodes/", deps.Workloads.ListNodes)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbRead)).Get("/clusters/{cluster_id}/nodes/{node_name}/", deps.Workloads.GetNode)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/events/", deps.Workloads.ListEvents)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbList)).Get("/clusters/{cluster_id}/pods/", deps.Workloads.ListPods)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.Workloads.DeletePod)

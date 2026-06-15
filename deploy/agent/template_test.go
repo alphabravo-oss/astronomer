@@ -35,6 +35,7 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				`verbs: ["*"]`,
 				`"create"`,
 				`pods/exec`,
+				`"secrets"`,
 			},
 		},
 		{
@@ -50,6 +51,52 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				`verbs: ["*"]`,
 				`clusterroles`,
 				`clusterrolebindings`,
+			},
+		},
+		{
+			name:    "namespace viewer",
+			profile: PrivilegeProfileNamespaceViewer,
+			want: []string{
+				`Namespace-scoped read-only inventory`,
+				`resources: ["configmaps", "endpoints", "events", "persistentvolumeclaims"`,
+				`verbs: ["get", "list", "watch"]`,
+			},
+			notWant: []string{
+				`resources: ["namespaces", "nodes"`,
+				`resources: ["customresourcedefinitions"]`,
+				`nonResourceURLs`,
+				`"secrets"`,
+				`pods/exec`,
+			},
+		},
+		{
+			name:    "namespace operator",
+			profile: PrivilegeProfileNamespaceOperator,
+			want: []string{
+				`Namespace-scoped workload operations`,
+				`pods/exec`,
+				`resources: ["roles", "rolebindings"]`,
+			},
+			notWant: []string{
+				`resources: ["namespaces", "nodes"`,
+				`resources: ["customresourcedefinitions"]`,
+				`nonResourceURLs`,
+				`clusterroles`,
+				`clusterrolebindings`,
+				`"secrets"`,
+			},
+		},
+		{
+			name:    "custom",
+			profile: PrivilegeProfileCustom,
+			want: []string{
+				`No default Kubernetes permissions`,
+				`[]`,
+			},
+			notWant: []string{
+				`resources: ["*"]`,
+				`verbs: ["*"]`,
+				`verbs: ["get", "list", "watch"]`,
 			},
 		},
 	}
@@ -70,6 +117,46 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 	}
 }
 
+func TestRBACBindingKindProfiles(t *testing.T) {
+	tests := []struct {
+		profile       string
+		wantKind      string
+		wantNamespace bool
+	}{
+		{PrivilegeProfileViewer, "ClusterRoleBinding", false},
+		{PrivilegeProfileOperator, "ClusterRoleBinding", false},
+		{PrivilegeProfileAdmin, "ClusterRoleBinding", false},
+		{PrivilegeProfileCustom, "ClusterRoleBinding", false},
+		{PrivilegeProfileNamespaceViewer, "RoleBinding", true},
+		{PrivilegeProfileNamespaceOperator, "RoleBinding", true},
+	}
+	for _, tt := range tests {
+		if got := RBACBindingKind(tt.profile); got != tt.wantKind {
+			t.Fatalf("RBACBindingKind(%q) = %q, want %q", tt.profile, got, tt.wantKind)
+		}
+		hasNamespace := strings.Contains(RBACBindingNamespaceLine(tt.profile), "namespace: astronomer-system")
+		if hasNamespace != tt.wantNamespace {
+			t.Fatalf("RBACBindingNamespaceLine(%q) namespace=%v, want %v", tt.profile, hasNamespace, tt.wantNamespace)
+		}
+	}
+}
+
+func TestNormalizePrivilegeProfileAcceptsNamespaceAliasesAndCustom(t *testing.T) {
+	tests := map[string]string{
+		"namespace_viewer":    PrivilegeProfileNamespaceViewer,
+		"namespaced-viewer":   PrivilegeProfileNamespaceViewer,
+		"namespace operator":  PrivilegeProfileNamespaceOperator,
+		"namespaced_operator": PrivilegeProfileNamespaceOperator,
+		"custom":              PrivilegeProfileCustom,
+		"":                    PrivilegeProfileAdmin,
+	}
+	for input, want := range tests {
+		if got := NormalizePrivilegeProfile(input); got != want {
+			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestRenderInstallYAMLUsesPrivilegeProfile(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "https://astro.example.com",
@@ -81,6 +168,7 @@ func TestRenderInstallYAMLUsesPrivilegeProfile(t *testing.T) {
 	for _, want := range []string{
 		`SERVER_URL: "https://astro.example.com"`,
 		`image: "example.com/agent:v1"`,
+		`PRIVILEGE_PROFILE: "viewer"`,
 		`verbs: ["get", "list", "watch"]`,
 	} {
 		if !strings.Contains(manifest, want) {
@@ -90,6 +178,61 @@ func TestRenderInstallYAMLUsesPrivilegeProfile(t *testing.T) {
 	for _, unwanted := range []string{`{{AGENT_RBAC_RULES}}`, `resources: ["*"]`, `verbs: ["*"]`} {
 		if strings.Contains(manifest, unwanted) {
 			t.Fatalf("manifest unexpectedly contains %q", unwanted)
+		}
+	}
+}
+
+func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "token",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileNamespaceOperator,
+	})
+	for _, want := range []string{
+		`PRIVILEGE_PROFILE: "namespace-operator"`,
+		`kind: RoleBinding`,
+		`namespace: astronomer-system`,
+		`Namespace-scoped workload operations`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("manifest missing %q:\n%s", want, manifest)
+		}
+	}
+	for _, unwanted := range []string{`kind: ClusterRoleBinding`, `resources: ["*"]`, `verbs: ["*"]`, `"secrets"`} {
+		if strings.Contains(manifest, unwanted) {
+			t.Fatalf("manifest unexpectedly contains %q:\n%s", unwanted, manifest)
+		}
+	}
+}
+
+func TestRenderInstallYAMLUsesInstallMetadata(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:          "https://astro.example.com",
+		ClusterID:          "c1",
+		RegistrationToken:  "token",
+		AgentImage:         "example.com/agent:v1",
+		PrivilegeProfile:   PrivilegeProfileOperator,
+		ServiceAccountName: "team-agent",
+		PodLabels: map[string]string{
+			"team":             "platform",
+			"example.com/tier": `gold"primary`,
+		},
+	})
+	for _, want := range []string{
+		"name: team-agent",
+		"serviceAccountName: team-agent",
+		`team: "platform"`,
+		`example.com/tier: "gold\"primary"`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("manifest missing %q:\n%s", want, manifest)
+		}
+	}
+	for _, unwanted := range []string{"{{AGENT_SERVICE_ACCOUNT_NAME}}", "{{AGENT_POD_LABELS}}"} {
+		if strings.Contains(manifest, unwanted) {
+			t.Fatalf("manifest still contains placeholder %q:\n%s", unwanted, manifest)
 		}
 	}
 }

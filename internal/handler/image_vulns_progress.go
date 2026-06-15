@@ -95,8 +95,8 @@ func (h *ImageVulnHandler) ClusterProgress(w http.ResponseWriter, r *http.Reques
 	// straight away.
 	if agg, err := h.queries.AggregateClusterVulnerabilities(r.Context(), clusterID); err == nil {
 		resp["reports_count"] = agg.ReportCount
-		if agg.LastScannedAt.Valid {
-			resp["last_scan_age_seconds"] = int(time.Since(agg.LastScannedAt.Time).Seconds())
+		if t, ok := imageVulnScanTime(agg.LastScannedAt); ok && agg.ReportCount > 0 {
+			resp["last_scan_age_seconds"] = int(time.Since(t).Seconds())
 		}
 	}
 

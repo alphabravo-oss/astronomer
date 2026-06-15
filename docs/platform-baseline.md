@@ -1,20 +1,22 @@
 # Platform baseline (sprint 075)
 
 After install / first boot the management plane seeds well-known
-helm_repositories rows (aqua, jetstack, fluent, prometheus-community —
-migrations 075/077/079; migration 083 removes the original bitnami
+helm_repositories rows (aqua, jetstack, fluent, prometheus-community,
+ingress-nginx, open-policy-agent — migrations 075/077/079/105; migration 083 removes the original bitnami
 seed because Broadcom deprecated the public Bitnami catalog in Aug
 2025 and `helm install bitnami/...` now pulls stale unpatched images)
 and kicks a one-shot `catalog:sync` if `helm_charts` is empty. This
 closes the "register cluster → auto-install platform baseline" gap:
-the five slugs the platform-baseline cluster_template (sprint 074)
+the seven slugs the platform-baseline cluster_template and Argo baseline
 references —
 
 - `trivy-operator`
 - `kube-state-metrics`
-- `node-exporter`
+- `prometheus-node-exporter`
 - `fluent-bit`
+- `ingress-nginx`
 - `cert-manager`
+- `gatekeeper`
 
 — resolve against the seeded catalog without operator intervention.
 
@@ -32,7 +34,7 @@ Response shape:
 ```json
 {
   "template_id": "",
-  "expected_slugs": ["trivy-operator", "kube-state-metrics", "node-exporter", "fluent-bit", "cert-manager"],
+  "expected_slugs": ["trivy-operator", "kube-state-metrics", "prometheus-node-exporter", "fluent-bit", "ingress-nginx", "cert-manager", "gatekeeper"],
   "resolved": [
     { "slug": "trivy-operator", "found": true, "chart_id": "<uuid>", "repository": "aqua" }
   ],
@@ -60,6 +62,6 @@ operator-added repos.
 
 Deferred — the `/dashboard/settings/compliance/baselines` page that
 ships with sprint 074 should call the coverage endpoint and render a
-"5/5 slugs resolved" banner, linking missing slugs to
+"7/7 slugs resolved" banner, linking missing slugs to
 `/dashboard/catalog?search=<slug>`. Until then operators verify via
 the API directly.

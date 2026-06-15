@@ -53,15 +53,7 @@ type SuperuserGateConfig struct {
 }
 
 func (cfg SuperuserGateConfig) internal() superuserGateConfig {
-	return superuserGateConfig{
-		StoreUnavailableStatus:  cfg.StoreUnavailableStatus,
-		StoreUnavailableCode:    cfg.StoreUnavailableCode,
-		StoreUnavailableMessage: cfg.StoreUnavailableMessage,
-		InvalidUserStatus:       cfg.InvalidUserStatus,
-		InvalidUserCode:         cfg.InvalidUserCode,
-		InvalidUserMessage:      cfg.InvalidUserMessage,
-		ForbiddenMessage:        cfg.ForbiddenMessage,
-	}
+	return superuserGateConfig(cfg)
 }
 
 func RequireSuperuser(w http.ResponseWriter, r *http.Request, querier UserByIDQuerier, cfg SuperuserGateConfig) (sqlc.User, bool) {

@@ -38,6 +38,17 @@ func TestRunPeriodicTaskWithLeader_NoLeaderConfigured(t *testing.T) {
 	}
 }
 
+func TestConfigureRuntimeUsesBoundedHTTPClientByDefault(t *testing.T) {
+	defer resetRuntime()
+	ConfigureRuntime(RuntimeDependencies{})
+	if runtimeDeps.HTTPClient == nil {
+		t.Fatal("HTTPClient was not configured")
+	}
+	if runtimeDeps.HTTPClient.Timeout != defaultWorkerHTTPTimeout {
+		t.Fatalf("HTTPClient.Timeout = %s, want %s", runtimeDeps.HTTPClient.Timeout, defaultWorkerHTTPTimeout)
+	}
+}
+
 func TestRunPeriodicTaskWithLeader_NotHeldSkipsWork(t *testing.T) {
 	defer resetRuntime()
 	fl := &fakeLeader{held: false}

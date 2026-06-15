@@ -180,7 +180,7 @@ func TestReadAuditMiddleware_EmitsForMatchedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	waitFor(t, func() bool { return enq.count() == 1 }, time.Second)
 
@@ -225,7 +225,7 @@ func TestReadAuditMiddleware_NoOpForUnmatched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	// Give any background goroutine time to (not) emit.
 	time.Sleep(50 * time.Millisecond)
 	if c := enq.count(); c != 0 {
@@ -271,7 +271,7 @@ func TestReadAuditMiddleware_NonBlocking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	elapsed := time.Since(start)
 
 	if elapsed > 250*time.Millisecond {

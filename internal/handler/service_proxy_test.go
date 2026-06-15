@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,10 +16,14 @@ import (
 
 type serviceProxyTestRequester struct {
 	path string
+	resp *protocol.K8sResponsePayload
 }
 
 func (r *serviceProxyTestRequester) Do(_ context.Context, _, _, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
 	r.path = path
+	if r.resp != nil {
+		return r.resp, nil
+	}
 	return &protocol.K8sResponsePayload{StatusCode: http.StatusNoContent}, nil
 }
 
@@ -87,6 +92,64 @@ func TestServiceProxyAuditsMutatingRequests(t *testing.T) {
 	}
 	if audit.rows[0].ResourceID != "cluster-1" || audit.rows[0].ResourceName != "grafana" {
 		t.Fatalf("audit resource = %s/%s", audit.rows[0].ResourceID, audit.rows[0].ResourceName)
+	}
+}
+
+func TestServiceProxySanitizesResponseHeaders(t *testing.T) {
+	requester := &serviceProxyTestRequester{resp: &protocol.K8sResponsePayload{
+		StatusCode: http.StatusOK,
+		Headers: map[string]string{
+			"Cache-Control":      "no-store",
+			"Clear-Site-Data":    `"cookies"`,
+			"Connection":         "upgrade",
+			"Content-Length":     "999",
+			"Content-Type":       "application/json",
+			"Proxy-Authenticate": "Basic",
+			"Set-Cookie":         "grafana_session=abc; Path=/",
+			"Transfer-Encoding":  "chunked",
+			"WWW-Authenticate":   "Bearer",
+			"X-Frame-Options":    "SAMEORIGIN",
+		},
+		Body: base64.StdEncoding.EncodeToString([]byte(`{"ok":true}`)),
+	}}
+	h := NewServiceProxyHandler(requester)
+	h.SetToolQuerier(serviceProxyTestTools{tools: []sqlc.ClusterTool{{
+		ServiceName: "grafana",
+		ServicePort: pgtype.Int4{Int32: 3000, Valid: true},
+	}}})
+	router := serviceProxyTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/observability/grafana:3000/api/health", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	for _, name := range []string{
+		"Clear-Site-Data",
+		"Connection",
+		"Content-Length",
+		"Proxy-Authenticate",
+		"Set-Cookie",
+		"Transfer-Encoding",
+		"WWW-Authenticate",
+	} {
+		if got := rec.Header().Get(name); got != "" {
+			t.Fatalf("%s forwarded as %q", name, got)
+		}
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	if got := rec.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+		t.Fatalf("X-Frame-Options = %q, want SAMEORIGIN", got)
+	}
+	if got := rec.Body.String(); got != `{"ok":true}` {
+		t.Fatalf("body = %q", got)
 	}
 }
 

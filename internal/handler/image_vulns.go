@@ -126,7 +126,7 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 	)
 	if ns := strings.TrimSpace(r.URL.Query().Get("namespace")); ns != "" {
 		items, err = h.queries.ListVulnerableImagesByNamespace(r.Context(), sqlc.ListVulnerableImagesByNamespaceParams{
-			ClusterID: clusterID, Namespace: ns, Limit: limit, Offset: offset,
+			ClusterID: clusterID, Namespace: ns, PageLimit: limit, PageOffset: offset,
 		})
 	} else {
 		items, err = h.queries.TopVulnerableImages(r.Context(), sqlc.TopVulnerableImagesParams{
@@ -186,7 +186,7 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 	}
 
 	cves, err := h.queries.ListVulnerabilitiesForReport(r.Context(), sqlc.ListVulnerabilitiesForReportParams{
-		ReportID: reportID, SeverityFilter: severity, Limit: limit, Offset: offset,
+		ReportID: reportID, SeverityFilter: severity, PageLimit: limit, PageOffset: offset,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "list_cve_error", "Failed to list vulnerabilities")
@@ -371,8 +371,8 @@ func (h *ImageVulnHandler) FleetTopClusters(w http.ResponseWriter, r *http.Reque
 			"low":          r.Low,
 			"report_count": r.ReportCount,
 		}
-		if r.LastScannedAt.Valid {
-			entry["last_scanned_at"] = r.LastScannedAt.Time.UTC().Format(time.RFC3339)
+		if t, ok := imageVulnScanTime(r.LastScannedAt); ok && r.ReportCount > 0 {
+			entry["last_scanned_at"] = t.Format(time.RFC3339)
 		} else {
 			entry["last_scanned_at"] = nil
 		}
@@ -392,8 +392,8 @@ func renderClusterAggregate(a sqlc.AggregateClusterVulnerabilitiesRow) map[strin
 		"unknown":      a.Unknown,
 		"report_count": a.ReportCount,
 	}
-	if a.LastScannedAt.Valid {
-		out["last_scanned_at"] = a.LastScannedAt.Time.UTC().Format(time.RFC3339)
+	if t, ok := imageVulnScanTime(a.LastScannedAt); ok && a.ReportCount > 0 {
+		out["last_scanned_at"] = t.Format(time.RFC3339)
 	} else {
 		out["last_scanned_at"] = nil
 	}
@@ -410,8 +410,8 @@ func renderFleetAggregate(a sqlc.AggregateFleetVulnerabilitiesRow) map[string]an
 		"report_count":  a.ReportCount,
 		"cluster_count": a.ClusterCount,
 	}
-	if a.LastScannedAt.Valid {
-		out["last_scanned_at"] = a.LastScannedAt.Time.UTC().Format(time.RFC3339)
+	if t, ok := imageVulnScanTime(a.LastScannedAt); ok && a.ReportCount > 0 {
+		out["last_scanned_at"] = t.Format(time.RFC3339)
 	} else {
 		out["last_scanned_at"] = nil
 	}

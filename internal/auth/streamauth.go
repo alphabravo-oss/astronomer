@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"net/http"
 	"strings"
 	"time"
@@ -82,9 +80,7 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
 			// No DB lookup available → can't verify an api_token; reject.
 			return uuid.Nil, false
 		}
-		sum := sha256.Sum256([]byte(token))
-		hashStr := hex.EncodeToString(sum[:])
-		apiToken, err := q.GetTokenByHash(r.Context(), hashStr)
+		apiToken, err := q.GetTokenByHash(r.Context(), HashOpaqueToken(token))
 		if err != nil {
 			return uuid.Nil, false
 		}

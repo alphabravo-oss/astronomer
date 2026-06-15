@@ -51,6 +51,10 @@ spec:
         spec:
           restartPolicy: OnFailure
           serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          {{- with .Values.managementRestoreDrill.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.image.pullSecrets }}
           imagePullSecrets:
             {{- toYaml . | nindent 12 }}
@@ -70,6 +74,10 @@ spec:
           # the sidecar's state.
           initContainers:
             - name: postgres
+              {{- with .Values.managementRestoreDrill.sidecar.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
               image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.sidecar.image.repository "tag" .Values.managementRestoreDrill.sidecar.image.tag "registry" .Values.managementRestoreDrill.sidecar.image.registry "fallback" .Values.image.registry) | quote }}
               imagePullPolicy: {{ .Values.managementRestoreDrill.sidecar.image.pullPolicy | default "IfNotPresent" }}
               restartPolicy: Always
@@ -101,6 +109,10 @@ spec:
                 {{- toYaml .Values.managementRestoreDrill.sidecar.resources | nindent 16 }}
           containers:
             - name: restore-runner
+              {{- with .Values.managementRestoreDrill.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
               image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.image.repository "tag" .Values.managementRestoreDrill.image.tag "registry" .Values.managementRestoreDrill.image.registry "fallback" .Values.image.registry) | quote }}
               imagePullPolicy: {{ .Values.managementRestoreDrill.image.pullPolicy | default "IfNotPresent" }}
               command: ["/bin/sh", "-eu", "-c"]
@@ -244,6 +256,8 @@ spec:
                   "
                   echo "Drill OK."
               env:
+                - name: HOME
+                  value: /tmp
                 - name: MANAGEMENT_BACKUP_RELEASE
                   value: {{ .Release.Name | quote }}
                 - name: MANAGEMENT_BACKUP_BUCKET

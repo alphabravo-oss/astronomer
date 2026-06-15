@@ -312,13 +312,31 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 			t.Errorf("expected %s called once, got %d", name, q.calls[name])
 		}
 	}
-	// One audit row per phase (5 phases).
-	if len(q.audit) != 5 {
-		t.Errorf("expected 5 audit rows, got %d", len(q.audit))
+	// One audit row per phase (5 phases) plus a direct token-revocation
+	// security event that can be queried without parsing phase names.
+	if len(q.audit) != 6 {
+		t.Errorf("expected 6 audit rows, got %d", len(q.audit))
 	}
+	phaseAuditRows := 0
+	revocationAuditRows := 0
 	for _, row := range q.audit {
-		if !strings.HasPrefix(row.Action, "cluster.decommission.") {
-			t.Errorf("audit action %q missing cluster.decommission. prefix", row.Action)
+		switch {
+		case strings.HasPrefix(row.Action, "cluster.decommission."):
+			phaseAuditRows++
+		case row.Action == "agent.token.revoked":
+			revocationAuditRows++
+			if row.ResourceType != "cluster" || row.ResourceID != q.row.ClusterID.String() {
+				t.Errorf("token revocation audit resource = %s/%s, want cluster/%s", row.ResourceType, row.ResourceID, q.row.ClusterID)
+			}
+			var detail map[string]any
+			if err := json.Unmarshal(row.Detail, &detail); err != nil {
+				t.Fatalf("decode token revocation audit detail: %v", err)
+			}
+			if detail["agent_tokens_removed"] != float64(1) {
+				t.Errorf("agent_tokens_removed detail = %v, want 1", detail["agent_tokens_removed"])
+			}
+		default:
+			t.Errorf("unexpected audit action %q", row.Action)
 		}
 		// Sanity: the regex contract in internal/audit will already enforce
 		// the canonical shape, but we double-check the format here too so
@@ -326,6 +344,12 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 		if strings.Contains(row.Action, " ") || strings.Contains(row.Action, "-") {
 			t.Errorf("audit action %q contains forbidden character", row.Action)
 		}
+	}
+	if phaseAuditRows != 5 {
+		t.Errorf("phase audit rows = %d, want 5", phaseAuditRows)
+	}
+	if revocationAuditRows != 1 {
+		t.Errorf("token revocation audit rows = %d, want 1", revocationAuditRows)
 	}
 }
 
@@ -516,7 +540,7 @@ func TestPhaseDeleteDependentsDeletesArgoCDClusterSecrets(t *testing.T) {
 		ClusterSecretName: secretName,
 		ServerUrl:         "https://prod-east.example",
 	}}
-	k8s := fake.NewSimpleClientset(&corev1.Secret{
+	k8s := fake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: argoCDNamespace,

@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster "Network & access" tab (migration 070).
  *
@@ -22,7 +23,7 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastError, toastInfo, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -44,24 +45,15 @@ import {
   type ApiserverAllowlistResponse,
   type ApiserverAllowlistSnapshot,
 } from '@/lib/api/cluster-detail';
-import { useAuthStore } from '@/lib/store';
+import { queryKeys } from '@/lib/hooks';
+import { usePermissionDecision } from '@/lib/permission-hooks';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
-// ─── Query keys ─────────────────────────────────────────────────────────────
-const qk = {
-  allowlist: (id: string) => ['clusters', id, 'apiserver-allowlist'] as const,
-  snapshots: (id: string) =>
-    ['clusters', id, 'apiserver-allowlist-snapshots'] as const,
-};
-
-// ─── RBAC stub ──────────────────────────────────────────────────────────────
-function useClustersWrite(): { canWrite: boolean; reason: string } {
-  const user = useAuthStore((s) => s.user);
-  const roles = user?.globalRoles ?? [];
-  const canWrite = roles.some((r) => /admin|write|owner|platform/i.test(r));
+function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
+  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
   return {
-    canWrite,
-    reason: canWrite ? '' : 'requires clusters:write',
+    canWrite: decision.allowed,
+    reason: decision.disabledReason ?? '',
   };
 }
 
@@ -124,10 +116,10 @@ export default function ClusterNetworkAccessPage() {
   const params = useParams<{ id: string }>();
   const clusterId = params.id;
   const queryClient = useQueryClient();
-  const { canWrite, reason } = useClustersWrite();
+  const { canWrite, reason } = useClustersUpdate(clusterId);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: qk.allowlist(clusterId),
+    queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId),
     queryFn: () => getApiserverAllowlist(clusterId),
     refetchInterval: 30_000,
   });
@@ -153,20 +145,20 @@ export default function ClusterNetworkAccessPage() {
     mutationFn: (body: { cidrs: string[]; mode: ApiserverAllowlistMode; forceApply?: boolean }) =>
       updateApiserverAllowlist(clusterId, body),
     onSuccess: () => {
-      toast.success('Apiserver allow-list updated');
+      toastSuccess('Apiserver allow-list updated');
       setEditing(false);
       setRequireForce(false);
-      queryClient.invalidateQueries({ queryKey: qk.allowlist(clusterId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId) });
     },
     onError: (err: any) => {
       const code = err?.response?.data?.error?.code;
       if (code === 'mode_change_requires_force') {
         setRequireForce(true);
-        toast.warning(
+        toastWarning(
           'Enforce mode requires force_apply while drift exists — re-submit to apply anyway.',
         );
       } else {
-        toast.error(
+        toastError(
           err?.response?.data?.error?.message ?? 'Failed to update allow-list',
         );
       }
@@ -176,22 +168,22 @@ export default function ClusterNetworkAccessPage() {
   const reconcileMut = useMutation({
     mutationFn: () => reconcileApiserverAllowlist(clusterId),
     onSuccess: () => {
-      toast.success('Reconcile queued');
+      toastSuccess('Reconcile queued');
       // The reconciler runs async; refresh after a short delay.
       setTimeout(
-        () => queryClient.invalidateQueries({ queryKey: qk.allowlist(clusterId) }),
+        () => queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId) }),
         2_000,
       );
     },
     onError: (err: any) => {
-      toast.error(
+      toastError(
         err?.response?.data?.error?.message ?? 'Failed to queue reconcile',
       );
     },
   });
 
   const { data: snapshots = [] } = useQuery({
-    queryKey: qk.snapshots(clusterId),
+    queryKey: queryKeys.clusterPages.apiserverAllowlistSnapshots(clusterId),
     queryFn: () => listApiserverAllowlistSnapshots(clusterId, { limit: 20 }),
     enabled: showSnapshots,
   });
@@ -226,7 +218,7 @@ export default function ClusterNetworkAccessPage() {
     const trimmed = newCIDR.trim();
     if (!trimmed) return;
     if (editedCIDRs.includes(trimmed)) {
-      toast.info('CIDR already in list');
+      toastInfo('CIDR already in list');
       return;
     }
     setEditedCIDRs([...editedCIDRs, trimmed]);
@@ -478,26 +470,26 @@ export default function ClusterNetworkAccessPage() {
             {snapshots.length === 0 ? (
               <p className="text-sm text-slate-400">No snapshots captured yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-slate-500">
-                    <th className="py-1">Captured</th>
-                    <th>Drift</th>
-                    <th>Effective</th>
-                    <th>Desired</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table className="w-full text-sm">
+                <TableHeader>
+                  <TableRow className="text-left text-xs text-slate-500">
+                    <TableHead className="py-1">Captured</TableHead>
+                    <TableHead>Drift</TableHead>
+                    <TableHead>Effective</TableHead>
+                    <TableHead>Desired</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {snapshots.map((s) => (
-                    <tr key={s.id} className="border-t text-xs">
-                      <td className="py-1 font-mono">{s.capturedAt}</td>
-                      <td>{s.drift ? '⚠ yes' : 'no'}</td>
-                      <td className="font-mono">{s.effectiveCidrs.length}</td>
-                      <td className="font-mono">{s.desiredCidrs.length}</td>
-                    </tr>
+                    <TableRow key={s.id} className="border-t text-xs">
+                      <TableCell className="py-1 font-mono">{s.capturedAt}</TableCell>
+                      <TableCell>{s.drift ? '⚠ yes' : 'no'}</TableCell>
+                      <TableCell className="font-mono">{s.effectiveCidrs.length}</TableCell>
+                      <TableCell className="font-mono">{s.desiredCidrs.length}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         )}

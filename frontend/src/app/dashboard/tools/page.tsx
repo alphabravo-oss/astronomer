@@ -1,8 +1,10 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useRouter } from 'next/navigation';
 import { useClusters, useTools, useClusterToolsStatus } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { normalizeToolStatus } from '@/lib/tool-status';
 import type { Cluster, ClusterTool, ClusterToolStatus, ToolStatus } from '@/types';
 import { Wrench, Loader2, Server } from 'lucide-react';
 
@@ -36,11 +38,11 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
   statuses?.forEach((s) => statusMap.set(s.slug, s));
 
   return (
-    <tr
+    <TableRow
       onClick={() => router.push(`/dashboard/clusters/${cluster.id}/tools`)}
       className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
     >
-      <td className="px-4 py-3">
+      <TableCell className="px-4 py-3">
         <div className="flex items-center gap-3">
           <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <div>
@@ -48,15 +50,15 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
             <p className="text-xs text-muted-foreground">{cluster.name}</p>
           </div>
         </div>
-      </td>
-      <td className="px-4 py-3">
+      </TableCell>
+      <TableCell className="px-4 py-3">
         <span className="text-xs text-muted-foreground capitalize">{cluster.environment}</span>
-      </td>
+      </TableCell>
       {tools.map((tool) => {
         const toolStatus = statusMap.get(tool.slug);
-        const status: ToolStatus = toolStatus?.status || 'not_installed';
+        const status = normalizeToolStatus(toolStatus?.status);
         return (
-          <td key={tool.slug} className="px-4 py-3">
+          <TableCell key={tool.slug} className="px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
                 {(status === 'installing' || status === 'upgrading' || status === 'uninstalling') && (
@@ -75,10 +77,10 @@ function ClusterToolRow({ cluster, tools }: { cluster: Cluster; tools: ClusterTo
                 {toolStatusLabel[status]}
               </span>
             </div>
-          </td>
+          </TableCell>
         );
       })}
-    </tr>
+    </TableRow>
   );
 }
 
@@ -113,31 +115,31 @@ export default function ToolsFleetPage() {
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <Table className="w-full">
+              <TableHeader>
+                <TableRow className="border-b border-border bg-muted/30">
+                  <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Cluster
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Environment
-                  </th>
+                  </TableHead>
                   {(tools || []).map((tool) => (
-                    <th
+                    <TableHead
                       key={tool.slug}
                       className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                     >
                       {tool.name}
-                    </th>
+                    </TableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {clusters.map((cluster) => (
                   <ClusterToolRow key={cluster.id} cluster={cluster} tools={tools || []} />
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}

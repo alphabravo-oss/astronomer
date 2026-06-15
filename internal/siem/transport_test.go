@@ -29,7 +29,9 @@ func TestTransport_SyslogUDP_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	received := make(chan []byte, 4)
 	done := make(chan struct{})
@@ -49,7 +51,9 @@ func TestTransport_SyslogUDP_RoundTrip(t *testing.T) {
 	}()
 
 	transport := NewSyslogUDP(conn.LocalAddr().String())
-	defer transport.Close()
+	defer func() {
+		_ = transport.Close()
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	batch := [][]byte{
@@ -98,7 +102,9 @@ func TestTransport_SplunkHEC_PostsExpectedShape(t *testing.T) {
 	defer srv.Close()
 
 	transport := NewSplunkHEC(srv.URL, "abc-token", srv.Client())
-	defer transport.Close()
+	defer func() {
+		_ = transport.Close()
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	batch := [][]byte{
@@ -142,7 +148,9 @@ func TestTransport_SplunkHEC_NonOKStatusReturnsError(t *testing.T) {
 	}))
 	defer srv.Close()
 	transport := NewSplunkHEC(srv.URL, "bad", srv.Client())
-	defer transport.Close()
+	defer func() {
+		_ = transport.Close()
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := transport.Send(ctx, [][]byte{[]byte(`{"event_name":"x"}`)})
@@ -175,7 +183,9 @@ func TestTransport_NDJSONHTTPS_AddsCustomHeaders(t *testing.T) {
 	hdr := http.Header{}
 	hdr.Set("Authorization", "Bearer abc")
 	transport := NewNDJSONHTTPS(srv.URL, srv.Client(), hdr)
-	defer transport.Close()
+	defer func() {
+		_ = transport.Close()
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := transport.Send(ctx, [][]byte{
@@ -204,7 +214,9 @@ func TestTransport_SyslogTCP_FramesNewlineDelimited(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer ln.Close()
+	defer func() {
+		_ = ln.Close()
+	}()
 
 	received := make(chan []string, 1)
 	done := make(chan struct{})
@@ -215,7 +227,9 @@ func TestTransport_SyslogTCP_FramesNewlineDelimited(t *testing.T) {
 			received <- nil
 			return
 		}
-		defer conn.Close()
+		defer func() {
+			_ = conn.Close()
+		}()
 		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 		scanner := bufio.NewScanner(conn)
 		var out []string

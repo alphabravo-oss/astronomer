@@ -23,11 +23,11 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const updateUser = useAuthStore((s) => s.updateUser);
-  const storedUser = useAuthStore((s) => s.user);
-  const { data: currentUser } = useCurrentUser();
+  const { data: currentUser, isFetched: currentUserFetched } = useCurrentUser();
   const { data: featureFlags } = useFeatureFlags();
-  const effectiveUser = currentUser ?? storedUser;
-  const mustChangePassword = effectiveUser?.mustChangePassword || effectiveUser?.must_change_password;
+  const mustChangePassword = currentUser
+    ? currentUser.mustChangePassword || currentUser.must_change_password
+    : false;
   const disabledFeature = disabledFeatureForPath(pathname, featureFlags);
 
   useEffect(() => {
@@ -39,10 +39,10 @@ export default function DashboardLayout({
   // Bootstrap admin / any user flagged must_change_password: kick them out
   // to the forced-rotation screen before any dashboard data starts loading.
   useEffect(() => {
-    if (mustChangePassword) {
+    if (currentUserFetched && mustChangePassword) {
       router.replace('/auth/change-password');
     }
-  }, [mustChangePassword, router]);
+  }, [currentUserFetched, mustChangePassword, router]);
 
   // Hold a single SSE connection open for the whole dashboard; per-page
   // hooks reuse this connection via refcount inside `lib/live-events.ts`.
@@ -65,7 +65,6 @@ export default function DashboardLayout({
             {disabledFeature ? <FeatureDisabledState /> : children}
           </div>
         </main>
-        <div id="bottom-panel-root" />
       </div>
       <CommandPalette />
       {/*

@@ -166,6 +166,8 @@ func runConnect(logger *slog.Logger) error {
 		// Health reporter (heartbeat + metrics tickers + JSON probes).
 		health := agent.NewHealthReporter(client, logger, cfg.HeartbeatInterval, cfg.MetricsInterval)
 		health.SetAgentVersion(version.Version)
+		health.SetAgentBuildSHA(version.GitCommit)
+		health.SetPrivilegeProfile(cfg.PrivilegeProfile)
 		health.SetClusterID(cfg.ClusterID)
 		if mc, err := metricsv.NewForConfig(restConfig); err == nil {
 			health.SetMetricsClient(mc)

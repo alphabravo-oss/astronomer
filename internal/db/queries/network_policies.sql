@@ -44,11 +44,6 @@ RETURNING *;
 -- name: DeleteNetworkPolicyTemplate :exec
 DELETE FROM network_policy_templates WHERE id = $1;
 
--- name: ListNetworkPolicyApplications :many
-SELECT * FROM network_policy_applications
-ORDER BY updated_at DESC
-LIMIT $1 OFFSET $2;
-
 -- name: ListApplicationsForCluster :many
 SELECT * FROM network_policy_applications
 WHERE cluster_id = $1
@@ -104,9 +99,3 @@ UPDATE network_policy_applications SET
     updated_at      = now()
 WHERE id = $1
 RETURNING *;
-
--- name: CountNetworkPolicyApplicationsByStatus :many
--- Powers the astronomer_network_policy_applications{cluster,status} gauge.
-SELECT cluster_id, status, count(*)::bigint AS total
-FROM network_policy_applications
-GROUP BY cluster_id, status;

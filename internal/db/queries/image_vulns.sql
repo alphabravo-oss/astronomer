@@ -1,10 +1,6 @@
 -- Sprint 062 — image vulnerability report + per-CVE row CRUD.
 --
--- These queries are also implemented by hand in
--- internal/db/sqlc/image_vulns_ext.sql.go because the local sqlc CLI is
--- broken in this repo. This file remains as the canonical source-of-
--- truth for what the queries do; future regenerations re-emit the hand
--- file's surface.
+-- Generated sqlc output is the canonical Go API for this surface.
 
 -- name: UpsertImageVulnerabilityReport :one
 -- Idempotent on the upstream (cluster_id, report_name) key. Updates
@@ -60,7 +56,7 @@ SELECT
     COALESCE(SUM(low_count), 0)::bigint AS low,
     COALESCE(SUM(unknown_count), 0)::bigint AS unknown,
     COUNT(*)::bigint AS report_count,
-    MAX(scanned_at) AS last_scanned_at
+    COALESCE(MAX(scanned_at), '1970-01-01T00:00:00Z'::timestamptz) AS last_scanned_at
 FROM image_vulnerability_reports
 WHERE cluster_id = $1;
 
@@ -73,7 +69,7 @@ SELECT
     COALESCE(SUM(unknown_count), 0)::bigint AS unknown,
     COUNT(*)::bigint AS report_count,
     COUNT(DISTINCT cluster_id)::bigint AS cluster_count,
-    MAX(scanned_at) AS last_scanned_at
+    COALESCE(MAX(scanned_at), '1970-01-01T00:00:00Z'::timestamptz) AS last_scanned_at
 FROM image_vulnerability_reports;
 
 -- name: TopVulnerableImages :many
@@ -88,17 +84,17 @@ LIMIT $2 OFFSET $3;
 SELECT * FROM image_vulnerability_reports
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY critical_count DESC, high_count DESC, scanned_at DESC
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg(page_limit)::int OFFSET sqlc.arg(page_offset)::int;
 
 -- name: CountVulnerableImagesForCluster :one
 SELECT COUNT(*)::bigint FROM image_vulnerability_reports WHERE cluster_id = $1;
 
 -- name: ListVulnerabilitiesForReport :many
 -- Severity filter is empty-string-treated-as-no-filter so callers can
--- pass '' for the unfiltered list.
+-- pass an empty string for the unfiltered list.
 SELECT * FROM image_vulnerabilities
-WHERE report_id = $1
-  AND ($2::text = '' OR severity = $2)
+WHERE report_id = @report_id::uuid
+  AND (@severity_filter::text = '' OR severity = @severity_filter::text)
 ORDER BY
     CASE severity
         WHEN 'CRITICAL' THEN 0
@@ -109,12 +105,12 @@ ORDER BY
     END ASC,
     cvss_score DESC NULLS LAST,
     vulnerability_id ASC
-LIMIT $3 OFFSET $4;
+LIMIT @page_limit::int OFFSET @page_offset::int;
 
 -- name: CountVulnerabilitiesForReport :one
 SELECT COUNT(*)::bigint FROM image_vulnerabilities
-WHERE report_id = $1
-  AND ($2::text = '' OR severity = $2);
+WHERE report_id = @report_id::uuid
+  AND (@severity_filter::text = '' OR severity = @severity_filter::text);
 
 -- name: TopClustersByVulnerability :many
 -- For the fleet rollup at /dashboard/security/. Sums critical+high per
@@ -126,7 +122,7 @@ SELECT
     COALESCE(SUM(medium_count), 0)::bigint AS medium,
     COALESCE(SUM(low_count), 0)::bigint AS low,
     COUNT(*)::bigint AS report_count,
-    MAX(scanned_at) AS last_scanned_at
+    COALESCE(MAX(scanned_at), '1970-01-01T00:00:00Z'::timestamptz) AS last_scanned_at
 FROM image_vulnerability_reports
 GROUP BY cluster_id
 ORDER BY critical DESC, high DESC

@@ -12,7 +12,7 @@
  * invalidate the relevant query on success.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as api from '@/lib/api/project-detail';
 import { queryKeys } from '@/lib/hooks';
 import type {
@@ -69,10 +69,10 @@ export function useUpdateProjectPolicy(projectId: string) {
       // list page reflects the new caps when the user navigates back.
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.all });
-      toast.success('Project policy updated');
+      toastSuccess('Project policy updated');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to update policy: ${err.message}`);
+      toastApiError('Failed to update policy', err);
     },
   });
 }
@@ -137,10 +137,10 @@ export function useCreateCloudCredential(projectId: string) {
       api.createProjectCloudCredential(projectId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.cloudCredentials(projectId) });
-      toast.success('Cloud credential created');
+      toastSuccess('Cloud credential created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create credential: ${err.message}`);
+      toastApiError('Failed to create credential', err);
     },
   });
 }
@@ -160,10 +160,10 @@ export function useUpdateCloudCredential(projectId: string) {
       qc.invalidateQueries({
         queryKey: projectDetailKeys.cloudCredential(projectId, vars.credentialId),
       });
-      toast.success('Cloud credential updated');
+      toastSuccess('Cloud credential updated');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to update credential: ${err.message}`);
+      toastApiError('Failed to update credential', err);
     },
   });
 }
@@ -175,10 +175,10 @@ export function useDeleteCloudCredential(projectId: string) {
       api.deleteProjectCloudCredential(projectId, credentialId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.cloudCredentials(projectId) });
-      toast.success('Cloud credential deleted');
+      toastSuccess('Cloud credential deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to delete credential: ${err.message}`);
+      toastApiError('Failed to delete credential', err);
     },
   });
 }
@@ -229,10 +229,10 @@ export function useCreateClusterTemplate() {
     mutationFn: (body: ClusterTemplateWriteRequest) => api.createClusterTemplate(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.all });
-      toast.success('Cluster template created');
+      toastSuccess('Cluster template created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create template: ${err.message}`);
+      toastApiError('Failed to create template', err);
     },
   });
 }
@@ -245,10 +245,10 @@ export function useUpdateClusterTemplate() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.all });
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.detail(vars.id) });
-      toast.success('Cluster template updated');
+      toastSuccess('Cluster template updated');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to update template: ${err.message}`);
+      toastApiError('Failed to update template', err);
     },
   });
 }
@@ -259,10 +259,10 @@ export function useDeleteClusterTemplate() {
     mutationFn: (id: string) => api.deleteClusterTemplate(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: clusterTemplateKeys.all });
-      toast.success('Cluster template deleted');
+      toastSuccess('Cluster template deleted');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to delete template: ${err.message}`);
+      toastApiError('Failed to delete template', err);
     },
   });
 }
@@ -327,10 +327,10 @@ export function useCreateProjectCatalog(projectId: string) {
       api.createProjectCatalog(projectId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
-      toast.success('Catalog created');
+      toastSuccess('Catalog created');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to create catalog: ${err.message}`);
+      toastApiError('Failed to create catalog', err);
     },
   });
 }
@@ -341,10 +341,10 @@ export function useSubscribeProjectCatalog(projectId: string) {
     mutationFn: (catalogId: string) => api.subscribeProjectCatalog(projectId, catalogId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
-      toast.success('Subscribed to catalog');
+      toastSuccess('Subscribed to catalog');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to subscribe: ${err.message}`);
+      toastApiError('Failed to subscribe', err);
     },
   });
 }
@@ -355,10 +355,10 @@ export function useDeleteProjectCatalog(projectId: string) {
     mutationFn: (catalogId: string) => api.deleteProjectCatalog(projectId, catalogId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: projectDetailKeys.catalogs(projectId) });
-      toast.success('Catalog unsubscribed');
+      toastSuccess('Catalog unsubscribed');
     },
     onError: (err: Error) => {
-      toast.error(`Failed to unsubscribe: ${err.message}`);
+      toastApiError('Failed to unsubscribe', err);
     },
   });
 }

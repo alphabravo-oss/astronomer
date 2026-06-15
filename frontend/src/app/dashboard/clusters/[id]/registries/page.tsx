@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * Cluster Registries tab — private image-pull credentials, per cluster.
  *
@@ -12,7 +13,7 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import {
   CheckCircle2,
   Container,
@@ -28,8 +29,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useCluster, useClusterNamespaces } from '@/lib/hooks';
-import { useAuthStore } from '@/lib/store';
+import { queryKeys, useCluster, useClusterNamespaces } from '@/lib/hooks';
+import { usePermissionDecision } from '@/lib/permission-hooks';
 import {
   createClusterRegistry,
   deleteClusterRegistry,
@@ -42,19 +43,14 @@ import {
 } from '@/lib/api/cluster-detail';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 
 const PASSWORD_SENTINEL = '<set>';
 
-function useClustersWrite(): { canWrite: boolean; reason: string } {
-  const user = useAuthStore((s) => s.user);
-  const roles = user?.globalRoles ?? [];
-  const canWrite = roles.some((r) => /admin|write|owner|platform/i.test(r));
-  return { canWrite, reason: canWrite ? '' : 'requires clusters:write' };
+function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
+  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
+  return { canWrite: decision.allowed, reason: decision.disabledReason ?? '' };
 }
-
-const qk = {
-  registries: (id: string) => ['clusters', id, 'registries'] as const,
-};
 
 function fmt(iso?: string) {
   if (!iso) return '—';
@@ -69,11 +65,11 @@ export default function ClusterRegistriesPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const queryClient = useQueryClient();
-  const { canWrite, reason } = useClustersWrite();
+  const { canWrite, reason } = useClustersUpdate(clusterId);
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: registries, isLoading } = useQuery({
-    queryKey: qk.registries(clusterId),
+    queryKey: queryKeys.clusterPages.registries(clusterId),
     queryFn: () => listClusterRegistries(clusterId),
     enabled: !!clusterId,
     refetchInterval: 30000,
@@ -88,11 +84,11 @@ export default function ClusterRegistriesPage() {
   const deleteMutation = useMutation({
     mutationFn: (registryId: string) => deleteClusterRegistry(clusterId, registryId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.registries(clusterId) });
-      toast.success('Registry removed');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.registries(clusterId) });
+      toastSuccess('Registry removed');
       setDeleteTarget(null);
     },
-    onError: (e: Error) => toast.error(`Delete failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Delete failed', e),
   });
 
   const testMutation = useMutation({
@@ -103,14 +99,14 @@ export default function ClusterRegistriesPage() {
     onSuccess: (res, registryId) => {
       setTestStatus((s) => ({ ...s, [registryId]: res.ok ? 'ok' : 'fail' }));
       if (res.ok) {
-        toast.success(`Registry reachable${res.latencyMs ? ` (${res.latencyMs}ms)` : ''}`);
+        toastSuccess(`Registry reachable${res.latencyMs ? ` (${res.latencyMs}ms)` : ''}`);
       } else {
-        toast.error(res.message || 'Registry test failed');
+        toastError(res.message || 'Registry test failed');
       }
     },
     onError: (e: Error, registryId) => {
       setTestStatus((s) => ({ ...s, [registryId]: 'fail' }));
-      toast.error(`Test failed: ${e.message}`);
+      toastApiError('Test failed', e);
     },
   });
 
@@ -176,28 +172,28 @@ export default function ClusterRegistriesPage() {
         </div>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-xs text-muted-foreground">
-              <tr>
-                <th className="text-left font-medium px-4 py-2.5">Registry</th>
-                <th className="text-left font-medium px-4 py-2.5">User</th>
-                <th className="text-left font-medium px-4 py-2.5">Namespaces</th>
-                <th className="text-left font-medium px-4 py-2.5">Default SA</th>
-                <th className="text-left font-medium px-4 py-2.5">Last applied</th>
-                <th className="text-right font-medium px-4 py-2.5">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+              <TableRow>
+                <TableHead className="text-left font-medium px-4 py-2.5">Registry</TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">User</TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">Namespaces</TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">Default SA</TableHead>
+                <TableHead className="text-left font-medium px-4 py-2.5">Last applied</TableHead>
+                <TableHead className="text-right font-medium px-4 py-2.5">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border">
               {registries.map((r) => (
-                <tr key={r.id} className="hover:bg-accent/30 align-top">
-                  <td className="px-4 py-2.5">
+                <TableRow key={r.id} className="hover:bg-accent/30 align-top">
+                  <TableCell className="px-4 py-2.5">
                     <div className="font-mono text-xs text-foreground break-all">{r.registryUrl}</div>
                     {r.lastApplyError ? (
                       <div className="text-xs text-status-error mt-1">{r.lastApplyError}</div>
                     ) : null}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{r.username}</td>
-                  <td className="px-4 py-2.5">
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{r.username}</TableCell>
+                  <TableCell className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {r.namespaces.length === 0 ? (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground border border-border">
@@ -214,17 +210,17 @@ export default function ClusterRegistriesPage() {
                         ))
                       )}
                     </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
                     {r.injectDefaultSa ? 'Yes' : 'No'}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <span>{fmt(r.lastAppliedAt)}</span>
                       <TestStatusPill state={testStatus[r.id]} />
                     </div>
-                  </td>
-                  <td className="px-4 py-2.5">
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => testMutation.mutate(r.id)}
@@ -257,11 +253,11 @@ export default function ClusterRegistriesPage() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -346,28 +342,28 @@ function RegistryDialog({
   const create = useMutation({
     mutationFn: (body: CreateRegistryRequest) => createClusterRegistry(clusterId, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.registries(clusterId) });
-      toast.success('Registry added');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.registries(clusterId) });
+      toastSuccess('Registry added');
       onClose();
     },
-    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Create failed', e),
   });
   const update = useMutation({
     mutationFn: (body: UpdateRegistryRequest) =>
       updateClusterRegistry(clusterId, existing!.id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.registries(clusterId) });
-      toast.success('Registry updated');
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.registries(clusterId) });
+      toastSuccess('Registry updated');
       onClose();
     },
-    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+    onError: (e: Error) => toastApiError('Update failed', e),
   });
 
   const loading = create.isPending || update.isPending;
 
   function handleSubmit() {
     if (!registryUrl || !username) {
-      toast.error('Registry URL and username are required');
+      toastError('Registry URL and username are required');
       return;
     }
     if (isEdit) {
@@ -384,7 +380,7 @@ function RegistryDialog({
       update.mutate(body);
     } else {
       if (!password) {
-        toast.error('Password is required');
+        toastError('Password is required');
         return;
       }
       create.mutate({
@@ -586,8 +582,7 @@ function Modal({
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -608,7 +603,7 @@ function Modal({
         </div>
         <div className="p-6 space-y-4 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 

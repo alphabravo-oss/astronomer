@@ -13,11 +13,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	dto "github.com/prometheus/client_model/go"
 
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestHandleK8sProxy_NoAgentConnected(t *testing.T) {
+	k8sProxyErrorsTotal.Reset()
 	hub := NewHub(slog.Default())
 	proxy := NewProxyHandler(hub, slog.Default())
 
@@ -36,6 +39,9 @@ func TestHandleK8sProxy_NoAgentConnected(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, "Cluster agent not connected") {
 		t.Fatalf("expected 'Cluster agent not connected' in body, got: %s", body)
+	}
+	if got := tunnelMetricValue(t, k8sProxyErrorsTotal.WithLabelValues(observability.MetricValues("normal", "agent_unavailable")...)); got != 1 {
+		t.Fatalf("agent_unavailable errors = %v, want 1", got)
 	}
 }
 
@@ -208,6 +214,41 @@ func TestHandleK8sProxy_SuccessfulResponse(t *testing.T) {
 
 	if body := w.Body.String(); body != `{"items":[]}` {
 		t.Fatalf("expected body {\"items\":[]}, got %q", body)
+	}
+}
+
+func TestHandleK8sProxy_InvalidAgentResponseRecordsMetric(t *testing.T) {
+	k8sProxyErrorsTotal.Reset()
+	hub := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID: "cluster-invalid",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.agents.Set("cluster-invalid", agent)
+
+	proxy := NewProxyHandler(hub, slog.Default())
+	r := chi.NewRouter()
+	r.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxy.HandleK8sProxy)
+
+	go func() {
+		msg := <-agent.sendCh
+		stream, ok := agent.Streams.GetStream(msg.StreamID)
+		if ok {
+			stream.DataCh <- []byte("not-json")
+		}
+	}()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/cluster-invalid/k8s/api/v1/pods", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := tunnelMetricValue(t, k8sProxyErrorsTotal.WithLabelValues(observability.MetricValues("normal", "invalid_response")...)); got != 1 {
+		t.Fatalf("invalid_response errors = %v, want 1", got)
 	}
 }
 
@@ -384,6 +425,65 @@ func TestWriteK8sResponse(t *testing.T) {
 	}
 }
 
+func TestWriteK8sResponseSanitizesUnsafeHeaders(t *testing.T) {
+	resp := &protocol.K8sResponsePayload{
+		StatusCode: http.StatusOK,
+		Headers: map[string]string{
+			"Audit-Id":            "audit-123",
+			"Cache-Control":       "no-cache",
+			"Content-Type":        "application/json",
+			"Authorization":       "Bearer leaked",
+			"Clear-Site-Data":     `"cookies"`,
+			"Connection":          "upgrade",
+			"Content-Length":      "999",
+			"Cookie":              "session=leaked",
+			"Keep-Alive":          "timeout=5",
+			"Proxy-Authenticate":  "Basic",
+			"Proxy-Authorization": "Basic leaked",
+			"Set-Cookie":          "k8s_session=leaked; Path=/",
+			"Set-Cookie2":         "legacy=leaked",
+			"TE":                  "trailers",
+			"Trailer":             "Expires",
+			"Trailers":            "Expires",
+			"Transfer-Encoding":   "chunked",
+			"Upgrade":             "websocket",
+			"WWW-Authenticate":    "Bearer",
+		},
+		Body: base64.StdEncoding.EncodeToString([]byte(`{"ok":true}`)),
+	}
+
+	w := httptest.NewRecorder()
+	writeK8sResponse(w, resp)
+
+	for _, header := range []string{"Audit-Id", "Cache-Control", "Content-Type"} {
+		if w.Header().Get(header) == "" {
+			t.Fatalf("expected safe header %s to be preserved", header)
+		}
+	}
+	for _, header := range []string{
+		"Authorization",
+		"Clear-Site-Data",
+		"Connection",
+		"Content-Length",
+		"Cookie",
+		"Keep-Alive",
+		"Proxy-Authenticate",
+		"Proxy-Authorization",
+		"Set-Cookie",
+		"Set-Cookie2",
+		"TE",
+		"Trailer",
+		"Trailers",
+		"Transfer-Encoding",
+		"Upgrade",
+		"WWW-Authenticate",
+	} {
+		if got := w.Header().Get(header); got != "" {
+			t.Fatalf("expected unsafe header %s to be stripped, got %q", header, got)
+		}
+	}
+}
+
 func TestIsWatchRequest(t *testing.T) {
 	tests := []struct {
 		name string
@@ -499,6 +599,115 @@ func TestHandleK8sProxy_StreamingWatch(t *testing.T) {
 	}
 }
 
+func TestHandleK8sProxyStreamingWatchSanitizesResponseHeaders(t *testing.T) {
+	hub := NewHub(slog.Default())
+
+	agent := &AgentConnection{
+		ClusterID: "cluster-watch-headers",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.agents.Set("cluster-watch-headers", agent)
+
+	proxy := NewProxyHandler(hub, slog.Default())
+	router := chi.NewRouter()
+	router.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxy.HandleK8sProxy)
+
+	go func() {
+		msg := <-agent.sendCh
+		stream, ok := agent.Streams.GetStream(msg.StreamID)
+		if !ok {
+			return
+		}
+		hdr, _ := json.Marshal(protocol.K8sStreamFrame{
+			Kind:       protocol.K8sStreamFrameHeader,
+			StatusCode: http.StatusOK,
+			Headers: map[string]string{
+				"Audit-Id":          "audit-stream",
+				"Content-Type":      "application/json",
+				"Set-Cookie":        "k8s_session=leaked; Path=/",
+				"Transfer-Encoding": "chunked",
+				"WWW-Authenticate":  "Bearer",
+			},
+		})
+		data, _ := json.Marshal(protocol.K8sStreamFrame{
+			Kind: protocol.K8sStreamFrameData,
+			Body: base64.StdEncoding.EncodeToString([]byte(`{"type":"ADDED"}` + "\n")),
+		})
+		end, _ := json.Marshal(protocol.K8sStreamFrame{Kind: protocol.K8sStreamFrameEnd})
+		stream.DataCh <- hdr
+		stream.DataCh <- data
+		stream.DataCh <- end
+	}()
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/clusters/cluster-watch-headers/k8s/api/v1/pods?watch=true", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Audit-Id"); got != "audit-stream" {
+		t.Fatalf("expected Audit-Id to be preserved, got %q", got)
+	}
+	for _, header := range []string{"Set-Cookie", "Transfer-Encoding", "WWW-Authenticate"} {
+		if got := w.Header().Get(header); got != "" {
+			t.Fatalf("expected unsafe streaming header %s to be stripped, got %q", header, got)
+		}
+	}
+}
+
+func TestForwardToOwnerPodSanitizesResponseHeaders(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			t.Fatalf("expected sibling auth header to be preserved")
+		}
+		w.Header().Set("Audit-Id", "audit-forward")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Set-Cookie", "k8s_session=leaked; Path=/")
+		w.Header().Set("Transfer-Encoding", "chunked")
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"forwarded":true}`))
+	}))
+	defer upstream.Close()
+
+	oldClient := proxyHTTPClient
+	proxyHTTPClient = upstream.Client()
+	t.Cleanup(func() {
+		proxyHTTPClient = oldClient
+	})
+
+	clusterID := "cluster-forward"
+	hub := NewHub(slog.Default())
+	hub.SetLocator(NewFakeLocatorForTest("self:8000", map[string]string{
+		clusterID: strings.TrimPrefix(upstream.URL, "http://"),
+	}))
+	proxy := NewProxyHandler(hub, slog.Default())
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/clusters/"+clusterID+"/k8s/api/v1/pods", nil)
+	req.Header.Set("Authorization", "Bearer caller")
+	w := httptest.NewRecorder()
+
+	if !proxy.forwardToOwnerPod(w, req, clusterID) {
+		t.Fatal("expected request to be forwarded")
+	}
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("Audit-Id"); got != "audit-forward" {
+		t.Fatalf("expected Audit-Id to be preserved, got %q", got)
+	}
+	for _, header := range []string{"Set-Cookie", "Transfer-Encoding", "WWW-Authenticate"} {
+		if got := w.Header().Get(header); got != "" {
+			t.Fatalf("expected unsafe forwarded header %s to be stripped, got %q", header, got)
+		}
+	}
+}
+
 func TestWriteK8sResponse_ZeroStatusCode(t *testing.T) {
 	resp := &protocol.K8sResponsePayload{
 		StatusCode: 0,
@@ -509,5 +718,22 @@ func TestWriteK8sResponse_ZeroStatusCode(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for zero status code, got %d", w.Code)
+	}
+}
+
+func tunnelMetricValue(t *testing.T, collector interface{ Write(*dto.Metric) error }) float64 {
+	t.Helper()
+	m := &dto.Metric{}
+	if err := collector.Write(m); err != nil {
+		t.Fatalf("collector.Write(): %v", err)
+	}
+	switch {
+	case m.Counter != nil:
+		return m.Counter.GetValue()
+	case m.Gauge != nil:
+		return m.Gauge.GetValue()
+	default:
+		t.Fatal("unsupported metric type")
+		return 0
 	}
 }

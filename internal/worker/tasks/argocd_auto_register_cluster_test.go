@@ -3,9 +3,14 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
@@ -23,11 +28,14 @@ type argoCDAutoRegisterTestQuerier struct {
 	listTouched   bool
 	cluster       sqlc.Cluster
 	clusters      []sqlc.Cluster
+	projects      []sqlc.Project
 	instances     []sqlc.ArgocdInstance
 	managed       []sqlc.ArgocdManagedCluster
 	created       []sqlc.CreateArgoCDManagedClusterParams
 	conditions    []sqlc.UpsertClusterConditionParams
 	managedLookup bool
+	repairSuccess []sqlc.RecordRepairJobSuccessParams
+	repairFailure []sqlc.RecordRepairJobFailureParams
 }
 
 func (q *argoCDAutoRegisterTestQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -40,6 +48,10 @@ func (q *argoCDAutoRegisterTestQuerier) GetClusterByID(_ context.Context, id uui
 func (q *argoCDAutoRegisterTestQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
 	q.listTouched = true
 	return q.clusters, nil
+}
+
+func (q *argoCDAutoRegisterTestQuerier) ListProjectsByCluster(context.Context, sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
+	return q.projects, nil
 }
 
 func (q *argoCDAutoRegisterTestQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
@@ -82,6 +94,16 @@ func (q *argoCDAutoRegisterTestQuerier) UpsertClusterCondition(_ context.Context
 func (q *argoCDAutoRegisterTestQuerier) ListArgoCDManagedClustersByCluster(_ context.Context, _ uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
 	q.managedLookup = true
 	return q.managed, nil
+}
+
+func (q *argoCDAutoRegisterTestQuerier) RecordRepairJobSuccess(_ context.Context, arg sqlc.RecordRepairJobSuccessParams) (sqlc.RepairJobState, error) {
+	q.repairSuccess = append(q.repairSuccess, arg)
+	return sqlc.RepairJobState{}, nil
+}
+
+func (q *argoCDAutoRegisterTestQuerier) RecordRepairJobFailure(_ context.Context, arg sqlc.RecordRepairJobFailureParams) (sqlc.RepairJobState, error) {
+	q.repairFailure = append(q.repairFailure, arg)
+	return sqlc.RepairJobState{}, nil
 }
 
 type argoCDTimelineRecorder struct {
@@ -195,19 +217,248 @@ func TestArgoCDAutoRegisterDefaultsEnabledWhenSettingMissing(t *testing.T) {
 	}
 }
 
+func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
+	ResetArgoCDAutoRegister()
+	t.Cleanup(ResetArgoCDAutoRegister)
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	encryptor, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("new encryptor: %v", err)
+	}
+	instanceToken, err := encryptor.Encrypt("argocd-token")
+	if err != nil {
+		t.Fatalf("encrypt instance token: %v", err)
+	}
+
+	var seenPath string
+	var seenAuth string
+	var seenRegistration struct {
+		Server string `json:"server"`
+		Name   string `json:"name"`
+		Config struct {
+			BearerToken string `json:"bearerToken"`
+		} `json:"config"`
+		Labels map[string]string `json:"labels"`
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.RequestURI()
+		seenAuth = r.Header.Get("Authorization")
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/clusters" {
+			t.Fatalf("unexpected upstream request: %s %s", r.Method, r.URL.RequestURI())
+		}
+		if err := json.NewDecoder(r.Body).Decode(&seenRegistration); err != nil {
+			t.Fatalf("decode registration: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name":   "cluster-prod-east",
+			"server": seenRegistration.Server,
+		})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:                clusterID,
+		Name:              "prod-east",
+		Environment:       "production",
+		Region:            "us-east-1",
+		Provider:          "aws",
+		Distribution:      "eks",
+		AgentVersion:      "v0.4.1",
+		KubernetesVersion: "v1.29.3+k3s1",
+		Annotations:       json.RawMessage(`{"astronomer.io/agent-privilege-profile":"operator"}`),
+		Labels:            json.RawMessage(`{"tier":"prod","Team Name":"platform"}`),
+		LastHeartbeat:     pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}
+	q := &argoCDAutoRegisterTestQuerier{
+		clusters: []sqlc.Cluster{cluster},
+		projects: []sqlc.Project{{
+			ID:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			Name: "platform",
+		}},
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "built-in",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: instanceToken,
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "cluster-prod-east",
+		}},
+	}
+	k8s := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-prod-east",
+			Namespace: argoCDNamespace,
+			Labels: map[string]string{
+				argoCDClusterSecretTypeLabel:   argoCDClusterSecretTypeValue,
+				astronomerManagedByLabelKey:    astronomerManagedByLabelValue,
+				astronomerClusterIDLabelKey:    clusterID.String(),
+				astronomerClusterNameLabelKey:  "prod-east",
+				astronomerEnvironmentLabelKey:  "staging",
+				astronomerProjectIDLabelKey:    "22222222-2222-2222-2222-222222222222",
+				astronomerLabelPrefix + "tier": "dev",
+			},
+		},
+		Data: map[string][]byte{"server": []byte("https://old-proxy.example")},
+	})
+	timeline := &argoCDTimelineRecorder{}
+	ConfigureArgoCDAutoRegister(ArgoCDAutoRegisterDeps{
+		Queries:             q,
+		Encryptor:           encryptor,
+		K8s:                 k8s,
+		ClusterProxyBaseURL: "https://astronomer.example",
+		Registration:        timeline,
+	})
+
+	if err := HandleArgoCDAutoRegisterCluster(context.Background(), asynq.NewTask(ArgoCDAutoRegisterClusterType, nil)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if seenPath != "/api/v1/clusters?upsert=true" {
+		t.Fatalf("upstream path = %q, want upsert registration", seenPath)
+	}
+	if seenAuth != "Bearer argocd-token" {
+		t.Fatalf("Authorization = %q, want decrypted Argo token", seenAuth)
+	}
+	wantServer := "https://astronomer.example/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
+	if seenRegistration.Server != wantServer {
+		t.Fatalf("registered server = %q, want %q", seenRegistration.Server, wantServer)
+	}
+	if !strings.HasPrefix(seenRegistration.Config.BearerToken, auth.ArgoCDClusterProxyTokenPrefix) {
+		t.Fatalf("registration bearer token prefix = %q, want %q", seenRegistration.Config.BearerToken, auth.ArgoCDClusterProxyTokenPrefix)
+	}
+	wantLabels := map[string]string{
+		astronomerManagedByLabelKey:                         astronomerManagedByLabelValue,
+		astronomerClusterIDLabelKey:                         clusterID.String(),
+		astronomerClusterNameLabelKey:                       "prod-east",
+		astronomerIsLocalLabelKey:                           "false",
+		astronomerEnvironmentLabelKey:                       "production",
+		astronomerRegionLabelKey:                            "us-east-1",
+		astronomerProviderLabelKey:                          "aws",
+		astronomerDistributionLabelKey:                      "eks",
+		astronomerAgentProfileLabelKey:                      "operator",
+		astronomerAgentVersionLabelKey:                      "v0.4.1",
+		astronomerKubernetesVersionLabelKey:                 "v1.29.3-k3s1",
+		astronomerProjectLabelKey:                           "platform",
+		astronomerProjectIDLabelKey:                         "11111111-1111-1111-1111-111111111111",
+		astronomerProjectMembershipLabelPrefix + "platform": "true",
+		astronomerProjectIDMembershipLabelPrefix + "11111111-1111-1111-1111-111111111111": "true",
+		astronomerLabelPrefix + "tier":      "prod",
+		astronomerLabelPrefix + "team-name": "platform",
+	}
+	for k, v := range wantLabels {
+		if got := seenRegistration.Labels[k]; got != v {
+			t.Fatalf("upstream labels[%q] = %q, want %q (full=%v)", k, got, v, seenRegistration.Labels)
+		}
+	}
+	if len(q.created) != 1 {
+		t.Fatalf("created rows = %d, want 1 upserted managed-cluster row", len(q.created))
+	}
+	var rowLabels map[string]string
+	if err := json.Unmarshal(q.created[0].Labels, &rowLabels); err != nil {
+		t.Fatalf("unmarshal row labels: %v", err)
+	}
+	if got := rowLabels[astronomerRegionLabelKey]; got != "us-east-1" {
+		t.Fatalf("row region label = %q, want us-east-1 (full=%v)", got, rowLabels)
+	}
+	if got := rowLabels[astronomerProjectIDLabelKey]; got != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("row project label = %q, want project id (full=%v)", got, rowLabels)
+	}
+	if len(timeline.steps) != 1 {
+		t.Fatalf("timeline steps = %+v, want one repair step", timeline.steps)
+	}
+	if timeline.steps[0].StepName != "argocd_registration_repaired" || timeline.steps[0].Status != "success" {
+		t.Fatalf("repair step = %+v", timeline.steps[0])
+	}
+	repairs, ok := timeline.steps[0].Detail["repairs"].([]string)
+	if !ok || len(repairs) != 1 || repairs[0] != "stale_labels" {
+		t.Fatalf("repair detail = %#v, want [stale_labels]", timeline.steps[0].Detail["repairs"])
+	}
+}
+
+func TestArgoCDAutoRegisterRepairBlockedWhenCredentialUnavailable(t *testing.T) {
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	cluster := sqlc.Cluster{
+		ID:            clusterID,
+		Name:          "prod-east",
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "built-in",
+			ApiUrl:             "https://argocd.example.test",
+			AuthTokenEncrypted: "token",
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "missing-secret",
+			ServerUrl:         "https://old-proxy.example",
+		}},
+	}
+	timeline := &argoCDTimelineRecorder{}
+
+	err := autoRegisterClusterIntoArgoCD(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries:      q,
+		K8s:          k8sfake.NewClientset(),
+		Registration: timeline,
+	}, cluster)
+	if !errors.Is(err, errArgoCDManagedClusterCredentialUnavailable) {
+		t.Fatalf("error = %v, want credential-unavailable sentinel", err)
+	}
+	if len(q.created) != 0 {
+		t.Fatalf("created rows = %d, want no upsert when credential is unavailable", len(q.created))
+	}
+	if len(timeline.steps) != 2 {
+		t.Fatalf("timeline steps = %+v, want blocked + failed", timeline.steps)
+	}
+	blocked := timeline.steps[0]
+	if blocked.StepName != "argocd_registration_repair_blocked" || blocked.Status != "failed" {
+		t.Fatalf("blocked step = %+v", blocked)
+	}
+	if blocked.Detail["reason"] != "credential_unavailable" {
+		t.Fatalf("blocked reason = %#v", blocked.Detail)
+	}
+	repairs, ok := blocked.Detail["repairs"].([]string)
+	if !ok || len(repairs) != 1 || repairs[0] != "missing_secret" {
+		t.Fatalf("blocked repairs = %#v, want [missing_secret]", blocked.Detail["repairs"])
+	}
+	if timeline.steps[1].StepName != "argocd_registration_failed" {
+		t.Fatalf("second step = %+v, want registration failure", timeline.steps[1])
+	}
+}
+
 func TestArgoCDManagedClusterIndexRepairRebuildsMissingRowFromSecret(t *testing.T) {
 	clusterID := uuid.New()
 	instanceID := uuid.New()
 	q := &argoCDAutoRegisterTestQuerier{
 		cluster: sqlc.Cluster{
-			ID:          clusterID,
-			Name:        "prod-east",
-			Environment: "production",
-			Labels:      json.RawMessage(`{"tier":"prod"}`),
+			ID:                clusterID,
+			Name:              "prod-east",
+			Environment:       "production",
+			Region:            "us-east-1",
+			Provider:          "aws",
+			Distribution:      "eks",
+			AgentVersion:      "v0.4.1",
+			KubernetesVersion: "v1.29.3+k3s1",
+			Annotations:       json.RawMessage(`{"astronomer.io/agent-privilege-profile":"viewer"}`),
+			Labels:            json.RawMessage(`{"tier":"prod"}`),
 		},
+		projects:  []sqlc.Project{{ID: uuid.MustParse("11111111-1111-1111-1111-111111111111"), Name: "platform"}},
 		instances: []sqlc.ArgocdInstance{{ID: instanceID, Name: "built-in"}},
 	}
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	timeline := &argoCDTimelineRecorder{}
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-prod-east",
 			Namespace: argoCDNamespace,
@@ -221,8 +472,9 @@ func TestArgoCDManagedClusterIndexRepairRebuildsMissingRowFromSecret(t *testing.
 	})
 
 	err := repairArgoCDManagedClusterIndex(context.Background(), ArgoCDAutoRegisterDeps{
-		Queries: q,
-		K8s:     k8s,
+		Queries:      q,
+		K8s:          k8s,
+		Registration: timeline,
 	}, q.instances)
 	if err != nil {
 		t.Fatalf("repair: %v", err)
@@ -240,12 +492,101 @@ func TestArgoCDManagedClusterIndexRepairRebuildsMissingRowFromSecret(t *testing.
 	if len(q.conditions) != 1 || q.conditions[0].Type != ConditionArgoCDAdopted || q.conditions[0].Status != "True" {
 		t.Fatalf("conditions = %+v, want ArgoCDAdopted True", q.conditions)
 	}
+	if len(timeline.steps) != 1 {
+		t.Fatalf("timeline steps = %+v, want one repair step", timeline.steps)
+	}
+	if timeline.steps[0].StepName != "argocd_registration_repaired" || timeline.steps[0].Detail["repair"] != "db_index_recreated" {
+		t.Fatalf("repair step = %+v", timeline.steps[0])
+	}
 	secret, err := k8s.CoreV1().Secrets(argoCDNamespace).Get(context.Background(), "cluster-prod-east", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get secret: %v", err)
 	}
-	if secret.Labels[astronomerClusterNameLabelKey] != "prod-east" || secret.Labels[astronomerEnvironmentLabelKey] != "production" || secret.Labels[astronomerLabelPrefix+"tier"] != "prod" {
+	if secret.Labels[astronomerClusterNameLabelKey] != "prod-east" ||
+		secret.Labels[astronomerEnvironmentLabelKey] != "production" ||
+		secret.Labels[astronomerRegionLabelKey] != "us-east-1" ||
+		secret.Labels[astronomerProviderLabelKey] != "aws" ||
+		secret.Labels[astronomerDistributionLabelKey] != "eks" ||
+		secret.Labels[astronomerAgentProfileLabelKey] != "viewer" ||
+		secret.Labels[astronomerAgentVersionLabelKey] != "v0.4.1" ||
+		secret.Labels[astronomerKubernetesVersionLabelKey] != "v1.29.3-k3s1" ||
+		secret.Labels[astronomerProjectIDLabelKey] != "11111111-1111-1111-1111-111111111111" ||
+		secret.Labels[astronomerProjectMembershipLabelPrefix+"platform"] != "true" ||
+		secret.Labels[astronomerLabelPrefix+"tier"] != "prod" {
 		t.Fatalf("secret labels were not refreshed from cluster row: %+v", secret.Labels)
+	}
+}
+
+func TestArgoCDManagedClusterIndexRepairReportsOrphanSecrets(t *testing.T) {
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	q := &argoCDAutoRegisterTestQuerier{
+		instances: []sqlc.ArgocdInstance{{ID: instanceID, Name: "built-in"}},
+	}
+	k8s := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "orphan-cluster",
+			Namespace: argoCDNamespace,
+			Labels: map[string]string{
+				argoCDClusterSecretTypeLabel: argoCDClusterSecretTypeValue,
+				astronomerManagedByLabelKey:  astronomerManagedByLabelValue,
+				astronomerClusterIDLabelKey:  clusterID.String(),
+			},
+		},
+		Data: map[string][]byte{"server": []byte("https://orphan.example.test")},
+	})
+
+	stats, err := repairArgoCDManagedClusterIndexWithStats(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries: q,
+		K8s:     k8s,
+	}, q.instances)
+	if err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	if stats.ClusterSecretsChecked != 1 || stats.AstronomerManagedSecrets != 1 || stats.OrphanSecretsFound != 1 {
+		t.Fatalf("stats = %+v, want one Astronomer-managed orphan secret", stats)
+	}
+	if len(q.created) != 0 {
+		t.Fatalf("created rows = %d, want none for orphan secret", len(q.created))
+	}
+}
+
+func TestArgoCDAutoRegisterSweepRecordsOrphanSecretRepairStats(t *testing.T) {
+	ResetArgoCDAutoRegister()
+	t.Cleanup(ResetArgoCDAutoRegister)
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	q := &argoCDAutoRegisterTestQuerier{
+		instances: []sqlc.ArgocdInstance{{ID: instanceID, Name: "built-in"}},
+	}
+	k8s := k8sfake.NewClientset(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "orphan-cluster",
+			Namespace: argoCDNamespace,
+			Labels: map[string]string{
+				argoCDClusterSecretTypeLabel: argoCDClusterSecretTypeValue,
+				astronomerManagedByLabelKey:  astronomerManagedByLabelValue,
+				astronomerClusterIDLabelKey:  clusterID.String(),
+			},
+		},
+	})
+	ConfigureArgoCDAutoRegister(ArgoCDAutoRegisterDeps{Queries: q, K8s: k8s})
+
+	if err := HandleArgoCDAutoRegisterCluster(context.Background(), asynq.NewTask(ArgoCDAutoRegisterClusterType, nil)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if len(q.repairSuccess) != 1 {
+		t.Fatalf("repair success writes = %d, want 1", len(q.repairSuccess))
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(q.repairSuccess[0].Metadata, &metadata); err != nil {
+		t.Fatalf("unmarshal repair metadata: %v", err)
+	}
+	if metadata["argocd_orphan_secrets_found"] != float64(1) {
+		t.Fatalf("orphan metadata = %#v, want 1 (full=%v)", metadata["argocd_orphan_secrets_found"], metadata)
+	}
+	if metadata["argocd_cluster_secrets_checked"] != float64(1) {
+		t.Fatalf("checked metadata = %#v, want 1 (full=%v)", metadata["argocd_cluster_secrets_checked"], metadata)
 	}
 }
 
@@ -264,7 +605,7 @@ func TestArgoCDManagedClusterIndexRepairDoesNotDuplicateExistingRow(t *testing.T
 			ClusterSecretName: "cluster-prod-east",
 		}},
 	}
-	k8s := k8sfake.NewSimpleClientset(&corev1.Secret{
+	k8s := k8sfake.NewClientset(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-prod-east",
 			Namespace: argoCDNamespace,

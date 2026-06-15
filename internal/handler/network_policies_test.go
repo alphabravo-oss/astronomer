@@ -27,6 +27,7 @@ type fakeNetPolHandlerQuerier struct {
 	bySlug       map[string]uuid.UUID
 	applications map[uuid.UUID]sqlc.NetworkPolicyApplication
 	clusters     map[uuid.UUID]sqlc.Cluster
+	audits       []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeNetPolHandlerQuerier() *fakeNetPolHandlerQuerier {
@@ -114,6 +115,12 @@ func (f *fakeNetPolHandlerQuerier) DeleteNetworkPolicyTemplate(_ context.Context
 	}
 	delete(f.templates, id)
 	delete(f.bySlug, t.Slug)
+	return nil
+}
+func (f *fakeNetPolHandlerQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
 	return nil
 }
 func (f *fakeNetPolHandlerQuerier) ListApplicationsForCluster(_ context.Context, clusterID uuid.UUID) ([]sqlc.NetworkPolicyApplication, error) {
@@ -277,6 +284,18 @@ func TestNetPolHandler_TestApply_CreatesRowAndEnqueues(t *testing.T) {
 	if len(q.applications) != 1 {
 		t.Errorf("expected 1 application created, got %d", len(q.applications))
 	}
+	q.mu.Lock()
+	audits := append([]sqlc.CreateAuditLogV1Params(nil), q.audits...)
+	q.mu.Unlock()
+	if len(audits) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(audits))
+	}
+	auditRow := audits[0]
+	if auditRow.Action != "cluster.network_policy.applied" || auditRow.ResourceType != "cluster" || auditRow.ResourceID != cluster.ID.String() {
+		t.Fatalf("audit row=%+v, want cluster.network_policy.applied on cluster %s", auditRow, cluster.ID)
+	}
+	assertAuditDetail(t, auditRow.Detail, "template_id", tmpl.ID.String())
+	assertAuditDetail(t, auditRow.Detail, "template_slug", tmpl.Slug)
 }
 
 func TestNetPolHandler_TestApply_RejectsBuiltinTemplateEdit(t *testing.T) {

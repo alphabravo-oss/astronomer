@@ -79,6 +79,7 @@ type ClusterQuerier interface {
 	// `curl --cacert ca.crt -sfL …` registration variant.
 	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
+	ListArgoCDApplicationsByManagedClusterTargets(ctx context.Context, arg sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error)
 	// Sprint 086 — cluster-condition remediation history. Read by
 	// the cluster detail page so operators can see what the
 	// reconciler has done in response to red condition pills.
@@ -454,6 +455,114 @@ func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterRe
 		out.ArgoCD.BaselineManagedBy = "argocd"
 	}
 	out.ArgoCD.BaselineComponents = baselineComponentOwnership(out.ArgoCD.BaselineManagedBy)
+
+	instanceIDs, targets := argoCDManagedClusterApplicationTargets(c, rows)
+	if len(instanceIDs) == 0 || len(targets) == 0 {
+		return
+	}
+	apps, err := h.queries.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
+		ArgocdInstanceIds:   instanceIDs,
+		DestinationClusters: targets,
+	})
+	if err != nil {
+		out.ArgoCD.Drift.LastError = "cached ArgoCD application drift unavailable"
+		return
+	}
+	out.ArgoCD.Drift = summarizeArgoCDDrift(apps)
+}
+
+func argoCDManagedClusterApplicationTargets(c sqlc.Cluster, rows []sqlc.ArgocdManagedCluster) ([]uuid.UUID, []string) {
+	seenIDs := map[uuid.UUID]struct{}{}
+	seenTargets := map[string]struct{}{}
+	instanceIDs := make([]uuid.UUID, 0, len(rows))
+	targets := make([]string, 0, len(rows)*2+1)
+
+	addID := func(id uuid.UUID) {
+		if id == uuid.Nil {
+			return
+		}
+		if _, ok := seenIDs[id]; ok {
+			return
+		}
+		seenIDs[id] = struct{}{}
+		instanceIDs = append(instanceIDs, id)
+	}
+	addTarget := func(target string) {
+		target = strings.TrimSpace(target)
+		if target == "" {
+			return
+		}
+		if _, ok := seenTargets[target]; ok {
+			return
+		}
+		seenTargets[target] = struct{}{}
+		targets = append(targets, target)
+	}
+
+	for _, row := range rows {
+		addID(row.ArgocdInstanceID)
+		addTarget(row.ServerUrl)
+		addTarget(row.ClusterSecretName)
+	}
+	addTarget(c.Name)
+
+	return instanceIDs, targets
+}
+
+func summarizeArgoCDDrift(apps []sqlc.ArgocdApplication) ClusterArgoCDDriftSummary {
+	out := ClusterArgoCDDriftSummary{AppCount: len(apps)}
+	var latest time.Time
+	for _, app := range apps {
+		switch normalizeArgoStatus(app.SyncStatus) {
+		case "synced":
+			out.SyncedCount++
+		case "outofsync":
+			out.OutOfSyncCount++
+		default:
+			out.UnknownSyncCount++
+		}
+
+		switch normalizeArgoStatus(app.HealthStatus) {
+		case "healthy":
+			out.HealthyCount++
+		case "progressing":
+			out.ProgressingCount++
+		case "degraded":
+			out.DegradedCount++
+		default:
+			out.UnknownHealthCount++
+		}
+
+		if app.LastSynced.Valid && app.LastSynced.Time.After(latest) {
+			latest = app.LastSynced.Time
+		}
+		out.ResourceCreatedCount += int(app.ResourceCreatedCount)
+		out.ResourceChangedCount += int(app.ResourceChangedCount)
+		out.ResourcePrunedCount += int(app.ResourcePrunedCount)
+	}
+	if !latest.IsZero() {
+		s := latest.UTC().Format(time.RFC3339Nano)
+		out.LastSynced = &s
+	}
+	if out.DegradedCount > 0 {
+		out.LastError = fmt.Sprintf("%d degraded ArgoCD application%s", out.DegradedCount, pluralSuffix(out.DegradedCount))
+	} else if out.OutOfSyncCount > 0 {
+		out.LastError = fmt.Sprintf("%d out-of-sync ArgoCD application%s", out.OutOfSyncCount, pluralSuffix(out.OutOfSyncCount))
+	}
+	return out
+}
+
+func normalizeArgoStatus(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	replacer := strings.NewReplacer("_", "", "-", "", " ", "")
+	return replacer.Replace(s)
+}
+
+func pluralSuffix(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // --- Request / Response types ---
@@ -598,7 +707,8 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Sprint 074 — auto-attach the platform-default cluster template
 	// (typically the seeded "Platform baseline" — trivy-operator,
-	// kube-state-metrics, node-exporter, fluent-bit, cert-manager).
+	// kube-state-metrics, node-exporter, fluent-bit, ingress-nginx,
+	// cert-manager, gatekeeper).
 	// Best-effort: a failure here MUST NOT fail the cluster create.
 	// The apply worker (sprint 049) is the durable retry path; the
 	// drift_check sweep picks up any 'pending' row left behind.
@@ -921,7 +1031,7 @@ func formatPhases(raw json.RawMessage) []DecommissionPhaseStatus {
 	out := make([]DecommissionPhaseStatus, 0, len(phaseOrder))
 	for _, name := range phaseOrder {
 		rec, ok := parsed[name]
-		entry := DecommissionPhaseStatus{Name: name, Status: "pending"}
+		entry := DecommissionPhaseStatus{Name: name, Status: tasks.PhaseStatusPending}
 		if ok {
 			entry.Status = rec.Status
 			if !rec.StartedAt.IsZero() {
@@ -941,7 +1051,7 @@ func formatPhases(raw json.RawMessage) []DecommissionPhaseStatus {
 func formatEmptyPhases() []DecommissionPhaseStatus {
 	out := make([]DecommissionPhaseStatus, 0, len(phaseOrder))
 	for _, name := range phaseOrder {
-		out = append(out, DecommissionPhaseStatus{Name: name, Status: "pending"})
+		out = append(out, DecommissionPhaseStatus{Name: name, Status: tasks.PhaseStatusPending})
 	}
 	return out
 }
@@ -1008,7 +1118,7 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Idempotency: if there's already an in-flight or succeeded decommission
 	// for this cluster, return its status rather than creating a duplicate.
 	if existing, lookupErr := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id); lookupErr == nil {
-		if existing.Status == "pending" || existing.Status == "running" || existing.Status == "succeeded" {
+		if existing.Status == tasks.PhaseStatusPending || existing.Status == tasks.PhaseStatusRunning || existing.Status == tasks.PhaseStatusSucceeded {
 			statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
 			RespondJSON(w, http.StatusAccepted, renderDecommission(existing, statusURL))
 			return
@@ -1609,29 +1719,51 @@ func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL string) map
 }
 
 func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) string {
+	annotations := clusterAnnotations(cluster.Annotations)
 	agentImage := "ghcr.io/alphabravocompany/astronomer-go-agent:latest"
 	if h != nil && h.agentImage != "" {
 		agentImage = h.agentImage
 	}
+	if image := strings.TrimSpace(annotations[agenttemplate.AgentImageAnnotation]); image != "" {
+		agentImage = image
+	}
 	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
-		ServerURL:         serverURL,
-		ClusterID:         cluster.ID.String(),
-		RegistrationToken: token,
-		CACert:            "",
-		AgentImage:        agentImage,
-		PrivilegeProfile:  clusterAgentPrivilegeProfile(cluster.Annotations),
+		ServerURL:          serverURL,
+		ClusterID:          cluster.ID.String(),
+		RegistrationToken:  token,
+		CACert:             "",
+		AgentImage:         agentImage,
+		PrivilegeProfile:   agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation]),
+		ServiceAccountName: strings.TrimSpace(annotations[agenttemplate.AgentServiceAccountNameAnnotation]),
+		PodLabels:          clusterAgentPodLabels(annotations),
 	})
 }
 
 func clusterAgentPrivilegeProfile(raw json.RawMessage) string {
+	return agenttemplate.NormalizePrivilegeProfile(clusterAnnotations(raw)[agenttemplate.PrivilegeProfileAnnotation])
+}
+
+func clusterAnnotations(raw json.RawMessage) map[string]string {
 	if len(raw) == 0 {
-		return agenttemplate.PrivilegeProfileAdmin
+		return map[string]string{}
 	}
 	var annotations map[string]string
 	if err := json.Unmarshal(raw, &annotations); err != nil {
-		return agenttemplate.PrivilegeProfileAdmin
+		return map[string]string{}
 	}
-	return agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation])
+	return annotations
+}
+
+func clusterAgentPodLabels(annotations map[string]string) map[string]string {
+	raw := strings.TrimSpace(annotations[agenttemplate.AgentPodLabelsAnnotation])
+	if raw == "" {
+		return nil
+	}
+	var labels map[string]string
+	if err := json.Unmarshal([]byte(raw), &labels); err != nil {
+		return nil
+	}
+	return labels
 }
 
 func agentServerURL(r *http.Request) string {
@@ -1711,7 +1843,7 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 
 	// Don't surface the password / CA in the audit detail; recordAudit will
 	// redact the well-known keys but we keep the explicit map narrow anyway.
-	recordAudit(r, h.queries, "cluster.update", "cluster", id.String(), "", map[string]any{
+	recordAudit(r, h.queries, "cluster.registry.updated", "cluster", id.String(), "", map[string]any{
 		"private_registry_url": req.PrivateRegistryUrl,
 		"registry_username":    req.RegistryUsername,
 		"insecure":             req.Insecure,
@@ -1733,6 +1865,6 @@ func (h *ClusterHandler) DeleteRegistryConfig(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	recordAudit(r, h.queries, "cluster.registry.delete", "cluster", id.String(), "", nil)
+	recordAudit(r, h.queries, "cluster.registry.deleted", "cluster", id.String(), "", nil)
 	w.WriteHeader(http.StatusNoContent)
 }

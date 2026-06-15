@@ -12,9 +12,11 @@ import { Plus, GitBranch, ExternalLink } from 'lucide-react';
 import api from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader, PageSection, PageShell } from '@/components/ui/page';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { RegisterInstanceModal } from '@/components/argocd/register-instance-modal';
 import { formatRelativeTime } from '@/lib/utils';
+import { queryKeys } from '@/lib/hooks';
 import type { PaginatedResponse, ArgoInstanceB1 } from '@/types';
 
 interface InstanceRow extends ArgoInstanceB1 {
@@ -29,7 +31,7 @@ export default function ArgoCDInstancesPage() {
   const [showRegister, setShowRegister] = useState(false);
 
   const { data: instancesPage, isLoading } = useQuery({
-    queryKey: ['argocd', 'instances'],
+    queryKey: queryKeys.argocd.instances(),
     queryFn: async () => {
       const res = await api.get<PaginatedResponse<ArgoInstanceB1>>('/argocd/instances');
       return res.data;
@@ -42,7 +44,7 @@ export default function ArgoCDInstancesPage() {
   // someone registers a new instance from another tab/session.
   useLiveQueryInvalidation(
     ['cluster.connected', 'cluster.disconnected', 'cluster.k8s_changed'],
-    [['argocd', 'instances']],
+    [queryKeys.argocd.instances()],
   );
 
   const instances: InstanceRow[] = instancesPage?.data ?? [];
@@ -108,35 +110,35 @@ export default function ArgoCDInstancesPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">ArgoCD</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            GitOps control planes registered with Astronomer.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowRegister(true)}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus className="h-4 w-4" />
-          Register Instance
-        </button>
-      </div>
-
-      <DataTable
-        data={instances}
-        columns={columns}
-        keyExtractor={(row) => row.id}
-        onRowClick={(row) => router.push(`/dashboard/argocd/${row.id}`)}
-        searchPlaceholder="Search instances..."
-        loading={isLoading}
-        emptyMessage="No ArgoCD instances yet. Register one to start managing applications."
+    <PageShell>
+      <PageHeader
+        title="ArgoCD"
+        description="GitOps control planes registered with Astronomer."
+        actions={(
+          <button
+            onClick={() => setShowRegister(true)}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
+              text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            <Plus className="h-4 w-4" />
+            Register Instance
+          </button>
+        )}
       />
 
+      <PageSection>
+        <DataTable
+          data={instances}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          onRowClick={(row) => router.push(`/dashboard/argocd/${row.id}`)}
+          searchPlaceholder="Search instances..."
+          loading={isLoading}
+          emptyMessage="No ArgoCD instances yet. Register one to start managing applications."
+        />
+      </PageSection>
+
       {showRegister && <RegisterInstanceModal onClose={() => setShowRegister(false)} />}
-    </div>
+    </PageShell>
   );
 }

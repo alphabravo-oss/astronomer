@@ -17,6 +17,7 @@ import (
 type projectAsyncQuerier struct {
 	upserts []sqlc.UpsertProjectNamespaceParams
 	deletes []sqlc.DeleteProjectNamespaceParams
+	outbox  []sqlc.UpsertTaskOutboxParams
 }
 
 func (q *projectAsyncQuerier) GetProjectByID(context.Context, uuid.UUID) (sqlc.Project, error) {
@@ -58,6 +59,10 @@ func (q *projectAsyncQuerier) UpsertProjectNamespace(_ context.Context, arg sqlc
 func (q *projectAsyncQuerier) DeleteProjectNamespace(_ context.Context, arg sqlc.DeleteProjectNamespaceParams) error {
 	q.deletes = append(q.deletes, arg)
 	return nil
+}
+func (q *projectAsyncQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	q.outbox = append(q.outbox, arg)
+	return sqlc.TaskOutbox{ID: uuid.New()}, nil
 }
 func (q *projectAsyncQuerier) ListProjectNamespaces(context.Context, uuid.UUID) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
@@ -159,5 +164,64 @@ func TestProjectHandlerEnqueueCleanupRunsLocallyWhenRequesterPresent(t *testing.
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected local project cleanup task to run")
+	}
+}
+
+func TestProjectHandlerUpsertAndEnqueueUsesTaskOutboxWithoutRequester(t *testing.T) {
+	queries := &projectAsyncQuerier{}
+	h := NewProjectHandler(queries)
+	h.SetTaskOutbox(queries)
+
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	h.upsertAndEnqueue(context.Background(), projectID, clusterID, "team-a")
+
+	if len(queries.upserts) != 1 {
+		t.Fatalf("expected 1 project namespace upsert, got %d", len(queries.upserts))
+	}
+	if len(queries.outbox) != 1 {
+		t.Fatalf("expected 1 task_outbox row, got %d", len(queries.outbox))
+	}
+	row := queries.outbox[0]
+	if !row.DedupeKey.Valid || row.DedupeKey.String != "project_reconcile:apply:"+projectID.String()+":"+clusterID.String()+":team-a" {
+		t.Fatalf("dedupe key = %+v", row.DedupeKey)
+	}
+	if row.TaskType != tasks.ProjectReconcileType || row.QueueName != "default" || row.MaxDeliveryAttempts != 20 {
+		t.Fatalf("outbox row = %+v", row)
+	}
+	var payload tasks.ProjectReconcilePayload
+	if err := json.Unmarshal(row.Payload, &payload); err != nil {
+		t.Fatalf("decode outbox payload: %v", err)
+	}
+	if payload.Op != "apply" || payload.ProjectID != projectID.String() || payload.ClusterID != clusterID.String() || payload.Namespace != "team-a" {
+		t.Fatalf("payload = %+v", payload)
+	}
+}
+
+func TestProjectHandlerEnqueueCleanupUsesTaskOutboxWithoutRequester(t *testing.T) {
+	queries := &projectAsyncQuerier{}
+	h := NewProjectHandler(queries)
+	h.SetTaskOutbox(queries)
+
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	h.enqueueCleanup(context.Background(), projectID, clusterID, "team-a")
+
+	if len(queries.deletes) != 0 {
+		t.Fatalf("expected task_outbox cleanup to leave DB row for task ownership, got %d deletes", len(queries.deletes))
+	}
+	if len(queries.outbox) != 1 {
+		t.Fatalf("expected 1 task_outbox row, got %d", len(queries.outbox))
+	}
+	row := queries.outbox[0]
+	if !row.DedupeKey.Valid || row.DedupeKey.String != "project_reconcile:remove:"+projectID.String()+":"+clusterID.String()+":team-a" {
+		t.Fatalf("dedupe key = %+v", row.DedupeKey)
+	}
+	var payload tasks.ProjectReconcilePayload
+	if err := json.Unmarshal(row.Payload, &payload); err != nil {
+		t.Fatalf("decode outbox payload: %v", err)
+	}
+	if payload.Op != "remove" || payload.ProjectID != projectID.String() || payload.ClusterID != clusterID.String() || payload.Namespace != "team-a" {
+		t.Fatalf("payload = %+v", payload)
 	}
 }

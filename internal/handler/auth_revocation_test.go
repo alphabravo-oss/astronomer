@@ -22,11 +22,11 @@ import (
 // the Logout / force-logout paths so tests can assert the right rows
 // landed without standing up a real database.
 type recordingRevocationQuerier struct {
-	mu              sync.Mutex
-	revoked         []sqlc.RevokeJWTParams
-	invalidated     []sqlc.InvalidateAllTokensParams
-	revErr          error
-	invalidateErr   error
+	mu            sync.Mutex
+	revoked       []sqlc.RevokeJWTParams
+	invalidated   []sqlc.InvalidateAllTokensParams
+	revErr        error
+	invalidateErr error
 }
 
 func newRecordingRevocationQuerier() *recordingRevocationQuerier {
@@ -76,6 +76,7 @@ func TestLogout_RevokesJTI(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Forwarded-Proto", "https")
 	req = setAuthUser(req, user.ID.String())
 	rec := httptest.NewRecorder()
 
@@ -94,6 +95,17 @@ func TestLogout_RevokesJTI(t *testing.T) {
 	}
 	if rev.revoked[0].Reason != "user_logout" {
 		t.Fatalf("Reason = %q, want user_logout", rev.revoked[0].Reason)
+	}
+	for _, name := range []string{middleware.SessionCookieName, middleware.RefreshCookieName, middleware.CSRFCookieName} {
+		cookie := cookieByName(t, rec.Result(), name)
+		assertCookieSecurity(t, cookie, cookieSecurityWant{
+			value:    "",
+			path:     "/",
+			httpOnly: true,
+			secure:   true,
+			sameSite: http.SameSiteLaxMode,
+			maxAge:   -1,
+		})
 	}
 }
 

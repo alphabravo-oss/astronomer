@@ -36,11 +36,20 @@ var (
 		},
 		observability.MetricLabels("job", "status"),
 	)
+	workerJobRetryAttemptsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Subsystem: "worker",
+			Name:      "job_retry_attempts_total",
+			Help:      "Total number of worker task executions that Asynq identified as retry attempts by job type.",
+		},
+		observability.MetricLabels("job"),
+	)
 )
 
 func registerJobMetrics() {
 	registerJobMetricsOnce.Do(func() {
-		prometheus.MustRegister(workerJobsTotal, workerJobDurationSeconds)
+		prometheus.MustRegister(workerJobsTotal, workerJobDurationSeconds, workerJobRetryAttemptsTotal)
 	})
 }
 
@@ -50,7 +59,7 @@ func registerJobMetrics() {
 // convention; the matching dequeue extraction lives in instrumentTask.
 func EnqueueWithCorrelation(client *asynq.Client, task *asynq.Task, correlationID string, opts ...asynq.Option) (*asynq.TaskInfo, error) {
 	if task == nil || client == nil {
-		return nil, asynqEnqueueNilErr
+		return nil, errAsynqEnqueueNil
 	}
 	if correlationID != "" {
 		wrapped := observability.WithCorrelationPayload(task.Payload(), correlationID)
@@ -59,10 +68,10 @@ func EnqueueWithCorrelation(client *asynq.Client, task *asynq.Task, correlationI
 	return client.Enqueue(task, opts...)
 }
 
-// asynqEnqueueNilErr is the sentinel for "you passed a nil task or
+// errAsynqEnqueueNil is the sentinel for "you passed a nil task or
 // client". Kept as a typed package-level err so test cases can assert
 // against it.
-var asynqEnqueueNilErr = errors.New("worker: enqueue called with nil task or client")
+var errAsynqEnqueueNil = errors.New("worker: enqueue called with nil task or client")
 
 func instrumentTask(job string, handler func(context.Context, *asynq.Task) error) func(context.Context, *asynq.Task) error {
 	registerJobMetrics()
@@ -78,6 +87,7 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		if cid := observability.ExtractAsynqCorrelationID(task.Payload()); cid != "" {
 			logger = observability.WithCorrelationID(logger, cid)
 		}
+		logger = observability.WithLogIdentifiers(logger, observability.ExtractLogIdentifiers(task.Payload()))
 		// Rejoin the originating trace if traceparent rode the
 		// payload, then open a child span for the worker execution.
 		// When tracing is disabled at the SDK level, Start returns a
@@ -85,6 +95,19 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		ctx = observability.ContextWithAsynqTracing(ctx, task.Payload())
 		ctx, span := tracer.Start(ctx, "asynq.job "+job)
 		defer span.End()
+		logger = observability.WithTraceID(logger, ctx)
+		if taskID, ok := asynq.GetTaskID(ctx); ok {
+			logger = logger.With("task_id", taskID)
+		}
+		if retryCount, ok := asynq.GetRetryCount(ctx); ok {
+			logger = logger.With("retry_count", retryCount)
+			if retryCount > 0 {
+				workerJobRetryAttemptsTotal.WithLabelValues(observability.MetricValues(job)...).Inc()
+			}
+		}
+		if maxRetry, ok := asynq.GetMaxRetry(ctx); ok {
+			logger = logger.With("max_retry", maxRetry)
+		}
 
 		observability.WithEvent(logger, "worker_job_started").Info("worker job started",
 			"job", job,

@@ -37,7 +37,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -45,6 +44,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -67,10 +67,6 @@ const clusterRegistryFieldManager = "astronomer-go-cluster-registry"
 // "astronomer-registry-<row-id>", deterministic across re-applies so SSA
 // + cleanup find the same Secret.
 const clusterRegistrySecretNamePrefix = "astronomer-registry-"
-
-// driftReconcileLeaseTTL bounds how long one worker holds the sweep so a
-// crashed worker doesn't strand the whole sweep until the next 30m tick.
-const driftReconcileLeaseTTL = 5 * time.Minute
 
 // ClusterApplyRegistrySecretPayload is the JSON body of an apply task.
 // Op is "apply" (default — write Secret + patch SA), "unapply" (remove
@@ -410,11 +406,11 @@ func applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, s
 	if err != nil {
 		return fmt.Errorf("marshal secret manifest: %w", err)
 	}
-	path := fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s?fieldManager=%s&force=true", namespace, secretName, clusterRegistryFieldManager)
-	resp, err := clusterRegistryApplyDeps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, map[string]string{
-		"Content-Type": "application/apply-patch+yaml",
-		"Accept":       "application/json",
-	})
+	path := kubeutil.ServerSideApplyPath(
+		fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName),
+		kubeutil.ApplyOptions{FieldManager: clusterRegistryFieldManager, Force: true},
+	)
+	resp, err := clusterRegistryApplyDeps.Requester.Do(ctx, clusterID, http.MethodPatch, path, body, kubeutil.ApplyPatchHeaders())
 	if err != nil {
 		return fmt.Errorf("apply secret: %w", err)
 	}

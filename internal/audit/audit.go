@@ -147,6 +147,7 @@ func Record(ctx context.Context, q Querier, event Event) {
 		return
 	}
 	if err := q.CreateAuditLogV1(ctx, row); err != nil {
+		recordWriteFailure("sync")
 		slog.Default().Warn("audit v1 log insert failed",
 			"source", row.Source,
 			"action", row.Action,
@@ -196,19 +197,19 @@ func publishToBus(event Event, row sqlc.CreateAuditLogV1Params) {
 	// changes. The detail map mirrors what a downstream receiver would
 	// want without having to round-trip back to the audit_log table.
 	data := map[string]any{
-		"action":          row.Action,
-		"resource_type":   row.ResourceType,
-		"resource_id":     row.ResourceID,
-		"resource_name":   row.ResourceName,
-		"actor_user_id":   userIDString(row.UserID),
+		"action":            row.Action,
+		"resource_type":     row.ResourceType,
+		"resource_id":       row.ResourceID,
+		"resource_name":     row.ResourceName,
+		"actor_user_id":     userIDString(row.UserID),
 		"actor_auth_method": row.ActorAuthMethod,
-		"correlation_id":  row.CorrelationID,
-		"request_id":      row.RequestID,
-		"source":          row.Source,
-		"http_method":     row.HTTPMethod,
-		"path":            row.Path,
-		"status_code":     row.StatusCode,
-		"detail":          event.Detail,
+		"correlation_id":    row.CorrelationID,
+		"request_id":        row.RequestID,
+		"source":            row.Source,
+		"http_method":       row.HTTPMethod,
+		"path":              row.Path,
+		"status_code":       row.StatusCode,
+		"detail":            event.Detail,
 	}
 	p.Publish("audit."+row.Action, data)
 }

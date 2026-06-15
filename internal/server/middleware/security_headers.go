@@ -18,7 +18,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		setHeaderIfEmpty(h, "Referrer-Policy", "strict-origin-when-cross-origin")
 		setHeaderIfEmpty(h, "X-Frame-Options", "DENY")
 		setHeaderIfEmpty(h, "Content-Security-Policy", defaultContentSecurityPolicy)
-		if requestIsHTTPS(r) {
+		if RequestIsHTTPS(r) {
 			setHeaderIfEmpty(h, "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
 		next.ServeHTTP(w, r)
@@ -31,7 +31,9 @@ func setHeaderIfEmpty(h http.Header, key, value string) {
 	}
 }
 
-func requestIsHTTPS(r *http.Request) bool {
+// RequestIsHTTPS reports whether a request arrived over HTTPS directly or via
+// a trusted reverse proxy that stamped X-Forwarded-Proto=https.
+func RequestIsHTTPS(r *http.Request) bool {
 	if r == nil {
 		return false
 	}

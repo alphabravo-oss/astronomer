@@ -133,7 +133,7 @@ func (q *Queries) CreateAlertEvent(ctx context.Context, arg CreateAlertEventPara
 const createAlertRule = `-- name: CreateAlertRule :one
 INSERT INTO alert_rules (name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at
+RETURNING id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction
 `
 
 type CreateAlertRuleParams struct {
@@ -171,6 +171,11 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RuleKind,
+		&i.AnomalyStddev,
+		&i.AnomalyWindowSeconds,
+		&i.AnomalyMinSamples,
+		&i.AnomalyDirection,
 	)
 	return i, err
 }
@@ -291,74 +296,6 @@ func (q *Queries) DeleteNotificationChannel(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
-const getActiveAlertSilences = `-- name: GetActiveAlertSilences :many
-SELECT id, rule_id, cluster_id, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM alert_silences WHERE starts_at <= now() AND ends_at > now() ORDER BY ends_at ASC
-`
-
-func (q *Queries) GetActiveAlertSilences(ctx context.Context) ([]AlertSilence, error) {
-	rows, err := q.db.Query(ctx, getActiveAlertSilences)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AlertSilence{}
-	for rows.Next() {
-		var i AlertSilence
-		if err := rows.Scan(
-			&i.ID,
-			&i.RuleID,
-			&i.ClusterID,
-			&i.Reason,
-			&i.StartsAt,
-			&i.EndsAt,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getActiveAlertSilencesByCluster = `-- name: GetActiveAlertSilencesByCluster :many
-SELECT id, rule_id, cluster_id, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM alert_silences WHERE cluster_id = $1 AND starts_at <= now() AND ends_at > now() ORDER BY ends_at ASC
-`
-
-func (q *Queries) GetActiveAlertSilencesByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertSilence, error) {
-	rows, err := q.db.Query(ctx, getActiveAlertSilencesByCluster, clusterID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AlertSilence{}
-	for rows.Next() {
-		var i AlertSilence
-		if err := rows.Scan(
-			&i.ID,
-			&i.RuleID,
-			&i.ClusterID,
-			&i.Reason,
-			&i.StartsAt,
-			&i.EndsAt,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getAlertEventByID = `-- name: GetAlertEventByID :one
 
 SELECT id, rule_id, cluster_id, status, message, details, fired_at, resolved_at, acknowledged_by_id, acknowledged_at, created_at, updated_at FROM alert_events WHERE id = $1
@@ -387,7 +324,7 @@ func (q *Queries) GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEve
 
 const getAlertRuleByID = `-- name: GetAlertRuleByID :one
 
-SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at FROM alert_rules WHERE id = $1
+SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction FROM alert_rules WHERE id = $1
 `
 
 // Alert Rules
@@ -406,29 +343,11 @@ func (q *Queries) GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getAlertSilenceByID = `-- name: GetAlertSilenceByID :one
-
-SELECT id, rule_id, cluster_id, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM alert_silences WHERE id = $1
-`
-
-// Alert Silences
-func (q *Queries) GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (AlertSilence, error) {
-	row := q.db.QueryRow(ctx, getAlertSilenceByID, id)
-	var i AlertSilence
-	err := row.Scan(
-		&i.ID,
-		&i.RuleID,
-		&i.ClusterID,
-		&i.Reason,
-		&i.StartsAt,
-		&i.EndsAt,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.RuleKind,
+		&i.AnomalyStddev,
+		&i.AnomalyWindowSeconds,
+		&i.AnomalyMinSamples,
+		&i.AnomalyDirection,
 	)
 	return i, err
 }
@@ -455,42 +374,6 @@ func (q *Queries) GetNotificationChannelByID(ctx context.Context, id uuid.UUID) 
 	return i, err
 }
 
-const listActiveAlertsByCluster = `-- name: ListActiveAlertsByCluster :many
-SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at FROM alert_rules WHERE cluster_id = $1 AND enabled = true ORDER BY created_at DESC
-`
-
-func (q *Queries) ListActiveAlertsByCluster(ctx context.Context, clusterID pgtype.UUID) ([]AlertRule, error) {
-	rows, err := q.db.Query(ctx, listActiveAlertsByCluster, clusterID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AlertRule{}
-	for rows.Next() {
-		var i AlertRule
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.ClusterID,
-			&i.RuleType,
-			&i.Configuration,
-			&i.Severity,
-			&i.Enabled,
-			&i.CooldownMinutes,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listAlertEvents = `-- name: ListAlertEvents :many
 SELECT id, rule_id, cluster_id, status, message, details, fired_at, resolved_at, acknowledged_by_id, acknowledged_at, created_at, updated_at FROM alert_events ORDER BY fired_at DESC LIMIT $1 OFFSET $2
 `
@@ -502,49 +385,6 @@ type ListAlertEventsParams struct {
 
 func (q *Queries) ListAlertEvents(ctx context.Context, arg ListAlertEventsParams) ([]AlertEvent, error) {
 	rows, err := q.db.Query(ctx, listAlertEvents, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AlertEvent{}
-	for rows.Next() {
-		var i AlertEvent
-		if err := rows.Scan(
-			&i.ID,
-			&i.RuleID,
-			&i.ClusterID,
-			&i.Status,
-			&i.Message,
-			&i.Details,
-			&i.FiredAt,
-			&i.ResolvedAt,
-			&i.AcknowledgedByID,
-			&i.AcknowledgedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAlertEventsByCluster = `-- name: ListAlertEventsByCluster :many
-SELECT id, rule_id, cluster_id, status, message, details, fired_at, resolved_at, acknowledged_by_id, acknowledged_at, created_at, updated_at FROM alert_events WHERE cluster_id = $1 ORDER BY fired_at DESC LIMIT $2 OFFSET $3
-`
-
-type ListAlertEventsByClusterParams struct {
-	ClusterID pgtype.UUID `json:"cluster_id"`
-	Limit     int32       `json:"limit"`
-	Offset    int32       `json:"offset"`
-}
-
-func (q *Queries) ListAlertEventsByCluster(ctx context.Context, arg ListAlertEventsByClusterParams) ([]AlertEvent, error) {
-	rows, err := q.db.Query(ctx, listAlertEventsByCluster, arg.ClusterID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -620,7 +460,7 @@ func (q *Queries) ListAlertEventsByRule(ctx context.Context, arg ListAlertEvents
 }
 
 const listAlertRules = `-- name: ListAlertRules :many
-SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at FROM alert_rules ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction FROM alert_rules ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListAlertRulesParams struct {
@@ -649,6 +489,11 @@ func (q *Queries) ListAlertRules(ctx context.Context, arg ListAlertRulesParams) 
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RuleKind,
+			&i.AnomalyStddev,
+			&i.AnomalyWindowSeconds,
+			&i.AnomalyMinSamples,
+			&i.AnomalyDirection,
 		); err != nil {
 			return nil, err
 		}
@@ -661,7 +506,7 @@ func (q *Queries) ListAlertRules(ctx context.Context, arg ListAlertRulesParams) 
 }
 
 const listAlertRulesByCluster = `-- name: ListAlertRulesByCluster :many
-SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at FROM alert_rules WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction FROM alert_rules WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListAlertRulesByClusterParams struct {
@@ -691,44 +536,11 @@ func (q *Queries) ListAlertRulesByCluster(ctx context.Context, arg ListAlertRule
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAlertRulesForChannel = `-- name: ListAlertRulesForChannel :many
-SELECT ar.id, ar.name, ar.cluster_id, ar.rule_type, ar.configuration, ar.severity, ar.enabled, ar.cooldown_minutes, ar.created_by_id, ar.created_at, ar.updated_at FROM alert_rules ar
-INNER JOIN alert_rule_channels arc ON ar.id = arc.alert_rule_id
-WHERE arc.notification_channel_id = $1
-`
-
-func (q *Queries) ListAlertRulesForChannel(ctx context.Context, notificationChannelID uuid.UUID) ([]AlertRule, error) {
-	rows, err := q.db.Query(ctx, listAlertRulesForChannel, notificationChannelID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AlertRule{}
-	for rows.Next() {
-		var i AlertRule
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.ClusterID,
-			&i.RuleType,
-			&i.Configuration,
-			&i.Severity,
-			&i.Enabled,
-			&i.CooldownMinutes,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.RuleKind,
+			&i.AnomalyStddev,
+			&i.AnomalyWindowSeconds,
+			&i.AnomalyMinSamples,
+			&i.AnomalyDirection,
 		); err != nil {
 			return nil, err
 		}
@@ -741,6 +553,7 @@ func (q *Queries) ListAlertRulesForChannel(ctx context.Context, notificationChan
 }
 
 const listAlertSilences = `-- name: ListAlertSilences :many
+
 SELECT id, rule_id, cluster_id, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM alert_silences ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
@@ -749,6 +562,7 @@ type ListAlertSilencesParams struct {
 	Offset int32 `json:"offset"`
 }
 
+// Alert Silences
 func (q *Queries) ListAlertSilences(ctx context.Context, arg ListAlertSilencesParams) ([]AlertSilence, error) {
 	rows, err := q.db.Query(ctx, listAlertSilences, arg.Limit, arg.Offset)
 	if err != nil {
@@ -847,48 +661,6 @@ func (q *Queries) ListEnabledNotificationChannels(ctx context.Context) ([]Notifi
 	return items, nil
 }
 
-const listFiringAlertEvents = `-- name: ListFiringAlertEvents :many
-SELECT id, rule_id, cluster_id, status, message, details, fired_at, resolved_at, acknowledged_by_id, acknowledged_at, created_at, updated_at FROM alert_events WHERE status = 'firing' ORDER BY fired_at DESC LIMIT $1 OFFSET $2
-`
-
-type ListFiringAlertEventsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-func (q *Queries) ListFiringAlertEvents(ctx context.Context, arg ListFiringAlertEventsParams) ([]AlertEvent, error) {
-	rows, err := q.db.Query(ctx, listFiringAlertEvents, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AlertEvent{}
-	for rows.Next() {
-		var i AlertEvent
-		if err := rows.Scan(
-			&i.ID,
-			&i.RuleID,
-			&i.ClusterID,
-			&i.Status,
-			&i.Message,
-			&i.Details,
-			&i.FiredAt,
-			&i.ResolvedAt,
-			&i.AcknowledgedByID,
-			&i.AcknowledgedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listNotificationChannels = `-- name: ListNotificationChannels :many
 SELECT id, name, channel_type, configuration, enabled, created_by_id, created_at, updated_at FROM notification_channels ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
@@ -965,7 +737,7 @@ UPDATE alert_rules SET
     enabled = $6,
     cooldown_minutes = $7
 WHERE id = $1
-RETURNING id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at
+RETURNING id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction
 `
 
 type UpdateAlertRuleParams struct {
@@ -1001,6 +773,11 @@ func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RuleKind,
+		&i.AnomalyStddev,
+		&i.AnomalyWindowSeconds,
+		&i.AnomalyMinSamples,
+		&i.AnomalyDirection,
 	)
 	return i, err
 }

@@ -41,6 +41,7 @@ import { cn, formatRelativeTime } from '@/lib/utils';
 import { PhaseBadge } from '@/components/backups/phase-badge';
 import { RestoreModal } from '@/components/backups/restore-modal';
 import { cronToHuman } from '@/components/backups/cron';
+import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import {
   b2Keys,
   useB2DeleteSchedule,
@@ -200,17 +201,12 @@ export default function BackupsPage() {
                 try {
                   const result = await testStorage.mutateAsync(row.id);
                   if (result.success) {
-                    // Reuse sonner via mutation isn't appropriate here (we
-                    // intentionally suppressed it), so render a custom toast.
-                    const { toast } = await import('sonner');
-                    toast.success(`Reachable: ${result.message}`);
+                    toastSuccess(`Reachable: ${result.message}`);
                   } else {
-                    const { toast } = await import('sonner');
-                    toast.error(`Unreachable: ${result.message}`);
+                    toastError(`Unreachable: ${result.message}`);
                   }
                 } catch (e) {
-                  const { toast } = await import('sonner');
-                  toast.error(`Test failed: ${(e as Error).message}`);
+                  toastApiError('Test failed', e);
                 }
               },
             },

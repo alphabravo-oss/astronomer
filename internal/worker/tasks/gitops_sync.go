@@ -529,7 +529,7 @@ func openOrClone(ctx context.Context, src sqlc.GitopsRegistrationSource, dir str
 		}
 		return repo, nil
 	}
-	auth, err := buildAuth(src)
+	auth, err := buildGitAuth(src)
 	if err != nil {
 		return nil, err
 	}
@@ -567,7 +567,7 @@ func setRemoteURL(repo *git.Repository, url string) error {
 }
 
 func fetchAndCheckout(ctx context.Context, src sqlc.GitopsRegistrationSource, repo *git.Repository) error {
-	auth, err := buildAuth(src)
+	auth, err := buildGitAuth(src)
 	if err != nil {
 		return err
 	}
@@ -621,12 +621,12 @@ func branchOrDefault(b string) string {
 	return b
 }
 
-// buildAuth resolves the auth_encrypted blob into a go-git auth method.
+// buildGitAuth resolves the auth_encrypted blob into a go-git auth method.
 // For v1 the blob is opaque-text-as-token (https_token) or PEM-bytes
 // (ssh_key). The encryption layer is a v2 follow-up — the schema's
 // auth_encrypted column already exists so we can wire Fernet later
 // without another migration.
-func buildAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, error) {
+func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, error) {
 	switch src.AuthMode {
 	case "", "none":
 		return nil, nil

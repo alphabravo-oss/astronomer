@@ -559,10 +559,18 @@ CREATE TABLE argocd_applications (
     destination_namespace   VARCHAR(255) NOT NULL DEFAULT '',
     sync_status             VARCHAR(16) NOT NULL DEFAULT 'Unknown',
     health_status           VARCHAR(16) NOT NULL DEFAULT 'Unknown',
+    resource_created_count  INTEGER NOT NULL DEFAULT 0,
+    resource_changed_count  INTEGER NOT NULL DEFAULT 0,
+    resource_pruned_count   INTEGER NOT NULL DEFAULT 0,
     last_synced             TIMESTAMPTZ,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (argocd_instance_id, name)
+    UNIQUE (argocd_instance_id, name),
+    CONSTRAINT argocd_application_resource_counts_nonnegative CHECK (
+        resource_created_count >= 0
+        AND resource_changed_count >= 0
+        AND resource_pruned_count >= 0
+    )
 );
 CREATE INDEX idx_argocd_apps_sync_health ON argocd_applications (sync_status, health_status);
 CREATE INDEX idx_argocd_apps_instance_project ON argocd_applications (argocd_instance_id, project);

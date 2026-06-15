@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deletePlatformSetting = `-- name: DeletePlatformSetting :exec
+DELETE FROM platform_settings WHERE key = $1
+`
+
+// DELETE resets to handler-side defaults — the row is gone and the
+// handler's registry default is what subsequent GETs return.
+func (q *Queries) DeletePlatformSetting(ctx context.Context, key string) error {
+	_, err := q.db.Exec(ctx, deletePlatformSetting, key)
+	return err
+}
+
 const getPlatformSetting = `-- name: GetPlatformSetting :one
 SELECT key, value, description, updated_by, updated_at, created_at
 FROM platform_settings
@@ -68,7 +79,7 @@ func (q *Queries) ListPlatformSettings(ctx context.Context) ([]PlatformSetting, 
 const listPlatformSettingsByPrefix = `-- name: ListPlatformSettingsByPrefix :many
 SELECT key, value, description, updated_by, updated_at, created_at
 FROM platform_settings
-WHERE key LIKE $1 || '%'
+WHERE key LIKE $1::text || '%'
 ORDER BY key
 `
 
@@ -108,6 +119,7 @@ INSERT INTO platform_settings (key, value, description, updated_by, updated_at)
 VALUES ($1, $2, $3, $4, now())
 ON CONFLICT (key) DO UPDATE SET
     value      = EXCLUDED.value,
+    -- Preserve the seeded description if the caller passes empty.
     description = CASE WHEN EXCLUDED.description = '' THEN platform_settings.description ELSE EXCLUDED.description END,
     updated_by = EXCLUDED.updated_by,
     updated_at = now()
@@ -138,15 +150,4 @@ func (q *Queries) UpsertPlatformSetting(ctx context.Context, arg UpsertPlatformS
 		&i.CreatedAt,
 	)
 	return i, err
-}
-
-const deletePlatformSetting = `-- name: DeletePlatformSetting :exec
-DELETE FROM platform_settings WHERE key = $1
-`
-
-// DELETE resets to handler-side defaults — the row is gone and the
-// handler's registry default is what subsequent GETs return.
-func (q *Queries) DeletePlatformSetting(ctx context.Context, key string) error {
-	_, err := q.db.Exec(ctx, deletePlatformSetting, key)
-	return err
 }

@@ -23,6 +23,40 @@ type CreateFleetOperationIdempotentParams struct {
 	CreatedBy                 pgtype.UUID     `json:"created_by"`
 }
 
+const fleetOperationColumns = `
+    id, name, description, operation_type, operation_spec, selector, strategy,
+    max_concurrent, on_error, respect_maintenance_windows, status,
+    total_clusters, completed_clusters, failed_clusters, skipped_clusters,
+    started_at, completed_at, last_error, created_by, created_at, updated_at`
+
+func scanFleetOperation(row operationScanRow) (FleetOperation, error) {
+	var i FleetOperation
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.OperationType,
+		&i.OperationSpec,
+		&i.Selector,
+		&i.Strategy,
+		&i.MaxConcurrent,
+		&i.OnError,
+		&i.RespectMaintenanceWindows,
+		&i.Status,
+		&i.TotalClusters,
+		&i.CompletedClusters,
+		&i.FailedClusters,
+		&i.SkippedClusters,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createFleetOperationIdempotent = `-- name: CreateFleetOperationIdempotent :one
 WITH claimed AS (
     INSERT INTO operation_idempotency_keys (scope, idempotency_key)

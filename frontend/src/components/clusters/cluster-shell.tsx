@@ -27,6 +27,7 @@ import {
 } from '@/lib/api/kubectl-shell';
 import { createStreamTicket } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { StatusBadge as UiStatusBadge } from '@/components/ui/status-badge';
 
 type Status = 'idle' | 'opening' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -128,7 +129,6 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
         closeShellSession(clusterId, sessionRef.current.id).catch(() => {});
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId]);
 
   const connectWS = useCallback((info: ShellSession) => {
@@ -236,7 +236,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
         <div className="flex items-center gap-2 text-sm">
           <TerminalIcon className="h-4 w-4" />
           <span className="font-medium">Cluster shell</span>
-          <StatusBadge status={status} />
+          <ShellStatusBadge status={status} />
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {session && isLive ? (
@@ -251,7 +251,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               </span>
             </>
           ) : isOpening ? (
-            <span>Provisioning session…</span>
+            <span>Preparing session...</span>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
@@ -300,7 +300,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
           {status === 'opening' && (
             <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-muted-foreground bg-black/70 z-10">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Provisioning ephemeral debug pod...
+              Preparing ephemeral debug pod...
             </div>
           )}
           {status === 'idle' && (
@@ -399,26 +399,10 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   );
 }
 
-function StatusBadge({ status }: { status: Status }) {
-  const label =
-    status === 'connected' ? 'connected' :
-    status === 'connecting' ? 'connecting' :
-    status === 'opening' ? 'opening' :
-    status === 'disconnected' ? 'disconnected' :
-    status === 'error' ? 'error' :
-    'not connected';
-  const colour =
-    status === 'connected' ? 'bg-green-500' :
-    status === 'error' ? 'bg-red-500' :
-    status === 'disconnected' ? 'bg-yellow-500' :
-    status === 'idle' ? 'bg-muted-foreground' :
-    'bg-blue-500';
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-      <span className={cn('h-2 w-2 rounded-full', colour)} />
-      {label}
-    </span>
-  );
+function ShellStatusBadge({ status }: { status: Status }) {
+  const badgeStatus = status === 'opening' ? 'connecting' : status === 'idle' ? 'disconnected' : status;
+  const label = status === 'idle' ? 'not connected' : status;
+  return <UiStatusBadge status={badgeStatus} label={label} size="sm" />;
 }
 
 function formatDuration(secs: number): string {

@@ -52,7 +52,7 @@ Leading slashes are stripped automatically.`,
 			}
 			_, err = cmd.OutOrStdout().Write(body)
 			if err == nil && len(body) > 0 && body[len(body)-1] != '\n' {
-				fmt.Fprintln(cmd.OutOrStdout())
+				_, err = fmt.Fprintln(cmd.OutOrStdout())
 			}
 			return err
 		},

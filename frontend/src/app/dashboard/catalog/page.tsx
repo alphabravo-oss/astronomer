@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import {
   useHelmRepositories,
@@ -21,6 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { HelmValuesForm } from '@/components/catalog/helm-values-form';
 import { SuggestedCatalogs } from '@/components/catalog/suggested-catalogs';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import {
   dumpHelmValuesYAML,
@@ -465,7 +467,14 @@ export default function CatalogPage() {
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
                         {chart.iconUrl ? (
-                          <img src={chart.iconUrl} alt={chart.displayName} className="h-8 w-8 object-contain" />
+                          <Image
+                            src={chart.iconUrl}
+                            alt={chart.displayName}
+                            width={32}
+                            height={32}
+                            unoptimized
+                            className="h-8 w-8 object-contain"
+                          />
                         ) : (
                           <Package className="h-5 w-5 text-muted-foreground" />
                         )}
@@ -576,14 +585,20 @@ function ChartDetailModal({
   const selectedVersion = versions?.find((v) => v.id === selectedVersionId) || versions?.[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative mx-4 w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
               {chart.iconUrl ? (
-                <img src={chart.iconUrl} alt={chart.displayName} className="h-8 w-8 object-contain" />
+                <Image
+                  src={chart.iconUrl}
+                  alt={chart.displayName}
+                  width={32}
+                  height={32}
+                  unoptimized
+                  className="h-8 w-8 object-contain"
+                />
               ) : (
                 <Package className="h-5 w-5 text-muted-foreground" />
               )}
@@ -682,7 +697,7 @@ function ChartDetailModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -775,8 +790,7 @@ function InstallChartModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative mx-4 w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <div>
@@ -916,7 +930,7 @@ function InstallChartModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -953,8 +967,7 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Add Repository</h3>
@@ -1075,6 +1088,6 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

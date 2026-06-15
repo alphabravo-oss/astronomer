@@ -20,12 +20,6 @@ FROM mirrored_ingress_classes
 WHERE cluster_id = $1
 ORDER BY name ASC;
 
--- name: GetMirroredIngressClass :one
-SELECT id, cluster_id, name, controller, parameters, is_default,
-       labels, annotations, last_seen_at, created_at, updated_at
-FROM mirrored_ingress_classes
-WHERE cluster_id = $1 AND name = $2;
-
 -- name: UpsertMirroredIngressClass :one
 INSERT INTO mirrored_ingress_classes (
     cluster_id, name, controller, parameters, is_default,
@@ -58,12 +52,6 @@ SELECT id, cluster_id, name, controller_name, description, parameters,
 FROM mirrored_gateway_classes
 WHERE cluster_id = $1
 ORDER BY name ASC;
-
--- name: GetMirroredGatewayClass :one
-SELECT id, cluster_id, name, controller_name, description, parameters,
-       accepted_status, labels, annotations, last_seen_at, created_at, updated_at
-FROM mirrored_gateway_classes
-WHERE cluster_id = $1 AND name = $2;
 
 -- name: UpsertMirroredGatewayClass :one
 INSERT INTO mirrored_gateway_classes (
@@ -107,13 +95,6 @@ SELECT id, cluster_id, namespace, name, pod_selector, policy_types,
 FROM mirrored_network_policies
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY name ASC;
-
--- name: GetMirroredNetworkPolicy :one
-SELECT id, cluster_id, namespace, name, pod_selector, policy_types,
-       ingress_rules, egress_rules, labels, annotations, is_managed,
-       last_seen_at, created_at, updated_at
-FROM mirrored_network_policies
-WHERE cluster_id = $1 AND namespace = $2 AND name = $3;
 
 -- name: UpsertMirroredNetworkPolicy :one
 INSERT INTO mirrored_network_policies (
@@ -159,12 +140,6 @@ FROM mirrored_resource_quotas
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY name ASC;
 
--- name: GetMirroredResourceQuota :one
-SELECT id, cluster_id, namespace, name, hard, used, scopes,
-       labels, annotations, last_seen_at, created_at, updated_at
-FROM mirrored_resource_quotas
-WHERE cluster_id = $1 AND namespace = $2 AND name = $3;
-
 -- name: UpsertMirroredResourceQuota :one
 INSERT INTO mirrored_resource_quotas (
     cluster_id, namespace, name, hard, used, scopes,
@@ -205,12 +180,6 @@ SELECT id, cluster_id, namespace, name, limits,
 FROM mirrored_limit_ranges
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY name ASC;
-
--- name: GetMirroredLimitRange :one
-SELECT id, cluster_id, namespace, name, limits,
-       labels, annotations, last_seen_at, created_at, updated_at
-FROM mirrored_limit_ranges
-WHERE cluster_id = $1 AND namespace = $2 AND name = $3;
 
 -- name: UpsertMirroredLimitRange :one
 INSERT INTO mirrored_limit_ranges (

@@ -11,21 +11,25 @@ func NewEngine() *Engine {
 }
 
 // CheckPermission evaluates if the given bindings grant access to resource+verb
-// at the specified scope (global, cluster, or project).
+// at the specified scope (global, cluster, project, and optional namespace).
 //
 // Check order (first match wins):
 //  1. Superuser binding (IsSuperuser=true) short-circuits to true
 //  2. Global roles (apply everywhere)
 //  3. Cluster roles (if clusterID provided)
 //  4. Project roles (if projectID provided)
-func (e *Engine) CheckPermission(bindings []RoleBinding, resource Resource, verb Verb, clusterID, projectID uuid.UUID) bool {
+func (e *Engine) CheckPermission(bindings []RoleBinding, resource Resource, verb Verb, clusterID, projectID uuid.UUID, namespace ...string) bool {
+	requestNamespace := ""
+	if len(namespace) > 0 {
+		requestNamespace = namespace[0]
+	}
 	for _, b := range bindings {
 		if b.IsSuperuser {
 			return true
 		}
 	}
 	for _, b := range bindings {
-		if !e.bindingApplies(b, clusterID, projectID) {
+		if !e.bindingApplies(b, clusterID, projectID, requestNamespace) {
 			continue
 		}
 		for _, rule := range b.RoleRules {
@@ -49,10 +53,19 @@ func (e *Engine) CheckSuperuser(bindings []RoleBinding) bool {
 }
 
 // bindingApplies checks whether a binding is applicable at the given scope.
-// - Global bindings (no ClusterID, no ProjectID) always apply.
-// - Cluster bindings apply when the clusterID matches.
-// - Project bindings apply when the projectID matches.
-func (e *Engine) bindingApplies(b RoleBinding, clusterID, projectID uuid.UUID) bool {
+//   - Global bindings (no ClusterID, no ProjectID) always apply.
+//   - Cluster bindings apply when the clusterID matches.
+//   - Project bindings apply when the projectID matches.
+//   - Namespace-scoped bindings only apply when the request carries the same
+//     namespace. They do not apply to broad cluster/project requests.
+func (e *Engine) bindingApplies(b RoleBinding, clusterID, projectID uuid.UUID, namespace string) bool {
+	if b.Namespace != "" && b.Namespace != namespace {
+		return false
+	}
+	if b.Namespace != "" && b.ClusterID == "" && b.ProjectID == "" {
+		return false
+	}
+
 	isGlobal := b.ClusterID == "" && b.ProjectID == ""
 	if isGlobal {
 		return true

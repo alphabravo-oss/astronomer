@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { Loader2, Copy, Check, Download, Server } from 'lucide-react';
 import {
   confirmRegistration,
@@ -48,7 +48,7 @@ export default function ConnectStepPage() {
         setManifest(manifest);
         setRegistrationToken(token);
       })
-      .catch(() => toast.error('Failed to fetch install manifest'));
+      .catch(() => toastError('Failed to fetch install manifest'));
     getRegistrationStatus(clusterId).then(setStatus).catch(() => {/* tolerated */});
     // Operator-configured TLS posture from platform_settings. Defaults
     // to public_ca on any failure so the wizard always renders something.
@@ -82,7 +82,7 @@ export default function ConnectStepPage() {
       router.push(`/dashboard/clusters/register/${clusterId}/progress`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      toast.error(`Failed to advance: ${msg}`);
+      toastError(`Failed to advance: ${msg}`);
       setConfirming(false);
     }
   };
@@ -134,7 +134,7 @@ export default function ConnectStepPage() {
       setCopied(which);
       setTimeout(() => setCopied(null), 1500);
     } catch {
-      toast.error('Failed to copy');
+      toastError('Failed to copy');
     }
   };
 

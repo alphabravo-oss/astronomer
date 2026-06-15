@@ -1,5 +1,25 @@
 {{- if .Values.networkPolicy.enabled }}
 {{- $externalCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) -}}
+{{- $externalHTTPSEgressCIDRs := .Values.networkPolicy.externalHTTPSEgressCIDRs | default (list) -}}
+{{- $externalPostgresEgressCIDRs := .Values.networkPolicy.externalPostgresEgressCIDRs | default (list) -}}
+{{- $externalRedisEgressCIDRs := .Values.networkPolicy.externalRedisEgressCIDRs | default (list) -}}
+{{- $kubernetesAPIEgressCIDRs := .Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list) -}}
+{{- $identityProviderEgressCIDRs := .Values.networkPolicy.identityProviderEgressCIDRs | default (list) -}}
+{{- if .Values.networkPolicy.defaultDeny }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-default-deny
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+{{- end }}
 {{- if .Values.frontend.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -34,6 +54,16 @@ spec:
         - protocol: TCP
           port: {{ .Values.server.service.port }}
     {{- range $cidr := $externalCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- range $cidr := $externalHTTPSEgressCIDRs }}
     - to:
         - ipBlock:
             cidr: {{ $cidr | quote }}
@@ -105,7 +135,7 @@ spec:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.postgres.port }}
+          port: {{ $.Values.postgres.port }}
     {{- end }}
     {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
     - to:
@@ -114,7 +144,7 @@ spec:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.redis.port }}
+          port: {{ $.Values.redis.port }}
     {{- end }}
     {{- if .Values.dex.enabled }}
     - to:
@@ -125,6 +155,21 @@ spec:
         - protocol: TCP
           port: 5556
     {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: argocd
+              app.kubernetes.io/name: argocd-server
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8080
     {{- range $cidr := $externalCIDRs }}
     - to:
         - ipBlock:
@@ -138,6 +183,42 @@ spec:
           port: 5432
         - protocol: TCP
           port: 6379
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+    {{- range $cidr := $externalHTTPSEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- range $cidr := $externalPostgresEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.postgres.port }}
+    {{- end }}
+    {{- range $cidr := $externalRedisEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.redis.port }}
+    {{- end }}
+    {{- range $cidr := $kubernetesAPIEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
         - protocol: TCP
           port: 6443
     {{- end }}
@@ -174,7 +255,7 @@ spec:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.postgres.port }}
+          port: {{ $.Values.postgres.port }}
     {{- end }}
     {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
     - to:
@@ -183,7 +264,7 @@ spec:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.redis.port }}
+          port: {{ $.Values.redis.port }}
     {{- end }}
     {{- range $cidr := $externalCIDRs }}
     - to:
@@ -198,6 +279,42 @@ spec:
           port: 5432
         - protocol: TCP
           port: 6379
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+    {{- range $cidr := $externalHTTPSEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- range $cidr := $externalPostgresEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.postgres.port }}
+    {{- end }}
+    {{- range $cidr := $externalRedisEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.redis.port }}
+    {{- end }}
+    {{- range $cidr := $kubernetesAPIEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
         - protocol: TCP
           port: 6443
     {{- end }}
@@ -248,6 +365,28 @@ spec:
           port: 389
         - protocol: TCP
           port: 636
+    {{- end }}
+    {{- range $cidr := $externalHTTPSEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    {{- end }}
+    {{- range $cidr := $identityProviderEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 389
+        - protocol: TCP
+          port: 636
+        - protocol: TCP
+          port: 443
     {{- end }}
 {{- end }}
 {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}

@@ -246,7 +246,9 @@ func TestComplianceHandler_ListJoinsRegistry(t *testing.T) {
 	}
 	// Response is wrapped in {"data": [...]}.
 	var wrapper map[string]json.RawMessage
-	json.Unmarshal(w.Body.Bytes(), &wrapper)
+	if err := json.Unmarshal(w.Body.Bytes(), &wrapper); err != nil {
+		t.Fatalf("decode wrapper: %v", err)
+	}
 	var entries []baselineResponse
 	if err := json.Unmarshal(wrapper["data"], &entries); err != nil {
 		t.Fatalf("decode entries: %v", err)
@@ -311,7 +313,9 @@ func TestComplianceHandler_DiffPreview(t *testing.T) {
 		t.Fatalf("Diff status = %d, body=%s", w.Code, w.Body.String())
 	}
 	var wrapper map[string]json.RawMessage
-	json.Unmarshal(w.Body.Bytes(), &wrapper)
+	if err := json.Unmarshal(w.Body.Bytes(), &wrapper); err != nil {
+		t.Fatalf("decode wrapper: %v", err)
+	}
 	var res compliance.DiffResult
 	if err := json.Unmarshal(wrapper["data"], &res); err != nil {
 		t.Fatalf("decode diff: %v", err)
@@ -377,9 +381,13 @@ func TestComplianceHandler_History(t *testing.T) {
 		t.Fatalf("History status = %d, body=%s", w.Code, w.Body.String())
 	}
 	var wrapper map[string]json.RawMessage
-	json.Unmarshal(w.Body.Bytes(), &wrapper)
+	if err := json.Unmarshal(w.Body.Bytes(), &wrapper); err != nil {
+		t.Fatalf("decode wrapper: %v", err)
+	}
 	var apps []applicationResponse
-	json.Unmarshal(wrapper["data"], &apps)
+	if err := json.Unmarshal(wrapper["data"], &apps); err != nil {
+		t.Fatalf("decode apps: %v", err)
+	}
 	if len(apps) != 1 {
 		t.Errorf("history entries = %d, want 1", len(apps))
 	}

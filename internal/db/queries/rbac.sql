@@ -3,9 +3,6 @@
 -- name: GetGlobalRoleByID :one
 SELECT * FROM global_roles WHERE id = $1;
 
--- name: GetGlobalRoleByName :one
-SELECT * FROM global_roles WHERE name = $1;
-
 -- name: ListGlobalRoles :many
 SELECT * FROM global_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
@@ -38,17 +35,6 @@ SELECT * FROM global_role_bindings WHERE id = $1;
 -- name: ListGlobalRoleBindings :many
 SELECT * FROM global_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
--- name: GetUserGlobalRoles :many
-SELECT gr.* FROM global_roles gr
-INNER JOIN global_role_bindings grb ON gr.id = grb.role_id
-WHERE grb.user_id = $1;
-
--- name: GetGlobalRoleBindingsByUserID :many
-SELECT * FROM global_role_bindings WHERE user_id = $1;
-
--- name: GetGlobalRoleBindingsByGroup :many
-SELECT * FROM global_role_bindings WHERE "group" = $1;
-
 -- name: CreateGlobalRoleBinding :one
 INSERT INTO global_role_bindings (user_id, "group", role_id)
 VALUES ($1, $2, $3)
@@ -61,9 +47,6 @@ DELETE FROM global_role_bindings WHERE id = $1;
 
 -- name: GetClusterRoleByID :one
 SELECT * FROM cluster_roles WHERE id = $1;
-
--- name: GetClusterRoleByName :one
-SELECT * FROM cluster_roles WHERE name = $1;
 
 -- name: ListClusterRoles :many
 SELECT * FROM cluster_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2;
@@ -100,17 +83,6 @@ SELECT * FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 -- name: ListClusterRoleBindingsByCluster :many
 SELECT * FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
--- name: GetUserClusterRoles :many
-SELECT cr.* FROM cluster_roles cr
-INNER JOIN cluster_role_bindings crb ON cr.id = crb.role_id
-WHERE crb.user_id = $1 AND crb.cluster_id = $2;
-
--- name: GetClusterRoleBindingsByUserID :many
-SELECT * FROM cluster_role_bindings WHERE user_id = $1;
-
--- name: GetClusterRoleBindingsByGroup :many
-SELECT * FROM cluster_role_bindings WHERE "group" = $1;
-
 -- name: CreateClusterRoleBinding :one
 INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id)
 VALUES ($1, $2, $3, $4)
@@ -123,9 +95,6 @@ DELETE FROM cluster_role_bindings WHERE id = $1;
 
 -- name: GetProjectRoleByID :one
 SELECT * FROM project_roles WHERE id = $1;
-
--- name: GetProjectRoleByName :one
-SELECT * FROM project_roles WHERE name = $1;
 
 -- name: ListProjectRoles :many
 SELECT * FROM project_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2;
@@ -161,17 +130,6 @@ SELECT * FROM project_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: ListProjectRoleBindingsByProject :many
 SELECT * FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
-
--- name: GetUserProjectRoles :many
-SELECT pr.* FROM project_roles pr
-INNER JOIN project_role_bindings prb ON pr.id = prb.role_id
-WHERE prb.user_id = $1 AND prb.project_id = $2;
-
--- name: GetProjectRoleBindingsByUserID :many
-SELECT * FROM project_role_bindings WHERE user_id = $1;
-
--- name: GetProjectRoleBindingsByGroup :many
-SELECT * FROM project_role_bindings WHERE "group" = $1;
 
 -- name: CreateProjectRoleBinding :one
 INSERT INTO project_role_bindings (user_id, "group", role_id, project_id)

@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   Shield,
   ShieldCheck,
@@ -30,9 +30,9 @@ import {
   RefreshCw,
   Check,
   AlertTriangle,
-  X,
 } from 'lucide-react';
 import { formatRelativeTime, cn } from '@/lib/utils';
+import { ModalShell } from '@/components/ui/modal-shell';
 import {
   getTotpStatus,
   startTotpEnrollment,
@@ -219,7 +219,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
   const startMut = useMutation({
     mutationFn: startTotpEnrollment,
     onSuccess: (data) => setEnrollment(data),
-    onError: (err: Error) => toast.error(err.message || 'Failed to start enrollment'),
+    onError: (err: Error) => toastApiError('', err, 'Failed to start enrollment'),
   });
 
   const confirmMut = useMutation({
@@ -231,7 +231,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
       setRecoveryCodes(data.recoveryCodes);
       setStep('codes');
     },
-    onError: (err: Error) => toast.error(err.message || 'Invalid code'),
+    onError: (err: Error) => toastApiError('', err, 'Invalid code'),
   });
 
   useEffect(() => {
@@ -241,7 +241,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
   }, []);
 
   return (
-    <Modal onClose={onClose} title="Enable two-factor authentication">
+    <ModalShell onClose={onClose} title="Enable two-factor authentication">
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-xs">
         {(['scan', 'verify', 'codes'] as WizardStep[]).map((s, i) => (
@@ -296,7 +296,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(enrollment.otpauthUrl);
-                      toast.success('Copied');
+                      toastSuccess('Copied');
                     }}
                     className="inline-flex items-center justify-center h-8 w-8 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent"
                     title="Copy"
@@ -366,7 +366,7 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
           onFinish={onDone}
         />
       )}
-    </Modal>
+    </ModalShell>
   );
 }
 
@@ -382,14 +382,14 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const mut = useMutation({
     mutationFn: () => disableTotp(password, code),
     onSuccess: () => {
-      toast.success('Two-factor authentication disabled');
+      toastSuccess('Two-factor authentication disabled');
       onDone();
     },
-    onError: (err: Error) => toast.error(err.message || 'Could not disable 2FA'),
+    onError: (err: Error) => toastApiError('', err, 'Could not disable 2FA'),
   });
 
   return (
-    <Modal onClose={onClose} title="Disable two-factor authentication">
+    <ModalShell onClose={onClose} title="Disable two-factor authentication">
       <div className="space-y-4">
         <div className="flex items-start gap-3 p-3 rounded-md bg-status-warning/10 border border-status-warning/30">
           <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
@@ -440,7 +440,7 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
           </button>
         </div>
       </div>
-    </Modal>
+    </ModalShell>
   );
 }
 
@@ -452,11 +452,11 @@ function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
   const mut = useMutation({
     mutationFn: () => regenerateRecoveryCodes(code),
     onSuccess: (data) => setCodes(data.recoveryCodes),
-    onError: (err: Error) => toast.error(err.message || 'Could not regenerate codes'),
+    onError: (err: Error) => toastApiError('', err, 'Could not regenerate codes'),
   });
 
   return (
-    <Modal onClose={onClose} title="Regenerate recovery codes">
+    <ModalShell onClose={onClose} title="Regenerate recovery codes">
       {codes ? (
         <RecoveryCodesBlock
           codes={codes}
@@ -489,7 +489,7 @@ function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
           </div>
         </div>
       )}
-    </Modal>
+    </ModalShell>
   );
 }
 
@@ -524,7 +524,7 @@ function RecoveryCodesBlock({
 
   const copy = () => {
     navigator.clipboard.writeText(codesText);
-    toast.success('Recovery codes copied to clipboard');
+    toastSuccess('Recovery codes copied to clipboard');
   };
 
   return (
@@ -603,42 +603,5 @@ export function CodeInput({
       className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       autoComplete="one-time-code"
     />
-  );
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-lg w-full mx-4 animate-fade-in max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-base font-semibold text-foreground">{title}</h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="p-6 space-y-4">{children}</div>
-      </div>
-    </div>
   );
 }

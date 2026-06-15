@@ -183,20 +183,6 @@ func scrapeMetricsLoop(ctx context.Context, server, token string, rec *recorder,
 	}
 }
 
-// scrapedMetrics lists the metric names the report cares about. The scrape
-// stores ALL families we see, but the report only inspects these.
-var scrapedMetrics = []string{
-	"astronomer_agent_connections",
-	"astronomer_db_pool_acquired_connections",
-	"astronomer_db_pool_max_connections",
-	"astronomer_db_pool_empty_acquire_count_total",
-	"astronomer_dropped_events_total",
-	"astronomer_worker_queue_depth",
-	"go_goroutines",
-	"go_memstats_alloc_bytes",
-	"astronomer_http_request_duration_seconds_count",
-}
-
 // scrapeOnce performs a single scrape and stores selected metric snapshots.
 func scrapeOnce(ctx context.Context, server, token string, rec *recorder) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/metrics", nil)
@@ -211,7 +197,9 @@ func scrapeOnce(ctx context.Context, server, token string, rec *recorder) error 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("scrape returned %d", resp.StatusCode)
 	}

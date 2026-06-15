@@ -14,7 +14,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countGroupMappings = `-- name: CountGroupMappings :one
+SELECT count(*) FROM identity_group_mappings
+`
+
+func (q *Queries) CountGroupMappings(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countGroupMappings)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countGroupSyncClusterBindings = `-- name: CountGroupSyncClusterBindings :one
+SELECT count(*) FROM cluster_role_bindings WHERE source = 'group_sync'
+`
+
+func (q *Queries) CountGroupSyncClusterBindings(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countGroupSyncClusterBindings)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countGroupSyncGlobalBindings = `-- name: CountGroupSyncGlobalBindings :one
+SELECT count(*) FROM global_role_bindings WHERE source = 'group_sync'
+`
+
+func (q *Queries) CountGroupSyncGlobalBindings(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countGroupSyncGlobalBindings)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countGroupSyncProjectBindings = `-- name: CountGroupSyncProjectBindings :one
+SELECT count(*) FROM project_role_bindings WHERE source = 'group_sync'
+`
+
+func (q *Queries) CountGroupSyncProjectBindings(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countGroupSyncProjectBindings)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createGroupMapping = `-- name: CreateGroupMapping :one
+
 INSERT INTO identity_group_mappings (
     connector_id, group_name, scope, role_id, cluster_id, project_id
 ) VALUES ($1, $2, $3, $4, $5, $6)
@@ -30,6 +75,9 @@ type CreateGroupMappingParams struct {
 	ProjectID   pgtype.UUID `json:"project_id"`
 }
 
+// Identity-group sync queries (migration 042). Drives the
+// claims-to-role-binding mapping resolved on every SSO login + the
+// admin CRUD endpoints under /api/v1/admin/group-mappings/.
 // Admin endpoint POST. Caller is responsible for validating that
 // scope/role_id/cluster_id/project_id agree before this call — the
 // table's scope_matches CHECK constraint will reject mismatched rows.
@@ -57,6 +105,132 @@ func (q *Queries) CreateGroupMapping(ctx context.Context, arg CreateGroupMapping
 	return i, err
 }
 
+const createGroupSyncClusterBinding = `-- name: CreateGroupSyncClusterBinding :one
+INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, source)
+VALUES ($1, '', $2, $3, 'group_sync')
+ON CONFLICT (user_id, role_id, cluster_id) DO NOTHING
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source
+`
+
+type CreateGroupSyncClusterBindingParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	RoleID    uuid.UUID   `json:"role_id"`
+	ClusterID uuid.UUID   `json:"cluster_id"`
+}
+
+func (q *Queries) CreateGroupSyncClusterBinding(ctx context.Context, arg CreateGroupSyncClusterBindingParams) (ClusterRoleBinding, error) {
+	row := q.db.QueryRow(ctx, createGroupSyncClusterBinding, arg.UserID, arg.RoleID, arg.ClusterID)
+	var i ClusterRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.ClusterID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+	)
+	return i, err
+}
+
+const createGroupSyncGlobalBinding = `-- name: CreateGroupSyncGlobalBinding :one
+INSERT INTO global_role_bindings (user_id, "group", role_id, source)
+VALUES ($1, '', $2, 'group_sync')
+ON CONFLICT (user_id, role_id) DO NOTHING
+RETURNING id, user_id, "group", role_id, created_at, updated_at, source
+`
+
+type CreateGroupSyncGlobalBindingParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	RoleID uuid.UUID   `json:"role_id"`
+}
+
+// Marks the source column with 'group_sync' on insert. ON CONFLICT
+// DO NOTHING handles the idempotent re-sync case (manual binding
+// on (user_id, role_id) wins; group_sync row stays absent).
+func (q *Queries) CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGroupSyncGlobalBindingParams) (GlobalRoleBinding, error) {
+	row := q.db.QueryRow(ctx, createGroupSyncGlobalBinding, arg.UserID, arg.RoleID)
+	var i GlobalRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+	)
+	return i, err
+}
+
+const createGroupSyncProjectBinding = `-- name: CreateGroupSyncProjectBinding :one
+INSERT INTO project_role_bindings (user_id, "group", role_id, project_id, source)
+VALUES ($1, '', $2, $3, 'group_sync')
+ON CONFLICT (user_id, role_id, project_id) DO NOTHING
+RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source
+`
+
+type CreateGroupSyncProjectBindingParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	RoleID    uuid.UUID   `json:"role_id"`
+	ProjectID uuid.UUID   `json:"project_id"`
+}
+
+func (q *Queries) CreateGroupSyncProjectBinding(ctx context.Context, arg CreateGroupSyncProjectBindingParams) (ProjectRoleBinding, error) {
+	row := q.db.QueryRow(ctx, createGroupSyncProjectBinding, arg.UserID, arg.RoleID, arg.ProjectID)
+	var i ProjectRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+	)
+	return i, err
+}
+
+const deleteGroupMapping = `-- name: DeleteGroupMapping :exec
+DELETE FROM identity_group_mappings WHERE id = $1
+`
+
+func (q *Queries) DeleteGroupMapping(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGroupMapping, id)
+	return err
+}
+
+const deleteGroupSyncClusterBinding = `-- name: DeleteGroupSyncClusterBinding :exec
+DELETE FROM cluster_role_bindings WHERE id = $1 AND source = 'group_sync'
+`
+
+func (q *Queries) DeleteGroupSyncClusterBinding(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGroupSyncClusterBinding, id)
+	return err
+}
+
+const deleteGroupSyncGlobalBinding = `-- name: DeleteGroupSyncGlobalBinding :exec
+DELETE FROM global_role_bindings WHERE id = $1 AND source = 'group_sync'
+`
+
+// Belt-and-suspenders source check so a sync run can never delete a
+// manual binding even if the caller picks the wrong ID.
+func (q *Queries) DeleteGroupSyncGlobalBinding(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGroupSyncGlobalBinding, id)
+	return err
+}
+
+const deleteGroupSyncProjectBinding = `-- name: DeleteGroupSyncProjectBinding :exec
+DELETE FROM project_role_bindings WHERE id = $1 AND source = 'group_sync'
+`
+
+func (q *Queries) DeleteGroupSyncProjectBinding(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGroupSyncProjectBinding, id)
+	return err
+}
+
 const getGroupMappingByID = `-- name: GetGroupMappingByID :one
 SELECT id, connector_id, group_name, scope, role_id, cluster_id, project_id, created_at, updated_at FROM identity_group_mappings WHERE id = $1
 `
@@ -74,6 +248,22 @@ func (q *Queries) GetGroupMappingByID(ctx context.Context, id uuid.UUID) (Identi
 		&i.ProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserIDPGroups = `-- name: GetUserIDPGroups :one
+SELECT user_id, connector_id, groups, synced_at FROM user_idp_groups WHERE user_id = $1
+`
+
+func (q *Queries) GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (UserIdpGroup, error) {
+	row := q.db.QueryRow(ctx, getUserIDPGroups, userID)
+	var i UserIdpGroup
+	err := row.Scan(
+		&i.UserID,
+		&i.ConnectorID,
+		&i.Groups,
+		&i.SyncedAt,
 	)
 	return i, err
 }
@@ -118,26 +308,6 @@ func (q *Queries) ListGroupMappings(ctx context.Context, arg ListGroupMappingsPa
 		return nil, err
 	}
 	return items, nil
-}
-
-const countGroupMappings = `-- name: CountGroupMappings :one
-SELECT count(*) FROM identity_group_mappings
-`
-
-func (q *Queries) CountGroupMappings(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countGroupMappings)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const deleteGroupMapping = `-- name: DeleteGroupMapping :exec
-DELETE FROM identity_group_mappings WHERE id = $1
-`
-
-func (q *Queries) DeleteGroupMapping(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteGroupMapping, id)
-	return err
 }
 
 const listGroupMappingsForConnector = `-- name: ListGroupMappingsForConnector :many
@@ -186,57 +356,37 @@ func (q *Queries) ListGroupMappingsForConnector(ctx context.Context, connectorID
 	return items, nil
 }
 
-const upsertUserIDPGroups = `-- name: UpsertUserIDPGroups :one
-INSERT INTO user_idp_groups (user_id, connector_id, groups, synced_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (user_id) DO UPDATE SET
-    connector_id = EXCLUDED.connector_id,
-    groups       = EXCLUDED.groups,
-    synced_at    = EXCLUDED.synced_at
-RETURNING user_id, connector_id, groups, synced_at
+const listGroupSyncClusterBindings = `-- name: ListGroupSyncClusterBindings :many
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE user_id = $1 AND source = 'group_sync'
 `
 
-type UpsertUserIDPGroupsParams struct {
-	UserID      uuid.UUID       `json:"user_id"`
-	ConnectorID pgtype.UUID     `json:"connector_id"`
-	Groups      json.RawMessage `json:"groups"`
-	SyncedAt    time.Time       `json:"synced_at"`
-}
-
-// Replace the user's group snapshot on every login. The synced_at
-// timestamp drives the audit + "stale-claims" detection in the
-// admin resync endpoint.
-func (q *Queries) UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error) {
-	row := q.db.QueryRow(ctx, upsertUserIDPGroups,
-		arg.UserID,
-		arg.ConnectorID,
-		arg.Groups,
-		arg.SyncedAt,
-	)
-	var i UserIdpGroup
-	err := row.Scan(
-		&i.UserID,
-		&i.ConnectorID,
-		&i.Groups,
-		&i.SyncedAt,
-	)
-	return i, err
-}
-
-const getUserIDPGroups = `-- name: GetUserIDPGroups :one
-SELECT user_id, connector_id, groups, synced_at FROM user_idp_groups WHERE user_id = $1
-`
-
-func (q *Queries) GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (UserIdpGroup, error) {
-	row := q.db.QueryRow(ctx, getUserIDPGroups, userID)
-	var i UserIdpGroup
-	err := row.Scan(
-		&i.UserID,
-		&i.ConnectorID,
-		&i.Groups,
-		&i.SyncedAt,
-	)
-	return i, err
+func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error) {
+	rows, err := q.db.Query(ctx, listGroupSyncClusterBindings, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterRoleBinding{}
+	for rows.Next() {
+		var i ClusterRoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Group,
+			&i.RoleID,
+			&i.ClusterID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Source,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listGroupSyncGlobalBindings = `-- name: ListGroupSyncGlobalBindings :many
@@ -260,39 +410,6 @@ func (q *Queries) ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype
 			&i.UserID,
 			&i.Group,
 			&i.RoleID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Source,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listGroupSyncClusterBindings = `-- name: ListGroupSyncClusterBindings :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE user_id = $1 AND source = 'group_sync'
-`
-
-func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error) {
-	rows, err := q.db.Query(ctx, listGroupSyncClusterBindings, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ClusterRoleBinding{}
-	for rows.Next() {
-		var i ClusterRoleBinding
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Group,
-			&i.RoleID,
-			&i.ClusterID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
@@ -340,155 +457,39 @@ func (q *Queries) ListGroupSyncProjectBindings(ctx context.Context, userID pgtyp
 	return items, nil
 }
 
-const createGroupSyncGlobalBinding = `-- name: CreateGroupSyncGlobalBinding :one
-INSERT INTO global_role_bindings (user_id, "group", role_id, source)
-VALUES ($1, '', $2, 'group_sync')
-ON CONFLICT (user_id, role_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, created_at, updated_at, source
+const upsertUserIDPGroups = `-- name: UpsertUserIDPGroups :one
+INSERT INTO user_idp_groups (user_id, connector_id, groups, synced_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id) DO UPDATE SET
+    connector_id = EXCLUDED.connector_id,
+    groups       = EXCLUDED.groups,
+    synced_at    = EXCLUDED.synced_at
+RETURNING user_id, connector_id, groups, synced_at
 `
 
-type CreateGroupSyncGlobalBindingParams struct {
-	UserID pgtype.UUID `json:"user_id"`
-	RoleID uuid.UUID   `json:"role_id"`
+type UpsertUserIDPGroupsParams struct {
+	UserID      uuid.UUID       `json:"user_id"`
+	ConnectorID pgtype.UUID     `json:"connector_id"`
+	Groups      json.RawMessage `json:"groups"`
+	SyncedAt    time.Time       `json:"synced_at"`
 }
 
-// Marks the source column with 'group_sync' on insert. ON CONFLICT
-// DO NOTHING handles the idempotent re-sync case (manual binding
-// on (user_id, role_id) wins; group_sync row stays absent).
-//
-// Returns the (zero, pgx.ErrNoRows) pair when the conflict path
-// triggers — callers should treat that as a successful no-op.
-func (q *Queries) CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGroupSyncGlobalBindingParams) (GlobalRoleBinding, error) {
-	row := q.db.QueryRow(ctx, createGroupSyncGlobalBinding, arg.UserID, arg.RoleID)
-	var i GlobalRoleBinding
+// Replace the user's group snapshot on every login. The synced_at
+// timestamp drives the audit + "stale-claims" detection in the
+// admin resync endpoint.
+func (q *Queries) UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error) {
+	row := q.db.QueryRow(ctx, upsertUserIDPGroups,
+		arg.UserID,
+		arg.ConnectorID,
+		arg.Groups,
+		arg.SyncedAt,
+	)
+	var i UserIdpGroup
 	err := row.Scan(
-		&i.ID,
 		&i.UserID,
-		&i.Group,
-		&i.RoleID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Source,
+		&i.ConnectorID,
+		&i.Groups,
+		&i.SyncedAt,
 	)
 	return i, err
-}
-
-const createGroupSyncClusterBinding = `-- name: CreateGroupSyncClusterBinding :one
-INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, source)
-VALUES ($1, '', $2, $3, 'group_sync')
-ON CONFLICT (user_id, role_id, cluster_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source
-`
-
-type CreateGroupSyncClusterBindingParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	RoleID    uuid.UUID   `json:"role_id"`
-	ClusterID uuid.UUID   `json:"cluster_id"`
-}
-
-func (q *Queries) CreateGroupSyncClusterBinding(ctx context.Context, arg CreateGroupSyncClusterBindingParams) (ClusterRoleBinding, error) {
-	row := q.db.QueryRow(ctx, createGroupSyncClusterBinding, arg.UserID, arg.RoleID, arg.ClusterID)
-	var i ClusterRoleBinding
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Group,
-		&i.RoleID,
-		&i.ClusterID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Source,
-	)
-	return i, err
-}
-
-const createGroupSyncProjectBinding = `-- name: CreateGroupSyncProjectBinding :one
-INSERT INTO project_role_bindings (user_id, "group", role_id, project_id, source)
-VALUES ($1, '', $2, $3, 'group_sync')
-ON CONFLICT (user_id, role_id, project_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source
-`
-
-type CreateGroupSyncProjectBindingParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	RoleID    uuid.UUID   `json:"role_id"`
-	ProjectID uuid.UUID   `json:"project_id"`
-}
-
-func (q *Queries) CreateGroupSyncProjectBinding(ctx context.Context, arg CreateGroupSyncProjectBindingParams) (ProjectRoleBinding, error) {
-	row := q.db.QueryRow(ctx, createGroupSyncProjectBinding, arg.UserID, arg.RoleID, arg.ProjectID)
-	var i ProjectRoleBinding
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Group,
-		&i.RoleID,
-		&i.ProjectID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Source,
-	)
-	return i, err
-}
-
-const deleteGroupSyncGlobalBinding = `-- name: DeleteGroupSyncGlobalBinding :exec
-DELETE FROM global_role_bindings WHERE id = $1 AND source = 'group_sync'
-`
-
-// Belt-and-suspenders source check so a sync run can never delete a
-// manual binding even if the caller picks the wrong ID.
-func (q *Queries) DeleteGroupSyncGlobalBinding(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteGroupSyncGlobalBinding, id)
-	return err
-}
-
-const deleteGroupSyncClusterBinding = `-- name: DeleteGroupSyncClusterBinding :exec
-DELETE FROM cluster_role_bindings WHERE id = $1 AND source = 'group_sync'
-`
-
-func (q *Queries) DeleteGroupSyncClusterBinding(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteGroupSyncClusterBinding, id)
-	return err
-}
-
-const deleteGroupSyncProjectBinding = `-- name: DeleteGroupSyncProjectBinding :exec
-DELETE FROM project_role_bindings WHERE id = $1 AND source = 'group_sync'
-`
-
-func (q *Queries) DeleteGroupSyncProjectBinding(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteGroupSyncProjectBinding, id)
-	return err
-}
-
-const countGroupSyncGlobalBindings = `-- name: CountGroupSyncGlobalBindings :one
-SELECT count(*) FROM global_role_bindings WHERE source = 'group_sync'
-`
-
-func (q *Queries) CountGroupSyncGlobalBindings(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countGroupSyncGlobalBindings)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countGroupSyncClusterBindings = `-- name: CountGroupSyncClusterBindings :one
-SELECT count(*) FROM cluster_role_bindings WHERE source = 'group_sync'
-`
-
-func (q *Queries) CountGroupSyncClusterBindings(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countGroupSyncClusterBindings)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countGroupSyncProjectBindings = `-- name: CountGroupSyncProjectBindings :one
-SELECT count(*) FROM project_role_bindings WHERE source = 'group_sync'
-`
-
-func (q *Queries) CountGroupSyncProjectBindings(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countGroupSyncProjectBindings)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }

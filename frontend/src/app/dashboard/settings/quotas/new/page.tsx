@@ -15,7 +15,7 @@ import {
   Loader2,
   Save,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { useCreateQuotaPlan } from '@/components/settings/hooks';
 import type { QuotaEnforcement, QuotaPlanWriteRequest } from '@/lib/api/settings';
@@ -66,11 +66,11 @@ function NewQuotaPlanForm() {
 
   const handleCreate = async () => {
     if (!form.name) {
-      toast.error('Plan name is required');
+      toastError('Plan name is required');
       return;
     }
     if (!/^[a-z0-9][a-z0-9-]*$/.test(form.name)) {
-      toast.error('Plan name must be lowercase letters, numbers, and dashes');
+      toastError('Plan name must be lowercase letters, numbers, and dashes');
       return;
     }
     try {

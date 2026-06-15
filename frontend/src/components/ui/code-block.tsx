@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 import { cn, copyToClipboard } from '@/lib/utils';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
 
 interface CodeBlockProps {
   code: string;
@@ -26,10 +26,10 @@ export function CodeBlock({
     const success = await copyToClipboard(code);
     if (success) {
       setCopied(true);
-      toast.success('Copied to clipboard');
+      toastSuccess('Copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     } else {
-      toast.error('Failed to copy');
+      toastError('Failed to copy');
     }
   };
 

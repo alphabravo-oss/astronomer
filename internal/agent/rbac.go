@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -50,7 +51,7 @@ func (s *RBACSyncer) HandleSyncRequest(ctx context.Context, msg *protocol.Messag
 	appliedClusterRoles := make(map[string]bool)
 	appliedClusterRoleBindings := make(map[string]bool)
 	appliedRoles := make(map[string]bool)        // "namespace/name"
-	appliedRoleBindings := make(map[string]bool)  // "namespace/name"
+	appliedRoleBindings := make(map[string]bool) // "namespace/name"
 
 	// Apply ClusterRoles.
 	for _, raw := range payload.ClusterRoles {
@@ -185,7 +186,7 @@ func (s *RBACSyncer) garbageCollect(
 	if err == nil {
 		for _, cr := range crs.Items {
 			if !appliedCR[cr.Name] {
-				if err := s.client.RbacV1().ClusterRoles().Delete(ctx, cr.Name, metav1.DeleteOptions{}); err != nil {
+				if err := s.client.RbacV1().ClusterRoles().Delete(ctx, cr.Name, kubeutil.DeleteOptions()); err != nil {
 					errors = append(errors, fmt.Sprintf("delete ClusterRole %s: %v", cr.Name, err))
 				} else {
 					removed++
@@ -200,7 +201,7 @@ func (s *RBACSyncer) garbageCollect(
 	if err == nil {
 		for _, crb := range crbs.Items {
 			if !appliedCRB[crb.Name] {
-				if err := s.client.RbacV1().ClusterRoleBindings().Delete(ctx, crb.Name, metav1.DeleteOptions{}); err != nil {
+				if err := s.client.RbacV1().ClusterRoleBindings().Delete(ctx, crb.Name, kubeutil.DeleteOptions()); err != nil {
 					errors = append(errors, fmt.Sprintf("delete ClusterRoleBinding %s: %v", crb.Name, err))
 				} else {
 					removed++
@@ -216,7 +217,7 @@ func (s *RBACSyncer) garbageCollect(
 		for _, r := range roles.Items {
 			key := r.Namespace + "/" + r.Name
 			if !appliedR[key] {
-				if err := s.client.RbacV1().Roles(r.Namespace).Delete(ctx, r.Name, metav1.DeleteOptions{}); err != nil {
+				if err := s.client.RbacV1().Roles(r.Namespace).Delete(ctx, r.Name, kubeutil.DeleteOptions()); err != nil {
 					errors = append(errors, fmt.Sprintf("delete Role %s: %v", key, err))
 				} else {
 					removed++
@@ -232,7 +233,7 @@ func (s *RBACSyncer) garbageCollect(
 		for _, rb := range rbs.Items {
 			key := rb.Namespace + "/" + rb.Name
 			if !appliedRB[key] {
-				if err := s.client.RbacV1().RoleBindings(rb.Namespace).Delete(ctx, rb.Name, metav1.DeleteOptions{}); err != nil {
+				if err := s.client.RbacV1().RoleBindings(rb.Namespace).Delete(ctx, rb.Name, kubeutil.DeleteOptions()); err != nil {
 					errors = append(errors, fmt.Sprintf("delete RoleBinding %s: %v", key, err))
 				} else {
 					removed++

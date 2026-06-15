@@ -14,6 +14,18 @@ rules:
     verbs: [create, read, update, delete, list, scale, restart]
   - resource: pods
     verbs: [read, list, watch, logs, exec, proxy]
+  - resource: nodes
+    verbs: [read, list]
+  - resource: services
+    verbs: [create, read, update, delete, list, proxy]
+  - resource: ingresses
+    verbs: [create, read, update, delete, list]
+  - resource: storage
+    verbs: [create, read, update, delete, list]
+  - resource: configmaps
+    verbs: [create, read, update, delete, list]
+  - resource: network_policies
+    verbs: [create, read, update, delete, list]
   - resource: monitoring
     verbs: [read, list, update]
   - resource: alerts

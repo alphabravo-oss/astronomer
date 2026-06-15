@@ -21,9 +21,10 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError } from '@/lib/toast';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { useDexConnectors } from '@/components/auth/hooks';
 import { useGlobalRoles, useClusters, useProjects } from '@/lib/hooks';
@@ -164,15 +165,15 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
 
   const handleSubmit = async () => {
     if (!groupName) {
-      toast.error('Group name is required');
+      toastError('Group name is required');
       return;
     }
     if (!role) {
-      toast.error('Role is required');
+      toastError('Role is required');
       return;
     }
     if (scope !== 'global' && !target) {
-      toast.error('Target is required for scoped mappings');
+      toastError('Target is required for scoped mappings');
       return;
     }
     try {
@@ -195,8 +196,7 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-foreground">New group mapping</h3>
@@ -320,7 +320,7 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 

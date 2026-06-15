@@ -1,18 +1,17 @@
 'use client';
 
-// Sprint 23 — shared registration-timeline component.
+// Sprint 23 - shared registration-timeline component.
 //
 // Used by both:
 //   - the wizard's progress page (/clusters/register/[id]/progress/)
-//   - the cluster-detail Provisioning tab (/clusters/[id]/provisioning/)
+//   - the cluster-detail Adoption tab (/clusters/[id]/adoption/)
 //
 // Subscribes to the wizard SSE stream + polls /clusters/{id}/registration/
 // status/ as a fallback. Renders each step row with status icon, label,
 // detail, optional progress bar, and a Retry button on failed rows.
 
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { Check, Circle, Loader2, X } from 'lucide-react';
+import { toastError, toastSuccess } from '@/lib/toast';
 import {
   getRegistrationStatus,
   retryRegistrationStep,
@@ -20,6 +19,8 @@ import {
   type RegistrationStep,
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live-events';
+import { ActionButton } from '@/components/ui/action-button';
+import { OperationTimeline, type OperationTimelineStepStatus } from '@/components/ui/operation-timeline';
 
 interface Props {
   clusterId: string;
@@ -84,10 +85,10 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
     try {
       const s = await retryRegistrationStep(clusterId, step.id);
       setStatus(s);
-      toast.success('Retry queued');
+      toastSuccess('Retry queued');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      toast.error(`Retry failed: ${msg}`);
+      toastError(`Retry failed: ${msg}`);
     } finally {
       setRetrying(null);
     }
@@ -96,87 +97,66 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
   if (notFound) {
     return (
       <div className="text-sm text-muted-foreground py-4">
-        No registration record for this cluster — it likely predates the wizard or has already been
+        No registration record for this cluster - it likely predates the wizard or has already been
         cleaned up.
       </div>
     );
   }
 
+  const steps = (status?.steps ?? []).map((step) => ({
+    id: step.id,
+    label: step.label,
+    status: timelineStatus(step.status),
+    detail: step.detail && Object.keys(step.detail).length > 0
+      ? Object.entries(step.detail)
+        .map(([k, v]) => `${k}: ${String(v)}`)
+        .join(' • ')
+      : undefined,
+    error: step.error_message,
+    progressPct: step.progress_pct,
+    action: step.status === 'failed' ? (
+      <ActionButton
+        intent="ghost"
+        size="sm"
+        onClick={() => onRetry(step)}
+        loading={retrying === step.id}
+        loadingLabel="Retrying..."
+      >
+        Retry
+      </ActionButton>
+    ) : undefined,
+  }));
+
   return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <PhaseBadge phase={status?.phase} />
-        {status?.started_at && (
-          <span className="text-xs text-muted-foreground">
-            Started {new Date(status.started_at).toLocaleString()}
-          </span>
-        )}
-      </div>
-
-      <ul className="divide-y divide-border">
-        {(status?.steps ?? []).map((step) => (
-          <li key={step.id} className="px-4 py-3 flex items-start gap-3">
-            <StepIcon status={step.status} />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-foreground">{step.label}</div>
-              {step.detail && Object.keys(step.detail).length > 0 && (
-                <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {Object.entries(step.detail)
-                    .map(([k, v]) => `${k}: ${String(v)}`)
-                    .join(' • ')}
-                </div>
-              )}
-              {step.error_message && (
-                <div className="text-xs text-status-danger mt-1">{step.error_message}</div>
-              )}
-              {step.status === 'running' && step.progress_pct > 0 && (
-                <div className="mt-1 h-1.5 w-full bg-muted rounded overflow-hidden">
-                  <div className="h-full bg-primary" style={{ width: `${step.progress_pct}%` }} />
-                </div>
-              )}
-            </div>
-            {step.status === 'failed' && (
-              <button
-                onClick={() => onRetry(step)}
-                disabled={retrying === step.id}
-                className="text-xs text-primary hover:underline disabled:opacity-50"
-              >
-                {retrying === step.id ? 'Retrying...' : 'Retry'}
-              </button>
-            )}
-          </li>
-        ))}
-        {!status?.steps?.length && (
-          <li className="px-4 py-6 text-sm text-muted-foreground text-center">
-            {status ? 'Waiting for first step...' : 'Loading...'}
-          </li>
-        )}
-      </ul>
-
-      {!embedded && status?.phase === 'failed' && (
+    <OperationTimeline
+      header={<PhaseBadge phase={status?.phase} />}
+      headerMeta={status?.started_at ? `Started ${new Date(status.started_at).toLocaleString()}` : undefined}
+      steps={steps}
+      emptyLabel={status ? 'Waiting for first step...' : 'Loading...'}
+      footer={!embedded && status?.phase === 'failed' ? (
         <div className="px-4 py-3 border-t border-border bg-status-danger/5">
           <p className="text-xs text-muted-foreground">
             Use the Retry buttons above to re-run a failing step, or talk to your platform team if
             the issue persists.
           </p>
         </div>
-      )}
-    </div>
+      ) : undefined}
+    />
   );
 }
 
-function StepIcon({ status }: { status: RegistrationStep['status'] }) {
+function timelineStatus(status: RegistrationStep['status']): OperationTimelineStepStatus {
   switch (status) {
     case 'success':
-      return <Check className="h-4 w-4 text-status-success mt-0.5" />;
+      return 'success';
     case 'running':
-      return <Loader2 className="h-4 w-4 text-primary animate-spin mt-0.5" />;
+      return 'running';
     case 'failed':
-      return <X className="h-4 w-4 text-status-danger mt-0.5" />;
+      return 'failed';
     case 'skipped':
-      return <Circle className="h-4 w-4 text-muted-foreground/40 mt-0.5" />;
+      return 'skipped';
     default:
-      return <Circle className="h-4 w-4 text-muted-foreground/40 mt-0.5" />;
+      return 'pending';
   }
 }
 
@@ -189,6 +169,7 @@ export function PhaseBadge({ phase }: { phase: RegistrationStatus['phase'] | und
     'text-muted-foreground';
   const label =
     phase === 'awaiting_agent' ? 'awaiting agent' :
+    phase === 'provisioning' ? 'applying baseline' :
     phase;
   return <span className={`text-xs font-medium uppercase tracking-wide ${colour}`}>Phase: {label}</span>;
 }

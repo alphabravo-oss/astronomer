@@ -28,6 +28,7 @@ type fakeFleetOperationQuerier struct {
 	targets        map[uuid.UUID]map[uuid.UUID]sqlc.FleetOperationTarget
 	idemOperations []sqlc.CreateFleetOperationIdempotentParams
 	idemByKey      map[string]sqlc.FleetOperation
+	auditRows      []sqlc.CreateAuditLogV1Params
 }
 
 func newFakeFleetOperationQuerier() *fakeFleetOperationQuerier {
@@ -174,6 +175,32 @@ func (f *fakeFleetOperationQuerier) RequeueFailedTargets(_ context.Context, oper
 	return nil
 }
 
+func (f *fakeFleetOperationQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.auditRows = append(f.auditRows, arg)
+	return nil
+}
+
+func (f *fakeFleetOperationQuerier) auditActions() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.auditRows))
+	for _, row := range f.auditRows {
+		out = append(out, row.Action)
+	}
+	return out
+}
+
+func (f *fakeFleetOperationQuerier) lastAuditRow() sqlc.CreateAuditLogV1Params {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.auditRows) == 0 {
+		return sqlc.CreateAuditLogV1Params{}
+	}
+	return f.auditRows[len(f.auditRows)-1]
+}
+
 // captureFleetTrigger counts orchestrator nudges.
 type captureFleetTrigger struct {
 	mu    sync.Mutex
@@ -240,6 +267,20 @@ func TestFleetOperation_CRUD(t *testing.T) {
 		t.Errorf("expected default strategy parallel, got %q", createResp.Data.Strategy)
 	}
 	id := createResp.Data.ID
+	createAudit := q.lastAuditRow()
+	if createAudit.Action != "fleet.operation.created" {
+		t.Fatalf("create audit action = %q, want fleet.operation.created; all actions=%v", createAudit.Action, q.auditActions())
+	}
+	if createAudit.ResourceType != "fleet_operation" || createAudit.ResourceID != id || createAudit.ResourceName != "rolling-cert-manager-upgrade" {
+		t.Fatalf("create audit resource = %s/%s/%s, want fleet_operation/%s/rolling-cert-manager-upgrade", createAudit.ResourceType, createAudit.ResourceID, createAudit.ResourceName, id)
+	}
+	var createDetail map[string]any
+	if err := json.Unmarshal(createAudit.Detail, &createDetail); err != nil {
+		t.Fatalf("decode create audit detail: %v", err)
+	}
+	if createDetail["operation_type"] != "tool_upgrade" || createDetail["strategy"] != "parallel" || createDetail["on_error"] != "abort" {
+		t.Fatalf("create audit detail = %#v", createDetail)
+	}
 
 	// List
 	rec = httptest.NewRecorder()
@@ -413,6 +454,10 @@ func TestFleetOperation_PauseResume(t *testing.T) {
 	if q.operations[id].Status != "running" {
 		t.Errorf("expected running, got %q", q.operations[id].Status)
 	}
+	actions := q.auditActions()
+	if !stringSliceContains(actions, "fleet.operation.paused") || !stringSliceContains(actions, "fleet.operation.resumed") {
+		t.Fatalf("pause/resume audit actions = %v, want paused and resumed", actions)
+	}
 	if trig.Count() < 2 {
 		t.Errorf("expected orchestrator to be nudged at least twice, got %d", trig.Count())
 	}
@@ -436,6 +481,20 @@ func TestFleetOperation_Abort(t *testing.T) {
 	}
 	if q.operations[id].Status != "aborted" {
 		t.Errorf("expected aborted, got %q", q.operations[id].Status)
+	}
+	abortAudit := q.lastAuditRow()
+	if abortAudit.Action != "fleet.operation.aborted" {
+		t.Fatalf("abort audit action = %q, want fleet.operation.aborted; all actions=%v", abortAudit.Action, q.auditActions())
+	}
+	if abortAudit.ResourceType != "fleet_operation" || abortAudit.ResourceID != id.String() || abortAudit.ResourceName != "x" {
+		t.Fatalf("abort audit resource = %s/%s/%s, want fleet_operation/%s/x", abortAudit.ResourceType, abortAudit.ResourceID, abortAudit.ResourceName, id)
+	}
+	var abortDetail map[string]any
+	if err := json.Unmarshal(abortAudit.Detail, &abortDetail); err != nil {
+		t.Fatalf("decode abort audit detail: %v", err)
+	}
+	if abortDetail["from"] != "running" || abortDetail["to"] != "aborted" {
+		t.Fatalf("abort audit detail = %#v", abortDetail)
 	}
 
 	// Re-abort a terminal-status row is 409.
@@ -481,6 +540,13 @@ func TestFleetOperation_RetryFailed(t *testing.T) {
 	}
 	if q.operations[opID].Status != "running" {
 		t.Errorf("parent op should be running, got %q", q.operations[opID].Status)
+	}
+	retryAudit := q.lastAuditRow()
+	if retryAudit.Action != "fleet.operation.retry_failed" {
+		t.Fatalf("retry audit action = %q, want fleet.operation.retry_failed; all actions=%v", retryAudit.Action, q.auditActions())
+	}
+	if retryAudit.ResourceType != "fleet_operation" || retryAudit.ResourceID != opID.String() || retryAudit.ResourceName != "x" {
+		t.Fatalf("retry audit resource = %s/%s/%s, want fleet_operation/%s/x", retryAudit.ResourceType, retryAudit.ResourceID, retryAudit.ResourceName, opID)
 	}
 	if trig.Count() == 0 {
 		t.Errorf("retry did not nudge orchestrator")
@@ -538,4 +604,13 @@ func TestFleetOperation_ListTargets_404(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status=%d, want 404", rec.Code)
 	}
+}
+
+func stringSliceContains(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
 }

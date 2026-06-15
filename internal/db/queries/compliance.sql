@@ -1,11 +1,9 @@
 -- Compliance report export queries.
 --
 -- These power the SOC 2 / ISO 27001 audit-prep bundle the
--- `/api/v1/admin/compliance/export/` endpoint emits. The Go-side
--- implementations live in internal/db/sqlc/compliance_manual.go
--- (hand-rolled, mirroring the audit_v1_manual.go pattern) — sqlc-CLI
--- isn't part of the local Makefile path. This file is the canonical
--- query text; a future `sqlc generate` run will pick them up.
+-- `/api/v1/admin/compliance/export/` endpoint emits. The generated sqlc
+-- output is the canonical Go API for these reads; keep this file parseable
+-- by the pinned sqlc version used in CI.
 
 -- name: ListAuditLogV1ForRange :many
 -- Keyset-paginated stream across the partitioned audit_log table for
@@ -21,15 +19,14 @@ SELECT id, created_at, schema_version, source, correlation_id, user_id,
 FROM audit_log
 WHERE created_at >= sqlc.arg(from_time)
   AND created_at <  sqlc.arg(to_time)
-  AND (created_at, id) > (sqlc.arg(after_created_at), sqlc.arg(after_id))
+  AND (created_at, id) > (sqlc.arg(after_created_at), sqlc.arg(after_id)::uuid)
 ORDER BY created_at ASC, id ASC
-LIMIT sqlc.arg(limit);
+LIMIT sqlc.arg(page_limit);
 
 -- name: CountAuditLogV1ForRange :one
--- The size estimate the handler uses to pick between the inline
--- streaming path and the async task path. Over ~100K rows the
--- streaming path's HTTP transport gets unreliable; the handler then
--- enqueues the export onto the asynq `compliance:export` queue.
+-- The size estimate retained for compliance dashboards and future durable
+-- background export planning. The current handler streams inline and keeps
+-- async compliance exports disabled until durable job/output state exists.
 SELECT count(*) FROM audit_log
 WHERE created_at >= sqlc.arg(from_time)
   AND created_at <  sqlc.arg(to_time);

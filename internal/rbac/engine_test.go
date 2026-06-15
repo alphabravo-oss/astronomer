@@ -215,8 +215,8 @@ func TestCheckPermission(t *testing.T) {
 			want:      true,
 		},
 		{
-			name: "no bindings denies everything",
-			bindings: []RoleBinding{},
+			name:      "no bindings denies everything",
+			bindings:  []RoleBinding{},
 			resource:  ResourceClusters,
 			verb:      VerbRead,
 			clusterID: nilUUID,
@@ -356,6 +356,75 @@ func TestCheckPermission(t *testing.T) {
 				t.Errorf("CheckPermission() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCheckPermissionNamespaceScopedBindings(t *testing.T) {
+	engine := NewEngine()
+	clusterID := uuid.New()
+	projectID := uuid.New()
+
+	bindings := []RoleBinding{{
+		UserID:    "u1",
+		ClusterID: clusterID.String(),
+		Namespace: "payments",
+		RoleRules: []Rule{{
+			Resource: string(ResourceWorkloads),
+			Verbs:    []string{string(VerbRead)},
+		}},
+	}}
+
+	if !engine.CheckPermission(bindings, ResourceWorkloads, VerbRead, clusterID, uuid.Nil, "payments") {
+		t.Fatal("expected matching namespace-scoped cluster binding to allow")
+	}
+	if engine.CheckPermission(bindings, ResourceWorkloads, VerbRead, clusterID, uuid.Nil, "default") {
+		t.Fatal("expected wrong namespace to deny")
+	}
+	if engine.CheckPermission(bindings, ResourceWorkloads, VerbRead, clusterID, uuid.Nil) {
+		t.Fatal("expected missing namespace context to deny namespace-scoped binding")
+	}
+	if engine.CheckPermission(bindings, ResourceWorkloads, VerbRead, uuid.New(), uuid.Nil, "payments") {
+		t.Fatal("expected wrong cluster to deny even when namespace matches")
+	}
+
+	projectBindings := []RoleBinding{{
+		UserID:    "u1",
+		ProjectID: projectID.String(),
+		Namespace: "payments",
+		RoleRules: []Rule{{
+			Resource: string(ResourcePods),
+			Verbs:    []string{string(VerbList)},
+		}},
+	}}
+	if !engine.CheckPermission(projectBindings, ResourcePods, VerbList, uuid.Nil, projectID, "payments") {
+		t.Fatal("expected matching namespace-scoped project binding to allow")
+	}
+	if engine.CheckPermission(projectBindings, ResourcePods, VerbList, uuid.Nil, projectID, "default") {
+		t.Fatal("expected wrong project namespace to deny")
+	}
+
+	broadClusterBinding := []RoleBinding{{
+		UserID:    "u1",
+		ClusterID: clusterID.String(),
+		RoleRules: []Rule{{
+			Resource: string(ResourceWorkloads),
+			Verbs:    []string{string(VerbRead)},
+		}},
+	}}
+	if !engine.CheckPermission(broadClusterBinding, ResourceWorkloads, VerbRead, clusterID, uuid.Nil, "payments") {
+		t.Fatal("expected broad cluster binding to allow namespaced requests")
+	}
+
+	namespaceOnlyBinding := []RoleBinding{{
+		UserID:    "u1",
+		Namespace: "payments",
+		RoleRules: []Rule{{
+			Resource: string(ResourceWorkloads),
+			Verbs:    []string{string(VerbRead)},
+		}},
+	}}
+	if engine.CheckPermission(namespaceOnlyBinding, ResourceWorkloads, VerbRead, uuid.Nil, uuid.Nil, "payments") {
+		t.Fatal("expected namespace-only binding with no cluster/project scope to fail closed")
 	}
 }
 

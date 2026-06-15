@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -108,7 +108,7 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	}
 	payloadBytes, err := json.Marshal(connectPayload)
 	if err != nil {
-		conn.Close(websocket.StatusInternalError, "marshal error")
+		_ = conn.Close(websocket.StatusInternalError, "marshal error")
 		return fmt.Errorf("marshal connect payload: %w", err)
 	}
 
@@ -120,7 +120,7 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	}
 
 	if err := tc.writeMessage(ctx, conn, connectMsg); err != nil {
-		conn.Close(websocket.StatusInternalError, "write error")
+		_ = conn.Close(websocket.StatusInternalError, "write error")
 		return fmt.Errorf("send CONNECT: %w", err)
 	}
 
@@ -130,21 +130,21 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 
 	ackMsg, err := tc.readMessage(ackCtx, conn)
 	if err != nil {
-		conn.Close(websocket.StatusInternalError, "read error")
+		_ = conn.Close(websocket.StatusInternalError, "read error")
 		return fmt.Errorf("read CONNECT_ACK: %w", err)
 	}
 	if ackMsg.Type != protocol.MsgConnectAck {
-		conn.Close(websocket.StatusProtocolError, "expected CONNECT_ACK")
+		_ = conn.Close(websocket.StatusProtocolError, "expected CONNECT_ACK")
 		return fmt.Errorf("expected CONNECT_ACK, got %s", ackMsg.Type)
 	}
 
 	var ack protocol.ConnectAckPayload
 	if err := json.Unmarshal(ackMsg.Payload, &ack); err != nil {
-		conn.Close(websocket.StatusInternalError, "unmarshal error")
+		_ = conn.Close(websocket.StatusInternalError, "unmarshal error")
 		return fmt.Errorf("unmarshal CONNECT_ACK: %w", err)
 	}
 	if !ack.Accepted {
-		conn.Close(websocket.StatusNormalClosure, "rejected")
+		_ = conn.Close(websocket.StatusNormalClosure, "rejected")
 		return fmt.Errorf("connection rejected: %s", ack.Reason)
 	}
 	if ack.AgentToken != "" && ack.AgentToken != tc.config.AgentToken {

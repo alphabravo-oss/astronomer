@@ -11,12 +11,23 @@ import {
   useUpdateUser,
   useDeleteUser,
   useResetUserPassword,
+  useMyEffectivePermissions,
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { RoleEditor } from '@/components/rbac/role-editor';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
-import type { GlobalRole, ClusterRole, ProjectRole, User, RoleBinding } from '@/types';
+import type {
+  ClusterRole,
+  EffectivePermissionBinding,
+  EffectivePermissionGrant,
+  EffectivePermissionSource,
+  GlobalRole,
+  ProjectRole,
+  RoleBinding,
+  User,
+} from '@/types';
 import {
   Shield,
   Plus,
@@ -31,11 +42,12 @@ import {
   Eye,
   EyeOff,
   Copy,
+  ListChecks,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toastError, toastSuccess } from '@/lib/toast';
 import { copyToClipboard } from '@/lib/utils';
 
-type TabKey = 'global-roles' | 'cluster-roles' | 'project-roles' | 'users' | 'bindings';
+type TabKey = 'global-roles' | 'cluster-roles' | 'project-roles' | 'users' | 'bindings' | 'effective';
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'global-roles', label: 'Global Roles', icon: Shield },
@@ -43,6 +55,7 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'project-roles', label: 'Project Roles', icon: Key },
   { key: 'users', label: 'Users', icon: Users },
   { key: 'bindings', label: 'Bindings', icon: Shield },
+  { key: 'effective', label: 'Effective', icon: ListChecks },
 ];
 
 export default function RBACPage() {
@@ -437,6 +450,8 @@ export default function RBACPage() {
             emptyMessage="No role bindings found"
           />
         )}
+
+        {activeTab === 'effective' && <EffectivePermissionsPanel />}
       </div>
 
       {/* Role Editor Modal */}
@@ -472,6 +487,220 @@ export default function RBACPage() {
   );
 }
 
+function EffectivePermissionsPanel() {
+  const [context, setContext] = useState({ clusterId: '', projectId: '', namespace: '' });
+  const selectedContext = {
+    clusterId: context.clusterId.trim() || undefined,
+    projectId: context.projectId.trim() || undefined,
+    namespace: context.namespace.trim() || undefined,
+  };
+  const { data, isLoading } = useMyEffectivePermissions(selectedContext);
+  const permissions = data?.permissions || [];
+  const bindings = data?.bindings || [];
+  const responseContext = data?.context;
+  const resourceCount = new Set(permissions.map((p) => p.resource)).size;
+  const highRiskCount = permissions.filter(isHighRiskGrant).length;
+  const applicableCount = permissions.filter((p) => p.appliesToContext !== false).length;
+
+  const permissionColumns: Column<EffectivePermissionGrant>[] = [
+    {
+      key: 'applies',
+      header: 'Applies',
+      accessor: (row) => (
+        <span className={cn('text-xs px-2 py-0.5 rounded', row.appliesToContext === false ? 'bg-muted text-muted-foreground' : 'bg-status-success/10 text-status-success')}>
+          {row.appliesToContext === false ? 'No' : 'Yes'}
+        </span>
+      ),
+      sortAccessor: (row) => (row.appliesToContext === false ? 0 : 1),
+    },
+    {
+      key: 'resource',
+      header: 'Resource',
+      accessor: (row) => row.resource,
+      sortAccessor: (row) => row.resource,
+    },
+    {
+      key: 'verb',
+      header: 'Verb',
+      accessor: (row) => row.verb,
+      sortAccessor: (row) => row.verb,
+    },
+    {
+      key: 'risk',
+      header: 'Risk',
+      accessor: (row) => (
+        <span className={cn('text-xs px-2 py-0.5 rounded', riskClassName(row))}>
+          {riskLabel(row)}
+        </span>
+      ),
+      sortAccessor: (row) => riskSort(row),
+    },
+    {
+      key: 'sources',
+      header: 'Granted By',
+      accessor: (row) => sourceSummary(row.sources),
+      sortable: false,
+    },
+    {
+      key: 'target',
+      header: 'Scope Target',
+      accessor: (row) => targetSummary(row.sources),
+      sortable: false,
+    },
+  ];
+
+  const bindingColumns: Column<EffectivePermissionBinding>[] = [
+    {
+      key: 'role',
+      header: 'Role',
+      accessor: (row) => row.roleName || row.roleId || row.bindingId || row.scope,
+    },
+    {
+      key: 'scope',
+      header: 'Scope',
+      accessor: (row) => row.scope || 'global',
+    },
+    {
+      key: 'target',
+      header: 'Target',
+      accessor: (row) => bindingTarget(row),
+      sortable: false,
+    },
+    {
+      key: 'rules',
+      header: 'Rules',
+      accessor: (row) => <span className="tabular-nums">{row.rules.length}</span>,
+      sortAccessor: (row) => row.rules.length,
+      align: 'center',
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-4">
+        <MetricTile label="Grants" value={permissions.length} />
+        <MetricTile label="Bindings" value={bindings.length} />
+        <MetricTile label="Resources" value={resourceCount} />
+        <MetricTile label="Applies Here" value={applicableCount} />
+        <MetricTile label="High Risk" value={highRiskCount} tone={highRiskCount > 0 ? 'warning' : 'default'} />
+      </div>
+
+      <div className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-3">
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Cluster ID</span>
+          <input
+            value={context.clusterId}
+            onChange={(event) => setContext((current) => ({ ...current, clusterId: event.target.value }))}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Project ID</span>
+          <input
+            value={context.projectId}
+            onChange={(event) => setContext((current) => ({ ...current, projectId: event.target.value }))}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Namespace</span>
+          <input
+            value={context.namespace}
+            onChange={(event) => setContext((current) => ({ ...current, namespace: event.target.value }))}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </label>
+        {responseContext?.warnings?.length ? (
+          <p className="text-xs text-muted-foreground md:col-span-3">{responseContext.warnings.join(' ')}</p>
+        ) : null}
+      </div>
+
+      <DataTable
+        data={permissions}
+        columns={permissionColumns}
+        keyExtractor={(row) => `${row.resource}:${row.verb}`}
+        searchPlaceholder="Search effective permissions..."
+        loading={isLoading}
+        emptyMessage="No effective permissions found"
+        pageSize={25}
+      />
+
+      <DataTable
+        data={bindings}
+        columns={bindingColumns}
+        keyExtractor={(row) => row.bindingId || `${row.scope}:${row.roleId}:${row.roleName}`}
+        searchPlaceholder="Search permission sources..."
+        loading={isLoading}
+        emptyMessage="No role bindings contribute permissions"
+        pageSize={10}
+      />
+    </div>
+  );
+}
+
+function MetricTile({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'warning' }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 text-2xl font-semibold tabular-nums', tone === 'warning' ? 'text-status-warning' : 'text-foreground')}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function sourceSummary(sources: EffectivePermissionSource[]): string {
+  const labels = sources.map((source) => source.roleName || source.roleId || source.bindingId || source.scope || 'binding');
+  return unique(labels).join(', ');
+}
+
+function targetSummary(sources: EffectivePermissionSource[]): string {
+  const labels = sources.map((source) => {
+    if (source.clusterId) return `cluster:${source.clusterId}`;
+    if (source.projectId) return `project:${source.projectId}`;
+    return source.scope || 'global';
+  });
+  return unique(labels).join(', ');
+}
+
+function bindingTarget(binding: EffectivePermissionBinding): string {
+  if (binding.clusterId) return `cluster:${binding.clusterId}`;
+  if (binding.projectId) return `project:${binding.projectId}`;
+  return binding.scope || 'global';
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function isHighRiskGrant(grant: EffectivePermissionGrant): boolean {
+  return riskSort(grant) >= 2;
+}
+
+function riskSort(grant: EffectivePermissionGrant): number {
+  if (grant.resource === '*' || grant.verb === '*') return 3;
+  if (grant.resource === 'secrets' && ['read', 'list', 'watch'].includes(grant.verb)) return 3;
+  if (['delete', 'manage', 'exec', 'proxy', 'sync'].includes(grant.verb)) return 2;
+  if (['create', 'update', 'scale', 'restart'].includes(grant.verb)) return 1;
+  return 0;
+}
+
+function riskLabel(grant: EffectivePermissionGrant): string {
+  const risk = riskSort(grant);
+  if (risk >= 3) return 'Critical';
+  if (risk === 2) return 'High';
+  if (risk === 1) return 'Medium';
+  return 'Low';
+}
+
+function riskClassName(grant: EffectivePermissionGrant): string {
+  const risk = riskSort(grant);
+  if (risk >= 3) return 'bg-status-error/10 text-status-error';
+  if (risk === 2) return 'bg-status-warning/10 text-status-warning';
+  if (risk === 1) return 'bg-status-info/10 text-status-info';
+  return 'bg-muted text-muted-foreground';
+}
+
 // ============================================================
 // Create User Modal
 // ============================================================
@@ -504,11 +733,11 @@ function CreateUserModal({
 
   const handleSave = async () => {
     if (!form.username || !form.email || !form.password) {
-      toast.error('Username, email, and password are required');
+      toastError('Username, email, and password are required');
       return;
     }
     if (form.password.length < 8) {
-      toast.error('Password must be at least 8 characters');
+      toastError('Password must be at least 8 characters');
       return;
     }
 
@@ -527,8 +756,7 @@ function CreateUserModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create User</h3>
@@ -640,7 +868,7 @@ function CreateUserModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -692,8 +920,7 @@ function EditUserModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Edit User</h3>
@@ -811,7 +1038,7 @@ function EditUserModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }
 
@@ -833,14 +1060,13 @@ function ResetPasswordResultModal({
     const success = await copyToClipboard(password);
     if (success) {
       setCopied(true);
-      toast.success('Password copied to clipboard');
+      toastSuccess('Password copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <OverlayShell onClose={onClose}>
       <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Password Reset</h3>
@@ -902,6 +1128,6 @@ function ResetPasswordResultModal({
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

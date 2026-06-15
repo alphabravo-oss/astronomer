@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/cluster-groups — operator-defined folder hierarchy
  * over clusters (migration 066).
@@ -21,9 +22,11 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import { Plus, Loader2, Trash2, Pencil, AlertCircle, Folder } from 'lucide-react';
 import * as api from '@/lib/api';
+import { queryKeys } from '@/lib/hooks';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import {
   CLUSTER_GROUP_COLORS,
   CLUSTER_GROUP_ICONS,
@@ -35,7 +38,7 @@ const MAX_DEPTH = 2;
 
 function useClusterGroups() {
   return useQuery({
-    queryKey: ['cluster-groups'],
+    queryKey: queryKeys.clusterGroups.all,
     queryFn: () => api.listClusterGroups(),
   });
 }
@@ -45,10 +48,10 @@ function useCreateClusterGroup() {
   return useMutation({
     mutationFn: (body: ClusterGroupWriteRequest) => api.createClusterGroup(body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['cluster-groups'] });
-      toast.success('Cluster group created');
+      qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
+      toastSuccess('Cluster group created');
     },
-    onError: (err: Error) => toast.error(`Failed to create: ${err.message}`),
+    onError: (err: Error) => toastApiError('Failed to create', err),
   });
 }
 
@@ -58,10 +61,10 @@ function useUpdateClusterGroup() {
     mutationFn: ({ id, body }: { id: string; body: ClusterGroupWriteRequest }) =>
       api.updateClusterGroup(id, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['cluster-groups'] });
-      toast.success('Cluster group updated');
+      qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
+      toastSuccess('Cluster group updated');
     },
-    onError: (err: Error) => toast.error(`Failed to update: ${err.message}`),
+    onError: (err: Error) => toastApiError('Failed to update', err),
   });
 }
 
@@ -70,10 +73,10 @@ function useDeleteClusterGroup() {
   return useMutation({
     mutationFn: (id: string) => api.deleteClusterGroup(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['cluster-groups'] });
-      toast.success('Cluster group deleted');
+      qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
+      toastSuccess('Cluster group deleted');
     },
-    onError: (err: Error) => toast.error(`Failed to delete: ${err.message}`),
+    onError: (err: Error) => toastApiError('Failed to delete', err),
   });
 }
 
@@ -86,7 +89,7 @@ export default function ClusterGroupsPage() {
   const [editing, setEditing] = useState<ClusterGroupTreeNode | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  const tree = data ?? [];
+  const tree = useMemo(() => data ?? [], [data]);
 
   // Sort the flat tree by parent → depth → name so siblings cluster
   // together visually. The server already returns rows ordered by
@@ -144,20 +147,20 @@ export default function ClusterGroupsPage() {
         </div>
       ) : (
         <div className="border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Name</th>
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Slug</th>
-                <th className="text-right px-4 py-2 font-medium text-muted-foreground">Clusters</th>
-                <th className="text-right px-4 py-2 font-medium text-muted-foreground">Subtree</th>
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/50 border-b border-border">
+              <TableRow>
+                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">Name</TableHead>
+                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">Slug</TableHead>
+                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">Clusters</TableHead>
+                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">Subtree</TableHead>
+                <TableHead className="px-4 py-2"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {flattened.map((g) => (
-                <tr key={g.id} className="border-b border-border last:border-b-0">
-                  <td className="px-4 py-2">
+                <TableRow key={g.id} className="border-b border-border last:border-b-0">
+                  <TableCell className="px-4 py-2">
                     <div
                       className="flex items-center gap-2"
                       style={{ paddingLeft: `${g.depth * 16}px` }}
@@ -171,13 +174,13 @@ export default function ClusterGroupsPage() {
                       </span>
                       <span className="font-medium text-foreground">{g.name}</span>
                     </div>
-                  </td>
-                  <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{g.slug}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{g.clusterCount}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="px-4 py-2 text-xs font-mono text-muted-foreground">{g.slug}</TableCell>
+                  <TableCell className="px-4 py-2 text-right tabular-nums">{g.clusterCount}</TableCell>
+                  <TableCell className="px-4 py-2 text-right tabular-nums text-muted-foreground">
                     {g.clusterCountTree}
-                  </td>
-                  <td className="px-4 py-2">
+                  </TableCell>
+                  <TableCell className="px-4 py-2">
                     <div className="flex items-center gap-1 justify-end">
                       <button
                         type="button"
@@ -207,11 +210,11 @@ export default function ClusterGroupsPage() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -291,7 +294,7 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
   }, [allGroups, existing]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <OverlayShell onClose={onClose}>
       <div className="bg-background border border-border rounded-lg shadow-lg w-full max-w-lg p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">
           {existing ? 'Edit cluster group' : 'New cluster group'}
@@ -411,6 +414,6 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
           </button>
         </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

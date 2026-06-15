@@ -141,7 +141,7 @@ func TestAstronomerEgressFromEnv(t *testing.T) {
 }
 
 func TestAstronomerEgressFromEnv_Unset(t *testing.T) {
-	os.Unsetenv("ASTRONOMER_TUNNEL_EGRESS_CIDRS")
+	_ = os.Unsetenv("ASTRONOMER_TUNNEL_EGRESS_CIDRS")
 	got := AstronomerEgressFromEnv()
 	if len(got) != 0 {
 		t.Fatalf("expected empty slice, got %v", got)

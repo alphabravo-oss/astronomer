@@ -12,6 +12,7 @@ import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import {
   useCloudCredentialProviders,
   useProjectCloudCredential,
@@ -123,27 +124,12 @@ export default function EditCloudCredentialPage({ params }: EditPageProps) {
               await updateMutation.mutateAsync({ credentialId: credId, body });
               router.push(backToList);
             } catch (err) {
-              const msg = extractAxiosError(err) ?? 'Failed to update credential.';
+              const msg = extractApiErrorMessage(err) ?? 'Failed to update credential.';
               setServerError(msg);
             }
           }}
         />
       </div>
     </div>
-  );
-}
-
-function extractAxiosError(err: unknown): string | null {
-  if (!err) return null;
-  type ResponseShape = {
-    response?: { data?: { error?: { message?: string }; message?: string } };
-    message?: string;
-  };
-  const obj = err as ResponseShape;
-  return (
-    obj.response?.data?.error?.message ??
-    obj.response?.data?.message ??
-    obj.message ??
-    null
   );
 }

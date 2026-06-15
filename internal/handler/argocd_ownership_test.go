@@ -91,6 +91,74 @@ func TestArgoCDClusterOwnershipDecisionPersistsLeaveLocal(t *testing.T) {
 	}
 }
 
+func TestArgoCDClusterOwnershipLocalClusterBlocksReplaceOption(t *testing.T) {
+	clusterID := uuid.New()
+	h := NewArgoCDHandler(&argocdManagedClusterQueryStub{
+		cluster: sqlc.Cluster{ID: clusterID, Name: "local", IsLocal: true},
+	})
+
+	rr := httptest.NewRecorder()
+	h.ClusterOwnership(rr, argoOwnershipReq(http.MethodGet, clusterID, "", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data argoCDClusterOwnershipResponse `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(envelope.Data.Components) == 0 {
+		t.Fatal("expected baseline components")
+	}
+	for _, component := range envelope.Data.Components {
+		for _, option := range component.Options {
+			if option == "replace" {
+				t.Fatalf("local component %s exposed unsafe replace option: %+v", component.Slug, component.Options)
+			}
+		}
+	}
+}
+
+func TestArgoCDClusterOwnershipReplaceRequiresReason(t *testing.T) {
+	clusterID := uuid.New()
+	q := &argocdManagedClusterQueryStub{
+		cluster: sqlc.Cluster{ID: clusterID, Name: "prod"},
+		managed: sqlc.ArgocdManagedCluster{
+			ID:               uuid.New(),
+			ArgocdInstanceID: uuid.New(),
+			ClusterID:        clusterID,
+		},
+	}
+	h := NewArgoCDHandler(q)
+
+	rr := httptest.NewRecorder()
+	h.SetClusterOwnershipDecision(rr, argoOwnershipReq(http.MethodPost, clusterID, "trivy-operator", bytes.NewBufferString(`{"decision":"replace"}`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(q.decisions) != 0 {
+		t.Fatalf("decision persisted despite missing reason: %+v", q.decisions)
+	}
+}
+
+func TestArgoCDClusterOwnershipReplaceRequiresArgoRegistration(t *testing.T) {
+	clusterID := uuid.New()
+	q := &argocdManagedClusterQueryStub{
+		cluster: sqlc.Cluster{ID: clusterID, Name: "prod"},
+	}
+	h := NewArgoCDHandler(q)
+
+	rr := httptest.NewRecorder()
+	h.SetClusterOwnershipDecision(rr, argoOwnershipReq(http.MethodPost, clusterID, "trivy-operator", bytes.NewBufferString(`{"decision":"replace","reason":"move ownership into argocd"}`)))
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(q.decisions) != 0 {
+		t.Fatalf("decision persisted despite missing Argo registration: %+v", q.decisions)
+	}
+}
+
 func argoOwnershipReq(method string, clusterID uuid.UUID, component string, body *bytes.Buffer) *http.Request {
 	path := "/api/v1/argocd/clusters/" + clusterID.String() + "/ownership/"
 	if component != "" {

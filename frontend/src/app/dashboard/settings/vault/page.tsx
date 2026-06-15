@@ -1,5 +1,6 @@
 'use client';
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
  * /dashboard/settings/vault — admin CRUD over HashiCorp Vault
  * connections (migration 067).
@@ -23,6 +24,7 @@ import { ArrowLeft, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { queryKeys } from '@/lib/hooks';
 import {
   listVaultConnections,
   createVaultConnection,
@@ -59,7 +61,7 @@ function VaultConnectionsPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['vault-connections'],
+    queryKey: queryKeys.vault.connections,
     queryFn: listVaultConnections,
   });
 
@@ -70,7 +72,7 @@ function VaultConnectionsPage() {
   const createMu = useMutation({
     mutationFn: createVaultConnection,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['vault-connections'] });
+      qc.invalidateQueries({ queryKey: queryKeys.vault.connections });
       setCreating(false);
       setDraft(blankBody('token'));
       setError(null);
@@ -79,11 +81,11 @@ function VaultConnectionsPage() {
   });
   const delMu = useMutation({
     mutationFn: deleteVaultConnection,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vault-connections'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.vault.connections }),
   });
   const testMu = useMutation({
     mutationFn: (id: string) => testVaultConnection(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vault-connections'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.vault.connections }),
   });
 
   return (
@@ -116,30 +118,30 @@ function VaultConnectionsPage() {
       {isLoading ? (
         <div className="text-muted-foreground">Loading…</div>
       ) : (
-        <table className="w-full text-sm border border-border rounded">
-          <thead className="bg-muted text-left">
-            <tr>
-              <th className="p-2">Name</th>
-              <th className="p-2">Address</th>
-              <th className="p-2">Auth</th>
-              <th className="p-2">Health</th>
-              <th className="p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="w-full text-sm border border-border rounded">
+          <TableHeader className="bg-muted text-left">
+            <TableRow>
+              <TableHead className="p-2">Name</TableHead>
+              <TableHead className="p-2">Address</TableHead>
+              <TableHead className="p-2">Auth</TableHead>
+              <TableHead className="p-2">Health</TableHead>
+              <TableHead className="p-2">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="p-4 text-muted-foreground">
+              <TableRow>
+                <TableCell colSpan={5} className="p-4 text-muted-foreground">
                   No Vault connections configured yet.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               rows.map((row: VaultConnection) => (
-                <tr key={row.id} className="border-t border-border">
-                  <td className="p-2 font-medium">{row.name}</td>
-                  <td className="p-2 font-mono text-xs">{row.addr}</td>
-                  <td className="p-2 uppercase text-xs">{row.authMethod}</td>
-                  <td className="p-2">
+                <TableRow key={row.id} className="border-t border-border">
+                  <TableCell className="p-2 font-medium">{row.name}</TableCell>
+                  <TableCell className="p-2 font-mono text-xs">{row.addr}</TableCell>
+                  <TableCell className="p-2 uppercase text-xs">{row.authMethod}</TableCell>
+                  <TableCell className="p-2">
                     {row.lastHealthOk ? (
                       <span className="text-status-success">ok</span>
                     ) : row.lastError ? (
@@ -149,8 +151,8 @@ function VaultConnectionsPage() {
                     ) : (
                       <span className="text-muted-foreground">unchecked</span>
                     )}
-                  </td>
-                  <td className="p-2 flex gap-2">
+                  </TableCell>
+                  <TableCell className="p-2 flex gap-2">
                     <button
                       onClick={() => testMu.mutate(row.id)}
                       className="text-xs underline"
@@ -165,12 +167,12 @@ function VaultConnectionsPage() {
                     >
                       <Trash2 className="h-3 w-3" /> Delete
                     </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
 
       {creating && (

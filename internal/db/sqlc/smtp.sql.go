@@ -13,91 +13,164 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getSMTPSettings = `-- name: GetSMTPSettings :one
-SELECT id, enabled, host, port, username, password_encrypted, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at FROM smtp_settings WHERE id = $1
+const consumePasswordResetToken = `-- name: ConsumePasswordResetToken :execrows
+UPDATE password_reset_tokens
+SET used_at = $2
+WHERE token_hash = $1 AND used_at IS NULL
 `
 
-// Returns the singleton settings row. Callers handle the no-rows case
-// by treating an absent row as "disabled with all defaults".
-func (q *Queries) GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSettings, error) {
-	row := q.db.QueryRow(ctx, getSMTPSettings, id)
-	var i SmtpSettings
+type ConsumePasswordResetTokenParams struct {
+	TokenHash string             `json:"token_hash"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+}
+
+// Atomically marks a reset token as used. Returns row-count so the
+// caller can distinguish "first use" (1) from "already used" (0)
+// without a separate SELECT. The handler also verifies expires_at +
+// password-hash match BEFORE this call — the predicate here is just
+// the race guard.
+func (q *Queries) ConsumePasswordResetToken(ctx context.Context, arg ConsumePasswordResetTokenParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumePasswordResetToken, arg.TokenHash, arg.UsedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countEmailMessages = `-- name: CountEmailMessages :one
+SELECT count(*) FROM email_messages
+`
+
+func (q *Queries) CountEmailMessages(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countEmailMessages)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createPasswordResetToken = `-- name: CreatePasswordResetToken :one
+
+INSERT INTO password_reset_tokens (user_id, token_hash, password_hash_at_issue, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, token_hash, password_hash_at_issue, expires_at, used_at, created_at
+`
+
+type CreatePasswordResetTokenParams struct {
+	UserID              uuid.UUID `json:"user_id"`
+	TokenHash           string    `json:"token_hash"`
+	PasswordHashAtIssue string    `json:"password_hash_at_issue"`
+	ExpiresAt           time.Time `json:"expires_at"`
+}
+
+// ----- Password reset tokens -----
+// Issues a new reset token. The handler caller hashes the plaintext
+// token (returned to the user via email) before calling this; we never
+// see the plaintext. password_hash_at_issue snapshots the user's
+// current password hash so a successful password change invalidates
+// every outstanding link.
+func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, createPasswordResetToken,
+		arg.UserID,
+		arg.TokenHash,
+		arg.PasswordHashAtIssue,
+		arg.ExpiresAt,
+	)
+	var i PasswordResetToken
 	err := row.Scan(
 		&i.ID,
-		&i.Enabled,
-		&i.Host,
-		&i.Port,
-		&i.Username,
-		&i.PasswordEncrypted,
-		&i.FromAddress,
-		&i.FromName,
-		&i.AuthMechanism,
-		&i.Encryption,
-		&i.RequireTls,
-		&i.TimeoutSeconds,
+		&i.UserID,
+		&i.TokenHash,
+		&i.PasswordHashAtIssue,
+		&i.ExpiresAt,
+		&i.UsedAt,
 		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const upsertSMTPSettings = `-- name: UpsertSMTPSettings :one
-INSERT INTO smtp_settings (
-    id, enabled, host, port, username, password_encrypted,
-    from_address, from_name, auth_mechanism, encryption,
-    require_tls, timeout_seconds
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-ON CONFLICT (id) DO UPDATE SET
-    enabled             = EXCLUDED.enabled,
-    host                = EXCLUDED.host,
-    port                = EXCLUDED.port,
-    username            = EXCLUDED.username,
-    password_encrypted  = EXCLUDED.password_encrypted,
-    from_address        = EXCLUDED.from_address,
-    from_name           = EXCLUDED.from_name,
-    auth_mechanism      = EXCLUDED.auth_mechanism,
-    encryption          = EXCLUDED.encryption,
-    require_tls         = EXCLUDED.require_tls,
-    timeout_seconds     = EXCLUDED.timeout_seconds,
-    updated_at          = now()
-RETURNING id, enabled, host, port, username, password_encrypted, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at
+const deleteEmailsOlderThan = `-- name: DeleteEmailsOlderThan :execrows
+DELETE FROM email_messages WHERE created_at < $1
 `
 
-type UpsertSMTPSettingsParams struct {
-	ID                uuid.UUID `json:"id"`
-	Enabled           bool      `json:"enabled"`
-	Host              string    `json:"host"`
-	Port              int32     `json:"port"`
-	Username          string    `json:"username"`
-	PasswordEncrypted string    `json:"password_encrypted"`
-	FromAddress       string    `json:"from_address"`
-	FromName          string    `json:"from_name"`
-	AuthMechanism     string    `json:"auth_mechanism"`
-	Encryption        string    `json:"encryption"`
-	RequireTls        bool      `json:"require_tls"`
-	TimeoutSeconds    int32     `json:"timeout_seconds"`
+// Retention sweep, runs daily. Returns the row count so the task can
+// emit a "rows deleted" log line for the operator.
+func (q *Queries) DeleteEmailsOlderThan(ctx context.Context, createdAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEmailsOlderThan, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-// Singleton write. The handler always passes the same well-known id;
-// ON CONFLICT lets the first PUT create the row and every subsequent
-// one update it without a separate INSERT/UPDATE branch.
-func (q *Queries) UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSettings, error) {
-	row := q.db.QueryRow(ctx, upsertSMTPSettings,
-		arg.ID,
-		arg.Enabled,
-		arg.Host,
-		arg.Port,
-		arg.Username,
-		arg.PasswordEncrypted,
-		arg.FromAddress,
-		arg.FromName,
-		arg.AuthMechanism,
-		arg.Encryption,
-		arg.RequireTls,
-		arg.TimeoutSeconds,
+const deleteExpiredPasswordResetTokens = `-- name: DeleteExpiredPasswordResetTokens :execrows
+DELETE FROM password_reset_tokens WHERE expires_at < $1
+`
+
+// Daily retention sweep companion to email retention. Returns the
+// row count for the log line.
+func (q *Queries) DeleteExpiredPasswordResetTokens(ctx context.Context, expiresAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPasswordResetTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePasswordResetTokensForUser = `-- name: DeletePasswordResetTokensForUser :exec
+DELETE FROM password_reset_tokens WHERE user_id = $1
+`
+
+// Wipes every outstanding reset token for a user. Called after a
+// successful reset so the consumed token's siblings can't be replayed,
+// and on user delete (CASCADE handles that one but this exists for
+// explicit "force expire all links" flows).
+func (q *Queries) DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deletePasswordResetTokensForUser, userID)
+	return err
+}
+
+const getPasswordResetTokenByHash = `-- name: GetPasswordResetTokenByHash :one
+SELECT id, user_id, token_hash, password_hash_at_issue, expires_at, used_at, created_at FROM password_reset_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetTokenByHash, tokenHash)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.PasswordHashAtIssue,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
 	)
-	var i SmtpSettings
+	return i, err
+}
+
+const getSMTPSettings = `-- name: GetSMTPSettings :one
+
+SELECT id, enabled, host, port, username, password_encrypted, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at FROM smtp_settings WHERE id = $1
+`
+
+// SMTP + email-message queries (migration 047). Backs:
+//
+//   - the admin /api/v1/admin/smtp/* endpoints (Get/Upsert/Test) and
+//     /api/v1/admin/emails/ audit view
+//   - the email:dispatch worker that drains queued/failed rows into
+//     real SMTP sends
+//   - the email:cleanup_old retention task
+//   - the password-reset request/complete flow (token table)
+//
+// The smtp_settings row is a singleton — every read/write targets the
+// same well-known id. The application code (NOT this query layer) is
+// responsible for Fernet-encrypting/decrypting password_encrypted; we
+// store and return the ciphertext verbatim.
+// Returns the singleton settings row. Callers handle the no-rows case
+// by treating an absent row as "disabled with all defaults".
+func (q *Queries) GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSetting, error) {
+	row := q.db.QueryRow(ctx, getSMTPSettings, id)
+	var i SmtpSetting
 	err := row.Scan(
 		&i.ID,
 		&i.Enabled,
@@ -175,30 +248,53 @@ func (q *Queries) InsertEmailMessage(ctx context.Context, arg InsertEmailMessage
 	return i, err
 }
 
-const getEmailMessageByID = `-- name: GetEmailMessageByID :one
-SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at FROM email_messages WHERE id = $1
+const listEmailMessages = `-- name: ListEmailMessages :many
+SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at FROM email_messages
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) GetEmailMessageByID(ctx context.Context, id uuid.UUID) (EmailMessage, error) {
-	row := q.db.QueryRow(ctx, getEmailMessageByID, id)
-	var i EmailMessage
-	err := row.Scan(
-		&i.ID,
-		&i.ToAddress,
-		&i.CcAddress,
-		&i.Subject,
-		&i.Template,
-		&i.BodyText,
-		&i.BodyHtml,
-		&i.UserID,
-		&i.Status,
-		&i.Attempts,
-		&i.LastError,
-		&i.SentAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+type ListEmailMessagesParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+// Admin audit view. Paginated, newest-first. The handler redacts the
+// body_text/body_html before returning the rows so a sensitive reset
+// link or recovery-code email doesn't appear in the admin UI.
+func (q *Queries) ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error) {
+	rows, err := q.db.Query(ctx, listEmailMessages, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailMessage{}
+	for rows.Next() {
+		var i EmailMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToAddress,
+			&i.CcAddress,
+			&i.Subject,
+			&i.Template,
+			&i.BodyText,
+			&i.BodyHtml,
+			&i.UserID,
+			&i.Status,
+			&i.Attempts,
+			&i.LastError,
+			&i.SentAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listQueuedEmails = `-- name: ListQueuedEmails :many
@@ -249,64 +345,34 @@ func (q *Queries) ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMes
 	return items, nil
 }
 
-const listEmailMessages = `-- name: ListEmailMessages :many
-SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at FROM email_messages
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
+const markEmailFailed = `-- name: MarkEmailFailed :exec
+UPDATE email_messages
+SET status   = $2,
+    attempts = $3,
+    last_error = $4,
+    updated_at = now()
+WHERE id = $1
 `
 
-type ListEmailMessagesParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+type MarkEmailFailedParams struct {
+	ID        uuid.UUID `json:"id"`
+	Status    string    `json:"status"`
+	Attempts  int32     `json:"attempts"`
+	LastError string    `json:"last_error"`
 }
 
-// Admin audit view. Paginated, newest-first. The handler redacts the
-// body_text/body_html before returning the rows so a sensitive reset
-// link or recovery-code email doesn't appear in the admin UI.
-func (q *Queries) ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error) {
-	rows, err := q.db.Query(ctx, listEmailMessages, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []EmailMessage{}
-	for rows.Next() {
-		var i EmailMessage
-		if err := rows.Scan(
-			&i.ID,
-			&i.ToAddress,
-			&i.CcAddress,
-			&i.Subject,
-			&i.Template,
-			&i.BodyText,
-			&i.BodyHtml,
-			&i.UserID,
-			&i.Status,
-			&i.Attempts,
-			&i.LastError,
-			&i.SentAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const countEmailMessages = `-- name: CountEmailMessages :one
-SELECT count(*) FROM email_messages
-`
-
-func (q *Queries) CountEmailMessages(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countEmailMessages)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+// Records a delivery failure. attempts is the NEW count (caller computes
+// prev+1) so the dispatcher can decide whether to mark the row 'failed'
+// (still retryable) or escalate to a final state. last_error is kept
+// short by the caller; the column is TEXT so we don't truncate here.
+func (q *Queries) MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) error {
+	_, err := q.db.Exec(ctx, markEmailFailed,
+		arg.ID,
+		arg.Status,
+		arg.Attempts,
+		arg.LastError,
+	)
+	return err
 }
 
 const markEmailSent = `-- name: MarkEmailSent :exec
@@ -331,30 +397,6 @@ func (q *Queries) MarkEmailSent(ctx context.Context, arg MarkEmailSentParams) er
 	return err
 }
 
-const markEmailFailed = `-- name: MarkEmailFailed :exec
-UPDATE email_messages
-SET status   = $2,
-    attempts = $3,
-    last_error = $4,
-    updated_at = now()
-WHERE id = $1
-`
-
-type MarkEmailFailedParams struct {
-	ID        uuid.UUID `json:"id"`
-	Status    string    `json:"status"`
-	Attempts  int32     `json:"attempts"`
-	LastError string    `json:"last_error"`
-}
-
-// Records a delivery failure. attempts is the NEW count (caller computes
-// prev+1) so the dispatcher can decide whether to mark the row 'failed'
-// (still retryable) or escalate to a final state.
-func (q *Queries) MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) error {
-	_, err := q.db.Exec(ctx, markEmailFailed, arg.ID, arg.Status, arg.Attempts, arg.LastError)
-	return err
-}
-
 const markEmailSkipped = `-- name: MarkEmailSkipped :exec
 UPDATE email_messages
 SET status     = 'skipped',
@@ -376,128 +418,78 @@ func (q *Queries) MarkEmailSkipped(ctx context.Context, arg MarkEmailSkippedPara
 	return err
 }
 
-const deleteEmailsOlderThan = `-- name: DeleteEmailsOlderThan :execrows
-DELETE FROM email_messages WHERE created_at < $1
+const upsertSMTPSettings = `-- name: UpsertSMTPSettings :one
+INSERT INTO smtp_settings (
+    id, enabled, host, port, username, password_encrypted,
+    from_address, from_name, auth_mechanism, encryption,
+    require_tls, timeout_seconds
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+ON CONFLICT (id) DO UPDATE SET
+    enabled             = EXCLUDED.enabled,
+    host                = EXCLUDED.host,
+    port                = EXCLUDED.port,
+    username            = EXCLUDED.username,
+    password_encrypted  = EXCLUDED.password_encrypted,
+    from_address        = EXCLUDED.from_address,
+    from_name           = EXCLUDED.from_name,
+    auth_mechanism      = EXCLUDED.auth_mechanism,
+    encryption          = EXCLUDED.encryption,
+    require_tls         = EXCLUDED.require_tls,
+    timeout_seconds     = EXCLUDED.timeout_seconds,
+    updated_at          = now()
+RETURNING id, enabled, host, port, username, password_encrypted, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at
 `
 
-// Retention sweep, runs daily. Returns the row count so the task can
-// emit a "rows deleted" log line for the operator.
-func (q *Queries) DeleteEmailsOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteEmailsOlderThan, cutoff)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type UpsertSMTPSettingsParams struct {
+	ID                uuid.UUID `json:"id"`
+	Enabled           bool      `json:"enabled"`
+	Host              string    `json:"host"`
+	Port              int32     `json:"port"`
+	Username          string    `json:"username"`
+	PasswordEncrypted string    `json:"password_encrypted"`
+	FromAddress       string    `json:"from_address"`
+	FromName          string    `json:"from_name"`
+	AuthMechanism     string    `json:"auth_mechanism"`
+	Encryption        string    `json:"encryption"`
+	RequireTls        bool      `json:"require_tls"`
+	TimeoutSeconds    int32     `json:"timeout_seconds"`
 }
 
-const countEmailsByStatus = `-- name: CountEmailsByStatus :one
-SELECT count(*) FROM email_messages WHERE status = $1
-`
-
-func (q *Queries) CountEmailsByStatus(ctx context.Context, status string) (int64, error) {
-	row := q.db.QueryRow(ctx, countEmailsByStatus, status)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-// ----- Password reset tokens -----
-
-const createPasswordResetToken = `-- name: CreatePasswordResetToken :one
-INSERT INTO password_reset_tokens (user_id, token_hash, password_hash_at_issue, expires_at)
-VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, token_hash, password_hash_at_issue, expires_at, used_at, created_at
-`
-
-type CreatePasswordResetTokenParams struct {
-	UserID              uuid.UUID          `json:"user_id"`
-	TokenHash           string             `json:"token_hash"`
-	PasswordHashAtIssue string             `json:"password_hash_at_issue"`
-	ExpiresAt           time.Time          `json:"expires_at"`
-}
-
-// Issues a new reset token. The handler hashes the plaintext token
-// before calling this; we never see the plaintext. password_hash_at_issue
-// snapshots the user's current password hash so a successful password
-// change invalidates every outstanding link.
-func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error) {
-	row := q.db.QueryRow(ctx, createPasswordResetToken,
-		arg.UserID,
-		arg.TokenHash,
-		arg.PasswordHashAtIssue,
-		arg.ExpiresAt,
+// Singleton write. The handler always passes the same well-known id;
+// ON CONFLICT lets the first PUT create the row and every subsequent
+// one update it without a separate INSERT/UPDATE branch.
+func (q *Queries) UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSetting, error) {
+	row := q.db.QueryRow(ctx, upsertSMTPSettings,
+		arg.ID,
+		arg.Enabled,
+		arg.Host,
+		arg.Port,
+		arg.Username,
+		arg.PasswordEncrypted,
+		arg.FromAddress,
+		arg.FromName,
+		arg.AuthMechanism,
+		arg.Encryption,
+		arg.RequireTls,
+		arg.TimeoutSeconds,
 	)
-	var i PasswordResetToken
+	var i SmtpSetting
 	err := row.Scan(
 		&i.ID,
-		&i.UserID,
-		&i.TokenHash,
-		&i.PasswordHashAtIssue,
-		&i.ExpiresAt,
-		&i.UsedAt,
+		&i.Enabled,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.PasswordEncrypted,
+		&i.FromAddress,
+		&i.FromName,
+		&i.AuthMechanism,
+		&i.Encryption,
+		&i.RequireTls,
+		&i.TimeoutSeconds,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const getPasswordResetTokenByHash = `-- name: GetPasswordResetTokenByHash :one
-SELECT id, user_id, token_hash, password_hash_at_issue, expires_at, used_at, created_at FROM password_reset_tokens WHERE token_hash = $1
-`
-
-func (q *Queries) GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error) {
-	row := q.db.QueryRow(ctx, getPasswordResetTokenByHash, tokenHash)
-	var i PasswordResetToken
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.TokenHash,
-		&i.PasswordHashAtIssue,
-		&i.ExpiresAt,
-		&i.UsedAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const consumePasswordResetToken = `-- name: ConsumePasswordResetToken :execrows
-UPDATE password_reset_tokens
-SET used_at = $2
-WHERE token_hash = $1 AND used_at IS NULL
-`
-
-type ConsumePasswordResetTokenParams struct {
-	TokenHash string             `json:"token_hash"`
-	UsedAt    pgtype.Timestamptz `json:"used_at"`
-}
-
-// Atomically marks a reset token as used. Returns row-count so the
-// caller can distinguish "first use" (1) from "already used" (0)
-// without a separate SELECT.
-func (q *Queries) ConsumePasswordResetToken(ctx context.Context, arg ConsumePasswordResetTokenParams) (int64, error) {
-	result, err := q.db.Exec(ctx, consumePasswordResetToken, arg.TokenHash, arg.UsedAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deletePasswordResetTokensForUser = `-- name: DeletePasswordResetTokensForUser :exec
-DELETE FROM password_reset_tokens WHERE user_id = $1
-`
-
-func (q *Queries) DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deletePasswordResetTokensForUser, userID)
-	return err
-}
-
-const deleteExpiredPasswordResetTokens = `-- name: DeleteExpiredPasswordResetTokens :execrows
-DELETE FROM password_reset_tokens WHERE expires_at < $1
-`
-
-func (q *Queries) DeleteExpiredPasswordResetTokens(ctx context.Context, cutoff time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredPasswordResetTokens, cutoff)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }

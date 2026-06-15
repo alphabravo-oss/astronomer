@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -72,8 +73,8 @@ func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, payload p
 	if targetImage == "" {
 		return "", fmt.Errorf("target_image is required")
 	}
-	namespace := firstNonEmpty(strings.TrimSpace(payload.AgentNamespace), DefaultAgentNamespace)
-	deploymentName := firstNonEmpty(strings.TrimSpace(payload.AgentDeployment), DefaultAgentDeploymentName)
+	namespace := cmp.Or(strings.TrimSpace(payload.AgentNamespace), DefaultAgentNamespace)
+	deploymentName := cmp.Or(strings.TrimSpace(payload.AgentDeployment), DefaultAgentDeploymentName)
 
 	var observed string
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -122,13 +123,4 @@ func agentContainerIndex(deploy *appsv1.Deployment) int {
 		return 0
 	}
 	return -1
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

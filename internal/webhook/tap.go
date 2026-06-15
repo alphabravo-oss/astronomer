@@ -36,10 +36,10 @@ type Tap struct {
 	bus *events.Bus
 	log *slog.Logger
 
-	mu        sync.Mutex
-	cache     []sqlc.WebhookSubscription
-	cachedAt  time.Time
-	cacheTTL  time.Duration
+	mu       sync.Mutex
+	cache    []sqlc.WebhookSubscription
+	cachedAt time.Time
+	cacheTTL time.Duration
 }
 
 // NewTap wires the dependencies. q is the *sqlc.Queries handle the
@@ -91,7 +91,7 @@ func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
 		EventName: eventName,
 		EventID:   fmt.Sprintf("%d", ev.ID),
 		Timestamp: ev.Time,
-		Detail:    rawJSON(ev.Data),
+		Detail:    events.RawJSON(ev.Data),
 	})
 	if err != nil {
 		t.log.WarnContext(ctx, "webhook tap: marshal event failed",
@@ -99,7 +99,7 @@ func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
 		return
 	}
 	for _, sub := range subs {
-		filters, ok := decodeFilters(sub.EventFilters)
+		filters, ok := events.DecodeFilterGlobs(sub.EventFilters)
 		if !ok {
 			t.log.WarnContext(ctx, "webhook tap: malformed event_filters; skipping",
 				"subscription_id", sub.ID.String(), "name", sub.Name)
@@ -171,32 +171,6 @@ func (t *Tap) Invalidate() {
 	t.cache = nil
 	t.cachedAt = time.Time{}
 	t.mu.Unlock()
-}
-
-// decodeFilters unmarshals the JSONB array of filter globs.
-func decodeFilters(raw []byte) ([]string, bool) {
-	if len(raw) == 0 {
-		return nil, true
-	}
-	var out []string
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, false
-	}
-	return out, true
-}
-
-// rawJSON re-marshals an arbitrary event payload back into json.RawMessage.
-// We accept the loss of type info here — receivers consume the JSON,
-// not the Go value.
-func rawJSON(v any) json.RawMessage {
-	if v == nil {
-		return nil
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	return b
 }
 
 // eventEnvelope is the JSON shape the tap persists onto webhook_deliveries.payload.

@@ -48,6 +48,38 @@ const (
 	ResourceWildcard        Resource = "*"
 )
 
+var canonicalResources = []Resource{
+	ResourceClusters,
+	ResourceProjects,
+	ResourceWorkloads,
+	ResourcePods,
+	ResourceMonitoring,
+	ResourceAlerts,
+	ResourceCatalog,
+	ResourceLogging,
+	ResourceBackups,
+	ResourceSecurity,
+	ResourceRBAC,
+	ResourceSettings,
+	ResourceArgoCD,
+	ResourceSSO,
+	ResourceUsers,
+	ResourceAuditLogs,
+	ResourceAgents,
+	ResourceSecrets,
+	ResourceConfigMaps,
+	ResourceServices,
+	ResourceIngresses,
+	ResourceStorage,
+	ResourceNodes,
+	ResourceServiceMesh,
+	ResourceSupportBundles,
+	ResourceClusterTemplates,
+	ResourceFleetOperations,
+	ResourceNetworkPolicies,
+	ResourceWildcard,
+}
+
 // Verb represents an action on a resource
 type Verb string
 
@@ -68,10 +100,58 @@ const (
 	VerbWildcard Verb = "*"
 )
 
+var canonicalVerbs = []Verb{
+	VerbCreate,
+	VerbRead,
+	VerbUpdate,
+	VerbDelete,
+	VerbList,
+	VerbWatch,
+	VerbScale,
+	VerbRestart,
+	VerbExec,
+	VerbLogs,
+	VerbProxy,
+	VerbSync,
+	VerbManage,
+	VerbWildcard,
+}
+
 // Rule represents a permission rule from a role's rules JSONB
 type Rule struct {
 	Resource string   `json:"resource"`
 	Verbs    []string `json:"verbs"`
+}
+
+// CanonicalResources returns the stable RBAC resource vocabulary. The wildcard
+// resource is included because built-in owner/admin templates intentionally use
+// it.
+func CanonicalResources() []Resource {
+	return append([]Resource(nil), canonicalResources...)
+}
+
+// CanonicalVerbs returns the stable RBAC action vocabulary. The wildcard verb
+// is included because built-in owner/admin templates intentionally use it.
+func CanonicalVerbs() []Verb {
+	return append([]Verb(nil), canonicalVerbs...)
+}
+
+func IsCanonicalResource(resource string) bool {
+	for _, candidate := range canonicalResources {
+		if resource == string(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsCanonicalVerb(verb string) bool {
+	for _, candidate := range canonicalVerbs {
+		if verb == string(candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 // RoleBinding ties a user/group to a role at a specific scope
@@ -86,6 +166,11 @@ type RoleBinding struct {
 	// Scope context
 	ClusterID string // empty for global
 	ProjectID string // empty for global/cluster
+	// Namespace optionally narrows a cluster/project binding to one Kubernetes
+	// namespace. Empty means the binding applies to the full cluster/project
+	// scope. Non-empty namespace bindings fail closed when the request does not
+	// carry the same namespace context.
+	Namespace string
 	// IsSuperuser short-circuits permission checks to true. The middleware
 	// emits a single synthetic binding with this flag when the underlying
 	// user record has is_superuser=true on the users table.

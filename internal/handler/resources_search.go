@@ -50,6 +50,7 @@ type ResourcesSearchHandler struct {
 	requester K8sRequester
 	queries   ResourcesSearchQuerier
 	authz     authorizationSupport
+	audit     any
 }
 
 // ResourcesSearchQuerier is the minimal slice of sqlc.Queries the search
@@ -70,6 +71,10 @@ func (h *ResourcesSearchHandler) SetAuthorization(engine *rbac.Engine, querier m
 	h.authz.SetAuthorization(engine, querier)
 }
 
+func (h *ResourcesSearchHandler) SetAuditWriter(audit any) {
+	h.audit = audit
+}
+
 // searchResourceDef is a local copy of the resourceDef shape from
 // resources.go restricted to the types we want exposed via the global
 // search endpoint. We keep this list small on purpose: nobody searches the
@@ -85,22 +90,20 @@ type searchResourceDef struct {
 	// place. The categorization choices below intentionally fold several
 	// related Kubernetes kinds onto a smaller set of RBAC resources from
 	// internal/rbac/types.go:
-	//   - pods, events, endpoints       -> rbac.ResourcePods
+	//   - pods, events                  -> rbac.ResourcePods
 	//   - deployments, statefulsets,
 	//     daemonsets, replicasets,
 	//     jobs, cronjobs                -> rbac.ResourceWorkloads
-	//   - services, ingresses,
-	//     networkpolicies, gateway-api  -> rbac.ResourceWorkloads (networking
-	//     does not have its own resource constant; folding into Workloads
-	//     keeps the RBAC vocabulary stable and matches how the existing
-	//     per-cluster resources handler gates these kinds)
-	//   - secrets, configmaps           -> rbac.ResourceWorkloads (typically
-	//     gated alongside the workloads that consume them)
+	//   - services, endpoints           -> rbac.ResourceServices
+	//   - ingresses, gateway-api        -> rbac.ResourceIngresses
+	//   - networkpolicies              -> rbac.ResourceNetworkPolicies
+	//   - secrets                       -> rbac.ResourceSecrets
+	//   - configmaps                    -> rbac.ResourceConfigMaps
 	//   - persistentvolumes,
 	//     persistentvolumeclaims,
-	//     storageclasses                -> rbac.ResourceWorkloads
-	//   - cluster-scoped registries
-	//     (nodes, namespaces, PVs, ...) -> rbac.ResourceClusters
+	//     storageclasses                -> rbac.ResourceStorage
+	//   - nodes                         -> rbac.ResourceNodes
+	//   - namespaces                    -> rbac.ResourceClusters
 	//   - unknown / default             -> rbac.ResourceWorkloads
 	rbacResource rbac.Resource
 }
@@ -108,25 +111,25 @@ type searchResourceDef struct {
 var searchResourceDefs = map[string]searchResourceDef{
 	"pods":                   {apiBase: "/api/v1", plural: "pods", namespaced: true, rbacResource: rbac.ResourcePods},
 	"events":                 {apiBase: "/api/v1", plural: "events", namespaced: true, rbacResource: rbac.ResourcePods},
-	"endpoints":              {apiBase: "/api/v1", plural: "endpoints", namespaced: true, rbacResource: rbac.ResourcePods},
-	"services":               {apiBase: "/api/v1", plural: "services", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"configmaps":             {apiBase: "/api/v1", plural: "configmaps", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"secrets":                {apiBase: "/api/v1", plural: "secrets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"endpoints":              {apiBase: "/api/v1", plural: "endpoints", namespaced: true, rbacResource: rbac.ResourceServices},
+	"services":               {apiBase: "/api/v1", plural: "services", namespaced: true, rbacResource: rbac.ResourceServices},
+	"configmaps":             {apiBase: "/api/v1", plural: "configmaps", namespaced: true, rbacResource: rbac.ResourceConfigMaps},
+	"secrets":                {apiBase: "/api/v1", plural: "secrets", namespaced: true, rbacResource: rbac.ResourceSecrets},
 	"namespaces":             {apiBase: "/api/v1", plural: "namespaces", namespaced: false, rbacResource: rbac.ResourceClusters},
-	"nodes":                  {apiBase: "/api/v1", plural: "nodes", namespaced: false, rbacResource: rbac.ResourceClusters},
-	"persistentvolumes":      {apiBase: "/api/v1", plural: "persistentvolumes", namespaced: false, rbacResource: rbac.ResourceWorkloads},
-	"persistentvolumeclaims": {apiBase: "/api/v1", plural: "persistentvolumeclaims", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"storageclasses":         {apiBase: "/apis/storage.k8s.io/v1", plural: "storageclasses", namespaced: false, rbacResource: rbac.ResourceWorkloads},
+	"nodes":                  {apiBase: "/api/v1", plural: "nodes", namespaced: false, rbacResource: rbac.ResourceNodes},
+	"persistentvolumes":      {apiBase: "/api/v1", plural: "persistentvolumes", namespaced: false, rbacResource: rbac.ResourceStorage},
+	"persistentvolumeclaims": {apiBase: "/api/v1", plural: "persistentvolumeclaims", namespaced: true, rbacResource: rbac.ResourceStorage},
+	"storageclasses":         {apiBase: "/apis/storage.k8s.io/v1", plural: "storageclasses", namespaced: false, rbacResource: rbac.ResourceStorage},
 	"deployments":            {apiBase: "/apis/apps/v1", plural: "deployments", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"statefulsets":           {apiBase: "/apis/apps/v1", plural: "statefulsets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"daemonsets":             {apiBase: "/apis/apps/v1", plural: "daemonsets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"replicasets":            {apiBase: "/apis/apps/v1", plural: "replicasets", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"jobs":                   {apiBase: "/apis/batch/v1", plural: "jobs", namespaced: true, rbacResource: rbac.ResourceWorkloads},
 	"cronjobs":               {apiBase: "/apis/batch/v1", plural: "cronjobs", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"ingresses":              {apiBase: "/apis/networking.k8s.io/v1", plural: "ingresses", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"networkpolicies":        {apiBase: "/apis/networking.k8s.io/v1", plural: "networkpolicies", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"gateways":               {apiBase: "/apis/gateway.networking.k8s.io/v1", plural: "gateways", namespaced: true, rbacResource: rbac.ResourceWorkloads},
-	"httproutes":             {apiBase: "/apis/gateway.networking.k8s.io/v1", plural: "httproutes", namespaced: true, rbacResource: rbac.ResourceWorkloads},
+	"ingresses":              {apiBase: "/apis/networking.k8s.io/v1", plural: "ingresses", namespaced: true, rbacResource: rbac.ResourceIngresses},
+	"networkpolicies":        {apiBase: "/apis/networking.k8s.io/v1", plural: "networkpolicies", namespaced: true, rbacResource: rbac.ResourceNetworkPolicies},
+	"gateways":               {apiBase: "/apis/gateway.networking.k8s.io/v1", plural: "gateways", namespaced: true, rbacResource: rbac.ResourceIngresses},
+	"httproutes":             {apiBase: "/apis/gateway.networking.k8s.io/v1", plural: "httproutes", namespaced: true, rbacResource: rbac.ResourceIngresses},
 }
 
 // rbacResourceForType maps a search `type` query parameter to the
@@ -226,6 +229,19 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	// Build the per-cluster k8s path once (it's identical for every cluster
 	// because the namespace + selectors are shared).
 	path := buildSearchPath(def, namespace, labelSelector, fieldSelector)
+	if resourceType == "secrets" {
+		recordAudit(r, h.audit, "cluster.secret.read", "cluster", "*", "secrets", map[string]any{
+			"scope":               "cross_cluster_search",
+			"resource_type":       resourceType,
+			"k8s_path":            path,
+			"namespace":           namespace,
+			"label_selector":      labelSelector,
+			"field_selector":      fieldSelector,
+			"name_filter":         nameFilter,
+			"limit":               limit,
+			"clusters_authorized": len(clusters),
+		})
+	}
 
 	// Step 2: fan out. errgroup with SetLimit caps concurrency at 16; the
 	// per-cluster context timeout means a single slow cluster cannot hold

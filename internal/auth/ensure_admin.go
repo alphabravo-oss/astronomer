@@ -15,12 +15,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
-// bootstrapPasswordEnv is checked when the database has zero users on boot.
-// An operator-supplied value beats an auto-generated one. Matches Rancher's
-// CATTLE_BOOTSTRAP_PASSWORD convention.
-const bootstrapPasswordEnv = "ASTRONOMER_BOOTSTRAP_PASSWORD"
+// Bootstrap env vars are checked when the database has zero users on boot.
+// Operator-supplied values beat the defaults. The password var matches
+// Rancher's CATTLE_BOOTSTRAP_PASSWORD convention.
+const (
+	bootstrapPasswordEnv = "ASTRONOMER_BOOTSTRAP_PASSWORD"
+	bootstrapUsernameEnv = "ASTRONOMER_BOOTSTRAP_USERNAME"
+	bootstrapEmailEnv    = "ASTRONOMER_BOOTSTRAP_EMAIL"
+)
 
 // EnsurePlatformConfigQuerier is the slice of sqlc Queries that the
 // platform-config seed flow needs.
@@ -72,7 +77,7 @@ func EnsurePlatformConfig(ctx context.Context, q EnsurePlatformConfigQuerier, se
 	// Preserve an existing instance_id across upserts so observability tags
 	// stay consistent.
 	if err == nil {
-		target.PlatformName = firstNonEmpty(existing.PlatformName, platformName)
+		target.PlatformName = strutil.FirstNonBlankTrimmed(existing.PlatformName, platformName)
 		target.TelemetryEnabled = existing.TelemetryEnabled
 		target.BootstrappedAt = existing.BootstrappedAt
 		target.InstanceID = existing.InstanceID
@@ -85,15 +90,6 @@ func EnsurePlatformConfig(ctx context.Context, q EnsurePlatformConfigQuerier, se
 	return nil
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if s := strings.TrimSpace(v); s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
 // EnsureAdminQuerier is the slice of sqlc Queries that the bootstrap admin
 // flow needs. Defined as an interface so tests can plug in a fake.
 type EnsureAdminQuerier interface {
@@ -101,11 +97,11 @@ type EnsureAdminQuerier interface {
 	CreateBootstrapAdmin(ctx context.Context, arg sqlc.CreateBootstrapAdminParams) (sqlc.User, error)
 }
 
-// EnsureBootstrapAdmin creates a forced-rotate admin user the first time the
-// server boots against an empty users table. The password comes from
+// EnsureBootstrapAdmin creates an admin user the first time the server boots
+// against an empty users table. The password comes from
 // ASTRONOMER_BOOTSTRAP_PASSWORD when set, otherwise a random 24-character
-// URL-safe value is generated. On creation the credentials are logged so
-// operators can retrieve them via `kubectl logs` (Rancher pattern).
+// URL-safe value is generated. Chart installs persist that password in the
+// bootstrap Secret so operators can retrieve it with kubectl.
 //
 // On subsequent boots (when users already exist) this is a no-op.
 func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slog.Logger) error {
@@ -122,6 +118,8 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 	}
 
 	password := strings.TrimSpace(os.Getenv(bootstrapPasswordEnv))
+	username := strutil.FirstNonBlankTrimmed(os.Getenv(bootstrapUsernameEnv), "admin")
+	email := strutil.FirstNonBlankTrimmed(os.Getenv(bootstrapEmailEnv), "admin@astronomer.local")
 	generated := false
 	if password == "" {
 		pw, err := generateBootstrapPassword()
@@ -138,8 +136,8 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 	}
 
 	user, err := q.CreateBootstrapAdmin(ctx, sqlc.CreateBootstrapAdminParams{
-		Email:     "admin@astronomer.local",
-		Username:  "admin",
+		Email:     email,
+		Username:  username,
 		FirstName: "Admin",
 		LastName:  "",
 		Password:  string(hashed),
@@ -161,8 +159,8 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 	)
 	if generated {
 		logger.Warn(
-			"Use this password to sign in for the first time. You will be "+
-				"required to change it immediately. It will NOT be shown again.",
+			"Use this generated password to sign in. The Helm chart also stores it "+
+				"in the bootstrap Secret for operator retrieval.",
 			"password", password,
 		)
 	}

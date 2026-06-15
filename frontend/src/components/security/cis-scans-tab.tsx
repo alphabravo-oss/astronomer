@@ -44,7 +44,7 @@ export function CISScansTab() {
     return map;
   }, [clustersPage]);
 
-  const scans = scansPage?.data ?? [];
+  const scans = useMemo(() => scansPage?.data ?? [], [scansPage]);
 
   // Recent failures = scans with at least one failed check, completed in
   // the last 24h. Surfaces the most actionable item at the top.

@@ -95,6 +95,9 @@ const deleteSIEMForwarder = `-- name: DeleteSIEMForwarder :exec
 DELETE FROM siem_forwarders WHERE id = $1
 `
 
+// ON DELETE CASCADE on siem_forward_queue.forwarder_id +
+// siem_forwarder_status.forwarder_id cleans up the queued events + the
+// status row; the handler doesn't have to do that explicitly.
 func (q *Queries) DeleteSIEMForwarder(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteSIEMForwarder, id)
 	return err
@@ -104,8 +107,10 @@ const deleteSIEMQueueByIDs = `-- name: DeleteSIEMQueueByIDs :exec
 DELETE FROM siem_forward_queue WHERE id = ANY($1::bigint[])
 `
 
-func (q *Queries) DeleteSIEMQueueByIDs(ctx context.Context, ids []int64) error {
-	_, err := q.db.Exec(ctx, deleteSIEMQueueByIDs, ids)
+// Called after a successful batch send. The dispatcher computes the id
+// set from the rows it just shipped.
+func (q *Queries) DeleteSIEMQueueByIDs(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.Exec(ctx, deleteSIEMQueueByIDs, dollar_1)
 	return err
 }
 
@@ -113,12 +118,15 @@ const deleteSIEMQueueOlderThan = `-- name: DeleteSIEMQueueOlderThan :execrows
 DELETE FROM siem_forward_queue WHERE created_at < $1
 `
 
-func (q *Queries) DeleteSIEMQueueOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
-	tag, err := q.db.Exec(ctx, deleteSIEMQueueOlderThan, cutoff)
+// Daily retention sweep. Removes queue rows older than the cutoff
+// regardless of forwarder status so a stuck/disabled forwarder doesn't
+// pin disk.
+func (q *Queries) DeleteSIEMQueueOlderThan(ctx context.Context, createdAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSIEMQueueOlderThan, createdAt)
 	if err != nil {
 		return 0, err
 	}
-	return tag.RowsAffected(), nil
+	return result.RowsAffected(), nil
 }
 
 const enqueueSIEMEvent = `-- name: EnqueueSIEMEvent :one
@@ -135,6 +143,9 @@ type EnqueueSIEMEventParams struct {
 	Severity    string          `json:"severity"`
 }
 
+// Bus-tap insert. Called once per (forwarder, event) pair that matched
+// at least one filter glob. The dispatcher picks rows up in batch
+// order via the (forwarder_id, id) index.
 func (q *Queries) EnqueueSIEMEvent(ctx context.Context, arg EnqueueSIEMEventParams) (SiemForwardQueue, error) {
 	row := q.db.QueryRow(ctx, enqueueSIEMEvent,
 		arg.ForwarderID,
@@ -244,8 +255,12 @@ SET attempts = attempts + 1
 WHERE id = ANY($1::bigint[])
 `
 
-func (q *Queries) IncrementSIEMQueueAttempts(ctx context.Context, ids []int64) error {
-	_, err := q.db.Exec(ctx, incrementSIEMQueueAttempts, ids)
+// Bumps the per-row retry counter without changing payload/severity. The
+// dispatcher calls this on each failure; when attempts crosses the cap
+// (100) the row is force-deleted via DeleteSIEMQueueByIDs and the
+// forwarder's dropped_total counter is bumped.
+func (q *Queries) IncrementSIEMQueueAttempts(ctx context.Context, dollar_1 []int64) error {
+	_, err := q.db.Exec(ctx, incrementSIEMQueueAttempts, dollar_1)
 	return err
 }
 
@@ -256,6 +271,9 @@ SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
 FROM siem_forwarders WHERE enabled = true ORDER BY created_at ASC
 `
 
+// Used by the event-bus tap: every published event scans this list and
+// filters by glob. Enabled-only because a disabled forwarder should NOT
+// accumulate queue rows the dispatcher will never drain.
 func (q *Queries) ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarder, error) {
 	rows, err := q.db.Query(ctx, listEnabledSIEMForwarders)
 	if err != nil {
@@ -305,6 +323,8 @@ type ListOldestSIEMQueueParams struct {
 	Limit       int32     `json:"limit"`
 }
 
+// Used by the tap when the queue depth hits the chart-tunable cap. We
+// delete the oldest N rows to make room for the new ones.
 func (q *Queries) ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQueueParams) ([]int64, error) {
 	rows, err := q.db.Query(ctx, listOldestSIEMQueue, arg.ForwarderID, arg.Limit)
 	if err != nil {
@@ -326,12 +346,28 @@ func (q *Queries) ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQue
 }
 
 const listSIEMForwarders = `-- name: ListSIEMForwarders :many
+
 SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
        tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
        timeout_seconds, enabled, created_by, created_at, updated_at
 FROM siem_forwarders ORDER BY created_at DESC
 `
 
+// SIEM forwarder + queue + status queries (migration 055). Backs:
+//
+//   - /api/v1/admin/siem-forwarders/* CRUD + test + status (handler)
+//   - the event-bus tap that enqueues matching events onto the per-
+//     forwarder queue (internal/siem.BusTap)
+//   - the worker dispatcher that batches + ships queue rows to the
+//     forwarder's transport, deletes on success, and updates the
+//     status row (queue_depth + dispatched_total + last_sent_at)
+//   - the daily retention sweep that purges queue rows older than 7
+//     days regardless of forwarder status so stale forwarders don't
+//     pin disk
+//
+// auth_encrypted is the Fernet ciphertext of the JSON auth blob; this
+// layer stores and returns it verbatim. Decryption happens in the
+// dispatcher right before the per-tick connect.
 func (q *Queries) ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, error) {
 	rows, err := q.db.Query(ctx, listSIEMForwarders)
 	if err != nil {
@@ -382,6 +418,9 @@ type ListSIEMQueueBatchParams struct {
 	Limit       int32     `json:"limit"`
 }
 
+// Dispatcher batch read. Ordered by id ascending so the dispatcher
+// processes oldest-first and the per-forwarder partial index serves
+// this query in constant time.
 func (q *Queries) ListSIEMQueueBatch(ctx context.Context, arg ListSIEMQueueBatchParams) ([]SiemForwardQueue, error) {
 	rows, err := q.db.Query(ctx, listSIEMQueueBatch, arg.ForwarderID, arg.Limit)
 	if err != nil {
@@ -424,6 +463,9 @@ type ListSIEMQueueExhaustedParams struct {
 	Limit       int32     `json:"limit"`
 }
 
+// Returns rows that have hit the retry cap. The dispatcher deletes
+// these + counts them as dropped — they aren't going to succeed and
+// holding them in the queue starves the rest of the batch.
 func (q *Queries) ListSIEMQueueExhausted(ctx context.Context, arg ListSIEMQueueExhaustedParams) ([]SiemForwardQueue, error) {
 	rows, err := q.db.Query(ctx, listSIEMQueueExhausted, arg.ForwarderID, arg.Attempts, arg.Limit)
 	if err != nil {
@@ -489,6 +531,9 @@ type UpdateSIEMForwarderParams struct {
 	Enabled         bool            `json:"enabled"`
 }
 
+// Full replacement update (PUT semantics). The handler preserves the
+// existing auth_encrypted when the admin didn't re-supply it (sentinel
+// pattern, analogous to webhook_subscriptions.secret_encrypted).
 func (q *Queries) UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error) {
 	row := q.db.QueryRow(ctx, updateSIEMForwarder,
 		arg.ID,
@@ -550,6 +595,9 @@ type UpsertSIEMForwarderStatusParams struct {
 	DispatchedTotal int64              `json:"dispatched_total"`
 }
 
+// Called by the dispatcher after each tick. The composite parameters
+// carry the deltas the dispatcher computed for this tick; the existing
+// row is preserved on conflict so the cumulative totals accumulate.
 func (q *Queries) UpsertSIEMForwarderStatus(ctx context.Context, arg UpsertSIEMForwarderStatusParams) error {
 	_, err := q.db.Exec(ctx, upsertSIEMForwarderStatus,
 		arg.ForwarderID,

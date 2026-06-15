@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // GKEProvider patches a GKE cluster's master-authorized-networks-config
@@ -41,8 +42,8 @@ func (p *GKEProvider) Detect(ctx context.Context, cluster Cluster) string {
 // gkeMasterAuthorizedNetworksConfig is the API sub-object we read/write.
 // Only the cidrBlocks list is operator-relevant in v1.
 type gkeMasterAuthorizedNetworksConfig struct {
-	Enabled     bool                  `json:"enabled"`
-	CidrBlocks  []gkeCidrBlock        `json:"cidrBlocks"`
+	Enabled    bool           `json:"enabled"`
+	CidrBlocks []gkeCidrBlock `json:"cidrBlocks"`
 }
 
 type gkeCidrBlock struct {
@@ -96,7 +97,7 @@ func (p *GKEProvider) signAndSend(ctx context.Context, req *http.Request, cluste
 	}
 	client := p.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = httpclient.DefaultExternal()
 	}
 	return client.Do(req)
 }
@@ -115,7 +116,9 @@ func (p *GKEProvider) GetEffective(ctx context.Context, cluster Cluster) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode/100 != 2 {
 		rb, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("GKE GetCluster %s: status %d: %s", cluster.Name, resp.StatusCode, string(rb))
@@ -168,7 +171,9 @@ func (p *GKEProvider) Apply(ctx context.Context, cluster Cluster, cidrs []string
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode/100 != 2 {
 		rb, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("GKE Update %s: status %d: %s", cluster.Name, resp.StatusCode, string(rb))
