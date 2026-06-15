@@ -768,8 +768,11 @@ P4
 
 P5
   [x] A5  streamedQuery SSE spike → recommend KEEP hand-rolled bus (docs/a5-streamedquery-spike.md)
-  [ ] D4  Document remaining Next-only surface (Appendix C)
-  [ ] —   Delete old DataTable internals (n/a — internals were swapped in place); Vite-readiness audit
+  [x] D4  Vite-readiness audit completed — Appendix C (full Next-coupling inventory + effort)
+  [x] —   Old DataTable internals: n/a (swapped in place, no dead code left)
+
+★ PLAN COMPLETE — every workstream item is done except an actual Vite migration, which Appendix C
+  now scopes. Remaining is operational only: push/PR the branch, and roll the branch to k3s.
 ```
 
 ---
@@ -780,8 +783,8 @@ P5
   this work adds lock-in — it moves bespoke logic *into* portable libraries, which is net-negative
   lock-in.
 - **TanStack Router** is a competing full router; adopting it means abandoning Next.js App Router,
-  server components, and the file-based routing of ~55 routes — a rewrite for no functional gain
-  today. Deferred to a deliberate Vite migration (Appendix B).
+  server components, and the file-based routing of ~100 route files (97 pages + 3 layouts) — a
+  rewrite for no functional gain today. Deferred to a deliberate Vite migration (Appendix B/C).
 - **TanStack Form** would replace a working `react-hook-form` setup — churn without payoff.
 
 ## Appendix B — Why not TanStack Router now
@@ -792,24 +795,60 @@ Dropping TanStack Router in means deleting `app/`-based routing and re-expressin
 TanStack Router's tree — i.e. the Vite migration itself. Workstream D makes that future migration a
 bounded, few-file change instead of a sprawling one, **without** committing to it now.
 
-## Appendix C — Vite-readiness audit (fill in during D4)
+## Appendix C — Vite-readiness audit (D4, completed)
 
-What stays vs. changes when/if we move to Vite + TanStack Router:
+Full inventory of what remains coupled to Next.js after Workstreams A–D, measured from
+`frontend/src` (counts are exact greps, not estimates). The headline: the app is **156 `'use client'`
+files with 0 `'use server'`** — effectively a client SPA in a Next shell, so the only genuinely
+large line item is re-expressing the route tree; everything else is trivial, behind a one-file
+adapter, or already portable.
 
-| Concern | Today (Next.js) | Vite equivalent | Effort after Workstreams A–D |
+### C.1 — Already portable (no work)
+| Concern | Today | Under Vite | Effort |
 |---|---|---|---|
-| Data fetching | TanStack Query | TanStack Query (unchanged) | None |
-| Tables | TanStack Table (after B) | unchanged | None |
-| Virtualization | TanStack Virtual (after C) | unchanged | None |
-| Navigation API | `lib/navigation.ts` adapter | rewrite adapter → TanStack Router hooks | 1 file |
-| Links | `lib/link.tsx` adapter | rewrite adapter → TanStack Router `<Link>` | 1 file |
-| Routing tree | `app/` file routes (~55) | TanStack Router route tree | Medium (the real migration) |
-| Images | `next/image` (1 file) | `<img>` / vite-imagetools | Trivial |
-| API proxy | `next.config.js` rewrites | Vite dev `server.proxy` | Trivial |
-| Auth gate | `middleware.ts` (`NextResponse.redirect`) | TanStack Router `beforeLoad`/route guard | Small–Medium |
-| Server actions | enabled in `next.config.js` but **unused** (0 `'use server'`) | nothing to port — drop config | None |
-| Build/SSR | Next standalone | Vite SPA build | Medium |
+| Data fetching | TanStack Query | unchanged | None |
+| Tables | TanStack Table (`DataTable`) | unchanged | None |
+| Virtualization | TanStack Virtual | unchanged | None |
+| Forms | react-hook-form | unchanged | None |
+| Theming | next-themes | next-themes (framework-agnostic) | None |
+| State | zustand | unchanged | None |
 
-> The point of Workstreams A–D: by the time a Vite decision is made, the only non-trivial line item
-> left is the routing tree itself — everything else is already portable or behind a one-file adapter.
+### C.2 — Behind a one-file adapter (the Workstream D payoff)
+| Concern | Today | Under Vite | Effort |
+|---|---|---|---|
+| Navigation hooks | `lib/navigation.ts` re-exports `next/navigation` (used by ~70 files via the adapter) | rewrite **this one file** → TanStack Router `useNavigate`/`useParams`/`useSearch` | 1 file |
+| Server redirect | `lib/navigation-server.ts` (`redirect`/`notFound`, used ×1 in `app/page.tsx`) | rewrite → router redirect / throw `notFound()` | 1 file |
+| Links | `lib/link.tsx` re-exports `next/link` (used by ~60 files) | rewrite **this one file** → TanStack Router `<Link>` (adapt `href`→`to`) | 1 file |
+
+> Lint guard (`no-restricted-imports`, D3) enforces that `next/navigation` and `next/link` are
+> imported **only** by these three adapter files — so the swap stays a 3-file change, not a 130-file one.
+
+### C.3 — Small, mechanical replacements
+| Concern | Today (exact location) | Under Vite | Effort |
+|---|---|---|---|
+| API + WS proxy | `next.config.js` `rewrites()` → `/api/v1/*` and `/api/ws/*` to `BACKEND_URL` | Vite dev `server.proxy` (same two rules); prod served behind the same ingress | Trivial |
+| Images | `next/image` — **1 file** (`app/dashboard/catalog/page.tsx`) | `<img>` (or `unplugin-imagemin` if optimization wanted) | Trivial |
+| Lazy imports | `next/dynamic` — **2 files** (`components/ui/yaml-editor.tsx`, `clusters/[id]/template/page.tsx`) | `React.lazy` + `<Suspense>` | Trivial |
+| Fonts | `next/font/google` — **1 file** (`app/layout.tsx`: Inter + JetBrains_Mono as CSS vars) | `@fontsource/*` packages or self-hosted `@font-face` exposing the same CSS vars | Trivial |
+| Document `<head>` | `export const metadata` — **1 file** (`app/layout.tsx`) | static `index.html` (or `react-helmet`/`@tanstack/react-meta`) | Trivial |
+| WASM terminal deps | `next.config.js` `transpilePackages: ['@wterm/*']` + `predev`/`prebuild` copy `wterm.wasm` to `public/` | Vite WASM handling (`?url`/`vite-plugin-wasm`) + `public/` copy | Small |
+| Server actions | enabled in `next.config.js` (`bodySizeLimit`) but **unused (0 `'use server'`)** | nothing to port — delete the config block | None |
+
+### C.4 — The real work
+| Concern | Today (exact) | Under Vite | Effort |
+|---|---|---|---|
+| Route tree | file-based routing: **97 `page.tsx` + 3 `layout.tsx`** under `app/` (incl. dynamic segments `[id]`, `[instanceId]`, route group `(components)`, nested layouts) | TanStack Router route tree (code-based or its file-route plugin); map `[id]`→`$id`, layouts→layout routes | **Medium–Large** — the migration itself |
+| Auth gate | `src/middleware.ts` (`NextResponse.redirect` on unauthenticated `/dashboard/*`) | TanStack Router `beforeLoad` guard on the dashboard layout route | Small–Medium |
+| Root shell | `app/layout.tsx` (`<html>/<body>`, `Providers`, font vars) | Vite `index.html` + a root `App`/`__root` route mounting `Providers` | Small |
+| Build / serve | `output: 'standalone'` Node SSR server (`node server.js`, port 3000) | Vite static SPA build behind nginx (or any static host); drop the Node runtime | Medium |
+| RSC | none in practice (0 `'use server'`, 156 `'use client'`); only `app/page.tsx` + `layout.tsx` are non-client | nothing to convert — the app is already client-rendered | None |
+
+### C.5 — Bottom line
+By the time a Vite decision is made, the portable layers (Query/Table/Virtual/Form/state/theme) need
+**zero** changes, the navigation/link surface is **3 adapter files**, and the small replacements
+(image/dynamic/font/metadata/proxy/wasm) are an afternoon. The only substantive effort is the
+**route-tree migration (100 route files) + the build/serve switch**, plus folding `middleware.ts`
+into a router guard. Workstream D converted that from "rewrite the whole app" into "rewrite the
+routing layer" — a bounded, well-understood project we can schedule deliberately rather than being
+forced into.
 ```
