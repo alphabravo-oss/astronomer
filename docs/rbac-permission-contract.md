@@ -47,6 +47,7 @@ server through this resource/action contract.
 | `cluster_templates` | Cluster template CRUD and template catalog management. |
 | `fleet_operations` | Legacy-named multi-cluster operation authoring and execution until the API is renamed. |
 | `network_policies` | Global network policy template CRUD and policy-template management. |
+| `custom_resources` | k8s-proxy access to custom resources (CRDs / non-core apigroups under `apis/<group>/<version>/...`). Lets operators grant or withhold CRD access deliberately instead of having it collapse into the generic `clusters` permission. |
 | `*` | Owner/admin wildcard. Allowed only in built-in owner/admin roles or explicit break-glass grants. |
 
 ## Verbs

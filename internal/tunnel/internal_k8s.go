@@ -30,6 +30,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -64,6 +65,35 @@ const InternalSourceHeader = "X-Astronomer-Internal-Source"
 // InternalSourceHeader.
 const InternalSourceValue = "sibling-server-pod"
 
+// InternalForwardedUserHeader carries the UUID of the end user whose
+// request the originating server pod is forwarding across the internal
+// door. The originating pod knows the authenticated user (it ran the JWT
+// /api-token middleware); it threads that identity here so the receiving
+// pod — which mutates the target cluster on the user's behalf — can emit
+// a user-attributed audit row matching the attribution the user-facing
+// /api/v1/clusters/{id}/k8s/* proxy already records. Absent or unparsable
+// values yield an anonymous (NULL user) row rather than dropping the
+// audit entirely, so a mutation through the door is never unaudited.
+const InternalForwardedUserHeader = "X-Astronomer-Forwarded-User"
+
+// forwardedUserUUID parses the originating-user UUID off the internal
+// request. uuid.Nil (and a NULL audit actor) is returned when the header
+// is absent or malformed.
+func forwardedUserUUID(r *http.Request) uuid.UUID {
+	if r == nil {
+		return uuid.Nil
+	}
+	got := strings.TrimSpace(r.Header.Get(InternalForwardedUserHeader))
+	if got == "" {
+		return uuid.Nil
+	}
+	id, err := uuid.Parse(got)
+	if err != nil {
+		return uuid.Nil
+	}
+	return id
+}
+
 // hasSiblingSourceSignal reports whether the request carries the
 // in-band sibling-pod source marker. Constant-time compared so the
 // check doesn't leak the (non-secret but stable) value's length.
@@ -93,6 +123,24 @@ type InternalK8sHandler struct {
 	hub *Hub
 	psk string
 	log *slog.Logger
+	// audit is the optional audit-log writer. When set, every mutating
+	// request forwarded through this internal door emits a
+	// cluster.k8s_proxy.forwarded row attributed to the originating user
+	// (threaded via InternalForwardedUserHeader), matching the user-facing
+	// proxy's attribution. nil leaves the door functional but unaudited —
+	// used only by narrow tests; production wires it via SetAuditWriter.
+	audit any
+}
+
+// SetAuditWriter wires the audit-log writer used to record a
+// user-attributed cluster.k8s_proxy.forwarded row for every mutation that
+// crosses this internal door. Pass the same *sqlc.Queries the user-facing
+// proxy audits through. Safe to call with nil (audit disabled).
+func (h *InternalK8sHandler) SetAuditWriter(w any) {
+	if h == nil {
+		return
+	}
+	h.audit = w
 }
 
 // NewInternalK8sHandler builds the handler. When psk is empty the
@@ -201,7 +249,39 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
 		return
 	}
+	// Audit the mutation, attributed to the originating user the calling
+	// pod threaded through the door. Mirrors the user-facing proxy's
+	// cluster.k8s_proxy.forwarded row so a mutation that crossed a pod
+	// boundary is never invisible in the audit trail. Best-effort: a
+	// recording failure must not fail the (already-completed) cluster op.
+	h.recordForwardedMutation(r, clusterID, &payload)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// internalK8sMutatingMethod reports whether the forwarded k8s method
+// mutates cluster state. Mirrors the user-facing proxy's classification
+// (only GET/HEAD/OPTIONS are non-mutating).
+func internalK8sMutatingMethod(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, "":
+		return false
+	default:
+		return true
+	}
+}
+
+// recordForwardedMutation emits the user-attributed audit row for a
+// mutation that crossed the internal door. No-op for reads or when no
+// audit writer is configured.
+func (h *InternalK8sHandler) recordForwardedMutation(r *http.Request, clusterID string, payload *protocol.K8sRequestPayload) {
+	if h == nil || h.audit == nil || payload == nil {
+		return
+	}
+	if !internalK8sMutatingMethod(payload.Method) {
+		return
+	}
+	recordForwardedK8sMutationAudit(r, h.audit, forwardedUserUUID(r), clusterID, payload.Method, payload.Path)
 }

@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/time/rate"
 )
 
@@ -68,6 +69,24 @@ var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
 	ClassHelm:     {RatePerSecond: 5.0 / 60.0, Burst: 2},
 }
 
+// defaultClusterCeilings is the aggregate (all-users-combined) per-cluster
+// cap for classes whose traffic funnels through a single cluster agent
+// tunnel. The per-user limits in defaultLimits still apply (defense in
+// depth); this is a second, coarser gate so that N distinct users — each
+// individually within their per-user quota — cannot collectively saturate
+// one cluster's tunnel. Only the tunnel-bound classes carry a ceiling;
+// classes absent from this map are limited per-user only.
+//
+// Sizing: the ceiling is set comfortably above a healthy multi-operator
+// working set but well below what would exhaust the agent's single
+// in-flight relay, and the burst absorbs the natural fan-out of a UI
+// loading several panes at once. Other clusters keep independent buckets,
+// so hammering cluster A never throttles cluster B.
+var defaultClusterCeilings = map[APIRateLimitClass]APIRateLimitConfig{
+	ClassK8sProxy: {RatePerSecond: 10.0, Burst: 60},
+	ClassExecLogs: {RatePerSecond: 120.0 / 60.0, Burst: 20}, // 120 new sessions/min/cluster
+}
+
 // apiBucket pairs a limiter with the last-access time for eviction.
 type apiBucket struct {
 	lim      *rate.Limiter
@@ -83,7 +102,11 @@ type apiRateLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]*apiBucket
 	configs map[APIRateLimitClass]APIRateLimitConfig
-	now     func() time.Time
+	// clusterCeilings holds the aggregate per-cluster cap for tunnel-bound
+	// classes. Separate from configs so the per-user and per-cluster gates
+	// tune independently. A class absent here is per-user only.
+	clusterCeilings map[APIRateLimitClass]APIRateLimitConfig
+	now             func() time.Time
 	// evictAfter is the idle-bucket TTL — anything not touched in this
 	// long gets dropped. Default 10× the longest fill window so a brief
 	// pause doesn't lose the carry-over tokens.
@@ -91,6 +114,10 @@ type apiRateLimiter struct {
 }
 
 func newAPIRateLimiter(configs map[APIRateLimitClass]APIRateLimitConfig, now func() time.Time) *apiRateLimiter {
+	return newAPIRateLimiterWithCeilings(configs, defaultClusterCeilings, now)
+}
+
+func newAPIRateLimiterWithCeilings(configs, clusterCeilings map[APIRateLimitClass]APIRateLimitConfig, now func() time.Time) *apiRateLimiter {
 	if configs == nil {
 		configs = defaultLimits
 	}
@@ -98,10 +125,11 @@ func newAPIRateLimiter(configs map[APIRateLimitClass]APIRateLimitConfig, now fun
 		now = time.Now
 	}
 	return &apiRateLimiter{
-		buckets:    make(map[string]*apiBucket),
-		configs:    configs,
-		now:        now,
-		evictAfter: 10 * time.Minute,
+		buckets:         make(map[string]*apiBucket),
+		configs:         configs,
+		clusterCeilings: clusterCeilings,
+		now:             now,
+		evictAfter:      10 * time.Minute,
 	}
 }
 
@@ -114,8 +142,30 @@ func (l *apiRateLimiter) allow(class APIRateLimitClass, key string) (bool, time.
 		// to lock the whole API.
 		return true, 0
 	}
-	mapKey := string(class) + ":" + key
+	return l.allowBucket(string(class)+":"+key, cfg)
+}
 
+// allowClusterCeiling enforces the aggregate (all-users-combined)
+// per-cluster cap for tunnel-bound classes. It is a SECOND gate, applied
+// on top of the per-user allow() — one cluster's tunnel is protected from
+// the combined load of many in-policy users, while other clusters keep
+// independent buckets and stay unaffected. A class with no configured
+// ceiling, or a request with no resolvable cluster id, is not capped here
+// (the per-user limit still applies).
+func (l *apiRateLimiter) allowClusterCeiling(class APIRateLimitClass, clusterID string) (bool, time.Duration) {
+	if clusterID == "" {
+		return true, 0
+	}
+	cfg, ok := l.clusterCeilings[class]
+	if !ok {
+		return true, 0
+	}
+	return l.allowBucket(string(class)+":cluster:"+clusterID, cfg)
+}
+
+// allowBucket is the shared token-bucket primitive: consult (and create)
+// the bucket at mapKey under cfg, returning allowed + suggested wait.
+func (l *apiRateLimiter) allowBucket(mapKey string, cfg APIRateLimitConfig) (bool, time.Duration) {
 	l.mu.Lock()
 	b, found := l.buckets[mapKey]
 	if !found {
@@ -189,21 +239,33 @@ func apiRateLimitWith(ctx context.Context, class APIRateLimitClass, configs map[
 	limiter.startJanitor(ctx, 0)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := apiRateLimitKey(r)
-			allowed, wait := limiter.allow(class, key)
-			if allowed {
-				next.ServeHTTP(w, r)
+			// Per-cluster aggregate ceiling first: a saturated tunnel must
+			// reject every caller regardless of their individual quota, and
+			// checking it first avoids spending a per-user token on a
+			// request the cluster gate would reject anyway.
+			clusterID := apiRateLimitClusterID(r)
+			if allowed, wait := limiter.allowClusterCeiling(class, clusterID); !allowed {
+				writeRateLimited(w, wait)
 				return
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Retry-After", formatAPIRetryAfter(wait))
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"code":    "rate_limited",
-				"message": "Too many requests for this endpoint class",
-			})
+			key := apiRateLimitKey(r)
+			if allowed, wait := limiter.allow(class, key); !allowed {
+				writeRateLimited(w, wait)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func writeRateLimited(w http.ResponseWriter, wait time.Duration) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", formatAPIRetryAfter(wait))
+	w.WriteHeader(http.StatusTooManyRequests)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"code":    "rate_limited",
+		"message": "Too many requests for this endpoint class",
+	})
 }
 
 // apiRateLimitKey derives a stable per-caller key. Authenticated user ID
@@ -227,6 +289,20 @@ func apiRateLimitKey(r *http.Request) string {
 		return "ip:" + addr
 	}
 	return "unknown"
+}
+
+// apiRateLimitClusterID extracts the target cluster from the request path
+// for the aggregate per-cluster ceiling. Every tunnel-bound route that
+// carries a ceiling is mounted under a {cluster_id} URL param, so chi has
+// already populated it by the time this middleware runs (it sits inside
+// the route's With-chain, after the route match). Returns "" when no
+// cluster id is present — such requests are not subject to the per-cluster
+// gate (the per-user limit still applies).
+func apiRateLimitClusterID(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return strings.TrimSpace(chi.URLParam(r, "cluster_id"))
 }
 
 func formatAPIRetryAfter(d time.Duration) string {

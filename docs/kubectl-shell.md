@@ -30,22 +30,34 @@ terminal inside the browser. No kubeconfig juggling, no port-forward.
 
 ## RBAC mirroring (v1, coarse)
 
-The operator's effective verbs against `clusters/{id}` translate to the
+The shell defaults to **read-only**. A write-capable (or cluster-admin)
+shell is a *deliberate, audited* opt-in: the Open request must explicitly
+ask for it (`{"elevate": true}` in the POST body, or `{"mode":"write"}`)
+**and** the caller must hold the matching astronomer RBAC verb. A normal
+break-glass debug session — and any request that does not opt in — gets
+`get/list/watch` only, even though opening the shell already required the
+`clusters:update` route gate.
+
+The operator's *granted* verbs against `clusters/{id}` translate to the
 in-cluster Role's verbs as follows:
 
-| Astronomer verb     | In-cluster verbs                       | Scope     |
-| ------------------- | -------------------------------------- | --------- |
-| `clusters:read`     | `get, list, watch`                     | all NS    |
-| `clusters:update`   | + `create, update, patch`              | all NS    |
-| `clusters:delete`   | + `delete`                             | all NS    |
-| Superuser           | `cluster-admin` (built-in ClusterRole) | all NS    |
+| Request                                | In-cluster verbs                       | Scope     |
+| -------------------------------------- | -------------------------------------- | --------- |
+| default (no elevation)                 | `get, list, watch`                     | all NS    |
+| `elevate` + `clusters:update` RBAC     | + `create, update, patch`              | all NS    |
+| `elevate` + `clusters:delete` RBAC     | + `delete`                             | all NS    |
+| `elevate` + Superuser                  | `cluster-admin` (built-in ClusterRole) | all NS    |
+
+Asking to elevate without the matching RBAC fails **closed** to read-only
+(the session still opens, but the rendered ClusterRole carries only
+`get/list/watch`). The granted verbs and whether the request was elevated
+are recorded on the `kubectl.session.opened` audit row.
 
 This is intentionally coarse for v1. The use case is operator break-glass
-debugging across an entire managed cluster — the same persona who can
-`kubectl edit` resources via the existing K8s proxy can drive them
-through the in-browser shell. Operators who need **per-namespace
-fine-grained control** should fall back to the existing `kubectl proxy`
-flow with their own kubeconfig (`/api/v1/clusters/{id}/generate-kubeconfig/`).
+debugging across an entire managed cluster. Operators who need
+**per-namespace fine-grained control** should fall back to the existing
+`kubectl proxy` flow with their own kubeconfig
+(`/api/v1/clusters/{id}/generate-kubeconfig/`).
 
 A v2 follow-on can mirror per-namespace project memberships into namespaced
 `RoleBindings` instead of the cluster-wide grant. The migration-065 schema
@@ -76,6 +88,28 @@ secret material; storing the response stream would turn an audit table
 into a secrets leak. The compliance story we want is "who ran what,
 against which cluster, when" — that question is answerable from input
 alone.
+
+### Recording is reliable, not best-effort
+
+Earlier builds dropped keystrokes silently when the recorder channel
+(cap 64) filled under sustained input, and only recognized
+`type:"stdin"|"input"` frames. Both let an attacker defeat the audit log.
+Now:
+
+- **Back-pressure, not drop.** The input recorder hook runs synchronously
+  in the exec read loop *before* the keystroke is forwarded to the agent.
+  When the drain channel is full it **blocks** (throttling the session)
+  instead of dropping the row. The block is bounded by the WS lifetime —
+  closing the socket cancels the recorder context and releases the read
+  loop. A command therefore cannot execute without first being queued for
+  the audit log.
+- **Closed frame contract.** The recorder's `extractStdinBytes` mirrors
+  the tunnel's `translateFromFrontend` exactly. Any frame the relay
+  forwards to the agent as stdin — `stdin`/`input` envelopes *and* the
+  raw-bytes fallback for unrecognized/non-JSON frames — is recorded. Only
+  the genuine control frames (`resize`/`auth`/`end`/`close`), which never
+  carry executed keystrokes, are ignored. An attacker can't wrap a command
+  in an exotic frame `type` to slip it past the recorder.
 
 ## Endpoints
 

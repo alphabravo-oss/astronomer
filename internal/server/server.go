@@ -980,8 +980,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Workloads:     workloadHandler,
 		Hub:           hub,
 		Proxy:         tunnel.NewProxyHandler(hub, logger),
-		InternalK8s:   tunnel.NewInternalK8sHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger),
-		InternalHelm:  tunnel.NewInternalHelmHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger),
+		InternalK8s: func() *tunnel.InternalK8sHandler {
+			h := tunnel.NewInternalK8sHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger)
+			// Audit every mutation crossing the internal door, attributed
+			// to the originating user — same writer the user-facing proxy
+			// records through (M6 / C2t).
+			h.SetAuditWriter(queries)
+			return h
+		}(),
+		InternalHelm: func() *tunnel.InternalHelmHandler {
+			h := tunnel.NewInternalHelmHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger)
+			h.SetAuditWriter(queries)
+			return h
+		}(),
 		Exec:          tunnel.NewExecConsumer(hub, logger),
 		Logs:          tunnel.NewLogsConsumer(hub, logger),
 		RemoteServer:  remoteServer,

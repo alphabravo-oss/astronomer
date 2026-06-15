@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -437,22 +438,12 @@ func detectDistribution(nodes []corev1.Node) string {
 	return "unknown"
 }
 
+// normalizeAgentPrivilegeProfile delegates to the canonical normalizer so the
+// self-reported heartbeat capability advertisement uses the same fail-closed
+// semantics: empty or unrecognized input resolves to least-privilege viewer,
+// never admin.
 func normalizeAgentPrivilegeProfile(profile string) string {
-	normalized := strings.NewReplacer("_", "-", " ", "-").Replace(strings.ToLower(strings.TrimSpace(profile)))
-	switch normalized {
-	case "viewer":
-		return "viewer"
-	case "operator":
-		return "operator"
-	case "namespace-viewer", "namespaced-viewer":
-		return "namespace-viewer"
-	case "namespace-operator", "namespaced-operator":
-		return "namespace-operator"
-	case "custom":
-		return "custom"
-	default:
-		return "admin"
-	}
+	return agenttemplate.NormalizePrivilegeProfile(profile)
 }
 
 func capabilityFeaturesForProfile(profile string) ([]string, []string) {

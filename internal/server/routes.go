@@ -486,6 +486,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					),
 				).Get("/audit-logs/", deps.Resources.ListAuditLogs)
 				if deps.Monitoring != nil {
+					// NEW-1: the shared Thanos/Alertmanager monitoring-stack
+					// install/upgrade/replace/uninstall routes run helm against
+					// the management/monitoring cluster but were never wired
+					// through the GATE-0 write-scope backstop. A read-scoped API
+					// token must not trigger these helm mutations. requireAuth
+					// stashes the token so the scope middleware can see it (it
+					// would otherwise bypass an unauthenticated request), then
+					// monitoringWriteScope enforces clusters:write on the
+					// mutating helm verbs (reads/preview/status pass through).
+					monitoringMutate := r.With(requireAuth(deps.JWT, deps.AuthQueries), appmiddleware.RequireWriteScopeForMutations(iauth.ScopeWriteClusters))
 					r.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
 					r.Put("/monitoring/backend/", deps.Monitoring.UpdateBackendConfig)
 					r.Get("/monitoring/operations/", deps.Monitoring.ListOperations)
@@ -493,16 +503,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					r.Post("/monitoring/operations/{id}/retry/", deps.Monitoring.RetryOperation)
 					r.Get("/monitoring/thanos/status/", deps.Monitoring.GetSharedThanosStatus)
 					r.Post("/monitoring/thanos/preview/", deps.Monitoring.PreviewSharedThanosStack)
-					r.Post("/monitoring/thanos/install/", deps.Monitoring.InstallSharedThanosStack)
-					r.Put("/monitoring/thanos/upgrade/", deps.Monitoring.UpgradeSharedThanosStack)
-					r.Post("/monitoring/thanos/replace/", deps.Monitoring.ReplaceSharedThanosStack)
-					r.Delete("/monitoring/thanos/uninstall/", deps.Monitoring.UninstallSharedThanosStack)
+					monitoringMutate.Post("/monitoring/thanos/install/", deps.Monitoring.InstallSharedThanosStack)
+					monitoringMutate.Put("/monitoring/thanos/upgrade/", deps.Monitoring.UpgradeSharedThanosStack)
+					monitoringMutate.Post("/monitoring/thanos/replace/", deps.Monitoring.ReplaceSharedThanosStack)
+					monitoringMutate.Delete("/monitoring/thanos/uninstall/", deps.Monitoring.UninstallSharedThanosStack)
 					r.Get("/monitoring/alertmanager/status/", deps.Monitoring.GetSharedAlertmanagerStatus)
 					r.Post("/monitoring/alertmanager/preview/", deps.Monitoring.PreviewSharedAlertmanager)
-					r.Post("/monitoring/alertmanager/install/", deps.Monitoring.InstallSharedAlertmanager)
-					r.Put("/monitoring/alertmanager/upgrade/", deps.Monitoring.UpgradeSharedAlertmanager)
-					r.Post("/monitoring/alertmanager/replace/", deps.Monitoring.ReplaceSharedAlertmanager)
-					r.Delete("/monitoring/alertmanager/uninstall/", deps.Monitoring.UninstallSharedAlertmanager)
+					monitoringMutate.Post("/monitoring/alertmanager/install/", deps.Monitoring.InstallSharedAlertmanager)
+					monitoringMutate.Put("/monitoring/alertmanager/upgrade/", deps.Monitoring.UpgradeSharedAlertmanager)
+					monitoringMutate.Post("/monitoring/alertmanager/replace/", deps.Monitoring.ReplaceSharedAlertmanager)
+					monitoringMutate.Delete("/monitoring/alertmanager/uninstall/", deps.Monitoring.UninstallSharedAlertmanager)
 				}
 			})
 			r.Get("/users/", deps.Resources.ListUsers)
@@ -878,7 +888,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(
 				requireAuth(deps.JWT, deps.AuthQueries),
 				requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
-			).Get("/api/v1/clusters/{id}/v2/pods/", remoteV2PodsHandler(deps))
+			).Get("/api/v1/clusters/{id}/v2/pods/", remoteV2PodsHandler(cfg, deps))
 		}
 	}
 	if deps.Proxy != nil {
@@ -1154,18 +1164,77 @@ func k8sProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
 	if r == nil || r.URL == nil {
 		return rbac.ResourceClusters, rbac.VerbRead
 	}
-	if isHighRiskPodProxySubresource(r.URL.Path) {
-		return rbac.ResourcePods, rbac.VerbExec
-	}
 
 	k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
 	ref := parseK8sProxyObjectRef(k8sPath)
+
+	// F1 (M2): pod exec/attach/portforward is RCE-equivalent and MUST map to
+	// the dedicated pods:exec verb. Detect the subresource from the parsed
+	// object ref (robust to core-vs-apis prefix and trailing shape) rather
+	// than a brittle hardcoded path matcher, so a mutating exec request can
+	// never degrade to a generic pod write verb. The fallback to the raw URL
+	// path keeps the gate working even when the chi wildcard param is unset
+	// (e.g. direct handler calls in tests).
+	if isHighRiskPodProxySubresourceRef(ref) || isHighRiskPodProxySubresource(r.URL.Path) {
+		return rbac.ResourcePods, rbac.VerbExec
+	}
+
 	verb := k8sProxyVerb(r, ref)
-	resource, verb := namedResourcePermission(ref["resource"], verb)
 	if ref["resource"] == "pods" && ref["subresource"] == "log" && !isMutatingK8sProxyMethod(r.Method) {
 		return rbac.ResourcePods, rbac.VerbLogs
 	}
+	// F2 (M3): custom resources, unknown apigroups, and non-resource discovery
+	// URLs are governed by an explicit, conservative policy rather than
+	// collapsing to the generic clusters verb (which let per-resource RBAC
+	// silently not apply to CRDs). Decide this BEFORE namedResourcePermission's
+	// generic fallthrough. See k8sProxyResourcePolicy.
+	if resource, ok := k8sProxyResourcePolicy(ref); ok {
+		return resource, verb
+	}
+	resource, verb := namedResourcePermission(ref["resource"], verb)
 	return resource, verb
+}
+
+// k8sProxyResourcePolicy implements the F2 (M3) policy for shapes that the
+// typed namedResourcePermission table does NOT recognise, so they no longer
+// silently collapse to the generic ResourceClusters permission:
+//
+//   - Custom resources served under apis/<group>/<version>/... whose
+//     <group> is not a core/built-in Kubernetes group map to the dedicated
+//     ResourceCustomResources permission, so per-resource RBAC (e.g.
+//     custom_resources:read / :update) governs CRD access instead of the
+//     blanket clusters verb.
+//   - Non-resource discovery URLs (/version, /healthz, /api, /apis and their
+//     sub-paths) carry no parseable object ref; they are read-only and map to
+//     ResourceClusters/VerbRead via the caller. They are intentionally NOT
+//     claimed here (ok=false) so the existing read classification stands.
+//
+// The policy is conservative: it never broadens access. A request that maps
+// to ResourceCustomResources requires that permission explicitly; absent a
+// matching binding the request is denied (whereas previously a clusters
+// binding would have allowed it).
+func k8sProxyResourcePolicy(ref map[string]string) (rbac.Resource, bool) {
+	if len(ref) == 0 {
+		// Non-resource / discovery URL (parseK8sProxyObjectRef returned nil):
+		// leave it to the generic read-only clusters classification.
+		return "", false
+	}
+	resourceType := strings.ToLower(strings.TrimSpace(ref["resource"]))
+	if resourceType == "" {
+		return "", false
+	}
+	if _, known := knownK8sProxyResource(resourceType); known {
+		// A built-in/typed resource — handled by namedResourcePermission.
+		return "", false
+	}
+	// Custom resource under apis/<group>/<version>/...: map to the dedicated
+	// custom-resources permission. Core-group (api/v1) unknown resources are
+	// rare/internal and stay on the generic clusters classification to avoid
+	// over-restricting discovery-ish core endpoints.
+	if strings.TrimSpace(ref["api_group"]) != "" {
+		return rbac.ResourceCustomResources, true
+	}
+	return "", false
 }
 
 func k8sProxyVerb(r *http.Request, ref map[string]string) rbac.Verb {
@@ -1181,6 +1250,13 @@ func k8sProxyVerb(r *http.Request, ref map[string]string) rbac.Verb {
 
 	switch r.Method {
 	case http.MethodPost:
+		// F3 (L1): POST pods/{name}/eviction deletes the pod (the Eviction
+		// subresource is a delete operation), so classify it as VerbDelete
+		// for honest RBAC + audit rather than the generic POST-to-named-
+		// subresource update verb.
+		if ref["resource"] == "pods" && ref["subresource"] == "eviction" {
+			return rbac.VerbDelete
+		}
 		if ref["name"] == "" {
 			return rbac.VerbCreate
 		}
@@ -1294,9 +1370,24 @@ func requireNamedResourcePermission(engine *rbac.Engine, querier appmiddleware.R
 }
 
 func namedResourcePermission(resourceType string, requestedVerb rbac.Verb) (rbac.Resource, rbac.Verb) {
+	if resource, ok := knownK8sProxyResource(resourceType); ok {
+		return resource, requestedVerb
+	}
+	if requestedVerb == rbac.VerbRead || requestedVerb == rbac.VerbList || requestedVerb == rbac.VerbWatch {
+		return rbac.ResourceClusters, requestedVerb
+	}
+	return rbac.ResourceClusters, rbac.VerbUpdate
+}
+
+// knownK8sProxyResource maps a Kubernetes resource type (singular or plural,
+// case-insensitive) to its astronomer RBAC resource. The second return value
+// reports whether the type is a recognised built-in; callers use it to decide
+// whether the F2 custom-resource policy should apply instead of the generic
+// clusters fallthrough.
+func knownK8sProxyResource(resourceType string) (rbac.Resource, bool) {
 	switch strings.ToLower(strings.TrimSpace(resourceType)) {
 	case "services", "service", "endpoints", "endpoint":
-		return rbac.ResourceServices, requestedVerb
+		return rbac.ResourceServices, true
 	case "ingresses", "ingress",
 		"gateways", "gateway",
 		"httproutes", "httproute",
@@ -1306,21 +1397,21 @@ func namedResourcePermission(resourceType string, requestedVerb rbac.Verb) (rbac
 		"udproutes", "udproute",
 		"tlsroutes", "tlsroute",
 		"referencegrants", "referencegrant":
-		return rbac.ResourceIngresses, requestedVerb
+		return rbac.ResourceIngresses, true
 	case "networkpolicies", "networkpolicy":
-		return rbac.ResourceNetworkPolicies, requestedVerb
+		return rbac.ResourceNetworkPolicies, true
 	case "persistentvolumes", "persistentvolume", "pv",
 		"persistentvolumeclaims", "persistentvolumeclaim", "pvc",
 		"storageclasses", "storageclass":
-		return rbac.ResourceStorage, requestedVerb
+		return rbac.ResourceStorage, true
 	case "configmaps", "configmap":
-		return rbac.ResourceConfigMaps, requestedVerb
+		return rbac.ResourceConfigMaps, true
 	case "secrets", "secret":
-		return rbac.ResourceSecrets, requestedVerb
+		return rbac.ResourceSecrets, true
 	case "pods", "pod":
-		return rbac.ResourcePods, requestedVerb
+		return rbac.ResourcePods, true
 	case "nodes", "node":
-		return rbac.ResourceNodes, requestedVerb
+		return rbac.ResourceNodes, true
 	case "deployments", "deployment",
 		"daemonsets", "daemonset",
 		"statefulsets", "statefulset",
@@ -1329,12 +1420,9 @@ func namedResourcePermission(resourceType string, requestedVerb rbac.Verb) (rbac
 		"cronjobs", "cronjob",
 		"hpa", "horizontalpodautoscalers", "horizontalpodautoscaler",
 		"poddisruptionbudgets", "poddisruptionbudget":
-		return rbac.ResourceWorkloads, requestedVerb
+		return rbac.ResourceWorkloads, true
 	default:
-		if requestedVerb == rbac.VerbRead || requestedVerb == rbac.VerbList || requestedVerb == rbac.VerbWatch {
-			return rbac.ResourceClusters, requestedVerb
-		}
-		return rbac.ResourceClusters, rbac.VerbUpdate
+		return "", false
 	}
 }
 
@@ -1462,6 +1550,36 @@ func isK8sProxyWatchRequest(r *http.Request) bool {
 		return true
 	}
 	return strings.Contains(r.URL.Path, "/watch/")
+}
+
+// isHighRiskPodProxySubresourceRef reports whether the parsed object ref is a
+// pod exec/attach/portforward subresource. Unlike the legacy path matcher
+// below, it relies on the structured subresource field, so it is robust to:
+//   - core (api/v1) vs apis prefix shape (parseK8sProxyObjectRef normalises
+//     both into resource/name/subresource),
+//   - trailing path segments after the subresource (proxied apiserver
+//     subresource URLs do not carry further segments, but a trailing slash or
+//     query no longer defeats detection),
+//   - singular vs plural resource spelling.
+//
+// This is the F1 (M2) fix: detection must never miss, because a missed
+// exec/attach/portforward would degrade to a generic pod *write* verb and
+// bypass the dedicated pods:exec gate.
+func isHighRiskPodProxySubresourceRef(ref map[string]string) bool {
+	if len(ref) == 0 {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(ref["resource"])) {
+	case "pods", "pod":
+	default:
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(ref["subresource"])) {
+	case "exec", "attach", "portforward":
+		return true
+	default:
+		return false
+	}
 }
 
 func isHighRiskPodProxySubresource(path string) bool {
@@ -1898,6 +2016,13 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			Post("/agents/fleet/{cluster_id}/upgrade-plan/", deps.AgentFleet.UpgradePlan)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbUpdate)).
 			Post("/agents/fleet/{cluster_id}/upgrade/", deps.AgentFleet.Upgrade)
+		// E3 (C2 rollout aid): cluster-admin agent posture report. Lists
+		// every managed cluster whose agent still resolves to the
+		// cluster-admin `admin` profile so operators can re-profile after
+		// the GATE-0 fail-closed default flip. Superuser-gated inside the
+		// handler (clean 401/403), same pattern as the other /admin/* reads.
+		r.With(requireAuth(deps.JWT, deps.AuthQueries)).
+			Get("/admin/agents/cluster-admin-posture/", deps.AgentFleet.ClusterAdminPosture)
 	}
 
 	if deps.Audit != nil {
@@ -2060,10 +2185,17 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			r.Get("/charts/{id}/readme/", deps.Catalog.GetChartReadme)
 			r.Get("/charts/{id}/values/", deps.Catalog.GetChartValues)
 			r.Get("/installed/", deps.Catalog.ListInstalledCharts)
-			r.Post("/installed/", deps.Catalog.CreateInstalledChart)
-			r.Put("/installed/{id}/upgrade/", deps.Catalog.UpgradeInstalledChart)
-			r.Post("/installed/{id}/rollback/", deps.Catalog.RollbackInstalledChart)
-			r.Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
+			// NEW-1: helm install/upgrade/uninstall are cluster-mutating (they
+			// run helm against a managed cluster), but this Catalog subtree was
+			// never wired through the GATE-0 write-scope backstop. A read-scoped
+			// API token must not be able to trigger these mutations, so the
+			// helm lifecycle routes carry mutationWriteScope (same contract as
+			// the workload/node/resource subtrees: reads + JWT + legacy
+			// empty-scope tokens pass through; RBAC stays primary underneath).
+			r.With(mutationWriteScope).Post("/installed/", deps.Catalog.CreateInstalledChart)
+			r.With(mutationWriteScope).Put("/installed/{id}/upgrade/", deps.Catalog.UpgradeInstalledChart)
+			r.With(mutationWriteScope).Post("/installed/{id}/rollback/", deps.Catalog.RollbackInstalledChart)
+			r.With(mutationWriteScope).Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
 			r.Get("/installed/{id}/values/", deps.Catalog.GetInstalledChartValues)
 		})
 
@@ -2374,7 +2506,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 // tunnel, and lists pods in the requested namespace.
 //
 // Returns 503 if the agent is not currently connected.
-func remoteV2PodsHandler(deps RouterDependencies) http.HandlerFunc {
+func remoteV2PodsHandler(cfg *config.Config, deps RouterDependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		clusterID := chi.URLParam(r, "id")
 		namespace := r.URL.Query().Get("namespace")
@@ -2382,7 +2514,16 @@ func remoteV2PodsHandler(deps RouterDependencies) http.HandlerFunc {
 			namespace = "default"
 		}
 
-		client, err := remoteproxy.K8sClient(deps.RemoteServer, clusterID)
+		// This route is hard-gated out of production (see route registration).
+		// The v2 transport verifies the apiserver cert against the in-cluster
+		// CA bundle by default; if that bundle is not provisioned in this
+		// (non-production) environment, fall back to the explicit, loudly
+		// logged insecure opt-in. Validate() refuses Insecure when Production
+		// is true, so this can never graduate InsecureSkipVerify into prod.
+		client, err := remoteproxy.K8sClientWithOptions(deps.RemoteServer, clusterID, remoteproxy.TLSOptions{
+			Insecure:   true,
+			Production: isProductionConfig(cfg),
+		})
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)

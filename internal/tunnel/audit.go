@@ -51,6 +51,85 @@ func recordStreamOpenAudit(r *http.Request, writer any, userID uuid.UUID, action
 	}))
 }
 
+// recordForwardedK8sMutationAudit emits the cluster.k8s_proxy.forwarded
+// audit row for a mutating k8s request that crossed the internal cross-pod
+// door (internal_k8s.go). userID is the originating end user the calling
+// pod threaded through InternalForwardedUserHeader; uuid.Nil yields an
+// anonymous (NULL user) row rather than dropping the audit. This matches
+// the action + resource shape the user-facing proxy's
+// auditK8sProxyMutations middleware records, so a mutation forwarded
+// across a pod boundary is indistinguishable in the audit trail from one
+// handled locally.
+func recordForwardedK8sMutationAudit(r *http.Request, writer any, userID uuid.UUID, clusterID, method, k8sPath string) {
+	v1, ok := writer.(auditWriterV1)
+	if !ok || v1 == nil {
+		return
+	}
+	ctx := context.Background()
+	if r != nil {
+		ctx = r.Context()
+	}
+	detail := map[string]any{
+		"method":   method,
+		"k8s_path": k8sPath,
+		"proxy":    "internal_door",
+	}
+	audit.Record(ctx, v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+		Request:         r,
+		Source:          "service",
+		CorrelationID:   middleware.GetCorrelationID(ctx),
+		UserID:          audit.UserIDFromUUID(userID),
+		ActorAuthMethod: "internal_forward",
+		Action:          "cluster.k8s_proxy.forwarded",
+		ResourceType:    "cluster",
+		ResourceID:      clusterID,
+		ResourceName:    k8sPath,
+		RequestID:       middleware.GetRequestID(ctx),
+		IPAddress:       middleware.RemoteIPAddr(r),
+		Detail:          detail,
+	}))
+}
+
+// recordForwardedHelmMutationAudit emits the cluster.helm_proxy.forwarded
+// audit row for a mutating helm op (install/upgrade/uninstall/rollback)
+// that crossed the internal cross-pod door (internal_helm.go), attributed
+// to the originating end user. HELM_STATUS is a read and is not audited
+// here. uuid.Nil yields an anonymous row rather than dropping the audit.
+func recordForwardedHelmMutationAudit(r *http.Request, writer any, userID uuid.UUID, clusterID, op, releaseName, namespace string) {
+	v1, ok := writer.(auditWriterV1)
+	if !ok || v1 == nil {
+		return
+	}
+	ctx := context.Background()
+	if r != nil {
+		ctx = r.Context()
+	}
+	resourceName := releaseName
+	if namespace != "" {
+		resourceName = namespace + "/" + releaseName
+	}
+	detail := map[string]any{
+		"op":           op,
+		"release_name": releaseName,
+		"namespace":    namespace,
+		"proxy":        "internal_door",
+	}
+	audit.Record(ctx, v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
+		Request:         r,
+		Source:          "service",
+		CorrelationID:   middleware.GetCorrelationID(ctx),
+		UserID:          audit.UserIDFromUUID(userID),
+		ActorAuthMethod: "internal_forward",
+		Action:          "cluster.helm_proxy.forwarded",
+		ResourceType:    "cluster",
+		ResourceID:      clusterID,
+		ResourceName:    resourceName,
+		RequestID:       middleware.GetRequestID(ctx),
+		IPAddress:       middleware.RemoteIPAddr(r),
+		Detail:          detail,
+	}))
+}
+
 func streamKindFromAction(action string) string {
 	switch action {
 	case "pod.exec.opened":

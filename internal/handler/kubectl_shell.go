@@ -176,14 +176,33 @@ func NewKubectlShellHandler(queries KubectlShellQuerier, bindings KubectlBinding
 }
 
 // effectiveVerbsFor derives the EffectiveVerbs bundle for the operator
-// against this cluster. Uses the rbac.Engine with bindings looked up
-// from the bindings querier. Falls back to read-only on lookup failure
-// (the middleware already proved clusters:update, so we know at least
-// Update is true; the bindings call here is for the more permissive
-// Delete bit).
-func (h *KubectlShellHandler) effectiveVerbsFor(r *http.Request, userID string, clusterID uuid.UUID) kubectl.EffectiveVerbs {
-	v := kubectl.EffectiveVerbs{Read: true, Update: true}
+// against this cluster.
+//
+// SECURITY (H5): a break-glass shell defaults to READ-ONLY
+// (get/list/watch) for every operator. Opening the shell only requires
+// the clusters:update RBAC gate enforced by the route middleware, but a
+// debug session does not need cluster-wide write by default. A
+// write-capable (or cluster-admin) shell is a *deliberate*, audited
+// opt-in: the caller must explicitly request elevation AND hold the
+// matching astronomer RBAC verb.
+//
+//   - elevate=false (default) ........... read-only (get/list/watch)
+//   - elevate=true + clusters:update .... + create/update/patch
+//   - elevate=true + clusters:delete .... + delete
+//   - elevate=true + superuser .......... cluster-admin
+//
+// On bindings-lookup failure we fail CLOSED to read-only — never silently
+// grant write.
+func (h *KubectlShellHandler) effectiveVerbsFor(r *http.Request, userID string, clusterID uuid.UUID, elevate bool) kubectl.EffectiveVerbs {
+	// Least privilege baseline. Opening the shell already proved
+	// clusters:update at the route gate, but read-only is all a default
+	// debug session gets.
+	v := kubectl.EffectiveVerbs{Read: true}
+	if !elevate {
+		return v
+	}
 	if h.Bindings == nil || h.RBACEngine == nil {
+		// Can't prove the elevation RBAC — stay read-only.
 		return v
 	}
 	bindings, err := h.Bindings.GetUserBindings(r.Context(), userID)
@@ -193,6 +212,11 @@ func (h *KubectlShellHandler) effectiveVerbsFor(r *http.Request, userID string, 
 	if h.RBACEngine.CheckSuperuser(bindings) {
 		v.Superuser = true
 		return v
+	}
+	// Elevation requires the matching write RBAC; without clusters:update
+	// the request stays read-only even though it was asked for.
+	if h.RBACEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil) {
+		v.Update = true
 	}
 	if h.RBACEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbDelete, clusterID, uuid.Nil) {
 		v.Delete = true
@@ -225,7 +249,16 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	verbs := h.effectiveVerbsFor(r, userID.String(), clusterID)
+	// SECURITY (H5): the shell defaults to read-only. A write-capable /
+	// cluster-admin shell is an explicit, audited opt-in (elevate=true)
+	// that still requires the matching astronomer RBAC verb. An empty /
+	// malformed body keeps the default least-privilege posture.
+	elevate := parseShellElevation(r)
+	verbs := h.effectiveVerbsFor(r, userID.String(), clusterID, elevate)
+	// A caller can ask to elevate without holding the RBAC; in that case
+	// effectiveVerbsFor returns read-only. Record what was actually
+	// granted, not what was requested.
+	elevated := verbs.Superuser || verbs.Update || verbs.Delete
 
 	info, err := kubectl.Open(r.Context(), h.Deps, kubectl.OpenRequest{
 		UserID:    userID,
@@ -239,9 +272,11 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recordAudit(r, h.Queries, "kubectl.session.opened", "cluster", clusterID.String(), "", map[string]any{
-		"session_id": info.ID.String(),
-		"superuser":  verbs.Superuser,
-		"verbs":      verbs.Verbs(),
+		"session_id":        info.ID.String(),
+		"superuser":         verbs.Superuser,
+		"verbs":             verbs.Verbs(),
+		"elevation_request": elevate,
+		"elevated":          elevated,
 	})
 	RespondJSON(w, http.StatusCreated, info)
 }
@@ -538,11 +573,21 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 			if len(line) > 1024 {
 				line = line[:1024] + "...<truncated>"
 			}
+			// SECURITY (L3): recording must be reliable for an audited
+			// break-glass feature. Rather than silently dropping the row
+			// when the recorder is behind (the old default: case), we
+			// BACK-PRESSURE: block this send until the drainer makes
+			// room. Because onInput runs synchronously in the exec read
+			// loop *before* the keystroke is forwarded to the agent
+			// (see ExecConsumer.proxyToAgent), blocking here throttles
+			// the session — the operator's command can't execute until
+			// it has been queued for the audit log. recordCtx is
+			// cancelled when the WS closes, so a dead drainer can't wedge
+			// the read loop forever.
 			select {
 			case recordCh <- line:
-			default:
-				// Recorder is behind. Dropping a row is preferable to
-				// stalling the operator's shell.
+			case <-recordCtx.Done():
+				return
 			}
 		}
 	}
@@ -658,21 +703,43 @@ func sanitizeRecordedLine(raw []byte) string {
 }
 
 // extractStdinBytes decodes one inbound WS frame into the raw stdin
-// bytes the operator typed (or pasted). The browser sends a JSON
-// envelope `{"type":"stdin"|"input","data":"…"}`; resize/auth frames
-// and anything malformed return ok=false so the recorder ignores them.
+// bytes the operator typed (or pasted).
+//
+// SECURITY (L3): this MUST mirror translateFromFrontend
+// (internal/tunnel/exec_consumer.go) exactly — every frame that gets
+// forwarded to the agent as stdin must also be recorded, or an attacker
+// could evade the audit log by wrapping keystrokes in an unrecognized
+// frame shape. translateFromFrontend forwards as stdin:
+//
+//   - {"type":"stdin"|"input","data":"…"}  → the data string
+//   - any frame that is NOT a recognized control frame
+//     (resize/auth/end/close) → the *raw frame bytes* (the fallback
+//     branch in translateFromFrontend wraps the whole frame as stdin)
+//
+// So the only frames we ignore are the control frames, which never carry
+// executed keystrokes. Everything else is recorded.
 func extractStdinBytes(frame []byte) ([]byte, bool) {
 	var env struct {
 		Type string `json:"type"`
 		Data string `json:"data"`
 	}
 	if err := json.Unmarshal(frame, &env); err != nil {
-		return nil, false
+		// Not valid JSON: translateFromFrontend forwards the raw bytes as
+		// stdin, so we must record them too.
+		return frame, true
 	}
-	if env.Type != "stdin" && env.Type != "input" {
+	switch env.Type {
+	case "stdin", "input":
+		return []byte(env.Data), true
+	case "resize", "auth", "end", "close":
+		// Control frames — never executed as keystrokes.
 		return nil, false
+	default:
+		// Unrecognized type (or empty type): translateFromFrontend's
+		// fallback forwards the whole frame to the agent as stdin, so it
+		// IS executed. Record the raw frame so it can't go unaudited.
+		return frame, true
 	}
-	return []byte(env.Data), true
 }
 
 // logger returns the handler's logger, falling back to slog.Default()
@@ -766,6 +833,34 @@ func (h *KubectlShellHandler) idleTimeout() time.Duration {
 		return h.Deps.IdleTimeout
 	}
 	return 30 * time.Minute
+}
+
+// parseShellElevation reads the opt-in write/elevation flag from the
+// Open request body. The body is optional: an empty or malformed body
+// (or any non-true value) keeps the default least-privilege posture so
+// a normal break-glass shell is read-only. Accepts both an explicit
+// boolean and the privilege-level string the SPA may send.
+func parseShellElevation(r *http.Request) bool {
+	if r.Body == nil {
+		return false
+	}
+	var body struct {
+		Elevate bool   `json:"elevate"`
+		Mode    string `json:"mode"`
+	}
+	// Best-effort: ignore decode errors (empty body, bad JSON) and treat
+	// them as "no elevation requested".
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return false
+	}
+	if body.Elevate {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(body.Mode)) {
+	case "write", "rw", "read-write", "elevated", "admin":
+		return true
+	}
+	return false
 }
 
 // parseShellClusterID extracts and parses the {cluster_id} URL param.

@@ -167,6 +167,48 @@ func TestSetCustomPrivilegeProfileReportsUnknownCapabilities(t *testing.T) {
 	}
 }
 
+// TestNormalizeAgentPrivilegeProfileFailsClosedToViewer is the negative guard
+// for NEW-2: empty or unrecognized privilege profiles must no longer
+// self-report "admin" in the heartbeat capability advertisement. The duplicate
+// normalizer now delegates to the canonical fail-closed implementation, so
+// garbage input resolves to least-privilege viewer.
+func TestNormalizeAgentPrivilegeProfileFailsClosedToViewer(t *testing.T) {
+	for _, in := range []string{"", "   ", "garbage", "root", "ADMIN-ish", "cluster-admin", "superuser"} {
+		if got := normalizeAgentPrivilegeProfile(in); got != "viewer" {
+			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want viewer (must not self-report admin)", in, got)
+		}
+	}
+	// Explicit profiles still resolve so day-2 advertisement is unchanged.
+	explicit := map[string]string{
+		"admin":              "admin",
+		"operator":           "operator",
+		"viewer":             "viewer",
+		"namespace-operator": "namespace-operator",
+		"custom":             "custom",
+	}
+	for in, want := range explicit {
+		if got := normalizeAgentPrivilegeProfile(in); got != want {
+			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestSetGarbagePrivilegeProfileDoesNotAdvertiseAdminCapabilities asserts the
+// observable end-to-end effect: a garbage profile must not advertise the
+// cluster_admin / rbac capability set in the heartbeat.
+func TestSetGarbagePrivilegeProfileDoesNotAdvertiseAdminCapabilities(t *testing.T) {
+	hr := NewHealthReporter(nil, slog.Default(), 30, 60)
+	hr.SetPrivilegeProfile("totally-bogus")
+	if hr.privilegeProfile != "viewer" {
+		t.Fatalf("privilegeProfile = %q, want viewer", hr.privilegeProfile)
+	}
+	for _, forbidden := range []string{"cluster_admin", "rbac"} {
+		if containsString(hr.enabledFeatures, forbidden) {
+			t.Fatalf("enabledFeatures = %+v unexpectedly advertises %q for garbage profile", hr.enabledFeatures, forbidden)
+		}
+	}
+}
+
 func TestSetConnected(t *testing.T) {
 	hr := NewHealthReporter(nil, slog.Default(), 30, 60)
 

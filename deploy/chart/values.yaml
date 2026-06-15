@@ -570,6 +570,18 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
+  # The management-cluster agent ClusterRole is an explicit allowlist (see
+  # templates/serviceaccount.yaml) rather than an unconditional */*/* grant.
+  # extraRules / extraNonResourceRules are ADDITIVE escape hatches so operators
+  # can grant access to platform add-ons this chart does not ship, without
+  # editing the template. Each entry is a standard RBAC PolicyRule.
+  # Example:
+  #   extraRules:
+  #     - apiGroups: ["example.com"]
+  #       resources: ["widgets"]
+  #       verbs: ["get", "list", "watch"]
+  extraRules: []
+  extraNonResourceRules: []
 
 # =============================================================================
 # Pod-level scheduling

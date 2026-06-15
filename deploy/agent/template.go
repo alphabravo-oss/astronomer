@@ -215,9 +215,12 @@ const operatorRBACRulesYAML = `  # Common workload operations without cluster-ad
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # RBAC objects are read-only here: granting write would let the operator
+  # profile self-escalate by binding broader roles. RBAC write belongs to the
+  # explicit admin profile only.
   - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch"]
@@ -246,9 +249,11 @@ const namespaceOperatorRBACRulesYAML = `  # Namespace-scoped workload operations
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # RBAC objects are read-only: write would allow self-escalation within the
+  # namespace. RBAC write belongs to the explicit admin profile only.
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`
+    verbs: ["get", "list", "watch"]`
 
 const customRBACRulesYAML = `  # No default Kubernetes permissions. Bind explicit custom RBAC outside this manifest.
   []`

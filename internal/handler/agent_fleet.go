@@ -23,6 +23,10 @@ import (
 )
 
 type AgentFleetQuerier interface {
+	// GetUserByID resolves the calling user for the superuser gate on the
+	// cluster-admin posture report (E3). The production *sqlc.Queries
+	// satisfies it; narrow test fakes implement it directly.
+	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	CountClusters(ctx context.Context) (int64, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)

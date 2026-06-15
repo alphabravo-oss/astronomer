@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -114,6 +115,16 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 	// Defense-in-depth in-band marker proving sibling-pod origin; the
 	// receiver rejects requests without it even with a valid PSK.
 	req.Header.Set(tunnel.InternalSourceHeader, tunnel.InternalSourceValue)
+	// Thread the originating user so the owner pod emits a user-attributed
+	// cluster.helm_proxy.forwarded audit row for the mutation it performs
+	// on our behalf (see k8s_requester.go for the rationale).
+	if uid := middleware.AuthenticatedUserUUID(ctx); uid.Valid {
+		if s, err := uid.Value(); err == nil {
+			if str, ok := s.(string); ok {
+				req.Header.Set(tunnel.InternalForwardedUserHeader, str)
+			}
+		}
+	}
 
 	httpResp, err := internalHelmForwardClient.Do(req)
 	if err != nil {

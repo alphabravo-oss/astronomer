@@ -64,6 +64,35 @@ type InternalHelmHandler struct {
 	hub *Hub
 	psk string
 	log *slog.Logger
+	// audit is the optional audit-log writer. When set, every mutating
+	// helm op (install/upgrade/uninstall/rollback) forwarded through this
+	// door emits a cluster.helm_proxy.forwarded row attributed to the
+	// originating user (threaded via InternalForwardedUserHeader). nil
+	// leaves the door functional but unaudited (narrow tests only).
+	audit any
+}
+
+// SetAuditWriter wires the audit-log writer used to record a
+// user-attributed cluster.helm_proxy.forwarded row for every mutating
+// helm op that crosses this internal door. Safe to call with nil.
+func (h *InternalHelmHandler) SetAuditWriter(w any) {
+	if h == nil {
+		return
+	}
+	h.audit = w
+}
+
+// internalHelmMutatingOp reports whether a forwarded helm message type
+// mutates cluster state. HELM_STATUS is a read; everything else this door
+// accepts (install/upgrade/uninstall/rollback) mutates.
+func internalHelmMutatingOp(t protocol.MessageType) bool {
+	switch t {
+	case protocol.MsgHelmInstall, protocol.MsgHelmUpgrade,
+		protocol.MsgHelmUninstall, protocol.MsgHelmRollback:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewInternalHelmHandler builds the handler. Empty psk 503s every call
@@ -177,6 +206,15 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf(`{"error":"decode agent response: %s"}`, err.Error()), http.StatusBadGateway)
 		return
 	}
+	// Audit the mutation, attributed to the originating user the calling
+	// pod threaded through the door — the helm counterpart to
+	// internal_k8s.go's cluster.k8s_proxy.forwarded row. Best-effort;
+	// reads (HELM_STATUS) are not audited here.
+	if h.audit != nil && internalHelmMutatingOp(req.MsgType) {
+		recordForwardedHelmMutationAudit(r, h.audit, forwardedUserUUID(r), clusterID,
+			string(req.MsgType), req.Payload.ReleaseName, req.Payload.Namespace)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)

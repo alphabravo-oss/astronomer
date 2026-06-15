@@ -45,6 +45,13 @@ const (
 	// ResourceClusters + VerbUpdate so an operator who can already update
 	// a cluster can apply a template to one of its namespaces.
 	ResourceNetworkPolicies Resource = "network_policies"
+	// ResourceCustomResources gates k8s-proxy access to custom resources
+	// (CRDs / arbitrary non-core apigroups under apis/<group>/<version>/...).
+	// Previously such requests collapsed to the generic ResourceClusters
+	// permission, so per-resource RBAC could not distinguish CRD access from
+	// any other cluster read/write. Mapping them to a dedicated resource lets
+	// operators grant or withhold CRD access deliberately (F2 / M3).
+	ResourceCustomResources Resource = "custom_resources"
 	ResourceWildcard        Resource = "*"
 )
 
@@ -77,6 +84,7 @@ var canonicalResources = []Resource{
 	ResourceClusterTemplates,
 	ResourceFleetOperations,
 	ResourceNetworkPolicies,
+	ResourceCustomResources,
 	ResourceWildcard,
 }
 

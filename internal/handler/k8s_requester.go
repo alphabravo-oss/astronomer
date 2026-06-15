@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -335,6 +336,19 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 	// Defense-in-depth in-band marker proving sibling-pod origin; the
 	// receiver rejects requests without it even with a valid PSK.
 	req.Header.Set(tunnel.InternalSourceHeader, tunnel.InternalSourceValue)
+	// Thread the originating user's identity so the owner pod can emit a
+	// user-attributed cluster.k8s_proxy.forwarded audit row for the
+	// mutation it performs on our behalf. The calling pod ran the auth
+	// middleware, so ctx carries the authenticated user; unauthenticated
+	// internal callers (server reconcilers) leave it empty and the row is
+	// recorded with a NULL actor rather than being dropped.
+	if uid := middleware.AuthenticatedUserUUID(ctx); uid.Valid {
+		if s, err := uid.Value(); err == nil {
+			if str, ok := s.(string); ok {
+				req.Header.Set(tunnel.InternalForwardedUserHeader, str)
+			}
+		}
+	}
 
 	httpResp, err := internalK8sForwardClient.Do(req)
 	if err != nil {

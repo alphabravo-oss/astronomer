@@ -32,6 +32,14 @@ type fakeAgentFleetQuerier struct {
 	operations map[uuid.UUID][]sqlc.AgentLifecycleOperation
 	created    []sqlc.AgentLifecycleOperation
 	idempotent []sqlc.CreateAgentLifecycleOperationIdempotentParams
+	users      map[uuid.UUID]sqlc.User
+}
+
+func (f *fakeAgentFleetQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
+	if u, ok := f.users[id]; ok {
+		return u, nil
+	}
+	return sqlc.User{}, errString("user not found")
 }
 
 type fakeAgentFleetLiveRequester struct {

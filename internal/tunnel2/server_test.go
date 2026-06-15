@@ -191,8 +191,12 @@ func TestEndToEnd_RemotedialerListPods(t *testing.T) {
 		t.Fatalf("session never came online")
 	}
 
-	// 5. Now talk to the cluster as if we were any handler.
-	client, err := remoteproxy.K8sClient(rs, clusterID.String())
+	// 5. Now talk to the cluster as if we were any handler. The fake API
+	//    server uses an ephemeral httptest cert, so this end-to-end plumbing
+	//    test opts into the explicit, non-production-only insecure mode rather
+	//    than minting a CA — TLS verification itself is covered by the
+	//    remoteproxy package tests.
+	client, err := remoteproxy.K8sClientWithOptions(rs, clusterID.String(), remoteproxy.TLSOptions{Insecure: true, Production: false})
 	if err != nil {
 		t.Fatalf("K8sClient: %v", err)
 	}

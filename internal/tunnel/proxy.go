@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
 
 const (
@@ -307,24 +308,6 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 	}
 }
 
-// isClientOnlyHeader reports whether a request header from the dashboard /
-// browser should be stripped before forwarding the request to the kubernetes
-// API. Authorization is the most important one — see buildK8sRequestPayload.
-func isClientOnlyHeader(name string) bool {
-	lower := strings.ToLower(name)
-	switch lower {
-	case "authorization", "cookie", "host":
-		return true
-	}
-	if strings.HasPrefix(lower, "x-forwarded-") {
-		return true
-	}
-	if strings.HasPrefix(lower, "impersonate-") {
-		return true
-	}
-	return false
-}
-
 // isHopByHopHeader reports whether name is an HTTP/1.1 hop-by-hop header
 // that should not be forwarded. See RFC 7230 §6.1.
 func isHopByHopHeader(name string) bool {
@@ -358,21 +341,19 @@ func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error
 		path = path + "?" + r.URL.RawQuery
 	}
 
-	// Forward only headers that make sense at the kubernetes API. Drop:
-	//   - Authorization: this is the caller's Astronomer JWT, not a k8s
-	//     bearer; client-go's transport refuses to overwrite it, so the
-	//     agent's SA token is bypassed and k8s returns 401.
-	//   - Cookie / Host / X-Forwarded-* : browser/proxy headers that are
-	//     either wrong (Host) or noise at the upstream.
-	//   - Impersonate-* : user-controlled Kubernetes impersonation headers.
-	//     If we add impersonation later, the server must derive those values
-	//     from Astronomer RBAC, not trust inbound client headers.
+	// Forward only the small allowlist of headers that the kubernetes API
+	// actually needs (see proxyhdr.ShouldForwardRequestHeader). Everything
+	// else is dropped — the allowlist fails closed against header-spoofing,
+	// including Authorization (caller's Astronomer JWT, not a k8s bearer),
+	// Cookie/Host/X-Forwarded-*, user-controlled Impersonate-* headers, and
+	// the front-proxy identity headers X-Remote-User/X-Remote-Group/
+	// X-Remote-Extra-* honored by clusters using --requestheader auth.
 	headers := make(map[string]string)
 	for key, values := range r.Header {
 		if len(values) == 0 {
 			continue
 		}
-		if isClientOnlyHeader(key) {
+		if !proxyhdr.ShouldForwardRequestHeader(key) {
 			continue
 		}
 		headers[key] = values[0]

@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
 
 // saTokenPath is the standard projected service-account token mount.
@@ -186,7 +187,7 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 		return p.sendStreamEnd(sendFn, msg.StreamID, fmt.Errorf("new request: %w", err))
 	}
 	for k, v := range req.Headers {
-		if isK8sClientOnlyHeader(k) {
+		if !proxyhdr.ShouldForwardRequestHeader(k) {
 			continue
 		}
 		httpReq.Header.Set(k, v)
@@ -375,7 +376,7 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 	}
 
 	for k, v := range req.Headers {
-		if isK8sClientOnlyHeader(k) {
+		if !proxyhdr.ShouldForwardRequestHeader(k) {
 			continue
 		}
 		httpReq.Header.Set(k, v)
@@ -399,19 +400,4 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 		respHeaders[k] = resp.Header.Get(k)
 	}
 	return respBody, resp.StatusCode, respHeaders, nil
-}
-
-func isK8sClientOnlyHeader(name string) bool {
-	lower := strings.ToLower(name)
-	switch lower {
-	case "authorization", "cookie", "host":
-		return true
-	}
-	if strings.HasPrefix(lower, "x-forwarded-") {
-		return true
-	}
-	if strings.HasPrefix(lower, "impersonate-") {
-		return true
-	}
-	return false
 }

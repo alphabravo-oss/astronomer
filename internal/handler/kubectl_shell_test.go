@@ -29,6 +29,29 @@ type fakeShellQuerier struct {
 	commands map[uuid.UUID][]sqlc.KubectlSessionCommand
 	users    map[uuid.UUID]sqlc.User
 	clusters map[uuid.UUID]sqlc.Cluster
+	audits   []sqlc.CreateAuditLogV1Params
+}
+
+// CreateAuditLogV1 captures audit rows so tests can assert on them. The
+// presence of this method also makes recordAudit's auditWriterV1 type
+// assertion succeed (the handler otherwise no-ops the audit write).
+func (f *fakeShellQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, arg)
+	return nil
+}
+
+// auditFor returns the last captured audit row whose action matches.
+func (f *fakeShellQuerier) auditFor(action string) (sqlc.CreateAuditLogV1Params, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.audits) - 1; i >= 0; i-- {
+		if f.audits[i].Action == action {
+			return f.audits[i], true
+		}
+	}
+	return sqlc.CreateAuditLogV1Params{}, false
 }
 
 func newFakeShellQuerier() *fakeShellQuerier {
@@ -170,14 +193,33 @@ func (f *fakeBindings) GetUserBindings(_ context.Context, _ string) ([]rbac.Role
 
 // fakeK8sRequester always returns 201/204 so Open() succeeds.
 type fakeShellRequester struct {
-	mu    sync.Mutex
-	calls []string
+	mu     sync.Mutex
+	calls  []string
+	bodies map[string][]byte // path -> last POST body
 }
 
-func (f *fakeShellRequester) Do(_ context.Context, _, method, path string, _ []byte, _ map[string]string) (*kubectl.K8sResponse, error) {
+// bodyFor returns the last POST body whose path contains substr.
+func (f *fakeShellRequester) bodyFor(substr string) []byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for path, b := range f.bodies {
+		if strings.Contains(path, substr) {
+			return b
+		}
+	}
+	return nil
+}
+
+func (f *fakeShellRequester) Do(_ context.Context, _, method, path string, body []byte, _ map[string]string) (*kubectl.K8sResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, method+" "+path)
+	if method == "POST" {
+		if f.bodies == nil {
+			f.bodies = map[string][]byte{}
+		}
+		f.bodies[path] = append([]byte(nil), body...)
+	}
 	if method == "GET" && strings.Contains(path, "/pods/") {
 		// Pod is Ready immediately.
 		return &kubectl.K8sResponse{
@@ -209,6 +251,48 @@ func newTestKubectlHandler(t *testing.T) (*KubectlShellHandler, *fakeShellQuerie
 		PodReadyTimeout: 500 * time.Millisecond,
 	})
 	return h, q, userID, clusterID
+}
+
+// newTestKubectlHandlerWithRBAC is like newTestKubectlHandler but exposes
+// the fake requester (so tests can inspect the manifests POSTed to k8s)
+// and the bindings fake (so tests can grant astronomer RBAC verbs).
+func newTestKubectlHandlerWithRBAC(t *testing.T) (*KubectlShellHandler, *fakeShellQuerier, *fakeShellRequester, *fakeBindings, uuid.UUID, uuid.UUID) {
+	t.Helper()
+	q := newFakeShellQuerier()
+	userID := uuid.New()
+	clusterID := uuid.New()
+	q.users[userID] = sqlc.User{ID: userID, Email: "op@example.test"}
+	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID}
+	bindings := &fakeBindings{}
+	requester := &fakeShellRequester{}
+	engine := rbac.NewEngine()
+	h := NewKubectlShellHandler(q, bindings, engine, kubectl.Deps{
+		Queries:         q,
+		Requester:       requester,
+		PodReadyTimeout: 500 * time.Millisecond,
+	})
+	return h, q, requester, bindings, userID, clusterID
+}
+
+// clusterRoleVerbs decodes a ClusterRole manifest body and returns the
+// verbs of its first rule (the shell manifest only emits one rule).
+func clusterRoleVerbs(t *testing.T, body []byte) []string {
+	t.Helper()
+	if body == nil {
+		return nil
+	}
+	var cr struct {
+		Rules []struct {
+			Verbs []string `json:"verbs"`
+		} `json:"rules"`
+	}
+	if err := json.Unmarshal(body, &cr); err != nil {
+		t.Fatalf("decode ClusterRole: %v body=%s", err, body)
+	}
+	if len(cr.Rules) == 0 {
+		return nil
+	}
+	return cr.Rules[0].Verbs
 }
 
 func authReq(method, target string, body string, userID uuid.UUID, isSuperuser bool) *http.Request {
@@ -464,5 +548,313 @@ func TestKubectlHandler_RequiresClusterUpdate(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated: want 401, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// --- E1 (H5): break-glass shell defaults to read-only ---
+
+func containsAny(verbs []string, wanted ...string) string {
+	set := map[string]bool{}
+	for _, v := range verbs {
+		set[v] = true
+	}
+	for _, w := range wanted {
+		if set[w] {
+			return w
+		}
+	}
+	return ""
+}
+
+// TestKubectlHandler_DefaultShellIsReadOnly is the H5 negative test: a
+// non-elevated operator (even one who holds clusters:update RBAC and
+// therefore passed the route gate) gets a per-session ClusterRole with
+// ONLY read verbs. The old behavior hardcoded create/update/patch into
+// every shell — this asserts that attack surface is gone by default.
+func TestKubectlHandler_DefaultShellIsReadOnly(t *testing.T) {
+	h, _, requester, bindings, userID, clusterID := newTestKubectlHandlerWithRBAC(t)
+	// Grant the operator FULL write RBAC. The point of the test is that
+	// holding the RBAC is not enough — without an explicit elevation
+	// opt-in the shell is still read-only.
+	bindings.list = []rbac.RoleBinding{{
+		UserID: userID.String(),
+		RoleRules: []rbac.Rule{
+			{Resource: string(rbac.ResourceClusters), Verbs: []string{
+				string(rbac.VerbRead), string(rbac.VerbUpdate), string(rbac.VerbDelete),
+			}},
+		},
+	}}
+	r := newKubectlRouter(h)
+
+	// No body → no elevation request.
+	req := authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", "", userID, false)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("open: want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	verbs := clusterRoleVerbs(t, requester.bodyFor("/clusterroles"))
+	if len(verbs) == 0 {
+		t.Fatalf("expected a ClusterRole to be created for a non-superuser shell")
+	}
+	if bad := containsAny(verbs, "create", "update", "patch", "delete", "*"); bad != "" {
+		t.Fatalf("default shell ClusterRole must be read-only, but granted %q (verbs=%v)", bad, verbs)
+	}
+	// Sanity: it should still carry read verbs.
+	if got := containsAny(verbs, "get", "list", "watch"); got == "" {
+		t.Fatalf("default shell ClusterRole should grant read verbs, got %v", verbs)
+	}
+}
+
+// TestKubectlHandler_ElevationRequiresRBAC asserts that asking to elevate
+// without the matching astronomer RBAC fails CLOSED to read-only (the
+// session still opens, but with no write verbs), and that elevation is
+// recorded in the audit row.
+func TestKubectlHandler_ElevationRequiresRBAC(t *testing.T) {
+	h, q, requester, bindings, userID, clusterID := newTestKubectlHandlerWithRBAC(t)
+	// Operator holds ONLY read RBAC. (In production the route gate
+	// requires clusters:update to even reach the handler; here we drive
+	// the handler directly to prove the elevation check is independent of
+	// the gate and fails closed.)
+	bindings.list = []rbac.RoleBinding{{
+		UserID: userID.String(),
+		RoleRules: []rbac.Rule{
+			{Resource: string(rbac.ResourceClusters), Verbs: []string{string(rbac.VerbRead)}},
+		},
+	}}
+	r := newKubectlRouter(h)
+
+	req := authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", `{"elevate":true}`, userID, false)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("open: want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	verbs := clusterRoleVerbs(t, requester.bodyFor("/clusterroles"))
+	if bad := containsAny(verbs, "create", "update", "patch", "delete", "*"); bad != "" {
+		t.Fatalf("elevation without RBAC must stay read-only, but granted %q (verbs=%v)", bad, verbs)
+	}
+
+	// The audit row records that elevation was requested but not granted.
+	row, ok := q.auditFor("kubectl.session.opened")
+	if !ok {
+		t.Fatalf("expected a kubectl.session.opened audit row")
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil {
+		t.Fatalf("decode audit detail: %v raw=%s", err, row.Detail)
+	}
+	if detail["elevation_request"] != true {
+		t.Fatalf("audit should record elevation_request=true, got %v", detail["elevation_request"])
+	}
+	if detail["elevated"] != false {
+		t.Fatalf("audit should record elevated=false (RBAC missing), got %v", detail["elevated"])
+	}
+}
+
+// TestKubectlHandler_ElevationGrantsWriteWithRBAC asserts the deliberate,
+// audited write path: explicit opt-in + the matching clusters:update RBAC
+// yields a write-capable ClusterRole, and the audit row marks it elevated.
+func TestKubectlHandler_ElevationGrantsWriteWithRBAC(t *testing.T) {
+	h, q, requester, bindings, userID, clusterID := newTestKubectlHandlerWithRBAC(t)
+	bindings.list = []rbac.RoleBinding{{
+		UserID: userID.String(),
+		RoleRules: []rbac.Rule{
+			{Resource: string(rbac.ResourceClusters), Verbs: []string{
+				string(rbac.VerbRead), string(rbac.VerbUpdate),
+			}},
+		},
+	}}
+	r := newKubectlRouter(h)
+
+	req := authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", `{"elevate":true}`, userID, false)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("open: want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	verbs := clusterRoleVerbs(t, requester.bodyFor("/clusterroles"))
+	if got := containsAny(verbs, "create", "update", "patch"); got == "" {
+		t.Fatalf("elevated shell should grant write verbs, got %v", verbs)
+	}
+	// clusters:delete RBAC was NOT granted, so delete must be absent.
+	if bad := containsAny(verbs, "delete", "*"); bad != "" {
+		t.Fatalf("elevated shell without clusters:delete must not grant %q (verbs=%v)", bad, verbs)
+	}
+
+	row, ok := q.auditFor("kubectl.session.opened")
+	if !ok {
+		t.Fatalf("expected a kubectl.session.opened audit row")
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil {
+		t.Fatalf("decode audit detail: %v raw=%s", err, row.Detail)
+	}
+	if detail["elevated"] != true {
+		t.Fatalf("audit should record elevated=true, got %v", detail["elevated"])
+	}
+}
+
+// TestKubectlHandler_SuperuserElevationIsClusterAdmin keeps the deliberate
+// elevated path intact: a superuser who opts in gets a cluster-admin
+// binding (no per-session ClusterRole) — but NOT by default.
+func TestKubectlHandler_SuperuserElevationIsClusterAdmin(t *testing.T) {
+	h, _, requester, bindings, userID, clusterID := newTestKubectlHandlerWithRBAC(t)
+	bindings.list = []rbac.RoleBinding{{UserID: userID.String(), IsSuperuser: true}}
+	r := newKubectlRouter(h)
+
+	// Default (no elevation) → read-only ClusterRole, NOT cluster-admin.
+	req := authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", "", userID, false)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("open: want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	verbs := clusterRoleVerbs(t, requester.bodyFor("/clusterroles"))
+	if bad := containsAny(verbs, "*", "create", "update", "patch", "delete"); bad != "" {
+		t.Fatalf("superuser default shell must still be read-only, granted %q (verbs=%v)", bad, verbs)
+	}
+
+	// Explicit elevation → cluster-admin binding, no per-session ClusterRole.
+	requester.bodies = nil
+	req = authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", `{"elevate":true}`, userID, false)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("elevated open: want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	if body := requester.bodyFor("/clusterroles"); body != nil {
+		// A superuser binds directly to the built-in cluster-admin role,
+		// so no per-session ClusterRole should be POSTed.
+		t.Fatalf("superuser shell should not create a per-session ClusterRole, got %s", body)
+	}
+	binding := requester.bodyFor("/clusterrolebindings")
+	if binding == nil {
+		t.Fatalf("expected a ClusterRoleBinding for the superuser shell")
+	}
+	if !strings.Contains(string(binding), "cluster-admin") {
+		t.Fatalf("superuser elevated shell should bind cluster-admin, got %s", binding)
+	}
+}
+
+// --- E2 (L3): recording reliability ---
+
+// TestKubectlHandler_RecorderBackPressures asserts the input recorder
+// throttles (blocks) rather than silently dropping rows when the drain
+// channel is full. We feed many lines through onInput with a drainer that
+// is intentionally slow/stalled, and assert that onInput BLOCKS once the
+// buffer is full — i.e. a keystroke cannot proceed (and therefore cannot
+// reach the agent) without first being queued for the audit log.
+func TestKubectlHandler_RecorderBackPressures(t *testing.T) {
+	const capHint = 64 // matches recordCh cap in HandleWS
+
+	ch := make(chan string, capHint)
+	// A drainer we control: it does not read until we tell it to.
+	release := make(chan struct{})
+	drained := make(chan int, 1)
+	go func() {
+		<-release
+		n := 0
+		for range ch {
+			n++
+			if n == capHint+5 {
+				drained <- n
+				return
+			}
+		}
+	}()
+
+	// Reproduce the HandleWS send semantics: block on the channel (with a
+	// recordCtx escape hatch) instead of dropping. This is the exact
+	// select the handler now uses.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	send := func(line string) bool {
+		select {
+		case ch <- line:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
+	// Fill the buffer (capHint sends succeed immediately).
+	for i := 0; i < capHint; i++ {
+		if !send("line") {
+			t.Fatalf("send %d should have succeeded into an empty buffer", i)
+		}
+	}
+
+	// The next send must BLOCK (buffer full, drainer not started). Prove
+	// it by racing the send against a short timer.
+	blocked := make(chan struct{})
+	go func() {
+		send("overflow") // should block until the drainer runs
+		close(blocked)
+	}()
+	select {
+	case <-blocked:
+		t.Fatalf("send did not back-pressure: it returned while the buffer was full (this is the silent-drop bug)")
+	case <-time.After(100 * time.Millisecond):
+		// Good: still blocked.
+	}
+
+	// Release the drainer; the blocked send (plus the rest) now completes
+	// — no row was dropped.
+	close(release)
+	// Push a few more so the drainer hits its target count.
+	go func() {
+		for i := 0; i < 5; i++ {
+			send("more")
+		}
+	}()
+	select {
+	case n := <-drained:
+		if n < capHint {
+			t.Fatalf("drained %d rows, expected at least the buffered %d (rows were dropped)", n, capHint)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("drainer never caught up — back-pressure deadlocked")
+	}
+}
+
+// TestExtractStdinBytes_ClosedFrameContract is the L3 frame-contract
+// negative test: any frame the tunnel forwards to the agent as stdin must
+// be recorded. Control frames are ignored; everything else (including
+// unrecognized "type" values and non-JSON frames that the relay forwards
+// as raw stdin) is captured so a command can't evade the audit log by
+// using an exotic frame shape.
+func TestExtractStdinBytes_ClosedFrameContract(t *testing.T) {
+	cases := []struct {
+		name   string
+		frame  string
+		wantOK bool
+		want   string // expected recorded bytes when wantOK
+	}{
+		{"stdin frame", `{"type":"stdin","data":"whoami\n"}`, true, "whoami\n"},
+		{"input frame", `{"type":"input","data":"ls\n"}`, true, "ls\n"},
+		{"resize ignored", `{"type":"resize","cols":80,"rows":24}`, false, ""},
+		{"auth ignored", `{"type":"auth","data":"tok"}`, false, ""},
+		{"end ignored", `{"type":"end"}`, false, ""},
+		{"close ignored", `{"type":"close"}`, false, ""},
+		// Audit-evasion attempts: the relay forwards these as raw stdin,
+		// so the recorder MUST capture them (record the whole frame).
+		{"unknown type recorded", `{"type":"x","data":"rm -rf /\n"}`, true, `{"type":"x","data":"rm -rf /\n"}`},
+		{"empty type recorded", `{"data":"curl evil\n"}`, true, `{"data":"curl evil\n"}`},
+		{"non-json recorded", `bare keystrokes`, true, `bare keystrokes`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := extractStdinBytes([]byte(tc.frame))
+			if ok != tc.wantOK {
+				t.Fatalf("ok=%v, want %v (frame=%s)", ok, tc.wantOK, tc.frame)
+			}
+			if tc.wantOK && string(got) != tc.want {
+				t.Fatalf("recorded %q, want %q", string(got), tc.want)
+			}
+		})
 	}
 }

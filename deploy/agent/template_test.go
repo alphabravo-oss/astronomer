@@ -3,6 +3,8 @@ package agenttemplate
 import (
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestRBACRulesYAMLProfiles(t *testing.T) {
@@ -43,14 +45,14 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 			profile: PrivilegeProfileOperator,
 			want: []string{
 				`pods/exec`,
-				`resources: ["roles", "rolebindings"]`,
+				// RBAC objects are present but read-only (no self-escalation).
+				`resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]`,
+				// Workload mutation verbs remain for day-2 ops.
 				`verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`,
 			},
 			notWant: []string{
 				`resources: ["*"]`,
 				`verbs: ["*"]`,
-				`clusterroles`,
-				`clusterrolebindings`,
 			},
 		},
 		{
@@ -81,6 +83,7 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				`resources: ["namespaces", "nodes"`,
 				`resources: ["customresourcedefinitions"]`,
 				`nonResourceURLs`,
+				// Namespace operator must never reach cluster-scoped RBAC.
 				`clusterroles`,
 				`clusterrolebindings`,
 				`"secrets"`,
@@ -112,6 +115,54 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				if strings.Contains(got, unwanted) {
 					t.Fatalf("profile %s unexpectedly contains %q:\n%s", tt.profile, unwanted, got)
 				}
+			}
+		})
+	}
+}
+
+// TestOperatorProfilesGrantNoRBACWriteVerbs is the negative guard for H6: the
+// operator and namespace-operator profiles must never carry write verbs on
+// rbac.authorization.k8s.io resources (roles/rolebindings/clusterroles/
+// clusterrolebindings). Write access there is a self-escalation primitive and
+// belongs exclusively to the explicit admin profile.
+func TestOperatorProfilesGrantNoRBACWriteVerbs(t *testing.T) {
+	type rbacRule struct {
+		APIGroups []string `yaml:"apiGroups"`
+		Resources []string `yaml:"resources"`
+		Verbs     []string `yaml:"verbs"`
+	}
+
+	writeVerbs := map[string]bool{
+		"create": true, "update": true, "patch": true, "delete": true,
+		"deletecollection": true, "*": true,
+	}
+
+	for _, profile := range []string{PrivilegeProfileOperator, PrivilegeProfileNamespaceOperator} {
+		t.Run(profile, func(t *testing.T) {
+			var rules []rbacRule
+			if err := yaml.Unmarshal([]byte(RBACRulesYAML(profile)), &rules); err != nil {
+				t.Fatalf("parse rules for %q: %v", profile, err)
+			}
+			sawRBAC := false
+			for _, r := range rules {
+				isRBAC := false
+				for _, g := range r.APIGroups {
+					if g == "rbac.authorization.k8s.io" || g == "*" {
+						isRBAC = true
+					}
+				}
+				if !isRBAC {
+					continue
+				}
+				sawRBAC = true
+				for _, v := range r.Verbs {
+					if writeVerbs[v] {
+						t.Fatalf("profile %q grants write verb %q on RBAC resources %v (self-escalation primitive)", profile, v, r.Resources)
+					}
+				}
+			}
+			if !sawRBAC {
+				t.Fatalf("profile %q has no rbac.authorization.k8s.io rule; expected read-only RBAC access", profile)
 			}
 		})
 	}
