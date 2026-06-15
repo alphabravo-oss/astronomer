@@ -362,19 +362,28 @@ export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resou
     return (
       <div className="space-y-6">
         {kindSpecific}
-        <GenericOverview obj={obj} resourceType={resourceType} />
+        {/* Tailored overview already summarises status; skip the generic dump. */}
+        <GenericOverview obj={obj} resourceType={resourceType} showStatus={false} />
       </div>
     );
   }
 
-  return <GenericOverview obj={obj} resourceType={resourceType} />;
+  return <GenericOverview obj={obj} resourceType={resourceType} showStatus />;
 }
 
-function GenericOverview({ obj, resourceType }: { obj?: K8sObject; resourceType: string }) {
+function GenericOverview({ obj, resourceType, showStatus }: { obj?: K8sObject; resourceType: string; showStatus?: boolean }) {
   const meta = obj?.metadata;
   if (!meta) {
     return <p className="text-sm text-muted-foreground">No data.</p>;
   }
+
+  // Top-level status scalars — surfaces .status for arbitrary CRs / unmapped
+  // kinds that have no tailored overview. Conditions live in their own tab.
+  const statusEntries = showStatus
+    ? (Object.entries(asRecord(obj?.status))
+        .filter(([k, v]) => k !== 'conditions' && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'))
+        .map(([k, v]) => [k, String(v)] as [string, string]))
+    : [];
 
   const metadataEntries: Array<[string, string]> = [];
   if (meta.name) metadataEntries.push(['name', meta.name]);
@@ -429,6 +438,10 @@ function GenericOverview({ obj, resourceType }: { obj?: K8sObject; resourceType:
       )}
 
       {/* Conditions moved to a dedicated tab (ConditionsTab) — Rancher-style. */}
+
+      {statusEntries.length > 0 && (
+        <Section title="Status"><KeyValueTable entries={statusEntries} /></Section>
+      )}
 
       {dataEntries.length > 0 && (
         <Section title="Data">

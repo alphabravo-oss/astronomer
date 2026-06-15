@@ -240,6 +240,23 @@ describe('ResourceOverview kind-specific branches', () => {
     expect(screen.getByText('Parameters')).toBeInTheDocument();
   });
 
+  it('surfaces top-level status scalars for an unmapped/custom kind', () => {
+    render(
+      <ResourceOverview
+        resourceType="widgets"
+        obj={{
+          metadata: { name: 'w1', namespace: 'default' },
+          status: { phase: 'Ready', observedGeneration: 3, conditions: [{ type: 'Ready', status: 'True' }] },
+        } as never}
+      />
+    );
+    // Generic Status section renders scalar status fields (not conditions).
+    expect(screen.getByText('Status')).toBeInTheDocument();
+    expect(screen.getByText('phase')).toBeInTheDocument();
+    expect(screen.getByText('Ready')).toBeInTheDocument();
+    expect(screen.getByText('observedGeneration')).toBeInTheDocument();
+  });
+
   it('masks secret data values', () => {
     render(
       <ResourceOverview
