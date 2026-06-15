@@ -7,6 +7,7 @@ import { useWorkload, useWorkloadPods, useWorkloadMetrics } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
+import { WorkloadActions } from '@/components/workloads/workload-actions';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Pod } from '@/types';
@@ -155,10 +156,18 @@ export default function WorkloadDetailPage() {
               <span>Cluster: {workload.clusterName}</span>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-4 text-sm">
             <span className="text-muted-foreground">
               Ready: <span className={cn('font-mono font-medium', workload.status === 'Running' ? 'text-status-success' : 'text-status-warning')}>{workload.ready}</span>
             </span>
+            <WorkloadActions
+              clusterId={clusterId}
+              kind={workload.kind}
+              namespace={workload.namespace}
+              name={workload.name}
+              replicas={workload.replicas}
+              onDeleted={() => router.push(`/dashboard/clusters/${clusterId}/${kind.toLowerCase()}s`)}
+            />
           </div>
         </div>
       </div>

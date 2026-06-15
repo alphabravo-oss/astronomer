@@ -130,6 +130,38 @@ export function getResourceDef(resourceType: string): K8sResourceDef | undefined
   return resourceDefs[resourceType];
 }
 
+/**
+ * Canonical K8s Kind (PascalCase, e.g. "Deployment") → resourceType (the
+ * lowercase-plural route key, e.g. "deployments"). Single source of truth for
+ * the detail/list/actions surfaces. Unknown kinds fall back to a naive plural.
+ */
+export const KIND_TO_RESOURCE_TYPE: Record<string, string> = {
+  Pod: 'pods',
+  Service: 'services',
+  ConfigMap: 'configmaps',
+  Secret: 'secrets',
+  Deployment: 'deployments',
+  StatefulSet: 'statefulsets',
+  DaemonSet: 'daemonsets',
+  ReplicaSet: 'replicasets',
+  Job: 'jobs',
+  CronJob: 'cronjobs',
+  Ingress: 'ingresses',
+  PersistentVolume: 'persistentvolumes',
+  PersistentVolumeClaim: 'persistentvolumeclaims',
+  Node: 'nodes',
+  Namespace: 'namespaces',
+};
+
+export function kindToResourceType(kind: string): string {
+  return KIND_TO_RESOURCE_TYPE[kind] ?? `${kind.toLowerCase()}s`;
+}
+
+/** Workload kinds whose replica count can be scaled via the scale subresource. */
+export const WORKLOAD_SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
+/** Workload kinds that support a rollout restart (pod-template annotation bump). */
+export const WORKLOAD_RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
+
 // ── Custom resource (CRD instance) helpers (GATE C) ──
 //
 // ponytail: arbitrary CRs don't fit the static resourceDefs map (group/version/

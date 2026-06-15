@@ -48,7 +48,7 @@ import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
-import { k8sResourcePath, detailHref } from '@/lib/k8s-paths';
+import { k8sResourcePath, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
 import { usePermissionDecision, canonicalPermissionResource } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -773,12 +773,6 @@ const genericColumnMap: Record<string, Column<GenericK8sResource>[]> = {
   replicasets: replicaSetColumns,
 };
 
-const WORKLOAD_SCALABLE_KINDS = ['Deployment', 'StatefulSet'];
-const WORKLOAD_KIND_TO_RESOURCE_TYPE: Record<string, string> = {
-  Deployment: 'deployments',
-  StatefulSet: 'statefulsets',
-  DaemonSet: 'daemonsets',
-};
 const WORKLOAD_KIND_TO_TEMPLATE: Record<string, string> = {
   Deployment: 'deployment',
   StatefulSet: 'statefulset',
@@ -1342,7 +1336,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
       key: 'actions',
       header: '',
       accessor: (row) => {
-        const resType = WORKLOAD_KIND_TO_RESOURCE_TYPE[row.kind] || 'deployments';
+        const resType = kindToResourceType(row.kind);
         const execDenied = firstDeniedDecision(podPermissions.read, podPermissions.exec);
         const logsDenied = firstDeniedDecision(podPermissions.read, podPermissions.logs);
         const items: ActionMenuItem[] = [
@@ -1509,7 +1503,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
             return;
           }
           if (deleteTarget) {
-            const resType = WORKLOAD_KIND_TO_RESOURCE_TYPE[deleteTarget.kind] || 'deployments';
+            const resType = kindToResourceType(deleteTarget.kind);
             k8sDeleteMut.mutate(
               { clusterId, path: k8sResourcePath(resType, deleteTarget.name, deleteTarget.namespace) },
               { onSuccess: () => setDeleteTarget(null) }

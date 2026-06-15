@@ -9,7 +9,13 @@ import { YamlPanel } from '@/components/ui/yaml-view-dialog';
 import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
 import { PodTerminal } from '@/components/workloads/pod-terminal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { detailHref, getResourceDef } from '@/lib/k8s-paths';
+import {
+  detailHref,
+  KIND_TO_RESOURCE_TYPE,
+  WORKLOAD_SCALABLE_KINDS,
+  WORKLOAD_RESTARTABLE_KINDS,
+} from '@/lib/k8s-paths';
+import { WorkloadActions } from '@/components/workloads/workload-actions';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Pod } from '@/types';
 import { Loader2, ArrowLeft } from 'lucide-react';
@@ -64,6 +70,8 @@ interface K8sObject {
   spec?: {
     nodeName?: string;
     containers?: ContainerSpec[];
+    // Workloads (Deployment/StatefulSet/ReplicaSet)
+    replicas?: number;
     // Service
     type?: string;
     clusterIP?: string;
@@ -145,6 +153,19 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
             {created && <span>Age: {formatRelativeTime(created)}</span>}
           </div>
         </div>
+        {/* Workload management actions, once the object (and its real Kind) has
+            loaded. namespace is always set for these kinds. */}
+        {o?.kind && namespace &&
+          (WORKLOAD_SCALABLE_KINDS.includes(o.kind) || WORKLOAD_RESTARTABLE_KINDS.includes(o.kind)) && (
+            <WorkloadActions
+              clusterId={clusterId}
+              kind={o.kind}
+              namespace={namespace}
+              name={name}
+              replicas={o.spec?.replicas ?? 0}
+              onDeleted={() => router.back()}
+            />
+          )}
       </div>
 
       {/* Tabs */}
@@ -275,19 +296,17 @@ function KeyValueTable({ entries, mask }: { entries: Array<[string, string]>; ma
   if (entries.length === 0) {
     return <p className="text-xs text-muted-foreground">None</p>;
   }
+  // Definition grid (dl/dt/dd, not a bare HTML table): even rows with subtle
+  // dividers so key/value pairs read cleanly inside the section cards.
   return (
-    <Table>
-      <TableBody>
-        {entries.map(([k, v]) => (
-          <TableRow key={k}>
-            <TableCell className="font-mono text-xs text-muted-foreground align-top w-1/3">{k}</TableCell>
-            <TableCell className="font-mono text-xs text-foreground break-all">
-              {mask ? '••••••••' : v}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <dl className="divide-y divide-border/60 text-xs">
+      {entries.map(([k, v]) => (
+        <div key={k} className="grid grid-cols-[minmax(0,12rem)_1fr] gap-4 py-1.5 first:pt-0 last:pb-0">
+          <dt className="font-mono text-muted-foreground break-all">{k}</dt>
+          <dd className="font-mono text-foreground break-all">{mask ? '••••••••' : v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -685,23 +704,6 @@ function ResourceEvents({ clusterId, namespace, name, kind }: {
 //   - pods (down) for the workload kinds that already have useWorkloadPods.
 // Everything else is out of scope (that's a later gate).
 
-const KIND_TO_RESOURCE_TYPE: Record<string, string> = {
-  Pod: 'pods',
-  Service: 'services',
-  ConfigMap: 'configmaps',
-  Secret: 'secrets',
-  Deployment: 'deployments',
-  StatefulSet: 'statefulsets',
-  DaemonSet: 'daemonsets',
-  ReplicaSet: 'replicasets',
-  Job: 'jobs',
-  CronJob: 'cronjobs',
-  Ingress: 'ingresses',
-  PersistentVolume: 'persistentvolumes',
-  PersistentVolumeClaim: 'persistentvolumeclaims',
-  Node: 'nodes',
-  Namespace: 'namespaces',
-};
 
 /** Workload kinds whose pods we can list via the existing hook. */
 const WORKLOAD_POD_KINDS: Record<string, string> = {
@@ -709,13 +711,6 @@ const WORKLOAD_POD_KINDS: Record<string, string> = {
   StatefulSet: 'statefulset',
   DaemonSet: 'daemonset',
 };
-
-function resolveResourceType(kind: string): string | undefined {
-  if (KIND_TO_RESOURCE_TYPE[kind] && getResourceDef(KIND_TO_RESOURCE_TYPE[kind])) {
-    return KIND_TO_RESOURCE_TYPE[kind];
-  }
-  return undefined;
-}
 
 function RelatedResources({ clusterId, namespace, name, kind, obj }: {
   clusterId: string; namespace?: string; name: string; kind: string; obj?: K8sObject;
@@ -743,7 +738,7 @@ function RelatedResources({ clusterId, namespace, name, kind, obj }: {
             </TableHeader>
             <TableBody>
               {owners.map((ref) => {
-                const ownerType = resolveResourceType(ref.kind);
+                const ownerType = KIND_TO_RESOURCE_TYPE[ref.kind];
                 // ponytail: owners share the object's namespace (controller refs always do).
                 return (
                   <TableRow key={ref.uid || `${ref.kind}/${ref.name}`}>
