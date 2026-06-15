@@ -409,6 +409,7 @@ function FindingsSection({
         keyExtractor={(row) => row.testId}
         searchPlaceholder="Search test ID or description..."
         pageSize={50}
+        virtualized
         emptyMessage="No findings match the current filters."
         onRowClick={(row) => {
           setExpanded((prev) => {

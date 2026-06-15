@@ -2,7 +2,8 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,9 +18,13 @@ import {
   type VisibilityState,
   type ColumnFiltersState,
   type PaginationState,
+  type ColumnSizingState,
   type Updater,
   type Column as RtColumn,
+  type Table as RtTable,
+  type Row as RtRow,
 } from '@tanstack/react-table';
+import type { Virtualizer } from '@tanstack/react-virtual';
 import {
   ChevronDown,
   ChevronUp,
@@ -80,6 +85,26 @@ interface DataTableProps<T> {
    */
   persistKey?: string;
   /**
+   * Opt into interactive column resizing. When false (the default), the table
+   * renders identically to before — fixed widths come from each column's
+   * `width`. When true, columns become drag-resizable and their pixel sizes are
+   * persisted under `dt:<persistKey>:sizing` if `persistKey` is set.
+   */
+  resizable?: boolean;
+  /**
+   * Opt into row virtualization for large datasets. When false (the default),
+   * the table renders identically to before using the semantic table/row
+   * primitives with client-side pagination. When true, the table renders a
+   * DIV-based ARIA grid that windows the *full* filtered+sorted row model
+   * (pagination is disabled and the pagination footer is hidden); only the
+   * rows in (and near) the viewport are mounted. Search/sort/faceted-filter/
+   * selection still apply over the full row model.
+   *
+   * Not compatible with `serverSide` (virtualization needs the full row model
+   * locally) — if both are passed, `serverSide` paging is ignored.
+   */
+  virtualized?: boolean;
+  /**
    * Opt into server-driven pagination. `data` should hold only the current
    * page's rows; the table will not slice further. The caller owns the
    * pagination state and feeds it into its query params so each page is a
@@ -94,12 +119,23 @@ interface DataTableProps<T> {
 }
 
 const visibilityStorageKey = (persistKey: string) => `dt:${persistKey}:visibility`;
+const sizingStorageKey = (persistKey: string) => `dt:${persistKey}:sizing`;
 
 function readPersistedVisibility(persistKey: string | undefined): VisibilityState | null {
   if (!persistKey || typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(visibilityStorageKey(persistKey));
     return raw ? (JSON.parse(raw) as VisibilityState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPersistedSizing(persistKey: string | undefined): ColumnSizingState | null {
+  if (!persistKey || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(sizingStorageKey(persistKey));
+    return raw ? (JSON.parse(raw) as ColumnSizingState) : null;
   } catch {
     return null;
   }
@@ -140,8 +176,13 @@ export function DataTable<T>({
   toolbar,
   className,
   persistKey,
+  resizable = false,
+  virtualized = false,
   serverSide,
 }: DataTableProps<T>) {
+  // serverSide pagination is incompatible with virtualization (the virtualizer
+  // windows a fully-loaded row model), so it is ignored when virtualized.
+  const effectiveServerSide = virtualized ? undefined : serverSide;
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -149,6 +190,7 @@ export function DataTable<T>({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() =>
     Object.fromEntries(columns.filter((c) => c.hidden).map((c) => [c.key, false]))
   );
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
 
   // Restore persisted visibility after mount. Reading localStorage during the
   // initial render would diverge from the server-rendered markup and trigger a
@@ -157,6 +199,15 @@ export function DataTable<T>({
     const stored = readPersistedVisibility(persistKey);
     if (stored) setColumnVisibility((prev) => ({ ...prev, ...stored }));
   }, [persistKey]);
+
+  // Restore persisted column sizing after mount, using the same post-mount
+  // pattern as visibility to avoid a hydration mismatch. Only meaningful when
+  // resizing is enabled.
+  useEffect(() => {
+    if (!resizable) return;
+    const stored = readPersistedSizing(persistKey);
+    if (stored) setColumnSizing((prev) => ({ ...prev, ...stored }));
+  }, [persistKey, resizable]);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
 
   const cellPadding = density === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
@@ -206,16 +257,35 @@ export function DataTable<T>({
       columnFilters,
       rowSelection,
       columnVisibility,
-      ...(serverSide ? { pagination: serverSide.pagination } : {}),
+      ...(resizable ? { columnSizing } : {}),
+      ...(effectiveServerSide ? { pagination: effectiveServerSide.pagination } : {}),
     },
-    manualPagination: !!serverSide,
-    ...(serverSide
+    ...(resizable
       ? {
-          rowCount: serverSide.rowCount,
+          enableColumnResizing: true,
+          columnResizeMode: 'onChange' as const,
+          onColumnSizingChange: (updater: Updater<ColumnSizingState>) =>
+            setColumnSizing((prev) => {
+              const next = typeof updater === 'function' ? updater(prev) : updater;
+              if (persistKey && typeof window !== 'undefined') {
+                try {
+                  window.localStorage.setItem(sizingStorageKey(persistKey), JSON.stringify(next));
+                } catch {
+                  /* ignore quota/availability errors — persistence is best-effort */
+                }
+              }
+              return next;
+            }),
+        }
+      : {}),
+    manualPagination: !!effectiveServerSide,
+    ...(effectiveServerSide
+      ? {
+          rowCount: effectiveServerSide.rowCount,
           onPaginationChange: (updater: Updater<PaginationState>) => {
             const next =
-              typeof updater === 'function' ? updater(serverSide.pagination) : updater;
-            serverSide.onPaginationChange(next);
+              typeof updater === 'function' ? updater(effectiveServerSide.pagination) : updater;
+            effectiveServerSide.onPaginationChange(next);
           },
         }
       : {}),
@@ -266,7 +336,11 @@ export function DataTable<T>({
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    // In virtualized mode the virtualizer windows the *full* filtered+sorted
+    // row model, so we skip the pagination row model entirely — getRowModel()
+    // then returns every matching row and the virtualizer renders only the
+    // visible window.
+    ...(virtualized ? {} : { getPaginationRowModel: getPaginationRowModel() }),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
     initialState: { pagination: { pageSize } },
@@ -284,14 +358,50 @@ export function DataTable<T>({
   const facetColumns = activeColumns.filter((c) => c.filter);
 
   const rows = table.getRowModel().rows;
+  // Header objects keyed by column id — needed to wire each resizable column's
+  // drag handle. Only consulted when `resizable` is true.
+  const headerByKey = useMemo(
+    () => new Map(table.getHeaderGroups()[0]?.headers.map((h) => [h.column.id, h])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [table, columnSizing, columnVisibility, columns]
+  );
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
   const filteredCount = table.getFilteredRowModel().rows.length;
   const totalPages = table.getPageCount();
   const page = table.getState().pagination.pageIndex;
   // Footer counts: server mode reports the server total; client mode the
   // filtered-row count. `effPageSize` is the page size actually in effect.
-  const effPageSize = serverSide ? serverSide.pagination.pageSize : pageSize;
-  const totalRows = serverSide ? serverSide.rowCount : filteredCount;
+  const effPageSize = effectiveServerSide ? effectiveServerSide.pagination.pageSize : pageSize;
+  const totalRows = effectiveServerSide ? effectiveServerSide.rowCount : filteredCount;
+
+  // ---- Virtualization ----
+  // The scroll container that the virtualizer measures against. Only used by
+  // the virtualized render branch, but the hook must run unconditionally (rules
+  // of hooks), so it is always created — it is cheap when `virtualized` is off.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const estimateSize = density === 'compact' ? 40 : 52;
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => estimateSize,
+    overscan: 12,
+  });
+  // Roving-tabindex focus index for the virtualized grid body. -1 = none yet.
+  const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
+
+  // Move keyboard focus between virtual rows. Because off-screen rows are not
+  // mounted, we ask the virtualizer to scroll the target into view first, then
+  // focus it on the next frame once it has been rendered.
+  const focusRowAt = (target: number) => {
+    if (target < 0 || target >= rows.length) return;
+    setFocusedRowIndex(target);
+    rowVirtualizer.scrollToIndex(target, { align: 'auto' });
+    requestAnimationFrame(() => {
+      const el =
+        scrollRef.current?.querySelector<HTMLElement>(`[data-row-index="${target}"]`) ?? null;
+      el?.focus();
+    });
+  };
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -389,7 +499,31 @@ export function DataTable<T>({
         </div>
       ) : null}
 
-      {/* Table */}
+      {/* Table — virtualized (DIV grid) branch */}
+      {virtualized ? (
+        <VirtualizedGrid
+          activeColumns={activeColumns}
+          table={table}
+          rows={rows}
+          rowVirtualizer={rowVirtualizer}
+          scrollRef={scrollRef}
+          totalRows={rows.length}
+          selectable={selectable}
+          resizable={resizable}
+          cellPadding={cellPadding}
+          selectPadding={selectPadding}
+          rowHeight={estimateSize}
+          loading={loading}
+          skeletonRows={skeletonRows}
+          emptyMessage={emptyMessage}
+          keyExtractor={keyExtractor}
+          onRowClick={onRowClick}
+          focusedRowIndex={focusedRowIndex}
+          setFocusedRowIndex={setFocusedRowIndex}
+          focusRowAt={focusRowAt}
+        />
+      ) : (
+      /* Table — default (semantic table) branch */
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <Table className="w-full text-sm">
@@ -408,17 +542,25 @@ export function DataTable<T>({
                 {activeColumns.map((col) => {
                   const column = table.getColumn(col.key);
                   const sorted = column?.getIsSorted();
+                  const header = resizable ? headerByKey.get(col.key) : undefined;
                   return (
                     <TableHead
                       key={col.key}
                       className={cn(
                         cellPadding,
                         'font-medium text-muted-foreground whitespace-nowrap',
+                        resizable && 'relative',
                         col.align === 'center' && 'text-center',
                         col.align === 'right' && 'text-right',
                         col.sortable !== false && 'cursor-pointer select-none hover:text-foreground'
                       )}
-                      style={col.width ? { width: col.width } : undefined}
+                      style={
+                        resizable
+                          ? { width: column?.getSize() }
+                          : col.width
+                            ? { width: col.width }
+                            : undefined
+                      }
                       onClick={() => col.sortable !== false && column?.toggleSorting()}
                     >
                       <div
@@ -441,6 +583,21 @@ export function DataTable<T>({
                           </span>
                         )}
                       </div>
+                      {resizable && header?.column.getCanResize() && (
+                        <span
+                          role="separator"
+                          aria-orientation="vertical"
+                          data-resize-handle=""
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          onClick={(e) => e.stopPropagation()}
+                          className={cn(
+                            'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none',
+                            'bg-transparent hover:bg-border/80',
+                            header.column.getIsResizing() && 'bg-primary/60'
+                          )}
+                        />
+                      )}
                     </TableHead>
                   );
                 })}
@@ -452,7 +609,11 @@ export function DataTable<T>({
                   <TableRow key={i} className="border-b border-border last:border-0">
                     {selectable && <TableCell className={selectPadding}><div className="h-4 w-4 rounded bg-muted animate-pulse" /></TableCell>}
                     {activeColumns.map((col) => (
-                      <TableCell key={col.key} className={cellPadding}>
+                      <TableCell
+                        key={col.key}
+                        className={cellPadding}
+                        style={resizable ? { width: table.getColumn(col.key)?.getSize() } : undefined}
+                      >
                         <div
                           className="h-4 w-24 max-w-full rounded bg-muted animate-pulse"
                           style={{ width: col.width ? `min(100%, ${col.width})` : undefined }}
@@ -502,6 +663,7 @@ export function DataTable<T>({
                             col.align === 'center' && 'text-center',
                             col.align === 'right' && 'text-right'
                           )}
+                          style={resizable ? { width: table.getColumn(col.key)?.getSize() } : undefined}
                         >
                           {col.accessor(row.original)}
                         </TableCell>
@@ -514,9 +676,11 @@ export function DataTable<T>({
           </Table>
         </div>
       </div>
+      )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {/* Pagination — hidden in virtualized mode (the virtualizer windows the
+          full row model, so there are no pages). */}
+      {!virtualized && totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
             Showing {totalRows === 0 ? 0 : page * effPageSize + 1}-{page * effPageSize + rows.length} of{' '}
@@ -561,6 +725,275 @@ export function DataTable<T>({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// VirtualizedGrid — DIV-based ARIA grid used when `virtualized` is set.
+//
+// A position:absolute table row breaks native table layout, so the virtualized
+// branch does NOT reuse the semantic table/row primitives. Instead it renders:
+//   - a scroll container with role="grid" + aria-rowcount (total body rows),
+//   - a sticky header row (role="row") of role="columnheader" cells,
+//   - a body sized to rowVirtualizer.getTotalSize() containing absolutely
+//     positioned virtual rows (role="row", aria-rowindex 1-based, +1 to
+//     account for the header), each holding role="gridcell" cells.
+// Column widths are shared between the header and rows (via a flex-basis /
+// width derived from col.width or the resizable size) so columns stay aligned.
+//
+// NOTE: because off-screen rows are not mounted, the browser's native Ctrl-F
+// find will not match text in rows outside the rendered window. This is an
+// inherent trade-off of virtualization.
+// ============================================================
+
+function VirtualizedGrid<T>({
+  activeColumns,
+  table,
+  rows,
+  rowVirtualizer,
+  scrollRef,
+  totalRows,
+  selectable,
+  resizable,
+  cellPadding,
+  selectPadding,
+  rowHeight,
+  loading,
+  skeletonRows,
+  emptyMessage,
+  keyExtractor,
+  onRowClick,
+  focusedRowIndex,
+  setFocusedRowIndex,
+  focusRowAt,
+}: {
+  activeColumns: Column<T>[];
+  table: RtTable<T>;
+  rows: RtRow<T>[];
+  rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  totalRows: number;
+  selectable: boolean;
+  resizable: boolean;
+  cellPadding: string;
+  selectPadding: string;
+  rowHeight: number;
+  loading: boolean;
+  skeletonRows: number;
+  emptyMessage: string;
+  keyExtractor: (row: T) => string;
+  onRowClick?: (row: T) => void;
+  focusedRowIndex: number;
+  setFocusedRowIndex: (i: number) => void;
+  focusRowAt: (i: number) => void;
+}) {
+  // Per-column width style shared by header + body cells so they line up.
+  const colStyle = (col: Column<T>): React.CSSProperties => {
+    const width = resizable ? `${table.getColumn(col.key)?.getSize()}px` : col.width;
+    return width
+      ? { width, flex: `0 0 ${width}`, minWidth: width }
+      : { flex: '1 1 0', minWidth: 0 };
+  };
+  const selectColStyle: React.CSSProperties = { flex: '0 0 2.5rem', width: '2.5rem' };
+
+  const alignClass = (col: Column<T>) =>
+    cn(col.align === 'center' && 'text-center justify-center', col.align === 'right' && 'text-right justify-end');
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+
+  return (
+    <div className="rounded-lg border border-border overflow-hidden">
+      <div
+        ref={scrollRef}
+        role="grid"
+        aria-rowcount={totalRows}
+        aria-colcount={activeColumns.length + (selectable ? 1 : 0)}
+        aria-multiselectable={selectable || undefined}
+        // The grid container is the single Tab entry point. Rows are focused
+        // programmatically (arrow keys / click) and stay out of the Tab order,
+        // so the grid is reachable even when the previously-focused row has been
+        // virtualized out of the DOM. Arrow keys here move focus into the body.
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            focusRowAt(focusedRowIndex >= 0 ? focusedRowIndex : 0);
+          }
+        }}
+        className="relative max-h-[28rem] overflow-auto text-sm outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
+      >
+        {/* Sticky header row */}
+        <div
+          role="row"
+          aria-rowindex={1}
+          className="sticky top-0 z-10 flex border-b border-border bg-muted/50 text-muted-foreground"
+        >
+          {selectable && (
+            <div role="columnheader" className={cn('flex items-center', selectPadding)} style={selectColStyle}>
+              <input
+                type="checkbox"
+                checked={table.getIsAllPageRowsSelected()}
+                onChange={table.getToggleAllPageRowsSelectedHandler()}
+                className="rounded border-border text-primary focus:ring-ring"
+              />
+            </div>
+          )}
+          {activeColumns.map((col) => {
+            const column = table.getColumn(col.key);
+            const sorted = column?.getIsSorted();
+            return (
+              <div
+                key={col.key}
+                role="columnheader"
+                aria-sort={
+                  col.sortable !== false
+                    ? sorted === 'asc'
+                      ? 'ascending'
+                      : sorted === 'desc'
+                        ? 'descending'
+                        : 'none'
+                    : undefined
+                }
+                className={cn(
+                  cellPadding,
+                  'flex items-center gap-1 font-medium whitespace-nowrap',
+                  col.sortable !== false && 'cursor-pointer select-none hover:text-foreground',
+                  alignClass(col)
+                )}
+                style={colStyle(col)}
+                onClick={() => col.sortable !== false && column?.toggleSorting()}
+              >
+                {col.header}
+                {col.sortable !== false && (
+                  <span className="text-muted-foreground/50">
+                    {sorted === 'asc' ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : sorted === 'desc' ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronsUpDown className="h-3 w-3" />
+                    )}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        {loading ? (
+          <div>
+            {Array.from({ length: skeletonRows }).map((_, i) => (
+              <div
+                key={i}
+                role="row"
+                className="flex border-b border-border"
+                style={{ height: rowHeight }}
+              >
+                {selectable && (
+                  <div role="gridcell" className={cn('flex items-center', selectPadding)} style={selectColStyle}>
+                    <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+                  </div>
+                )}
+                {activeColumns.map((col) => (
+                  <div
+                    key={col.key}
+                    role="gridcell"
+                    className={cn('flex items-center', cellPadding)}
+                    style={colStyle(col)}
+                  >
+                    <div
+                      className="h-4 w-24 max-w-full rounded bg-muted animate-pulse"
+                      style={{ width: col.width ? `min(100%, ${col.width})` : undefined }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <div role="row">
+            <div role="gridcell" className="px-4 py-12 text-center text-muted-foreground">
+              {emptyMessage}
+            </div>
+          </div>
+        ) : (
+          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+            {virtualItems.map((virtualRow) => {
+              const row = rows[virtualRow.index];
+              const key = keyExtractor(row.original);
+              const isSelected = row.getIsSelected();
+              return (
+                <div
+                  key={key}
+                  // measureElement reads each row's real height for variable-size
+                  // rows; data-index lets the virtualizer key the measurement.
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  data-row-index={virtualRow.index}
+                  role="row"
+                  // 1-based, and +1 again because the sticky header is row 1.
+                  aria-rowindex={virtualRow.index + 2}
+                  aria-selected={selectable ? isSelected : undefined}
+                  // Programmatically focusable only (-1): the grid container owns
+                  // the Tab stop, so a virtualized-out focused row can't strand
+                  // keyboard users outside the grid.
+                  tabIndex={-1}
+                  onFocus={() => setFocusedRowIndex(virtualRow.index)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      focusRowAt(virtualRow.index + 1);
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      focusRowAt(virtualRow.index - 1);
+                    } else if (e.key === 'Enter' && onRowClick) {
+                      e.preventDefault();
+                      onRowClick(row.original);
+                    }
+                  }}
+                  onClick={() => onRowClick?.(row.original)}
+                  className={cn(
+                    'absolute left-0 top-0 flex w-full border-b border-border transition-colors',
+                    'focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring',
+                    onRowClick && 'cursor-pointer hover:bg-muted/50',
+                    isSelected && 'bg-muted/30'
+                  )}
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  {selectable && (
+                    <div
+                      role="gridcell"
+                      className={cn('flex items-center', selectPadding)}
+                      style={selectColStyle}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={row.getToggleSelectedHandler()}
+                        className="rounded border-border text-primary focus:ring-ring"
+                      />
+                    </div>
+                  )}
+                  {activeColumns.map((col) => (
+                    <div
+                      key={col.key}
+                      role="gridcell"
+                      className={cn('flex items-center', cellPadding, alignClass(col))}
+                      style={colStyle(col)}
+                    >
+                      {col.accessor(row.original)}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
