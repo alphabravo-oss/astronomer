@@ -43,6 +43,13 @@ const (
 	ClassSearch APIRateLimitClass = "search"
 	// ClassK8sProxy covers the /clusters/{id}/k8s/* passthrough.
 	ClassK8sProxy APIRateLimitClass = "k8s-proxy"
+	// ClassArgoCDProxy covers the internal /internal/argocd/clusters/{id}/k8s/*
+	// machine-to-machine front door the built-in ArgoCD uses to deploy baseline
+	// components. ArgoCD's cluster-cache discovery + resource sync fire large
+	// request bursts (one per API resource type), so this class is sized far
+	// more generously than the user-facing proxy — it is trusted, cluster-
+	// scoped, token-gated traffic — while still capping a runaway.
+	ClassArgoCDProxy APIRateLimitClass = "argocd-proxy"
 	// ClassExecLogs covers the WebSocket upgrades for exec + logs.
 	// Limit is on NEW sessions per window; in-flight sessions are not
 	// metered (they hold a goroutine, not a request quota).
@@ -63,10 +70,11 @@ type APIRateLimitConfig struct {
 // without hitting the limit, but a runaway loop trips within seconds.
 // Operators override via chart values.
 var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
-	ClassSearch:   {RatePerSecond: 10.0 / 60.0, Burst: 5}, // 10/min sustained, brief burst of 5
-	ClassK8sProxy: {RatePerSecond: 1.0, Burst: 20},
-	ClassExecLogs: {RatePerSecond: 30.0 / 60.0, Burst: 5}, // 30 new sessions/min
-	ClassHelm:     {RatePerSecond: 5.0 / 60.0, Burst: 2},
+	ClassSearch:      {RatePerSecond: 10.0 / 60.0, Burst: 5}, // 10/min sustained, brief burst of 5
+	ClassK8sProxy:    {RatePerSecond: 1.0, Burst: 20},
+	ClassArgoCDProxy: {RatePerSecond: 50.0, Burst: 1000},     // ArgoCD discovery/sync bursts (trusted M2M)
+	ClassExecLogs:    {RatePerSecond: 30.0 / 60.0, Burst: 5}, // 30 new sessions/min
+	ClassHelm:        {RatePerSecond: 5.0 / 60.0, Burst: 2},
 }
 
 // defaultClusterCeilings is the aggregate (all-users-combined) per-cluster
@@ -83,8 +91,9 @@ var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
 // loading several panes at once. Other clusters keep independent buckets,
 // so hammering cluster A never throttles cluster B.
 var defaultClusterCeilings = map[APIRateLimitClass]APIRateLimitConfig{
-	ClassK8sProxy: {RatePerSecond: 10.0, Burst: 60},
-	ClassExecLogs: {RatePerSecond: 120.0 / 60.0, Burst: 20}, // 120 new sessions/min/cluster
+	ClassK8sProxy:    {RatePerSecond: 10.0, Burst: 60},
+	ClassArgoCDProxy: {RatePerSecond: 100.0, Burst: 2000},      // baseline provisioning across many Apps per cluster
+	ClassExecLogs:    {RatePerSecond: 120.0 / 60.0, Burst: 20}, // 120 new sessions/min/cluster
 }
 
 // apiBucket pairs a limiter with the last-access time for eviction.

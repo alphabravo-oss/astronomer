@@ -912,7 +912,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// against argocd_cluster_proxy_tokens before the shared tunnel
 			// proxy sees the request.
 			r.With(
-				rateLimit(appmiddleware.ClassK8sProxy),
+				rateLimit(appmiddleware.ClassArgoCDProxy),
 				requireArgoCDClusterProxyToken(deps.ArgoCDProxyTokens),
 				auditArgoCDK8sProxyMutations(deps.AuditWriter),
 			).

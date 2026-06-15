@@ -266,6 +266,23 @@ spec:
         - protocol: TCP
           port: {{ $.Values.redis.port }}
     {{- end }}
+    # The argocd auto-register worker task calls the built-in ArgoCD API server
+    # to register connected clusters (so baseline ApplicationSets can provision
+    # them). argocd-server listens on 8080 (its Service maps 80/443 -> 8080) and
+    # the CNI evaluates egress post-DNAT on the backend pod, so this is tightly
+    # scoped to the argocd-server pod in the ArgoCD namespace on 8080 — NOT a
+    # blanket port opening. External ArgoCD instances are reached via the
+    # 80/443 external-CIDR egress below.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.crds.argoNamespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argocd-server
+      ports:
+        - protocol: TCP
+          port: 8080
     {{- range $cidr := $externalCIDRs }}
     - to:
         - ipBlock:
