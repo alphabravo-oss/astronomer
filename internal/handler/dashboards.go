@@ -686,8 +686,8 @@ func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
-		Scope:    "global",
-		ScopeIds: []uuid.UUID{},
+		Scope:   "global",
+		ScopeID: uuid.Nil,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
@@ -718,8 +718,8 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
-		Scope:    "cluster",
-		ScopeIds: []uuid.UUID{id},
+		Scope:   "cluster",
+		ScopeID: id,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
@@ -744,8 +744,8 @@ func (h *DashboardHandler) RenderProject(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
-		Scope:    "project",
-		ScopeIds: []uuid.UUID{id},
+		Scope:   "project",
+		ScopeID: id,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())

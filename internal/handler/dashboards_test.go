@@ -137,7 +137,7 @@ func (f *fakeDashboardQuerier) ListWidgetsForScope(_ context.Context, arg sqlc.L
 				continue
 			}
 			for _, sid := range w.ScopeIds {
-				if uuidInSlice(sid, arg.ScopeIds) {
+				if sid == arg.ScopeID {
 					out = append(out, w)
 					break
 				}
@@ -370,7 +370,7 @@ func TestWidget_ScopeMatching(t *testing.T) {
 	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "project-A-only", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "project", ScopeIds: []uuid.UUID{projectA}, Enabled: true}
 	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "disabled", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{}`), Scope: "global", ScopeIds: []uuid.UUID{}, Enabled: false}
 
-	rowsA, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeIds: []uuid.UUID{clusterA}})
+	rowsA, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeID: clusterA})
 	namesA := setOfNames(rowsA)
 	for _, want := range []string{"global-1", "cluster-all", "cluster-A-only"} {
 		if !namesA[want] {
@@ -384,7 +384,7 @@ func TestWidget_ScopeMatching(t *testing.T) {
 		t.Errorf("disabled widget leaked into list")
 	}
 
-	rowsB, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeIds: []uuid.UUID{clusterB}})
+	rowsB, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "cluster", ScopeID: clusterB})
 	namesB := setOfNames(rowsB)
 	if namesB["cluster-A-only"] {
 		t.Errorf("cluster B should not see cluster-A-only widgets")
@@ -393,7 +393,7 @@ func TestWidget_ScopeMatching(t *testing.T) {
 		t.Errorf("cluster B missing cluster-all widget")
 	}
 
-	rowsP, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "project", ScopeIds: []uuid.UUID{projectA}})
+	rowsP, _ := q.ListWidgetsForScope(context.Background(), sqlc.ListWidgetsForScopeParams{Scope: "project", ScopeID: projectA})
 	namesP := setOfNames(rowsP)
 	if !namesP["project-A-only"] {
 		t.Errorf("project list missing project-A-only")
@@ -412,15 +412,6 @@ func setOfNames(rows []sqlc.DashboardWidget) map[string]bool {
 		out[r.Name] = true
 	}
 	return out
-}
-
-func uuidInSlice(id uuid.UUID, ids []uuid.UUID) bool {
-	for _, candidate := range ids {
-		if candidate == id {
-			return true
-		}
-	}
-	return false
 }
 
 // TestSpecResolve_ClusterUIDTemplating verifies {{cluster_uid}} and

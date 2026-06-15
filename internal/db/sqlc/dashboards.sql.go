@@ -358,15 +358,18 @@ WHERE enabled = true
     scope = 'global'
     OR (
       scope = $1
-      AND (cardinality(scope_ids) = 0 OR $2 = ANY(scope_ids))
+      -- scope_id must bind as a scalar uuid here; sqlc previously inferred the
+      -- column's array type for a positional $2, sending uuid[] into "= ANY"
+      -- and 500ing every render. The ::uuid cast pins it to a single value.
+      AND (cardinality(scope_ids) = 0 OR $2::uuid = ANY(scope_ids))
     )
   )
 ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC
 `
 
 type ListWidgetsForScopeParams struct {
-	Scope    string      `json:"scope"`
-	ScopeIds []uuid.UUID `json:"scope_ids"`
+	Scope   string    `json:"scope"`
+	ScopeID uuid.UUID `json:"scope_id"`
 }
 
 // Returns the widgets the render handler should ship to a client at the
@@ -374,7 +377,7 @@ type ListWidgetsForScopeParams struct {
 // 'cluster' / 'project' the list expands to widgets scoped to that
 // entity OR widgets in that scope with an empty scope_ids set.
 func (q *Queries) ListWidgetsForScope(ctx context.Context, arg ListWidgetsForScopeParams) ([]DashboardWidget, error) {
-	rows, err := q.db.Query(ctx, listWidgetsForScope, arg.Scope, arg.ScopeIds)
+	rows, err := q.db.Query(ctx, listWidgetsForScope, arg.Scope, arg.ScopeID)
 	if err != nil {
 		return nil, err
 	}

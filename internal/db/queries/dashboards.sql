@@ -65,8 +65,11 @@ WHERE enabled = true
   AND (
     scope = 'global'
     OR (
-      scope = $1
-      AND (cardinality(scope_ids) = 0 OR $2 = ANY(scope_ids))
+      scope = sqlc.arg(scope)
+      -- scope_id must bind as a scalar uuid here; sqlc previously inferred the
+      -- column's array type for a positional $2, sending uuid[] into "= ANY"
+      -- and 500ing every render. The ::uuid cast pins it to a single value.
+      AND (cardinality(scope_ids) = 0 OR sqlc.arg(scope_id)::uuid = ANY(scope_ids))
     )
   )
 ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC;
