@@ -35,7 +35,10 @@ rules:
     verbs: [read, list]
   - resource: backups
     verbs: [create, read, update, list]
+  # Read-only on built-in workloads/services/configmaps, so likewise read-only
+  # on CRD-backed objects — global-scope write across every cluster's custom
+  # resources would exceed this role's day-2 (non-destructive) posture.
   - resource: custom_resources
-    verbs: [create, read, update, delete, list, watch]
+    verbs: [read, list, watch]
   - resource: audit_logs
     verbs: [read, list]

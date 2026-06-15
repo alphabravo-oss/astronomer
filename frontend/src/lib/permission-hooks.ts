@@ -100,8 +100,12 @@ export function useClusterResourcePermission(
   clusterId: string,
   resourceType: string,
   verb: PermissionVerb | '*',
+  // Override the canonical mapping when the caller already knows the RBAC
+  // resource (e.g. custom resources, whose plural would otherwise fall through
+  // to the generic 'clusters' default and mis-gate read/edit).
+  resourceOverride?: string,
 ): PermissionDecision {
-  return usePermissionDecision(canonicalPermissionResource(resourceType), verb, {
+  return usePermissionDecision(resourceOverride ?? canonicalPermissionResource(resourceType), verb, {
     type: 'cluster',
     id: clusterId,
   });

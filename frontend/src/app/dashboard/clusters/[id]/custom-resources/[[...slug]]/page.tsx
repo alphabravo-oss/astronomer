@@ -78,6 +78,7 @@ export default function CustomResourcesPage() {
       namespace={namespace}
       name={name}
       k8sPath={k8sPath}
+      permissionResource={CR_PERMISSION}
     />
   );
 }

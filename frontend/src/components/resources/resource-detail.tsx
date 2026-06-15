@@ -21,6 +21,9 @@ interface ResourceDetailProps {
   name: string;
   /** K8s API path to the single object (e.g. "api/v1/namespaces/default/pods/my-pod"). */
   k8sPath: string;
+  /** RBAC resource to gate on, when it differs from the canonical mapping of
+   * resourceType (custom resources gate on 'custom_resources', not 'clusters'). */
+  permissionResource?: string;
 }
 
 // ponytail: Logs/Exec are pod-only; we append them to this base set when
@@ -86,18 +89,19 @@ interface K8sObject {
   data?: Record<string, string>;
 }
 
-export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPath }: ResourceDetailProps) {
+export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPath, permissionResource }: ResourceDetailProps) {
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('overview');
 
   // Gate on the SAME canonical permission resource the list rows use, so the
   // detail view doesn't fall through to the generic 'clusters' verb (GATE-A bug).
-  // Server-side RBAC stays the real gate; this just aligns client gating.
-  const read = useClusterResourcePermission(clusterId, resourceType, 'read');
-  const update = useClusterResourcePermission(clusterId, resourceType, 'update');
+  // Custom resources pass permissionResource='custom_resources' explicitly since
+  // their plural has no canonical mapping. Server-side RBAC stays the real gate.
+  const read = useClusterResourcePermission(clusterId, resourceType, 'read', permissionResource);
+  const update = useClusterResourcePermission(clusterId, resourceType, 'update', permissionResource);
   // ponytail: always call these (rules-of-hooks); only consulted for pods.
-  const logsPerm = useClusterResourcePermission(clusterId, resourceType, 'logs');
-  const execPerm = useClusterResourcePermission(clusterId, resourceType, 'exec');
+  const logsPerm = useClusterResourcePermission(clusterId, resourceType, 'logs', permissionResource);
+  const execPerm = useClusterResourcePermission(clusterId, resourceType, 'exec', permissionResource);
 
   const isPod = resourceType === 'pods';
   const tabs = useMemo(() => {

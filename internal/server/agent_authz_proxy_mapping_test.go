@@ -163,6 +163,60 @@ func TestProxyCustomResourceMapsToCustomResourcesPermission(t *testing.T) {
 	}
 }
 
+// TestProxyEscalationGroupWritesRequireRBACPermission is the F2 (M4) negative
+// test: writing to a privilege-escalation API group (RBAC, admission webhooks,
+// CRD definitions, aggregated APIServices) is cluster-admin-equivalent, so a
+// custom_resources:write binding must NOT authorise it — it requires the
+// dedicated rbac permission. Reads stay on custom_resources so the explorer is
+// unchanged.
+func TestProxyEscalationGroupWritesRequireRBACPermission(t *testing.T) {
+	clusterID := uuid.New().String()
+	base := "/api/v1/clusters/" + clusterID + "/k8s"
+	crbPath := base + "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings"
+	crbNamed := crbPath + "/my-binding"
+	webhookPath := base + "/apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations"
+
+	t.Run("POST clusterrolebinding denied with custom_resources:create", func(t *testing.T) {
+		router, token := newProxyPermissionRouter(t, routeSecurityBindings(rbac.ResourceCustomResources, rbac.VerbCreate, rbac.VerbUpdate, rbac.VerbDelete))
+		rec := proxyRequest(router, http.MethodPost, crbPath, token)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("ClusterRoleBinding POST with custom_resources:create status = %d, want %d (escalation); body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+		}
+	})
+
+	t.Run("POST clusterrolebinding allowed with rbac:create", func(t *testing.T) {
+		router, token := newProxyPermissionRouter(t, routeSecurityBindings(rbac.ResourceRBAC, rbac.VerbCreate))
+		rec := proxyRequest(router, http.MethodPost, crbPath, token)
+		if rec.Code == http.StatusForbidden {
+			t.Fatalf("ClusterRoleBinding POST with rbac:create status = %d (forbidden); body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("DELETE clusterrolebinding denied with custom_resources:delete", func(t *testing.T) {
+		router, token := newProxyPermissionRouter(t, routeSecurityBindings(rbac.ResourceCustomResources, rbac.VerbDelete))
+		rec := proxyRequest(router, http.MethodDelete, crbNamed, token)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("ClusterRoleBinding DELETE with custom_resources:delete status = %d, want %d (escalation); body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+		}
+	})
+
+	t.Run("POST webhook denied with custom_resources:create", func(t *testing.T) {
+		router, token := newProxyPermissionRouter(t, routeSecurityBindings(rbac.ResourceCustomResources, rbac.VerbCreate))
+		rec := proxyRequest(router, http.MethodPost, webhookPath, token)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("ValidatingWebhook POST with custom_resources:create status = %d, want %d (escalation); body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+		}
+	})
+
+	t.Run("GET clusterrole allowed with custom_resources:read (read unchanged)", func(t *testing.T) {
+		router, token := newProxyPermissionRouter(t, routeSecurityBindings(rbac.ResourceCustomResources, rbac.VerbRead, rbac.VerbList))
+		rec := proxyRequest(router, http.MethodGet, base+"/apis/rbac.authorization.k8s.io/v1/clusterroles", token)
+		if rec.Code == http.StatusForbidden {
+			t.Fatalf("ClusterRole LIST with custom_resources:list status = %d (forbidden); reads must stay on custom_resources; body=%s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 // TestProxyEvictionRequiresPodsDelete is the F3 (L1) negative test: POST to
 // pods/{name}/eviction deletes the pod and must require pods:delete, not a
 // generic pod update. A pods:update (no delete) binding is denied; pods:delete

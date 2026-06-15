@@ -1189,10 +1189,36 @@ func k8sProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
 	// silently not apply to CRDs). Decide this BEFORE namedResourcePermission's
 	// generic fallthrough. See k8sProxyResourcePolicy.
 	if resource, ok := k8sProxyResourcePolicy(ref); ok {
+		// F2 (M4): writing to the privilege-escalation API groups (RBAC,
+		// admission webhooks, aggregated APIServices, CRD definitions) via the
+		// proxy is cluster-admin-equivalent — e.g. POST a ClusterRoleBinding to
+		// bind yourself to cluster-admin. The generic custom_resources grant
+		// must NOT authorise that, so gate mutating verbs on these groups behind
+		// the dedicated rbac permission (held only by owner/admin templates).
+		// Reads/lists/watches stay on custom_resources so the explorer is
+		// unchanged.
+		if isMutatingK8sProxyMethod(r.Method) && isPrivilegeEscalationAPIGroup(ref["api_group"]) {
+			return rbac.ResourceRBAC, verb
+		}
 		return resource, verb
 	}
 	resource, verb := namedResourcePermission(ref["resource"], verb)
 	return resource, verb
+}
+
+// isPrivilegeEscalationAPIGroup reports whether a Kubernetes API group lets a
+// writer escalate to cluster-admin: RBAC (ClusterRole/Binding), admission
+// webhooks (intercept/mutate any request), aggregated APIServices, and CRD
+// definitions (own the shape of arbitrary cluster resources).
+func isPrivilegeEscalationAPIGroup(group string) bool {
+	switch strings.ToLower(strings.TrimSpace(group)) {
+	case "rbac.authorization.k8s.io",
+		"admissionregistration.k8s.io",
+		"apiregistration.k8s.io",
+		"apiextensions.k8s.io":
+		return true
+	}
+	return false
 }
 
 // k8sProxyResourcePolicy implements the F2 (M3) policy for shapes that the

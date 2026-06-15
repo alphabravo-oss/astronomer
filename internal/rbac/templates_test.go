@@ -173,8 +173,11 @@ func TestCustomResources_TemplateGrants(t *testing.T) {
 		return false
 	}
 
-	// Viewer/read-only roles: read + list, but NOT write.
-	for _, name := range []string{"cluster-viewer", "project-viewer"} {
+	// Viewer/read-only roles: read + list, but NOT write. platform-operator is
+	// read-only here too — it is read-only on built-in workloads/services, so
+	// global-scope write across every cluster's custom resources would exceed
+	// its non-destructive day-2 posture.
+	for _, name := range []string{"cluster-viewer", "project-viewer", "platform-operator"} {
 		verbs := verbsFor(name)
 		if !has(verbs, VerbRead) || !has(verbs, VerbList) {
 			t.Errorf("%s custom_resources verbs = %v, want read+list", name, verbs)
@@ -185,7 +188,7 @@ func TestCustomResources_TemplateGrants(t *testing.T) {
 	}
 
 	// Operator + admin roles: write verbs (create/update/delete).
-	for _, name := range []string{"cluster-operator", "platform-operator", "cluster-owner", "platform-admin"} {
+	for _, name := range []string{"cluster-operator", "cluster-owner", "platform-admin"} {
 		verbs := verbsFor(name)
 		if !has(verbs, VerbCreate) || !has(verbs, VerbUpdate) || !has(verbs, VerbDelete) {
 			t.Errorf("%s custom_resources verbs = %v, want create+update+delete", name, verbs)
