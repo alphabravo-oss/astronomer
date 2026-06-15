@@ -133,6 +133,63 @@ describe('ResourceOverview kind-specific branches', () => {
     expect(screen.getByText('pv-1')).toBeInTheDocument();
   });
 
+  it('renders a job overview with completions, parallelism and counts', () => {
+    render(
+      <ResourceOverview
+        resourceType="jobs"
+        obj={{
+          metadata: { name: 'backup', namespace: 'default' },
+          spec: { completions: 3, parallelism: 2, backoffLimit: 4 },
+          status: { succeeded: 1, active: 2, failed: 0 },
+        }}
+      />
+    );
+    expect(screen.getByText('Job')).toBeInTheDocument();
+    expect(screen.getByText('completions')).toBeInTheDocument();
+    expect(screen.getByText('1/3')).toBeInTheDocument();
+    expect(screen.getByText('parallelism')).toBeInTheDocument();
+  });
+
+  it('renders a cronjob overview with schedule and suspend state', () => {
+    render(
+      <ResourceOverview
+        resourceType="cronjobs"
+        obj={{
+          metadata: { name: 'nightly', namespace: 'default' },
+          spec: { schedule: '0 3 * * *', suspend: true, concurrencyPolicy: 'Forbid' },
+          status: { active: [{ name: 'nightly-123' }] },
+        }}
+      />
+    );
+    expect(screen.getByText('CronJob')).toBeInTheDocument();
+    expect(screen.getByText('0 3 * * *')).toBeInTheDocument();
+    expect(screen.getByText('suspended')).toBeInTheDocument();
+    // active jobs count derived from the status.active array length.
+    expect(screen.getByText('active jobs')).toBeInTheDocument();
+  });
+
+  it('renders an HPA overview with target, min/max and replicas', () => {
+    render(
+      <ResourceOverview
+        resourceType="hpa"
+        obj={{
+          metadata: { name: 'web-hpa', namespace: 'default' },
+          spec: {
+            scaleTargetRef: { kind: 'Deployment', name: 'web' },
+            minReplicas: 2, maxReplicas: 10,
+            metrics: [{ type: 'Resource', resource: { name: 'cpu', target: { averageUtilization: 75 } } }],
+          } as never,
+          status: { currentReplicas: 3, desiredReplicas: 4 } as never,
+        }}
+      />
+    );
+    expect(screen.getByText('HorizontalPodAutoscaler')).toBeInTheDocument();
+    expect(screen.getByText('Deployment web')).toBeInTheDocument();
+    expect(screen.getByText('2 / 10')).toBeInTheDocument();
+    expect(screen.getByText('Metrics')).toBeInTheDocument();
+    expect(screen.getByText('target 75%')).toBeInTheDocument();
+  });
+
   it('masks secret data values', () => {
     render(
       <ResourceOverview

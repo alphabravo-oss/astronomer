@@ -329,6 +329,10 @@ export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resou
       case 'configmaps': return <ConfigMapOverview obj={obj!} />;
       case 'ingresses': return <IngressOverview obj={obj!} />;
       case 'persistentvolumeclaims': return <PVCOverview obj={obj!} />;
+      case 'replicasets': return <ReplicaSetOverview obj={obj!} />;
+      case 'jobs': return <JobOverview obj={obj!} />;
+      case 'cronjobs': return <CronJobOverview obj={obj!} />;
+      case 'hpa': return <HPAOverview obj={obj!} />;
       default: return null;
     }
   })();
@@ -613,6 +617,104 @@ function PVCOverview({ obj }: { obj: K8sObject }) {
     <Section title="PersistentVolumeClaim">
       <KeyValueTable entries={summary} />
     </Section>
+  );
+}
+
+// ── Kind-specific overviews for workload/batch/autoscaling kinds (Rancher
+// parity). These previously fell to the bare GenericOverview. They read the
+// varied spec/status shapes through a loose record view rather than widening
+// the shared K8sObject type with a dozen one-off fields. ──
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+}
+function num(v: unknown, fallback = '-'): string {
+  return v == null ? fallback : String(v);
+}
+function rel(v: unknown): string | null {
+  return typeof v === 'string' && v ? formatRelativeTime(v) : null;
+}
+
+function ReplicaSetOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const selector = Object.entries(asRecord(asRecord(spec.selector).matchLabels)) as Array<[string, string]>;
+  const ready = num(status.readyReplicas, '0');
+  const desired = num(spec.replicas ?? status.replicas, '0');
+  const summary: Array<[string, string]> = [
+    ['ready', `${ready}/${desired}`],
+    ['available', num(status.availableReplicas, '0')],
+  ];
+  return (
+    <>
+      <Section title="ReplicaSet"><KeyValueTable entries={summary} /></Section>
+      <Section title="Selector"><KeyValueTable entries={selector} /></Section>
+    </>
+  );
+}
+
+function JobOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const summary: Array<[string, string]> = [
+    ['completions', `${num(status.succeeded, '0')}/${num(spec.completions, '1')}`],
+  ];
+  if (spec.parallelism != null) summary.push(['parallelism', num(spec.parallelism)]);
+  if (spec.backoffLimit != null) summary.push(['backoffLimit', num(spec.backoffLimit)]);
+  if (status.active != null) summary.push(['active', num(status.active)]);
+  if (status.failed != null) summary.push(['failed', num(status.failed)]);
+  if (spec.suspend != null) summary.push(['suspended', spec.suspend ? 'Yes' : 'No']);
+  const started = rel(status.startTime);
+  const completed = rel(status.completionTime);
+  if (started) summary.push(['started', started]);
+  if (completed) summary.push(['completed', completed]);
+  return <Section title="Job"><KeyValueTable entries={summary} /></Section>;
+}
+
+function CronJobOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const summary: Array<[string, string]> = [];
+  if (spec.schedule) summary.push(['schedule', String(spec.schedule)]);
+  if (spec.timeZone) summary.push(['timeZone', String(spec.timeZone)]);
+  summary.push(['suspended', spec.suspend ? 'Yes' : 'No']);
+  if (spec.concurrencyPolicy) summary.push(['concurrency', String(spec.concurrencyPolicy)]);
+  const active = Array.isArray(status.active) ? status.active.length : 0;
+  summary.push(['active jobs', String(active)]);
+  const lastSchedule = rel(status.lastScheduleTime);
+  const lastSuccess = rel(status.lastSuccessfulTime);
+  if (lastSchedule) summary.push(['last scheduled', lastSchedule]);
+  if (lastSuccess) summary.push(['last successful', lastSuccess]);
+  return <Section title="CronJob"><KeyValueTable entries={summary} /></Section>;
+}
+
+function HPAOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const target = asRecord(spec.scaleTargetRef);
+  const summary: Array<[string, string]> = [];
+  if (target.kind || target.name) summary.push(['target', `${num(target.kind, '')} ${num(target.name, '')}`.trim()]);
+  summary.push(['min / max', `${num(spec.minReplicas, '1')} / ${num(spec.maxReplicas)}`]);
+  summary.push(['replicas', `${num(status.currentReplicas, '0')} → ${num(status.desiredReplicas, '0')}`]);
+  const lastScale = rel(status.lastScaleTime);
+  if (lastScale) summary.push(['last scaled', lastScale]);
+
+  // Resource metrics (cpu/memory utilization targets), defensively parsed.
+  const metrics = (Array.isArray(spec.metrics) ? spec.metrics : []).map((m) => {
+    const r = asRecord(asRecord(m).resource);
+    const t = asRecord(r.target);
+    const name = num(r.name, '');
+    const val = t.averageUtilization != null ? `${t.averageUtilization}%` : num(t.averageValue ?? t.value, '');
+    return name && val ? ([name, `target ${val}`] as [string, string]) : null;
+  }).filter(Boolean) as Array<[string, string]>;
+
+  return (
+    <>
+      <Section title="HorizontalPodAutoscaler"><KeyValueTable entries={summary} /></Section>
+      {metrics.length > 0 && (
+        <Section title="Metrics"><KeyValueTable entries={metrics} /></Section>
+      )}
+    </>
   );
 }
 
