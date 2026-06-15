@@ -724,8 +724,8 @@ Every task lists its own tests; this is the program-level safety net.
 > Everything except D4 (Vite-readiness doc) is now done: P0, all of P1 (A1–A5), the full Table
 > track (B0–B4, incl. resize), and virtualization (C0–C1). Branch commits: d2ac588 (foundation +
 > B0–B2), d2bf354 (B3), 46c56bb (B4), c9d9b6a (B2-resize + C + A5). All green: tsc / lint 0-warn /
-> 200 jest / 11 real-browser e2e / code-health. Deployed to k3s: only d2ac588 (image
-> tanstack-d2ac588); B3/B4/C/resize not yet rolled out.
+> 200 jest / 11 real-browser e2e / code-health. **Deployed to k3s: the full branch** (image
+> tanstack-12faad4 @ commit 12faad4) — ArgoCD `astronomer-self-manage` Synced + Healthy, pod serving.
 
 ```
 P0
