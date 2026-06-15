@@ -71,6 +71,15 @@ func shouldAddTrailingSlash(p string) bool {
 	if strings.HasPrefix(p, "/api/v1/ws/") {
 		return false
 	}
+	// k8s proxy passthrough: everything after /k8s/ is a verbatim Kubernetes
+	// API path forwarded to the agent/apiserver as-is. The proxy route is a
+	// chi wildcard (…/k8s/*) that matches with or without a trailing slash, so
+	// appending one here corrupts the upstream path — e.g. /openapi/v2 ->
+	// /openapi/v2/, which the apiserver 404s (breaking ArgoCD's cluster-cache
+	// OpenAPI fetch and thus baseline provisioning).
+	if strings.Contains(p, "/k8s/") {
+		return false
+	}
 	// Last segment looks like a file (foo.bar) → leave alone. Cheap
 	// heuristic: '.' after the final '/'. We don't care about
 	// false-positives from dotted resource names (rare in REST URLs)
