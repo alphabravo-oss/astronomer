@@ -35,7 +35,7 @@ const BASE_TABS = [
   { id: 'events', label: 'Events' },
   { id: 'related', label: 'Related' },
 ] as const;
-type TabId = 'overview' | 'yaml' | 'events' | 'related' | 'logs' | 'exec';
+type TabId = 'overview' | 'yaml' | 'conditions' | 'events' | 'related' | 'logs' | 'exec';
 
 // k8s container spec/status (camelCase keys have no underscores, so they
 // survive the api client's snake->camel transform untouched).
@@ -109,15 +109,18 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
   const execPerm = useClusterResourcePermission(clusterId, resourceType, 'exec', permissionResource);
 
   const isPod = resourceType === 'pods';
-  const tabs = useMemo(() => {
-    if (!isPod) return BASE_TABS;
-    const extra: Array<{ id: TabId; label: string }> = [];
-    if (logsPerm.allowed) extra.push({ id: 'logs', label: 'Logs' });
-    if (execPerm.allowed) extra.push({ id: 'exec', label: 'Exec' });
-    return [...BASE_TABS, ...extra];
-  }, [isPod, logsPerm.allowed, execPerm.allowed]);
-
   const { data: obj, isLoading, error } = useK8sResource(clusterId, k8sPath, read.allowed);
+  const conditions = (obj as K8sObject | undefined)?.status?.conditions ?? [];
+  const tabs = useMemo(() => {
+    const out: Array<{ id: TabId; label: string }> = [...BASE_TABS];
+    // Conditions tab (Rancher-style) when the object reports any — after YAML.
+    if (conditions.length > 0) out.splice(2, 0, { id: 'conditions', label: 'Conditions' });
+    if (isPod) {
+      if (logsPerm.allowed) out.push({ id: 'logs', label: 'Logs' });
+      if (execPerm.allowed) out.push({ id: 'exec', label: 'Exec' });
+    }
+    return out;
+  }, [isPod, logsPerm.allowed, execPerm.allowed, conditions.length]);
 
   if (!read.allowed) {
     return (
@@ -209,6 +212,8 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
           <YamlPanel clusterId={clusterId} k8sPath={k8sPath} allowEdit={update.allowed} />
         </div>
       )}
+
+      {tab === 'conditions' && <ConditionsTab conditions={conditions} />}
 
       {tab === 'events' && (
         <ResourceEvents clusterId={clusterId} namespace={namespace} name={name} kind={kind} />
@@ -371,7 +376,6 @@ function GenericOverview({ obj, resourceType }: { obj?: K8sObject; resourceType:
   const labels = Object.entries(meta.labels ?? {}) as Array<[string, string]>;
   const annotations = Object.entries(meta.annotations ?? {}) as Array<[string, string]>;
   const owners = meta.ownerReferences ?? [];
-  const conditions = obj?.status?.conditions ?? [];
 
   // ponytail: mask secret 'data' values; only secrets carries this.
   const isSecret = resourceType === 'secrets';
@@ -412,30 +416,7 @@ function GenericOverview({ obj, resourceType }: { obj?: K8sObject; resourceType:
         </Section>
       )}
 
-      {conditions.length > 0 && (
-        <Section title="Conditions">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Message</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {conditions.map((c, i) => (
-                <TableRow key={String(c.type ?? i)}>
-                  <TableCell className="text-xs font-medium">{String(c.type ?? '-')}</TableCell>
-                  <TableCell className="text-xs">{String(c.status ?? '-')}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{String(c.reason ?? '-')}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{String(c.message ?? '-')}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Section>
-      )}
+      {/* Conditions moved to a dedicated tab (ConditionsTab) — Rancher-style. */}
 
       {dataEntries.length > 0 && (
         <Section title="Data">
@@ -637,6 +618,44 @@ function num(v: unknown, fallback = '-'): string {
 }
 function rel(v: unknown): string | null {
   return typeof v === 'string' && v ? formatRelativeTime(v) : null;
+}
+
+function ConditionsTab({ conditions }: { conditions: Array<Record<string, unknown>> }) {
+  if (conditions.length === 0) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">No conditions reported.</p>;
+  }
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Reason</TableHead>
+            <TableHead>Message</TableHead>
+            <TableHead>Last Transition</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {conditions.map((c, i) => {
+            const status = String(c.status ?? '-');
+            return (
+              <TableRow key={String(c.type ?? i)}>
+                <TableCell className="text-xs font-medium">{String(c.type ?? '-')}</TableCell>
+                <TableCell className={cn('text-xs font-medium',
+                  status === 'True' ? 'text-status-success' : status === 'False' ? 'text-status-warning' : 'text-muted-foreground')}>
+                  {status}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">{String(c.reason ?? '-')}</TableCell>
+                <TableCell className="text-xs text-muted-foreground break-words">{String(c.message ?? '-')}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{rel(c.lastTransitionTime) ?? '-'}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
 }
 
 function WorkloadOverview({ obj }: { obj: K8sObject }) {
