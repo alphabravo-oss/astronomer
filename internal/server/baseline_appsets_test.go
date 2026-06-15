@@ -42,21 +42,12 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	})
 	q := baselineAppSetQuerierStub{
 		tools: map[string]sqlc.ClusterTool{
-			"trivy-operator": {
-				Slug:      "trivy-operator",
-				Charts:    json.RawMessage(`[{"chart_name":"trivy-operator","repo_url":"https://charts.example.test/aqua","namespace":"security","order":0}]`),
-				Presets:   json.RawMessage(`{"default":"operator:\n  scanJobTimeout: 10m\n"}`),
+			"kube-state-metrics": {
+				Slug:      "kube-state-metrics",
+				Charts:    json.RawMessage(`[{"chart_name":"kube-state-metrics","repo_url":"https://charts.example.test/ksm","namespace":"observability","order":0}]`),
+				Presets:   json.RawMessage(`{"default":"replicas: 2\n"}`),
 				IsEnabled: true,
 			},
-		},
-		// Only ksm + node-exporter are default-on; enable the other five so this
-		// test exercises the full 7-component render (labels, generators, waves).
-		settings: map[string]json.RawMessage{
-			platformSettingBaselineComponentPrefix + "trivy-operator": json.RawMessage(`true`),
-			platformSettingBaselineComponentPrefix + "fluent-bit":     json.RawMessage(`true`),
-			platformSettingBaselineComponentPrefix + "ingress-nginx":  json.RawMessage(`true`),
-			platformSettingBaselineComponentPrefix + "cert-manager":   json.RawMessage(`true`),
-			platformSettingBaselineComponentPrefix + "gatekeeper":     json.RawMessage(`true`),
 		},
 	}
 
@@ -67,14 +58,15 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	if err != nil {
 		t.Fatalf("list applicationsets: %v", err)
 	}
-	if len(items.Items) != 7 {
-		t.Fatalf("applicationset count = %d, want 7", len(items.Items))
+	// Baseline auto-manages only the two metrics exporters.
+	if len(items.Items) != 2 {
+		t.Fatalf("applicationset count = %d, want 2", len(items.Items))
 	}
-	trivy := findUnstructuredByName(items.Items, "astronomer-baseline-trivy")
-	if trivy == nil {
-		t.Fatal("astronomer-baseline-trivy not created")
+	ksm := findUnstructuredByName(items.Items, "astronomer-baseline-kube-state-metrics")
+	if ksm == nil {
+		t.Fatal("astronomer-baseline-kube-state-metrics not created")
 	}
-	generators, found, err := unstructured.NestedSlice(trivy.Object, "spec", "generators")
+	generators, found, err := unstructured.NestedSlice(ksm.Object, "spec", "generators")
 	if err != nil || !found || len(generators) != 1 {
 		t.Fatalf("generators found=%v len=%d err=%v", found, len(generators), err)
 	}
@@ -88,56 +80,38 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	if labels[argoCDIsLocalLabelKey] != "false" {
 		t.Fatalf("selector is-local = %v, want false", labels[argoCDIsLocalLabelKey])
 	}
-	appSetLabels := trivy.GetLabels()
+	appSetLabels := ksm.GetLabels()
 	if appSetLabels[baselineApplicationSetTargetLabel] != baselineTargetAdoptedClusters {
 		t.Fatalf("applicationset target label = %q, want %q", appSetLabels[baselineApplicationSetTargetLabel], baselineTargetAdoptedClusters)
 	}
-	if appSetLabels[baselineApplicationSetSyncPhaseLabel] != string(baselineSyncPhaseHealthCheck) {
-		t.Fatalf("applicationset sync phase label = %q, want %q", appSetLabels[baselineApplicationSetSyncPhaseLabel], baselineSyncPhaseHealthCheck)
+	if appSetLabels[baselineApplicationSetSyncPhaseLabel] != string(baselineSyncPhaseWorkloads) {
+		t.Fatalf("applicationset sync phase label = %q, want %q", appSetLabels[baselineApplicationSetSyncPhaseLabel], baselineSyncPhaseWorkloads)
 	}
-	repo, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "spec", "source", "repoURL")
-	if repo != "https://charts.example.test/aqua" {
+	// DB tool override flows into the rendered source.
+	repo, _, _ := unstructured.NestedString(ksm.Object, "spec", "template", "spec", "source", "repoURL")
+	if repo != "https://charts.example.test/ksm" {
 		t.Fatalf("repoURL = %q", repo)
 	}
-	namespace, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "spec", "destination", "namespace")
-	if namespace != "security" {
-		t.Fatalf("namespace = %q, want security", namespace)
+	namespace, _, _ := unstructured.NestedString(ksm.Object, "spec", "template", "spec", "destination", "namespace")
+	if namespace != "observability" {
+		t.Fatalf("namespace = %q, want observability", namespace)
 	}
-	values, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "spec", "source", "helm", "values")
-	if values != "operator:\n  scanJobTimeout: 10m\n" {
+	values, _, _ := unstructured.NestedString(ksm.Object, "spec", "template", "spec", "source", "helm", "values")
+	if values != "replicas: 2\n" {
 		t.Fatalf("helm values = %q", values)
 	}
-	trivyWave, _, _ := unstructured.NestedString(trivy.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
-	if trivyWave != "30" {
-		t.Fatalf("trivy sync wave = %q, want 30", trivyWave)
+	ksmWave, _, _ := unstructured.NestedString(ksm.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
+	if ksmWave != "10" {
+		t.Fatalf("ksm sync wave = %q, want 10", ksmWave)
 	}
-	ingress := findUnstructuredByName(items.Items, "astronomer-baseline-ingress-nginx")
-	if ingress == nil {
-		t.Fatal("astronomer-baseline-ingress-nginx not created")
+	if findUnstructuredByName(items.Items, "astronomer-baseline-node-exporter") == nil {
+		t.Fatal("astronomer-baseline-node-exporter not created")
 	}
-	ingressRepo, _, _ := unstructured.NestedString(ingress.Object, "spec", "template", "spec", "source", "repoURL")
-	if ingressRepo != "https://kubernetes.github.io/ingress-nginx" {
-		t.Fatalf("ingress repoURL = %q", ingressRepo)
-	}
-	certManager := findUnstructuredByName(items.Items, "astronomer-baseline-cert-manager")
-	if certManager == nil {
-		t.Fatal("astronomer-baseline-cert-manager not created")
-	}
-	certManagerWave, _, _ := unstructured.NestedString(certManager.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
-	if certManagerWave != "-30" {
-		t.Fatalf("cert-manager sync wave = %q, want -30", certManagerWave)
-	}
-	gatekeeper := findUnstructuredByName(items.Items, "astronomer-baseline-gatekeeper")
-	if gatekeeper == nil {
-		t.Fatal("astronomer-baseline-gatekeeper not created")
-	}
-	gatekeeperRepo, _, _ := unstructured.NestedString(gatekeeper.Object, "spec", "template", "spec", "source", "repoURL")
-	if gatekeeperRepo != "https://open-policy-agent.github.io/gatekeeper/charts" {
-		t.Fatalf("gatekeeper repoURL = %q", gatekeeperRepo)
-	}
-	gatekeeperWave, _, _ := unstructured.NestedString(gatekeeper.Object, "spec", "template", "metadata", "annotations", "argocd.argoproj.io/sync-wave")
-	if gatekeeperWave != "-10" {
-		t.Fatalf("gatekeeper sync wave = %q, want -10", gatekeeperWave)
+	// Opt-in components are Tools-owned, never baseline appsets.
+	for _, optIn := range []string{"astronomer-baseline-trivy", "astronomer-baseline-fluent-bit", "astronomer-baseline-ingress-nginx", "astronomer-baseline-cert-manager", "astronomer-baseline-gatekeeper"} {
+		if findUnstructuredByName(items.Items, optIn) != nil {
+			t.Fatalf("%s should not be a baseline appset", optIn)
+		}
 	}
 }
 
@@ -145,14 +119,7 @@ func TestBaselineApplicationSetsUseSyncWaveStandards(t *testing.T) {
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		argocdApplicationSetGVR: "ApplicationSetList",
 	})
-	q := baselineAppSetQuerierStub{settings: map[string]json.RawMessage{
-		platformSettingBaselineComponentPrefix + "trivy-operator": json.RawMessage(`true`),
-		platformSettingBaselineComponentPrefix + "fluent-bit":     json.RawMessage(`true`),
-		platformSettingBaselineComponentPrefix + "ingress-nginx":  json.RawMessage(`true`),
-		platformSettingBaselineComponentPrefix + "cert-manager":   json.RawMessage(`true`),
-		platformSettingBaselineComponentPrefix + "gatekeeper":     json.RawMessage(`true`),
-	}}
-	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
 		t.Fatalf("ensureBaselineApplicationSets: %v", err)
 	}
 	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
@@ -164,13 +131,8 @@ func TestBaselineApplicationSetsUseSyncWaveStandards(t *testing.T) {
 		phase baselineSyncPhase
 		wave  string
 	}{
-		"astronomer-baseline-cert-manager":       {phase: baselineSyncPhaseCRDs, wave: "-30"},
-		"astronomer-baseline-ingress-nginx":      {phase: baselineSyncPhaseOperators, wave: "-20"},
 		"astronomer-baseline-kube-state-metrics": {phase: baselineSyncPhaseWorkloads, wave: "10"},
 		"astronomer-baseline-node-exporter":      {phase: baselineSyncPhaseWorkloads, wave: "10"},
-		"astronomer-baseline-fluent-bit":         {phase: baselineSyncPhaseWorkloads, wave: "10"},
-		"astronomer-baseline-gatekeeper":         {phase: baselineSyncPhasePolicies, wave: "-10"},
-		"astronomer-baseline-trivy":              {phase: baselineSyncPhaseHealthCheck, wave: "30"},
 	}
 	if len(items.Items) != len(expected) {
 		t.Fatalf("applicationset count = %d, want %d", len(items.Items), len(expected))

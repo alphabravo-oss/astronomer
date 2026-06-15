@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
@@ -139,7 +138,7 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		AgentPrivilegeProfile: clusterAgentPrivilegeProfile(c.Annotations),
 		ArgoCD: ClusterArgoCDSummary{
 			BaselineManagedBy:  "unknown",
-			BaselineComponents: baselineComponentOwnership(context.Background(), nil, "unknown"),
+			BaselineComponents: baselineComponentOwnership("unknown"),
 		},
 	}
 	if c.LastHeartbeat.Valid {

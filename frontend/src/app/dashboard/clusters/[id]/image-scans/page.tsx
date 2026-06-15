@@ -264,6 +264,7 @@ export default function ClusterImageScansPage() {
            • !ready     — amber warning trivy-operator is unreachable.
           Sprint 081. */}
       <ScanProgressBanner
+        clusterId={clusterId}
         progress={progress.data}
         dispatchedRecently={!!lastRescanAt && Date.now() - lastRescanAt < 30_000}
       />
@@ -716,9 +717,11 @@ function HistorySparkline({
 // idle+up-to-date, operator-not-ready. Polling logic lives in the
 // parent (3s while scanning, 30s idle); this component stays pure.
 function ScanProgressBanner({
+  clusterId,
   progress,
   dispatchedRecently,
 }: {
+  clusterId: string;
   progress?: import('@/lib/api/cluster-detail').ImageVulnProgress;
   dispatchedRecently?: boolean;
 }) {
@@ -745,15 +748,27 @@ function ScanProgressBanner({
     );
   }
   if (!progress.trivyOperatorReady) {
+    // Trivy is opt-in: a cluster may simply not have it (the operator may run
+    // a different scanner like NeuVector, or none). Make this a calm, clearly
+    // actionable notice rather than an error — and point straight to Tools.
     return (
-      <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm flex items-center gap-3">
-        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+      <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm flex items-start gap-3">
+        <ShieldAlert className="h-4 w-4 text-sky-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1">
-          <div className="font-medium text-foreground">trivy-operator is not ready</div>
+          <div className="font-medium text-foreground">Image scanning isn&apos;t enabled on this cluster</div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            No scans will run until the operator deployment is Available in
-            <code className="mx-1 font-mono">trivy-system</code>. Check the cluster&apos;s Tools tab and reinstall the platform baseline if needed.
+            Astronomer&apos;s built-in scanning uses the Trivy operator, which
+            isn&apos;t installed here — so there are no vulnerability reports. If
+            you already use a different scanner (e.g. NeuVector), you can ignore
+            this. To turn on Astronomer scanning, install Trivy from the Tools
+            tab; reports appear within the first scan window (~5–15 min).
           </div>
+          <a
+            href={`/dashboard/clusters/${clusterId}/tools`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 mt-2 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+          >
+            Enable Trivy from Tools
+          </a>
         </div>
       </div>
     );

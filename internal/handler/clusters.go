@@ -438,7 +438,7 @@ func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterRe
 	} else if manageBaseline {
 		out.ArgoCD.BaselineManagedBy = "argocd_pending"
 	}
-	out.ArgoCD.BaselineComponents = baselineComponentOwnership(ctx, h.queries, out.ArgoCD.BaselineManagedBy)
+	out.ArgoCD.BaselineComponents = baselineComponentOwnership(out.ArgoCD.BaselineManagedBy)
 	rows, err := h.queries.ListArgoCDManagedClustersByCluster(ctx, c.ID)
 	if err != nil {
 		return
@@ -454,7 +454,7 @@ func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterRe
 	if out.ArgoCD.Registered && manageBaseline && !c.IsLocal {
 		out.ArgoCD.BaselineManagedBy = "argocd"
 	}
-	out.ArgoCD.BaselineComponents = baselineComponentOwnership(ctx, h.queries, out.ArgoCD.BaselineManagedBy)
+	out.ArgoCD.BaselineComponents = baselineComponentOwnership(out.ArgoCD.BaselineManagedBy)
 
 	instanceIDs, targets := argoCDManagedClusterApplicationTargets(c, rows)
 	if len(instanceIDs) == 0 || len(targets) == 0 {

@@ -2,28 +2,15 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
-
-// baselineSettingStub implements baselineSettingReader for tests.
-type baselineSettingStub map[string]json.RawMessage
-
-func (s baselineSettingStub) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {
-	v, ok := s[key]
-	if !ok {
-		return sqlc.PlatformSetting{}, pgx.ErrNoRows
-	}
-	return sqlc.PlatformSetting{Key: key, Value: v}, nil
-}
 
 // legacyClusterWithMetrics is a snapshot of the pre-DTO wire shape: it embeds
 // sqlc.Cluster anonymously so every column is marshaled at the top level, then
@@ -199,7 +186,7 @@ func TestClusterResponseIncludesBaselineComponentOwnership(t *testing.T) {
 		}
 	}
 
-	components := baselineComponentOwnership(context.Background(), nil, "argocd")
+	components := baselineComponentOwnership("argocd")
 	if len(components) != 2 {
 		t.Fatalf("argocd component count = %d, want 2", len(components))
 	}
@@ -207,23 +194,11 @@ func TestClusterResponseIncludesBaselineComponentOwnership(t *testing.T) {
 		if component.ManagedBy != "argocd" {
 			t.Fatalf("component %s managed_by = %q, want argocd", component.Slug, component.ManagedBy)
 		}
-	}
-
-	// Opting ingress-nginx in surfaces it (3 components, including ingress-nginx).
-	withIngress := baselineComponentOwnership(context.Background(), baselineSettingStub{
-		"argocd.baseline.ingress-nginx": json.RawMessage(`true`),
-	}, "argocd")
-	if len(withIngress) != 3 {
-		t.Fatalf("with ingress-nginx enabled count = %d, want 3", len(withIngress))
-	}
-	found := false
-	for _, c := range withIngress {
-		if c.Slug == "ingress-nginx" {
-			found = true
+		switch component.Slug {
+		case "kube-state-metrics", "prometheus-node-exporter":
+		default:
+			t.Fatalf("unexpected baseline-managed component %q (only metrics exporters expected)", component.Slug)
 		}
-	}
-	if !found {
-		t.Fatal("ingress-nginx enabled via setting but not listed")
 	}
 }
 

@@ -109,17 +109,14 @@ type baselineChartCoordinates struct {
 	Order     int    `json:"order"`
 }
 
+// fallbackBaselineApplicationSetComponents is the platform baseline that
+// Astronomer auto-manages on every adopted cluster: ONLY the two metrics
+// exporters that power the built-in dashboards and conflict with nothing.
+// Everything else a cluster might want (trivy, fluent-bit, ingress-nginx,
+// cert-manager, gatekeeper, …) is installed on demand from the per-cluster
+// Tools view — that is the single, per-cluster ownership path for them, so we
+// deliberately do NOT manage them as global baseline ApplicationSets here.
 var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent{
-	{
-		ApplicationSetName: "astronomer-baseline-trivy",
-		ApplicationPrefix:  "astronomer-trivy",
-		Slug:               "trivy-operator",
-		ChartName:          "trivy-operator",
-		RepoURL:            "https://aquasecurity.github.io/helm-charts",
-		Namespace:          "trivy-system",
-		ValuesYAML:         "trivy:\n  ignoreUnfixed: true\noperator:\n  scanJobTimeout: 5m\n",
-		SyncPhase:          baselineSyncPhaseHealthCheck,
-	},
 	{
 		ApplicationSetName: "astronomer-baseline-kube-state-metrics",
 		ApplicationPrefix:  "astronomer-ksm",
@@ -141,45 +138,6 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		Namespace:          "monitoring",
 		ValuesYAML:         "hostRootFsMount:\n  enabled: true\n",
 		SyncPhase:          baselineSyncPhaseWorkloads,
-	},
-	{
-		ApplicationSetName: "astronomer-baseline-fluent-bit",
-		ApplicationPrefix:  "astronomer-fluent-bit",
-		Slug:               "fluent-bit",
-		ChartName:          "fluent-bit",
-		RepoURL:            "https://fluent.github.io/helm-charts",
-		Namespace:          "logging",
-		ValuesYAML:         "config:\n  service: |\n    [SERVICE]\n        Daemon Off\n        Flush 1\n",
-		SyncPhase:          baselineSyncPhaseWorkloads,
-	},
-	{
-		ApplicationSetName: "astronomer-baseline-ingress-nginx",
-		ApplicationPrefix:  "astronomer-ingress-nginx",
-		Slug:               "ingress-nginx",
-		ChartName:          "ingress-nginx",
-		RepoURL:            "https://kubernetes.github.io/ingress-nginx",
-		Namespace:          "ingress-nginx",
-		ValuesYAML:         "controller:\n  metrics:\n    enabled: true\n",
-		SyncPhase:          baselineSyncPhaseOperators,
-	},
-	{
-		ApplicationSetName: "astronomer-baseline-cert-manager",
-		ApplicationPrefix:  "astronomer-cert-manager",
-		Slug:               "cert-manager",
-		ChartName:          "cert-manager",
-		RepoURL:            "https://charts.jetstack.io",
-		Namespace:          "cert-manager",
-		ValuesYAML:         "installCRDs: true\nstartupapicheck:\n  enabled: false\n",
-		SyncPhase:          baselineSyncPhaseCRDs,
-	},
-	{
-		ApplicationSetName: "astronomer-baseline-gatekeeper",
-		ApplicationPrefix:  "astronomer-gatekeeper",
-		Slug:               "gatekeeper",
-		ChartName:          "gatekeeper",
-		RepoURL:            "https://open-policy-agent.github.io/gatekeeper/charts",
-		Namespace:          "gatekeeper-system",
-		SyncPhase:          baselineSyncPhasePolicies,
 	},
 }
 
