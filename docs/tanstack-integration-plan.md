@@ -722,7 +722,8 @@ Every task lists its own tests; this is the program-level safety net.
 > unchanged public API (~74 call sites untouched), plus column-visibility persistence (B2), faceted
 > filters (B3), and opt-in server-side pagination (B4, Audit page refactored onto it). Only column
 > *resize* (part of B2) is deferred. Remaining plan items: A5 (optional streamedQuery spike), D4
-> (Vite-readiness doc), virtualization track C. Commits d2ac588 / d2bf354 / (B3) / (B4) on the branch.
+> (Vite-readiness doc), virtualization track C. Branch commits: d2ac588 (foundation + B0–B2),
+> d2bf354 (B3), 46c56bb (B4). Deployed to k3s: d2ac588 (image tanstack-d2ac588); B3/B4 not yet rolled out.
 
 ```
 P0
