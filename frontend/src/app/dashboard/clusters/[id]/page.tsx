@@ -535,23 +535,33 @@ export default function ClusterDetailPage() {
 }
 
 function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
+  // The local/self-managed cluster runs the in-process management agent (the
+  // chart's ServiceAccount + management ClusterRole), not a profile-generated
+  // remote agent — so the viewer/operator/admin model doesn't apply. Its stored
+  // annotation is empty (which would default to "viewer"), so surface its true
+  // posture explicitly instead of mislabeling it read-only.
+  const isLocal = !!cluster.isLocal;
   const profile = (cluster.agentPrivilegeProfile || 'admin').toLowerCase();
-  const isAdmin = profile === 'admin';
-  const label =
-    profile === 'viewer'
+  const isAdmin = !isLocal && profile === 'admin';
+  const label = isLocal
+    ? 'Management'
+    : profile === 'viewer'
       ? 'Viewer'
       : profile === 'operator'
         ? 'Operator'
         : 'Admin';
-  const detail =
-    profile === 'viewer'
+  const detail = isLocal
+    ? 'In-cluster management agent — full management RBAC for platform self-management.'
+    : profile === 'viewer'
       ? 'Read-only inventory, logs, health checks, and discovery.'
       : profile === 'operator'
         ? 'Workload operations without ClusterRole or cluster-admin escalation.'
         : 'Full API-group, resource, verb, and non-resource URL access.';
-  const tone = isAdmin
-    ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-    : 'border-status-success/30 bg-status-success/10 text-status-success';
+  const tone = isLocal
+    ? 'border-status-info/30 bg-status-info/10 text-status-info'
+    : isAdmin
+      ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+      : 'border-status-success/30 bg-status-success/10 text-status-success';
 
   return (
     <div className="rounded-lg border border-border bg-card">
