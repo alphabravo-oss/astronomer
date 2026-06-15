@@ -4,17 +4,20 @@
 # This template is rendered by the Astronomer management server with
 # cluster-specific values. Placeholders use {{PLACEHOLDER}} syntax.
 #
-# Placeholders:
-#   {{SERVER_URL}}           - Management server WebSocket URL
-#   {{CLUSTER_ID}}           - Unique cluster identifier
-#   {{REGISTRATION_TOKEN}}   - Bearer token for agent authentication
-#   {{CA_CERT}}              - Base64-encoded CA certificate (optional)
-#   {{AGENT_IMAGE}}          - Full agent container image reference
-#   {{AGENT_SERVICE_ACCOUNT_NAME}} - Agent ServiceAccount name
-#   {{AGENT_POD_LABELS}}     - Additional Deployment pod-template labels
-#   {{AGENT_RBAC_RULES}}     - ClusterRole rules selected by privilege profile
-#   {{AGENT_RBAC_BINDING_KIND}} - ClusterRoleBinding or RoleBinding
-#   {{AGENT_RBAC_BINDING_NAMESPACE}} - Optional namespace line for RoleBinding
+# Placeholders (names shown WITHOUT the double-brace syntax on purpose: the
+# renderer string-replaces every literal {{...}} occurrence, so documenting
+# them with braces here would inject their values — e.g. the multi-line RBAC
+# rules — into this comment and break the rendered YAML):
+#   SERVER_URL                   - Management server WebSocket URL
+#   CLUSTER_ID                   - Unique cluster identifier
+#   REGISTRATION_TOKEN           - Bearer token for agent authentication
+#   CA_CERT                      - Base64-encoded CA certificate (optional)
+#   AGENT_IMAGE                  - Full agent container image reference
+#   AGENT_SERVICE_ACCOUNT_NAME   - Agent ServiceAccount name
+#   AGENT_POD_LABELS             - Additional Deployment pod-template labels
+#   AGENT_RBAC_RULES             - ClusterRole rules selected by privilege profile
+#   AGENT_RBAC_BINDING_KIND      - ClusterRoleBinding or RoleBinding
+#   AGENT_RBAC_BINDING_NAMESPACE - Optional namespace line for RoleBinding
 # ============================================================================
 
 ---

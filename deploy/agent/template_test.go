@@ -375,3 +375,45 @@ func TestRenderInstallYAMLUsesInstallMetadata(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderInstallYAMLIsValidYAMLForEveryProfile is the regression guard for
+// the bug where the multi-line {{AGENT_RBAC_RULES}} value (notably the admin
+// profile's */*/* rules) was string-replaced INTO the header-comment block
+// that documented the placeholders, breaking the rendered YAML. Every profile
+// must render a manifest whose documents all parse as valid YAML.
+func TestRenderInstallYAMLIsValidYAMLForEveryProfile(t *testing.T) {
+	profiles := []string{
+		PrivilegeProfileAdmin,
+		PrivilegeProfileViewer,
+		PrivilegeProfileOperator,
+		PrivilegeProfileNamespaceViewer,
+		PrivilegeProfileNamespaceOperator,
+		PrivilegeProfileCustom,
+		"", // unspecified -> admin default
+	}
+	for _, p := range profiles {
+		manifest := RenderInstallYAML(InstallTemplateData{
+			ServerURL:         "https://astro.example.com",
+			ClusterID:         "c1",
+			RegistrationToken: "tok",
+			AgentImage:        "example.com/agent:v1",
+			PrivilegeProfile:  p,
+		})
+		dec := yaml.NewDecoder(strings.NewReader(manifest))
+		docs := 0
+		for {
+			var doc any
+			err := dec.Decode(&doc)
+			if err != nil {
+				if err.Error() == "EOF" {
+					break
+				}
+				t.Fatalf("profile %q rendered invalid YAML at doc %d: %v\n%s", p, docs, err, manifest)
+			}
+			docs++
+		}
+		if docs < 5 {
+			t.Fatalf("profile %q rendered only %d YAML docs, expected the full agent manifest", p, docs)
+		}
+	}
+}
