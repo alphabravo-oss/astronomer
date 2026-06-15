@@ -140,32 +140,32 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Wait for K8S_RESPONSE on the stream with timeout.
+	// Wait for the K8S_RESPONSE on the stream with timeout. The agent sends
+	// small bodies as a single K8sResponsePayload but CHUNKS large bodies
+	// (>K8sChunkSizeBytes) into header+data…+end stream frames even for unary
+	// requests — so reassemble both shapes. Reading only the first frame here
+	// (the old behaviour) returned status+headers with a zero-length body for
+	// every chunked response, e.g. a 398 KiB secrets list -> HTTP 200 + empty,
+	// which broke ArgoCD's cluster-cache discovery and any large user list.
 	ctx, cancel := context.WithTimeout(r.Context(), k8sProxyTimeout)
 	defer cancel()
 
-	select {
-	case data := <-stream.DataCh:
-		var resp protocol.K8sResponsePayload
-		if err := json.Unmarshal(data, &resp); err != nil {
-			p.log.Error("failed to unmarshal K8s response",
-				slog.String("cluster_id", clusterID),
-				slog.String("error", err.Error()),
-			)
-			recordK8sProxyError(mode, "invalid_response")
-			http.Error(w, `{"error":"invalid response from agent"}`, http.StatusBadGateway)
+	resp, err := reassembleK8sResponse(ctx, stream.DataCh, stream.DoneCh)
+	if err != nil {
+		if ctx.Err() != nil {
+			recordK8sProxyError(mode, "timeout")
+			http.Error(w, `{"error":"request timed out"}`, http.StatusGatewayTimeout)
 			return
 		}
-		writeK8sResponse(w, &resp)
-
-	case <-stream.DoneCh:
-		recordK8sProxyError(mode, "stream_closed")
-		http.Error(w, `{"error":"stream closed unexpectedly"}`, http.StatusBadGateway)
-
-	case <-ctx.Done():
-		recordK8sProxyError(mode, "timeout")
-		http.Error(w, `{"error":"request timed out"}`, http.StatusGatewayTimeout)
+		p.log.Error("failed to assemble K8s response",
+			slog.String("cluster_id", clusterID),
+			slog.String("error", err.Error()),
+		)
+		recordK8sProxyError(mode, "invalid_response")
+		http.Error(w, `{"error":"invalid response from agent"}`, http.StatusBadGateway)
+		return
 	}
+	writeK8sResponse(w, resp)
 }
 
 // isWatchRequest reports whether r is a Kubernetes Watch request that needs
