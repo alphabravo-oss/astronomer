@@ -261,10 +261,12 @@ function podForViewer(obj: K8sObject | undefined, namespace: string): Pod {
 // ── Generic overview (no per-kind renderers — that's a later gate) ──
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  // Match the app's standard surface (rounded-lg border bg-card) so detail
+  // views read as carded panels like the rest of the dashboard, not bare lists.
   return (
-    <div>
-      <h2 className="mb-2 text-sm font-semibold text-foreground">{title}</h2>
-      {children}
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <h2 className="border-b border-border px-4 py-2.5 text-sm font-semibold text-foreground">{title}</h2>
+      <div className="px-4 py-3">{children}</div>
     </div>
   );
 }
