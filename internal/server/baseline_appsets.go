@@ -398,14 +398,13 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 								"prune":    true,
 								"selfHeal": true,
 							},
-							// ServerSideApply: the apiserver performs the merge so ArgoCD
-							// doesn't client-side-apply the chart objects. ArgoCD still
-							// fetches the OpenAPI schema (CreateNamespace + diff do this
-							// even under SSA), and through the tunnel that fetch arrives
-							// WITHOUT the cluster proxy token (kubectl treats discovery as
-							// anonymous). The internal-argocd proxy route therefore allows
-							// unauthenticated read-only /openapi GETs — see
-							// requireArgoCDClusterProxyToken.
+							// ServerSideApply: the apiserver performs the merge, so ArgoCD
+							// does NOT download the OpenAPI schema client-side for
+							// validation. Through the tunnel proxy that client-side openapi
+							// fetch is made WITHOUT the cluster proxy token (kubectl treats
+							// it as public discovery) and the proxy 401s it, failing every
+							// apply. SSA sidesteps that entirely and is the recommended mode
+							// for proxied/aggregated clusters.
 							"syncOptions": []any{"CreateNamespace=true", "ServerSideApply=true"},
 						},
 					},
