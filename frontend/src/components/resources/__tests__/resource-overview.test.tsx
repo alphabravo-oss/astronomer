@@ -201,8 +201,9 @@ describe('ResourceOverview kind-specific branches', () => {
       />
     );
 
-    // The key is shown but the value is masked, never the raw base64.
-    expect(screen.getByText('password')).toBeInTheDocument();
+    // The key is shown (in the Secret keys list + masked Data table) but the
+    // value is masked, never the raw base64.
+    expect(screen.getAllByText('password').length).toBeGreaterThan(0);
     expect(screen.queryByText('c2VjcmV0')).not.toBeInTheDocument();
     expect(screen.getByText('••••••••')).toBeInTheDocument();
   });

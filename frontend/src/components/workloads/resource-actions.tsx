@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Scaling, RotateCw, Trash2, Pause, Play, Zap } from 'lucide-react';
+import { Scaling, RotateCw, Trash2, Pause, Play, Zap, Download } from 'lucide-react';
+import * as apiClient from '@/lib/api';
+import { toastApiError } from '@/lib/toast';
 import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useScaleWorkload, useRestartWorkload, useK8sDelete, useK8sPatch, useK8sCreate } from '@/lib/hooks';
@@ -69,6 +71,22 @@ export function ResourceActions({
   const [showScale, setShowScale] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
+  // Download the object's live YAML (Rancher-universal action). Fetched on
+  // demand so it isn't pulled for every detail view.
+  const downloadYaml = async () => {
+    try {
+      const yaml = await apiClient.k8sGetYaml(clusterId, path);
+      const url = URL.createObjectURL(new Blob([yaml], { type: 'text/yaml' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toastApiError('Failed to download YAML', e);
+    }
+  };
+
   // Trigger a CronJob now: create a Job from its jobTemplate, mirroring
   // `kubectl create job --from=cronjob` (generateName + the manual-instantiate
   // annotation). Pure k8s-proxy POST, no backend endpoint needed.
@@ -125,6 +143,9 @@ export function ResourceActions({
           {suspended ? 'Resume' : 'Suspend'}
         </button>
       )}
+      <button type="button" className={BTN} onClick={downloadYaml} title="Download YAML">
+        <Download className="h-3.5 w-3.5" /> YAML
+      </button>
       <button type="button"
         className={cn(BTN, 'border-status-error/30 text-status-error hover:bg-status-error/10')}
         disabled={!deletePerm.allowed} title={denied(deletePerm)}

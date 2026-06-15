@@ -342,6 +342,9 @@ export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resou
       case 'jobs': return <JobOverview obj={obj!} />;
       case 'cronjobs': return <CronJobOverview obj={obj!} />;
       case 'hpa': return <HPAOverview obj={obj!} />;
+      case 'secrets': return <SecretOverview obj={obj!} />;
+      case 'persistentvolumes': return <PVOverview obj={obj!} />;
+      case 'networkpolicies': return <NetworkPolicyOverview obj={obj!} />;
       default: return null;
     }
   })();
@@ -785,6 +788,56 @@ function HPAOverview({ obj }: { obj: K8sObject }) {
       {metrics.length > 0 && (
         <Section title="Metrics"><KeyValueTable entries={metrics} /></Section>
       )}
+    </>
+  );
+}
+
+function SecretOverview({ obj }: { obj: K8sObject }) {
+  const type = asRecord(obj).type;
+  const keys = Object.keys(obj.data ?? {});
+  const summary: Array<[string, string]> = [];
+  if (type) summary.push(['type', String(type)]);
+  summary.push(['keys', String(keys.length)]);
+  return (
+    <>
+      <Section title="Secret"><KeyValueTable entries={summary} /></Section>
+      {keys.length > 0 && (
+        <Section title="Keys">
+          <ul className="space-y-1">
+            {keys.map((k) => <li key={k} className="font-mono text-xs text-foreground">{k}</li>)}
+          </ul>
+        </Section>
+      )}
+    </>
+  );
+}
+
+function PVOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const claim = asRecord(spec.claimRef);
+  const summary: Array<[string, string]> = [];
+  if (status.phase) summary.push(['status', String(status.phase)]);
+  const cap = asRecord(spec.capacity).storage;
+  if (cap) summary.push(['capacity', String(cap)]);
+  if (Array.isArray(spec.accessModes)) summary.push(['accessModes', (spec.accessModes as string[]).join(', ')]);
+  if (spec.persistentVolumeReclaimPolicy) summary.push(['reclaimPolicy', String(spec.persistentVolumeReclaimPolicy)]);
+  if (spec.storageClassName) summary.push(['storageClass', String(spec.storageClassName)]);
+  if (claim.name) summary.push(['claim', `${claim.namespace ? `${claim.namespace}/` : ''}${claim.name}`]);
+  return <Section title="PersistentVolume"><KeyValueTable entries={summary} /></Section>;
+}
+
+function NetworkPolicyOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const summary: Array<[string, string]> = [];
+  if (Array.isArray(spec.policyTypes)) summary.push(['policyTypes', (spec.policyTypes as string[]).join(', ')]);
+  summary.push(['ingress rules', String(Array.isArray(spec.ingress) ? spec.ingress.length : 0)]);
+  summary.push(['egress rules', String(Array.isArray(spec.egress) ? spec.egress.length : 0)]);
+  const podSelector = Object.entries(asRecord(asRecord(spec.podSelector).matchLabels)) as Array<[string, string]>;
+  return (
+    <>
+      <Section title="NetworkPolicy"><KeyValueTable entries={summary} /></Section>
+      <Section title="Pod Selector"><KeyValueTable entries={podSelector} /></Section>
     </>
   );
 }
