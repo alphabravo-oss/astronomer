@@ -721,9 +721,11 @@ Every task lists its own tests; this is the program-level safety net.
 > **all of the Table track B0–B4** DONE — `DataTable` internals on `@tanstack/react-table` behind the
 > unchanged public API (~74 call sites untouched), plus column-visibility persistence (B2), faceted
 > filters (B3), and opt-in server-side pagination (B4, Audit page refactored onto it). Only column
-> *resize* (part of B2) is deferred. Remaining plan items: A5 (optional streamedQuery spike), D4
-> (Vite-readiness doc), virtualization track C. Branch commits: d2ac588 (foundation + B0–B2),
-> d2bf354 (B3), 46c56bb (B4). Deployed to k3s: d2ac588 (image tanstack-d2ac588); B3/B4 not yet rolled out.
+> Everything except D4 (Vite-readiness doc) is now done: P0, all of P1 (A1–A5), the full Table
+> track (B0–B4, incl. resize), and virtualization (C0–C1). Branch commits: d2ac588 (foundation +
+> B0–B2), d2bf354 (B3), 46c56bb (B4), c9d9b6a (B2-resize + C + A5). All green: tsc / lint 0-warn /
+> 200 jest / 11 real-browser e2e / code-health. Deployed to k3s: only d2ac588 (image
+> tanstack-d2ac588); B3/B4/C/resize not yet rolled out.
 
 ```
 P0
@@ -747,9 +749,8 @@ P2
   [x] B1  Reimplement DataTable internals on react-table (keystone, 0 call-site edits, test unedited)
           ↳ parity: 2-state sort, numeric sortAccessor, visible-column search, page-reset-on-search,
             autoResetPageIndex:false (no snap-to-1 on poll), ≥1-visible-column guard, selection/bulkActions
-  [~] B2  Persist column visibility (DONE, via `persistKey` prop, hydration-safe; enabled on clusters)
-          Column RESIZE deferred — invasive to the shared render path; its own follow-up    (GATE 2)
-          ↳ Confirmed in a real browser: tests/e2e/data-table.spec.ts (sort/paginate + reload-persist)
+  [x] B2  Column visibility persistence (`persistKey`) + RESIZE (`resizable`, drag handles, persisted
+          sizing) — both hydration-safe. Real-browser e2e for visibility persistence.     (GATE 2)
 
 P3
   [x] B3  Faceted filters — additive `Column.filter` config + toolbar multi-select dropdown
@@ -760,13 +761,15 @@ P3
           future extension; audit columns aren't server-sortable today.            (GATE 3)
 
 P4
-  [ ] C0  Virtualize DataTable body (separate role=grid path; drop pagination model; measureElement)
-  [ ] C1  Enable on VERIFIED fetch-all lists (CIS findings first); author ARIA-grid a11y (GATE 4)
+  [x] C0  Virtualize DataTable body — opt-in `virtualized`; separate DIV ARIA-grid path
+          (role=grid/row/gridcell), drops pagination model, measureElement, keyboard nav
+  [x] C1  Enabled on the CIS scan-findings list (verified fetch-all); ARIA-grid a11y; real-browser
+          e2e (1200 rows → bounded DOM). a11y hardened: grid container is the keyboard entry point. (GATE 4)
 
 P5
-  [ ] A5  (optional) streamedQuery SSE spike
+  [x] A5  streamedQuery SSE spike → recommend KEEP hand-rolled bus (docs/a5-streamedquery-spike.md)
   [ ] D4  Document remaining Next-only surface (Appendix C)
-  [ ] —   Delete old DataTable internals; Vite-readiness audit     (DONE)
+  [ ] —   Delete old DataTable internals (n/a — internals were swapped in place); Vite-readiness audit
 ```
 
 ---
