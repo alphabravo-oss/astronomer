@@ -9,8 +9,8 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 56
-- Handler Go files scanned: 123
-- Production source files scanned: 188
+- Handler Go files scanned: 124
+- Production source files scanned: 189
 - Task constants resolved: 106
 - Worker handler registrations: 59
 - Periodic schedules: 45
@@ -215,7 +215,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 
 | Scope |Call sites |Examples |
 | --- |--- |--- |
-| `agent_lifecycle` |1 |[`internal/handler/agent_fleet.go:762`](internal/handler/agent_fleet.go:762) |
+| `agent_lifecycle` |1 |[`internal/handler/agent_fleet.go:766`](internal/handler/agent_fleet.go:766) |
 | `argocd` |1 |[`internal/handler/argocd.go:597`](internal/handler/argocd.go:597) |
 | `catalog` |4 |[`internal/handler/catalog.go:939`](internal/handler/catalog.go:939)<br>[`internal/handler/catalog.go:999`](internal/handler/catalog.go:999)<br>[`internal/handler/catalog.go:1093`](internal/handler/catalog.go:1093)<br>[`internal/handler/catalog.go:1146`](internal/handler/catalog.go:1146) |
 | `deferred` |1 |[`internal/handler/maintenance_gate.go:137`](internal/handler/maintenance_gate.go:137) |

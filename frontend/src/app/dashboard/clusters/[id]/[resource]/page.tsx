@@ -49,7 +49,7 @@ import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
 import { k8sResourcePath, detailHref } from '@/lib/k8s-paths';
-import { usePermissionDecision } from '@/lib/permission-hooks';
+import { usePermissionDecision, canonicalPermissionResource } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
 import type {
@@ -797,77 +797,6 @@ type ResourcePermissionDecisions = {
   manage: PermissionDecision;
 };
 
-function canonicalPermissionResource(resourceType: string): string {
-  switch (resourceType.toLowerCase()) {
-    case 'services':
-    case 'service':
-    case 'endpoints':
-    case 'endpoint':
-      return 'services';
-    case 'ingresses':
-    case 'ingress':
-    case 'gateways':
-    case 'gateway':
-    case 'httproutes':
-    case 'httproute':
-    case 'gatewayclasses':
-    case 'gatewayclass':
-    case 'grpcroutes':
-    case 'grpcroute':
-    case 'tcproutes':
-    case 'tcproute':
-    case 'udproutes':
-    case 'udproute':
-    case 'tlsroutes':
-    case 'tlsroute':
-    case 'referencegrants':
-    case 'referencegrant':
-      return 'ingresses';
-    case 'networkpolicies':
-    case 'networkpolicy':
-      return 'network_policies';
-    case 'persistentvolumes':
-    case 'persistentvolume':
-    case 'persistentvolumeclaims':
-    case 'persistentvolumeclaim':
-    case 'storageclasses':
-    case 'storageclass':
-      return 'storage';
-    case 'configmaps':
-    case 'configmap':
-      return 'configmaps';
-    case 'secrets':
-    case 'secret':
-      return 'secrets';
-    case 'pods':
-    case 'pod':
-      return 'pods';
-    case 'nodes':
-    case 'node':
-      return 'nodes';
-    case 'deployments':
-    case 'deployment':
-    case 'daemonsets':
-    case 'daemonset':
-    case 'statefulsets':
-    case 'statefulset':
-    case 'replicasets':
-    case 'replicaset':
-    case 'jobs':
-    case 'job':
-    case 'cronjobs':
-    case 'cronjob':
-    case 'hpa':
-    case 'horizontalpodautoscalers':
-    case 'horizontalpodautoscaler':
-    case 'poddisruptionbudgets':
-    case 'poddisruptionbudget':
-      return 'workloads';
-    default:
-      return 'clusters';
-  }
-}
-
 function useClusterResourcePermissions(clusterId: string, resourceType: string): ResourcePermissionDecisions {
   const permissionResource = canonicalPermissionResource(resourceType);
   const scope = useMemo(() => ({ type: 'cluster' as const, id: clusterId }), [clusterId]);
@@ -1205,6 +1134,7 @@ function EventsTable({ clusterId }: { clusterId: string }) {
 }
 
 function PodsTable({ clusterId }: { clusterId: string }) {
+  const router = useRouter();
   const { data, isLoading } = useClusterPods(clusterId);
   const deletePod = useDeletePod();
   const permissions = useClusterResourcePermissions(clusterId, 'pods');
@@ -1243,11 +1173,14 @@ function PodsTable({ clusterId }: { clusterId: string }) {
   }, [clusterId, permissions.exec]);
 
   const columns = useMemo<Column<Pod>[]>(() => [
-    ...podColumns,
+    // Override the shared name cell with a drill-down link into pod detail.
+    nameColumn<Pod>(clusterId, 'pods'),
+    ...podColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
+        <StopRowClick>
         <ActionMenu
           items={[
             {
@@ -1286,16 +1219,18 @@ function PodsTable({ clusterId }: { clusterId: string }) {
             },
           ]}
         />
+        </StopRowClick>
       ),
       sortable: false,
       align: 'center',
     },
-  ], [openExec, openLogs, permissions.delete, permissions.exec, permissions.logs, permissions.read]);
+  ], [clusterId, openExec, openLogs, permissions.delete, permissions.exec, permissions.logs, permissions.read]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
-        searchPlaceholder="Search pods..." loading={isLoading} emptyMessage="No pods found" />
+        searchPlaceholder="Search pods..." loading={isLoading} emptyMessage="No pods found"
+        onRowClick={makeRowClick(router, clusterId, 'pods', permissions.read)} />
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -81,9 +81,26 @@ const serviceObject = {
     uid: 'svc-uid-123',
     creationTimestamp: '2024-01-01T00:00:00Z',
     labels: { team: 'platform' },
+    ownerReferences: [{ kind: 'Deployment', name: 'my-deploy', uid: 'dep-uid-1' }],
   },
   spec: { type: 'ClusterIP', clusterIP: '10.0.0.10', ports: [{ port: 80, protocol: 'TCP' }] },
   status: {},
+};
+
+// Events list returned by the k8s proxy GET with a fieldSelector for this object.
+const eventList = {
+  apiVersion: 'v1',
+  kind: 'EventList',
+  items: [
+    {
+      metadata: { uid: 'evt-uid-1' },
+      type: 'Warning',
+      reason: 'FailedScheduling',
+      message: 'no nodes available',
+      count: 3,
+      lastTimestamp: '2024-01-01T01:00:00Z',
+    },
+  ],
 };
 
 async function mockApi(page: Page) {
@@ -100,6 +117,10 @@ async function mockApi(page: Page) {
     }
     if (path === `/clusters/${CLUSTER_ID}/resources/services` && method === 'GET') {
       return route.fulfill({ json: apiResponse([serviceRow]) });
+    }
+    // Events feed (fieldSelector query) — match before the single-object route.
+    if (path === `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/events`) {
+      return route.fulfill({ json: eventList });
     }
     // Single Service via the k8s proxy: /clusters/{id}/k8s/api/v1/namespaces/{ns}/services/{name}
     if (path === `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/services/${SERVICE_NAME}`) {
@@ -171,4 +192,26 @@ test('drilldown: clicking the row action button does NOT navigate', async ({ con
   await expect(page.getByRole('heading', { name: 'Services' })).toBeVisible();
   // The action menu opened (View YAML item visible) — confirms we hit the button.
   await expect(page.getByText('View YAML').first()).toBeVisible();
+});
+
+test('drilldown: Events tab lists this object\'s events; Related shows owner refs', async ({ context, page }) => {
+  await authenticate(context, page);
+  await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}`);
+
+  await expect(page.getByRole('heading', { name: SERVICE_NAME })).toBeVisible();
+
+  // Events tab: the mocked event renders (type/reason/message).
+  await page.getByRole('button', { name: 'Events' }).click();
+  await expect(page.getByText('FailedScheduling')).toBeVisible();
+  await expect(page.getByText('no nodes available')).toBeVisible();
+
+  // Related tab: owner reference renders as a drill-down link.
+  await page.getByRole('button', { name: 'Related' }).click();
+  await expect(page.getByText('Owned By')).toBeVisible();
+  const ownerLink = page.getByRole('link', { name: 'my-deploy' });
+  await expect(ownerLink).toBeVisible();
+  await expect(ownerLink).toHaveAttribute(
+    'href',
+    new RegExp(`/dashboard/clusters/${CLUSTER_ID}/deployments/${SERVICE_NS}/my-deploy$`),
+  );
 });

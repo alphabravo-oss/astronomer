@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from '@/lib/navigation';
+import { useParams, useRouter } from '@/lib/navigation';
+import { detailHref } from '@/lib/k8s-paths';
 import { useWorkload, useWorkloadPods, useWorkloadMetrics } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -16,6 +17,7 @@ type TabKey = 'pods' | 'logs' | 'metrics';
 
 export default function WorkloadDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const clusterId = params.id as string;
   const kind = params.kind as string;
   const namespace = params.namespace as string;
@@ -39,8 +41,16 @@ export default function WorkloadDetailPage() {
     {
       key: 'name',
       header: 'Name',
+      // Name links into the generic pod detail (open-in-new-tab friendly);
+      // stopPropagation so it doesn't double-fire the row click.
       accessor: (row) => (
-        <span className="font-mono text-xs text-foreground">{row.name}</span>
+        <Link
+          href={detailHref(clusterId, 'pods', row.namespace ?? namespace, row.name)}
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-xs text-foreground hover:underline"
+        >
+          {row.name}
+        </Link>
       ),
     },
     {
@@ -197,10 +207,9 @@ export default function WorkloadDetailPage() {
             searchPlaceholder="Search pods..."
             loading={podsLoading}
             emptyMessage="No pods found"
-            onRowClick={(row) => {
-              setSelectedPod(row.name);
-              setActiveTab('logs');
-            }}
+            onRowClick={(row) =>
+              router.push(detailHref(clusterId, 'pods', row.namespace ?? namespace, row.name))
+            }
           />
         </div>
       )}

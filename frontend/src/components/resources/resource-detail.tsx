@@ -2,11 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation';
-import { useK8sResource } from '@/lib/hooks';
-import { usePermissionDecision } from '@/lib/permission-hooks';
+import { Link } from '@/lib/link';
+import { useK8sResource, useWorkloadPods } from '@/lib/hooks';
+import { useClusterResourcePermission } from '@/lib/permission-hooks';
 import { YamlPanel } from '@/components/ui/yaml-view-dialog';
+import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
+import { PodTerminal } from '@/components/workloads/pod-terminal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { detailHref, getResourceDef } from '@/lib/k8s-paths';
 import { formatRelativeTime, cn } from '@/lib/utils';
+import type { Pod } from '@/types';
 import { Loader2, ArrowLeft } from 'lucide-react';
 
 interface ResourceDetailProps {
@@ -18,12 +23,29 @@ interface ResourceDetailProps {
   k8sPath: string;
 }
 
-// ponytail: only the two GATE-A tabs. Events/Related are GATE-B.
-const TABS = [
+// ponytail: Logs/Exec are pod-only; we append them to this base set when
+// resourceType === 'pods' rather than building a per-kind tab registry.
+const BASE_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'yaml', label: 'YAML' },
+  { id: 'events', label: 'Events' },
+  { id: 'related', label: 'Related' },
 ] as const;
-type TabId = (typeof TABS)[number]['id'];
+type TabId = 'overview' | 'yaml' | 'events' | 'related' | 'logs' | 'exec';
+
+// k8s container spec/status (camelCase keys have no underscores, so they
+// survive the api client's snake->camel transform untouched).
+interface ContainerSpec {
+  name?: string;
+  image?: string;
+}
+interface ContainerStatus {
+  name?: string;
+  image?: string;
+  ready?: boolean;
+  restartCount?: number;
+  state?: Record<string, { reason?: string } | undefined>;
+}
 
 interface K8sObject {
   kind?: string;
@@ -36,7 +58,31 @@ interface K8sObject {
     annotations?: Record<string, string>;
     ownerReferences?: Array<{ kind: string; name: string; uid?: string }>;
   };
-  status?: { conditions?: Array<Record<string, unknown>> };
+  spec?: {
+    nodeName?: string;
+    containers?: ContainerSpec[];
+    // Service
+    type?: string;
+    clusterIP?: string;
+    selector?: Record<string, string>;
+    ports?: Array<{ name?: string; port?: number; targetPort?: number | string; protocol?: string; nodePort?: number }>;
+    // Ingress
+    ingressClassName?: string;
+    rules?: Array<{ host?: string }>;
+    tls?: Array<{ hosts?: string[]; secretName?: string }>;
+    // PVC
+    storageClassName?: string;
+    volumeName?: string;
+    resources?: { requests?: { storage?: string } };
+  };
+  status?: {
+    conditions?: Array<Record<string, unknown>>;
+    phase?: string;
+    podIP?: string;
+    containerStatuses?: ContainerStatus[];
+    // PVC
+    capacity?: { storage?: string };
+  };
   data?: Record<string, string>;
 }
 
@@ -44,10 +90,23 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
   const router = useRouter();
   const [tab, setTab] = useState<TabId>('overview');
 
-  // ponytail: detail page maps to the generic "clusters" permission resource, like the YAML dialogs.
-  const scope = useMemo(() => ({ type: 'cluster' as const, id: clusterId }), [clusterId]);
-  const read = usePermissionDecision('clusters', 'read', scope);
-  const update = usePermissionDecision('clusters', 'update', scope);
+  // Gate on the SAME canonical permission resource the list rows use, so the
+  // detail view doesn't fall through to the generic 'clusters' verb (GATE-A bug).
+  // Server-side RBAC stays the real gate; this just aligns client gating.
+  const read = useClusterResourcePermission(clusterId, resourceType, 'read');
+  const update = useClusterResourcePermission(clusterId, resourceType, 'update');
+  // ponytail: always call these (rules-of-hooks); only consulted for pods.
+  const logsPerm = useClusterResourcePermission(clusterId, resourceType, 'logs');
+  const execPerm = useClusterResourcePermission(clusterId, resourceType, 'exec');
+
+  const isPod = resourceType === 'pods';
+  const tabs = useMemo(() => {
+    if (!isPod) return BASE_TABS;
+    const extra: Array<{ id: TabId; label: string }> = [];
+    if (logsPerm.allowed) extra.push({ id: 'logs', label: 'Logs' });
+    if (execPerm.allowed) extra.push({ id: 'exec', label: 'Exec' });
+    return [...BASE_TABS, ...extra];
+  }, [isPod, logsPerm.allowed, execPerm.allowed]);
 
   const { data: obj, isLoading, error } = useK8sResource(clusterId, k8sPath, read.allowed);
 
@@ -87,7 +146,7 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
       {/* Tabs */}
       <div className="border-b border-border">
         <nav className="flex gap-0 -mb-px">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -123,11 +182,79 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
           <YamlPanel clusterId={clusterId} k8sPath={k8sPath} allowEdit={update.allowed} />
         </div>
       )}
+
+      {tab === 'events' && (
+        <ResourceEvents clusterId={clusterId} namespace={namespace} name={name} kind={kind} />
+      )}
+
+      {tab === 'related' && (
+        <RelatedResources clusterId={clusterId} namespace={namespace} name={name} kind={kind} obj={o} />
+      )}
+
+      {/* Pod-only tabs. ponytail: reuse PodLogsViewer/PodTerminal as-is by
+          synthesizing the minimal Pod shape they need from the raw k8s object. */}
+      {tab === 'logs' && isPod && namespace && (
+        <PodLogsViewer
+          clusterId={clusterId}
+          namespace={namespace}
+          pods={[podForViewer(o, namespace)]}
+          selectedPod={name}
+          onPodChange={() => { /* single pod here; selector is a no-op */ }}
+        />
+      )}
+
+      {tab === 'exec' && isPod && namespace && (
+        <div className="h-[70vh]">
+          <PodTerminal
+            clusterId={clusterId}
+            namespace={namespace}
+            pod={name}
+            container={podContainerNames(o)[0] ?? ''}
+            containers={podContainerNames(o)}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Generic overview (no per-kind renderers — that's GATE-B) ──
+// ── Pod helpers (plan C1) ──
+
+function podContainerNames(obj?: K8sObject): string[] {
+  return (obj?.spec?.containers ?? []).map((c) => c.name ?? '').filter(Boolean);
+}
+
+/**
+ * Build the minimal `Pod` shape PodLogsViewer/PodTerminal consume from the raw
+ * k8s object. ponytail: we only populate the fields those components touch
+ * (name, namespace, containers) — not the full app Pod model.
+ */
+function podForViewer(obj: K8sObject | undefined, namespace: string): Pod {
+  const containers = (obj?.spec?.containers ?? []).map((c) => ({
+    name: c.name ?? '',
+    image: c.image ?? '',
+    status: 'running' as const,
+    ready: true,
+    restartCount: 0,
+  }));
+  return {
+    name: obj?.metadata?.name ?? '',
+    namespace,
+    clusterId: '',
+    phase: (obj?.status?.phase ?? 'Unknown') as Pod['phase'],
+    status: obj?.status?.phase ?? 'Unknown',
+    ready: '',
+    restarts: 0,
+    node: obj?.spec?.nodeName ?? '',
+    ip: obj?.status?.podIP ?? '',
+    containers,
+    conditions: [],
+    createdAt: obj?.metadata?.creationTimestamp ?? '',
+    age: '',
+  };
+}
+
+// ── Generic overview (no per-kind renderers — that's a later gate) ──
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -158,7 +285,41 @@ function KeyValueTable({ entries, mask }: { entries: Array<[string, string]>; ma
   );
 }
 
-function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resourceType: string }) {
+// Exported for unit testing the kind-specific branches without mounting the
+// full detail shell (which pulls in PodTerminal/wterm). Pure presentational.
+export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resourceType: string }) {
+  const meta = obj?.metadata;
+  if (!meta) {
+    return <p className="text-sm text-muted-foreground">No data.</p>;
+  }
+
+  // ponytail: small per-kind branches keyed by resourceType for the few
+  // highest-value kinds; everything else falls through to the generic view.
+  // Each branch renders its tailored section ABOVE the shared GenericOverview.
+  const kindSpecific = (() => {
+    switch (resourceType) {
+      case 'pods': return <PodOverview obj={obj!} />;
+      case 'services': return <ServiceOverview obj={obj!} />;
+      case 'configmaps': return <ConfigMapOverview obj={obj!} />;
+      case 'ingresses': return <IngressOverview obj={obj!} />;
+      case 'persistentvolumeclaims': return <PVCOverview obj={obj!} />;
+      default: return null;
+    }
+  })();
+
+  if (kindSpecific) {
+    return (
+      <div className="space-y-6">
+        {kindSpecific}
+        <GenericOverview obj={obj} resourceType={resourceType} />
+      </div>
+    );
+  }
+
+  return <GenericOverview obj={obj} resourceType={resourceType} />;
+}
+
+function GenericOverview({ obj, resourceType }: { obj?: K8sObject; resourceType: string }) {
   const meta = obj?.metadata;
   if (!meta) {
     return <p className="text-sm text-muted-foreground">No data.</p>;
@@ -245,6 +406,393 @@ function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resourceType
       {dataEntries.length > 0 && (
         <Section title="Data">
           <KeyValueTable entries={dataEntries} mask={isSecret} />
+        </Section>
+      )}
+    </div>
+  );
+}
+
+// ── Kind-specific overviews (plan A4 / C1) ──
+//
+// ponytail: only the few highest-value kinds get tailored sections; everything
+// else uses GenericOverview. No per-kind framework — just small components.
+
+function PodOverview({ obj }: { obj: K8sObject }) {
+  const spec = obj.spec ?? {};
+  const status = obj.status ?? {};
+  const statuses = status.containerStatuses ?? [];
+  const totalRestarts = statuses.reduce((sum, c) => sum + (c.restartCount ?? 0), 0);
+
+  // Merge spec containers (image) with status containers (ready/restarts/state).
+  const byName = new Map<string, ContainerStatus>();
+  for (const c of statuses) if (c.name) byName.set(c.name, c);
+  const rows = (spec.containers ?? []).map((c) => {
+    const st = byName.get(c.name ?? '');
+    return {
+      name: c.name ?? '-',
+      image: c.image ?? st?.image ?? '-',
+      ready: st?.ready ?? false,
+      restarts: st?.restartCount ?? 0,
+      state: st?.state ? (Object.keys(st.state)[0] ?? 'unknown') : 'unknown',
+    };
+  });
+
+  const summary: Array<[string, string]> = [];
+  if (status.phase) summary.push(['phase', status.phase]);
+  if (spec.nodeName) summary.push(['node', spec.nodeName]);
+  if (status.podIP) summary.push(['podIP', status.podIP]);
+  summary.push(['restarts', String(totalRestarts)]);
+
+  return (
+    <>
+      <Section title="Pod">
+        <KeyValueTable entries={summary} />
+      </Section>
+      <Section title="Containers">
+        {rows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">None</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Image</TableHead>
+                <TableHead className="text-center">Ready</TableHead>
+                <TableHead className="text-center">Restarts</TableHead>
+                <TableHead>State</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((c) => (
+                <TableRow key={c.name}>
+                  <TableCell className="font-mono text-xs">{c.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground break-all">{c.image}</TableCell>
+                  <TableCell className="text-xs text-center">{c.ready ? 'Yes' : 'No'}</TableCell>
+                  <TableCell className="text-xs tabular-nums text-center">{c.restarts}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{c.state}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Section>
+    </>
+  );
+}
+
+function ServiceOverview({ obj }: { obj: K8sObject }) {
+  const spec = obj.spec ?? {};
+  const summary: Array<[string, string]> = [];
+  if (spec.type) summary.push(['type', spec.type]);
+  if (spec.clusterIP) summary.push(['clusterIP', spec.clusterIP]);
+  const selector = Object.entries(spec.selector ?? {}) as Array<[string, string]>;
+  const ports = spec.ports ?? [];
+
+  return (
+    <>
+      <Section title="Service">
+        <KeyValueTable entries={summary} />
+      </Section>
+      {ports.length > 0 && (
+        <Section title="Ports">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Port</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Protocol</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ports.map((p, i) => (
+                <TableRow key={p.name || i}>
+                  <TableCell className="text-xs">{p.name || '-'}</TableCell>
+                  <TableCell className="text-xs tabular-nums">{p.port ?? '-'}</TableCell>
+                  <TableCell className="text-xs tabular-nums">{String(p.targetPort ?? '-')}</TableCell>
+                  <TableCell className="text-xs">{p.protocol || '-'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Section>
+      )}
+      <Section title="Selector">
+        <KeyValueTable entries={selector} />
+      </Section>
+    </>
+  );
+}
+
+function ConfigMapOverview({ obj }: { obj: K8sObject }) {
+  const keys = Object.keys(obj.data ?? {});
+  return (
+    <Section title="Keys">
+      {keys.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No keys.</p>
+      ) : (
+        <ul className="space-y-1">
+          {keys.map((k) => (
+            <li key={k} className="font-mono text-xs text-foreground">{k}</li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function IngressOverview({ obj }: { obj: K8sObject }) {
+  const spec = obj.spec ?? {};
+  const summary: Array<[string, string]> = [];
+  if (spec.ingressClassName) summary.push(['class', spec.ingressClassName]);
+  const hosts = (spec.rules ?? []).map((r) => r.host).filter(Boolean) as string[];
+  const tlsHosts = (spec.tls ?? []).flatMap((t) => t.hosts ?? []);
+
+  return (
+    <>
+      <Section title="Ingress">
+        <KeyValueTable entries={summary} />
+      </Section>
+      <Section title="Hosts">
+        {hosts.length === 0 ? (
+          <p className="text-xs text-muted-foreground">None</p>
+        ) : (
+          <ul className="space-y-1">
+            {hosts.map((h) => <li key={h} className="font-mono text-xs text-foreground">{h}</li>)}
+          </ul>
+        )}
+      </Section>
+      {tlsHosts.length > 0 && (
+        <Section title="TLS">
+          <ul className="space-y-1">
+            {tlsHosts.map((h) => <li key={h} className="font-mono text-xs text-foreground">{h}</li>)}
+          </ul>
+        </Section>
+      )}
+    </>
+  );
+}
+
+function PVCOverview({ obj }: { obj: K8sObject }) {
+  const spec = obj.spec ?? {};
+  const status = obj.status ?? {};
+  const summary: Array<[string, string]> = [];
+  if (status.phase) summary.push(['status', status.phase]);
+  const capacity = status.capacity?.storage ?? spec.resources?.requests?.storage;
+  if (capacity) summary.push(['capacity', capacity]);
+  if (spec.storageClassName) summary.push(['storageClass', spec.storageClassName]);
+  if (spec.volumeName) summary.push(['volume', spec.volumeName]);
+
+  return (
+    <Section title="PersistentVolumeClaim">
+      <KeyValueTable entries={summary} />
+    </Section>
+  );
+}
+
+// ── Events tab (plan D1) ──
+//
+// ponytail: fetch this object's events straight from the k8s proxy with a
+// fieldSelector — no backend change. Namespaced objects scope to their ns;
+// cluster-scoped objects query the cluster-wide /events feed.
+
+interface K8sEvent {
+  metadata?: { uid?: string };
+  type?: string;
+  reason?: string;
+  message?: string;
+  count?: number;
+  lastTimestamp?: string;
+  eventTime?: string;
+  firstTimestamp?: string;
+}
+
+function eventsPath(namespace: string | undefined, name: string, kind: string): string {
+  const selector = `involvedObject.name=${name},involvedObject.kind=${kind}`;
+  const base = namespace
+    ? `api/v1/namespaces/${namespace}/events`
+    : 'api/v1/events';
+  return `${base}?fieldSelector=${encodeURIComponent(selector)}`;
+}
+
+function ResourceEvents({ clusterId, namespace, name, kind }: {
+  clusterId: string; namespace?: string; name: string; kind: string;
+}) {
+  const path = useMemo(() => eventsPath(namespace, name, kind), [namespace, name, kind]);
+  const { data, isLoading, error } = useK8sResource(clusterId, path);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="py-24 text-center text-sm text-status-error">
+        Failed to load events: {(error as Error).message}
+      </div>
+    );
+  }
+
+  const items = ((data as { items?: K8sEvent[] } | undefined)?.items ?? []);
+  if (items.length === 0) {
+    return <p className="py-12 text-center text-sm text-muted-foreground">No events for this resource.</p>;
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Type</TableHead>
+          <TableHead>Reason</TableHead>
+          <TableHead>Message</TableHead>
+          <TableHead className="text-center">Count</TableHead>
+          <TableHead>Last Seen</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {items.map((e, i) => {
+          const last = e.lastTimestamp || e.eventTime || e.firstTimestamp;
+          return (
+            <TableRow key={e.metadata?.uid || i}>
+              <TableCell className={cn('text-xs font-medium', e.type === 'Warning' ? 'text-status-warning' : 'text-status-info')}>
+                {e.type || '-'}
+              </TableCell>
+              <TableCell className="text-xs font-medium text-foreground">{e.reason || '-'}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{e.message || '-'}</TableCell>
+              <TableCell className="text-xs tabular-nums text-center">{e.count ?? 1}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{last ? formatRelativeTime(last) : '-'}</TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+// ── Related tab (plan D2) ──
+//
+// ponytail: deliberately NOT a general relationship engine. Just two relations:
+//   - ownerReferences (up), as drill-down links;
+//   - pods (down) for the workload kinds that already have useWorkloadPods.
+// Everything else is out of scope (that's a later gate).
+
+const KIND_TO_RESOURCE_TYPE: Record<string, string> = {
+  Pod: 'pods',
+  Service: 'services',
+  ConfigMap: 'configmaps',
+  Secret: 'secrets',
+  Deployment: 'deployments',
+  StatefulSet: 'statefulsets',
+  DaemonSet: 'daemonsets',
+  ReplicaSet: 'replicasets',
+  Job: 'jobs',
+  CronJob: 'cronjobs',
+  Ingress: 'ingresses',
+  PersistentVolume: 'persistentvolumes',
+  PersistentVolumeClaim: 'persistentvolumeclaims',
+  Node: 'nodes',
+  Namespace: 'namespaces',
+};
+
+/** Workload kinds whose pods we can list via the existing hook. */
+const WORKLOAD_POD_KINDS: Record<string, string> = {
+  Deployment: 'deployment',
+  StatefulSet: 'statefulset',
+  DaemonSet: 'daemonset',
+};
+
+function resolveResourceType(kind: string): string | undefined {
+  if (KIND_TO_RESOURCE_TYPE[kind] && getResourceDef(KIND_TO_RESOURCE_TYPE[kind])) {
+    return KIND_TO_RESOURCE_TYPE[kind];
+  }
+  return undefined;
+}
+
+function RelatedResources({ clusterId, namespace, name, kind, obj }: {
+  clusterId: string; namespace?: string; name: string; kind: string; obj?: K8sObject;
+}) {
+  const owners = obj?.metadata?.ownerReferences ?? [];
+
+  // ponytail: always call the hook (rules-of-hooks); it self-disables when the
+  // kind isn't a workload or args are missing.
+  const workloadKind = WORKLOAD_POD_KINDS[kind] ?? '';
+  const { data: pods } = useWorkloadPods(clusterId, workloadKind, namespace ?? '', name);
+  const showPods = !!workloadKind && !!namespace;
+
+  return (
+    <div className="space-y-6">
+      <Section title="Owned By">
+        {owners.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No owner references.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kind</TableHead>
+                <TableHead>Name</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {owners.map((ref) => {
+                const ownerType = resolveResourceType(ref.kind);
+                // ponytail: owners share the object's namespace (controller refs always do).
+                return (
+                  <TableRow key={ref.uid || `${ref.kind}/${ref.name}`}>
+                    <TableCell className="text-xs">{ref.kind}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {ownerType ? (
+                        <Link
+                          href={detailHref(clusterId, ownerType, namespace, ref.name)}
+                          className="text-foreground hover:underline"
+                        >
+                          {ref.name}
+                        </Link>
+                      ) : (
+                        ref.name
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Section>
+
+      {showPods && (
+        <Section title="Pods">
+          {!pods || pods.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No pods.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Restarts</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pods.map((p) => (
+                  <TableRow key={`${p.namespace}/${p.name}`}>
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={detailHref(clusterId, 'pods', p.namespace, p.name)}
+                        className="text-foreground hover:underline"
+                      >
+                        {p.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.status}</TableCell>
+                    <TableCell className="text-xs tabular-nums text-center">{p.restarts}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </Section>
       )}
     </div>
