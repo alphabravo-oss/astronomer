@@ -354,6 +354,13 @@ export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resou
       case 'poddisruptionbudgets': return <PDBOverview obj={obj!} />;
       case 'resourcequotas': return <ResourceQuotaOverview obj={obj!} />;
       case 'crds': return <CRDOverview obj={obj!} />;
+      case 'gateways': return <GatewayOverview obj={obj!} />;
+      case 'gatewayclasses': return <GatewayClassOverview obj={obj!} />;
+      case 'httproutes':
+      case 'grpcroutes':
+      case 'tlsroutes':
+      case 'tcproutes':
+      case 'udproutes': return <RouteOverview obj={obj!} />;
       default: return null;
     }
   })();
@@ -993,6 +1000,75 @@ function CRDOverview({ obj }: { obj: K8sObject }) {
   const vers = versions.map((v) => String(v.name ?? '')).filter(Boolean).join(', ');
   if (vers) summary.push(['versions', vers]);
   return <Section title="CustomResourceDefinition"><KeyValueTable entries={summary} /></Section>;
+}
+
+function GatewayOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  const summary: Array<[string, string]> = [];
+  if (spec.gatewayClassName) summary.push(['gatewayClass', String(spec.gatewayClassName)]);
+  const addrs = (Array.isArray(status.addresses) ? status.addresses : [])
+    .map((a) => String(asRecord(a).value ?? '')).filter(Boolean);
+  if (addrs.length) summary.push(['addresses', addrs.join(', ')]);
+  const listeners = (Array.isArray(spec.listeners) ? (spec.listeners as Array<Record<string, unknown>>) : []);
+  return (
+    <>
+      <Section title="Gateway"><KeyValueTable entries={summary} /></Section>
+      {listeners.length > 0 && (
+        <Section title="Listeners">
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>Name</TableHead><TableHead>Port</TableHead><TableHead>Protocol</TableHead><TableHead>Hostname</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {listeners.map((l, i) => (
+                <TableRow key={String(l.name ?? i)}>
+                  <TableCell className="text-xs font-medium">{String(l.name ?? '-')}</TableCell>
+                  <TableCell className="text-xs tabular-nums">{String(l.port ?? '-')}</TableCell>
+                  <TableCell className="text-xs">{String(l.protocol ?? '-')}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{String(l.hostname ?? '*')}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Section>
+      )}
+    </>
+  );
+}
+
+function RouteOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const parents = (Array.isArray(spec.parentRefs) ? (spec.parentRefs as Array<Record<string, unknown>>) : [])
+    .map((p) => {
+      const r = asRecord(p);
+      return `${r.namespace ? `${r.namespace}/` : ''}${String(r.name ?? '')}`.trim();
+    })
+    .filter(Boolean);
+  const hostnames = (Array.isArray(spec.hostnames) ? (spec.hostnames as string[]) : []);
+  const summary: Array<[string, string]> = [];
+  if (parents.length) summary.push(['parents', parents.join(', ')]);
+  summary.push(['rules', String(Array.isArray(spec.rules) ? spec.rules.length : 0)]);
+  return (
+    <>
+      <Section title="Route"><KeyValueTable entries={summary} /></Section>
+      {hostnames.length > 0 && (
+        <Section title="Hostnames">
+          <ul className="space-y-1">
+            {hostnames.map((h) => <li key={h} className="font-mono text-xs text-foreground">{h}</li>)}
+          </ul>
+        </Section>
+      )}
+    </>
+  );
+}
+
+function GatewayClassOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const summary: Array<[string, string]> = [];
+  if (spec.controllerName) summary.push(['controller', String(spec.controllerName)]);
+  if (spec.description) summary.push(['description', String(spec.description)]);
+  return <Section title="GatewayClass"><KeyValueTable entries={summary} /></Section>;
 }
 
 // ── Events tab (plan D1) ──

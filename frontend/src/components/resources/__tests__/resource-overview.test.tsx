@@ -257,6 +257,24 @@ describe('ResourceOverview kind-specific branches', () => {
     expect(screen.getByText('observedGeneration')).toBeInTheDocument();
   });
 
+  it('renders a Gateway with class and listeners', () => {
+    render(
+      <ResourceOverview
+        resourceType="gateways"
+        obj={{
+          metadata: { name: 'gw', namespace: 'default' },
+          spec: { gatewayClassName: 'istio', listeners: [{ name: 'http', port: 80, protocol: 'HTTP' }] },
+          status: { addresses: [{ value: '10.0.0.5' }] },
+        } as never}
+      />
+    );
+    expect(screen.getByText('Gateway')).toBeInTheDocument();
+    expect(screen.getByText('istio')).toBeInTheDocument();
+    expect(screen.getByText('Listeners')).toBeInTheDocument();
+    expect(screen.getByText('HTTP')).toBeInTheDocument();
+    expect(screen.getByText('10.0.0.5')).toBeInTheDocument();
+  });
+
   it('masks secret data values', () => {
     render(
       <ResourceOverview
