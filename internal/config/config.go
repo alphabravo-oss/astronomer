@@ -96,6 +96,15 @@ type Config struct {
 	// proxy. The registration handler appends /api/v1/clusters/{id}/k8s.
 	ArgoCDClusterProxyBaseURL string `mapstructure:"argocd_cluster_proxy_base_url"`
 
+	// ArgoCDInternalProxyAddr is a dedicated, non-public listen address serving
+	// ONLY the ArgoCD->adopted-cluster k8s proxy. ArgoCD's GitOps apply path
+	// sends no per-request credential (kubectl treats discovery/apply as
+	// anonymous), so this route cannot be token-gated. Instead it runs on its
+	// own port that the public ingress never maps and a NetworkPolicy restricts
+	// to the argocd namespace — network isolation IS the authentication. The
+	// public :8000 listener keeps the token-gated route for any other caller.
+	ArgoCDInternalProxyAddr string `mapstructure:"argocd_internal_proxy_addr"`
+
 	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
 	// AuthLocalPasswordOnly is the production acknowledgement required when no
 	// bundled Dex is deployed.
@@ -146,6 +155,7 @@ func Load() (*Config, error) {
 		"kubectl_shell_session_hard_cap_hours",
 		"argocd_ui_upstream",
 		"argocd_cluster_proxy_base_url",
+		"argocd_internal_proxy_addr",
 		"dex_bundled_enabled",
 		"auth_local_password_only",
 	); err != nil {
@@ -174,7 +184,10 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://argocd-server.argocd.svc.cluster.local:80"},
-		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8000"},
+		// Adopted clusters register against the dedicated internal proxy port
+		// (network-isolated, tokenless) — not the public :8000 listener.
+		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8090"},
+		envconfig.Default{Key: "argocd_internal_proxy_addr", Value: ":8090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
 		envconfig.Default{Key: "auth_local_password_only", Value: false},
 	)

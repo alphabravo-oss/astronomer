@@ -120,6 +120,16 @@ func main() {
 		}
 	}()
 	go func() {
+		// Dedicated network-isolated listener for the ArgoCD->cluster proxy
+		// (see config.ArgoCDInternalProxyAddr). ArgoCD's apply path is
+		// anonymous, so this port relies on NetworkPolicy isolation rather
+		// than a per-request token.
+		if err := srv.StartInternalArgoCDProxy(cfg.ArgoCDInternalProxyAddr); err != nil {
+			observability.WithEvent(logger, "server_internal_argocd_listener_error").Error("internal argocd proxy listener error", "error", err)
+			os.Exit(1)
+		}
+	}()
+	go func() {
 		if err := server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger); err != nil {
 			observability.WithEvent(logger, "server_metrics_listener_error").Error("server metrics listener error", "error", err)
 			os.Exit(1)

@@ -1877,6 +1877,30 @@ func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
 	}
 }
 
+func TestInternalArgoCDProxyRouterServesTokenlessRequests(t *testing.T) {
+	clusterID := uuid.New()
+	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
+		Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+	})
+	base := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
+	// The internal listener is network-isolated, not token-gated: a tokenless
+	// PATCH (ArgoCD's apply path) must reach the proxy handler (503 — no tunnel),
+	// not 401. This is exactly what the public route rejects.
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{http.MethodPatch, base + "/api/v1/namespaces/trivy-system"},
+		{http.MethodGet, base + "/openapi/v2"},
+		{http.MethodGet, base + "/api/v1/secrets"},
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s %s: status = %d, want %d (handler reached, no token); body=%s", tc.method, tc.path, rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+		}
+	}
+}
+
 func TestArgoCDInternalK8sProxyRequiresClusterScopedToken(t *testing.T) {
 	clusterID := uuid.New()
 	otherClusterID := uuid.New()

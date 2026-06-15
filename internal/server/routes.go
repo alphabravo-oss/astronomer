@@ -1129,6 +1129,33 @@ func auditK8sProxySecretReads(auditWriter any) func(http.Handler) http.Handler {
 	}
 }
 
+// NewInternalArgoCDProxyRouter builds the handler for the dedicated internal
+// ArgoCD->adopted-cluster k8s proxy listener (config.ArgoCDInternalProxyAddr).
+//
+// Unlike the public /api/v1/internal/argocd route, this listener is NOT
+// token-gated. ArgoCD's GitOps apply path (CreateNamespace, manifest apply,
+// even under ServerSideApply) sends requests with no Authorization header at
+// all — kubectl treats discovery/apply as anonymous — so a per-request token
+// can never gate it. Instead this runs on its own port that the public ingress
+// never maps and a NetworkPolicy restricts to the argocd namespace: network
+// isolation IS the authentication boundary. Routing uses the path cluster_id,
+// and mutations are still audited.
+func NewInternalArgoCDProxyRouter(deps RouterDependencies) http.Handler {
+	r := chi.NewRouter()
+	r.Use(appmiddleware.NormalizeAPITrailingSlash)
+	if deps.Proxy == nil {
+		return r
+	}
+	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
+		return appmiddleware.APIRateLimit(context.Background(), class, nil)
+	}
+	r.With(
+		rateLimit(appmiddleware.ClassArgoCDProxy),
+		auditArgoCDK8sProxyMutations(deps.AuditWriter),
+	).HandleFunc("/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
+	return r
+}
+
 func auditArgoCDK8sProxyMutations(auditWriter any) func(http.Handler) http.Handler {
 	return auditK8sProxyMutationsWithAction(auditWriter, "argocd.k8s_proxy.forwarded", map[string]any{
 		"proxy": "argocd_internal",

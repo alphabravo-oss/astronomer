@@ -95,6 +95,11 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
+            # Network-isolated ArgoCD->cluster proxy. Never mapped by the public
+            # ingress; the NetworkPolicy restricts it to the argocd namespace.
+            - name: argocd-proxy
+              containerPort: 8090
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "astronomer.fullname" . }}-config

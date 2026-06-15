@@ -192,10 +192,14 @@ func resolveCallbackBaseURL(ctx context.Context, _ *config.Config, queries *sqlc
 type Server struct {
 	httpServer *http.Server
 	handler    http.Handler
-	logger     *slog.Logger
-	db         *db.DB
-	cancel     context.CancelFunc
-	queue      *asynq.Client
+	// internalArgoCDHandler serves the dedicated, network-isolated
+	// ArgoCD->cluster proxy on a separate (non-public) port. nil in
+	// lightweight test servers.
+	internalArgoCDHandler http.Handler
+	logger                *slog.Logger
+	db                    *db.DB
+	cancel                context.CancelFunc
+	queue                 *asynq.Client
 	// hub is the tunnel hub; nil in lightweight test servers. Held here
 	// so Shutdown can drain WS connections before tearing down HTTP.
 	hub *tunnel.Hub
@@ -977,9 +981,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetAuditWriter(queries)
 			return h
 		}(),
-		Workloads:     workloadHandler,
-		Hub:           hub,
-		Proxy:         tunnel.NewProxyHandler(hub, logger),
+		Workloads: workloadHandler,
+		Hub:       hub,
+		Proxy:     tunnel.NewProxyHandler(hub, logger),
 		InternalK8s: func() *tunnel.InternalK8sHandler {
 			h := tunnel.NewInternalK8sHandler(hub, tunnel.DerivePSK(cfg.EncryptionKey), logger)
 			// Audit every mutation crossing the internal door, attributed
@@ -1310,13 +1314,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	router := NewRouter(cfg, deps)
 
 	s := &Server{
-		handler:   router,
-		logger:    logger,
-		db:        database,
-		queue:     queue,
-		hub:       hub,
-		Encryptor: encryptor,
-		SSO:       ssoManager,
+		handler:               router,
+		internalArgoCDHandler: NewInternalArgoCDProxyRouter(deps),
+		logger:                logger,
+		db:                    database,
+		queue:                 queue,
+		hub:                   hub,
+		Encryptor:             encryptor,
+		SSO:                   ssoManager,
 	}
 	s.httpServer = &http.Server{
 		// Wrap with otelhttp so every request emits a server span
@@ -1596,6 +1601,27 @@ func (s *Server) Start(addr string) error {
 	}
 	s.logger.Info("server listening", "addr", addr)
 	return s.httpServer.Serve(ln)
+}
+
+// StartInternalArgoCDProxy serves the network-isolated ArgoCD->cluster proxy on
+// its own listener. addr must be a non-public port (the deployment maps the
+// public ingress only to the main :8000 listener, and a NetworkPolicy restricts
+// this port to the argocd namespace). Blocks until the listener errors.
+func (s *Server) StartInternalArgoCDProxy(addr string) error {
+	if s.internalArgoCDHandler == nil || strings.TrimSpace(addr) == "" {
+		return nil
+	}
+	srv := &http.Server{
+		Handler:           s.internalArgoCDHandler,
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	s.logger.Info("internal argocd proxy listening", "addr", addr)
+	return srv.Serve(ln)
 }
 
 // Shutdown gracefully shuts down the server with a deadline.

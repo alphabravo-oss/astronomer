@@ -398,13 +398,12 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 								"prune":    true,
 								"selfHeal": true,
 							},
-							// ServerSideApply: the apiserver performs the merge, so ArgoCD
-							// does NOT download the OpenAPI schema client-side for
-							// validation. Through the tunnel proxy that client-side openapi
-							// fetch is made WITHOUT the cluster proxy token (kubectl treats
-							// it as public discovery) and the proxy 401s it, failing every
-							// apply. SSA sidesteps that entirely and is the recommended mode
-							// for proxied/aggregated clusters.
+							// ServerSideApply has the apiserver perform the merge — the
+							// recommended mode for proxied/aggregated clusters. (Note: it
+							// does NOT avoid ArgoCD's anonymous openapi/discovery/apply
+							// requests through the tunnel; that's handled by the
+							// network-isolated internal proxy listener, not by a sync
+							// option — see NewInternalArgoCDProxyRouter.)
 							"syncOptions": []any{"CreateNamespace=true", "ServerSideApply=true"},
 						},
 					},
