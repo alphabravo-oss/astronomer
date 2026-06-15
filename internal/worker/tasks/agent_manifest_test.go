@@ -53,7 +53,9 @@ func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
 	)
 	for _, want := range []string{
 		"pods/exec",
-		`resources: ["roles", "rolebindings"]`,
+		// Operator can READ RBAC objects (write belongs to admin only); the
+		// hardened rule lists cluster + namespaced RBAC resources together.
+		`resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]`,
 		`verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`,
 	} {
 		if !strings.Contains(manifest, want) {
