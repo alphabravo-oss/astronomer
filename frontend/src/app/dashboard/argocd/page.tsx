@@ -6,7 +6,7 @@
 // one. Row click navigates to the per-instance detail page.
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, GitBranch, ExternalLink } from 'lucide-react';
 import api from '@/lib/api';

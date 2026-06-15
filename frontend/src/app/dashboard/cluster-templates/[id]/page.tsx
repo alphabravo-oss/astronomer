@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * full form is re-rendered.
  */
 import { use } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, PencilLine, Layers } from 'lucide-react';
 import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
 import { useCurrentUser } from '@/lib/hooks';

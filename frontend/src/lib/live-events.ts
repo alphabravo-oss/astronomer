@@ -19,6 +19,9 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { createStreamTicket } from '@/lib/api';
+// Aliased to `qk` because `useLiveQueryInvalidation` below has a parameter
+// named `queryKeys` that would otherwise shadow the factory import.
+import { queryKeys as qk } from '@/lib/query-keys';
 
 // --- Types ---
 
@@ -438,12 +441,12 @@ export function useLiveClusterMetricsMerger(): void {
       // produces ['clusters', 'list', params] — the prefix match below
       // catches all of them at once.
       queryClient.setQueriesData(
-        { queryKey: ['clusters', 'list'] },
+        { queryKey: qk.clusters.listAll },
         (old: unknown) => mergeClusterMetricsIntoListResponse(old, payload),
       );
 
       // Detail page cache: ['clusters', 'detail', id]
-      queryClient.setQueryData(['clusters', 'detail', payload.cluster_id], (old: unknown) =>
+      queryClient.setQueryData(qk.clusters.detail(payload.cluster_id), (old: unknown) =>
         mergeClusterMetricsIntoDetail(old, payload),
       );
     };
@@ -455,14 +458,14 @@ export function useLiveClusterMetricsMerger(): void {
       // Patch any cached list / detail responses to flip the status field
       // without waiting for the next refetch.
       queryClient.setQueriesData(
-        { queryKey: ['clusters', 'list'] },
+        { queryKey: qk.clusters.listAll },
         (old: unknown) => mergeClusterStatusIntoListResponse(old, payload.cluster_id, payload.new_status!),
       );
-      queryClient.setQueryData(['clusters', 'detail', payload.cluster_id], (old: unknown) =>
+      queryClient.setQueryData(qk.clusters.detail(payload.cluster_id), (old: unknown) =>
         mergeClusterStatusIntoDetail(old, payload.new_status!),
       );
       // Also kick a hard refresh so any dependent caches catch up.
-      queryClient.invalidateQueries({ queryKey: ['clusters', 'detail', payload.cluster_id] });
+      queryClient.invalidateQueries({ queryKey: qk.clusters.detail(payload.cluster_id) });
     };
 
     state.target.addEventListener('cluster.metrics', onMetrics as EventListener);

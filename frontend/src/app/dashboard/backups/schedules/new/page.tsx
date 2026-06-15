@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, Calendar, Check, Loader2 } from 'lucide-react';
 import { useClusterNamespaces } from '@/lib/hooks';
 import {

@@ -7,8 +7,8 @@
  *   - Test: synthesise a payload and surface the response.
  */
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useParams, useRouter } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Loader2,

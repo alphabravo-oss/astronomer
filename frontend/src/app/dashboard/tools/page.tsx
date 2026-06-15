@@ -1,7 +1,7 @@
 'use client';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { useClusters, useTools, useClusterToolsStatus } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 import { normalizeToolStatus } from '@/lib/tool-status';

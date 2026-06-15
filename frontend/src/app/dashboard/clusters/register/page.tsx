@@ -10,7 +10,7 @@
 // Rancher posture called out in the sprint plan (operators must
 // explicitly opt in to installing tools).
 
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { useState } from 'react';
 import { toastError } from '@/lib/toast';
 import { Server, Loader2, Info } from 'lucide-react';

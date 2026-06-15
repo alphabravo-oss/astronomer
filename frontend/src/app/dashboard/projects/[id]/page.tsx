@@ -8,7 +8,7 @@
  * the same `[id]/layout.tsx`) handle the editable surfaces.
  */
 import { use } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { Loader2, Users, Server, Layers } from 'lucide-react';
 import { useProject } from '@/lib/hooks';
 import { formatRelativeTime } from '@/lib/utils';

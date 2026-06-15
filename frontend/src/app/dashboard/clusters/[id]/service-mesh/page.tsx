@@ -14,8 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * the auth gate (same as the snapshots page).
  */
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useParams } from '@/lib/navigation';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';

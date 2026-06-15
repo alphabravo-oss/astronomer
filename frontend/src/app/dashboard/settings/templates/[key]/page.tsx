@@ -14,8 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * a 400 with `missing` when applicable; we surface those names inline.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import { ArrowLeft, Eye, FileText, Loader2, RotateCcw, Save } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';

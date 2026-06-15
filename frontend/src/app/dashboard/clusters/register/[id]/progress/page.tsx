@@ -6,7 +6,7 @@
 // `ready`, the "Take me to the cluster" CTA appears.
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from '@/lib/navigation';
 import { Check, Server } from 'lucide-react';
 import { RegistrationTimeline } from '@/components/clusters/registration-timeline';
 

@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * other settings subpages use.
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, FileText, Loader2 } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {

@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams } from '@/lib/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import {

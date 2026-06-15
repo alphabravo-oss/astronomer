@@ -1,7 +1,7 @@
 'use client';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from '@/lib/navigation';
 import { useState } from 'react';
 import { useNodeDetail } from '@/lib/hooks';
 import * as apiClient from '@/lib/api';

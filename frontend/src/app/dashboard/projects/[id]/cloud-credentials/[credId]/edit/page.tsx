@@ -9,8 +9,8 @@
  * backend keeps the existing ciphertext.
  */
 import { use, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import {

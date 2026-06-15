@@ -23,7 +23,7 @@ import {
   Package,
   Layers,
 } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 
 export default function DashboardPage() {
   const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });

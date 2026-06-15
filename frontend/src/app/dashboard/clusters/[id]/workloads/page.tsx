@@ -24,8 +24,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useParams } from '@/lib/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   Boxes,

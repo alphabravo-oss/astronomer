@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { AlertTriangle, Loader2, Plus, X } from 'lucide-react';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { useB2CreateRestore } from './hooks';

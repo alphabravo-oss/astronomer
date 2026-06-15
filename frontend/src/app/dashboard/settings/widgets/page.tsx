@@ -19,7 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, Plus, Trash2, Save, Loader2, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
 import {
   listWidgets,

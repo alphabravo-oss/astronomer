@@ -5,8 +5,8 @@
  * form used by the create page.
  */
 import { use, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
 import { extractApiErrorMessage } from '@/lib/api/errors';

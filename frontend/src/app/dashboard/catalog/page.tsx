@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from '@/lib/navigation';
 import {
   useHelmRepositories,
   useCreateHelmRepository,

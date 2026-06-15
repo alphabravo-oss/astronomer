@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { Orbit, Loader2, Mail, ArrowLeft, Check } from 'lucide-react';
 import { toastApiError, toastError } from '@/lib/toast';
 import { requestPasswordReset } from '@/lib/api/account-security';

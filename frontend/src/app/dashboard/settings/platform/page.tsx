@@ -9,7 +9,7 @@
  * push keys that actually changed.
  */
 import { useMemo, useState, useEffect } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Loader2,

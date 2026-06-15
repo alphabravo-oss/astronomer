@@ -11,8 +11,8 @@
  *     and we don't accidentally clobber stored secrets on a no-op save.
  */
 import { use, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import {

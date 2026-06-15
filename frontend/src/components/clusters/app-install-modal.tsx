@@ -43,6 +43,7 @@ import {
   type ChartVersionRow,
 } from '@/lib/api/cluster-detail';
 import { upgradeInstalledChart } from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 import type { PermissionDecision } from '@/lib/permissions';
 
 type Mode =
@@ -116,7 +117,7 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
 
   // Versions
   const versions = useQuery({
-    queryKey: ['catalog', 'chart-versions', mode.chartId],
+    queryKey: queryKeys.catalog.installChartVersions(mode.chartId),
     queryFn: () => listChartVersions(mode.chartId),
   });
 
@@ -139,7 +140,7 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
   // new version's defaults — that would silently revert their
   // customisation. Show a "Reset to chart defaults" button instead.
   const defaultValues = useQuery({
-    queryKey: ['catalog', 'chart-values', mode.chartId, selectedVersion?.version],
+    queryKey: queryKeys.catalog.installChartValues(mode.chartId, selectedVersion?.version),
     queryFn: () => getChartDefaultValues(mode.chartId, selectedVersion?.version),
     enabled: !!selectedVersion?.version,
   });
@@ -176,7 +177,7 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
           ? `Upgrade dispatched — ${mode.kind === 'upgrade' ? mode.releaseName : ''} will reflect new revision shortly`
           : `Install dispatched — "${releaseName}" will appear in Installed once helm completes`,
       );
-      qc.invalidateQueries({ queryKey: ['clusters', clusterId, 'apps', 'installed'] });
+      qc.invalidateQueries({ queryKey: queryKeys.clusterPages.appsInstalled(clusterId) });
       onClose();
     },
     onError: (err) => {

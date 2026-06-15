@@ -5,8 +5,10 @@
 // CONNECT_ACK auto-advances the page (Detect automatically toggle).
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { useRouter } from '@/lib/navigation';
+import { useParams } from '@/lib/navigation';
+import { queryKeys } from '@/lib/query-keys';
 import { toastError } from '@/lib/toast';
 import { Loader2, Copy, Check, Download, Server } from 'lucide-react';
 import {
@@ -14,7 +16,6 @@ import {
   getClusterManifestWithToken,
   getRegistrationStatus,
   getRegistrationTLS,
-  type RegistrationStatus,
   type RegistrationTLSMode,
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live-events';
@@ -27,38 +28,52 @@ export default function ConnectStepPage() {
   const params = useParams();
   const clusterId = String(params?.id ?? '');
 
-  const [manifest, setManifest] = useState('');
-  const [registrationToken, setRegistrationToken] = useState('');
   const [tab, setTab] = useState<Tab>('curl');
   const [copied, setCopied] = useState<CurlVariant | 'quick' | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [status, setStatus] = useState<RegistrationStatus | null>(null);
   const [autoDetect, setAutoDetect] = useState(true);
   const [tlsMode, setTlsMode] = useState<RegistrationTLSMode>('public_ca');
   const [curlVariant, setCurlVariant] = useState<CurlVariant>('public_ca');
   const advancedRef = useRef(false);
 
-  // Fetch the manifest once on mount; the backend mints a fresh
-  // registration token each call and exposes it via response header
-  // so the Curl tab can render the Rancher-style one-liner.
+  // Fetch the manifest once on mount; the backend mints a fresh registration
+  // token each call and exposes it via a response header so the Curl tab can
+  // render the Rancher-style one-liner. staleTime: Infinity keeps a window
+  // refocus from silently re-minting the token mid-flow.
+  const { data: manifestData, isError: manifestError } = useQuery({
+    queryKey: queryKeys.clusterPages.registrationManifest(clusterId),
+    queryFn: () => getClusterManifestWithToken(clusterId),
+    enabled: !!clusterId,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const manifest = manifestData?.manifest ?? '';
+  const registrationToken = manifestData?.token ?? '';
   useEffect(() => {
-    if (!clusterId) return;
-    getClusterManifestWithToken(clusterId)
-      .then(({ manifest, token }) => {
-        setManifest(manifest);
-        setRegistrationToken(token);
-      })
-      .catch(() => toastError('Failed to fetch install manifest'));
-    getRegistrationStatus(clusterId).then(setStatus).catch(() => {/* tolerated */});
-    // Operator-configured TLS posture from platform_settings. Defaults
-    // to public_ca on any failure so the wizard always renders something.
-    getRegistrationTLS()
-      .then((tls) => {
-        setTlsMode(tls.mode);
-        setCurlVariant(tls.mode);
-      })
-      .catch(() => {/* tolerated — keep public_ca default */});
-  }, [clusterId]);
+    if (manifestError) toastError('Failed to fetch install manifest');
+  }, [manifestError]);
+
+  const { data: status = null } = useQuery({
+    queryKey: queryKeys.clusterPages.registrationStatus(clusterId),
+    queryFn: () => getRegistrationStatus(clusterId),
+    enabled: !!clusterId,
+    retry: false,
+  });
+
+  // Operator-configured TLS posture from platform_settings. Seeds the editable
+  // tlsMode/curlVariant selectors; defaults to public_ca on any failure.
+  const { data: tlsData } = useQuery({
+    queryKey: queryKeys.settings.registrationTls,
+    queryFn: () => getRegistrationTLS(),
+    staleTime: Infinity,
+    retry: false,
+  });
+  useEffect(() => {
+    if (tlsData) {
+      setTlsMode(tlsData.mode);
+      setCurlVariant(tlsData.mode);
+    }
+  }, [tlsData]);
 
   // SSE subscription via the global live-events bus. When the agent
   // connects, hop to page 3 if auto-detect is on.

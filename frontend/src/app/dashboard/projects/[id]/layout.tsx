@@ -14,8 +14,8 @@
  * Adding more is a one-line change to the `tabs` array.
  */
 import { use } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { usePathname } from '@/lib/navigation';
 import { ArrowLeft, FolderKanban, Shield, KeyRound, Gauge, Loader2, LayoutDashboard, Package } from 'lucide-react';
 import { useProject } from '@/lib/hooks';
 import { cn } from '@/lib/utils';

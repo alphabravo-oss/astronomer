@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { Orbit, Eye, EyeOff, Loader2, KeyRound, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { changeOwnPassword } from '@/lib/api';

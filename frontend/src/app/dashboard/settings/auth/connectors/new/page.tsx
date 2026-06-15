@@ -14,8 +14,8 @@
  *      skip and apply from the overview page.
  */
 import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, Loader2, Search } from 'lucide-react';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import { cn } from '@/lib/utils';

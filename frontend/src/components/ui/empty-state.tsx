@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import type { ElementType, ReactNode } from 'react';
 import { AlertCircle, Clock3, Loader2, Lock, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';

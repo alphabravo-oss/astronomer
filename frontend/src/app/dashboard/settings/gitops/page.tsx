@@ -9,8 +9,8 @@
  * last-sync status; the detail page handles per-source actions.
  */
 import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
   GitBranch,

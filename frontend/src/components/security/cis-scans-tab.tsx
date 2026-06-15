@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { useCISScans } from '@/lib/hooks';
 import { useClusters } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';

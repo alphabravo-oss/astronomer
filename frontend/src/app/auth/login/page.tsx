@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight, Shield, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { getSSOProviders } from '@/lib/api';
+import { useSSOProviders } from '@/lib/hooks';
 import {
   loginWithCredentialsChallengeAware,
   verifyTotpChallenge,
@@ -20,30 +20,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
-  const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([]);
   const [form, setForm] = useState({ email: '', password: '' });
   // 423 challenge state: when present, render the TOTP screen instead of the
   // credentials form. `enrollmentRequired` distinguishes the "you must enroll
   // now" branch from the standard "enter your code" branch.
   const [challenge, setChallenge] = useState<TotpChallenge | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getSSOProviders()
-      .then((providers) => {
-        if (!cancelled) {
-          setSSOProviders(providers.filter((provider) => provider.enabled));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSSOProviders([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // SSO providers come from React Query (cached, retry-aware, devtools-visible).
+  // On error the query data is undefined → we fall back to an empty list, the
+  // same behavior the old imperative fetch had.
+  const { data: ssoProvidersData } = useSSOProviders();
+  const ssoProviders = (ssoProvidersData ?? []).filter((provider) => provider.enabled);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import { ArrowLeft, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 

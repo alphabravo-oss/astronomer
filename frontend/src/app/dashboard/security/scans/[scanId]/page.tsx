@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useParams, useRouter } from '@/lib/navigation';
 import { useCISScan, useClusters, useCreateCISScan } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { cisScanReportCSVUrl } from '@/lib/api';

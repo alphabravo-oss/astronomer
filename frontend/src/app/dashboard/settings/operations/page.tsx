@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useState, useMemo } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Loader2,

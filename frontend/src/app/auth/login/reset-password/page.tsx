@@ -12,8 +12,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter, useSearchParams } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import { Orbit, Loader2, Eye, EyeOff, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { completePasswordReset } from '@/lib/api/account-security';

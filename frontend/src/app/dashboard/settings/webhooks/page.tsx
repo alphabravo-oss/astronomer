@@ -8,8 +8,8 @@
  * status / time come from the backend joined to the subscription row.
  */
 import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
   Loader2,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams } from '@/lib/navigation';
 import {
   useCluster,
   useClusterNodes,
@@ -70,8 +70,8 @@ import type {
   GatewayRoute,
   ReferenceGrant,
 } from '@/types';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import {
   Loader2, Server, Terminal, FileText, Trash2, RotateCw, Scaling,
   Code, Pencil, ShieldBan, ShieldCheck, Unplug, Plus,

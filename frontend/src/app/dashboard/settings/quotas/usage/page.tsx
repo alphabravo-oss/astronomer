@@ -11,7 +11,7 @@
  *   - Fleet totals — aggregate sums across the entire deployment, useful
  *     for capacity planning.
  */
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Gauge,

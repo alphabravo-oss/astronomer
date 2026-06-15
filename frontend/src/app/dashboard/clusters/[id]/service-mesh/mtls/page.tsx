@@ -12,8 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * non-exclusive.
  */
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useParams } from '@/lib/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Info, Loader2, Server, Shield } from 'lucide-react';
 

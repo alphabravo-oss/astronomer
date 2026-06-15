@@ -15,7 +15,7 @@
  *   - Display name (text on the login button)
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
 import { useDexSettings, useRegisterDexAsSSO } from '@/components/auth/hooks';
 

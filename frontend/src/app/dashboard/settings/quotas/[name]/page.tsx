@@ -9,8 +9,8 @@
  * an integer cap.
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useParams, useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
   Gauge,

@@ -12,7 +12,7 @@
 // row, blowing up page render time for active baselines.
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { useAnomalyBaselines } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { formatRelativeTime } from '@/lib/utils';

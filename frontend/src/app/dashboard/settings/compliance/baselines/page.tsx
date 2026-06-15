@@ -11,7 +11,7 @@ import { OverlayShell } from '@/components/ui/overlay-shell';
  * "View diff" drawer + Apply / Revert action. Active card is badged.
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, CheckCircle2, History, Loader2, Shield, Undo2 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';

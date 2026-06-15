@@ -43,208 +43,11 @@ import type {
 import type { AuditLogQueryParams, GeneralSettings } from './api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 
-// ============================================================
-// Query Key Factories
-// ============================================================
-
-export const queryKeys = {
-  featureFlags: ['settings', 'features'] as const,
-  clusters: {
-    all: ['clusters'] as const,
-    list: (params?: Record<string, unknown>) => ['clusters', 'list', params] as const,
-    detail: (id: string) => ['clusters', 'detail', id] as const,
-    nodes: (id: string) => ['clusters', id, 'nodes'] as const,
-    nodeDetail: (id: string, nodeName: string) => ['clusters', id, 'nodes', nodeName] as const,
-    namespaces: (id: string) => ['clusters', id, 'namespaces'] as const,
-    // Params is part of the key because callers ask for different
-    // limits (overview wants the latest 10; the events page + sidebar
-    // both want 200). Without the params in the cache key, whichever
-    // hook mounted last wins and the sidebar count flaps between 10
-    // and 200 as the user navigates Overview ↔ Events.
-    events: (id: string, params?: Record<string, unknown>) =>
-      ['clusters', id, 'events', params] as const,
-    pods: (id: string) => ['clusters', id, 'pods'] as const,
-    metrics: (id: string, range?: string) => ['clusters', id, 'metrics', range] as const,
-    metricsSummary: (id: string) => ['clusters', id, 'metrics', 'summary'] as const,
-  },
-  clusterPages: {
-    appsInstalled: (id: string) => ['clusters', id, 'apps', 'installed'] as const,
-    appCatalogBrowse: (query: string) => ['catalog', 'browse', query] as const,
-    appCatalogRecommended: ['catalog', 'recommended'] as const,
-    imageVulnSummary: (id: string) => ['clusters', id, 'image-vulns', 'summary'] as const,
-    imageVulnImages: (id: string, namespace: string) =>
-      ['clusters', id, 'image-vulns', 'images', namespace] as const,
-    imageVulnReport: (id: string, reportId: string, severity: string) =>
-      ['clusters', id, 'image-vulns', 'report', reportId, severity] as const,
-    imageVulnHistory: (id: string, hours: number) =>
-      ['clusters', id, 'image-vulns', 'history', hours] as const,
-    imageVulnReportHistory: (id: string, reportId: string) =>
-      ['clusters', id, 'image-vulns', 'report-history', reportId] as const,
-    imageVulnDiff: (id: string, hours: number) =>
-      ['clusters', id, 'image-vulns', 'diff', hours] as const,
-    imageVulnProgress: (id: string) => ['clusters', id, 'image-vulns', 'progress'] as const,
-    apiserverAllowlist: (id: string) => ['clusters', id, 'apiserver-allowlist'] as const,
-    apiserverAllowlistSnapshots: (id: string) =>
-      ['clusters', id, 'apiserver-allowlist-snapshots'] as const,
-    registries: (id: string) => ['clusters', id, 'registries'] as const,
-    mirroredIngressClasses: (id: string) => ['clusters', id, 'mirrored', 'ingress-classes'] as const,
-    mirroredGatewayClasses: (id: string) => ['clusters', id, 'mirrored', 'gateway-classes'] as const,
-    mirroredNetworkPolicies: (id: string) => ['clusters', id, 'mirrored', 'network-policies'] as const,
-    mirroredResourceQuotas: (id: string) => ['clusters', id, 'mirrored', 'resource-quotas'] as const,
-    mirroredLimitRanges: (id: string) => ['clusters', id, 'mirrored', 'limit-ranges'] as const,
-    serviceMeshDetection: (id: string) => ['clusters', id, 'service-mesh'] as const,
-    serviceMeshInventory: (id: string) => ['clusters', id, 'service-mesh', 'inventory'] as const,
-    serviceMeshMtls: (id: string) => ['clusters', id, 'service-mesh', 'mtls'] as const,
-    veleroStatus: (id: string) => ['clusters', id, 'velero-status'] as const,
-    snapshots: (id: string) => ['clusters', id, 'snapshots'] as const,
-    snapshotSchedules: (id: string) => ['clusters', id, 'snapshot-schedules'] as const,
-    templates: ['cluster-templates'] as const,
-    templateBinding: (id: string) => ['clusters', id, 'template'] as const,
-    workloadKind: (id: string, kind: string) => ['clusters', id, 'workloads', kind] as const,
-    vulnerabilitySummary: (id: string) => ['clusters', id, 'vulnerabilities', 'summary'] as const,
-    serviceMeshHeader: (id: string) => ['clusters', id, 'service-mesh', 'header'] as const,
-    registrationStatus: (id: string) => ['cluster-registration-status', id] as const,
-  },
-  workloads: {
-    list: (clusterId: string, params?: Record<string, unknown>) =>
-      ['workloads', clusterId, 'list', params] as const,
-    detail: (clusterId: string, kind: string, ns: string, name: string) =>
-      ['workloads', clusterId, kind, ns, name] as const,
-    pods: (clusterId: string, kind: string, ns: string, name: string) =>
-      ['workloads', clusterId, kind, ns, name, 'pods'] as const,
-    metrics: (clusterId: string, kind: string, ns: string, name: string, range?: string) =>
-      ['workloads', clusterId, kind, ns, name, 'metrics', range] as const,
-  },
-  podLogs: (clusterId: string, ns: string, pod: string, container?: string) =>
-    ['pod-logs', clusterId, ns, pod, container] as const,
-  argocd: {
-    all: ['argocd'] as const,
-    instances: (clusterId?: string) => ['argocd', 'instances', clusterId] as const,
-    instance: (instanceId: string) => ['argocd', 'instance', instanceId] as const,
-    instanceHealth: (instanceId: string) => ['argocd', 'instance', instanceId, 'health'] as const,
-    liveApps: (instanceId?: string) =>
-      instanceId ? (['argocd', 'live-apps', instanceId] as const) : (['argocd', 'live-apps'] as const),
-    cachedApplications: (params?: { instanceId?: string; limit?: number; offset?: number }) =>
-      ['argocd', 'cached-applications', params] as const,
-    dbApps: (instanceId: string) => ['argocd', 'db-apps', instanceId] as const,
-    dbApp: (appId: string) => ['argocd', 'db-app', appId] as const,
-    appManifests: (appId: string) => ['argocd', 'app-manifests', appId] as const,
-    appHistory: (appId: string) => ['argocd', 'app-history', appId] as const,
-    operations: ['argocd', 'operations'] as const,
-    appOperations: (appId: string) => ['argocd', 'operations', 'for-app', appId] as const,
-    projects: (instanceId: string) => ['argocd', 'projects', instanceId] as const,
-    repos: (instanceId: string) => ['argocd', 'repos', instanceId] as const,
-    managedClusters: (instanceId: string) => ['argocd', 'managed-clusters', instanceId] as const,
-    orphanReport: (instanceId: string) => ['argocd', 'orphan-report', instanceId] as const,
-    appsets: (instanceId: string) => ['argocd', 'appsets', instanceId] as const,
-    clusterOwnership: (clusterId: string) => ['argocd', 'clusters', clusterId, 'ownership'] as const,
-    applications: (params?: Record<string, unknown>) => ['argocd', 'applications', params] as const,
-  },
-  rbac: {
-    globalRoles: ['rbac', 'global-roles'] as const,
-    clusterRoles: (clusterId?: string) => ['rbac', 'cluster-roles', clusterId] as const,
-    projectRoles: (projectId?: string) => ['rbac', 'project-roles', projectId] as const,
-    bindings: (params?: Record<string, unknown>) => ['rbac', 'bindings', params] as const,
-    myPermissions: (params?: apiClient.EffectivePermissionParams) => ['rbac', 'my-permissions', params] as const,
-  },
-  users: {
-    current: ['users', 'current'] as const,
-    list: (params?: Record<string, unknown>) => ['users', 'list', params] as const,
-  },
-  settings: {
-    general: ['settings', 'general'] as const,
-    sso: ['settings', 'sso'] as const,
-    tokens: ['settings', 'tokens'] as const,
-    auditLogs: (params?: Record<string, unknown>) => ['settings', 'audit-logs', params] as const,
-  },
-  activity: (limit?: number) => ['activity', limit] as const,
-  alerting: {
-    rules: ['alerting', 'rules'] as const,
-    events: (params?: Record<string, unknown>) => ['alerting', 'events', params] as const,
-    channels: ['alerting', 'channels'] as const,
-    silences: ['alerting', 'silences'] as const,
-  },
-  // Sprint 072 — read-only anomaly baselines for tuning.
-  anomalyBaselines: {
-    list: (params?: Record<string, unknown>) => ['anomaly-baselines', 'list', params] as const,
-    detail: (id: string) => ['anomaly-baselines', 'detail', id] as const,
-  },
-  logging: {
-    all: ['logging'] as const,
-    outputs: ['logging', 'outputs'] as const,
-    pipelines: ['logging', 'pipelines'] as const,
-    operations: (params?: Record<string, unknown>) => ['logging', 'operations', params] as const,
-    operation: (id: string) => ['logging', 'operations', 'detail', id] as const,
-  },
-  clusterGroups: {
-    all: ['cluster-groups'] as const,
-  },
-  vault: {
-    connections: ['vault-connections'] as const,
-  },
-  agents: {
-    fleet: ['agents', 'fleet'] as const,
-    diagnostics: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'diagnostics'] as const,
-    operations: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'operations'] as const,
-  },
-  extensions: {
-    list: ['extensions'] as const,
-  },
-  adminOperations: {
-    queues: ['admin', 'queues'] as const,
-    dlq: (queue: string) => ['admin', 'queues', queue, 'dlq'] as const,
-    outbox: (status: string) => ['admin', 'task-outbox', status] as const,
-  },
-  storage: {
-    pvs: (clusterId: string) => ['storage', clusterId, 'pvs'] as const,
-    pvcs: (clusterId: string) => ['storage', clusterId, 'pvcs'] as const,
-    storageClasses: (clusterId: string) => ['storage', clusterId, 'storageclasses'] as const,
-  },
-  networking: {
-    services: (clusterId: string) => ['networking', clusterId, 'services'] as const,
-    ingresses: (clusterId: string) => ['networking', clusterId, 'ingresses'] as const,
-    networkPolicies: (clusterId: string) => ['networking', clusterId, 'networkpolicies'] as const,
-    gateways: (clusterId: string) => ['networking', clusterId, 'gateways'] as const,
-    httpRoutes: (clusterId: string) => ['networking', clusterId, 'httproutes'] as const,
-    gatewayClasses: (clusterId: string) => ['networking', clusterId, 'gatewayclasses'] as const,
-    grpcRoutes: (clusterId: string) => ['networking', clusterId, 'grpcroutes'] as const,
-    tlsRoutes: (clusterId: string) => ['networking', clusterId, 'tlsroutes'] as const,
-    tcpRoutes: (clusterId: string) => ['networking', clusterId, 'tcproutes'] as const,
-    udpRoutes: (clusterId: string) => ['networking', clusterId, 'udproutes'] as const,
-    referenceGrants: (clusterId: string) => ['networking', clusterId, 'referencegrants'] as const,
-  },
-  projects: {
-    all: ['projects'] as const,
-    list: (params?: Record<string, unknown>) => ['projects', 'list', params] as const,
-    detail: (id: string) => ['projects', 'detail', id] as const,
-  },
-  catalog: {
-    repositories: ['catalog', 'repositories'] as const,
-    charts: (params?: Record<string, unknown>) => ['catalog', 'charts', params] as const,
-    chartVersions: (chartId: string) => ['catalog', 'charts', chartId, 'versions'] as const,
-    installed: (params?: Record<string, unknown>) => ['catalog', 'installed', params] as const,
-  },
-  backups: {
-    list: ['backups', 'list'] as const,
-    storage: ['backups', 'storage'] as const,
-    schedules: ['backups', 'schedules'] as const,
-  },
-  security: {
-    templates: ['security', 'templates'] as const,
-    policies: ['security', 'policies'] as const,
-    scans: (params?: Record<string, unknown>) => ['security', 'scans', params] as const,
-  },
-  tools: {
-    all: ['tools'] as const,
-    list: () => ['tools', 'list'] as const,
-    detail: (slug: string) => ['tools', 'detail', slug] as const,
-    clusterStatus: (clusterId: string) => ['tools', 'clusterStatus', clusterId] as const,
-  },
-  generic: {
-    resources: (clusterId: string, resourceType: string) =>
-      ['generic', clusterId, resourceType] as const,
-  },
-};
+// Query key factory lives in ./query-keys.ts (single source of truth).
+// Imported here and re-exported so existing `import { queryKeys } from '@/lib/hooks'`
+// call sites keep working.
+import { queryKeys } from './query-keys';
+export { queryKeys };
 
 export function useFeatureFlags() {
   return useQuery({
@@ -296,7 +99,7 @@ export function useClusterNodes(clusterId: string) {
 // gets invalidated on cluster.heartbeat events via useLiveQueryInvalidation.
 export function useClusterConditions(clusterId: string) {
   return useQuery({
-    queryKey: ['clusters', clusterId, 'conditions'] as const,
+    queryKey: queryKeys.clusters.conditions(clusterId),
     queryFn: () => apiClient.getClusterConditions(clusterId),
     enabled: !!clusterId,
     refetchInterval: 60000,
@@ -308,7 +111,7 @@ export function useClusterConditions(clusterId: string) {
 // fresh attempt shows up the next tick instead of one minute later.
 export function useClusterConditionRemediation(clusterId: string) {
   return useQuery({
-    queryKey: ['clusters', clusterId, 'condition-remediation'] as const,
+    queryKey: queryKeys.clusters.conditionRemediation(clusterId),
     queryFn: () => apiClient.getClusterConditionRemediation(clusterId),
     enabled: !!clusterId,
     refetchInterval: 30000,
@@ -343,7 +146,7 @@ export function useClusterEvents(clusterId: string, params?: { type?: string; li
 
 export function useClusterPods(clusterId: string, params?: { namespace?: string }) {
   return useQuery({
-    queryKey: queryKeys.clusters.pods(clusterId),
+    queryKey: queryKeys.clusters.pods(clusterId, params),
     queryFn: () => apiClient.getClusterPods(clusterId, params),
     enabled: !!clusterId,
     refetchInterval: 15000,
@@ -415,7 +218,7 @@ export function useDeletePod() {
     mutationFn: ({ clusterId, namespace, name }: { clusterId: string; namespace: string; name: string }) =>
       apiClient.deletePod(clusterId, namespace, name),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.pods(variables.clusterId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.podsAll(variables.clusterId) });
       toastSuccess('Pod deleted');
     },
     onError: (error: Error) => {
@@ -570,11 +373,14 @@ export function usePodLogs(
   // Initial fetch — include tail/since in the queryKey so flipping modes
   // refetches instead of serving the previous mode's cache.
   const query = useQuery({
-    queryKey: [
-      ...queryKeys.podLogs(clusterId, namespace, pod, params?.container),
+    queryKey: queryKeys.podLogsFetch(
+      clusterId,
+      namespace,
+      pod,
+      params?.container,
       effectiveTailLines ?? 'no-tail',
-      effectiveSinceSeconds ?? 'no-since',
-    ],
+      effectiveSinceSeconds ?? 'no-since'
+    ),
     queryFn: () =>
       apiClient.getPodLogs(clusterId, namespace, pod, {
         container: params?.container,
@@ -658,9 +464,15 @@ export function usePodLogs(
     cleanupRef.current = null;
   }, []);
 
+  // Forward query fields explicitly rather than spreading the whole result —
+  // spreading a TanStack Query result subscribes the consumer to every field
+  // and defeats its fine-grained re-render tracking (@tanstack/query/no-rest-destructuring).
   return {
-    ...query,
     data: allLogs,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
     streamLogs,
     stopStreaming,
     status,
@@ -798,7 +610,7 @@ export function useCreateRole() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rbac'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
       toastSuccess('Role created successfully');
     },
     onError: (error: Error) => {
@@ -817,7 +629,7 @@ export function useCreateRoleBinding() {
       scope?: { clusterId?: string; projectId?: string };
     }) => apiClient.createRoleBinding(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rbac'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
       toastSuccess('Role binding created');
     },
     onError: (error: Error) => {
@@ -1027,7 +839,7 @@ export function useAcknowledgeAlert() {
   return useMutation({
     mutationFn: (id: string) => apiClient.acknowledgeAlert(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['alerting'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert acknowledged');
     },
     onError: (error: Error) => {
@@ -1041,7 +853,7 @@ export function useResolveAlert() {
   return useMutation({
     mutationFn: (id: string) => apiClient.resolveAlert(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['alerting'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerting.all });
       toastSuccess('Alert resolved');
     },
     onError: (error: Error) => {
@@ -1226,7 +1038,7 @@ export function useRetryLoggingOperation() {
     mutationFn: (id: string) => apiClient.retryLoggingOperation(id),
     onSuccess: () => {
       // Invalidate every cached list (parameterized keys) and the detail rows.
-      queryClient.invalidateQueries({ queryKey: ['logging', 'operations'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.logging.operationsAll });
       toastSuccess('Operation retry queued');
     },
     onError: (error: Error) => {
@@ -1269,7 +1081,7 @@ export function useCreatePVC() {
     mutationFn: ({ clusterId, data }: { clusterId: string; data: Partial<PersistentVolumeClaim> }) =>
       apiClient.createPersistentVolumeClaim(clusterId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['storage'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
       toastSuccess('PVC created');
     },
     onError: (error: Error) => {
@@ -1284,7 +1096,7 @@ export function useDeletePVC() {
     mutationFn: ({ clusterId, namespace, name }: { clusterId: string; namespace: string; name: string }) =>
       apiClient.deletePersistentVolumeClaim(clusterId, namespace, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['storage'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
       toastSuccess('PVC deleted');
     },
     onError: (error: Error) => {
@@ -1299,7 +1111,7 @@ export function useDeletePV() {
     mutationFn: ({ clusterId, name }: { clusterId: string; name: string }) =>
       apiClient.deletePersistentVolume(clusterId, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['storage'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
       toastSuccess('PV deleted');
     },
     onError: (error: Error) => {
@@ -1342,7 +1154,7 @@ export function useDeleteService() {
     mutationFn: ({ clusterId, namespace, name }: { clusterId: string; namespace: string; name: string }) =>
       apiClient.deleteService(clusterId, namespace, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['networking'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
       toastSuccess('Service deleted');
     },
     onError: (error: Error) => {
@@ -1357,7 +1169,7 @@ export function useDeleteIngress() {
     mutationFn: ({ clusterId, namespace, name }: { clusterId: string; namespace: string; name: string }) =>
       apiClient.deleteIngress(clusterId, namespace, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['networking'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
       toastSuccess('Ingress deleted');
     },
     onError: (error: Error) => {
@@ -1372,7 +1184,7 @@ export function useDeleteNetworkPolicy() {
     mutationFn: ({ clusterId, namespace, name }: { clusterId: string; namespace: string; name: string }) =>
       apiClient.deleteNetworkPolicy(clusterId, namespace, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['networking'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
       toastSuccess('Network policy deleted');
     },
     onError: (error: Error) => {
@@ -1530,7 +1342,7 @@ export function useCreateUser() {
       globalRoles: string[];
     }) => apiClient.createUser(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       toastSuccess('User created');
     },
     onError: (error: Error) => {
@@ -1545,7 +1357,7 @@ export function useUpdateUser() {
     mutationFn: ({ id, data }: { id: string; data: Partial<User> }) =>
       apiClient.updateUser(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       toastSuccess('User updated');
     },
     onError: (error: Error) => {
@@ -1559,7 +1371,7 @@ export function useDeleteUser() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteUser(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       toastSuccess('User deleted');
     },
     onError: (error: Error) => {
@@ -1603,7 +1415,7 @@ export function useCreateHelmRepository() {
       password?: string;
     }) => apiClient.createHelmRepository(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Repository added');
     },
     onError: (error: Error) => {
@@ -1617,7 +1429,7 @@ export function useSyncHelmRepository() {
   return useMutation({
     mutationFn: (id: string) => apiClient.syncHelmRepository(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Repository sync initiated');
     },
     onError: (error: Error) => {
@@ -1631,7 +1443,7 @@ export function useDeleteHelmRepository() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteHelmRepository(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Repository deleted');
     },
     onError: (error: Error) => {
@@ -1674,7 +1486,7 @@ export function useInstallHelmChart() {
       values_override?: string;
     }) => apiClient.installHelmChart(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Chart installation initiated');
     },
     onError: (error: Error) => {
@@ -1689,7 +1501,7 @@ export function useUpgradeInstalledChart() {
     mutationFn: ({ id, data }: { id: string; data: { chart_version_id: string; values_override?: string } }) =>
       apiClient.upgradeInstalledChart(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Chart upgrade initiated');
     },
     onError: (error: Error) => {
@@ -1703,7 +1515,7 @@ export function useUninstallChart() {
   return useMutation({
     mutationFn: (id: string) => apiClient.uninstallChart(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Chart uninstalled');
     },
     onError: (error: Error) => {
@@ -1718,7 +1530,7 @@ export function useRollbackChart() {
     mutationFn: ({ id, revision }: { id: string; revision: number }) =>
       apiClient.rollbackChart(id, revision),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['catalog'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.all });
       toastSuccess('Chart rollback initiated');
     },
     onError: (error: Error) => {
@@ -1754,7 +1566,7 @@ export function useCreateBackupStorageConfig() {
       connectionString?: string;
     }) => apiClient.createBackupStorageConfig(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Storage configuration created');
     },
     onError: (error: Error) => {
@@ -1784,7 +1596,7 @@ export function useDeleteBackupStorageConfig() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteBackupStorageConfig(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Storage configuration deleted');
     },
     onError: (error: Error) => {
@@ -1810,7 +1622,7 @@ export function useCreateBackup() {
       backup_type: import('@/types').BackupType;
     }) => apiClient.createBackup(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Backup initiated');
     },
     onError: (error: Error) => {
@@ -1824,7 +1636,7 @@ export function useRestoreFromBackup() {
   return useMutation({
     mutationFn: (id: string) => apiClient.restoreFromBackup(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Restore initiated');
     },
     onError: (error: Error) => {
@@ -1838,7 +1650,7 @@ export function useDeleteBackup() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteBackup(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Backup deleted');
     },
     onError: (error: Error) => {
@@ -1866,7 +1678,7 @@ export function useCreateBackupSchedule() {
       enabled?: boolean;
     }) => apiClient.createBackupSchedule(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Backup schedule created');
     },
     onError: (error: Error) => {
@@ -1887,7 +1699,7 @@ export function useUpdateBackupSchedule() {
       enabled: boolean;
     }> }) => apiClient.updateBackupSchedule(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Backup schedule updated');
     },
     onError: (error: Error) => {
@@ -1901,7 +1713,7 @@ export function useDeleteBackupSchedule() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteBackupSchedule(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['backups'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.backups.all });
       toastSuccess('Backup schedule deleted');
     },
     onError: (error: Error) => {
@@ -1927,7 +1739,7 @@ export function useCreatePodSecurityTemplate() {
     mutationFn: (data: Partial<import('@/types').PodSecurityTemplate>) =>
       apiClient.createPodSecurityTemplate(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('PSA template created');
     },
     onError: (error: Error) => {
@@ -1942,7 +1754,7 @@ export function useUpdatePodSecurityTemplate() {
     mutationFn: ({ id, data }: { id: string; data: Partial<import('@/types').PodSecurityTemplate> }) =>
       apiClient.updatePodSecurityTemplate(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('PSA template updated');
     },
     onError: (error: Error) => {
@@ -1956,7 +1768,7 @@ export function useDeletePodSecurityTemplate() {
   return useMutation({
     mutationFn: (id: string) => apiClient.deletePodSecurityTemplate(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('PSA template deleted');
     },
     onError: (error: Error) => {
@@ -1979,7 +1791,7 @@ export function useAssignSecurityPolicy() {
     mutationFn: (data: { cluster_id: string; template_id: string }) =>
       apiClient.assignSecurityPolicy(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('Security policy assigned');
     },
     onError: (error: Error) => {
@@ -1993,7 +1805,7 @@ export function useApplySecurityPolicy() {
   return useMutation({
     mutationFn: (id: string) => apiClient.applySecurityPolicy(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('Security policy applied to cluster');
     },
     onError: (error: Error) => {
@@ -2007,7 +1819,7 @@ export function useRemoveSecurityPolicy() {
   return useMutation({
     mutationFn: (id: string) => apiClient.removeSecurityPolicy(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('Security policy removed');
     },
     onError: (error: Error) => {
@@ -2030,7 +1842,7 @@ export function useTriggerSecurityScan() {
     mutationFn: (data: { cluster_id: string; scan_type: import('@/types').SecurityScanType }) =>
       apiClient.triggerSecurityScan(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.security.all });
       toastSuccess('Security scan initiated');
     },
     onError: (error: Error) => {
@@ -2159,12 +1971,12 @@ export function useK8sDelete() {
     mutationFn: ({ clusterId, path }: { clusterId: string; path: string }) =>
       apiClient.k8sDelete(clusterId, path),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['k8s'] });
-      queryClient.invalidateQueries({ queryKey: ['clusters'] });
-      queryClient.invalidateQueries({ queryKey: ['networking'] });
-      queryClient.invalidateQueries({ queryKey: ['storage'] });
-      queryClient.invalidateQueries({ queryKey: ['workloads'] });
-      queryClient.invalidateQueries({ queryKey: ['generic'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workloads.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.generic.all });
       toastSuccess('Resource deleted');
     },
     onError: (error: Error) => {
@@ -2179,12 +1991,12 @@ export function useK8sApplyYaml() {
     mutationFn: ({ clusterId, path, yaml }: { clusterId: string; path: string; yaml: string }) =>
       apiClient.k8sApplyYaml(clusterId, path, yaml),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['k8s'] });
-      queryClient.invalidateQueries({ queryKey: ['clusters'] });
-      queryClient.invalidateQueries({ queryKey: ['networking'] });
-      queryClient.invalidateQueries({ queryKey: ['storage'] });
-      queryClient.invalidateQueries({ queryKey: ['workloads'] });
-      queryClient.invalidateQueries({ queryKey: ['generic'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workloads.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.generic.all });
       toastSuccess('Resource updated');
     },
     onError: (error: Error) => {
@@ -2212,12 +2024,12 @@ export function useK8sCreate() {
     mutationFn: ({ clusterId, path, body }: { clusterId: string; path: string; body: unknown }) =>
       apiClient.k8sCreate(clusterId, path, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['k8s'] });
-      queryClient.invalidateQueries({ queryKey: ['clusters'] });
-      queryClient.invalidateQueries({ queryKey: ['networking'] });
-      queryClient.invalidateQueries({ queryKey: ['storage'] });
-      queryClient.invalidateQueries({ queryKey: ['workloads'] });
-      queryClient.invalidateQueries({ queryKey: ['generic'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workloads.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.generic.all });
       toastSuccess('Resource created');
     },
     onError: (error: Error) => {
@@ -2241,9 +2053,9 @@ export function useK8sPatch() {
       patchType?: 'strategic-merge' | 'merge' | 'json';
     }) => apiClient.k8sPatch(clusterId, path, body, patchType),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['k8s'] });
-      queryClient.invalidateQueries({ queryKey: ['clusters'] });
-      queryClient.invalidateQueries({ queryKey: ['generic'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.generic.all });
       toastSuccess('Resource updated');
     },
     onError: (error: Error) => {
@@ -2307,7 +2119,7 @@ export function useCreateCISScan() {
   return useMutation({
     mutationFn: (payload: import('@/types').CISScanCreatePayload) => apiClient.createCISScan(payload),
     onSuccess: (scan) => {
-      queryClient.invalidateQueries({ queryKey: ['cis', 'scans'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cis.scansAll });
       queryClient.setQueryData(cisQueryKeys.scan(scan.id), scan);
       toastSuccess('CIS scan queued');
     },

@@ -9,7 +9,7 @@
  * result on top + a paginated history table below.
  */
 import { useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Loader2,

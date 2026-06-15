@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+import { usePathname } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import {
   LayoutDashboard,
   Server,

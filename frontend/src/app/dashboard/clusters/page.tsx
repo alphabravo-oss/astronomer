@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from '@/lib/navigation';
 import { useClusters, useDeleteCluster, queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -250,6 +250,7 @@ export default function ClustersPage() {
         data={clusters}
         columns={columns}
         keyExtractor={(row) => row.id}
+        persistKey="clusters"
         onRowClick={(row) => router.push(`/dashboard/clusters/${row.id}`)}
         searchPlaceholder="Search clusters..."
         loading={isLoading}

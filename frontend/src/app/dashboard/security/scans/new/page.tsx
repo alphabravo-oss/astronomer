@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from '@/lib/navigation';
+import { Link } from '@/lib/link';
 import { useClusters } from '@/lib/hooks';
 import { useCISProfiles, useCreateCISScan } from '@/lib/hooks';
 import { CIS_NOT_INSTALLED_HINT } from '@/components/security/cis-scans-tab';

@@ -17,7 +17,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import {
   Archive,
   Clock,

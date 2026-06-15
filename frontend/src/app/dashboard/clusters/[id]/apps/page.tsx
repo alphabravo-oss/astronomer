@@ -28,7 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from '@/lib/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
@@ -43,7 +43,7 @@ import {
   ArrowUpCircle,
   Trash2,
 } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
 import { usePermissionDecision } from '@/lib/permission-hooks';

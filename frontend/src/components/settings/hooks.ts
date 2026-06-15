@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as api from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 import { useAuthStore } from '@/lib/store';
 import { isSuperuser as hasSuperuserAccess } from '@/lib/permissions';
 import type {
@@ -238,7 +239,7 @@ export function useRetryWebhookDelivery(webhookId: string) {
       api.retryWebhookDelivery(webhookId, deliveryId),
     onSuccess: () => {
       qc.invalidateQueries({
-        queryKey: ['settings', 'webhooks', webhookId, 'deliveries'],
+        queryKey: queryKeys.settings.webhookDeliveries(webhookId),
       });
       toastSuccess('Delivery re-queued');
     },

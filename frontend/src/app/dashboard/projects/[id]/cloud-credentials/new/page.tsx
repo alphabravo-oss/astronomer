@@ -13,9 +13,9 @@
  * at the bottom.
  */
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, Loader2, Search, Cloud } from 'lucide-react';
 import {
   useCloudCredentialProviders,

@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * Backend: /api/v1/admin/read-audit-policies/. Superuser-gated.
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, FileSearch, Loader2, Plus, Trash2 } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { OverlayShell } from '@/components/ui/overlay-shell';

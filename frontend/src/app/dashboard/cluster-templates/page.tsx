@@ -13,8 +13,8 @@
  * the user lacks read we still mount the page — we just render an explainer
  * instead of the list, so the sidebar link remains a stable target.
  */
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { Plus, Trash2, Layers } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { LoadingState, PermissionState } from '@/components/ui/empty-state';

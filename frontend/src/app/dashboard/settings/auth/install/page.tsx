@@ -15,8 +15,8 @@
  *      settings row so /apply has somewhere to write afterwards.
  */
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, ArrowRight, Check, Loader2, Server, Wrench, Globe } from 'lucide-react';
 import { useClusters, useInstallTool, useTools } from '@/lib/hooks';
 import { useUpdateDexSettings } from '@/components/auth/hooks';

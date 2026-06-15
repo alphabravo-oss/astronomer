@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * "Sync now" + "Dry-run preview" + "Save changes" actions.
  */
 import { use, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { StatusBadge } from '@/components/ui/status-badge';

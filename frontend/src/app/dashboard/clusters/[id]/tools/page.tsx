@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams } from '@/lib/navigation';
 import { useCluster } from '@/lib/hooks';
 import { ToolsTab } from '@/components/clusters/tools-tab';
 import { Loader2, Server } from 'lucide-react';

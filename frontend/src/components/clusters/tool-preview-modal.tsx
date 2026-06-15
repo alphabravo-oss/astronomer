@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as apiClient from '@/lib/api';
+import { queryKeys } from '@/lib/query-keys';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { Loader2 } from 'lucide-react';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -34,7 +35,7 @@ export function ToolPreviewModal({
   confirmDecision,
 }: ToolPreviewModalProps) {
   const { data: preview, isLoading } = useQuery({
-    queryKey: ['tools', 'preview', toolSlug, clusterId, preset],
+    queryKey: queryKeys.tools.preview(toolSlug, clusterId, preset),
     queryFn: () => apiClient.previewToolInstall(toolSlug, { cluster_id: clusterId, preset }),
   });
 

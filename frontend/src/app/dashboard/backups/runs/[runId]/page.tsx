@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from '@/lib/navigation';
 import {
   AlertTriangle,
   ArrowLeft,

@@ -5,8 +5,8 @@
  * Reused for edit via the [id] page; this is the create-only entrypoint.
  */
 import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { useCreateGitOpsSource } from '@/components/settings/hooks';

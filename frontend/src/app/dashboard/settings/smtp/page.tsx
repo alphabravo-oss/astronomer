@@ -10,7 +10,7 @@
  * they actually type a new value.
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, Loader2, Mail, Save, Send } from 'lucide-react';
 import { toastError } from '@/lib/toast';
 import { cn, formatRelativeTime } from '@/lib/utils';

@@ -12,7 +12,7 @@
  * matches mappings regardless of source. Roles come from `useGlobalRoles`.
  */
 import { useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Loader2,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams } from '@/lib/navigation';
 import { useWorkload, useWorkloadPods, useWorkloadMetrics } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -10,7 +10,7 @@ import { MetricsChart } from '@/components/monitoring/metrics-chart';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Pod } from '@/types';
 import { ArrowLeft, Box, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 
 type TabKey = 'pods' | 'logs' | 'metrics';
 

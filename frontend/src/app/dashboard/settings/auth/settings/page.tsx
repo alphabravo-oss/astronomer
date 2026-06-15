@@ -14,7 +14,7 @@
  *      without a code change here.
  */
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useClusters } from '@/lib/hooks';
 import { useDexSettings, useUpdateDexSettings, useApplyDexConfig } from '@/components/auth/hooks';

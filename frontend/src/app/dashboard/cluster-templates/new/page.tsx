@@ -10,8 +10,8 @@
  * (so deep-links don't 404), but the Save button refuses to fire.
  */
 import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { PermissionState } from '@/components/ui/empty-state';
 import { extractApiErrorMessage } from '@/lib/api/errors';

@@ -6,7 +6,7 @@
 // itself just hosts the ClusterShell component; lifecycle (open / close /
 // stream) lives there.
 
-import { useParams } from 'next/navigation';
+import { useParams } from '@/lib/navigation';
 import { useCluster } from '@/lib/hooks';
 import { ClusterShell } from '@/components/clusters/cluster-shell';
 import { Loader2, Server, TerminalSquare } from 'lucide-react';

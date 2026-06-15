@@ -24,14 +24,18 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        launchOptions: chromiumExecutable ? { executablePath: chromiumExecutable } : undefined,
+        launchOptions: chromiumExecutable
+          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
+          : undefined,
       },
     },
     {
       name: 'mobile-chromium',
       use: {
         ...devices['Pixel 7'],
-        launchOptions: chromiumExecutable ? { executablePath: chromiumExecutable } : undefined,
+        launchOptions: chromiumExecutable
+          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
+          : undefined,
       },
     },
   ],

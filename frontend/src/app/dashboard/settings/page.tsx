@@ -10,7 +10,7 @@
  * Showing the cards to non-admins is still fine — they'll just bounce off a
  * 403 placeholder on click.
  */
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import {
   Palette,
   Mail,

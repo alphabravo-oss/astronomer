@@ -6,8 +6,8 @@
  * is shown as a small "N in use" + worst-cap bar so operators can spot the
  * hot plans without clicking through.
  */
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
   ExternalLink,

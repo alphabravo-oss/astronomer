@@ -9,7 +9,7 @@
  * on /dashboard/settings/quotas/; we just deep-link there.
  */
 import { use } from 'react';
-import Link from 'next/link';
+import { Link } from '@/lib/link';
 import { Loader2, Settings, Server, Layers, Users } from 'lucide-react';
 import { useProjectEffectiveQuota } from '@/components/projects/hooks';
 import { cn } from '@/lib/utils';
