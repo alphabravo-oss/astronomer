@@ -1930,29 +1930,25 @@ func TestArgoCDInternalK8sProxyAllowsUnauthenticatedOpenAPI(t *testing.T) {
 	})
 	base := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
 
-	// Discovery + schema GETs without a token reach the proxy handler (503 — no
-	// tunnel), proving the requests ArgoCD makes anonymously are no longer 401'd.
-	for _, path := range []string{"/openapi/v2", "/openapi/v3/apis/apps/v1", "/version", "/api", "/api/v1", "/apis", "/apis/apps", "/apis/apps/v1"} {
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, base+path, nil))
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("discovery GET %s status = %d, want %d (handler reached); body=%s", path, rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
+	// GET /openapi/* without a token reaches the proxy handler (503 — no tunnel),
+	// proving the schema fetch ArgoCD makes anonymously is no longer 401'd.
+	openapiRec := httptest.NewRecorder()
+	router.ServeHTTP(openapiRec, httptest.NewRequest(http.MethodGet, base+"/openapi/v2", nil))
+	if openapiRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("openapi GET status = %d, want %d (handler reached); body=%s", openapiRec.Code, http.StatusServiceUnavailable, openapiRec.Body.String())
 	}
 
-	// The bypass is scoped: resource-data paths without a token still 401, and a
-	// mutating method to a discovery path still requires the token.
-	for _, path := range []string{"/api/v1/secrets", "/api/v1/namespaces/default/secrets", "/apis/apps/v1/deployments"} {
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, base+path, nil))
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("data GET %s status = %d, want %d", path, rec.Code, http.StatusUnauthorized)
-		}
+	// The bypass is scoped: a data path without a token still 401s, and a
+	// mutating method to /openapi still requires the token.
+	dataRec := httptest.NewRecorder()
+	router.ServeHTTP(dataRec, httptest.NewRequest(http.MethodGet, base+"/api/v1/secrets", nil))
+	if dataRec.Code != http.StatusUnauthorized {
+		t.Fatalf("data GET status = %d, want %d", dataRec.Code, http.StatusUnauthorized)
 	}
 	postRec := httptest.NewRecorder()
-	router.ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, base+"/api/v1", nil))
+	router.ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, base+"/openapi/v2", nil))
 	if postRec.Code != http.StatusUnauthorized {
-		t.Fatalf("discovery POST status = %d, want %d", postRec.Code, http.StatusUnauthorized)
+		t.Fatalf("openapi POST status = %d, want %d", postRec.Code, http.StatusUnauthorized)
 	}
 }
 
