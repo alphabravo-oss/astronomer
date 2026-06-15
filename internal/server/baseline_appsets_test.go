@@ -40,14 +40,23 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		argocdApplicationSetGVR: "ApplicationSetList",
 	})
-	q := baselineAppSetQuerierStub{tools: map[string]sqlc.ClusterTool{
-		"trivy-operator": {
-			Slug:      "trivy-operator",
-			Charts:    json.RawMessage(`[{"chart_name":"trivy-operator","repo_url":"https://charts.example.test/aqua","namespace":"security","order":0}]`),
-			Presets:   json.RawMessage(`{"default":"operator:\n  scanJobTimeout: 10m\n"}`),
-			IsEnabled: true,
+	q := baselineAppSetQuerierStub{
+		tools: map[string]sqlc.ClusterTool{
+			"trivy-operator": {
+				Slug:      "trivy-operator",
+				Charts:    json.RawMessage(`[{"chart_name":"trivy-operator","repo_url":"https://charts.example.test/aqua","namespace":"security","order":0}]`),
+				Presets:   json.RawMessage(`{"default":"operator:\n  scanJobTimeout: 10m\n"}`),
+				IsEnabled: true,
+			},
 		},
-	}}
+		// Opinionated infra is opt-in; enable all three so this test exercises
+		// the full 7-component render (labels, generators, sync waves).
+		settings: map[string]json.RawMessage{
+			platformSettingBaselineComponentPrefix + "ingress-nginx": json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "cert-manager":  json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "gatekeeper":    json.RawMessage(`true`),
+		},
+	}
 
 	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
 		t.Fatalf("ensureBaselineApplicationSets: %v", err)
@@ -134,7 +143,12 @@ func TestBaselineApplicationSetsUseSyncWaveStandards(t *testing.T) {
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		argocdApplicationSetGVR: "ApplicationSetList",
 	})
-	if err := ensureBaselineApplicationSets(context.Background(), dyn, nil); err != nil {
+	q := baselineAppSetQuerierStub{settings: map[string]json.RawMessage{
+		platformSettingBaselineComponentPrefix + "ingress-nginx": json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "cert-manager":  json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "gatekeeper":    json.RawMessage(`true`),
+	}}
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
 		t.Fatalf("ensureBaselineApplicationSets: %v", err)
 	}
 	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
@@ -203,6 +217,54 @@ func TestArgoCDManagePlatformBaselineEnabledDefaultsTrue(t *testing.T) {
 		settings: map[string]json.RawMessage{platformSettingArgoCDManageBaseline: json.RawMessage(`false`)},
 	}) {
 		t.Fatal("false setting should disable baseline ApplicationSets")
+	}
+}
+
+func TestBaselineDefaultsExcludeOpinionatedInfra(t *testing.T) {
+	newDyn := func() *fake.FakeDynamicClient {
+		return fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+			argocdApplicationSetGVR: "ApplicationSetList",
+		})
+	}
+	names := func(dyn *fake.FakeDynamicClient) map[string]bool {
+		items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			t.Fatalf("list applicationsets: %v", err)
+		}
+		got := map[string]bool{}
+		for i := range items.Items {
+			got[items.Items[i].GetName()] = true
+		}
+		return got
+	}
+
+	// No settings → only the 4 non-conflicting observability/security agents.
+	dyn := newDyn()
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	got := names(dyn)
+	for _, on := range []string{"astronomer-baseline-trivy", "astronomer-baseline-kube-state-metrics", "astronomer-baseline-node-exporter", "astronomer-baseline-fluent-bit"} {
+		if !got[on] {
+			t.Errorf("default-on component %s missing", on)
+		}
+	}
+	for _, off := range []string{"astronomer-baseline-ingress-nginx", "astronomer-baseline-cert-manager", "astronomer-baseline-gatekeeper"} {
+		if got[off] {
+			t.Errorf("opinionated component %s should be opt-in, got created", off)
+		}
+	}
+
+	// Explicit false disables a default-on agent.
+	dyn = newDyn()
+	q := baselineAppSetQuerierStub{settings: map[string]json.RawMessage{
+		platformSettingBaselineComponentPrefix + "trivy-operator": json.RawMessage(`false`),
+	}}
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	if names(dyn)["astronomer-baseline-trivy"] {
+		t.Error("trivy disabled via setting should not be created")
 	}
 }
 

@@ -44,6 +44,13 @@ type baselineApplicationSetComponent struct {
 	Namespace          string
 	ValuesYAML         string
 	SyncPhase          baselineSyncPhase
+	// DefaultEnabled installs this component on every adopted cluster unless an
+	// operator explicitly disables it. Opinionated infrastructure that collides
+	// with the user's own choices — ingress controller, cert-manager, policy
+	// engine — ships OPT-IN (DefaultEnabled=false): we never assume ownership of
+	// a cluster's ingress/TLS/policy. The always-on set is non-conflicting
+	// observability + security agents only.
+	DefaultEnabled bool
 }
 
 type baselineSyncPhase string
@@ -105,6 +112,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		ApplicationSetName: "astronomer-baseline-trivy",
 		ApplicationPrefix:  "astronomer-trivy",
 		Slug:               "trivy-operator",
+		DefaultEnabled:     true,
 		ChartName:          "trivy-operator",
 		RepoURL:            "https://aquasecurity.github.io/helm-charts",
 		Namespace:          "trivy-system",
@@ -115,6 +123,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		ApplicationSetName: "astronomer-baseline-kube-state-metrics",
 		ApplicationPrefix:  "astronomer-ksm",
 		Slug:               "kube-state-metrics",
+		DefaultEnabled:     true,
 		ChartName:          "kube-state-metrics",
 		RepoURL:            "https://prometheus-community.github.io/helm-charts",
 		Namespace:          "monitoring",
@@ -125,6 +134,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		ApplicationSetName: "astronomer-baseline-node-exporter",
 		ApplicationPrefix:  "astronomer-node-exporter",
 		Slug:               "prometheus-node-exporter",
+		DefaultEnabled:     true,
 		ChartName:          "prometheus-node-exporter",
 		RepoURL:            "https://prometheus-community.github.io/helm-charts",
 		Namespace:          "monitoring",
@@ -135,6 +145,7 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		ApplicationSetName: "astronomer-baseline-fluent-bit",
 		ApplicationPrefix:  "astronomer-fluent-bit",
 		Slug:               "fluent-bit",
+		DefaultEnabled:     true,
 		ChartName:          "fluent-bit",
 		RepoURL:            "https://fluent.github.io/helm-charts",
 		Namespace:          "logging",
@@ -191,6 +202,27 @@ func argoCDManagePlatformBaselineEnabled(ctx context.Context, q platformSettingR
 	var enabled bool
 	if err := json.Unmarshal(row.Value, &enabled); err != nil {
 		return true
+	}
+	return enabled
+}
+
+// platformSettingBaselineComponentPrefix + slug gates a single baseline
+// component. Value is a JSON bool; absent falls back to component.DefaultEnabled.
+// This is how operators opt INTO the opinionated infra (ingress-nginx,
+// cert-manager, gatekeeper) or opt OUT of a default-on agent.
+const platformSettingBaselineComponentPrefix = "argocd.baseline."
+
+func baselineComponentEnabled(ctx context.Context, q platformSettingReader, c baselineApplicationSetComponent) bool {
+	if q == nil {
+		return c.DefaultEnabled
+	}
+	row, err := q.GetPlatformSetting(ctx, platformSettingBaselineComponentPrefix+c.Slug)
+	if err != nil {
+		return c.DefaultEnabled
+	}
+	var enabled bool
+	if err := json.Unmarshal(row.Value, &enabled); err != nil {
+		return c.DefaultEnabled
 	}
 	return enabled
 }
@@ -266,7 +298,17 @@ func ensureBaselineApplicationSets(ctx context.Context, dyn dynamic.Interface, q
 		return fmt.Errorf("dynamic client not configured")
 	}
 	res := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace)
+	// q is the real *sqlc.Queries (implements platformSettingReader); the
+	// tool-only fakes/nil fall back to DefaultEnabled gating.
+	settings, _ := q.(platformSettingReader)
 	for _, component := range baselineApplicationSetComponents(ctx, q) {
+		if !baselineComponentEnabled(ctx, settings, component) {
+			// Disabled/opt-in: remove the appset so its generated Apps prune.
+			if err := res.Delete(ctx, component.ApplicationSetName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				return fmt.Errorf("delete applicationset %s: %w", component.ApplicationSetName, err)
+			}
+			continue
+		}
 		obj := baselineApplicationSetObject(component)
 		current, err := res.Get(ctx, component.ApplicationSetName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
