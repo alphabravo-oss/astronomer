@@ -247,6 +247,7 @@ export const queryKeys = {
     clusterStatus: (clusterId: string) => ['tools', 'clusterStatus', clusterId] as const,
     preview: (toolSlug: string, clusterId: string, preset: string) =>
       ['tools', 'preview', toolSlug, clusterId, preset] as const,
+    operation: (operationId: string) => ['tools', 'operation', operationId] as const,
   },
   generic: {
     all: ['generic'] as const,

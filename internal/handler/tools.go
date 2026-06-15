@@ -127,8 +127,10 @@ type ToolResponse struct {
 	ServicePort       *int32          `json:"service_port"`
 	ServicePath       string          `json:"service_path"`
 	SubServices       json.RawMessage `json:"sub_services"`
-	CreatedAt         string          `json:"created_at"`
-	UpdatedAt         string          `json:"updated_at"`
+	// FormSchema drives the install-time settings form (nil → raw-YAML only).
+	FormSchema *ToolFormSchema `json:"form_schema,omitempty"`
+	CreatedAt  string          `json:"created_at"`
+	UpdatedAt  string          `json:"updated_at"`
 }
 
 func toolToResponse(t sqlc.ClusterTool) ToolResponse {
@@ -148,6 +150,7 @@ func toolToResponse(t sqlc.ClusterTool) ToolResponse {
 		ServiceName:       t.ServiceName,
 		ServicePath:       t.ServicePath,
 		SubServices:       t.SubServices,
+		FormSchema:        toolFormSchemaFor(t.Slug),
 		CreatedAt:         t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:         t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
@@ -1257,10 +1260,20 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 			})
 			return adoptExistingToolRelease(ctx, h.queries, clusterID, env, status)
 		}
+		h.recordToolOperationEvent(ctx, op.ID, "info", "helm", "pulling chart and applying via Helm through the agent tunnel", map[string]any{
+			"chart":     env.ChartName,
+			"repo":      env.RepoURL,
+			"namespace": env.Namespace,
+		})
 		result, err := h.sendHelmRaw(ctx, env, protocol.MsgHelmInstall)
 		if err != nil {
 			return err
 		}
+		h.recordToolOperationEvent(ctx, op.ID, "info", "helm", "Helm release deployed", map[string]any{
+			"releaseName": env.ReleaseName,
+			"status":      result.Status,
+			"revision":    result.Revision,
+		})
 		_, err = h.queries.CreateInstalledChart(ctx, sqlc.CreateInstalledChartParams{
 			ClusterID:      clusterID,
 			ReleaseName:    env.ReleaseName,

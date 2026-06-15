@@ -1873,7 +1873,12 @@ export async function previewToolInstall(slug: string, data: { cluster_id: strin
 }
 
 export async function installTool(slug: string, data: { cluster_id: string; preset: string; values_override?: string }) {
-  const res = await api.post<APIResponse<unknown>>(`/tools/${slug}/install`, data);
+  const res = await api.post<APIResponse<import('@/types').ToolOperation>>(`/tools/${slug}/install`, data);
+  return res.data.data;
+}
+
+export async function getToolOperation(operationId: string) {
+  const res = await api.get<APIResponse<import('@/types').ToolOperation>>(`/tools/operations/${operationId}/`);
   return res.data.data;
 }
 

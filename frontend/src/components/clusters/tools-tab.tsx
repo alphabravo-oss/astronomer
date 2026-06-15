@@ -6,8 +6,10 @@ import { useTools, useClusterToolsStatus, useInstallTool, useUninstallTool, useA
 import { usePermissionDecision } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
 import { ToolCard } from '@/components/clusters/tool-card';
-import { ToolPreviewModal } from '@/components/clusters/tool-preview-modal';
+import { ToolInstallModal } from '@/components/clusters/tool-install-modal';
+import { ToolInstallProgress } from '@/components/clusters/tool-install-progress';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import type { ClusterTool } from '@/types';
 import { Loader2, Wrench, Sparkles } from 'lucide-react';
 import { toastWarning } from '@/lib/toast';
 
@@ -37,7 +39,8 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
   const uninstallMutation = useUninstallTool();
   const adoptMutation = useAdoptTool();
 
-  const [previewTool, setPreviewTool] = useState<{ slug: string; name: string; preset: string } | null>(null);
+  const [installTool, setInstallTool] = useState<{ tool: ClusterTool; preset: string } | null>(null);
+  const [activeOperation, setActiveOperation] = useState<{ id: string; name: string } | null>(null);
   const [uninstallSlug, setUninstallSlug] = useState<string | null>(null);
 
   const statusMap = new Map<string, (typeof statuses extends (infer T)[] | undefined ? T : never)>();
@@ -54,25 +57,30 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
     }
     const tool = tools?.find((t) => t.slug === slug);
     if (tool) {
-      setPreviewTool({ slug, name: tool.name, preset });
+      setInstallTool({ tool, preset });
     }
   };
 
   const handleConfirmInstall = (valuesOverride?: string) => {
-    if (!previewTool) return;
+    if (!installTool) return;
     if (!catalogCreateDecision.allowed) {
       toastPermissionDenied(catalogCreateDecision);
       return;
     }
+    const name = installTool.tool.name;
     installMutation.mutate(
       {
-        slug: previewTool.slug,
+        slug: installTool.tool.slug,
         cluster_id: clusterId,
-        preset: previewTool.preset,
+        preset: installTool.preset,
         values_override: valuesOverride,
       },
       {
-        onSuccess: () => setPreviewTool(null),
+        onSuccess: (op) => {
+          setInstallTool(null);
+          // Open the live progress drawer keyed on the returned operation id.
+          if (op?.id) setActiveOperation({ id: op.id, name });
+        },
       }
     );
   };
@@ -181,17 +189,25 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
         ))}
       </div>
 
-      {/* Preview Modal */}
-      {previewTool && (
-        <ToolPreviewModal
-          toolSlug={previewTool.slug}
-          toolName={previewTool.name}
+      {/* Install config modal — form + Edit YAML */}
+      {installTool && (
+        <ToolInstallModal
+          tool={installTool.tool}
           clusterId={clusterId}
-          preset={previewTool.preset}
+          preset={installTool.preset}
           onConfirm={handleConfirmInstall}
-          onClose={() => setPreviewTool(null)}
+          onClose={() => setInstallTool(null)}
           installing={installMutation.isPending}
           confirmDecision={catalogCreateDecision}
+        />
+      )}
+
+      {/* Live install-progress drawer (Rancher-style bottom terminal) */}
+      {activeOperation && (
+        <ToolInstallProgress
+          operationId={activeOperation.id}
+          toolName={activeOperation.name}
+          onClose={() => setActiveOperation(null)}
         />
       )}
 

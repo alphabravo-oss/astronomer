@@ -1678,6 +1678,43 @@ export interface ClusterTool {
     service: string;
     port: number;
   }>;
+  form_schema?: ToolFormSchema | null;
+}
+
+export interface ToolFormField {
+  path: string;
+  label: string;
+  type: 'string' | 'number' | 'boolean' | 'select' | 'storage';
+  group: string;
+  default?: string;
+  options?: string[];
+  help?: string;
+  placeholder?: string;
+  storage_class_path?: string;
+}
+
+export interface ToolFormSchema {
+  fields: ToolFormField[];
+}
+
+export interface ToolOperationEvent {
+  id: string;
+  level: string; // info | warn | error
+  stage: string;
+  message: string;
+  detail?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface ToolOperation {
+  id: string;
+  operationType?: string;
+  status: string; // pending | running | completed | failed | superseded
+  errorMessage?: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt?: string;
+  events?: ToolOperationEvent[];
 }
 
 export type ToolStatus = 'not_installed' | 'installed' | 'installed_unmanaged' | 'installing' | 'upgrading' | 'failed' | 'uninstalling' | 'unknown';

@@ -1872,6 +1872,22 @@ export function useClusterToolsStatus(clusterId: string) {
   });
 }
 
+const TOOL_OP_TERMINAL = ['completed', 'failed', 'superseded'];
+
+// Polls a single tool operation (+ its events) every 2s while in-flight, then
+// stops once it reaches a terminal state. Drives the install-progress drawer.
+export function useToolOperation(operationId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.tools.operation(operationId || ''),
+    queryFn: () => apiClient.getToolOperation(operationId as string),
+    enabled: !!operationId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && TOOL_OP_TERMINAL.includes(status) ? false : 2000;
+    },
+  });
+}
+
 export function useInstallTool() {
   const queryClient = useQueryClient();
   return useMutation({
