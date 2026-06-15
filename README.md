@@ -1,482 +1,250 @@
+# Astronomer
+
 <p align="center">
-  <strong>ASTRONOMER</strong><br/>
-  Enterprise Kubernetes Multi-Cluster Management Platform
+  <strong>Enterprise Kubernetes Operations for Adopted Clusters</strong>
 </p>
 
 <p align="center">
-  <a href="#license"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Build-Passing-brightgreen.svg" alt="Build: Passing"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Coverage-87%25-green.svg" alt="Coverage: 87%"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Django-5.0-092E20.svg" alt="Django 5.0"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Next.js-16-000000.svg" alt="Next.js 16"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Python-3.12-3776AB.svg" alt="Python 3.12"></a>
+  Adopt the clusters you already run. Govern them with policy. Deploy through Argo CD. Operate everything from one control plane.
 </p>
 
----
-
-**Astronomer** is an enterprise-grade, open-source platform for managing multiple Kubernetes clusters from a single control plane. It provides a unified dashboard for monitoring, workload management, RBAC policy enforcement, and GitOps integration across all your clusters -- whether they run on EKS, AKS, GKE, or bare metal.
-
-Think of it as a self-hosted alternative to Rancher, built with a modern stack and an agent-based architecture that requires **no inbound network access** to your downstream clusters.
-
 <p align="center">
-  <em>[Screenshot placeholder: Dashboard showing multi-cluster overview with health metrics, workload counts, and ArgoCD sync status]</em>
+  <a href="#license"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
+  <a href="#platform-capabilities"><img src="https://img.shields.io/badge/Kubernetes-Multi--Cluster-326CE5" alt="Kubernetes multi-cluster"></a>
+  <a href="#gitops-delivery"><img src="https://img.shields.io/badge/GitOps-Argo%20CD-EF7B4D" alt="Argo CD GitOps"></a>
+  <a href="#declarative-management"><img src="https://img.shields.io/badge/API-CRD%20Native-5B5FC7" alt="CRD native API"></a>
+  <a href="#enterprise-foundation"><img src="https://img.shields.io/badge/Built%20For-Day--2%20Operations-111827" alt="Day-2 operations"></a>
 </p>
 
 ---
 
-## Key Features
+Astronomer is a self-hosted Kubernetes management plane for platform teams that need the operational depth of a modern enterprise cluster manager without taking over cluster provisioning.
 
-- **Multi-Cluster Management** -- Register and manage any number of Kubernetes clusters across clouds, regions, and environments from a single pane of glass.
-- **Agent-Based Architecture** -- A lightweight agent runs inside each managed cluster and establishes an outbound WebSocket reverse tunnel. No VPN, no firewall rules, no inbound ports required.
-- **Enterprise RBAC** -- Three-tier role-based access control (Global, Cluster, Project) with fine-grained resource/verb rules and IdP group mapping.
-- **Real-Time Monitoring** -- Live cluster health dashboards powered by Prometheus integration and agent-reported metrics (CPU, memory, node/pod counts).
-- **Workload Management** -- List, inspect, scale, restart, and manage Deployments, StatefulSets, DaemonSets, and Pods across all clusters.
-- **Helm Chart Catalog** -- Browse, install, and manage Helm charts across clusters with a built-in chart repository browser and one-click installs.
-- **Cluster Tools** -- Install and manage operational tools (monitoring, logging, security, backup, service mesh) on clusters via curated tool definitions.
-- **Backup Management** -- Configure and manage backup schedules, retention policies, and restore operations across clusters.
-- **Alerting** -- Define alert rules, notification channels, and escalation policies with support for multi-cluster alert aggregation.
-- **Logging Configuration** -- Configure and manage centralized logging pipelines, log forwarding, and retention policies.
-- **Security Scanning** -- Runtime security monitoring and vulnerability scanning with policy-based enforcement.
-- **ArgoCD GitOps Integration** -- Manage ArgoCD instances and applications, trigger syncs, view deployment history, and inspect rendered manifests.
-- **Service Proxy** -- Proxy HTTP requests to ClusterIP services inside managed clusters through the agent tunnel, enabling access to internal dashboards and UIs.
-- **SSO/OIDC Authentication** -- Authenticate via GitHub, Google, or any OIDC/SAML provider. Personal API tokens with scoping and expiration.
-- **Real-Time WebSocket Updates** -- Live cluster status changes, health events, and workload updates pushed to the browser via Django Channels.
-- **Kubernetes API Proxy** -- Transparently proxy `kubectl`-style API requests to any managed cluster through the agent tunnel.
-- **Audit Logging** -- Immutable audit trail of all significant actions for compliance and security analysis.
+It is built for organizations that already create clusters with Terraform, Cluster API, cloud consoles, RKE2/k3s, EKS, AKS, GKE, bare metal, or any other provisioning stack, then need a single place to adopt, secure, observe, automate, and operate them.
 
----
+Astronomer is intentionally day-2 focused:
 
-## Architecture Overview
+- No cloud node-pool provisioning.
+- No machine drivers.
+- No forced infrastructure workflow.
+- No inbound access required to managed clusters.
+- Argo CD, not Fleet, is the deployment engine.
+- Postgres stores product state, audit history, identity, credentials, and durable operations.
+- Kubernetes, CRDs, and Argo CD handle declarative desired state and reconciliation.
 
-Astronomer uses a hub-and-spoke architecture. The **management plane** runs the API server, frontend, and supporting infrastructure. Each managed cluster runs a lightweight **agent** that dials home over a WebSocket reverse tunnel.
+## Product Promise
 
-```
-                        Management Plane
-  ┌──────────────────────────────────────────────────────────┐
-  │                                                          │
-  │  ┌──────────┐    ┌──────────────┐    ┌───────────────┐  │
-  │  │ Next.js  │    │  Django API  │    │  Celery Beat  │  │
-  │  │ Frontend ├───>│  (Daphne)    │<───┤  + Workers    │  │
-  │  │ :3000    │    │  :8000       │    │               │  │
-  │  └──────────┘    └──────┬───────┘    └───────┬───────┘  │
-  │                         │                    │          │
-  │  ┌──────────┐  ┌───────┴──────────┐         │          │
-  │  │ Website  │  │                  │         │          │
-  │  │ :3001    │  │                  │         │          │
-  │  └──────────┘  │                  │         │          │
-  │        ┌───────┴──────┐    ┌─────┴─────┐   │          │
-  │        │ PostgreSQL   │    │   Redis   │<──┘          │
-  │        │ :5432        │    │   :6379   │              │
-  │        └──────────────┘    └───────────┘              │
-  │                                                          │
-  │  ┌──────────┐                                           │
-  │  │ Registry │  (Docker registry for agent images)       │
-  │  │ :5000    │                                           │
-  │  └──────────┘                                           │
-  │                                                          │
-  └────────────────────────┬─────────────────────────────────┘
-                           │
-                    Nginx Reverse Proxy
-                    (TLS Termination)
-                           │
-               ────────────┼──────────────
-              │            │              │
-              ▼            ▼              ▼
-       ┌─────────┐  ┌─────────┐   ┌─────────┐
-       │  Agent  │  │  Agent  │   │  Agent  │
-       │ Cluster │  │ Cluster │   │ Cluster │
-       │   A     │  │   B     │   │   C     │
-       └────┬────┘  └────┬────┘   └────┬────┘
-            │             │             │
-            ▼             ▼             ▼
-       K8s API       K8s API       K8s API
-```
+Astronomer gives platform teams one trusted operating layer for every cluster after it exists.
 
-Each agent:
-1. Establishes a persistent WebSocket connection to the management server.
-2. Sends periodic heartbeats and resource metrics.
-3. Proxies Kubernetes API requests from the management server to the local cluster.
-4. Handles Helm operations (install, upgrade, uninstall) for chart catalog and tools.
-5. Proxies HTTP requests to ClusterIP services for the service proxy feature.
-6. Streams container logs and executes commands in pods.
-7. Applies RBAC policies pushed from the management server.
+| Outcome | What Astronomer Delivers |
+| --- | --- |
+| Adopt clusters safely | Rancher-style cluster registration, agent install manifests, privilege profiles, registration timelines, and health state. |
+| Standardize every cluster | Built-in platform baselines, Argo CD ApplicationSets, curated tools, policy bundles, and consistent labels across the fleet. |
+| Operate with confidence | Cluster explorer, workload actions, logs, shell, service proxy, health summaries, events, and live resource views. |
+| Govern at scale | Projects, RBAC, SSO/OIDC, TOTP, API tokens, group mappings, audit logs, compliance baselines, and scoped permissions. |
+| Secure the control plane | Secret redaction, encrypted credentials, token hashing, NetworkPolicy, TLS posture, least-privilege agents, and high-risk route controls. |
+| Prove resilience | HA chart defaults, external Postgres/Redis production posture, management-plane backups, restore drills, queue visibility, and runbooks. |
 
-For a detailed architecture deep-dive, see [docs/architecture.md](docs/architecture.md).
+## Why Astronomer
 
----
+### Bring Your Own Clusters
 
-## Quick Start
+Astronomer starts where cluster provisioning ends. Teams keep the infrastructure workflow they already trust, then adopt clusters into Astronomer for governance, visibility, deployment, and day-2 operations.
 
-### Prerequisites
+### Argo-Native Delivery
 
-- Docker >= 24.0
-- Docker Compose >= 2.20
-- Git
+Astronomer uses the built-in Argo CD installation as the fleet deployment layer. New clusters can be registered into Argo CD automatically, labeled with Astronomer-owned targeting metadata, and managed through ApplicationSets for baseline components, tools, and GitOps-driven workloads.
 
-### 1. Clone and Configure
+### Secure Agent Connectivity
+
+Managed clusters run a lightweight agent that connects outbound to the management plane. That model avoids opening inbound firewall paths to every cluster while still enabling Kubernetes API proxying, log streaming, service proxying, health reporting, and controlled operations.
+
+### Enterprise Governance
+
+Astronomer treats policy, RBAC, audit, identity, and secret handling as core product surfaces. High-risk operations are permission-gated, auditable, and designed around durable operation records rather than invisible one-off mutations.
+
+### Dense Operator Experience
+
+The UI is designed for people who live in Kubernetes every day: fast navigation, deep resource views, cluster context, workload controls, Argo CD state, compliance posture, and operational settings without a marketing landing page between the user and the work.
+
+## Platform Capabilities
+
+### Multi-Cluster Operations
+
+- Adopt existing Kubernetes clusters through the dashboard, API, CLI-oriented manifest flow, GitOps source, or Kubernetes-native CRDs.
+- Track cluster phase, connectivity, health, labels, projects, environment, region, provider, distribution, Kubernetes version, agent version, and privilege profile.
+- Browse live Kubernetes resources across clusters, including namespaces, nodes, events, pods, deployments, daemonsets, statefulsets, jobs, cronjobs, services, ingresses, Gateway API resources, storage, RBAC objects, network policies, quotas, PDBs, ConfigMaps, Secrets, CRDs, and more.
+- Run common workload operations such as inspect, scale, restart, edit, and delete where permissions allow.
+- Stream pod logs and open controlled shell sessions for approved clusters.
+- Proxy approved in-cluster services through Astronomer without exposing every internal dashboard to the network.
+- Surface cluster adoption progress, failures, retries, and baseline application state.
+
+### GitOps Delivery
+
+- Built-in Argo CD integration for applications, projects, repositories, syncs, health, resources, and operational state.
+- Automatic Argo CD managed-cluster registration for adopted clusters.
+- Argo CD cluster Secret labeling contract for deterministic ApplicationSet targeting.
+- Platform baseline fan-out through Argo CD ApplicationSets.
+- Sync-wave conventions for namespaces, CRDs, operators, policies, workloads, and health checks.
+- Drift, orphan, stale resource, and ownership visibility for Argo-managed components.
+- GitOps registration sources for declarative cluster onboarding.
+- Helm catalog, OCI catalog, curated tools, and baseline component installation paths.
+
+### Security And Governance
+
+- Email-first local authentication with secure browser sessions.
+- OIDC/OAuth provider support, SSO presets, group mappings, and logout flows.
+- TOTP enrollment, recovery codes, API tokens, token revocation, password reset, and account security workflows.
+- Project and cluster-scoped RBAC with permission-aware UI behavior.
+- Agent privilege profiles: `viewer`, `operator`, `namespace-viewer`, `namespace-operator`, `custom`, and `admin`.
+- Audit logging for material reads, writes, secret access, service proxy mutations, Argo operations, RBAC changes, and admin actions.
+- Read-audit policy surfaces for sensitive access monitoring.
+- Compliance baseline workflows for common enterprise profiles.
+- Secret-handling policy covering hashing, encryption, external references, redaction, support bundles, CRDs, and Argo resources.
+- Vault connection surfaces for externally managed secret material.
+- Network policy, pod security, image vulnerability, CIS, registry, and service mesh posture surfaces.
+
+### Observability And Operations
+
+- Platform-wide health summary for multi-cluster visibility.
+- Monitoring backend configuration and shared observability stack workflows.
+- Alerting, notification templates, SMTP settings, outbound webhooks, and SIEM forwarders.
+- Logging pipeline configuration and management-plane log tailing.
+- Support bundle export with redaction controls.
+- Queue and dead-letter inspection for background jobs.
+- Durable task-outbox visibility for committed work that has not yet reached the worker queue.
+- Management-plane backup, restore-drill status, and disaster-recovery runbooks.
+- OpenAPI documentation for supported public APIs.
+
+### Declarative Management
+
+Astronomer exposes Kubernetes-native management APIs under `management.astronomer.io/v1alpha1` when CRDs are enabled.
+
+| CRD | Purpose |
+| --- | --- |
+| `Cluster` | Declarative adopted-cluster metadata, project refs, Argo adoption intent, baseline profile, agent settings, and ownership metadata. |
+| `Project` | Project policy intent, resource quotas, network-policy posture, pod-security posture, and cluster membership. |
+| `ClusterBaseline` | Desired baseline profile, target selectors, bundle list, version pins, sync policy, and Argo CD fan-out. |
+| `ComponentBundle` | Reusable component definitions, source references, default namespaces, values schema references, health checks, and upgrade policy. |
+| `AgentProfile` | Agent privilege, namespace scope, install metadata, capability claims, and RBAC posture. |
+| `GitOpsTarget` | Declarative ApplicationSet generation, cluster selectors, project selectors, bundle references, parameters, sync windows, and status. |
+
+The CRD layer is intentionally not a database mirror. It is a Kubernetes-native intent and reconciliation surface for operators who want `kubectl apply` workflows, GitOps-managed platform state, and status conditions without losing the product history and auditability stored in Postgres.
+
+## Enterprise Foundation
+
+Astronomer is designed around a clean split of responsibility:
+
+- Postgres is the durable product database for users, sessions, RBAC, audit history, projects, cluster inventory, credentials, and operation records.
+- Redis/asynq is the queue and scheduler layer, not the durable source of operator intent.
+- Kubernetes and Argo CD own declarative deployment convergence.
+- Target clusters remain the source of truth for live Kubernetes objects.
+- CRDs expose operator intent where Kubernetes-native workflows are the right fit.
+- Agents execute cluster-local work through authenticated, scoped, audited channels.
+
+That split matters. It lets Astronomer deliver enterprise UX, history, identity, and audit controls without pretending that Postgres should replace etcd or that Argo CD should become an account database.
+
+## Deployment Posture
+
+Astronomer ships as a Kubernetes-native management plane with a Helm chart for development, testing, and production environments.
+
+Production-oriented chart capabilities include:
+
+- Server, worker, and frontend replica controls.
+- PodDisruptionBudgets, anti-affinity, and topology spread.
+- NetworkPolicy with explicit ingress and egress boundaries.
+- Ingress/Gateway and TLS integration.
+- cert-manager and Let's Encrypt compatibility.
+- External Postgres and Redis support for production.
+- Bootstrap admin credential generation or operator-provided password.
+- Non-root security contexts, dropped capabilities, seccomp, and read-only-root-filesystem posture where practical.
+- Migration, preflight, backup, and restore-drill jobs.
+- Management-plane backup to S3-compatible storage.
+- Production value validation and chart render tests.
+
+The bundled Postgres and Redis profiles are for development, CI, and small smoke environments. Real production installs should use managed or HA Postgres, TLS, backups, restore drills, and separate protection for encryption and signing keys.
+
+## What Astronomer Is Not
+
+Astronomer is not a cluster provisioning product. It does not try to replace Terraform, Cluster API, cloud provider provisioning, RKE2/k3s installation workflows, or your existing infrastructure automation.
+
+Astronomer is the enterprise operating plane after those clusters exist.
+
+## Getting Started
+
+For local development:
 
 ```bash
-git clone https://github.com/astronomer/astronomer.git
-cd astronomer
-
-# Copy the example environment file and review the settings
-cp .env.example .env
-```
-
-### 2. Build and Start
-
-```bash
-# First-time setup: build images, run migrations, create admin user
-make setup
-
-# Start all services in development mode
 make dev
 ```
 
-### 3. Access the Platform
-
-| Service            | URL                                       |
-|--------------------|-------------------------------------------|
-| Frontend (UI)      | [http://localhost:3000](http://localhost:3000) |
-| Website            | [http://localhost:3001](http://localhost:3001) |
-| API                | [http://localhost/api/v1/](http://localhost/api/v1/) |
-| API Docs (Swagger) | [http://localhost/api/v1/schema/swagger/](http://localhost/api/v1/schema/swagger/) |
-| API Docs (ReDoc)   | [http://localhost/api/v1/schema/redoc/](http://localhost/api/v1/schema/redoc/) |
-| Django Admin       | [http://localhost/admin/](http://localhost/admin/) |
-
-### 4. Register Your First Cluster
-
-1. Log in to the dashboard.
-2. Navigate to **Clusters > Add Cluster**.
-3. Fill in the cluster details and click **Register**.
-4. Copy the generated agent install manifest.
-5. Apply it to your downstream cluster: `kubectl apply -f agent-install.yaml`
-
-The agent will connect within seconds and the cluster status will transition to **Active**.
-
----
-
-## Configuration
-
-All configuration is managed through environment variables. Copy `.env.example` to `.env` and customize the values for your environment.
-
-For a complete reference of every setting, see [docs/configuration.md](docs/configuration.md).
-
-Key variables:
-
-| Variable              | Description                                 | Default                        |
-|-----------------------|---------------------------------------------|--------------------------------|
-| `SECRET_KEY`          | JWT HMAC signing key (multi-key supported via comma) | *(generate a random value)* |
-| `ASTRONOMER_ENCRYPTION_KEY` | Fernet key wrapping SSO/agent secrets | *(required for production)* |
-| `DATABASE_URL`        | PostgreSQL connection string                | `postgres://...@postgres:5432` |
-| `REDIS_URL`           | Redis connection string                     | `redis://redis:6379/0`         |
-| `SERVER_URL`          | External base URL of this install           | *(empty)*                      |
-| `DEBUG`               | Enable debug logging                        | `false`                        |
-| `ENV`                 | Environment label (development / production)| `development`                  |
-
----
-
-## Production Deployment
-
-For production, Astronomer provides Kubernetes manifests in the `k8s/` directory. The deployment includes:
-
-- High-availability backend with 3 replicas and pod anti-affinity
-- Horizontal Pod Autoscaler for the backend
-- Init containers for database migrations
-- TLS termination via Ingress
-- Separate Celery worker and beat deployments
+For a Kubernetes install:
 
 ```bash
-# Deploy to Kubernetes
-make k8s-deploy
-
-# Check status
-make k8s-status
+helm upgrade --install astronomer ./deploy/chart \
+  --namespace astronomer \
+  --create-namespace \
+  -f deploy/chart/values.yaml
 ```
 
-For a complete production deployment guide including TLS setup, database configuration, monitoring, and backup procedures, see [docs/deployment.md](docs/deployment.md).
-
----
-
-## Agent Installation
-
-The Astronomer agent is a lightweight Python process that runs inside each managed cluster. It requires no inbound network access -- it connects outbound to the management server over WebSocket.
+For production, layer the production values file and provide external Postgres, external Redis, TLS, bootstrap credentials, encryption keys, and backup settings:
 
 ```bash
-# Option 1: Via the management UI (recommended)
-# Navigate to Clusters > [Your Cluster] > Register and apply the generated manifest
-
-# Option 2: Via kubectl with a pre-generated manifest
-kubectl apply -f https://your-astronomer-server/api/v1/clusters/<id>/register/manifest
-
-# Option 3: Manual installation
-kubectl apply -f agent/manifests/install.yaml
+helm upgrade --install astronomer ./deploy/chart \
+  --namespace astronomer \
+  --create-namespace \
+  -f deploy/chart/values.yaml \
+  -f deploy/chart/values-production.yaml
 ```
 
-For detailed installation instructions, configuration options, and troubleshooting, see [docs/agent-installation.md](docs/agent-installation.md).
-
----
-
-## Tech Stack
-
-| Layer          | Technology                                                         |
-|----------------|--------------------------------------------------------------------|
-| **Frontend**   | Next.js 16, React, TypeScript, Tailwind CSS, shadcn/ui, Zustand, React Query |
-| **Website**    | Next.js 15, React, TypeScript, Tailwind CSS (marketing site and blog) |
-| **Backend**    | Django 5, Django REST Framework, Django Channels, Daphne (ASGI)    |
-| **Auth**       | django-allauth (GitHub, Google, OIDC), SimpleJWT, NextAuth.js      |
-| **Database**   | PostgreSQL 16                                                      |
-| **Cache/Queue**| Redis 7, Celery 5, django-celery-beat                              |
-| **Agent**      | Python 3.12, websockets, httpx, kubernetes-client, structlog       |
-| **API Docs**   | drf-spectacular (OpenAPI 3.0), Swagger UI, ReDoc                   |
-| **Proxy**      | Nginx (TLS termination, rate limiting, WebSocket proxying)         |
-| **Registry**   | Docker Registry v2 (serves agent images to managed clusters)       |
-| **Monitoring** | Prometheus client, Sentry SDK                                      |
-| **Infra**      | Docker Compose, Kubernetes manifests                               |
-
----
-
-## Project Structure
-
-```
-astronomer/
-├── backend/                  # Django backend application
-│   ├── astronomer/           #   Django project settings and configuration
-│   │   ├── asgi.py           #     ASGI entrypoint (HTTP + WebSocket routing)
-│   │   ├── celery.py         #     Celery app and beat schedule
-│   │   ├── routing.py        #     WebSocket URL routing
-│   │   ├── urls.py           #     REST API URL configuration
-│   │   └── wsgi.py           #     WSGI entrypoint (fallback)
-│   ├── apps/                 #   Django applications
-│   │   ├── agents/           #     WebSocket tunnel consumers and protocol
-│   │   ├── alerting/         #     Alert rules, notifications, and escalation
-│   │   ├── argocd/           #     ArgoCD instance and application management
-│   │   ├── audit/            #     Audit log recording and querying
-│   │   ├── authentication/   #     SSO, API tokens, user profiles
-│   │   ├── backups/          #     Backup schedules, retention, and restores
-│   │   ├── catalog/          #     Helm chart repos, charts, and installs
-│   │   ├── clusters/         #     Cluster CRUD, registration, health, service proxy
-│   │   ├── core/             #     Base models, audit logging, settings views
-│   │   ├── logging_config/   #     Centralized logging pipeline configuration
-│   │   ├── monitoring/       #     Prometheus integration and metrics queries
-│   │   ├── projects/         #     Project (namespace group) management
-│   │   ├── rbac/             #     Three-tier RBAC (Global/Cluster/Project)
-│   │   ├── resources/        #     Kubernetes resource browsing and management
-│   │   ├── security/         #     Security scanning and runtime policies
-│   │   ├── tools/            #     Cluster tool catalog and installation
-│   │   └── workloads/        #     Workload listing, scaling, restarting
-│   ├── conftest.py           #   Shared pytest fixtures
-│   ├── manage.py             #   Django management command entrypoint
-│   └── requirements.txt      #   Python dependencies
-├── frontend/                 # Next.js dashboard application
-│   ├── src/
-│   │   ├── app/              #     Next.js App Router pages
-│   │   │   ├── auth/         #       Authentication pages
-│   │   │   ├── bootstrap/    #       First-run bootstrap flow
-│   │   │   └── dashboard/    #       Main dashboard
-│   │   │       ├── alerting/       #   Alert management
-│   │   │       ├── argocd/         #   ArgoCD integration
-│   │   │       ├── backups/        #   Backup management
-│   │   │       ├── catalog/        #   Helm chart catalog
-│   │   │       ├── clusters/       #   Cluster overview and detail
-│   │   │       │   └── [id]/tools/ #   Per-cluster tool management
-│   │   │       ├── logging/        #   Logging configuration
-│   │   │       ├── monitoring/     #   Monitoring dashboards
-│   │   │       ├── networking/     #   Network policies
-│   │   │       ├── projects/       #   Project management
-│   │   │       ├── rbac/           #   RBAC management
-│   │   │       ├── security/       #   Security scanning
-│   │   │       ├── settings/       #   Platform settings
-│   │   │       ├── storage/        #   Storage management
-│   │   │       ├── tools/          #   Tool catalog browser
-│   │   │       └── workloads/      #   Workload management
-│   │   ├── components/       #     React components
-│   │   │   ├── ui/           #       shadcn/ui base components
-│   │   │   ├── clusters/     #       Cluster-specific components
-│   │   │   ├── workloads/    #       Workload management components
-│   │   │   ├── monitoring/   #       Monitoring and charts
-│   │   │   ├── argocd/       #       ArgoCD integration components
-│   │   │   └── rbac/         #       RBAC management components
-│   │   ├── lib/              #     Utility functions and API client
-│   │   ├── styles/           #     Global CSS and Tailwind config
-│   │   └── types/            #     TypeScript type definitions
-│   └── package.json
-├── website/                  # Public-facing marketing website
-│   ├── src/app/(frontend)/   #   Next.js marketing pages
-│   │   ├── about/            #     About page
-│   │   ├── blog/             #     Blog listing and post pages
-│   │   ├── docs/             #     Documentation landing
-│   │   ├── features/         #     Features page
-│   │   ├── onboarding/       #     Onboarding flow
-│   │   └── pricing/          #     Pricing page
-│   ├── apps/                 #   Django backend (mirror of backend/apps)
-│   ├── astronomer/           #   Django settings for website context
-│   ├── manage.py
-│   └── requirements.txt
-├── agent/                    # Cluster agent (WebSocket reverse tunnel)
-│   ├── astronomer_agent/
-│   │   ├── main.py           #     CLI entrypoint (Click)
-│   │   ├── tunnel.py         #     WebSocket tunnel with stream multiplexing
-│   │   ├── protocol.py       #     Wire protocol (message types, serialization)
-│   │   ├── k8s_proxy.py      #     Kubernetes API request proxy
-│   │   ├── service_proxy.py  #     HTTP proxy to ClusterIP services
-│   │   ├── helm_handler.py   #     Helm chart install/upgrade/uninstall
-│   │   ├── exec_handler.py   #     Pod command execution handler
-│   │   ├── log_stream_handler.py  # Container log streaming
-│   │   ├── health.py         #     Health reporting and metrics collection
-│   │   ├── rbac_sync.py      #     RBAC manifest reconciliation
-│   │   └── config.py         #     Agent configuration dataclass
-│   ├── manifests/
-│   │   └── install.yaml.template  # Templated agent install manifest
-│   ├── tests/                #     Agent unit tests
-│   └── setup.py
-├── k8s/                      # Kubernetes deployment manifests
-│   ├── namespace.yaml
-│   ├── backend/              #     Backend deployment, service, HPA, ingress
-│   ├── frontend/             #     Frontend deployment and service
-│   ├── postgres/             #     PostgreSQL deployment and service
-│   └── redis/                #     Redis deployment and service
-├── nginx/                    # Nginx reverse proxy configuration
-│   ├── nginx.conf            #     Full Nginx config with TLS and rate limiting
-│   └── Dockerfile
-├── content/                  # Website content (blog posts, docs)
-├── docs/                     # Documentation
-├── scripts/                  # Helper scripts (DB init, etc.)
-├── docker-compose.yml        # Development environment (10 services)
-├── Makefile                  # Development commands
-└── .env.example              # Environment variable reference
-```
-
----
-
-## API Overview
-
-Astronomer exposes a RESTful API under `/api/v1/` with full OpenAPI 3.0 documentation.
-
-| Endpoint                          | Description                              |
-|-----------------------------------|------------------------------------------|
-| `POST /api/v1/auth/login/`       | Authenticate and obtain JWT tokens       |
-| `POST /api/v1/auth/tokens/`      | Create a personal API token              |
-| `GET  /api/v1/auth/me/`          | Get current user profile and roles       |
-| `GET  /api/v1/clusters/`         | List all clusters                        |
-| `POST /api/v1/clusters/`         | Register a new cluster                   |
-| `POST /api/v1/clusters/{id}/register/` | Generate agent install manifest    |
-| `GET  /api/v1/clusters/{id}/health/`   | Get cluster health snapshot        |
-| `*/api/v1/clusters/{id}/proxy/service/...` | Proxy requests to ClusterIP services |
-| `GET  /api/v1/workloads/workloads/{cluster_id}/` | List workloads         |
-| `POST /api/v1/workloads/workloads/{cluster_id}/.../scale` | Scale a workload |
-| `GET  /api/v1/catalog/charts/`   | List Helm charts across repos            |
-| `GET  /api/v1/catalog/repos/`    | List configured Helm repositories        |
-| `GET  /api/v1/tools/`            | List available cluster tools             |
-| `GET  /api/v1/tools/{slug}/`     | Get tool detail and install config       |
-| `GET  /api/v1/monitoring/metrics/cluster-overview/{cluster_id}/` | Cluster metrics |
-| `POST /api/v1/monitoring/metrics/query/{cluster_id}/` | Execute PromQL query |
-| `GET  /api/v1/argocd/applications/` | List ArgoCD applications              |
-| `POST /api/v1/argocd/applications/{id}/sync/` | Trigger ArgoCD sync       |
-| `GET  /api/v1/alerting/rules/`   | List alert rules                         |
-| `GET  /api/v1/backups/`          | List backup configurations               |
-| `GET  /api/v1/logging/pipelines/`| List logging pipelines                   |
-| `GET  /api/v1/security/scans/`   | List security scan results               |
-| `GET  /api/v1/audit/`            | Query audit logs                         |
-| `GET  /api/v1/rbac/my-roles/`    | Get current user's role bindings         |
-| `GET  /api/v1/rbac/my-roles/check/` | Check a specific permission           |
-| `GET  /api/v1/settings/general`  | Get platform settings                    |
-| `GET  /api/v1/activity`          | Get activity feed                        |
-
-Interactive API documentation is available at:
-- **Swagger UI**: `/api/v1/schema/swagger/`
-- **ReDoc**: `/api/v1/schema/redoc/`
-
-For the complete API reference, see [docs/api-reference.md](docs/api-reference.md).
-
----
-
-## Docker Compose Services
-
-The development environment runs 10 services:
-
-| Service          | Container                | Port | Description                          |
-|------------------|--------------------------|------|--------------------------------------|
-| `postgres`       | `astronomer-postgres`    | 5432 | PostgreSQL 16 primary datastore      |
-| `redis`          | `astronomer-redis`       | 6379 | Cache, message broker, channel layer |
-| `backend`        | `astronomer-backend`     | 8000 | Django ASGI application (Daphne)     |
-| `celery-worker`  | `astronomer-celery-worker` | -  | Async task processing                |
-| `celery-beat`    | `astronomer-celery-beat` | -    | Periodic task scheduler              |
-| `frontend`       | `astronomer-frontend`    | 3000 | Next.js dashboard application        |
-| `website`        | `astronomer-website`     | 3001 | Public marketing website             |
-| `nginx`          | `astronomer-nginx`       | 80/443 | Reverse proxy and TLS termination  |
-| `registry`       | `astronomer-registry`    | 5000 | Docker registry for agent images     |
-
----
-
-## Development
-
-### Useful Commands
+After installation, retrieve the bootstrap password when one was generated by the chart:
 
 ```bash
-make help                # Show all available commands
-make dev                 # Start all services (foreground)
-make up                  # Start all services (background)
-make down                # Stop all services
-make test                # Run all tests (backend + frontend)
-make test-backend        # Run backend tests with pytest
-make test-frontend       # Run frontend tests with Jest
-make lint                # Run all linters (ruff, eslint)
-make logs                # Tail all service logs
-make shell               # Open Django interactive shell
-make dbshell             # Open PostgreSQL shell
-make migrate             # Run database migrations
-make makemigrations      # Create new migration files
+kubectl -n astronomer get secret astronomer-bootstrap \
+  -o jsonpath='{.data.password}' | base64 -d
 ```
 
-### Running Tests
+## Operator Experience
 
-```bash
-# Backend tests (pytest)
-make test-backend
+Typical first workflows:
 
-# Backend tests with coverage
-make test-backend-cov
+1. Log in with the bootstrap admin email.
+2. Configure external identity, SSO providers, group mappings, and RBAC.
+3. Register an existing cluster and apply the generated agent manifest.
+4. Choose the right agent privilege profile for the cluster.
+5. Enable Argo CD adoption for baseline and GitOps delivery.
+6. Apply a platform baseline or declarative `ClusterBaseline`.
+7. Use the cluster explorer, workload actions, logs, shell, tools, security, monitoring, and audit surfaces for day-2 operations.
 
-# Frontend tests (Jest)
-make test-frontend
-```
+## Repository Map
 
----
+| Path | Purpose |
+| --- | --- |
+| `cmd/server` | Go API server and management-plane entrypoint. |
+| `cmd/worker` | Background worker for durable operations and reconciliation tasks. |
+| `cmd/agent` | Adopted-cluster agent for outbound connectivity and cluster-local execution. |
+| `cmd/astro` | CLI-oriented helper surface. |
+| `frontend` | Next.js dashboard. |
+| `internal` | Product domains, handlers, workers, CRD controllers, RBAC, auth, audit, tunnel, and database access. |
+| `deploy/chart` | Helm chart for the management plane. |
+| `deploy/agent` | Agent install manifest rendering. |
+| `docs` | Architecture notes, APIs, policies, runbooks, threat model, and implementation plans. |
+| `scripts` | Validation, smoke, code-health, OpenAPI, load-test, and operational helpers. |
 
-## Contributing
+## Documentation
 
-Contributions are welcome. Please follow these guidelines:
-
-1. **Fork** the repository and create a feature branch from `main`.
-2. **Write tests** for any new functionality.
-3. **Follow the code style**: `ruff` for Python, `eslint` + `prettier` for TypeScript.
-4. **Run the full test suite** before submitting: `make test && make lint`.
-5. **Write clear commit messages** describing the change.
-6. **Open a pull request** with a description of what changed and why.
-
-### Code Style
-
-- **Python**: Enforced by [Ruff](https://docs.astral.sh/ruff/) (linting + formatting).
-- **TypeScript**: Enforced by ESLint with the Next.js configuration and Prettier.
-- **Commits**: Use conventional commit messages where possible.
-
----
+- [Helm chart and production posture](deploy/chart/README.md)
+- [Cluster registration API](docs/cluster-registration-api.md)
+- [CRD-based management API](docs/crd-api.md)
+- [Control-plane state contract](docs/control-plane-state-contract.md)
+- [Agent privilege profiles](docs/agent-privilege-profiles.md)
+- [Secret handling policy](docs/secret-handling-policy.md)
+- [Threat model](docs/threat-model.md)
+- [Operator runbooks](docs/runbooks/README.md)
+- [OpenAPI specification](docs/openapi.yaml)
 
 ## License
 
 Copyright 2024-2026 AlphaBravo, Inc.
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [GNU Affero General Public License](LICENSE) for more details.
-
----
-
-## Documentation
-
-- [Architecture Overview](docs/architecture.md)
-- [Production Deployment Guide](docs/deployment.md)
-- [API Reference](docs/api-reference.md)
-- [Agent Installation Guide](docs/agent-installation.md)
-- [Configuration Reference](docs/configuration.md)
+Astronomer is licensed under the GNU Affero General Public License v3.0 or later. See [LICENSE](LICENSE) for details.
