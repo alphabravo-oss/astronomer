@@ -139,8 +139,8 @@ describe('ResourceOverview kind-specific branches', () => {
         resourceType="jobs"
         obj={{
           metadata: { name: 'backup', namespace: 'default' },
-          spec: { completions: 3, parallelism: 2, backoffLimit: 4 },
-          status: { succeeded: 1, active: 2, failed: 0 },
+          spec: { completions: 3, parallelism: 2, backoffLimit: 4 } as never,
+          status: { succeeded: 1, active: 2, failed: 0 } as never,
         }}
       />
     );
@@ -156,8 +156,8 @@ describe('ResourceOverview kind-specific branches', () => {
         resourceType="cronjobs"
         obj={{
           metadata: { name: 'nightly', namespace: 'default' },
-          spec: { schedule: '0 3 * * *', suspend: true, concurrencyPolicy: 'Forbid' },
-          status: { active: [{ name: 'nightly-123' }] },
+          spec: { schedule: '0 3 * * *', suspend: true, concurrencyPolicy: 'Forbid' } as never,
+          status: { active: [{ name: 'nightly-123' }] } as never,
         }}
       />
     );

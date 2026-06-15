@@ -329,6 +329,9 @@ export function ResourceOverview({ obj, resourceType }: { obj?: K8sObject; resou
       case 'configmaps': return <ConfigMapOverview obj={obj!} />;
       case 'ingresses': return <IngressOverview obj={obj!} />;
       case 'persistentvolumeclaims': return <PVCOverview obj={obj!} />;
+      case 'deployments':
+      case 'statefulsets':
+      case 'daemonsets': return <WorkloadOverview obj={obj!} />;
       case 'replicasets': return <ReplicaSetOverview obj={obj!} />;
       case 'jobs': return <JobOverview obj={obj!} />;
       case 'cronjobs': return <CronJobOverview obj={obj!} />;
@@ -635,6 +638,43 @@ function rel(v: unknown): string | null {
   return typeof v === 'string' && v ? formatRelativeTime(v) : null;
 }
 
+function WorkloadOverview({ obj }: { obj: K8sObject }) {
+  const spec = asRecord(obj.spec);
+  const status = asRecord(obj.status);
+  // Defensive across Deployment/StatefulSet (spec.replicas + status.*Replicas)
+  // and DaemonSet (status.desiredNumberScheduled / numberReady).
+  const ready = status.readyReplicas ?? status.numberReady;
+  const desired = spec.replicas ?? status.desiredNumberScheduled ?? status.replicas;
+  const summary: Array<[string, string]> = [
+    ['ready', `${num(ready, '0')}/${num(desired, '0')}`],
+  ];
+  const updated = status.updatedReplicas ?? status.updatedNumberScheduled;
+  const available = status.availableReplicas ?? status.numberAvailable;
+  if (updated != null) summary.push(['updated', num(updated)]);
+  if (available != null) summary.push(['available', num(available)]);
+  const strategy = asRecord(spec.strategy).type ?? asRecord(spec.updateStrategy).type;
+  if (strategy) summary.push(['strategy', String(strategy)]);
+
+  const selector = Object.entries(asRecord(asRecord(spec.selector).matchLabels)) as Array<[string, string]>;
+  const templateSpec = asRecord(asRecord(spec.template).spec);
+  const containers = Array.isArray(templateSpec.containers) ? (templateSpec.containers as Array<Record<string, unknown>>) : [];
+  const images = containers.map((c) => String(c.image ?? '')).filter(Boolean);
+
+  return (
+    <>
+      <Section title="Workload"><KeyValueTable entries={summary} /></Section>
+      {images.length > 0 && (
+        <Section title="Images">
+          <ul className="space-y-1">
+            {images.map((img) => <li key={img} className="font-mono text-xs text-foreground break-all">{img}</li>)}
+          </ul>
+        </Section>
+      )}
+      <Section title="Selector"><KeyValueTable entries={selector} /></Section>
+    </>
+  );
+}
+
 function ReplicaSetOverview({ obj }: { obj: K8sObject }) {
   const spec = asRecord(obj.spec);
   const status = asRecord(obj.status);
@@ -699,13 +739,24 @@ function HPAOverview({ obj }: { obj: K8sObject }) {
   const lastScale = rel(status.lastScaleTime);
   if (lastScale) summary.push(['last scaled', lastScale]);
 
-  // Resource metrics (cpu/memory utilization targets), defensively parsed.
+  // Resource metrics: pair each spec target with its live current value from
+  // status.currentMetrics so the row reads "current X% / target Y%".
+  const current = new Map<string, string>();
+  (Array.isArray(status.currentMetrics) ? status.currentMetrics : []).forEach((m) => {
+    const r = asRecord(asRecord(m).resource);
+    const c = asRecord(r.current);
+    const name = num(r.name, '');
+    const val = c.averageUtilization != null ? `${c.averageUtilization}%` : num(c.averageValue ?? c.value, '');
+    if (name && val) current.set(name, val);
+  });
   const metrics = (Array.isArray(spec.metrics) ? spec.metrics : []).map((m) => {
     const r = asRecord(asRecord(m).resource);
     const t = asRecord(r.target);
     const name = num(r.name, '');
-    const val = t.averageUtilization != null ? `${t.averageUtilization}%` : num(t.averageValue ?? t.value, '');
-    return name && val ? ([name, `target ${val}`] as [string, string]) : null;
+    const target = t.averageUtilization != null ? `${t.averageUtilization}%` : num(t.averageValue ?? t.value, '');
+    if (!name || !target) return null;
+    const cur = current.get(name);
+    return [name, cur ? `${cur} / target ${target}` : `target ${target}`] as [string, string];
   }).filter(Boolean) as Array<[string, string]>;
 
   return (
