@@ -750,7 +750,8 @@ P2
           ↳ Confirmed in a real browser: tests/e2e/data-table.spec.ts (sort/paginate + reload-persist)
 
 P3
-  [ ] B3  Faceted filters
+  [x] B3  Faceted filters — additive `Column.filter` config + toolbar multi-select dropdown
+          (getFacetedRowModel/UniqueValues); enabled on clusters Provider; unit + real-browser e2e
   [ ] B4  Opt-in server-side mode (workloads, audit)               (GATE 3)
 
 P4

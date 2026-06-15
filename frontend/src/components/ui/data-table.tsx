@@ -9,11 +9,15 @@ import {
   getFilteredRowModel,
   getSortedRowModel,
   getPaginationRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   type ColumnDef,
   type SortingState,
   type RowSelectionState,
   type VisibilityState,
+  type ColumnFiltersState,
   type Updater,
+  type Column as RtColumn,
 } from '@tanstack/react-table';
 import {
   ChevronDown,
@@ -23,6 +27,7 @@ import {
   ChevronRight,
   Search,
   SlidersHorizontal,
+  Filter,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -41,6 +46,13 @@ export interface Column<T> {
   hidden?: boolean;
   width?: string;
   align?: 'left' | 'center' | 'right';
+  /**
+   * When set, renders a faceted multi-select filter for this column in the
+   * toolbar. The facet options are derived automatically from the column's
+   * `sortAccessor` value (so faceted columns should define a `sortAccessor`
+   * that returns the scalar to filter on).
+   */
+  filter?: { label?: string };
 }
 
 interface DataTableProps<T> {
@@ -118,6 +130,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() =>
     Object.fromEntries(columns.filter((c) => c.hidden).map((c) => [c.key, false]))
@@ -147,6 +160,13 @@ export function DataTable<T>({
         accessorFn: (row: T) => sortValue(col, row),
         enableSorting: col.sortable !== false,
         enableHiding: true,
+        enableColumnFilter: !!col.filter,
+        // Faceted multi-select: keep the row when nothing is selected, otherwise
+        // when its (stringified) value is among the selected facet values.
+        filterFn: (row, columnId, value) => {
+          const selected = (value as string[]) ?? [];
+          return selected.length === 0 || selected.includes(String(row.getValue(columnId)));
+        },
         // Numeric sortAccessors sort numerically; everything else by locale.
         // react-table negates this for descending, so we return the ascending
         // comparison — matching the old `aVal - bVal` / localeCompare logic.
@@ -166,7 +186,7 @@ export function DataTable<T>({
     data,
     columns: columnDefs,
     getRowId: keyExtractor,
-    state: { globalFilter, sorting, rowSelection, columnVisibility },
+    state: { globalFilter, sorting, columnFilters, rowSelection, columnVisibility },
     enableRowSelection: selectable,
     enableSortingRemoval: false, // 2-state toggle (asc ⇄ desc), never back to unsorted
     sortDescFirst: false, // always start ascending, even for numeric columns
@@ -189,6 +209,7 @@ export function DataTable<T>({
     },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater: Updater<VisibilityState>) =>
       setColumnVisibility((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -214,6 +235,8 @@ export function DataTable<T>({
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     initialState: { pagination: { pageSize } },
   });
 
@@ -224,6 +247,9 @@ export function DataTable<T>({
     () => columns.filter((c) => columnVisibility[c.key] !== false),
     [columns, columnVisibility]
   );
+
+  // Faceted filters render for visible columns that opted in via `filter`.
+  const facetColumns = activeColumns.filter((c) => c.filter);
 
   const rows = table.getRowModel().rows;
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
@@ -263,6 +289,18 @@ export function DataTable<T>({
               )}
             </div>
           )}
+          {facetColumns.map((col) => {
+            const column = table.getColumn(col.key);
+            if (!column) return null;
+            return (
+              <FacetedFilter
+                key={col.key}
+                column={column}
+                label={col.filter?.label ?? col.header}
+                onChange={() => table.setPageIndex(0)}
+              />
+            );
+          })}
           {toolbar}
         </div>
 
@@ -485,6 +523,88 @@ export function DataTable<T>({
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// FacetedFilter — multi-select dropdown driven by the column's faceted
+// unique values. Rendered in the toolbar for columns with a `filter` config.
+// ============================================================
+
+function FacetedFilter<T>({
+  column,
+  label,
+  onChange,
+}: {
+  column: RtColumn<T, unknown>;
+  label: string;
+  onChange?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = (column.getFilterValue() as string[] | undefined) ?? [];
+  const options = Array.from(column.getFacetedUniqueValues().keys())
+    .map((v) => String(v))
+    .filter((v) => v !== '')
+    .sort();
+
+  const apply = (next: string[]) => {
+    column.setFilterValue(next.length ? next : undefined);
+    onChange?.();
+  };
+  const toggle = (value: string) =>
+    apply(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm transition-colors',
+          selected.length > 0
+            ? 'border-primary/50 text-foreground bg-accent'
+            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+        )}
+      >
+        <Filter className="h-3.5 w-3.5" />
+        {label}
+        {selected.length > 0 && (
+          <span className="ml-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-2xs">
+            {selected.length}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-52 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
+          {options.length === 0 ? (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">No values</p>
+          ) : (
+            options.map((opt) => (
+              <label
+                key={opt}
+                className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => toggle(opt)}
+                  className="rounded border-border text-primary focus:ring-ring"
+                />
+                {opt}
+              </label>
+            ))
+          )}
+          {selected.length > 0 && (
+            <button
+              onClick={() => apply([])}
+              className="w-full mt-1 px-2 py-1.5 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent text-left"
+            >
+              Clear filter
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -124,6 +124,20 @@ test('DataTable: paginates, searches, and sorts the clusters list', async ({ con
   await expect(firstBodyRow(page)).toContainText('Cluster 21');
 });
 
+test('DataTable: faceted Provider filter narrows the rows (B3)', async ({ context, page }) => {
+  await authenticate(context, page);
+  await page.goto('/dashboard/clusters');
+  await expect(page.getByText('Showing 1-20 of 25')).toBeVisible();
+
+  // 25 clusters cycle aws/gcp/azure → 9 are aws (indices 0,3,…,24). Filtering to
+  // a single page (<20 rows) also removes the pagination footer.
+  await page.getByRole('button', { name: /provider/i }).click();
+  await page.getByRole('checkbox', { name: 'aws' }).click();
+
+  await expect(page.locator('tbody tr')).toHaveCount(9);
+  await expect(page.getByText('Showing 1-20 of 25')).toHaveCount(0);
+});
+
 test('DataTable: column-visibility choices persist across reload (B2)', async ({ context, page }) => {
   await authenticate(context, page);
   await page.goto('/dashboard/clusters');

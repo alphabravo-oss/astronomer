@@ -109,6 +109,7 @@ export default function ClustersPage() {
         <span className="text-muted-foreground">{providerDisplayName(row.provider)}</span>
       ),
       sortAccessor: (row) => row.provider,
+      filter: { label: 'Provider' },
     },
     {
       key: 'distribution',

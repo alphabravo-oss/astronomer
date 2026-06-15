@@ -74,6 +74,38 @@ describe('DataTable behavior (TanStack Table engine)', () => {
     window.localStorage.clear();
   });
 
+  it('filters rows via a faceted multi-select column filter', () => {
+    type R = { id: string; name: string; status: string };
+    const facetRows: R[] = [
+      { id: '1', name: 'Alpha', status: 'ready' },
+      { id: '2', name: 'Bravo', status: 'pending' },
+      { id: '3', name: 'Charlie', status: 'ready' },
+    ];
+    const facetColumns: Column<R>[] = [
+      { key: 'name', header: 'Name', accessor: (r) => r.name },
+      {
+        key: 'status',
+        header: 'Status',
+        accessor: (r) => r.status,
+        sortAccessor: (r) => r.status,
+        filter: { label: 'Status' },
+      },
+    ];
+    render(
+      <DataTable data={facetRows} columns={facetColumns} keyExtractor={(r) => r.id} searchable={false} />
+    );
+
+    // Open the Status facet and select 'ready'.
+    fireEvent.click(screen.getByRole('button', { name: /status/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'ready' }));
+
+    const body = bodyRowText();
+    expect(body).toHaveLength(2);
+    expect(body.join(' ')).toContain('Alpha');
+    expect(body.join(' ')).toContain('Charlie');
+    expect(body.join(' ')).not.toContain('Bravo');
+  });
+
   it('toggles column visibility but refuses to hide the last column', () => {
     render(<DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />);
     fireEvent.click(screen.getByRole('button', { name: /columns/i }));
