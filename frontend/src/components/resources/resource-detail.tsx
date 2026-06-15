@@ -9,13 +9,8 @@ import { YamlPanel } from '@/components/ui/yaml-view-dialog';
 import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
 import { PodTerminal } from '@/components/workloads/pod-terminal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  detailHref,
-  KIND_TO_RESOURCE_TYPE,
-  WORKLOAD_SCALABLE_KINDS,
-  WORKLOAD_RESTARTABLE_KINDS,
-} from '@/lib/k8s-paths';
-import { WorkloadActions } from '@/components/workloads/workload-actions';
+import { detailHref, KIND_TO_RESOURCE_TYPE } from '@/lib/k8s-paths';
+import { ResourceActions } from '@/components/workloads/resource-actions';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Pod } from '@/types';
 import { Loader2, ArrowLeft } from 'lucide-react';
@@ -72,6 +67,8 @@ interface K8sObject {
     containers?: ContainerSpec[];
     // Workloads (Deployment/StatefulSet/ReplicaSet)
     replicas?: number;
+    paused?: boolean; // Deployment rollout
+    suspend?: boolean; // CronJob
     // Service
     type?: string;
     clusterIP?: string;
@@ -153,19 +150,23 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
             {created && <span>Age: {formatRelativeTime(created)}</span>}
           </div>
         </div>
-        {/* Workload management actions, once the object (and its real Kind) has
-            loaded. namespace is always set for these kinds. */}
-        {o?.kind && namespace &&
-          (WORKLOAD_SCALABLE_KINDS.includes(o.kind) || WORKLOAD_RESTARTABLE_KINDS.includes(o.kind)) && (
-            <WorkloadActions
-              clusterId={clusterId}
-              kind={o.kind}
-              namespace={namespace}
-              name={name}
-              replicas={o.spec?.replicas ?? 0}
-              onDeleted={() => router.back()}
-            />
-          )}
+        {/* Management actions (Delete everywhere; Scale/Restart for workloads,
+            Pause for Deployments, Suspend for CronJobs), once the object and
+            its real Kind have loaded. */}
+        {o?.kind && (
+          <ResourceActions
+            clusterId={clusterId}
+            kind={o.kind}
+            namespace={namespace}
+            name={name}
+            replicas={o.spec?.replicas}
+            paused={o.kind === 'Deployment' ? (o.spec?.paused ?? false) : undefined}
+            suspended={o.kind === 'CronJob' ? (o.spec?.suspend ?? false) : undefined}
+            k8sPath={k8sPath}
+            permissionResource={permissionResource}
+            onDeleted={() => router.back()}
+          />
+        )}
       </div>
 
       {/* Tabs */}

@@ -7,7 +7,7 @@ import { useWorkload, useWorkloadPods, useWorkloadMetrics } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { PodLogsViewer } from '@/components/workloads/pod-logs-viewer';
-import { WorkloadActions } from '@/components/workloads/workload-actions';
+import { ResourceActions } from '@/components/workloads/resource-actions';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Pod } from '@/types';
@@ -160,7 +160,7 @@ export default function WorkloadDetailPage() {
             <span className="text-muted-foreground">
               Ready: <span className={cn('font-mono font-medium', workload.status === 'Running' ? 'text-status-success' : 'text-status-warning')}>{workload.ready}</span>
             </span>
-            <WorkloadActions
+            <ResourceActions
               clusterId={clusterId}
               kind={workload.kind}
               namespace={workload.namespace}

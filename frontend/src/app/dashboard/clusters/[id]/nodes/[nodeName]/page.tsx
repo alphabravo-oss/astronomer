@@ -11,6 +11,7 @@ import { ActionButton } from '@/components/ui/action-button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OverlayShell } from '@/components/ui/overlay-shell';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
+import { ResourceActions } from '@/components/workloads/resource-actions';
 import { k8sResourcePath } from '@/lib/k8s-paths';
 import { usePermissionDecision } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
@@ -568,6 +569,13 @@ export default function NodeDetailPage() {
           >
             Drain
           </ActionButton>
+          {/* Node is cluster-scoped — ResourceActions renders only Delete here. */}
+          <ResourceActions
+            clusterId={clusterId}
+            kind="Node"
+            name={nodeName}
+            onDeleted={() => router.push(`/dashboard/clusters/${clusterId}/nodes`)}
+          />
         </div>
       </div>
 
