@@ -39,7 +39,7 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "heartbeat_interval", Value: 30},
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
-		envconfig.Default{Key: "privilege_profile", Value: "admin"},
+		envconfig.Default{Key: "privilege_profile", Value: "viewer"},
 	)
 
 	cfg := &AgentConfig{}

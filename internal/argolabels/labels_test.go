@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -56,7 +57,8 @@ func TestManagedClusterLabelsWithSingleProject(t *testing.T) {
 		ClusterNameLabelKey:                            "prod-east",
 		EnvironmentLabelKey:                            "production",
 		IsLocalLabelKey:                                "false",
-		AgentProfileLabelKey:                           "admin",
+		// No explicit privilege-profile annotation -> least privilege (C2).
+		AgentProfileLabelKey:                           "viewer",
 		AgentVersionLabelKey:                           "v0.4.1",
 		KubernetesVersionLabelKey:                      "v1.29.3-k3s1",
 		LabelPrefix + "team-name":                      "platform",
@@ -132,4 +134,41 @@ type fakeProjectLister struct {
 func (f *fakeProjectLister) ListProjectsByCluster(_ context.Context, arg sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
 	f.arg = arg
 	return f.projects, nil
+}
+
+// TestClusterAgentPrivilegeProfileFailsClosedToViewer is the negative test for
+// finding C2 at the annotation-read layer: a cluster with no annotations (or
+// unparseable annotations, or no explicit profile annotation) must resolve to
+// the read-only viewer profile, never cluster-admin.
+func TestClusterAgentPrivilegeProfileFailsClosedToViewer(t *testing.T) {
+	cases := map[string]json.RawMessage{
+		"empty":                 nil,
+		"unparseable":           json.RawMessage(`not-json`),
+		"no profile annotation": json.RawMessage(`{"some/other":"value"}`),
+		"unknown profile":       json.RawMessage(`{"astronomer.io/agent-privilege-profile":"cluster-admin"}`),
+	}
+	for name, raw := range cases {
+		if got := ClusterAgentPrivilegeProfile(raw); got != agenttemplate.PrivilegeProfileViewer {
+			t.Fatalf("ClusterAgentPrivilegeProfile(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileViewer)
+		}
+		if got := ClusterAgentPrivilegeProfile(raw); got == agenttemplate.PrivilegeProfileAdmin {
+			t.Fatalf("ClusterAgentPrivilegeProfile(%s) must not default to admin", name)
+		}
+	}
+}
+
+// TestClusterAgentPrivilegeProfileExplicitProfilesPreserved proves that
+// explicitly annotated profiles still resolve after the C2 fix.
+func TestClusterAgentPrivilegeProfileExplicitProfilesPreserved(t *testing.T) {
+	cases := map[string]string{
+		"admin":    agenttemplate.PrivilegeProfileAdmin,
+		"operator": agenttemplate.PrivilegeProfileOperator,
+		"viewer":   agenttemplate.PrivilegeProfileViewer,
+	}
+	for annotation, want := range cases {
+		raw := json.RawMessage(`{"astronomer.io/agent-privilege-profile":"` + annotation + `"}`)
+		if got := ClusterAgentPrivilegeProfile(raw); got != want {
+			t.Fatalf("ClusterAgentPrivilegeProfile(%q) = %q, want %q", annotation, got, want)
+		}
+	}
 }

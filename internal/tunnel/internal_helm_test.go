@@ -35,10 +35,28 @@ func TestInternalHelmHandler_DisabledWhenPSKEmpty(t *testing.T) {
 	}
 }
 
+// TestInternalHelmHandler_ForbidsValidPSKWithoutSiblingSource is the H4
+// defense-in-depth negative test for the helm door: a valid PSK without
+// the in-band sibling-pod source marker (what an external caller reaching
+// the handler through a misconfigured catch-all would present) is rejected.
+func TestInternalHelmHandler_ForbidsValidPSKWithoutSiblingSource(t *testing.T) {
+	h := NewInternalHelmHandler(NewHub(slog.Default()), "the-right-psk", slog.Default())
+	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgHelmUninstall})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
+	// Valid PSK, but NO X-Astronomer-Internal-Source header.
+	req.Header.Set(InternalPSKHeader, "the-right-psk")
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for valid PSK without sibling-source marker, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestInternalHelmHandler_ForbidsBadPSK(t *testing.T) {
 	h := NewInternalHelmHandler(NewHub(slog.Default()), "the-right-psk", slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgHelmInstall})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
+	req.Header.Set(InternalSourceHeader, InternalSourceValue)
 	req.Header.Set(InternalPSKHeader, "wrong")
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
@@ -51,6 +69,7 @@ func TestInternalHelmHandler_RejectsBadMsgType(t *testing.T) {
 	h := NewInternalHelmHandler(NewHub(slog.Default()), "psk", slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgK8sRequest})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
+	req.Header.Set(InternalSourceHeader, InternalSourceValue)
 	req.Header.Set(InternalPSKHeader, "psk")
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
@@ -67,6 +86,7 @@ func TestInternalHelmHandler_NoAgentReturns503(t *testing.T) {
 		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/no-such-cluster", bytes.NewReader(body))
+	req.Header.Set(InternalSourceHeader, InternalSourceValue)
 	req.Header.Set(InternalPSKHeader, "psk")
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
@@ -121,6 +141,7 @@ func TestInternalHelmHandler_RoundTrip(t *testing.T) {
 		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c-helm", bytes.NewReader(body))
+	req.Header.Set(InternalSourceHeader, InternalSourceValue)
 	req.Header.Set(InternalPSKHeader, "psk")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -156,6 +177,7 @@ func TestInternalHelmHandler_TimeoutReturns504(t *testing.T) {
 		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c-slow", bytes.NewReader(body))
+	req.Header.Set(InternalSourceHeader, InternalSourceValue)
 	req.Header.Set(InternalPSKHeader, "psk")
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

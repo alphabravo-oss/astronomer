@@ -280,7 +280,7 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 		Timestamp:              time.Now().UTC().Format(time.RFC3339),
 		AgentVersion:           hr.agentVersion,
 		AgentBuildSHA:          defaultAgentValue(hr.agentBuildSHA, version.GitCommit),
-		PrivilegeProfile:       defaultAgentValue(hr.privilegeProfile, "admin"),
+		PrivilegeProfile:       defaultAgentValue(hr.privilegeProfile, "viewer"),
 		EnabledFeatures:        append([]string{}, hr.enabledFeatures...),
 		DeniedFeatures:         append([]string{}, hr.deniedFeatures...),
 		LastSuccessfulAction:   "heartbeat.collect",

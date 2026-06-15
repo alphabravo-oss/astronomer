@@ -73,6 +73,16 @@ func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 		verb := rbac.VerbRead
 		if kind == auth.StreamKindExec || kind == auth.StreamKindShell {
 			verb = rbac.VerbUpdate
+			// H2 backstop: an exec/shell ticket is a cluster write /
+			// RCE-equivalent credential. A read-scoped API token must
+			// not be able to mint one even when the owning user holds
+			// the clusters:update RBAC verb checked below. JWT sessions
+			// and legacy empty-scope tokens pass through (see
+			// requireTokenScope). Logs tickets stay read-eligible.
+			if !requireTokenScope(r, auth.ScopeWriteClusters) {
+				RespondRequestError(w, r, http.StatusForbidden, "scope_denied", "Token is missing the required scope: "+auth.ScopeWriteClusters)
+				return
+			}
 		}
 		if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, verb) {
 			return
@@ -87,4 +97,32 @@ func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Ticket:    token,
 		ExpiresAt: ticket.ExpiresAt.UTC().Format(time.RFC3339),
 	})
+}
+
+// requireTokenScope reports whether the request is allowed to perform an
+// action requiring `required` from an API-token scope perspective. It
+// mirrors middleware.APITokenScopeEnforce's contract inline so a handler
+// that issues an exec/shell credential can enforce the same backstop the
+// route middleware applies to direct mutations:
+//
+//   - JWT (dashboard) sessions bypass — session RBAC is their gate.
+//   - When the token row isn't in context (tests / unconfigured deploy)
+//     we can't enforce scopes; preserve prior behaviour and allow — RBAC
+//     remains in the chain.
+//   - Pre-044 / empty-scope legacy tokens pass through (opt-in rollout).
+//   - Any other API token must carry `required` (or admin / *).
+func requireTokenScope(r *http.Request, required string) bool {
+	user, _ := middleware.GetAuthenticatedUser(r.Context())
+	if user == nil || user.AuthMethod != "api_token" {
+		return true
+	}
+	tok, ok := middleware.GetAuthenticatedAPIToken(r.Context())
+	if !ok || tok == nil {
+		return true
+	}
+	scopes, err := auth.ParseTokenScopes(tok.Scopes)
+	if err != nil {
+		return false
+	}
+	return auth.ScopeAllowsRequest(scopes, required)
 }

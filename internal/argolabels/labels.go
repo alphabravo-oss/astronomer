@@ -179,11 +179,11 @@ func IsOwnedLabel(k string) bool {
 
 func ClusterAgentPrivilegeProfile(raw json.RawMessage) string {
 	if len(raw) == 0 {
-		return agenttemplate.PrivilegeProfileAdmin
+		return agenttemplate.PrivilegeProfileViewer
 	}
 	var annotations map[string]string
 	if err := json.Unmarshal(raw, &annotations); err != nil {
-		return agenttemplate.PrivilegeProfileAdmin
+		return agenttemplate.PrivilegeProfileViewer
 	}
 	return agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation])
 }

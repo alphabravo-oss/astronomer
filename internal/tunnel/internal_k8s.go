@@ -43,6 +43,35 @@ import (
 // no extra plumbing is required to share it.
 const InternalPSKHeader = "X-Astronomer-Internal-PSK"
 
+// InternalSourceHeader is a second, defense-in-depth signal that the
+// request originated from a sibling server pod's cross-pod requester
+// (k8s_requester.go / helm_requester.go) rather than from any external
+// caller. Sibling requesters always set it to InternalSourceValue.
+//
+// This is NOT a secret — it can't be (it ships in the binary). Its sole
+// purpose is to ensure that even if a misconfigured external ingress
+// forwards /internal/* (the frontend.enabled=false catch-all, the dev
+// nginx catch-all, etc.) AND an attacker has somehow learned the PSK,
+// the request still fails closed unless it carries the in-band marker
+// that an ingress proxy fronting the public listener does not add. It
+// pairs with the explicit `/internal/` denies in the ingress/HTTPRoute/
+// nginx templates: those keep external traffic off the path; this keeps
+// the handler fail-closed if one of them ever drifts. Browser-origin
+// requests routed through any of the shipped ingresses never set it.
+const InternalSourceHeader = "X-Astronomer-Internal-Source"
+
+// InternalSourceValue is the fixed marker sibling requesters place in
+// InternalSourceHeader.
+const InternalSourceValue = "sibling-server-pod"
+
+// hasSiblingSourceSignal reports whether the request carries the
+// in-band sibling-pod source marker. Constant-time compared so the
+// check doesn't leak the (non-secret but stable) value's length.
+func hasSiblingSourceSignal(r *http.Request) bool {
+	got := r.Header.Get(InternalSourceHeader)
+	return subtle.ConstantTimeCompare([]byte(got), []byte(InternalSourceValue)) == 1
+}
+
 // DerivePSK returns the PSK pods include in cross-pod internal requests.
 // SHA-256 over the encryption-key bytes namespaced with a literal so
 // the raw key is never sent on the wire and rotating the key rotates
@@ -86,6 +115,16 @@ func NewInternalK8sHandler(hub *Hub, psk string, log *slog.Logger) *InternalK8sH
 func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.psk == "" {
 		http.Error(w, `{"error":"internal endpoint disabled"}`, http.StatusServiceUnavailable)
+		return
+	}
+	// Defense in depth: reject anything that didn't originate from a
+	// sibling server pod's requester, even with a valid PSK. External
+	// ingress paths never add this marker, so a /internal/* request that
+	// leaked through a misconfigured catch-all fails closed here. Checked
+	// before the PSK so a leaked-PSK attacker over an external route is
+	// still denied.
+	if !hasSiblingSourceSignal(r) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 	got := r.Header.Get(InternalPSKHeader)

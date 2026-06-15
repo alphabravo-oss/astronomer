@@ -82,6 +82,13 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal endpoint disabled"}`, http.StatusServiceUnavailable)
 		return
 	}
+	// Defense in depth: reject anything lacking the sibling-pod source
+	// marker even with a valid PSK (see internal_k8s.go). Checked before
+	// the PSK so a leaked-PSK attacker over an external route is denied.
+	if !hasSiblingSourceSignal(r) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
 	got := r.Header.Get(InternalPSKHeader)
 	if subtle.ConstantTimeCompare([]byte(got), []byte(h.psk)) != 1 {
 		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)

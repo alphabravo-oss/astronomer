@@ -148,11 +148,90 @@ func TestNormalizePrivilegeProfileAcceptsNamespaceAliasesAndCustom(t *testing.T)
 		"namespace operator":  PrivilegeProfileNamespaceOperator,
 		"namespaced_operator": PrivilegeProfileNamespaceOperator,
 		"custom":              PrivilegeProfileCustom,
-		"":                    PrivilegeProfileAdmin,
 	}
 	for input, want := range tests {
 		if got := NormalizePrivilegeProfile(input); got != want {
 			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+// TestNormalizePrivilegeProfileFailsClosedToViewer is the negative test for
+// finding C2: an empty or unrecognized profile must resolve to the read-only
+// viewer profile, never the cluster-admin "admin" profile.
+func TestNormalizePrivilegeProfileFailsClosedToViewer(t *testing.T) {
+	for _, input := range []string{"", "   ", "garbage", "cluster-admin", "root", "superuser", "unknown-profile"} {
+		if got := NormalizePrivilegeProfile(input); got != PrivilegeProfileViewer {
+			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q (must fail closed to viewer)", input, got, PrivilegeProfileViewer)
+		}
+		if got := NormalizePrivilegeProfile(input); got == PrivilegeProfileAdmin {
+			t.Fatalf("NormalizePrivilegeProfile(%q) must not silently default to admin", input)
+		}
+	}
+}
+
+// TestNormalizePrivilegeProfileExplicitProfilesStillResolve proves that
+// deliberately chosen broader profiles continue to work after the C2 fix.
+func TestNormalizePrivilegeProfileExplicitProfilesStillResolve(t *testing.T) {
+	tests := map[string]string{
+		"admin":              PrivilegeProfileAdmin,
+		"ADMIN":              PrivilegeProfileAdmin,
+		"  admin  ":          PrivilegeProfileAdmin,
+		"operator":           PrivilegeProfileOperator,
+		"Operator":           PrivilegeProfileOperator,
+		"viewer":             PrivilegeProfileViewer,
+		"namespace-operator": PrivilegeProfileNamespaceOperator,
+		"namespace-viewer":   PrivilegeProfileNamespaceViewer,
+	}
+	for input, want := range tests {
+		if got := NormalizePrivilegeProfile(input); got != want {
+			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+// TestRenderInstallYAMLDefaultProfileHasNoFullAccessRule is the renderer-level
+// negative test for C2: an agent manifest rendered with no explicit profile
+// must not contain the cluster-admin */*/* wildcard rule.
+func TestRenderInstallYAMLDefaultProfileHasNoFullAccessRule(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "token",
+		AgentImage:        "example.com/agent:v1",
+		// PrivilegeProfile intentionally left empty.
+	})
+	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "viewer"`) {
+		t.Fatalf("default manifest should resolve to viewer profile:\n%s", manifest)
+	}
+	for _, unwanted := range []string{
+		`resources: ["*"]`,
+		`verbs: ["*"]`,
+		`nonResourceURLs: ["*"]`,
+	} {
+		if strings.Contains(manifest, unwanted) {
+			t.Fatalf("default manifest unexpectedly contains cluster-admin rule %q:\n%s", unwanted, manifest)
+		}
+	}
+}
+
+// TestRenderInstallYAMLExplicitAdminStillRendersFullAccess proves that
+// explicitly choosing admin still renders the full-access RBAC rules.
+func TestRenderInstallYAMLExplicitAdminStillRendersFullAccess(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "token",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileAdmin,
+	})
+	for _, want := range []string{
+		`PRIVILEGE_PROFILE: "admin"`,
+		`resources: ["*"]`,
+		`verbs: ["*"]`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("explicit admin manifest missing %q:\n%s", want, manifest)
 		}
 	}
 }

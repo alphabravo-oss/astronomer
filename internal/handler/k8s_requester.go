@@ -332,6 +332,9 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(tunnel.InternalPSKHeader, r.psk)
+	// Defense-in-depth in-band marker proving sibling-pod origin; the
+	// receiver rejects requests without it even with a valid PSK.
+	req.Header.Set(tunnel.InternalSourceHeader, tunnel.InternalSourceValue)
 
 	httpResp, err := internalK8sForwardClient.Do(req)
 	if err != nil {

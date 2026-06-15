@@ -149,10 +149,19 @@ func TestClusterResponseIncludesAgentPrivilegeProfile(t *testing.T) {
 		t.Fatalf("agent privilege profile = %q, want operator", resp.AgentPrivilegeProfile)
 	}
 
+	// An invalid/unknown profile must fail closed to least privilege (C2),
+	// never to the cluster-admin profile.
 	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"invalid"}`)
 	resp = clusterToResponse(cluster)
+	if resp.AgentPrivilegeProfile != "viewer" {
+		t.Fatalf("invalid profile = %q, want viewer fallback", resp.AgentPrivilegeProfile)
+	}
+
+	// An explicit admin profile must still resolve to admin.
+	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"admin"}`)
+	resp = clusterToResponse(cluster)
 	if resp.AgentPrivilegeProfile != "admin" {
-		t.Fatalf("invalid profile = %q, want admin fallback", resp.AgentPrivilegeProfile)
+		t.Fatalf("explicit admin profile = %q, want admin", resp.AgentPrivilegeProfile)
 	}
 }
 

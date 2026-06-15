@@ -604,7 +604,7 @@ func agentPrivilegeProfileSelfTestCheck(agent agentFleetItem) agentSelfTestCheck
 		agenttemplate.PrivilegeProfileNamespaceViewer, agenttemplate.PrivilegeProfileNamespaceOperator:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the " + agent.PrivilegeProfile + " privilege profile."}
 	case agenttemplate.PrivilegeProfileAdmin:
-		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using the full-admin privilege profile."}
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using the elevated full-admin (cluster-admin) privilege profile; re-profile to least privilege unless this is deliberate."}
 	case agenttemplate.PrivilegeProfileCustom:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using custom RBAC; run live diagnostics to verify required permissions."}
 	default:
@@ -991,11 +991,11 @@ func latestAgentObservationTime(cluster sqlc.Cluster, conn sqlc.AgentConnection)
 
 func agentPrivilegeProfileFromAnnotations(raw json.RawMessage) string {
 	if len(raw) == 0 {
-		return agenttemplate.PrivilegeProfileAdmin
+		return agenttemplate.PrivilegeProfileViewer
 	}
 	var annotations map[string]string
 	if err := json.Unmarshal(raw, &annotations); err != nil {
-		return agenttemplate.PrivilegeProfileAdmin
+		return agenttemplate.PrivilegeProfileViewer
 	}
 	return agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation])
 }

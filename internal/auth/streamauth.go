@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -91,6 +92,16 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
 		if err != nil || !dbUser.IsActive {
 			return uuid.Nil, false
 		}
+		// H2 backstop: opening pod exec or a kubectl shell over a raw
+		// API-token bearer is a cluster write / RCE-equivalent action.
+		// A read-scoped token must not reach it even when the owning
+		// user holds the matching RBAC verb — mirror the write-scope
+		// gate the ticket-issuance path enforces. Logs stay read-eligible
+		// (a read-scoped token can still tail logs). Legacy empty-scope
+		// tokens keep their pre-044 behaviour via ScopeAllowsRequest.
+		if streamKindRequiresWriteScope(kind) && !apiTokenAllowsScope(apiToken.Scopes, ScopeWriteClusters) {
+			return uuid.Nil, false
+		}
 		return dbUser.ID, true
 	}
 
@@ -102,4 +113,29 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
 		return uuid.Nil, false
 	}
 	return claims.UserID, true
+}
+
+// streamKindRequiresWriteScope reports whether opening a stream of the
+// given kind is a write action that an API token must carry a write
+// scope to perform. Exec and shell are interactive process execution
+// (RCE-equivalent); logs and events are reads.
+func streamKindRequiresWriteScope(kind string) bool {
+	switch NormalizeStreamKind(kind) {
+	case StreamKindExec, StreamKindShell:
+		return true
+	default:
+		return false
+	}
+}
+
+// apiTokenAllowsScope decodes an api_tokens.scopes column and reports
+// whether it satisfies `required`. Garbled JSON fails closed (the row
+// is platform-side corrupt, not a client error). Empty/legacy scopes
+// pass through per the opt-in rollout contract in ScopeAllowsRequest.
+func apiTokenAllowsScope(raw json.RawMessage, required string) bool {
+	scopes, err := ParseTokenScopes(raw)
+	if err != nil {
+		return false
+	}
+	return ScopeAllowsRequest(scopes, required)
 }

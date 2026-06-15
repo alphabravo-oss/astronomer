@@ -1135,3 +1135,60 @@ func k8sTextResponse(status int, body string) *protocol.K8sResponsePayload {
 		Body:       base64.StdEncoding.EncodeToString([]byte(body)),
 	}
 }
+
+// TestAgentPrivilegeProfileFromAnnotationsFailsClosed is the negative test for
+// finding C2 in the fleet handler: absent/unparseable/unknown annotations must
+// resolve to the read-only viewer profile, never cluster-admin.
+func TestAgentPrivilegeProfileFromAnnotationsFailsClosed(t *testing.T) {
+	cases := map[string]json.RawMessage{
+		"empty":       nil,
+		"unparseable": json.RawMessage(`oops`),
+		"absent":      json.RawMessage(`{}`),
+		"unknown":     json.RawMessage(`{"astronomer.io/agent-privilege-profile":"root"}`),
+	}
+	for name, raw := range cases {
+		if got := agentPrivilegeProfileFromAnnotations(raw); got != agenttemplate.PrivilegeProfileViewer {
+			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileViewer)
+		}
+		if got := agentPrivilegeProfileFromAnnotations(raw); got == agenttemplate.PrivilegeProfileAdmin {
+			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) must not default to admin", name)
+		}
+	}
+}
+
+// TestAgentPrivilegeProfileFromAnnotationsPreservesExplicit proves explicit
+// profiles still resolve in the fleet handler after the C2 fix.
+func TestAgentPrivilegeProfileFromAnnotationsPreservesExplicit(t *testing.T) {
+	cases := map[string]string{
+		"admin":    agenttemplate.PrivilegeProfileAdmin,
+		"operator": agenttemplate.PrivilegeProfileOperator,
+		"viewer":   agenttemplate.PrivilegeProfileViewer,
+	}
+	for annotation, want := range cases {
+		raw := json.RawMessage(`{"astronomer.io/agent-privilege-profile":"` + annotation + `"}`)
+		if got := agentPrivilegeProfileFromAnnotations(raw); got != want {
+			t.Fatalf("agentPrivilegeProfileFromAnnotations(%q) = %q, want %q", annotation, got, want)
+		}
+	}
+}
+
+// TestAgentPrivilegeProfileSelfTestFlagsExplicitAdmin verifies the fleet
+// self-test does not silently pass a cluster-admin agent and surfaces it as an
+// elevated (non-passing) finding. A default (empty) profile now resolves to
+// viewer and passes, so admin posture is only reached when explicitly chosen.
+func TestAgentPrivilegeProfileSelfTestFlagsExplicitAdmin(t *testing.T) {
+	adminCheck := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: agenttemplate.PrivilegeProfileAdmin})
+	if adminCheck.Status == "passed" {
+		t.Fatalf("admin privilege profile must not be a passing self-test, got %q: %s", adminCheck.Status, adminCheck.Message)
+	}
+
+	defaultCheck := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: ""})
+	if defaultCheck.Status != "passed" {
+		t.Fatalf("default (empty) profile should resolve to viewer and pass, got %q: %s", defaultCheck.Status, defaultCheck.Message)
+	}
+
+	viewerCheck := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: agenttemplate.PrivilegeProfileViewer})
+	if viewerCheck.Status != "passed" {
+		t.Fatalf("viewer profile should pass, got %q: %s", viewerCheck.Status, viewerCheck.Message)
+	}
+}

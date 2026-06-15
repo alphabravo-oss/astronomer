@@ -40,8 +40,10 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.HealthAddr != ":8081" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":8081")
 	}
-	if cfg.PrivilegeProfile != "admin" {
-		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "admin")
+	// The default privilege profile must fail closed to least privilege (C2):
+	// forgetting to set a profile must not grant cluster-admin.
+	if cfg.PrivilegeProfile != "viewer" {
+		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "viewer")
 	}
 	if cfg.TokenSecretName != "astronomer-agent-token" {
 		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "astronomer-agent-token")

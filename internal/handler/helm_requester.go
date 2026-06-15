@@ -111,6 +111,9 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(tunnel.InternalPSKHeader, r.psk)
+	// Defense-in-depth in-band marker proving sibling-pod origin; the
+	// receiver rejects requests without it even with a valid PSK.
+	req.Header.Set(tunnel.InternalSourceHeader, tunnel.InternalSourceValue)
 
 	httpResp, err := internalHelmForwardClient.Do(req)
 	if err != nil {

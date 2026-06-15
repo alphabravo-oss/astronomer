@@ -58,6 +58,8 @@ func RenderInstallYAML(data InstallTemplateData) string {
 func NormalizePrivilegeProfile(profile string) string {
 	normalized := strings.NewReplacer("_", "-", " ", "-").Replace(strings.ToLower(strings.TrimSpace(profile)))
 	switch normalized {
+	case PrivilegeProfileAdmin:
+		return PrivilegeProfileAdmin
 	case PrivilegeProfileViewer:
 		return PrivilegeProfileViewer
 	case PrivilegeProfileOperator:
@@ -69,7 +71,10 @@ func NormalizePrivilegeProfile(profile string) string {
 	case PrivilegeProfileCustom:
 		return PrivilegeProfileCustom
 	default:
-		return PrivilegeProfileAdmin
+		// Fail closed to least privilege: an empty or unrecognized profile
+		// resolves to read-only viewer, never cluster-admin. Choosing a
+		// broader profile (admin/operator) must be explicit.
+		return PrivilegeProfileViewer
 	}
 }
 

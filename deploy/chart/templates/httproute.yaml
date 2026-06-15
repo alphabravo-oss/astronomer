@@ -63,6 +63,20 @@ spec:
     - {{ . | quote }}
     {{- end }}
   rules:
+    # Defense in depth (security review H4): the server-internal cross-pod
+    # PSK door at /internal/tunnel/{k8s,helm}/* performs cluster mutations
+    # with no per-user authz and must never be externally reachable. This
+    # more-specific /internal match takes precedence over the catch-all `/`
+    # rule below; it forwards to a non-existent blackhole service so an
+    # external /internal request is NEVER routed to the real backend in
+    # either frontend.enabled topology.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /internal
+      backendRefs:
+        - name: {{ include "astronomer.fullname" . }}-internal-deny
+          port: {{ .Values.server.service.port }}
     - matches:
         - path:
             type: PathPrefix
