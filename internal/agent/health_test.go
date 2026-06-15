@@ -167,15 +167,19 @@ func TestSetCustomPrivilegeProfileReportsUnknownCapabilities(t *testing.T) {
 	}
 }
 
-// TestNormalizeAgentPrivilegeProfileFailsClosedToViewer is the negative guard
-// for NEW-2: empty or unrecognized privilege profiles must no longer
-// self-report "admin" in the heartbeat capability advertisement. The duplicate
-// normalizer now delegates to the canonical fail-closed implementation, so
-// garbage input resolves to least-privilege viewer.
-func TestNormalizeAgentPrivilegeProfileFailsClosedToViewer(t *testing.T) {
-	for _, in := range []string{"", "   ", "garbage", "root", "ADMIN-ish", "cluster-admin", "superuser"} {
+// TestNormalizeAgentPrivilegeProfileDefaultsAndFailsClosed: the duplicate
+// heartbeat normalizer matches canonical semantics — an unspecified profile
+// defaults to admin (Rancher-style full control); an explicit-but-unrecognized
+// (garbage/typo) value fails closed to viewer so it never self-advertises admin.
+func TestNormalizeAgentPrivilegeProfileDefaultsAndFailsClosed(t *testing.T) {
+	for _, in := range []string{"", "   "} {
+		if got := normalizeAgentPrivilegeProfile(in); got != "admin" {
+			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want admin (unspecified -> admin)", in, got)
+		}
+	}
+	for _, in := range []string{"garbage", "root", "ADMIN-ish", "cluster-admin", "superuser"} {
 		if got := normalizeAgentPrivilegeProfile(in); got != "viewer" {
-			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want viewer (must not self-report admin)", in, got)
+			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want viewer (unknown -> fail closed)", in, got)
 		}
 	}
 	// Explicit profiles still resolve so day-2 advertisement is unchanged.

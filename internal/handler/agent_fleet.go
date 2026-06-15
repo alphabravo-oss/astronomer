@@ -608,7 +608,10 @@ func agentPrivilegeProfileSelfTestCheck(agent agentFleetItem) agentSelfTestCheck
 		agenttemplate.PrivilegeProfileNamespaceViewer, agenttemplate.PrivilegeProfileNamespaceOperator:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the " + agent.PrivilegeProfile + " privilege profile."}
 	case agenttemplate.PrivilegeProfileAdmin:
-		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using the elevated full-admin (cluster-admin) privilege profile; re-profile to least privilege unless this is deliberate."}
+		// Full management control is the default (Rancher-style); the per-user
+		// gate is the management-plane RBAC. Not a finding — just note that a
+		// least-privilege profile can be applied if desired.
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the full-management (admin) privilege profile (default). Apply a viewer/operator profile to scope it down if least privilege is required."}
 	case agenttemplate.PrivilegeProfileCustom:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using custom RBAC; run live diagnostics to verify required permissions."}
 	default:
@@ -994,12 +997,14 @@ func latestAgentObservationTime(cluster sqlc.Cluster, conn sqlc.AgentConnection)
 }
 
 func agentPrivilegeProfileFromAnnotations(raw json.RawMessage) string {
+	// Unspecified annotations default to full management control (see
+	// NormalizePrivilegeProfile), matching Rancher's cluster-admin agent model.
 	if len(raw) == 0 {
-		return agenttemplate.PrivilegeProfileViewer
+		return agenttemplate.NormalizePrivilegeProfile("")
 	}
 	var annotations map[string]string
 	if err := json.Unmarshal(raw, &annotations); err != nil {
-		return agenttemplate.PrivilegeProfileViewer
+		return agenttemplate.NormalizePrivilegeProfile("")
 	}
 	return agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation])
 }

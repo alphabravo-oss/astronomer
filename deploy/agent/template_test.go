@@ -207,16 +207,24 @@ func TestNormalizePrivilegeProfileAcceptsNamespaceAliasesAndCustom(t *testing.T)
 	}
 }
 
-// TestNormalizePrivilegeProfileFailsClosedToViewer is the negative test for
-// finding C2: an empty or unrecognized profile must resolve to the read-only
-// viewer profile, never the cluster-admin "admin" profile.
-func TestNormalizePrivilegeProfileFailsClosedToViewer(t *testing.T) {
-	for _, input := range []string{"", "   ", "garbage", "cluster-admin", "root", "superuser", "unknown-profile"} {
-		if got := NormalizePrivilegeProfile(input); got != PrivilegeProfileViewer {
-			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q (must fail closed to viewer)", input, got, PrivilegeProfileViewer)
+// TestNormalizePrivilegeProfileDefaultsToAdmin: an unspecified (empty/blank)
+// profile defaults to full management control (admin), matching Rancher's
+// cluster-admin agent model. The per-user gate is the management-plane RBAC.
+func TestNormalizePrivilegeProfileDefaultsToAdmin(t *testing.T) {
+	for _, input := range []string{"", "   ", "\t"} {
+		if got := NormalizePrivilegeProfile(input); got != PrivilegeProfileAdmin {
+			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q (unspecified -> admin)", input, got, PrivilegeProfileAdmin)
 		}
-		if got := NormalizePrivilegeProfile(input); got == PrivilegeProfileAdmin {
-			t.Fatalf("NormalizePrivilegeProfile(%q) must not silently default to admin", input)
+	}
+}
+
+// TestNormalizePrivilegeProfileUnknownFailsClosed: an explicitly-supplied but
+// UNRECOGNIZED profile (a typo/misconfig) must fail closed to viewer rather
+// than silently granting admin.
+func TestNormalizePrivilegeProfileUnknownFailsClosed(t *testing.T) {
+	for _, input := range []string{"garbage", "cluster-admin", "root", "superuser", "unknown-profile"} {
+		if got := NormalizePrivilegeProfile(input); got != PrivilegeProfileViewer {
+			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q (unknown -> fail closed)", input, got, PrivilegeProfileViewer)
 		}
 	}
 }
@@ -241,10 +249,11 @@ func TestNormalizePrivilegeProfileExplicitProfilesStillResolve(t *testing.T) {
 	}
 }
 
-// TestRenderInstallYAMLDefaultProfileHasNoFullAccessRule is the renderer-level
-// negative test for C2: an agent manifest rendered with no explicit profile
-// must not contain the cluster-admin */*/* wildcard rule.
-func TestRenderInstallYAMLDefaultProfileHasNoFullAccessRule(t *testing.T) {
+// TestRenderInstallYAMLDefaultProfileResolvesToAdmin: an agent manifest
+// rendered with no explicit profile defaults to full management control
+// (admin), matching Rancher's cluster-admin agent model. The per-user security
+// boundary is the management-plane RBAC.
+func TestRenderInstallYAMLDefaultProfileResolvesToAdmin(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "https://astro.example.com",
 		ClusterID:         "c1",
@@ -252,16 +261,16 @@ func TestRenderInstallYAMLDefaultProfileHasNoFullAccessRule(t *testing.T) {
 		AgentImage:        "example.com/agent:v1",
 		// PrivilegeProfile intentionally left empty.
 	})
-	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "viewer"`) {
-		t.Fatalf("default manifest should resolve to viewer profile:\n%s", manifest)
+	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "admin"`) {
+		t.Fatalf("default manifest should resolve to admin profile:\n%s", manifest)
 	}
-	for _, unwanted := range []string{
+	for _, wanted := range []string{
 		`resources: ["*"]`,
 		`verbs: ["*"]`,
 		`nonResourceURLs: ["*"]`,
 	} {
-		if strings.Contains(manifest, unwanted) {
-			t.Fatalf("default manifest unexpectedly contains cluster-admin rule %q:\n%s", unwanted, manifest)
+		if !strings.Contains(manifest, wanted) {
+			t.Fatalf("default (admin) manifest should contain full-access rule %q:\n%s", wanted, manifest)
 		}
 	}
 }

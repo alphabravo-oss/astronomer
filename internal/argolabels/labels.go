@@ -178,12 +178,14 @@ func IsOwnedLabel(k string) bool {
 }
 
 func ClusterAgentPrivilegeProfile(raw json.RawMessage) string {
+	// Absent/unparseable annotations mean "unspecified" — which now defaults to
+	// full management control via NormalizePrivilegeProfile (Rancher-style).
 	if len(raw) == 0 {
-		return agenttemplate.PrivilegeProfileViewer
+		return agenttemplate.NormalizePrivilegeProfile("")
 	}
 	var annotations map[string]string
 	if err := json.Unmarshal(raw, &annotations); err != nil {
-		return agenttemplate.PrivilegeProfileViewer
+		return agenttemplate.NormalizePrivilegeProfile("")
 	}
 	return agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation])
 }

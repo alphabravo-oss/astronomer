@@ -58,6 +58,13 @@ func RenderInstallYAML(data InstallTemplateData) string {
 func NormalizePrivilegeProfile(profile string) string {
 	normalized := strings.NewReplacer("_", "-", " ", "-").Replace(strings.ToLower(strings.TrimSpace(profile)))
 	switch normalized {
+	case "":
+		// Default to full management control, matching Rancher's
+		// cluster-admin agent model: the agent holds broad access and the
+		// per-user security boundary is the management-plane RBAC (user
+		// identity is stripped at the tunnel and re-authorized there).
+		// Scoping the agent down (viewer/operator/namespace-*) is opt-in.
+		return PrivilegeProfileAdmin
 	case PrivilegeProfileAdmin:
 		return PrivilegeProfileAdmin
 	case PrivilegeProfileViewer:
@@ -71,9 +78,9 @@ func NormalizePrivilegeProfile(profile string) string {
 	case PrivilegeProfileCustom:
 		return PrivilegeProfileCustom
 	default:
-		// Fail closed to least privilege: an empty or unrecognized profile
-		// resolves to read-only viewer, never cluster-admin. Choosing a
-		// broader profile (admin/operator) must be explicit.
+		// An explicitly-supplied but UNRECOGNIZED value is a misconfiguration
+		// (e.g. a typo) — fail closed to read-only viewer rather than silently
+		// granting admin. The empty/unspecified case is handled above.
 		return PrivilegeProfileViewer
 	}
 }

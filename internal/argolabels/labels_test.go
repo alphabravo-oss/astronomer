@@ -57,8 +57,9 @@ func TestManagedClusterLabelsWithSingleProject(t *testing.T) {
 		ClusterNameLabelKey:                            "prod-east",
 		EnvironmentLabelKey:                            "production",
 		IsLocalLabelKey:                                "false",
-		// No explicit privilege-profile annotation -> least privilege (C2).
-		AgentProfileLabelKey:                           "viewer",
+		// No explicit privilege-profile annotation -> full management control
+		// (default; matches Rancher's cluster-admin agent model).
+		AgentProfileLabelKey:                           "admin",
 		AgentVersionLabelKey:                           "v0.4.1",
 		KubernetesVersionLabelKey:                      "v1.29.3-k3s1",
 		LabelPrefix + "team-name":                      "platform",
@@ -136,24 +137,30 @@ func (f *fakeProjectLister) ListProjectsByCluster(_ context.Context, arg sqlc.Li
 	return f.projects, nil
 }
 
-// TestClusterAgentPrivilegeProfileFailsClosedToViewer is the negative test for
-// finding C2 at the annotation-read layer: a cluster with no annotations (or
-// unparseable annotations, or no explicit profile annotation) must resolve to
-// the read-only viewer profile, never cluster-admin.
-func TestClusterAgentPrivilegeProfileFailsClosedToViewer(t *testing.T) {
+// TestClusterAgentPrivilegeProfileDefaultsToAdmin: at the annotation-read
+// layer, an UNSPECIFIED profile (no annotations / unparseable / no profile key)
+// defaults to full management control (admin), matching Rancher's cluster-admin
+// agent model — the per-user gate is the management-plane RBAC.
+func TestClusterAgentPrivilegeProfileDefaultsToAdmin(t *testing.T) {
 	cases := map[string]json.RawMessage{
 		"empty":                 nil,
 		"unparseable":           json.RawMessage(`not-json`),
 		"no profile annotation": json.RawMessage(`{"some/other":"value"}`),
-		"unknown profile":       json.RawMessage(`{"astronomer.io/agent-privilege-profile":"cluster-admin"}`),
 	}
 	for name, raw := range cases {
-		if got := ClusterAgentPrivilegeProfile(raw); got != agenttemplate.PrivilegeProfileViewer {
-			t.Fatalf("ClusterAgentPrivilegeProfile(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileViewer)
+		if got := ClusterAgentPrivilegeProfile(raw); got != agenttemplate.PrivilegeProfileAdmin {
+			t.Fatalf("ClusterAgentPrivilegeProfile(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileAdmin)
 		}
-		if got := ClusterAgentPrivilegeProfile(raw); got == agenttemplate.PrivilegeProfileAdmin {
-			t.Fatalf("ClusterAgentPrivilegeProfile(%s) must not default to admin", name)
-		}
+	}
+}
+
+// TestClusterAgentPrivilegeProfileUnknownFailsClosed: an explicit but
+// UNRECOGNIZED profile string (typo/misconfig) must fail closed to viewer, not
+// silently grant admin.
+func TestClusterAgentPrivilegeProfileUnknownFailsClosed(t *testing.T) {
+	raw := json.RawMessage(`{"astronomer.io/agent-privilege-profile":"cluster-admin"}`)
+	if got := ClusterAgentPrivilegeProfile(raw); got != agenttemplate.PrivilegeProfileViewer {
+		t.Fatalf("ClusterAgentPrivilegeProfile(unknown) = %q, want %q", got, agenttemplate.PrivilegeProfileViewer)
 	}
 }
 

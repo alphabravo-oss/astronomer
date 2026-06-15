@@ -337,9 +337,9 @@ func TestRefreshManagedClusterLabels_NoChangeNoPatch(t *testing.T) {
 				"astronomer.io/environment":             "prod",
 				"astronomer.io/is-local":                "false",
 				// No explicit profile annotation on the cluster -> desired
-				// profile is least-privilege viewer (C2). Matching here keeps
-				// this the idempotent no-op case.
-				"astronomer.io/agent-privilege-profile": "viewer",
+				// profile is the full-management admin default. Matching here
+				// keeps this the idempotent no-op case.
+				"astronomer.io/agent-privilege-profile": "admin",
 				"astronomer.io/label-tier":              "prod",
 			},
 		},

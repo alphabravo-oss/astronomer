@@ -281,7 +281,7 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 		Timestamp:              time.Now().UTC().Format(time.RFC3339),
 		AgentVersion:           hr.agentVersion,
 		AgentBuildSHA:          defaultAgentValue(hr.agentBuildSHA, version.GitCommit),
-		PrivilegeProfile:       defaultAgentValue(hr.privilegeProfile, "viewer"),
+		PrivilegeProfile:       defaultAgentValue(hr.privilegeProfile, "admin"),
 		EnabledFeatures:        append([]string{}, hr.enabledFeatures...),
 		DeniedFeatures:         append([]string{}, hr.deniedFeatures...),
 		LastSuccessfulAction:   "heartbeat.collect",
@@ -439,9 +439,9 @@ func detectDistribution(nodes []corev1.Node) string {
 }
 
 // normalizeAgentPrivilegeProfile delegates to the canonical normalizer so the
-// self-reported heartbeat capability advertisement uses the same fail-closed
-// semantics: empty or unrecognized input resolves to least-privilege viewer,
-// never admin.
+// self-reported heartbeat capability advertisement uses the same semantics:
+// an unspecified profile defaults to full-management admin (Rancher-style),
+// while an explicit-but-unrecognized value fails closed to viewer.
 func normalizeAgentPrivilegeProfile(profile string) string {
 	return agenttemplate.NormalizePrivilegeProfile(profile)
 }

@@ -40,10 +40,11 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.HealthAddr != ":8081" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":8081")
 	}
-	// The default privilege profile must fail closed to least privilege (C2):
-	// forgetting to set a profile must not grant cluster-admin.
-	if cfg.PrivilegeProfile != "viewer" {
-		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "viewer")
+	// The default privilege profile is full-management admin (Rancher-style):
+	// the agent holds broad access and the per-user gate is the
+	// management-plane RBAC. Least-privilege profiles are opt-in.
+	if cfg.PrivilegeProfile != "admin" {
+		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "admin")
 	}
 	if cfg.TokenSecretName != "astronomer-agent-token" {
 		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "astronomer-agent-token")

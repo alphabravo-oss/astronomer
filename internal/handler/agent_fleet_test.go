@@ -1147,20 +1147,21 @@ func k8sTextResponse(status int, body string) *protocol.K8sResponsePayload {
 // TestAgentPrivilegeProfileFromAnnotationsFailsClosed is the negative test for
 // finding C2 in the fleet handler: absent/unparseable/unknown annotations must
 // resolve to the read-only viewer profile, never cluster-admin.
-func TestAgentPrivilegeProfileFromAnnotationsFailsClosed(t *testing.T) {
-	cases := map[string]json.RawMessage{
+func TestAgentPrivilegeProfileFromAnnotationsDefaultsAndFailsClosed(t *testing.T) {
+	// Unspecified (empty / unparseable / absent key) -> admin default.
+	for name, raw := range map[string]json.RawMessage{
 		"empty":       nil,
 		"unparseable": json.RawMessage(`oops`),
 		"absent":      json.RawMessage(`{}`),
-		"unknown":     json.RawMessage(`{"astronomer.io/agent-privilege-profile":"root"}`),
+	} {
+		if got := agentPrivilegeProfileFromAnnotations(raw); got != agenttemplate.PrivilegeProfileAdmin {
+			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) = %q, want %q (unspecified -> admin)", name, got, agenttemplate.PrivilegeProfileAdmin)
+		}
 	}
-	for name, raw := range cases {
-		if got := agentPrivilegeProfileFromAnnotations(raw); got != agenttemplate.PrivilegeProfileViewer {
-			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileViewer)
-		}
-		if got := agentPrivilegeProfileFromAnnotations(raw); got == agenttemplate.PrivilegeProfileAdmin {
-			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) must not default to admin", name)
-		}
+	// Explicit but unknown (typo) -> fail closed to viewer.
+	unknown := json.RawMessage(`{"astronomer.io/agent-privilege-profile":"root"}`)
+	if got := agentPrivilegeProfileFromAnnotations(unknown); got != agenttemplate.PrivilegeProfileViewer {
+		t.Fatalf("agentPrivilegeProfileFromAnnotations(unknown) = %q, want %q (fail closed)", got, agenttemplate.PrivilegeProfileViewer)
 	}
 }
 
@@ -1180,23 +1181,26 @@ func TestAgentPrivilegeProfileFromAnnotationsPreservesExplicit(t *testing.T) {
 	}
 }
 
-// TestAgentPrivilegeProfileSelfTestFlagsExplicitAdmin verifies the fleet
-// self-test does not silently pass a cluster-admin agent and surfaces it as an
-// elevated (non-passing) finding. A default (empty) profile now resolves to
-// viewer and passes, so admin posture is only reached when explicitly chosen.
-func TestAgentPrivilegeProfileSelfTestFlagsExplicitAdmin(t *testing.T) {
-	adminCheck := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: agenttemplate.PrivilegeProfileAdmin})
-	if adminCheck.Status == "passed" {
-		t.Fatalf("admin privilege profile must not be a passing self-test, got %q: %s", adminCheck.Status, adminCheck.Message)
+// TestAgentPrivilegeProfileSelfTestPasses verifies the fleet self-test treats
+// the supported profiles — including the default full-management (admin) — as
+// passing, and only flags genuinely uncertain postures (custom RBAC). Admin is
+// the default (Rancher-style); the per-user gate is the management-plane RBAC,
+// so it is not a finding.
+func TestAgentPrivilegeProfileSelfTestPasses(t *testing.T) {
+	for _, profile := range []string{
+		agenttemplate.PrivilegeProfileAdmin,
+		agenttemplate.PrivilegeProfileViewer,
+		agenttemplate.PrivilegeProfileOperator,
+		"", // unspecified -> admin default
+	} {
+		c := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: profile})
+		if c.Status != "passed" {
+			t.Fatalf("profile %q should pass self-test, got %q: %s", profile, c.Status, c.Message)
+		}
 	}
-
-	defaultCheck := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: ""})
-	if defaultCheck.Status != "passed" {
-		t.Fatalf("default (empty) profile should resolve to viewer and pass, got %q: %s", defaultCheck.Status, defaultCheck.Message)
-	}
-
-	viewerCheck := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: agenttemplate.PrivilegeProfileViewer})
-	if viewerCheck.Status != "passed" {
-		t.Fatalf("viewer profile should pass, got %q: %s", viewerCheck.Status, viewerCheck.Message)
+	// Custom RBAC still warns (needs live verification).
+	custom := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: agenttemplate.PrivilegeProfileCustom})
+	if custom.Status != "warning" {
+		t.Fatalf("custom profile should warn, got %q: %s", custom.Status, custom.Message)
 	}
 }
