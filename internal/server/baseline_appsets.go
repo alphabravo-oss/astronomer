@@ -45,11 +45,13 @@ type baselineApplicationSetComponent struct {
 	ValuesYAML         string
 	SyncPhase          baselineSyncPhase
 	// DefaultEnabled installs this component on every adopted cluster unless an
-	// operator explicitly disables it. Opinionated infrastructure that collides
-	// with the user's own choices — ingress controller, cert-manager, policy
-	// engine — ships OPT-IN (DefaultEnabled=false): we never assume ownership of
-	// a cluster's ingress/TLS/policy. The always-on set is non-conflicting
-	// observability + security agents only.
+	// operator explicitly disables it. Only the two metrics exporters
+	// (kube-state-metrics, prometheus-node-exporter) ship on by default — they
+	// power the platform's metrics dashboards and conflict with nothing.
+	// Everything else (trivy, fluent-bit, ingress-nginx, cert-manager,
+	// gatekeeper) is OPT-IN via the per-component setting argocd.baseline.<slug>:
+	// the kube-API agent already serves resources/logs/exec tool-free, so these
+	// are value-adds the operator turns on from the cluster Tools view.
 	DefaultEnabled bool
 }
 
@@ -112,7 +114,6 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		ApplicationSetName: "astronomer-baseline-trivy",
 		ApplicationPrefix:  "astronomer-trivy",
 		Slug:               "trivy-operator",
-		DefaultEnabled:     true,
 		ChartName:          "trivy-operator",
 		RepoURL:            "https://aquasecurity.github.io/helm-charts",
 		Namespace:          "trivy-system",
@@ -145,7 +146,6 @@ var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent
 		ApplicationSetName: "astronomer-baseline-fluent-bit",
 		ApplicationPrefix:  "astronomer-fluent-bit",
 		Slug:               "fluent-bit",
-		DefaultEnabled:     true,
 		ChartName:          "fluent-bit",
 		RepoURL:            "https://fluent.github.io/helm-charts",
 		Namespace:          "logging",

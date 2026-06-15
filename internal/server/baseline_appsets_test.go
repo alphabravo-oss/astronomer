@@ -49,12 +49,14 @@ func TestEnsureBaselineApplicationSetsCreatesOwnedClusterGeneratorSets(t *testin
 				IsEnabled: true,
 			},
 		},
-		// Opinionated infra is opt-in; enable all three so this test exercises
-		// the full 7-component render (labels, generators, sync waves).
+		// Only ksm + node-exporter are default-on; enable the other five so this
+		// test exercises the full 7-component render (labels, generators, waves).
 		settings: map[string]json.RawMessage{
-			platformSettingBaselineComponentPrefix + "ingress-nginx": json.RawMessage(`true`),
-			platformSettingBaselineComponentPrefix + "cert-manager":  json.RawMessage(`true`),
-			platformSettingBaselineComponentPrefix + "gatekeeper":    json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "trivy-operator": json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "fluent-bit":     json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "ingress-nginx":  json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "cert-manager":   json.RawMessage(`true`),
+			platformSettingBaselineComponentPrefix + "gatekeeper":     json.RawMessage(`true`),
 		},
 	}
 
@@ -144,9 +146,11 @@ func TestBaselineApplicationSetsUseSyncWaveStandards(t *testing.T) {
 		argocdApplicationSetGVR: "ApplicationSetList",
 	})
 	q := baselineAppSetQuerierStub{settings: map[string]json.RawMessage{
-		platformSettingBaselineComponentPrefix + "ingress-nginx": json.RawMessage(`true`),
-		platformSettingBaselineComponentPrefix + "cert-manager":  json.RawMessage(`true`),
-		platformSettingBaselineComponentPrefix + "gatekeeper":    json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "trivy-operator": json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "fluent-bit":     json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "ingress-nginx":  json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "cert-manager":   json.RawMessage(`true`),
+		platformSettingBaselineComponentPrefix + "gatekeeper":     json.RawMessage(`true`),
 	}}
 	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
 		t.Fatalf("ensureBaselineApplicationSets: %v", err)
@@ -238,33 +242,33 @@ func TestBaselineDefaultsExcludeOpinionatedInfra(t *testing.T) {
 		return got
 	}
 
-	// No settings → only the 4 non-conflicting observability/security agents.
+	// No settings → only the two metrics exporters ship by default.
 	dyn := newDyn()
 	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
 		t.Fatalf("ensureBaselineApplicationSets: %v", err)
 	}
 	got := names(dyn)
-	for _, on := range []string{"astronomer-baseline-trivy", "astronomer-baseline-kube-state-metrics", "astronomer-baseline-node-exporter", "astronomer-baseline-fluent-bit"} {
+	for _, on := range []string{"astronomer-baseline-kube-state-metrics", "astronomer-baseline-node-exporter"} {
 		if !got[on] {
 			t.Errorf("default-on component %s missing", on)
 		}
 	}
-	for _, off := range []string{"astronomer-baseline-ingress-nginx", "astronomer-baseline-cert-manager", "astronomer-baseline-gatekeeper"} {
+	for _, off := range []string{"astronomer-baseline-trivy", "astronomer-baseline-fluent-bit", "astronomer-baseline-ingress-nginx", "astronomer-baseline-cert-manager", "astronomer-baseline-gatekeeper"} {
 		if got[off] {
-			t.Errorf("opinionated component %s should be opt-in, got created", off)
+			t.Errorf("opt-in component %s should not ship by default, got created", off)
 		}
 	}
 
-	// Explicit false disables a default-on agent.
+	// Explicit false disables a default-on exporter.
 	dyn = newDyn()
 	q := baselineAppSetQuerierStub{settings: map[string]json.RawMessage{
-		platformSettingBaselineComponentPrefix + "trivy-operator": json.RawMessage(`false`),
+		platformSettingBaselineComponentPrefix + "kube-state-metrics": json.RawMessage(`false`),
 	}}
 	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
 		t.Fatalf("ensureBaselineApplicationSets: %v", err)
 	}
-	if names(dyn)["astronomer-baseline-trivy"] {
-		t.Error("trivy disabled via setting should not be created")
+	if names(dyn)["astronomer-baseline-kube-state-metrics"] {
+		t.Error("kube-state-metrics disabled via setting should not be created")
 	}
 }
 
