@@ -360,31 +360,52 @@ can do," which today defaults to cluster‑admin.
 
 ## 13. Execution checklist
 
+> **ALL DONE.** Commits: `54cc6f1` (GATE 0) and `0b8c679` (P1/P2/P3 + 2 adversarial follow‑ups).
+> Verified: `go build ./...`, route‑security gate, full security test packages, Helm renders (both
+> `frontend.enabled` values). **Open caveats** below the list.
+
 ```
-P0  (close the exploitable / fail‑open set)            ── GATE 0
-  [ ] A1  Write‑scope fallthrough on typed mutation routes            (H1)
-  [ ] A2  Exec/logs/shell + ticket issuance require exec/write scope  (H2) ⭐
-  [ ] B1  Default agent profile → viewer; no silent admin             (C2) ⭐
-  [ ] C1  Internal /internal/* unreachable from external ingress      (H4) ⭐
+P0  (close the exploitable / fail‑open set)            ── GATE 0 ✅
+  [x] A1  Write‑scope fallthrough on typed mutation routes            (H1)
+  [x] A2  Exec/logs/shell + ticket issuance require exec/write scope  (H2) ⭐
+  [x] B1  Default agent profile → viewer; no silent admin             (C2) ⭐
+  [x] C1  Internal /internal/* unreachable from external ingress      (H4) ⭐
 
-P1  (shrink the ceiling + boundary + mapping)          ── GATE 1
-  [ ] D1  Strip X‑Remote‑*; allowlist; one shared helper              (H3,M1)
-  [ ] E1  Break‑glass shell defaults to read‑only                     (H5)
-  [ ] B2  operator profile drops RBAC‑write by default                (H6)
-  [ ] F1  exec/attach/portforward always → pods:exec                  (M2)
-  [ ] B3  Scope management agent ClusterRole + values knob            (C1)
-  [ ] E3  Cluster‑admin posture report (C2 rollout aid)
+P1  (shrink the ceiling + boundary + mapping)          ── GATE 1 ✅
+  [x] D1  Strip X‑Remote‑*; allowlist; one shared helper (pkg/proxyhdr) (H3,M1)
+  [x] E1  Break‑glass shell defaults to read‑only                     (H5)
+  [x] B2  operator profile drops RBAC‑write by default                (H6)
+  [x] F1  exec/attach/portforward always → pods:exec                  (M2)
+  [x] B3  Scope management agent ClusterRole + values knob            (C1)  ⚠ see caveat
+  [x] E3  Cluster‑admin posture report (admin endpoint)               (C2 aid)
 
-P2  (defense‑in‑depth / DoS / audit)                   ── GATE 2
-  [ ] F2  CRD / non‑resource RBAC policy decided + enforced           (M3)
-  [ ] G1  Per‑cluster rate limits                                     (M5)
-  [ ] C2t Audit the internal door                                    (M6)
-  [ ] F3  Eviction classified as delete                              (L1)
-  [ ] E2  Back‑pressure shell recording; close frame contract        (L3)
+P2  (defense‑in‑depth / DoS / audit)                   ── GATE 2 ✅
+  [x] F2  CRD → custom_resources verb; non‑resource URLs read‑only    (M3)  ⚠ role-template follow-up
+  [x] G1  Per‑cluster rate limits                                     (M5)
+  [x] C2t Audit the internal door (user‑attributed)                  (M6)
+  [x] F3  Eviction classified as pods:delete                         (L1)
+  [x] E2  Back‑pressure shell recording; closed frame contract        (L3)
 
-P3
-  [ ] H1t v2 remoteproxy transport verifies TLS before prod          (M4)
+P3 ✅
+  [x] H1t v2 remoteproxy transport verifies TLS (insecure ≠ prod)     (M4)
+
+Plus two adversarial follow-ups landed:
+  [x] NEW‑1  write‑scope backstop extended to Catalog + Monitoring helm routes
+             (added requireAuth to previously‑unauthed monitoring mutating routes)
+  [x] NEW‑2  dedupe normalizeAgentPrivilegeProfile (health.go) → fail‑closed canonical
 ```
+
+### Open caveats / follow‑ups (not blockers, but track before/after deploy)
+- **B3 (management ClusterRole) is conservative but NOT platform‑e2e‑confirmed.** The wildcard was
+  replaced with an enumerated allowlist derived from codebase references; a full install/register/proxy
+  e2e couldn't run in the sandbox. **On the next k3s deploy, watch for the management agent missing a
+  permission** (RBAC `forbidden` errors). Mitigation in place: a Helm values override to extend the role.
+- **F2 role‑template follow‑up:** CRD access no longer rides on the `clusters` verb — add
+  `custom_resources` read/list to the viewer role template and write to operator/admin, otherwise CRD
+  browsing breaks for existing roles. (Directly feeds the Cluster‑Explorer **WS‑E** CRD explorer.)
+- **Monitoring read routes** (`/settings/monitoring/{thanos,alertmanager}/*` status/preview) were
+  previously **unauthenticated**; NEW‑1 added auth to the *mutating* verbs but left reads open — worth a
+  separate decision on whether those reads should require auth.
 
 ---
 
