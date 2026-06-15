@@ -1918,6 +1918,40 @@ func TestArgoCDInternalK8sProxyRequiresClusterScopedToken(t *testing.T) {
 	}
 }
 
+func TestArgoCDInternalK8sProxyAllowsUnauthenticatedOpenAPI(t *testing.T) {
+	clusterID := uuid.New()
+	tokens := &routeSecurityArgoTokenQuerier{
+		tokenHash: auth.HashArgoCDClusterProxyToken(auth.ArgoCDClusterProxyTokenPrefix + "tok"),
+		clusterID: clusterID,
+	}
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+		ArgoCDProxyTokens: tokens,
+	})
+	base := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
+
+	// GET /openapi/* without a token reaches the proxy handler (503 — no tunnel),
+	// proving the schema fetch ArgoCD makes anonymously is no longer 401'd.
+	openapiRec := httptest.NewRecorder()
+	router.ServeHTTP(openapiRec, httptest.NewRequest(http.MethodGet, base+"/openapi/v2", nil))
+	if openapiRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("openapi GET status = %d, want %d (handler reached); body=%s", openapiRec.Code, http.StatusServiceUnavailable, openapiRec.Body.String())
+	}
+
+	// The bypass is scoped: a data path without a token still 401s, and a
+	// mutating method to /openapi still requires the token.
+	dataRec := httptest.NewRecorder()
+	router.ServeHTTP(dataRec, httptest.NewRequest(http.MethodGet, base+"/api/v1/secrets", nil))
+	if dataRec.Code != http.StatusUnauthorized {
+		t.Fatalf("data GET status = %d, want %d", dataRec.Code, http.StatusUnauthorized)
+	}
+	postRec := httptest.NewRecorder()
+	router.ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, base+"/openapi/v2", nil))
+	if postRec.Code != http.StatusUnauthorized {
+		t.Fatalf("openapi POST status = %d, want %d", postRec.Code, http.StatusUnauthorized)
+	}
+}
+
 func TestArgoCDInternalK8sProxyMutationsAreAudited(t *testing.T) {
 	clusterID := uuid.New()
 	token := auth.ArgoCDClusterProxyTokenPrefix + "audit-test-token"

@@ -1492,6 +1492,17 @@ func requireArgoCDClusterProxyToken(queries ArgoCDClusterProxyTokenQuerier) func
 				writeRouteAuthError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
 				return
 			}
+			// ArgoCD fetches the cluster's OpenAPI schema (for CreateNamespace,
+			// diff, validation) using kubectl's discovery client, which treats
+			// /openapi as anonymous and omits our cluster proxy token — so the
+			// fetch would 401 and every sync fails. /openapi is read-only schema
+			// (no resource data) and the route is already network-restricted to
+			// argocd-server, so we let unauthenticated GET /openapi/* through;
+			// routing uses the path cluster_id, not the token.
+			if isArgoCDProxyPublicDiscovery(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			token, ok := bearerToken(r)
 			if !ok || !strings.HasPrefix(token, iauth.ArgoCDClusterProxyTokenPrefix) {
 				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Valid ArgoCD cluster proxy token is required")
@@ -1534,6 +1545,18 @@ func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.Toke
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// isArgoCDProxyPublicDiscovery reports whether r is a read-only request for the
+// cluster's OpenAPI schema on the internal-argocd k8s proxy. Only GET/HEAD to
+// the /k8s/openapi/ subtree qualifies — that endpoint returns API schema, never
+// resource data, so it's safe to serve without the per-cluster proxy token that
+// ArgoCD's discovery client omits.
+func isArgoCDProxyPublicDiscovery(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	return strings.Contains(r.URL.Path, "/k8s/openapi/")
 }
 
 func bearerToken(r *http.Request) (string, bool) {
