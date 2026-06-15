@@ -1548,15 +1548,42 @@ func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.Toke
 }
 
 // isArgoCDProxyPublicDiscovery reports whether r is a read-only request for the
-// cluster's OpenAPI schema on the internal-argocd k8s proxy. Only GET/HEAD to
-// the /k8s/openapi/ subtree qualifies — that endpoint returns API schema, never
-// resource data, so it's safe to serve without the per-cluster proxy token that
-// ArgoCD's discovery client omits.
+// cluster's API discovery or OpenAPI schema on the internal-argocd k8s proxy.
+// ArgoCD's apply path (gitops-engine kubectl) fetches these to build its REST
+// mapper and validate manifests, and makes those sub-requests WITHOUT our
+// per-cluster proxy token (kubectl treats discovery/schema as anonymous) — so
+// they would 401 and every sync fails. These endpoints return only the API
+// surface (resource kinds, versions, schema), never resource data, and the
+// route is already network-restricted to argocd-server, so we serve them
+// without a token. Routing uses the path cluster_id, not the token. Resource
+// data paths and all mutating methods still require the token.
+//
+// Discovery is distinguished from data by URL shape (GET-only):
+//   - /openapi/*, /version            → schema / version
+//   - /api, /api/v1                   → core group + v1 discovery (data is /api/v1/<resource…>, ≥3 segs)
+//   - /apis, /apis/<g>, /apis/<g>/<v> → group discovery (data is /apis/<g>/<v>/<resource…>, ≥4 segs)
 func isArgoCDProxyPublicDiscovery(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	return strings.Contains(r.URL.Path, "/k8s/openapi/")
+	idx := strings.Index(r.URL.Path, "/k8s/")
+	if idx < 0 {
+		return false
+	}
+	p := strings.Trim(r.URL.Path[idx+len("/k8s/"):], "/")
+	if p == "" {
+		return false
+	}
+	segs := strings.Split(p, "/")
+	switch segs[0] {
+	case "openapi", "version":
+		return true
+	case "api":
+		return len(segs) <= 2
+	case "apis":
+		return len(segs) <= 3
+	}
+	return false
 }
 
 func bearerToken(r *http.Request) (string, bool) {
