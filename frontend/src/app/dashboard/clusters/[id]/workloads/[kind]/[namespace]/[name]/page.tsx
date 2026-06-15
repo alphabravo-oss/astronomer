@@ -146,7 +146,7 @@ export default function WorkloadDetailPage() {
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold text-foreground tracking-tight">{workload.name}</h1>
+              <h1 className="text-xl font-semibold text-foreground tracking-tight">{workload.name}</h1>
               <StatusBadge status={workload.status} size="lg" />
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -188,16 +188,16 @@ export default function WorkloadDetailPage() {
 
       {/* Tabs */}
       <div className="border-b border-border">
-        <nav className="flex gap-6">
+        <nav className="flex gap-0 -mb-px">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                'pb-3 text-sm font-medium border-b-2 transition-colors',
+                'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
                 activeTab === tab.key
                   ? 'border-foreground text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
               )}
             >
               {tab.label}

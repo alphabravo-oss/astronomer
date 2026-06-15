@@ -531,7 +531,7 @@ export default function NodeDetailPage() {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowYaml(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-sm font-medium
               border border-border text-foreground hover:bg-accent transition-colors"
           >
             <Code className="h-3.5 w-3.5" /> YAML
@@ -543,7 +543,7 @@ export default function NodeDetailPage() {
               disabledReason={nodeUpdateBlockedReason}
               size="sm"
               icon={<ShieldCheck className="h-3.5 w-3.5" />}
-              className="border-status-success/30 text-status-success hover:bg-status-success/10"
+              className="gap-1.5 text-sm border-status-success/30 text-status-success hover:bg-status-success/10"
             >
               Uncordon
             </ActionButton>
@@ -554,7 +554,7 @@ export default function NodeDetailPage() {
               disabledReason={nodeUpdateBlockedReason}
               size="sm"
               icon={<ShieldBan className="h-3.5 w-3.5" />}
-              className="border-status-warning/30 text-status-warning hover:bg-status-warning/10"
+              className="gap-1.5 text-sm border-status-warning/30 text-status-warning hover:bg-status-warning/10"
             >
               Cordon
             </ActionButton>
@@ -565,7 +565,7 @@ export default function NodeDetailPage() {
             disabledReason={nodeManageBlockedReason}
             size="sm"
             icon={<Unplug className="h-3.5 w-3.5" />}
-            className="border-status-error/30 text-status-error hover:bg-status-error/10"
+            className="gap-1.5 text-sm border-status-error/30 text-status-error hover:bg-status-error/10"
           >
             Drain
           </ActionButton>

@@ -215,7 +215,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 
 | Scope |Call sites |Examples |
 | --- |--- |--- |
-| `agent_lifecycle` |1 |[`internal/handler/agent_fleet.go:766`](internal/handler/agent_fleet.go:766) |
+| `agent_lifecycle` |1 |[`internal/handler/agent_fleet.go:769`](internal/handler/agent_fleet.go:769) |
 | `argocd` |1 |[`internal/handler/argocd.go:597`](internal/handler/argocd.go:597) |
 | `catalog` |4 |[`internal/handler/catalog.go:939`](internal/handler/catalog.go:939)<br>[`internal/handler/catalog.go:999`](internal/handler/catalog.go:999)<br>[`internal/handler/catalog.go:1093`](internal/handler/catalog.go:1093)<br>[`internal/handler/catalog.go:1146`](internal/handler/catalog.go:1146) |
 | `deferred` |1 |[`internal/handler/maintenance_gate.go:137`](internal/handler/maintenance_gate.go:137) |

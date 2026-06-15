@@ -384,6 +384,16 @@ function GenericOverview({ obj, resourceType, showStatus }: { obj?: K8sObject; r
     return <p className="text-sm text-muted-foreground">No data.</p>;
   }
 
+  // Top-level spec scalars — surfaces .spec for arbitrary CRs / unmapped kinds
+  // that have no tailored overview. Skip nested objects/arrays and the fields
+  // that kind overviews / actions already handle (replicas/paused/suspend).
+  const SPEC_SKIP = new Set(['replicas', 'paused', 'suspend']);
+  const specEntries = showStatus
+    ? (Object.entries(asRecord(obj?.spec))
+        .filter(([k, v]) => !SPEC_SKIP.has(k) && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'))
+        .map(([k, v]) => [k, String(v)] as [string, string]))
+    : [];
+
   // Top-level status scalars — surfaces .status for arbitrary CRs / unmapped
   // kinds that have no tailored overview. Conditions live in their own tab.
   const statusEntries = showStatus
@@ -445,6 +455,10 @@ function GenericOverview({ obj, resourceType, showStatus }: { obj?: K8sObject; r
       )}
 
       {/* Conditions moved to a dedicated tab (ConditionsTab) — Rancher-style. */}
+
+      {specEntries.length > 0 && (
+        <Section title="Spec"><KeyValueTable entries={specEntries} /></Section>
+      )}
 
       {statusEntries.length > 0 && (
         <Section title="Status"><KeyValueTable entries={statusEntries} /></Section>

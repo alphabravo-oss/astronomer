@@ -257,6 +257,24 @@ describe('ResourceOverview kind-specific branches', () => {
     expect(screen.getByText('observedGeneration')).toBeInTheDocument();
   });
 
+  it('surfaces top-level spec scalars for an unmapped/custom kind', () => {
+    render(
+      <ResourceOverview
+        resourceType="widgets"
+        obj={{
+          metadata: { name: 'w1', namespace: 'default' },
+          spec: { size: 'large', replicas: 5, template: { nested: true } },
+        } as never}
+      />
+    );
+    // Generic Spec section renders scalar spec fields, skipping nested objects
+    // and the replicas/paused/suspend fields kind overviews handle.
+    expect(screen.getByText('Spec')).toBeInTheDocument();
+    expect(screen.getByText('size')).toBeInTheDocument();
+    expect(screen.getByText('large')).toBeInTheDocument();
+    expect(screen.queryByText('replicas')).not.toBeInTheDocument();
+  });
+
   it('renders a Gateway with class and listeners', () => {
     render(
       <ResourceOverview
