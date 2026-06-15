@@ -25,7 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { useMemo, useState } from 'react';
 import { Link } from '@/lib/link';
-import { useParams } from '@/lib/navigation';
+import { useParams, useRouter } from '@/lib/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   Boxes,
@@ -322,10 +322,15 @@ export default function WorkloadsPage() {
 // ---------------------------------------------------------------------
 
 function WorkloadRow({ clusterId, workload }: { clusterId: string; workload: Workload }) {
+  const router = useRouter();
   const status = computeStatus(workload);
   const kindMeta = KIND_META[workload.kind];
+  const href = `/dashboard/clusters/${clusterId}/workloads/${kindMeta.urlSegment}/${workload.item.metadata.namespace}/${workload.item.metadata.name}`;
+  // ponytail: this list page is un-gated today (no permission hooks; the detail
+  // route does its own read-gating). Make the whole row drill in for parity
+  // with the resource tables; the name stays a real <Link> for open-in-new-tab.
   return (
-    <TableRow className="hover:bg-muted/30">
+    <TableRow className="hover:bg-muted/30 cursor-pointer" onClick={() => router.push(href)}>
       <TableCell className="px-3 py-2">
         <span className="inline-flex items-center gap-1.5 text-foreground">
           <kindMeta.icon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -334,7 +339,8 @@ function WorkloadRow({ clusterId, workload }: { clusterId: string; workload: Wor
       </TableCell>
       <TableCell className="px-3 py-2">
         <Link
-          href={`/dashboard/clusters/${clusterId}/workloads/${kindMeta.urlSegment}/${workload.item.metadata.namespace}/${workload.item.metadata.name}`}
+          href={href}
+          onClick={(e) => e.stopPropagation()}
           className="text-foreground hover:underline"
         >
           {workload.item.metadata.name}

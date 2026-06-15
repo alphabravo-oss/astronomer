@@ -1965,6 +1965,17 @@ export function useK8sGetYaml(clusterId: string, path: string, enabled = true) {
   });
 }
 
+// Single object as JSON (mirrors useK8sGetYaml). ponytail: reuse existing k8sQueryKeys.resource.
+export function useK8sResource(clusterId: string, path: string, enabled = true) {
+  return useQuery({
+    queryKey: k8sQueryKeys.resource(clusterId, path),
+    queryFn: () => apiClient.k8sGet(clusterId, path),
+    enabled: !!clusterId && !!path && enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useK8sDelete() {
   const queryClient = useQueryClient();
   return useMutation({

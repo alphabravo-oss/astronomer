@@ -48,7 +48,7 @@ import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
-import { k8sResourcePath } from '@/lib/k8s-paths';
+import { k8sResourcePath, detailHref } from '@/lib/k8s-paths';
 import { usePermissionDecision } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -77,6 +77,71 @@ import {
   Code, Pencil, ShieldBan, ShieldCheck, Unplug, Plus,
 } from 'lucide-react';
 import { toastApiError, toastError, toastSuccess, toastWarning } from '@/lib/toast';
+
+/** Bespoke workload detail route (workloads keep their own detail page, not the generic one). */
+function workloadDetailHref(clusterId: string, kind: string, namespace: string, name: string): string {
+  return `/dashboard/clusters/${clusterId}/workloads/${kind.toLowerCase()}/${namespace}/${name}`;
+}
+
+// ── Drill-down helpers (GATE A) ──
+//
+// Tiny shared pieces so every resource table reads as clickable: a name cell
+// rendered as a real <Link> (supports open-in-new-tab) and a wrapper that stops
+// row-click propagation around per-row action controls.
+
+/** A visible name link into the resource detail route; clicking it must not also fire the row click. */
+function NameLink({ clusterId, resourceType, namespace, name }: {
+  clusterId: string; resourceType: string; namespace?: string; name: string;
+}) {
+  return (
+    <Link
+      href={detailHref(clusterId, resourceType, namespace, name)}
+      onClick={(e) => e.stopPropagation()}
+      className="font-medium text-foreground font-mono text-xs hover:underline"
+    >
+      {name}
+    </Link>
+  );
+}
+
+/** Wrap per-row action controls so clicking them doesn't trigger the row drill-down. */
+function StopRowClick({ children }: { children: React.ReactNode }) {
+  return <div onClick={(e) => e.stopPropagation()}>{children}</div>;
+}
+
+/** A "Name" column whose cell links into the detail route, for any row carrying name/namespace. */
+function nameColumn<T extends { name: string; namespace?: string }>(
+  clusterId: string,
+  resourceType: string,
+): Column<T> {
+  return {
+    key: 'name',
+    header: 'Name',
+    accessor: (row) => (
+      <NameLink clusterId={clusterId} resourceType={resourceType} namespace={row.namespace} name={row.name} />
+    ),
+    sortAccessor: (row) => row.name,
+  };
+}
+
+/**
+ * Build a read-gated onRowClick that drills into the resource detail route.
+ * Mirrors the existing nodes onRowClick.
+ */
+function makeRowClick<T extends { name: string; namespace?: string }>(
+  router: ReturnType<typeof useRouter>,
+  clusterId: string,
+  resourceType: string,
+  read: PermissionDecision,
+) {
+  return (row: T) => {
+    if (!read.allowed) {
+      toastPermissionDenied(read);
+      return;
+    }
+    router.push(detailHref(clusterId, resourceType, row.namespace, row.name));
+  };
+}
 
 // ── Column Definitions ──
 
@@ -972,6 +1037,7 @@ function NodesTable({ clusterId }: { clusterId: string }) {
 
 function NamespacesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNamespaces(clusterId);
+  const router = useRouter();
   const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, 'namespaces');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
@@ -1001,12 +1067,13 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
   };
 
   const columns = useMemo<Column<Namespace>[]>(() => [
-    ...nsColumns,
+    nameColumn<Namespace>(clusterId, 'namespaces'),
+    ...nsColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -1032,12 +1099,12 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
           ]}
-        />
+        /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.read, permissions.update]);
+  ], [clusterId, permissions.read, permissions.update]);
 
   return (
     <>
@@ -1056,6 +1123,7 @@ function NamespacesTable({ clusterId }: { clusterId: string }) {
       </div>
 
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        onRowClick={makeRowClick(router, clusterId, 'namespaces', permissions.read)}
         searchPlaceholder="Search namespaces..." loading={isLoading} emptyMessage="No namespaces found" />
 
       {yamlTarget && (
@@ -1267,6 +1335,7 @@ function PodsTable({ clusterId }: { clusterId: string }) {
 
 function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: string; title: string }) {
   const { data, isLoading } = useWorkloads(clusterId);
+  const router = useRouter();
   const filtered = (data?.data || []).filter((w) => w.kind === kind);
   const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
@@ -1325,7 +1394,8 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
       header: 'Name',
       accessor: (row) => (
         <Link
-          href={`/dashboard/clusters/${clusterId}/workloads/${row.kind.toLowerCase()}/${row.namespace}/${row.name}`}
+          href={workloadDetailHref(clusterId, row.kind, row.namespace, row.name)}
+          onClick={(e) => e.stopPropagation()}
           className="font-medium text-foreground font-mono text-xs hover:underline"
         >
           {row.name}
@@ -1415,7 +1485,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
           disabledReason: permissionDeniedReason(permissions.delete),
           separator: true,
         });
-        return <ActionMenu items={items} />;
+        return <StopRowClick><ActionMenu items={items} /></StopRowClick>;
       },
       sortable: false,
       align: 'center',
@@ -1449,6 +1519,13 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
         </ActionButton>
       </div>
       <DataTable data={filtered} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={(row) => {
+          if (!permissions.read.allowed) {
+            toastPermissionDenied(permissions.read);
+            return;
+          }
+          router.push(workloadDetailHref(clusterId, row.kind, row.namespace, row.name));
+        }}
         searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
 
       <ScaleDialog
@@ -1526,6 +1603,7 @@ function WorkloadsTable({ clusterId, kind, title }: { clusterId: string; kind: s
 
 function ServicesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useServices(clusterId);
+  const router = useRouter();
   const deleteService = useDeleteService();
   const permissions = useClusterResourcePermissions(clusterId, 'services');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
@@ -1533,12 +1611,13 @@ function ServicesTable({ clusterId }: { clusterId: string }) {
   const [showCreate, setShowCreate] = useState(false);
 
   const columns = useMemo<Column<K8sService>[]>(() => [
-    ...serviceColumns,
+    nameColumn<K8sService>(clusterId, 'services'),
+    ...serviceColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -1564,12 +1643,12 @@ function ServicesTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
           ]}
-        />
+        /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.delete, permissions.read, permissions.update]);
+  ], [clusterId, permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
@@ -1586,6 +1665,7 @@ function ServicesTable({ clusterId }: { clusterId: string }) {
         </ActionButton>
       </div>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, 'services', permissions.read)}
         searchPlaceholder="Search services..." loading={isLoading} emptyMessage="No services found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -1611,6 +1691,7 @@ function ServicesTable({ clusterId }: { clusterId: string }) {
 
 function IngressesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useIngresses(clusterId);
+  const router = useRouter();
   const deleteIngress = useDeleteIngress();
   const permissions = useClusterResourcePermissions(clusterId, 'ingresses');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
@@ -1618,12 +1699,13 @@ function IngressesTable({ clusterId }: { clusterId: string }) {
   const [showCreate, setShowCreate] = useState(false);
 
   const columns = useMemo<Column<Ingress>[]>(() => [
-    ...ingressColumns,
+    nameColumn<Ingress>(clusterId, 'ingresses'),
+    ...ingressColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -1649,12 +1731,12 @@ function IngressesTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
           ]}
-        />
+        /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.delete, permissions.read, permissions.update]);
+  ], [clusterId, permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
@@ -1671,6 +1753,7 @@ function IngressesTable({ clusterId }: { clusterId: string }) {
         </ActionButton>
       </div>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, 'ingresses', permissions.read)}
         searchPlaceholder="Search ingresses..." loading={isLoading} emptyMessage="No ingresses found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -1696,6 +1779,7 @@ function IngressesTable({ clusterId }: { clusterId: string }) {
 
 function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useNetworkPolicies(clusterId);
+  const router = useRouter();
   const deleteNp = useDeleteNetworkPolicy();
   const permissions = useClusterResourcePermissions(clusterId, 'networkpolicies');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
@@ -1703,12 +1787,13 @@ function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
   const [showCreate, setShowCreate] = useState(false);
 
   const columns = useMemo<Column<NetworkPolicy>[]>(() => [
-    ...networkPolicyColumns,
+    nameColumn<NetworkPolicy>(clusterId, 'networkpolicies'),
+    ...networkPolicyColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -1734,12 +1819,12 @@ function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
           ]}
-        />
+        /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.delete, permissions.read, permissions.update]);
+  ], [clusterId, permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
@@ -1756,6 +1841,7 @@ function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
         </ActionButton>
       </div>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, 'networkpolicies', permissions.read)}
         searchPlaceholder="Search network policies..." loading={isLoading} emptyMessage="No network policies found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2003,45 +2089,49 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   const path = k8sResourcePath(resourceType, row.name, row.namespace);
   const title = `${kindLabel}: ${row.namespace}/${row.name}`;
   return (
-    <ActionMenu
-      items={[
-        {
-          label: 'View YAML',
-          icon: <Code className="h-3.5 w-3.5" />,
-          onClick: () => onView({ path, title }),
-          disabled: !permissions.read.allowed,
-          disabledReason: permissionDeniedReason(permissions.read),
-        },
-        {
-          label: 'Edit YAML',
-          icon: <Pencil className="h-3.5 w-3.5" />,
-          onClick: () => onView({ path, title }),
-          disabled: !permissions.update.allowed,
-          disabledReason: permissionDeniedReason(permissions.update),
-        },
-        {
-          label: 'Delete',
-          icon: <Trash2 className="h-3.5 w-3.5" />,
-          onClick: () => onDelete(row),
-          variant: 'destructive',
-          disabled: !permissions.delete.allowed,
-          disabledReason: permissionDeniedReason(permissions.delete),
-          separator: true,
-        },
-      ]}
-    />
+    <StopRowClick>
+      <ActionMenu
+        items={[
+          {
+            label: 'View YAML',
+            icon: <Code className="h-3.5 w-3.5" />,
+            onClick: () => onView({ path, title }),
+            disabled: !permissions.read.allowed,
+            disabledReason: permissionDeniedReason(permissions.read),
+          },
+          {
+            label: 'Edit YAML',
+            icon: <Pencil className="h-3.5 w-3.5" />,
+            onClick: () => onView({ path, title }),
+            disabled: !permissions.update.allowed,
+            disabledReason: permissionDeniedReason(permissions.update),
+          },
+          {
+            label: 'Delete',
+            icon: <Trash2 className="h-3.5 w-3.5" />,
+            onClick: () => onDelete(row),
+            variant: 'destructive',
+            disabled: !permissions.delete.allowed,
+            disabledReason: permissionDeniedReason(permissions.delete),
+            separator: true,
+          },
+        ]}
+      />
+    </StopRowClick>
   );
 }
 
 function GatewaysTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useGateways(clusterId);
+  const router = useRouter();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, 'gateways');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Gateway | null>(null);
 
   const columns = useMemo<Column<Gateway>[]>(() => [
-    ...gatewayColumns,
+    nameColumn<Gateway>(clusterId, 'gateways'),
+    ...gatewayColumns.slice(1),
     {
       key: 'actions',
       header: '',
@@ -2051,11 +2141,12 @@ function GatewaysTable({ clusterId }: { clusterId: string }) {
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions]);
+  ], [clusterId, permissions]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, 'gateways', permissions.read)}
         searchPlaceholder="Search gateways..." loading={isLoading} emptyMessage="No gateways found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2094,13 +2185,15 @@ function RouteTable<T extends GatewayRoute>({
   searchPlaceholder: string;
   emptyMessage: string;
 }) {
+  const router = useRouter();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, resourceType);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<T | null>(null);
 
   const columns = useMemo<Column<T>[]>(() => [
-    ...(routeColumns as Column<T>[]),
+    nameColumn<T>(clusterId, resourceType),
+    ...(routeColumns.slice(1) as Column<T>[]),
     {
       key: 'actions',
       header: '',
@@ -2110,11 +2203,12 @@ function RouteTable<T extends GatewayRoute>({
       sortable: false,
       align: 'center' as const,
     },
-  ], [resourceType, kindLabel, permissions]);
+  ], [clusterId, resourceType, kindLabel, permissions]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, resourceType, permissions.read)}
         searchPlaceholder={searchPlaceholder} loading={isLoading} emptyMessage={emptyMessage} />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2171,13 +2265,15 @@ function UDPRoutesTable({ clusterId }: { clusterId: string }) {
 
 function GatewayClassesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useGatewayClasses(clusterId);
+  const router = useRouter();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, 'gatewayclasses');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GatewayClass | null>(null);
 
   const columns = useMemo<Column<GatewayClass>[]>(() => [
-    ...gatewayClassColumns,
+    nameColumn<GatewayClass>(clusterId, 'gatewayclasses'),
+    ...gatewayClassColumns.slice(1),
     {
       key: 'actions',
       header: '',
@@ -2185,7 +2281,7 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
         const path = k8sResourcePath('gatewayclasses', row.name);
         const title = `GatewayClass: ${row.name}`;
         return (
-          <ActionMenu
+          <StopRowClick><ActionMenu
             items={[
               {
                 label: 'View YAML',
@@ -2211,17 +2307,18 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
             ]}
-          />
+          /></StopRowClick>
         );
       },
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.delete, permissions.read, permissions.update]);
+  ], [clusterId, permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        onRowClick={makeRowClick(router, clusterId, 'gatewayclasses', permissions.read)}
         searchPlaceholder="Search GatewayClasses..." loading={isLoading} emptyMessage="No GatewayClasses found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2248,13 +2345,15 @@ function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 
 function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useReferenceGrants(clusterId);
+  const router = useRouter();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, 'referencegrants');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ReferenceGrant | null>(null);
 
   const columns = useMemo<Column<ReferenceGrant>[]>(() => [
-    ...referenceGrantColumns,
+    nameColumn<ReferenceGrant>(clusterId, 'referencegrants'),
+    ...referenceGrantColumns.slice(1),
     {
       key: 'actions',
       header: '',
@@ -2264,11 +2363,12 @@ function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions]);
+  ], [clusterId, permissions]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, 'referencegrants', permissions.read)}
         searchPlaceholder="Search ReferenceGrants..." loading={isLoading} emptyMessage="No ReferenceGrants found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2295,18 +2395,20 @@ function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
 
 function PVsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumes(clusterId);
+  const router = useRouter();
   const deletePv = useDeletePV();
   const permissions = useClusterResourcePermissions(clusterId, 'persistentvolumes');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PersistentVolume | null>(null);
 
   const columns = useMemo<Column<PersistentVolume>[]>(() => [
-    ...pvColumns,
+    nameColumn<PersistentVolume>(clusterId, 'persistentvolumes'),
+    ...pvColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -2332,16 +2434,17 @@ function PVsTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
           ]}
-        />
+        /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.delete, permissions.read, permissions.update]);
+  ], [clusterId, permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        onRowClick={makeRowClick(router, clusterId, 'persistentvolumes', permissions.read)}
         searchPlaceholder="Search persistent volumes..." loading={isLoading} emptyMessage="No persistent volumes found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2365,18 +2468,20 @@ function PVsTable({ clusterId }: { clusterId: string }) {
 
 function PVCsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumeClaims(clusterId);
+  const router = useRouter();
   const deletePvc = useDeletePVC();
   const permissions = useClusterResourcePermissions(clusterId, 'persistentvolumeclaims');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PersistentVolumeClaim | null>(null);
 
   const columns = useMemo<Column<PersistentVolumeClaim>[]>(() => [
-    ...pvcColumns,
+    nameColumn<PersistentVolumeClaim>(clusterId, 'persistentvolumeclaims'),
+    ...pvcColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -2402,16 +2507,17 @@ function PVCsTable({ clusterId }: { clusterId: string }) {
                 separator: true,
               },
           ]}
-        />
+        /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.delete, permissions.read, permissions.update]);
+  ], [clusterId, permissions.delete, permissions.read, permissions.update]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+        onRowClick={makeRowClick(router, clusterId, 'persistentvolumeclaims', permissions.read)}
         searchPlaceholder="Search PVCs..." loading={isLoading} emptyMessage="No persistent volume claims found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2435,16 +2541,31 @@ function PVCsTable({ clusterId }: { clusterId: string }) {
 
 function StorageClassesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useStorageClasses(clusterId);
+  const router = useRouter();
   const permissions = useClusterResourcePermissions(clusterId, 'storageclasses');
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
 
   const columns = useMemo<Column<StorageClass>[]>(() => [
-    ...storageClassColumns,
+    // SC name keeps its "default" badge alongside the drill-down link.
+    {
+      key: 'name',
+      header: 'Name',
+      accessor: (row) => (
+        <div className="flex items-center gap-2">
+          <NameLink clusterId={clusterId} resourceType="storageclasses" name={row.name} />
+          {row.isDefault && (
+            <span className="px-1.5 py-0.5 rounded text-2xs bg-status-info/10 text-status-info">default</span>
+          )}
+        </div>
+      ),
+      sortAccessor: (row) => row.name,
+    },
+    ...storageClassColumns.slice(1),
     {
       key: 'actions',
       header: '',
       accessor: (row) => (
-        <ActionMenu
+        <StopRowClick><ActionMenu
           items={[
               {
                 label: 'View YAML',
@@ -2454,16 +2575,17 @@ function StorageClassesTable({ clusterId }: { clusterId: string }) {
                 disabledReason: permissionDeniedReason(permissions.read),
               },
             ]}
-          />
+          /></StopRowClick>
       ),
       sortable: false,
       align: 'center' as const,
     },
-  ], [permissions.read]);
+  ], [clusterId, permissions.read]);
 
   return (
     <>
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.name}
+        onRowClick={makeRowClick(router, clusterId, 'storageclasses', permissions.read)}
         searchPlaceholder="Search storage classes..." loading={isLoading} emptyMessage="No storage classes found" />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}
@@ -2522,6 +2644,7 @@ const editableGenericTypes = new Set([
 
 function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: string; resourceType: string; title: string }) {
   const { data, isLoading } = useGenericResources(clusterId, resourceType);
+  const router = useRouter();
   const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, resourceType);
   const [yamlTarget, setYamlTarget] = useState<{ path: string; title: string } | null>(null);
@@ -2537,7 +2660,9 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
   const columns = useMemo<Column<GenericK8sResource>[]>(() => {
     if (!k8sType) return baseColumns;
     return [
-      ...baseColumns,
+      // Override the shared name cell with a drill-down link (k8sType === detailHref key).
+      nameColumn<GenericK8sResource>(clusterId, k8sType),
+      ...baseColumns.slice(1),
       {
         key: 'actions',
         header: '',
@@ -2589,13 +2714,13 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
               separator: true,
             });
           }
-          return <ActionMenu items={items} />;
+          return <StopRowClick><ActionMenu items={items} /></StopRowClick>;
         },
         sortable: false,
         align: 'center' as const,
       },
     ];
-  }, [baseColumns, k8sType, isDeletable, isEditable, permissions.delete, permissions.read, permissions.update, title]);
+  }, [clusterId, baseColumns, k8sType, isDeletable, isEditable, permissions.delete, permissions.read, permissions.update, title]);
 
   return (
     <>
@@ -2614,6 +2739,7 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
         </div>
       )}
       <DataTable data={data || []} columns={columns} keyExtractor={(r) => r.namespace ? `${r.namespace}/${r.name}` : r.name}
+        onRowClick={k8sType ? makeRowClick(router, clusterId, k8sType, permissions.read) : undefined}
         searchPlaceholder={`Search ${title.toLowerCase()}...`} loading={isLoading} emptyMessage={`No ${title.toLowerCase()} found`} />
       {yamlTarget && (
         <YamlViewDialog open={!!yamlTarget} onClose={() => setYamlTarget(null)} clusterId={clusterId}

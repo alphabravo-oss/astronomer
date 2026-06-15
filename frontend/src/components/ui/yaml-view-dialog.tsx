@@ -32,11 +32,56 @@ export function YamlViewDialog({
   editMode: initialEditMode = false,
   allowEdit = true,
 }: YamlViewDialogProps) {
+  if (!open) return null;
+
+  return (
+    <ModalShell
+      title={title}
+      onClose={onClose}
+      size="xl"
+      panelClassName="w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden"
+      bodyClassName="flex-1 min-h-0 p-0 space-y-0"
+    >
+      {/* ponytail: YamlPanel owns fetch/edit/dry-run and the View/Edit toggle; dialog is just chrome. */}
+      <YamlPanel
+        clusterId={clusterId}
+        k8sPath={k8sPath}
+        allowEdit={allowEdit}
+        editMode={initialEditMode}
+        active={open}
+      />
+    </ModalShell>
+  );
+}
+
+interface YamlPanelProps {
+  clusterId: string;
+  /** K8s API path (e.g. "api/v1/namespaces/default/pods/my-pod") */
+  k8sPath: string;
+  /** If false, hide the edit toggle (read-only) */
+  allowEdit?: boolean;
+  /** Start in edit mode */
+  editMode?: boolean;
+  /** When false, fetching is paused (used by the dialog when closed). Defaults true. */
+  active?: boolean;
+}
+
+/**
+ * Embeddable YAML view/edit/dry-run panel. Used both as the body of YamlViewDialog
+ * and as the YAML tab of ResourceDetail.
+ */
+export function YamlPanel({
+  clusterId,
+  k8sPath,
+  allowEdit = true,
+  editMode: initialEditMode = false,
+  active = true,
+}: YamlPanelProps) {
   const [editMode, setEditMode] = useState(initialEditMode);
   const [editedYaml, setEditedYaml] = useState('');
   const [preview, setPreview] = useState<YamlApplyPreview | null>(null);
 
-  const { data: yaml, isLoading, error, refetch } = useK8sGetYaml(clusterId, k8sPath, open);
+  const { data: yaml, isLoading, error, refetch } = useK8sGetYaml(clusterId, k8sPath, active);
   const applyYaml = useK8sApplyYaml();
   const dryRunYaml = useK8sDryRunYaml();
 
@@ -48,16 +93,14 @@ export function YamlViewDialog({
     }
   }, [yaml]);
 
-  // Reset state when dialog opens
+  // Reset state when (re)activated
   useEffect(() => {
-    if (open) {
+    if (active) {
       setEditMode(initialEditMode);
       setPreview(null);
       refetch();
     }
-  }, [open, initialEditMode, refetch]);
-
-  if (!open) return null;
+  }, [active, initialEditMode, refetch]);
 
   const handleSave = (yamlStr: string) => {
     if (!preview || preview.previewFor !== yamlStr) {
@@ -102,67 +145,63 @@ export function YamlViewDialog({
   };
 
   return (
-    <ModalShell
-      title={title}
-      onClose={onClose}
-      size="xl"
-      panelClassName="w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden"
-      bodyClassName="flex-1 min-h-0 p-0 space-y-0"
-      headerActions={allowEdit ? (
-        <div className="flex items-center bg-muted rounded p-0.5">
-          <button
-            onClick={() => setEditMode(false)}
-            className={cn(
-              'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-              !editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Eye className="h-3 w-3" /> View
-          </button>
-          <button
-            onClick={() => setEditMode(true)}
-            className={cn(
-              'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
-              editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Pencil className="h-3 w-3" /> Edit
-          </button>
+    <div className="flex h-full min-h-0 flex-col">
+      {allowEdit && (
+        <div className="flex shrink-0 items-center justify-end border-b border-border px-3 py-2">
+          <div className="flex items-center bg-muted rounded p-0.5">
+            <button
+              onClick={() => setEditMode(false)}
+              className={cn(
+                'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+                !editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Eye className="h-3 w-3" /> View
+            </button>
+            <button
+              onClick={() => setEditMode(true)}
+              className={cn(
+                'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+                editMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Pencil className="h-3 w-3" /> Edit
+            </button>
+          </div>
         </div>
-      ) : undefined}
-    >
+      )}
       <div className="flex-1 min-h-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-full text-sm text-status-error">
+            Failed to load YAML: {(error as Error).message}
+          </div>
+        ) : (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <YamlEditor
+                value={editMode ? editedYaml : (yaml || '')}
+                onChange={editMode ? (next) => {
+                  setEditedYaml(next);
+                  if (preview?.previewFor !== next) setPreview(null);
+                } : undefined}
+                readOnly={!editMode}
+                onDryRun={editMode ? handleDryRun : undefined}
+                onSave={editMode ? handleSave : undefined}
+                saving={applyYaml.isPending}
+                dryRunning={dryRunYaml.isPending}
+                saveBlocked={editMode && (!preview || preview.previewFor !== editedYaml)}
+                className="h-full"
+              />
             </div>
-          ) : error ? (
-            <div className="flex items-center justify-center h-full text-sm text-status-error">
-              Failed to load YAML: {(error as Error).message}
-            </div>
-          ) : (
-            <div className="flex h-full flex-col">
-              <div className="min-h-0 flex-1">
-                <YamlEditor
-                  value={editMode ? editedYaml : (yaml || '')}
-                  onChange={editMode ? (next) => {
-                    setEditedYaml(next);
-                    if (preview?.previewFor !== next) setPreview(null);
-                  } : undefined}
-                  readOnly={!editMode}
-                  onDryRun={editMode ? handleDryRun : undefined}
-                  onSave={editMode ? handleSave : undefined}
-                  saving={applyYaml.isPending}
-                  dryRunning={dryRunYaml.isPending}
-                  saveBlocked={editMode && (!preview || preview.previewFor !== editedYaml)}
-                  className="h-full"
-                />
-              </div>
-              {editMode && preview && <YamlDiffPreview preview={preview} />}
-            </div>
-          )}
+            {editMode && preview && <YamlDiffPreview preview={preview} />}
+          </div>
+        )}
       </div>
-    </ModalShell>
+    </div>
   );
 }
 

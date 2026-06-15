@@ -102,6 +102,28 @@ export function isNamespaced(resourceType: string): boolean {
 }
 
 /**
+ * Resolve (namespace, name) from a catch-all detail route slug.
+ * Namespaced kinds -> [namespace, name]; cluster-scoped -> [name].
+ */
+export function resolveDetailSlug(resourceType: string, slug: string[]): { namespace?: string; name?: string } {
+  if (isNamespaced(resourceType)) {
+    return { namespace: slug[0], name: slug[1] };
+  }
+  return { namespace: undefined, name: slug[0] };
+}
+
+/**
+ * Build the in-app URL for a resource's detail page.
+ * Namespaced -> .../[resource]/<ns>/<name>; cluster-scoped -> .../[resource]/<name>.
+ */
+export function detailHref(clusterId: string, resourceType: string, namespace: string | undefined, name: string): string {
+  const base = `/dashboard/clusters/${clusterId}/${resourceType}`;
+  return isNamespaced(resourceType) && namespace
+    ? `${base}/${namespace}/${name}`
+    : `${base}/${name}`;
+}
+
+/**
  * Get the resource definition for a type.
  */
 export function getResourceDef(resourceType: string): K8sResourceDef | undefined {
