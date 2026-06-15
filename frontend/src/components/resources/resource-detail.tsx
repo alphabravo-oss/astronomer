@@ -162,6 +162,7 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
             replicas={o.spec?.replicas}
             paused={o.kind === 'Deployment' ? (o.spec?.paused ?? false) : undefined}
             suspended={o.kind === 'CronJob' ? (o.spec?.suspend ?? false) : undefined}
+            jobTemplate={o.kind === 'CronJob' ? asRecord(o.spec).jobTemplate as Record<string, unknown> : undefined}
             k8sPath={k8sPath}
             permissionResource={permissionResource}
             onDeleted={() => router.back()}

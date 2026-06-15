@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Scaling, RotateCw, Trash2, Pause, Play } from 'lucide-react';
+import { Scaling, RotateCw, Trash2, Pause, Play, Zap } from 'lucide-react';
 import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { useScaleWorkload, useRestartWorkload, useK8sDelete, useK8sPatch } from '@/lib/hooks';
+import { useScaleWorkload, useRestartWorkload, useK8sDelete, useK8sPatch, useK8sCreate } from '@/lib/hooks';
 import { useClusterResourcePermission } from '@/lib/permission-hooks';
 import {
   k8sResourcePath,
+  k8sListPath,
   kindToResourceType,
   WORKLOAD_SCALABLE_KINDS,
   WORKLOAD_RESTARTABLE_KINDS,
@@ -24,6 +25,8 @@ interface ResourceActionsProps {
   paused?: boolean;
   /** CronJob suspended (spec.suspend). Pass to show Suspend/Resume. */
   suspended?: boolean;
+  /** CronJob spec.jobTemplate. Pass to show "Run Now" (creates a Job from it). */
+  jobTemplate?: Record<string, unknown>;
   /** Exact object path; preferred for delete/patch (correct for CRs too). */
   k8sPath?: string;
   /** RBAC resource override when it differs from the kind (custom resources). */
@@ -45,7 +48,7 @@ const denied = (p: { allowed: boolean; disabledReason?: string; reason?: string 
  * server stays the real gate.
  */
 export function ResourceActions({
-  clusterId, kind, namespace, name, replicas, paused, suspended, k8sPath, permissionResource, onDeleted,
+  clusterId, kind, namespace, name, replicas, paused, suspended, jobTemplate, k8sPath, permissionResource, onDeleted,
 }: ResourceActionsProps) {
   const resourceType = kindToResourceType(kind);
   const path = k8sPath ?? k8sResourcePath(resourceType, name, namespace);
@@ -54,14 +57,36 @@ export function ResourceActions({
   const restartPerm = useClusterResourcePermission(clusterId, resourceType, 'restart', permissionResource);
   const updatePerm = useClusterResourcePermission(clusterId, resourceType, 'update', permissionResource);
   const deletePerm = useClusterResourcePermission(clusterId, resourceType, 'delete', permissionResource);
+  // "Run Now" creates a Job, so it needs jobs:create (canonically workloads:create).
+  const triggerPerm = useClusterResourcePermission(clusterId, 'jobs', 'create');
 
   const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
   const patch = useK8sPatch();
   const k8sDelete = useK8sDelete();
+  const k8sCreate = useK8sCreate();
 
   const [showScale, setShowScale] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+
+  // Trigger a CronJob now: create a Job from its jobTemplate, mirroring
+  // `kubectl create job --from=cronjob` (generateName + the manual-instantiate
+  // annotation). Pure k8s-proxy POST, no backend endpoint needed.
+  const runNow = () =>
+    k8sCreate.mutate({
+      clusterId,
+      path: k8sListPath('jobs', namespace),
+      body: {
+        apiVersion: 'batch/v1',
+        kind: 'Job',
+        metadata: {
+          generateName: `${name}-manual-`,
+          namespace,
+          annotations: { 'cronjob.kubernetes.io/instantiate': 'manual' },
+        },
+        spec: (jobTemplate as { spec?: unknown })?.spec,
+      },
+    });
 
   return (
     <div className="flex items-center gap-2">
@@ -84,6 +109,12 @@ export function ResourceActions({
           onClick={() => patch.mutate({ clusterId, path, body: { spec: { paused: !paused } } })}>
           {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
           {paused ? 'Resume' : 'Pause'}
+        </button>
+      )}
+      {kind === 'CronJob' && jobTemplate && (
+        <button type="button" className={BTN} disabled={!triggerPerm.allowed || k8sCreate.isPending}
+          title={denied(triggerPerm)} onClick={runNow}>
+          <Zap className="h-3.5 w-3.5" /> Run Now
         </button>
       )}
       {kind === 'CronJob' && suspended !== undefined && (
