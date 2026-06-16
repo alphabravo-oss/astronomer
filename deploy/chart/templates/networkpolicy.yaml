@@ -127,8 +127,10 @@ spec:
     {{- end }}
     # Internal ArgoCD->cluster proxy (port 8090). This listener is NOT
     # token-gated (ArgoCD's apply path is anonymous), so its only authentication
-    # is this network isolation: only the argocd-application-controller, which
-    # performs cluster syncs, may reach it. The public ingress never maps 8090.
+    # is this network isolation: only ArgoCD's own pods may reach it. The
+    # application-controller performs cluster syncs; argocd-server connects here
+    # to validate a cluster's reachability when it is registered (cluster upsert),
+    # so both must be allowed or registration hangs. The public ingress never maps 8090.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -136,6 +138,12 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: argocd-application-controller
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.crds.argoNamespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argocd-server
       ports:
         - protocol: TCP
           port: 8090
