@@ -36,8 +36,6 @@ export const projectDetailKeys = {
   cloudCredentialProviders: ['cloud-credentials', 'providers'] as const,
   // BYO catalogs (migration 061).
   catalogs: (projectId: string) => ['projects', 'detail', projectId, 'catalogs'] as const,
-  catalogCharts: (projectId: string, catalogId: string) =>
-    ['projects', 'detail', projectId, 'catalogs', catalogId, 'charts'] as const,
 };
 
 export const clusterTemplateKeys = {
@@ -313,14 +311,6 @@ export function useProjectCatalogs(projectId: string) {
     queryKey: projectDetailKeys.catalogs(projectId),
     queryFn: () => api.listProjectCatalogs(projectId),
     enabled: !!projectId,
-  });
-}
-
-export function useProjectCatalogCharts(projectId: string, catalogId: string | undefined) {
-  return useQuery({
-    queryKey: projectDetailKeys.catalogCharts(projectId, catalogId || ''),
-    queryFn: () => api.listProjectCatalogCharts(projectId, catalogId as string),
-    enabled: !!projectId && !!catalogId,
   });
 }
 

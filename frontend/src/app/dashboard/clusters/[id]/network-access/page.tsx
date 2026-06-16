@@ -46,16 +46,8 @@ import {
   type ApiserverAllowlistSnapshot,
 } from '@/lib/api/cluster-detail';
 import { queryKeys } from '@/lib/hooks';
-import { usePermissionDecision } from '@/lib/permission-hooks';
+import { useClustersUpdate } from '@/lib/permission-hooks';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-
-function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
-  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
-  return {
-    canWrite: decision.allowed,
-    reason: decision.disabledReason ?? '',
-  };
-}
 
 // ─── Mode badge ─────────────────────────────────────────────────────────────
 function ModeBadge({

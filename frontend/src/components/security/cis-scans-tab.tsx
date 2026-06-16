@@ -327,12 +327,6 @@ function ScanAggregateStrip({ scans }: { scans: CISScanListItem[] }) {
   );
 }
 
-/** Public re-export so `page.tsx` can also peek at total count for default-tab logic. */
-export function useCISScansCount(): number | undefined {
-  const { data } = useCISScans({ pageSize: 1 });
-  return data?.total;
-}
-
 /**
  * Centralised empty-state hint shown on the overview tab strip when the
  * backend reports `source: 'fallback'` for the first cluster's profiles —

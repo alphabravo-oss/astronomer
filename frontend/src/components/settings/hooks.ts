@@ -361,18 +361,6 @@ export function useDeleteGroupMapping() {
   });
 }
 
-export function useResyncUserGroups() {
-  return useMutation({
-    mutationFn: (userId: string) => api.resyncUserGroups(userId),
-    onSuccess: (result) => {
-      toastSuccess(`Synced ${result.synced} group(s)`);
-    },
-    onError: (err: Error) => {
-      toastApiError('Resync failed', err);
-    },
-  });
-}
-
 // ============================================================
 // Backup Drill
 // ============================================================

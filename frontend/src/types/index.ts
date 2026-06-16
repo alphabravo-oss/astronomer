@@ -502,13 +502,6 @@ export interface ClusterRegistration {
   install_baseline?: boolean;
 }
 
-export interface ClusterRegistrationResponse {
-  clusterId: string;
-  token: string;
-  installCommand: string;
-  manifestUrl: string;
-}
-
 // --- Workload Types ---
 
 export type WorkloadKind = 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'Job' | 'CronJob' | 'ReplicaSet';
@@ -1764,55 +1757,6 @@ export interface LiveEvent<T = unknown> {
   type: LiveEventType | string;
   time: string;
   data?: T;
-}
-
-export interface LiveClusterMetricsData {
-  cluster_id: string;
-  cpu_percentage: number;
-  memory_percentage: number;
-  pod_count: number;
-  timestamp: string;
-}
-
-export interface LiveClusterHeartbeatData {
-  cluster_id: string;
-  last_heartbeat: string;
-  agent_version?: string;
-  agent_build_sha?: string;
-  heartbeat_schema_version?: number;
-  kubernetes_version?: string;
-  node_count?: number;
-  pod_count?: number;
-  cpu_usage_percent?: number;
-  memory_usage_percent?: number;
-  distribution?: string;
-  privilege_profile?: string;
-  available_apis?: string[];
-  enabled_features?: string[];
-  denied_features?: string[];
-  last_successful_action?: string;
-  last_successful_action_at?: string;
-  degraded_reasons?: string[];
-}
-
-export interface LiveClusterStatusChangedData {
-  cluster_id: string;
-  old_status?: string;
-  new_status?: string;
-  timestamp?: string;
-}
-
-export interface LiveClusterMutationData {
-  cluster_id: string;
-  name?: string;
-  display_name?: string;
-  status?: string;
-}
-
-export interface LiveAgentLifecycleData {
-  cluster_id: string;
-  session_id?: string;
-  agent_version?: string;
 }
 
 // --- Activity Feed ---

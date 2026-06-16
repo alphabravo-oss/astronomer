@@ -1,6 +1,6 @@
 'use client';
 
-import { cn, gaugeTextColor } from '@/lib/utils';
+import { cn, gaugeColor, gaugeTextColor } from '@/lib/utils';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 
 interface MetricCardProps {
@@ -86,7 +86,7 @@ export function MetricCard({
         <div className="mt-3">
           <div className="gauge-bar">
             <div
-              className={cn('gauge-bar-fill', gaugeBarColor(percentage))}
+              className={cn('gauge-bar-fill', gaugeColor(percentage))}
               style={{ width: `${Math.min(percentage, 100)}%` }}
             />
           </div>
@@ -111,10 +111,4 @@ export function MetricCard({
       )}
     </div>
   );
-}
-
-function gaugeBarColor(percentage: number): string {
-  if (percentage >= 90) return 'bg-status-error';
-  if (percentage >= 75) return 'bg-status-warning';
-  return 'bg-status-success';
 }

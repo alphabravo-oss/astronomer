@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 
 import { queryKeys, useCluster, useClusterNamespaces, useClusters } from '@/lib/hooks';
-import { usePermissionDecision } from '@/lib/permission-hooks';
+import { useClustersUpdate } from '@/lib/permission-hooks';
 import {
   createSnapshot,
   createSnapshotSchedule,
@@ -55,14 +55,6 @@ import {
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OverlayShell } from '@/components/ui/overlay-shell';
-
-function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
-  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
-  return {
-    canWrite: decision.allowed,
-    reason: decision.disabledReason ?? '',
-  };
-}
 
 // ─── Phase pill ─────────────────────────────────────────────────────────────
 function PhasePill({ phase }: { phase: SnapshotPhase }) {

@@ -2,7 +2,7 @@
 
 import { Link } from '@/lib/link';
 import type { ElementType, ReactNode } from 'react';
-import { AlertCircle, Clock3, Loader2, Lock, WifiOff } from 'lucide-react';
+import { AlertCircle, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type StateTone = 'neutral' | 'danger' | 'warning' | 'info';
@@ -171,28 +171,4 @@ export function PermissionState({
       className={className}
     />
   );
-}
-
-export function DisconnectedState({
-  title = 'Connection unavailable',
-  description = 'Live cluster data is unavailable until the agent reconnects.',
-  className,
-}: {
-  title?: string;
-  description?: ReactNode;
-  className?: string;
-}) {
-  return <StatePanel icon={WifiOff} title={title} description={description} tone="warning" className={className} />;
-}
-
-export function StaleState({
-  title = 'Showing cached data',
-  description = 'The latest live refresh failed, so this view may be stale.',
-  className,
-}: {
-  title?: string;
-  description?: ReactNode;
-  className?: string;
-}) {
-  return <StatePanel icon={Clock3} title={title} description={description} tone="info" className={className} />;
 }

@@ -33,11 +33,8 @@ export const b2Keys = {
   all: ['b2-backups'] as const,
   storage: (params?: Record<string, unknown>) =>
     ['b2-backups', 'storage', params] as const,
-  storageDetail: (id: string) => ['b2-backups', 'storage', 'detail', id] as const,
   schedules: (params?: Record<string, unknown>) =>
     ['b2-backups', 'schedules', params] as const,
-  scheduleDetail: (id: string) =>
-    ['b2-backups', 'schedules', 'detail', id] as const,
   runs: (params?: Record<string, unknown>) =>
     ['b2-backups', 'runs', params] as const,
   runDetail: (id: string) => ['b2-backups', 'runs', 'detail', id] as const,
@@ -56,14 +53,6 @@ export function useB2StorageLocations(params?: { cluster_id?: string }) {
   });
 }
 
-export function useB2StorageLocation(id: string) {
-  return useQuery({
-    queryKey: b2Keys.storageDetail(id),
-    queryFn: () => api.b2GetStorageLocation(id),
-    enabled: !!id,
-  });
-}
-
 export function useB2CreateStorageLocation() {
   const qc = useQueryClient();
   return useMutation<BackupStorageLocation, Error, CreateBackupStorageRequest>({
@@ -73,22 +62,6 @@ export function useB2CreateStorageLocation() {
       toastSuccess('Storage location created');
     },
     onError: (e) => toastApiError('Failed to create storage', e),
-  });
-}
-
-export function useB2UpdateStorageLocation() {
-  const qc = useQueryClient();
-  return useMutation<
-    BackupStorageLocation,
-    Error,
-    { id: string; data: Partial<CreateBackupStorageRequest> }
-  >({
-    mutationFn: ({ id, data }) => api.b2UpdateStorageLocation(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: b2Keys.all });
-      toastSuccess('Storage location updated');
-    },
-    onError: (e) => toastApiError('Failed to update storage', e),
   });
 }
 
@@ -118,14 +91,6 @@ export function useB2Schedules(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.schedules(params),
     queryFn: () => api.b2ListSchedules({ ...params, page_size: 100 }),
-  });
-}
-
-export function useB2Schedule(id: string) {
-  return useQuery({
-    queryKey: b2Keys.scheduleDetail(id),
-    queryFn: () => api.b2GetSchedule(id),
-    enabled: !!id,
   });
 }
 
@@ -200,14 +165,6 @@ export function useB2Run(id: string) {
 }
 
 // --- Restores ---
-
-export function useB2Restores() {
-  return useQuery({
-    queryKey: b2Keys.restores(),
-    queryFn: () => api.b2ListRestores({ page_size: 100 }),
-    refetchInterval: 15000,
-  });
-}
 
 export function useB2Restore(id: string) {
   return useQuery({

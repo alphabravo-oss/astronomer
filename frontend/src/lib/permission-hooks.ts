@@ -16,6 +16,16 @@ export function usePermissionDecision(
 }
 
 /**
+ * Cluster-scoped `clusters:update` decision, flattened to the `{ canWrite,
+ * reason }` shape the cluster detail tabs (template, registries, snapshots,
+ * network-access) gate their write actions on.
+ */
+export function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
+  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
+  return { canWrite: decision.allowed, reason: decision.disabledReason ?? '' };
+}
+
+/**
  * Map a K8s resource type (as used in the cluster browser routes) to the
  * canonical permission resource the RBAC layer gates on. Shared by the resource
  * list page and the generic ResourceDetail so client gating matches.

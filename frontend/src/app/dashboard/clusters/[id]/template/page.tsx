@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
-import { usePermissionDecision } from '@/lib/permission-hooks';
+import { useClustersUpdate } from '@/lib/permission-hooks';
 import {
   bindClusterTemplate,
   detachClusterTemplate,
@@ -47,11 +47,6 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react').then((m) => m.
     </div>
   ),
 });
-
-function useClustersUpdate(clusterId: string): { canWrite: boolean; reason: string } {
-  const decision = usePermissionDecision('clusters', 'update', { type: 'cluster', id: clusterId });
-  return { canWrite: decision.allowed, reason: decision.disabledReason ?? '' };
-}
 
 function fmt(iso?: string) {
   if (!iso) return '—';
