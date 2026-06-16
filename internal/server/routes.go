@@ -1695,8 +1695,19 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 			// route to the same handler so older callers keep working.
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Post("/{id}/generate_kubeconfig/", deps.Clusters.GenerateKubeconfig)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/kubeconfig-preview/", deps.Clusters.PreviewKubeconfig)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/metrics/", deps.Clusters.GetMetrics)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/metrics/summary/", deps.Clusters.GetMetricsSummary)
+			// Serve the cluster-detail metrics charts from the Monitoring handler,
+			// which returns real Prometheus time-series (with a synthetic-series
+			// fallback when no backend is configured) in the shape the charts
+			// expect. The scalar Clusters.GetMetrics returned no series, so the
+			// charts rendered empty. Fall back to it only if Monitoring is unwired.
+			clusterMetricsHandler := deps.Clusters.GetMetrics
+			clusterMetricsSummaryHandler := deps.Clusters.GetMetricsSummary
+			if deps.Monitoring != nil {
+				clusterMetricsHandler = deps.Monitoring.ListMetrics
+				clusterMetricsSummaryHandler = deps.Monitoring.ListMetrics
+			}
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/metrics/", clusterMetricsHandler)
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/metrics/summary/", clusterMetricsSummaryHandler)
 			// Wizard endpoints — migration 078 / sprint 22.
 			if deps.ClusterRegistration != nil {
 				r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/registration/status/", deps.ClusterRegistration.GetStatus)

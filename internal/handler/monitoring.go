@@ -119,7 +119,13 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 }
 
 func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) {
+	// Accept either {cluster_id} or {id} so this real-series handler can serve
+	// the cluster-detail metrics route (which uses {id}) as well as the
+	// top-level /clusters/{cluster_id}/metrics route, without a param mismatch.
 	clusterID := chi.URLParam(r, "cluster_id")
+	if clusterID == "" {
+		clusterID = chi.URLParam(r, "id")
+	}
 	if r.URL.Path == "/api/v1/clusters/"+clusterID+"/metrics/summary/" {
 		if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
