@@ -81,7 +81,7 @@ metadata:
   name: default
 spec:
   calicoNetwork:
-    bgp: Disabled
+    bgp: Enabled
     # CRITICAL on hosts with Tailscale/WireGuard: pin the node IP to the
     # kubernetes InternalIP (real eth0), otherwise Calico's first-found
     # autodetect grabs the tailscale0 IP and pods can't reach the API server

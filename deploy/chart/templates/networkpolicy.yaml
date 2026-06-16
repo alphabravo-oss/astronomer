@@ -14,7 +14,17 @@ metadata:
     {{- include "astronomer.labels" . | nindent 4 }}
     app.kubernetes.io/component: network-policy
 spec:
-  podSelector: {}
+  # Exclude the bundled astro-argocd subchart pods. ArgoCD is trusted
+  # control-plane infra (needs the k8s API, DNS, git/OCI repos, intra-argo),
+  # and its pre-install/pre-upgrade hooks (e.g. redis-secret-init) run BEFORE
+  # any allow-policy could be applied — so on upgrade a prior default-deny would
+  # block them and stall the release. Stock ArgoCD ships no NetworkPolicies;
+  # leaving its pods unselected here matches that and keeps installs hands-off.
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/part-of
+        operator: NotIn
+        values: ["argocd"]
   policyTypes:
     - Ingress
     - Egress
@@ -442,6 +452,12 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 14 }}
+        # The migrate Job (post-install/upgrade hook) connects to apply schema
+        # migrations — without this it's blocked by default-deny and the install
+        # stalls in Init forever.
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "migrate") | nindent 14 }}
       ports:
         - protocol: TCP
           port: {{ .Values.postgres.port }}
@@ -474,5 +490,46 @@ spec:
         - protocol: TCP
           port: {{ .Values.redis.port }}
   egress: []
+{{- end }}
+{{- if .Values.migrate.enabled }}
+---
+# The migrate Job needs DNS (to resolve postgres) plus egress to postgres.
+# It's caught by default-deny like every other astronomer component, so without
+# its own allow-policy DNS is dropped and the init wait hangs on "bad address".
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-migrate
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "migrate") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "migrate") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.postgres.port }}
+    {{- end }}
+    {{- range $cidr := $externalPostgresEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.postgres.port }}
+    {{- end }}
 {{- end }}
 {{- end }}
