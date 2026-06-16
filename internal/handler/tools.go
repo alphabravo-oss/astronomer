@@ -261,6 +261,12 @@ func (h *ToolHandler) EnsureInstalled(ctx context.Context, clusterID uuid.UUID, 
 	if valuesYAML == "" && preset != "" {
 		valuesYAML = presetValuesYAML(tool.Presets, preset)
 	}
+	// Adapt the baseline install to the target distribution as well.
+	if cluster, cerr := h.queries.GetClusterByID(ctx, clusterID); cerr == nil {
+		if distYAML := distributionInstallValues(slug, cluster.Distribution); distYAML != "" {
+			valuesYAML = distYAML + "\n" + valuesYAML
+		}
+	}
 
 	env := toolOperationEnvelope{
 		ClusterID:   clusterID.String(),
@@ -906,6 +912,16 @@ func (h *ToolHandler) resolveAction(r *http.Request) (sqlc.ClusterTool, toolActi
 			valuesYAML += "\n"
 		}
 		valuesYAML += req.ValuesOverride
+	}
+	// Adapt the install to the target distribution (k3s/k3d, OpenShift, …) by
+	// prepending distribution-specific overrides; the preset + user values
+	// concatenated above still take precedence on any conflicting key.
+	if cid, perr := uuid.Parse(req.ClusterID); perr == nil {
+		if cluster, cerr := h.queries.GetClusterByID(r.Context(), cid); cerr == nil {
+			if distYAML := distributionInstallValues(tool.Slug, cluster.Distribution); distYAML != "" {
+				valuesYAML = distYAML + "\n" + valuesYAML
+			}
+		}
 	}
 	return tool, req, firstChart(charts), valuesYAML, nil
 }
