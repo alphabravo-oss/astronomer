@@ -755,14 +755,72 @@ func (h *LoggingHandler) FluentbitConfig(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging pipeline not found")
 		return
 	}
-	// TODO: render the full Fluent Bit configuration from all enabled
-	// pipelines/outputs for this cluster once the renderer is ported. The
-	// minimal stub below is enough for the UI to render the config view.
-	config := "[SERVICE]\n    Daemon Off\n    Log_Level info\n\n[INPUT]\n    Name tail\n    Path /var/log/containers/*.log\n    Tag kube.*\n\n[OUTPUT]\n    Name stdout\n    Match *\n"
+	config := h.renderFullFluentbitConfig(r.Context(), pipeline.ClusterID)
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"cluster_id": pipeline.ClusterID.String(),
 		"config":     config,
 	})
+}
+
+// renderFullFluentbitConfig assembles the complete Fluent Bit configuration for
+// a cluster from its enabled pipelines (filters) and outputs, reusing the same
+// block renderers the controller applies to the cluster. Previously this view
+// returned a hardcoded stub that ignored the actual pipelines/outputs.
+func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterID uuid.UUID) string {
+	var b strings.Builder
+	b.WriteString("# rendered by astronomer-go logging controller\n")
+	b.WriteString("[SERVICE]\n")
+	writeKV(&b, "Daemon", "Off")
+	writeKV(&b, "Log_Level", "info")
+	writeKV(&b, "Parsers_File", "parsers.conf")
+	b.WriteString("\n[INPUT]\n")
+	writeKV(&b, "Name", "tail")
+	writeKV(&b, "Path", "/var/log/containers/*.log")
+	writeKV(&b, "Tag", "kube.*")
+	writeKV(&b, "Mem_Buf_Limit", "5MB")
+	writeKV(&b, "Skip_Long_Lines", "On")
+	b.WriteString("\n[FILTER]\n")
+	writeKV(&b, "Name", "kubernetes")
+	writeKV(&b, "Match", "kube.*")
+	writeKV(&b, "Merge_Log", "On")
+
+	pipelines, err := h.queries.ListPipelinesByCluster(ctx, sqlc.ListPipelinesByClusterParams{ClusterID: clusterID, Limit: 500, Offset: 0})
+	if err == nil {
+		for _, p := range pipelines {
+			if !p.Enabled {
+				continue
+			}
+			b.WriteString("\n")
+			b.WriteString(renderPipelineBlock(loggingOperationEnvelope{
+				ClusterID: clusterID.String(), TargetID: p.ID.String(), TargetType: "pipeline",
+				Name: p.Name, Enabled: p.Enabled, Namespaces: p.Namespaces, Labels: p.Labels, Filters: p.Filters,
+			}))
+		}
+	}
+
+	outputs, err := h.queries.ListOutputsByCluster(ctx, sqlc.ListOutputsByClusterParams{ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, Limit: 500, Offset: 0})
+	enabledOutputs := 0
+	if err == nil {
+		for _, o := range outputs {
+			if !o.Enabled {
+				continue
+			}
+			enabledOutputs++
+			b.WriteString("\n")
+			b.WriteString(renderOutputBlock(loggingOperationEnvelope{
+				ClusterID: clusterID.String(), TargetID: o.ID.String(), TargetType: "output",
+				Name: o.Name, OutputType: o.OutputType, Enabled: o.Enabled, Configuration: o.Configuration,
+			}))
+		}
+	}
+	if enabledOutputs == 0 {
+		// No output configured yet — stdout so logs are at least visible in the
+		// Fluent Bit pod and the config is valid.
+		b.WriteString("\n[OUTPUT]\n")
+		writeKV(&b, "Name", "stdout")
+		writeKV(&b, "Match", "*")
+	}
+	return b.String()
 }
 
 // --- Operations endpoints ---
