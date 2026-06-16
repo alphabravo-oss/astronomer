@@ -30,3 +30,6 @@ coverage.out
 *.test
 /keyrotate
 .claude/
+
+# Generated marketing screenshots (large binaries)
+screenshots/

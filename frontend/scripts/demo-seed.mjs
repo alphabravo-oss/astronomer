@@ -41,17 +41,27 @@ function asList(d) {
 }
 
 async function login() {
-  const r = await fetch(`${BASE}/api/v1/auth/login/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-  });
-  if (!r.ok) throw new Error(`login failed: ${r.status}`);
-  TOKEN = (await r.json()).data.token;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const r = await fetch(`${BASE}/api/v1/auth/login/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    });
+    if (r.ok) { TOKEN = (await r.json()).data.token; return; }
+    if (r.status === 429) { // rate-limited: back off and retry
+      await new Promise((res) => setTimeout(res, 20000));
+      continue;
+    }
+    throw new Error(`login failed: ${r.status}`);
+  }
+  throw new Error('login failed: still rate-limited after retries');
 }
 
 // --- entity definitions: list + delete for teardown, create payloads for seed.
 // Each create payload's `name` starts with PREFIX so teardown matches it.
+// `seeds` may be an array, or a fn(ctx) -> array where ctx maps a previously
+// seeded item's name to its created id (used so a schedule can reference its
+// storage config). Definitions seed in order, so dependencies come first.
 function definitions(localClusterId) {
   return [
     {
@@ -99,6 +109,47 @@ function definitions(localClusterId) {
           cluster_id: localClusterId, network_policy_mode: 'baseline' },
       ],
     },
+    {
+      label: 'webhooks',
+      list: '/admin/webhooks/',
+      del: (id) => `/admin/webhooks/${id}/`,
+      seeds: [
+        { name: `${PREFIX}ci-pipeline`, url: 'https://ci.example.com/hooks/astronomer', enabled: true,
+          secret: 'demo-webhook-secret-ci', event_filters: ['cluster.adopted', 'tool.installed'] },
+        { name: `${PREFIX}audit-sink`, url: 'https://siem.example.com/ingest', enabled: true,
+          secret: 'demo-webhook-secret-audit', event_filters: ['audit.event'] },
+      ],
+    },
+    {
+      label: 'backup storage',
+      list: '/backups/storage/',
+      del: (id) => `/backups/storage/${id}/`,
+      seeds: [
+        { name: `${PREFIX}s3-primary`, storage_type: 's3', bucket: 'astronomer-backups-prod',
+          region: 'us-east-1', prefix: 'velero', is_default: true, cluster_id: localClusterId,
+          access_key: 'AKIADEMO0000000', secret_key: 'demoSecretKeyDoNotUse' },
+        { name: `${PREFIX}s3-dr`, storage_type: 's3', bucket: 'astronomer-backups-dr',
+          region: 'us-west-2', prefix: 'velero', is_default: false, cluster_id: localClusterId,
+          access_key: 'AKIADEMO1111111', secret_key: 'demoSecretKeyDoNotUse' },
+      ],
+    },
+    {
+      label: 'backup schedules',
+      list: '/backups/schedules/',
+      del: (id) => `/backups/schedules/${id}/`,
+      // Needs a storage id; reference the primary storage seeded just above.
+      // May fail if Velero isn't installed on the cluster — tolerated per-item.
+      seeds: (ctx) => {
+        const storageId = ctx[`${PREFIX}s3-primary`];
+        if (!storageId) return [];
+        return [
+          { name: `${PREFIX}nightly-full`, storage_id: storageId, backup_type: 'full',
+            cron_expression: '0 2 * * *', retention_count: 14, enabled: true, cluster_id: localClusterId },
+          { name: `${PREFIX}hourly-config`, storage_id: storageId, backup_type: 'config',
+            cron_expression: '0 * * * *', retention_count: 48, enabled: false, cluster_id: localClusterId },
+        ];
+      },
+    },
   ];
 }
 
@@ -109,18 +160,25 @@ async function localClusterId() {
 }
 
 async function seed(defs) {
+  const ctx = {}; // name -> created id, so later defs can reference earlier ones
   for (const d of defs) {
+    const payloads = typeof d.seeds === 'function' ? d.seeds(ctx) : d.seeds;
     let ok = 0;
-    for (const payload of d.seeds) {
-      try { await api('POST', d.list, payload); ok++; }
-      catch (e) { console.log(`  ! ${d.label}: ${payload.name} -> ${e.message}`); }
+    for (const payload of payloads) {
+      try {
+        const created = await api('POST', d.post || d.list, payload);
+        if (created?.id) ctx[payload.name] = created.id;
+        ok++;
+      } catch (e) { console.log(`  ! ${d.label}: ${payload.name} -> ${e.message}`); }
     }
-    console.log(`seeded ${ok}/${d.seeds.length} ${d.label}`);
+    console.log(`seeded ${ok}/${payloads.length} ${d.label}`);
   }
 }
 
 async function teardown(defs) {
-  for (const d of defs) {
+  // Reverse order so dependents (schedules) are removed before their
+  // dependencies (storage), avoiding FK-constraint delete failures.
+  for (const d of [...defs].reverse()) {
     const items = asList(await api('GET', d.list));
     const mine = items.filter((it) => String(it.name || '').startsWith(PREFIX));
     let ok = 0;
