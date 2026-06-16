@@ -82,9 +82,17 @@ metadata:
 spec:
   calicoNetwork:
     bgp: Disabled
+    # CRITICAL on hosts with Tailscale/WireGuard: pin the node IP to the
+    # kubernetes InternalIP (real eth0), otherwise Calico's first-found
+    # autodetect grabs the tailscale0 IP and pods can't reach the API server
+    # or any ClusterIP. This is the root cause of the whole networking saga.
+    nodeAddressAutodetectionV4:
+      kubernetes: NodeInternalIP
     ipPools:
+      # Single-node cluster: no cross-node overlay needed, so use direct routing
+      # (encapsulation None). VXLAN here also broke pod->node-own-IP traffic.
       - cidr: ${POD_CIDR}
-        encapsulation: VXLAN
+        encapsulation: None
         natOutgoing: Enabled
         nodeSelector: all()
 EOF
