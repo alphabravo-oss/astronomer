@@ -112,14 +112,14 @@ func GenerateSecret(accountName, issuer string) (secret string, otpauthURL strin
 // the handler doesn't need to reach into a 3rd-party QR library —
 // pquerna/otp wraps boombuler/barcode for us.
 //
-// The image is 256x256 which renders crisply on retina screens without
-// bloating the payload (typical output ~2-3kB).
+// The image is 512x512 so it stays crisp when displayed larger (easier to
+// scan on dense/retina screens) while still tiny on the wire (~3-5kB).
 func QRCodePNG(otpauthURL string) ([]byte, error) {
 	key, err := otp.NewKeyFromURL(otpauthURL)
 	if err != nil {
 		return nil, fmt.Errorf("totp: parse otpauth url: %w", err)
 	}
-	img, err := key.Image(256, 256)
+	img, err := key.Image(512, 512)
 	if err != nil {
 		return nil, fmt.Errorf("totp: encode qr: %w", err)
 	}

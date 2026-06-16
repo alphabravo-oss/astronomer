@@ -280,9 +280,9 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
                 <img
                   src={`data:image/png;base64,${enrollment.qrPngBase64}`}
                   alt="TOTP QR code"
-                  className="block"
-                  width={192}
-                  height={192}
+                  className="block [image-rendering:pixelated]"
+                  width={256}
+                  height={256}
                 />
               </div>
               <details className="w-full">
