@@ -18,5 +18,14 @@ Policies:
 | `K8sDisallowLatestTag` | `disallow-latest-tag` | Containers using `:latest` or an untagged image |
 | `K8sRequiredLabels` | `ns-require-team-label` | Namespaces missing a `team` label |
 
-Apply order: templates first (they register CRDs), then constraints. Gatekeeper
-must be installed (the `gatekeeper` catalog tool) before these apply.
+## Delivery
+
+The bundle is embedded (`bundle.go`) and applied automatically by the
+`gatekeeper:policy_apply` reconciler (`internal/worker/tasks`), which runs on the
+tunnel queue every 5 minutes: for each connected cluster that has Gatekeeper
+installed (detected via the constraint-template API) it server-side-applies each
+manifest through the agent tunnel. Templates apply before constraints; a
+constraint whose generated CRD isn't ready yet applies on the next sweep
+(idempotent). Clusters without Gatekeeper are skipped.
+
+To apply manually instead: `kubectl apply -f internal/gatekeeperpolicy/bundle/`

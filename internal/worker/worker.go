@@ -209,6 +209,7 @@ func (w *Worker) RegisterTunnelHandlers() {
 	w.mux.HandleFunc(TypeClusterTemplateDriftCheck, instrumentTask(TypeClusterTemplateDriftCheck, tasks.HandleClusterTemplateDriftCheck))
 	w.mux.HandleFunc(tasks.MeshDetectType, instrumentTask(tasks.MeshDetectType, tasks.HandleMeshDetect))
 	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
+	w.mux.HandleFunc(tasks.GatekeeperPolicyApplyType, instrumentTask(tasks.GatekeeperPolicyApplyType, tasks.HandleGatekeeperPolicyApply))
 	w.log.Info("registered tunnel-queue task handlers")
 }
 

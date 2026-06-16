@@ -210,6 +210,18 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		s.log.Info("registered periodic task", "task", "service mesh detection sweep (tunnel queue)", "schedule", "@every 5m", "entry_id", entryID)
 	}
 	{
+		// Gatekeeper policy bundle delivery — tunnel queue (needs the agent
+		// K8sRequester). Applies the starter ConstraintTemplates/Constraints to
+		// clusters that have Gatekeeper installed; idempotent + skips the rest.
+		task := asynq.NewTask(tasks.GatekeeperPolicyApplyType, nil)
+		entryID, err := s.scheduler.Register("@every 5m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+		if err != nil {
+			s.log.Error("failed to register periodic task", "task", tasks.GatekeeperPolicyApplyType, "error", err)
+			return err
+		}
+		s.log.Info("registered periodic task", "task", "gatekeeper policy apply (tunnel queue)", "schedule", "@every 5m", "entry_id", entryID)
+	}
+	{
 		task := asynq.NewTask(tasks.ClusterGroupMetricsRefreshType, nil)
 		entryID, err := s.scheduler.Register("@every 5m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
 		if err != nil {
