@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -1219,10 +1220,84 @@ func renderOutputBlock(env loggingOperationEnvelope) string {
 		if v := configString(cfg, "format", ""); v != "" {
 			writeKV(&b, "Format", v)
 		}
+	case "splunk":
+		host, port := outputHostPort(cfg, "hec_url", "8088")
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "splunk")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "Host", host)
+		writeKV(&b, "Port", port)
+		if v := configString(cfg, "token", configString(cfg, "splunk_token", "")); v != "" {
+			writeKV(&b, "Splunk_Token", v)
+		}
+		writeKV(&b, "Splunk_Send_Raw", "Off")
+		writeKV(&b, "TLS", "On")
+	case "datadog":
+		site := configString(cfg, "site", "datadoghq.com")
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "datadog")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "Host", "http-intake.logs."+site)
+		writeKV(&b, "TLS", "on")
+		writeKV(&b, "compress", "gzip")
+		if v := configString(cfg, "api_key", ""); v != "" {
+			writeKV(&b, "apikey", v)
+		}
+		if v := configString(cfg, "service", ""); v != "" {
+			writeKV(&b, "dd_service", v)
+		}
+		if v := configString(cfg, "source", ""); v != "" {
+			writeKV(&b, "dd_source", v)
+		}
+		if v := configString(cfg, "tags", ""); v != "" {
+			writeKV(&b, "dd_tags", v)
+		}
+	case "cloudwatch":
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "cloudwatch_logs")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "region", configString(cfg, "region", "us-east-1"))
+		writeKV(&b, "log_group_name", configString(cfg, "log_group", "/astronomer/cluster-logs"))
+		writeKV(&b, "log_stream_prefix", configString(cfg, "log_stream_prefix", "fluentbit-"))
+		writeKV(&b, "auto_create_group", "On")
+		if configString(cfg, "access_key", "") != "" {
+			// The cloudwatch_logs plugin reads AWS credentials from the Fluent
+			// Bit pod's identity (IRSA / instance role), not inline params.
+			b.WriteString("# note: access_key/secret_key are supplied via the pod's AWS identity (IRSA/instance role)\n")
+		}
+	case "syslog":
+		b.WriteString("[OUTPUT]\n")
+		writeKV(&b, "Name", "syslog")
+		writeKV(&b, "Match", configString(cfg, "match", "*"))
+		writeKV(&b, "Host", configString(cfg, "host", ""))
+		writeKV(&b, "Port", configString(cfg, "port", "514"))
+		writeKV(&b, "Mode", configString(cfg, "protocol", "tcp"))
+		writeKV(&b, "Syslog_Format", configString(cfg, "format", "rfc5424"))
+		writeKV(&b, "Syslog_Maxsize", "2048")
 	default:
 		b.WriteString("# unsupported output_type " + env.OutputType + "; no [OUTPUT] emitted\n")
 	}
 	return b.String()
+}
+
+// outputHostPort extracts host + port for an output, accepting either a full
+// URL field (e.g. "https://host:8088") or separate host/port config keys.
+func outputHostPort(cfg map[string]any, urlKey, defaultPort string) (host, port string) {
+	port = defaultPort
+	if raw := configString(cfg, urlKey, ""); raw != "" {
+		if u, err := url.Parse(raw); err == nil && u.Hostname() != "" {
+			host = u.Hostname()
+			if u.Port() != "" {
+				port = u.Port()
+			}
+			return host, port
+		}
+	}
+	host = configString(cfg, "host", "")
+	if p := configString(cfg, "port", ""); p != "" {
+		port = p
+	}
+	return host, port
 }
 
 // renderPipelineBlock renders Match rules for the pipeline's namespaces and
