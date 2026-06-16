@@ -22,7 +22,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -459,21 +458,7 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid subscription id")
 		return
 	}
-	limit := 50
-	offset := 0
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			offset = n
-		}
-	}
-	if limit > 200 {
-		limit = 200
-	}
+	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListWebhookDeliveriesBySubscription(r.Context(), sqlc.ListWebhookDeliveriesBySubscriptionParams{
 		SubscriptionID: id,
 		Limit:          int32(limit),

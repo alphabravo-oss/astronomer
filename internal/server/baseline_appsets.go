@@ -14,6 +14,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
 const (
@@ -206,15 +207,15 @@ func baselineComponentFromTool(ctx context.Context, q baselineToolQuerier, fallb
 		return out
 	}
 	if chart, ok := firstToolChart(tool.Charts); ok {
-		out.ChartName = firstNonEmptyServerString(chart.ChartName, out.ChartName)
-		out.RepoURL = firstNonEmptyServerString(chart.RepoURL, out.RepoURL)
-		out.Namespace = firstNonEmptyServerString(chart.Namespace, out.Namespace)
+		out.ChartName = strutil.FirstNonBlankTrimmed(chart.ChartName, out.ChartName)
+		out.RepoURL = strutil.FirstNonBlankTrimmed(chart.RepoURL, out.RepoURL)
+		out.Namespace = strutil.FirstNonBlankTrimmed(chart.Namespace, out.Namespace)
 	}
 	if values := defaultPresetValues(tool.Presets); values != "" {
 		out.ValuesYAML = values
 	}
 	if out.Namespace == "" {
-		out.Namespace = firstNonEmptyServerString(tool.DefaultNamespace, fallback.Namespace)
+		out.Namespace = strutil.FirstNonBlankTrimmed(tool.DefaultNamespace, fallback.Namespace)
 	}
 	return out
 }
@@ -369,13 +370,4 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 			},
 		},
 	}
-}
-
-func firstNonEmptyServerString(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
 }

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
-	"strconv"
 	"strings"
 	"time"
 
@@ -528,21 +527,7 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
 		return
 	}
-	limit := 50
-	offset := 0
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			offset = n
-		}
-	}
-	if limit > 200 {
-		limit = 200
-	}
+	limit, offset := queryLimitOffset(r, 50)
 
 	rows, err := h.queries.ListEmailMessages(r.Context(), sqlc.ListEmailMessagesParams{
 		Limit:  int32(limit),

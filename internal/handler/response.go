@@ -91,6 +91,24 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 	return v
 }
 
+// queryLimitOffset parses the "limit"/"offset" pagination query params, clamping
+// limit to [1, 200] (falling back to defaultLimit when missing, unparseable, or
+// < 1) and offset to >= 0.
+func queryLimitOffset(r *http.Request, defaultLimit int) (limit, offset int) {
+	limit = queryInt(r, "limit", defaultLimit)
+	if limit < 1 {
+		limit = defaultLimit
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset = queryInt(r, "offset", 0)
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
+}
+
 type paginatedResponse struct {
 	Data     any     `json:"data"`
 	Count    int64   `json:"count"`

@@ -62,17 +62,7 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, "invalid_status", "Invalid task outbox status")
 		return
 	}
-	limit := queryInt(r, "limit", 50)
-	offset := queryInt(r, "offset", 0)
-	if limit < 1 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListTaskOutbox(r.Context(), sqlc.ListTaskOutboxParams{
 		Status: status,
 		Limit:  int32(limit),

@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
@@ -70,8 +69,3 @@ func HandleCrdMirrorGaugePopulate(ctx context.Context, _ *asynq.Task) error {
 type mirrorCountQuerier interface {
 	CountMirroredRowsByKind(ctx context.Context) ([]sqlc.MirrorRowCount, error)
 }
-
-// unused — kept to silence the goimports unused-import warning if
-// downstream packages drop the uuid usage. Removing the import would
-// also work; this is the lighter touch.
-var _ = uuid.Nil

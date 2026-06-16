@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -211,10 +210,7 @@ func sendOne(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
 		if newAttempts >= emailMaxAttempts {
 			status = "failed"
 		}
-		errMsg := err.Error()
-		if len(errMsg) > 1024 {
-			errMsg = errMsg[:1024]
-		}
+		errMsg := truncateDispatchLastError(err.Error(), 1024)
 		_ = emailDeps.Queries.MarkEmailFailed(ctx, sqlc.MarkEmailFailedParams{
 			ID:        row.ID,
 			Status:    status,
@@ -263,9 +259,3 @@ func HandleEmailCleanupOld(ctx context.Context, _ *asynq.Task) error {
 		return nil
 	})
 }
-
-// emailDispatchID is reserved for the future "enqueue-on-demand" path
-// that wakes the dispatcher between ticks. Not used today (the periodic
-// schedule covers the latency we care about) but defined so the
-// constant is visible in one place.
-var _ uuid.UUID

@@ -119,17 +119,7 @@ func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit := queryInt(r, "limit", 20)
-	offset := queryInt(r, "offset", 0)
-	if limit < 1 {
-		limit = 20
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := queryLimitOffset(r, 20)
 
 	rows, err := h.queries.ListBackupDrillResults(r.Context(), sqlc.ListBackupDrillResultsParams{
 		Limit:  int32(limit),

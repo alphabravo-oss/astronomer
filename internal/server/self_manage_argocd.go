@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	authv1 "k8s.io/api/authentication/v1"
@@ -390,8 +391,8 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		},
 		"bootstrap": map[string]any{
 			"password": string(bootstrapSecret.Data["password"]),
-			"username": firstNonEmptyServerString(os.Getenv("ASTRONOMER_BOOTSTRAP_USERNAME"), "admin"),
-			"email":    firstNonEmptyServerString(os.Getenv("ASTRONOMER_BOOTSTRAP_EMAIL"), "admin@astronomer.local"),
+			"username": strutil.FirstNonBlankTrimmed(os.Getenv("ASTRONOMER_BOOTSTRAP_USERNAME"), "admin"),
+			"email":    strutil.FirstNonBlankTrimmed(os.Getenv("ASTRONOMER_BOOTSTRAP_EMAIL"), "admin@astronomer.local"),
 		},
 	}
 	for key, value := range listenerValues {

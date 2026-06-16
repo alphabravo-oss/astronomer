@@ -374,17 +374,7 @@ func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request
 	if !h.gate(w, r) {
 		return
 	}
-	limit := queryInt(r, "limit", 50)
-	offset := queryInt(r, "offset", 0)
-	if limit < 1 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	if offset < 0 {
-		offset = 0
-	}
+	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListDeferredOperations(r.Context(), sqlc.ListDeferredOperationsParams{
 		Limit:  int32(limit),
 		Offset: int32(offset),
