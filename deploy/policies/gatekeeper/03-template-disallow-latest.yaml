@@ -1,0 +1,34 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowlatesttag
+  annotations:
+    astronomer.io/policy-bundle: "starter"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowLatestTag
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowlatesttag
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          endswith(c.image, ":latest")
+          msg := sprintf("Image with the :latest tag is not allowed: %v", [c.image])
+        }
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          not contains(c.image, ":")
+          msg := sprintf("Image without an explicit tag is not allowed: %v", [c.image])
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
