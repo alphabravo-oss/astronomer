@@ -48,7 +48,11 @@ spec:
             - -c
             - |
               echo "waiting for postgres..."
-              until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
+              # FQDN, not the short name: busybox's musl resolver does not apply
+              # the ndots/search domains, so `nc -z <svc>` returns "bad address"
+              # and the migration job hangs in init forever. The FQDN resolves
+              # regardless of resolver.
+              until nc -z {{ include "astronomer.fullname" . }}-postgres.{{ .Release.Namespace }}.svc.cluster.local 5432; do sleep 1; done
               echo "postgres up"
           volumeMounts:
             - name: tmp

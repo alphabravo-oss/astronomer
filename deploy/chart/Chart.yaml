@@ -16,3 +16,12 @@ keywords:
   - multi-cluster
   - management
   - golang
+dependencies:
+  # ArgoCD is required for provisioning (GitOps apply to managed clusters) and
+  # for Astronomer's self-management. Bundled as a subchart so a single
+  # `helm install astronomer` brings it up in the astronomer namespace, named
+  # astro-argocd (see values.yaml argo-cd.fullnameOverride).
+  - name: argo-cd
+    version: "9.5.21"
+    repository: https://argoproj.github.io/argo-helm
+    condition: argo-cd.enabled

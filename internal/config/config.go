@@ -183,7 +183,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
-		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://argocd-server.argocd.svc.cluster.local:80"},
+		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://astro-argocd-server.astronomer.svc.cluster.local:80"},
 		// Adopted clusters register against the dedicated internal proxy port
 		// (network-isolated, tokenless) — not the public :8000 listener.
 		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8090"},

@@ -38,15 +38,18 @@ import (
 )
 
 const (
-	localArgoInstanceName      = "local"
-	localArgoReleaseName       = "argocd"
-	localArgoNamespace         = "argocd"
-	localArgoAPIURL            = "http://argocd-server.argocd.svc.cluster.local/argocd"
+	localArgoInstanceName = "local"
+	// ArgoCD ships as the astro-argocd subchart of the astronomer chart, in the
+	// astronomer namespace — so its resources are astro-argocd-* and it is
+	// reachable in-namespace (no separate argocd namespace).
+	localArgoReleaseName       = "astro-argocd"
+	localArgoNamespace         = "astronomer"
+	localArgoAPIURL            = "http://astro-argocd-server.astronomer.svc.cluster.local/argocd"
 	localArgoRepoSecretName    = "astronomer-self-repo"
 	localArgoClusterSecretName = "astronomer-local-cluster"
 	localArgoApplicationName   = "astronomer-self-manage"
 	localArgoRepoURL           = "http://astronomer-server.astronomer.svc.cluster.local:8000/helm-repo/astronomer-v2"
-	localArgoAppControllerSA   = "argocd-application-controller"
+	localArgoAppControllerSA   = "astro-argocd-application-controller"
 	localArgoAppControllerTTL  = 24 * time.Hour
 	localArgoBootstrapPeriod   = 30 * time.Second
 	localArgoBootstrapTimeout  = 60 * time.Second

@@ -1013,9 +1013,10 @@ crds:
   # The namespace itself is NOT created by the chart — operators install
   # the CRD into an existing namespace they own.
   watchNamespace: astronomer-mgmt
-  # Namespace containing the built-in Argo CD ApplicationSet CRDs/resources.
-  # GitOpsTarget materialization writes ApplicationSets here.
-  argoNamespace: argocd
+  # Namespace containing the bundled astro-argocd subchart (the release
+  # namespace). GitOpsTarget materialization writes ApplicationSets here and the
+  # NetworkPolicy scopes ArgoCD<->server traffic to it.
+  argoNamespace: astronomer
 
 # =============================================================================
 # In-browser kubectl shell (migration 065 / sprint 17)
@@ -1046,3 +1047,35 @@ kubectlShell:
   # Hard cap — the session unconditionally closes at this many hours
   # since open, even if the operator is still actively typing.
   sessionHardCapHours: 4
+
+# =============================================================================
+# argo-cd subchart (bundled). Deploys ArgoCD as "astro-argocd" in the release
+# namespace. Astronomer's server self-manages through it and uses it to apply
+# baseline ApplicationSets to managed clusters. Disable to bring your own.
+# =============================================================================
+argo-cd:
+  enabled: true
+  # All resources become astro-argocd-* (server, application-controller, etc.).
+  fullnameOverride: astro-argocd
+  dex:
+    enabled: false
+  redis-ha:
+    enabled: false
+  controller:
+    replicas: 1
+  applicationSet:
+    enabled: true
+  configs:
+    params:
+      # Astronomer reverse-proxies /argocd/* after its own auth; ArgoCD runs
+      # insecure behind that and emits its SPA under /argocd.
+      server.insecure: true
+      server.rootpath: /argocd
+      server.basehref: /argocd
+    cm:
+      # Account Astronomer's self-management authenticates as.
+      accounts.astronomer: apiKey, login
+    rbac:
+      policy.csv: |
+        g, astronomer, role:admin
+      policy.default: role:readonly

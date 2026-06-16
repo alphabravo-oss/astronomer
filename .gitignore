@@ -33,3 +33,6 @@ coverage.out
 
 # Generated marketing screenshots (large binaries)
 screenshots/
+
+# Vendored Helm subchart tarballs (rebuilt via `helm dependency build`; Chart.lock pins versions)
+deploy/chart/charts/
