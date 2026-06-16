@@ -159,14 +159,33 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 					ClusterID: clusterStr,
 					RuleID:    rule.ID.String(),
 				})
-				if err == nil && task != nil {
-					runtimeLogger().InfoContext(ctx, "prepared alert notification",
+				if err != nil || task == nil {
+					runtimeLogger().ErrorContext(ctx, "failed to build alert notification task",
+						"event_id", event.ID.String(),
+						"channel_id", channel.ID.String(),
+						"error", err)
+					continue
+				}
+				if runtimeDeps.Enqueuer == nil {
+					runtimeLogger().WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
+						"event_id", event.ID.String(),
+						"channel_id", channel.ID.String())
+					continue
+				}
+				if _, enqErr := runtimeDeps.Enqueuer.Enqueue(task); enqErr != nil {
+					runtimeLogger().ErrorContext(ctx, "failed to enqueue alert notification",
 						"event_id", event.ID.String(),
 						"channel_id", channel.ID.String(),
 						"channel_type", channel.ChannelType,
-						"severity", rule.Severity,
-						"recipient_count", len(notificationRecipients(channel)))
+						"error", enqErr)
+					continue
 				}
+				runtimeLogger().InfoContext(ctx, "enqueued alert notification",
+					"event_id", event.ID.String(),
+					"channel_id", channel.ID.String(),
+					"channel_type", channel.ChannelType,
+					"severity", rule.Severity,
+					"recipient_count", len(notificationRecipients(channel)))
 			}
 		}
 
@@ -577,6 +596,12 @@ func pgTime(t time.Time) pgtype.Timestamptz {
 // Order intentionally favors the type-specific key first so a misuse
 // (`url` field on a slack channel that should be webhook_url) doesn't
 // silently mask a misconfig.
+// NotificationRecipients exposes the channel delivery-target extraction for
+// callers outside this package (e.g. the handler's Test Channel endpoint).
+func NotificationRecipients(channel sqlc.NotificationChannel) []string {
+	return notificationRecipients(channel)
+}
+
 func notificationRecipients(channel sqlc.NotificationChannel) []string {
 	var cfg map[string]any
 	if err := json.Unmarshal(channel.Configuration, &cfg); err != nil {

@@ -93,6 +93,17 @@ func main() {
 	audit.SetWriter(auditWriter)
 	defer audit.SetWriter(nil)
 
+	// Enqueuer for tasks that fan out follow-up work (e.g. the alert
+	// evaluator handing notification:send tasks to the notification
+	// dispatcher). This is the worker process that runs HandleAlertEvaluation,
+	// so it must be able to enqueue.
+	runtimeRedisOpt, redisOptErr := asynq.ParseRedisURI(cfg.RedisURL)
+	if redisOptErr != nil {
+		log.Error("failed to parse redis uri for runtime enqueuer", "error", redisOptErr)
+		os.Exit(1)
+	}
+	runtimeEnqueuer := asynq.NewClient(runtimeRedisOpt)
+	defer runtimeEnqueuer.Close()
 	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
 		Queries:                 sqlc.New(database.Pool()),
 		Log:                     log,
@@ -101,6 +112,7 @@ func main() {
 		PlatformName:            "Astronomer",
 		AuditLogRetentionMonths: cfg.AuditLogRetentionMonths,
 		Leader:                  leader.New(database.Pool(), log),
+		Enqueuer:                runtimeEnqueuer,
 	})
 	var controlPlaneK8s kubernetes.Interface
 	var controlPlaneDyn dynamic.Interface

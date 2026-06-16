@@ -1158,6 +1158,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			return h
 		}(),
 	}
+	// Wire the asynq client into the alerting handler so the "Test Channel"
+	// endpoint can dispatch a real notification:send task.
+	deps.Alerting.SetEnqueuer(queue)
 	// Migration 063 — read-side audit. The PolicyEvaluator is shared
 	// between the middleware and the admin handler so policy writes
 	// invalidate the 30s cache. Both are nil-safe; when queries are
@@ -1372,6 +1375,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		PlatformName:   "Astronomer",
 		Leader:         leader.New(database.Pool(), logger),
 		K8s:            requester,
+		Enqueuer:       queue,
 	})
 	// Migration 092: durable task outbox dispatcher. Handlers can commit a
 	// task_outbox row in the same transaction as product state, and this

@@ -70,6 +70,10 @@ type AlertingQuerier interface {
 type AlertingHandler struct {
 	queries   AlertingQuerier
 	requester K8sRequester
+	// enqueuer hands a notification:send task to the worker dispatcher for the
+	// "Test Channel" button. Optional — when nil, the test endpoint reports
+	// the dispatcher is unavailable rather than pretending success.
+	enqueuer tasks.Enqueuer
 }
 
 // NewAlertingHandler creates a new alerting handler.
@@ -80,6 +84,9 @@ func NewAlertingHandler(queries AlertingQuerier) *AlertingHandler {
 func NewAlertingHandlerWithDeps(queries AlertingQuerier, requester K8sRequester) *AlertingHandler {
 	return &AlertingHandler{queries: queries, requester: requester}
 }
+
+// SetEnqueuer wires the asynq client used to dispatch test notifications.
+func (h *AlertingHandler) SetEnqueuer(e tasks.Enqueuer) { h.enqueuer = e }
 
 // --- Request types ---
 
@@ -305,11 +312,36 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
 		return
 	}
-	if _, err := h.queries.GetNotificationChannelByID(r.Context(), id); err != nil {
+	channel, err := h.queries.GetNotificationChannelByID(r.Context(), id)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Notification channel not found")
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Notification channel configuration is valid"})
+	if h.enqueuer == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, "dispatcher_unavailable", "Notification dispatcher is not available")
+		return
+	}
+	recipients := tasks.NotificationRecipients(channel)
+	if len(recipients) == 0 && strings.ToLower(channel.ChannelType) != "email" {
+		RespondRequestError(w, r, http.StatusBadRequest, "no_destination", "Channel has no configured destination to test")
+		return
+	}
+	task, err := tasks.NewNotificationSendTask(tasks.NotificationSendPayload{
+		Channel:    channel.ChannelType,
+		Subject:    "Astronomer test notification",
+		Body:       "This is a test notification from Astronomer for channel \"" + channel.Name + "\". If you can see this, delivery is working.",
+		Recipients: recipients,
+		Severity:   "info",
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, "build_error", "Failed to build test notification")
+		return
+	}
+	if _, err := h.enqueuer.Enqueue(task); err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, "enqueue_error", "Failed to enqueue test notification")
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Test notification sent to " + channel.Name})
 }
 
 // DeleteChannel handles DELETE /api/v1/alerting/channels/{id}/.

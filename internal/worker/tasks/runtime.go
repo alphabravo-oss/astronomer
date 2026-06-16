@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -140,6 +141,17 @@ type RuntimeDependencies struct {
 	// tasks degrade gracefully (e.g. mark the row failed with a clear
 	// message).
 	K8s K8sRequester
+	// Enqueuer hands follow-up tasks to the asynq queue — e.g. the alert
+	// evaluator enqueues a notification:send task per fired (rule, channel).
+	// Optional — when nil, tasks that would fan out a follow-up log and skip
+	// it rather than crash. *asynq.Client satisfies it.
+	Enqueuer Enqueuer
+}
+
+// Enqueuer is the narrow asynq surface a task uses to enqueue a follow-up
+// task. *asynq.Client satisfies it; tests inject a recording fake.
+type Enqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
 var runtimeDeps RuntimeDependencies
