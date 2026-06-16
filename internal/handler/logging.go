@@ -782,8 +782,28 @@ func (h *LoggingHandler) refreshAggregateFluentBitConfig(ctx context.Context, cl
 	}
 	return applyConfigMap(ctx, h.requester, clusterID, LoggingNamespace, FluentBitConfigMapName, map[string]string{
 		"fluent-bit.conf": config,
+		// Standard parsers referenced by [SERVICE] Parsers_File; existingConfigMap
+		// mounts only the keys in this ConfigMap, so we ship parsers here too.
+		"parsers.conf": fluentBitDefaultParsers,
 	})
 }
+
+// fluentBitDefaultParsers is a minimal parsers.conf covering CRI/Docker
+// container-runtime log formats so the tail input can decode k8s logs.
+const fluentBitDefaultParsers = `[PARSER]
+    Name cri
+    Format regex
+    Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+    Time_Key time
+    Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+[PARSER]
+    Name docker
+    Format json
+    Time_Key time
+    Time_Format %Y-%m-%dT%H:%M:%S.%L
+    Time_Keep On
+`
 
 // renderFullFluentbitConfig assembles the complete Fluent Bit configuration for
 // a cluster from its enabled pipelines (filters) and outputs, reusing the same
