@@ -62,6 +62,7 @@ func (h *BackupHandler) reconcileOnce(ctx context.Context) {
 	h.pollRunningBackups(ctx)
 	h.reconcilePendingRestores(ctx)
 	h.pollRunningRestores(ctx)
+	h.enforceScheduleRetention(ctx)
 }
 
 func (h *BackupHandler) reconcilePendingBackups(ctx context.Context) {

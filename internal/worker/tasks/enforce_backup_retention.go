@@ -14,15 +14,16 @@ func NewEnforceBackupRetentionTask() *asynq.Task {
 	return asynq.NewTask(EnforceBackupRetentionType, nil, asynq.MaxRetry(2))
 }
 
-// HandleEnforceBackupRetention is a no-op under the Velero engine. Velero
-// honours the `spec.ttl` we attach to every Schedule (and to one-off Backup
-// CRs); on expiry it deletes both the in-cluster Backup object and the
-// underlying object-storage bytes. Our DB rows are pruned by the server-side
-// reconciler when it observes the upstream CR has been removed.
+// HandleEnforceBackupRetention is a no-op in the worker process. Retention is
+// enforced elsewhere: TIME-based expiry is delegated to Velero via the
+// `spec.ttl` attached to every Schedule/Backup CR, and COUNT-based retention
+// ("keep N backups") is enforced by the server-side BackupHandler reconciler
+// (enforceScheduleRetention), which has the tunnel K8s requester needed to
+// issue Velero DeleteBackupRequest CRs. The standalone worker has no tunnel,
+// so it can't do that work — hence the no-op here.
 //
-// We keep the handler registered so the existing scheduler entry continues
-// to enqueue without error and so a future iteration can extend it (for
-// example, to vacuum failed backup rows older than N days).
+// We keep the handler registered so the existing scheduler entry continues to
+// enqueue without error.
 func HandleEnforceBackupRetention(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, EnforceBackupRetentionType, func() error {
 		if runtimeDeps.Queries == nil {
