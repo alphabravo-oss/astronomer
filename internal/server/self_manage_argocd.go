@@ -50,6 +50,7 @@ const (
 	localArgoApplicationName   = "astronomer-self-manage"
 	localArgoRepoURL           = "http://astronomer-server.astronomer.svc.cluster.local:8000/helm-repo/astronomer-v2"
 	localArgoAppControllerSA   = "astro-argocd-application-controller"
+	localArgoServerDeployment  = "astro-argocd-server"
 	localArgoAppControllerTTL  = 24 * time.Hour
 	localArgoBootstrapPeriod   = 30 * time.Second
 	localArgoBootstrapTimeout  = 60 * time.Second
@@ -100,10 +101,11 @@ func startLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg 
 }
 
 func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, encryptor *auth.Encryptor, k8s kubernetes.Interface, dyn dynamic.Interface, localCluster sqlc.Cluster, toolHandler *handler.ToolHandler) error {
-	if _, err := toolHandler.EnsureInstalled(ctx, localCluster.ID, handler.ArgoCDToolSlug, localArgoReleaseName, "default", handler.ArgoCDDefaultValuesYAML); err != nil {
-		return fmt.Errorf("ensure argocd tool installed: %w", err)
-	}
-	if err := waitForDeploymentReady(ctx, k8s, localArgoNamespace, "argocd-server"); err != nil {
+	// ArgoCD ships as the bundled astro-argocd subchart of the astronomer
+	// release, so it is already installed. We just wait for it to be ready
+	// instead of helm-installing it as a separate tool — that would collide on
+	// the argoproj.io CRDs already owned by the astronomer release.
+	if err := waitForDeploymentReady(ctx, k8s, localArgoNamespace, localArgoServerDeployment); err != nil {
 		return fmt.Errorf("argocd-server not ready: %w", err)
 	}
 
