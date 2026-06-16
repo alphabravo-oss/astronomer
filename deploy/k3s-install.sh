@@ -4,7 +4,8 @@
 #
 # Stands up the full stack the way we want it, from scratch:
 #   k3s (NO flannel, NO traefik)  ->  Calico CNI  ->  cert-manager
-#   ->  ingress-nginx  ->  argocd  ->  import images  ->  helm install astronomer
+#   ->  ingress-nginx  ->  import images  ->  helm install astronomer
+# ArgoCD is bundled in the astronomer chart (astro-argocd subchart), not here.
 #
 # Why Calico (not flannel): flannel + k3s kube-proxy on this host drifted such
 # that new pods couldn't reach ClusterIPs (CoreDNS/postgres). Calico is the
@@ -28,7 +29,7 @@ INGRESS_NGINX_VERSION="${INGRESS_NGINX_VERSION:-4.15.1}"
 ARGOCD_CHART_VERSION="${ARGOCD_CHART_VERSION:-9.5.21}"
 
 # Astronomer image tags (locally-built, imported into k3s containerd).
-IMG_SERVER="${IMG_SERVER:-dd-ba1adcc}"
+IMG_SERVER="${IMG_SERVER:-dd-1481a04}"
 IMG_WORKER="${IMG_WORKER:-dd-62e7d0b}"
 IMG_FRONTEND="${IMG_FRONTEND:-dd-2de57b1}"
 IMG_MIGRATE="${IMG_MIGRATE:-dd-4caf792}"
