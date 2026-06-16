@@ -410,11 +410,16 @@ export interface GroupMapping {
 }
 
 export interface GroupMappingWriteRequest {
-  connector: string;
+  /** Connector UUID; empty/omitted = wildcard (any connector). */
+  connector_id?: string;
   group_name: string;
   scope: GroupScope;
-  role: string;
-  target?: string;
+  /** Role UUID. */
+  role_id: string;
+  /** Cluster UUID, required when scope=cluster. */
+  cluster_id?: string;
+  /** Project UUID, required when scope=project. */
+  project_id?: string;
 }
 
 // ============================================================

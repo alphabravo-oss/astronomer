@@ -178,11 +178,12 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
     }
     try {
       await create.mutateAsync({
-        connector,
+        ...(connector ? { connector_id: connector } : {}),
         group_name: groupName,
         scope,
-        role,
-        ...(scope !== 'global' ? { target } : {}),
+        role_id: role,
+        ...(scope === 'cluster' ? { cluster_id: target } : {}),
+        ...(scope === 'project' ? { project_id: target } : {}),
       });
       onClose();
       setConnector('');
@@ -218,7 +219,7 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
           >
             <option value="">Any connector</option>
             {(connectors ?? []).map((c) => (
-              <option key={c.id} value={c.name}>
+              <option key={c.id} value={c.id}>
                 {c.displayName} ({c.type})
               </option>
             ))}
@@ -265,7 +266,7 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
               Pick a role…
             </option>
             {(roles ?? []).map((r) => (
-              <option key={r.id} value={r.name}>
+              <option key={r.id} value={r.id}>
                 {r.displayName} ({r.name})
               </option>
             ))}
@@ -291,7 +292,7 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
                 ))}
               {scope === 'project' &&
                 (projectsData?.data ?? []).map((p) => (
-                  <option key={p.id} value={p.name}>
+                  <option key={p.id} value={p.id}>
                     {p.displayName} ({p.name})
                   </option>
                 ))}
