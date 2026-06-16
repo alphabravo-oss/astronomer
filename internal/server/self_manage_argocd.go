@@ -49,8 +49,11 @@ const (
 	localArgoClusterSecretName = "astronomer-local-cluster"
 	localArgoApplicationName   = "astronomer-self-manage"
 	localArgoRepoURL           = "http://astronomer-server.astronomer.svc.cluster.local:8000/helm-repo/astronomer-v2"
-	localArgoAppControllerSA   = "astro-argocd-application-controller"
-	localArgoServerDeployment  = "astro-argocd-server"
+	// The argo-cd subchart's fullnameOverride prefixes workloads
+	// (astro-argocd-server, astro-argocd-application-controller) but its
+	// ServiceAccounts keep the chart's fixed unprefixed names.
+	localArgoAppControllerSA  = "argocd-application-controller"
+	localArgoServerDeployment = "astro-argocd-server"
 	localArgoAppControllerTTL  = 24 * time.Hour
 	localArgoBootstrapPeriod   = 30 * time.Second
 	localArgoBootstrapTimeout  = 60 * time.Second
