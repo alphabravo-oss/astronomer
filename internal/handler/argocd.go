@@ -43,7 +43,9 @@ const MaxArgoCDOperationPolls = 60
 const argoCDPollCadence = 30 * time.Second
 
 const (
-	argocdNamespace                   = "argocd"
+	// ArgoCD ships as the bundled astro-argocd subchart in the astronomer
+	// namespace, so its ServiceAccounts/cluster Secrets live there.
+	argocdNamespace                   = "astronomer"
 	argocdApplicationControllerSA     = "argocd-application-controller"
 	localArgoCDTokenDuration          = 24 * time.Hour
 	localArgoCDTokenRefreshWindow     = 2 * time.Hour

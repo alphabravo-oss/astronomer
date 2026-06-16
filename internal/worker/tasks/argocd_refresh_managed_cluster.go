@@ -39,7 +39,7 @@ const ArgoCDRefreshManagedClusterLabelsType = "argocd:refresh_managed_cluster_la
 // its cluster Secrets. Kept in lockstep with internal/handler.argocdNamespace —
 // duplicated here so this package doesn't import internal/handler (which would
 // create a cycle).
-const argoCDNamespace = "argocd"
+const argoCDNamespace = "astronomer"
 
 // argoCDClusterSecretTypeLabel marks a Secret as an ArgoCD cluster registration.
 // Mirrors the constants in internal/handler/argocd.go for the same reason as

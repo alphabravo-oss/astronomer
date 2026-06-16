@@ -291,11 +291,10 @@ spec:
     {{- end }}
     # The argocd auto-register worker task calls the built-in ArgoCD API server
     # to register connected clusters (so baseline ApplicationSets can provision
-    # them). argocd-server listens on 8080 (its Service maps 80/443 -> 8080) and
-    # the CNI evaluates egress post-DNAT on the backend pod, so this is tightly
-    # scoped to the argocd-server pod in the ArgoCD namespace on 8080 — NOT a
-    # blanket port opening. External ArgoCD instances are reached via the
-    # 80/443 external-CIDR egress below.
+    # them). Calico evaluates egress against the Service port (pre-DNAT), not the
+    # backend pod's 8080, so allow the Service's 80/443 as well as 8080 — matching
+    # the server netpol. External ArgoCD instances are reached via the 80/443
+    # external-CIDR egress below.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -304,6 +303,10 @@ spec:
             matchLabels:
               app.kubernetes.io/name: argocd-server
       ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
         - protocol: TCP
           port: 8080
     {{- range $cidr := $externalCIDRs }}
