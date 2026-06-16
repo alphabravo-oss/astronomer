@@ -20,13 +20,13 @@ import (
 
 // fakeSIEMQuerier is the in-memory SIEMQuerier the handler tests use.
 type fakeSIEMQuerier struct {
-	mu          sync.Mutex
-	byID        map[uuid.UUID]sqlc.SiemForwarder
-	byName      map[string]sqlc.SiemForwarder
-	queue       []sqlc.SiemForwardQueue
-	status      map[uuid.UUID]sqlc.SiemForwarderStatus
-	users       map[uuid.UUID]sqlc.User
-	enqueueCnt  int
+	mu         sync.Mutex
+	byID       map[uuid.UUID]sqlc.SiemForwarder
+	byName     map[string]sqlc.SiemForwarder
+	queue      []sqlc.SiemForwardQueue
+	status     map[uuid.UUID]sqlc.SiemForwarderStatus
+	users      map[uuid.UUID]sqlc.User
+	enqueueCnt int
 }
 
 func newFakeSIEMQuerier(users ...sqlc.User) *fakeSIEMQuerier {

@@ -226,4 +226,3 @@ func decodeBase64Loose(s string) ([]byte, error) {
 	}
 	return base64.RawStdEncoding.DecodeString(strings.TrimRight(s, "="))
 }
-

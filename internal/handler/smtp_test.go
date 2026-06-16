@@ -135,16 +135,16 @@ func TestSMTPHandler_GetSetTest(t *testing.T) {
 
 	// PUT a fresh config.
 	put := map[string]any{
-		"enabled":       true,
-		"host":          "smtp.example.com",
-		"port":          587,
-		"username":      "user",
-		"password":      "topsecret",
-		"from_address":  "noreply@example.com",
-		"from_name":     "Test",
-		"auth_mechanism": "plain",
-		"encryption":    "starttls",
-		"require_tls":   true,
+		"enabled":         true,
+		"host":            "smtp.example.com",
+		"port":            587,
+		"username":        "user",
+		"password":        "topsecret",
+		"from_address":    "noreply@example.com",
+		"from_name":       "Test",
+		"auth_mechanism":  "plain",
+		"encryption":      "starttls",
+		"require_tls":     true,
 		"timeout_seconds": 30,
 	}
 	body, _ := json.Marshal(put)

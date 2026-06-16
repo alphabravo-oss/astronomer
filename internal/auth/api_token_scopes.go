@@ -82,10 +82,10 @@ func ParseTokenScopes(raw json.RawMessage) ([]string, error) {
 // ScopeAllowsRequest decides whether the supplied token scopes are
 // sufficient to satisfy `required`.
 //
-//	- Empty `scopes` slice => legacy token, NO scope-level enforcement
-//	  (preserves backward compatibility with pre-044 tokens).
-//	- ScopeAdmin or ScopeWildcard ("*") => allow everything.
-//	- Otherwise => the required scope must be in the slice verbatim.
+//   - Empty `scopes` slice => legacy token, NO scope-level enforcement
+//     (preserves backward compatibility with pre-044 tokens).
+//   - ScopeAdmin or ScopeWildcard ("*") => allow everything.
+//   - Otherwise => the required scope must be in the slice verbatim.
 //
 // `required` may be empty when the route doesn't need scope enforcement
 // (e.g. /auth/me/), in which case any non-revoked token passes.

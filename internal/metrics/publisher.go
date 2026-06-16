@@ -67,11 +67,11 @@ type MetricsProvider interface {
 // Publisher drives the periodic fan-out. Construct via New, then Start.
 // Start spawns goroutines and returns immediately; cancel ctx to stop them.
 type Publisher struct {
-	bus      *events.Bus
-	queries  ClusterQuerier
-	metrics  MetricsProvider
-	log      *slog.Logger
-	tickEvery time.Duration
+	bus        *events.Bus
+	queries    ClusterQuerier
+	metrics    MetricsProvider
+	log        *slog.Logger
+	tickEvery  time.Duration
 	sweepEvery time.Duration
 	threshold  time.Duration
 }

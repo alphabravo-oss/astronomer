@@ -922,7 +922,7 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, auditD
 		(*auditDetail)["sso_logout"] = "no_endpoint"
 		return ""
 	}
-		idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
+	idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
 	if err != nil {
 		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "encrypt_error")...).Inc()
 		(*auditDetail)["sso_logout"] = "decrypt_failed"

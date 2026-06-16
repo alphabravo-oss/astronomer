@@ -17,12 +17,12 @@ import (
 // to be assembled directly.
 //
 // Encoding choices:
-//   * Subject is rendered ASCII-only (asciiSafeSubject) so we don't
+//   - Subject is rendered ASCII-only (asciiSafeSubject) so we don't
 //     need to RFC 2047-encode.
-//   * Body parts use quoted-printable so a "long line" or stray UTF-8
+//   - Body parts use quoted-printable so a "long line" or stray UTF-8
 //     in a username doesn't trip SMTP servers that enforce the 1000-
 //     octet hard line limit (RFC 5321 §4.5.3.1.6).
-//   * The boundary is 32 random bytes hex-encoded; collision with body
+//   - The boundary is 32 random bytes hex-encoded; collision with body
 //     content is statistically impossible at that length.
 func composeMessage(subject, from, to, cc, text, html string) ([]byte, error) {
 	boundary, err := randomBoundary()

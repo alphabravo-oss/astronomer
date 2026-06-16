@@ -54,9 +54,9 @@ func (p *SQLSettingsProvider) Invalidate() {
 }
 
 // Provide returns the current Settings. The error path:
-//   * no smtp_settings row yet → returns (empty, nil) so the dispatch
+//   - no smtp_settings row yet → returns (empty, nil) so the dispatch
 //     worker logs "smtp disabled" cleanly and skips the send.
-//   * fernet decrypt fail → returns a non-nil error; the dispatcher
+//   - fernet decrypt fail → returns a non-nil error; the dispatcher
 //     marks the row failed (it'd otherwise loop forever).
 func (p *SQLSettingsProvider) Provide(ctx context.Context) (Settings, error) {
 	p.mu.Lock()

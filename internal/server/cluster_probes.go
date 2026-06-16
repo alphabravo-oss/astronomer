@@ -18,8 +18,8 @@ import (
 // so the server can write them without depending on the worker package
 // (which would create an import cycle through tunnel-aware code).
 const (
-	probeConditionAgentReachable     = "AgentReachable"
-	probeConditionGatewayAPISupport  = "GatewayAPISupported"
+	probeConditionAgentReachable    = "AgentReachable"
+	probeConditionGatewayAPISupport = "GatewayAPISupported"
 )
 
 const (

@@ -102,18 +102,18 @@ func TestWebhookDispatch_SubscriptionTemplateBeatsOverride(t *testing.T) {
 // registry keys. Lock the precedence table.
 func TestOverrideKeyForEvent(t *testing.T) {
 	cases := map[string]string{
-		"audit.user.login":          "webhook.audit.event",
-		"audit.admin.webhook.create": "webhook.audit.event",
-		"cluster.connected":         "webhook.cluster.connected",
-		"cluster.disconnected":      "webhook.cluster.disconnected",
-		"cluster.status_changed":    "webhook.cluster.status_changed",
-		"cluster.created":           "webhook.cluster.created",
-		"cluster.updated":           "webhook.cluster.updated",
-		"cluster.deleted":           "webhook.cluster.deleted",
+		"audit.user.login":                          "webhook.audit.event",
+		"audit.admin.webhook.create":                "webhook.audit.event",
+		"cluster.connected":                         "webhook.cluster.connected",
+		"cluster.disconnected":                      "webhook.cluster.disconnected",
+		"cluster.status_changed":                    "webhook.cluster.status_changed",
+		"cluster.created":                           "webhook.cluster.created",
+		"cluster.updated":                           "webhook.cluster.updated",
+		"cluster.deleted":                           "webhook.cluster.deleted",
 		"cluster.decommission.cleanup_managed_side": "webhook.cluster.decommissioned",
-		"alert.fired":                          "webhook.alert.fired",
-		"alert.resolved":                       "webhook.alert.resolved",
-		"unknown.event":                        "",
+		"alert.fired":                               "webhook.alert.fired",
+		"alert.resolved":                            "webhook.alert.resolved",
+		"unknown.event":                             "",
 	}
 	for ev, want := range cases {
 		got := overrideKeyForEvent(ev)

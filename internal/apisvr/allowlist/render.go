@@ -6,11 +6,11 @@
 //
 //   - operatorCIDRs   : the CIDR list the operator stored on the row.
 //   - astronomerEgress: the tunnel-egress block the platform always
-//                       needs to keep open (otherwise the agent loses
-//                       its outbound path back to the control plane).
+//     needs to keep open (otherwise the agent loses
+//     its outbound path back to the control plane).
 //   - emergency       : the global emergency-access block (optional;
-//                       set by the operator as a "break-glass" CIDR
-//                       in chart values).
+//     set by the operator as a "break-glass" CIDR
+//     in chart values).
 //
 // And returns the desired-state list with:
 //

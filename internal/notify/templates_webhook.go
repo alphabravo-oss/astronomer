@@ -48,16 +48,16 @@ const canonicalEventJSON = `{
 // Webhook template keys. The convention is "webhook.<family>" so the
 // admin UI can group related families under one section.
 const (
-	KeyWebhookAuditEvent             = "webhook.audit.event"
-	KeyWebhookAlertFired             = "webhook.alert.fired"
-	KeyWebhookAlertResolved          = "webhook.alert.resolved"
-	KeyWebhookClusterConnected       = "webhook.cluster.connected"
-	KeyWebhookClusterDisconnected    = "webhook.cluster.disconnected"
-	KeyWebhookClusterStatusChanged   = "webhook.cluster.status_changed"
-	KeyWebhookClusterCreated         = "webhook.cluster.created"
-	KeyWebhookClusterUpdated         = "webhook.cluster.updated"
-	KeyWebhookClusterDeleted         = "webhook.cluster.deleted"
-	KeyWebhookClusterDecommissioned  = "webhook.cluster.decommissioned"
+	KeyWebhookAuditEvent            = "webhook.audit.event"
+	KeyWebhookAlertFired            = "webhook.alert.fired"
+	KeyWebhookAlertResolved         = "webhook.alert.resolved"
+	KeyWebhookClusterConnected      = "webhook.cluster.connected"
+	KeyWebhookClusterDisconnected   = "webhook.cluster.disconnected"
+	KeyWebhookClusterStatusChanged  = "webhook.cluster.status_changed"
+	KeyWebhookClusterCreated        = "webhook.cluster.created"
+	KeyWebhookClusterUpdated        = "webhook.cluster.updated"
+	KeyWebhookClusterDeleted        = "webhook.cluster.deleted"
+	KeyWebhookClusterDecommissioned = "webhook.cluster.decommissioned"
 )
 
 // commonWebhookVars are the keys every webhook event carries (the

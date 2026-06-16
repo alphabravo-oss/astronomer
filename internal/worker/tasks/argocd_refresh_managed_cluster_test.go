@@ -330,12 +330,12 @@ func TestRefreshManagedClusterLabels_NoChangeNoPatch(t *testing.T) {
 			Name:      secretName,
 			Namespace: argoCDNamespace,
 			Labels: map[string]string{
-				argoCDClusterSecretTypeLabel:            argoCDClusterSecretTypeValue,
-				"astronomer.io/managed-by":              "astronomer",
-				"astronomer.io/cluster-id":              clusterID.String(),
-				"astronomer.io/cluster-name":            "noop",
-				"astronomer.io/environment":             "prod",
-				"astronomer.io/is-local":                "false",
+				argoCDClusterSecretTypeLabel: argoCDClusterSecretTypeValue,
+				"astronomer.io/managed-by":   "astronomer",
+				"astronomer.io/cluster-id":   clusterID.String(),
+				"astronomer.io/cluster-name": "noop",
+				"astronomer.io/environment":  "prod",
+				"astronomer.io/is-local":     "false",
 				// No explicit profile annotation on the cluster -> desired
 				// profile is the full-management admin default. Matching here
 				// keeps this the idempotent no-op case.

@@ -171,9 +171,9 @@ func TestFormat_NDJSON_DefaultSeverityIsInfo(t *testing.T) {
 func TestFormat_ForID_DispatchesCorrectly(t *testing.T) {
 	ev := auditEvent()
 	cases := []struct {
-		id      string
-		prefix  []byte
-		isJSON  bool
+		id     string
+		prefix []byte
+		isJSON bool
 	}{
 		{FormatRFC5424ID, []byte("<"), false},
 		{FormatRFC3164ID, []byte("<"), false},

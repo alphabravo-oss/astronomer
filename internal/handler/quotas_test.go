@@ -282,13 +282,13 @@ func TestProjectQuota_RendersUsage(t *testing.T) {
 	projectID := uuid.New()
 	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
 	q.projectPlan[projectID] = sqlc.GetEffectiveQuotaForProjectRow{
-		ProjectID:             projectID,
-		PlanName:              "free",
-		Enforcement:           "hard",
-		MaxClustersPerProject: 5,
+		ProjectID:               projectID,
+		PlanName:                "free",
+		Enforcement:             "hard",
+		MaxClustersPerProject:   5,
 		MaxNamespacesPerProject: 10,
-		MaxMembersPerProject:  10,
-		Overrides:             json.RawMessage(`{"max_clusters_per_project": 50}`),
+		MaxMembersPerProject:    10,
+		Overrides:               json.RawMessage(`{"max_clusters_per_project": 50}`),
 	}
 	q.clustersInProject[projectID] = 3
 	q.namespacesInProject[projectID] = 4

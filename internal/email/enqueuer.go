@@ -33,11 +33,11 @@ type OverrideLookup func(ctx context.Context, key string) (Overrides, bool)
 // Enqueuer is the user-facing API every hook site (auth lockout, totp
 // enroll, alert fire, ...) writes to. It:
 //
-//   1. Renders the template (so the body is captured at the time the
-//      event happened, not when the dispatcher gets around to it).
-//   2. Inserts an email_messages row with status='queued' when SMTP
-//      is enabled OR status='skipped' when it isn't.
-//   3. Returns the row id so the caller can correlate in audit logs.
+//  1. Renders the template (so the body is captured at the time the
+//     event happened, not when the dispatcher gets around to it).
+//  2. Inserts an email_messages row with status='queued' when SMTP
+//     is enabled OR status='skipped' when it isn't.
+//  3. Returns the row id so the caller can correlate in audit logs.
 //
 // The actual SMTP send happens later, in the email:dispatch worker
 // task. Decoupling enqueue from send is the constraint above ("DON'T

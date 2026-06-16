@@ -15,16 +15,16 @@
 //
 // Detection precedence (when multiple meshes have artifacts present):
 //   - Istio   wins first when istiod is in istio-system OR a Gateway /
-//             VirtualService / DestinationRule CR exists. The Istio
-//             ecosystem is the dominant install across the fleet and
-//             its CRDs collide with no other mesh's API surface.
+//     VirtualService / DestinationRule CR exists. The Istio
+//     ecosystem is the dominant install across the fleet and
+//     its CRDs collide with no other mesh's API surface.
 //   - Linkerd second when the linkerd-control-plane Deployment exists
-//             OR a ServiceProfile / Server CR exists.
+//     OR a ServiceProfile / Server CR exists.
 //   - Kuma    third (kuma-system control-plane Deployment).
 //   - Cilium  last (cilium ClusterMesh signal). The cluster-mesh
-//             detection is light-weight because the full Cilium agent
-//             is a node-level thing; here we only look for the
-//             cluster-mesh feature being enabled.
+//     detection is light-weight because the full Cilium agent
+//     is a node-level thing; here we only look for the
+//     cluster-mesh feature being enabled.
 //   - "none"  is the catch-all when every probe returns 0/404.
 //
 // The detector tolerates partial failure: any one of the six probes
@@ -511,12 +511,12 @@ func isSystemNamespace(name string) bool {
 // covered by an mTLS-enforcing rule.
 //
 //   - Istio:   namespaces with at least one mode=STRICT
-//              PeerAuthentication count as covered.
+//     PeerAuthentication count as covered.
 //   - Linkerd: presence of Server CRs cluster-wide implies coverage
-//              equal to (server_count > 0 ? 100 : 0). Linkerd's
-//              proxy auth doesn't decompose neatly by namespace
-//              without a full Server↔Workload walk; the heuristic
-//              keeps it cheap and "non-zero" when any Server exists.
+//     equal to (server_count > 0 ? 100 : 0). Linkerd's
+//     proxy auth doesn't decompose neatly by namespace
+//     without a full Server↔Workload walk; the heuristic
+//     keeps it cheap and "non-zero" when any Server exists.
 //   - Other:   0%.
 //
 // Returns an int in [0, 100]. When the denominator is zero (no user

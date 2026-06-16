@@ -8,13 +8,13 @@
 //
 // The breaker fast-fails repeat offenders. State per cluster:
 //
-//   closed   — normal pass-through. Each consecutive failure increments
-//              a counter; on threshold, transition to OPEN.
-//   open     — every Do returns `circuit_open` immediately without
-//              touching the tunnel. After openDuration, transition to
-//              HALF_OPEN.
-//   half-open — exactly one trial request is allowed. Success → CLOSED
-//              and counter reset. Failure → OPEN with the timer reset.
+//	closed   — normal pass-through. Each consecutive failure increments
+//	           a counter; on threshold, transition to OPEN.
+//	open     — every Do returns `circuit_open` immediately without
+//	           touching the tunnel. After openDuration, transition to
+//	           HALF_OPEN.
+//	half-open — exactly one trial request is allowed. Success → CLOSED
+//	           and counter reset. Failure → OPEN with the timer reset.
 //
 // The breaker is a thin wrapper; callers that already short-circuit on
 // "agent not connected" still do so — the breaker only kicks in for
@@ -61,18 +61,18 @@ func (s breakerState) String() string {
 // the map is bounded by the number of clusters we ever observe — well
 // inside acceptable for any realistic fleet.
 type breakerEntry struct {
-	mu           sync.Mutex
-	state        breakerState
+	mu              sync.Mutex
+	state           breakerState
 	consecutiveErrs int
-	openedAt     time.Time
+	openedAt        time.Time
 }
 
 // clusterBreaker is the shared coordinator. One per *TunnelK8sRequester.
 type clusterBreaker struct {
-	mu            sync.RWMutex
-	entries       map[string]*breakerEntry
-	threshold     int           // consecutive failures to OPEN
-	openDuration  time.Duration // time before HALF_OPEN
+	mu           sync.RWMutex
+	entries      map[string]*breakerEntry
+	threshold    int           // consecutive failures to OPEN
+	openDuration time.Duration // time before HALF_OPEN
 }
 
 // circuitStateGauge surfaces per-cluster state as a metric (0 closed,

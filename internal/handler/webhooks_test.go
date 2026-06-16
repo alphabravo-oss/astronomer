@@ -249,11 +249,11 @@ func TestWebhooksHandler_CRUD(t *testing.T) {
 
 	// 1) Create.
 	createBody, _ := json.Marshal(map[string]any{
-		"name":           "slack-audit",
-		"url":            "https://hooks.slack.com/services/T/B/X",
-		"secret":         "swordfish",
-		"event_filters":  []string{"audit.*"},
-		"max_retries":    3,
+		"name":            "slack-audit",
+		"url":             "https://hooks.slack.com/services/T/B/X",
+		"secret":          "swordfish",
+		"event_filters":   []string{"audit.*"},
+		"max_retries":     3,
 		"timeout_seconds": 15,
 	})
 	w := httptest.NewRecorder()
@@ -386,11 +386,11 @@ func TestWebhooksHandler_RequiresSuperuser(t *testing.T) {
 	h := newWebhookTestHandler(t, q)
 
 	cases := []struct {
-		name    string
-		method  string
-		fn      func(http.ResponseWriter, *http.Request)
-		body    []byte
-		params  map[string]string
+		name   string
+		method string
+		fn     func(http.ResponseWriter, *http.Request)
+		body   []byte
+		params map[string]string
 	}{
 		{
 			name:   "list",

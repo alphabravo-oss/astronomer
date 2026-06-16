@@ -72,10 +72,11 @@ var vulnerabilityReportGVR = schema.GroupVersionResource{
 
 // mirrorResyncPeriod is how often the SharedInformerFactory replays
 // every object as an Add. Resyncs serve two purposes:
-//   1. Drift detection — anything the agent missed gets re-emitted.
-//   2. last_seen_at refresh — the server-side prune (1h cutoff) only
-//      drops rows that haven't been touched in an hour; the resync
-//      keeps living rows fresh.
+//  1. Drift detection — anything the agent missed gets re-emitted.
+//  2. last_seen_at refresh — the server-side prune (1h cutoff) only
+//     drops rows that haven't been touched in an hour; the resync
+//     keeps living rows fresh.
+//
 // 10 minutes balances those against the server-side ingest pressure.
 const mirrorResyncPeriod = 10 * time.Minute
 

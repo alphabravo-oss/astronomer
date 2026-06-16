@@ -72,13 +72,13 @@ func (h *PlatformHealthHandler) SetAsynqInspector(insp PlatformHealthInspector) 
 // warning in the `errors` field (operators see a rollup, partial-failure
 // doesn't kill the whole response).
 type PlatformHealthResponse struct {
-	ClustersTotal           int       `json:"clusters_total"`
-	ClustersDegraded        int       `json:"clusters_degraded"`
-	ClustersDisconnected    int       `json:"clusters_disconnected"`
-	WorkerDLQDepth          int       `json:"worker_dlq_depth"`
-	WorkerRetryDepth        int       `json:"worker_retry_depth"`
-	AsOf                    time.Time `json:"as_of"`
-	Errors                  []string  `json:"errors,omitempty"`
+	ClustersTotal        int       `json:"clusters_total"`
+	ClustersDegraded     int       `json:"clusters_degraded"`
+	ClustersDisconnected int       `json:"clusters_disconnected"`
+	WorkerDLQDepth       int       `json:"worker_dlq_depth"`
+	WorkerRetryDepth     int       `json:"worker_retry_depth"`
+	AsOf                 time.Time `json:"as_of"`
+	Errors               []string  `json:"errors,omitempty"`
 }
 
 // Summary is the chi-mounted handler.

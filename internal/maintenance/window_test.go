@@ -203,7 +203,7 @@ func TestNextOpen_ComputesCorrectly(t *testing.T) {
 
 func TestNextClose_Active(t *testing.T) {
 	now := time.Date(2026, 5, 12, 14, 0, 0, 0, time.UTC) // Tuesday 14:00
-	w := testWindow()                                     // 8h window starting 9am
+	w := testWindow()                                    // 8h window starting 9am
 	close := NextClose(w, now)
 	want := time.Date(2026, 5, 12, 17, 0, 0, 0, time.UTC)
 	if !close.Equal(want) {

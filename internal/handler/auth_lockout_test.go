@@ -27,9 +27,9 @@ type recordingLockoutQuerier struct {
 	emails map[string]uuid.UUID
 	unames map[string]uuid.UUID
 	// Captured call counts so tests can assert behaviour.
-	incCalls   int
-	lockCalls  int
-	resetCalls int
+	incCalls    int
+	lockCalls   int
+	resetCalls  int
 	unlockCalls int
 }
 

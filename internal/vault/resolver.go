@@ -167,10 +167,10 @@ type Client interface {
 // is mutex-guarded; each Resolve call holds its own per-call dedupe
 // table separate from cross-request state.
 type Resolver struct {
-	q        Querier
-	decrypt  Decryptor
+	q         Querier
+	decrypt   Decryptor
 	newClient func(conn sqlc.VaultConnection, authBlob string) (Client, error)
-	observer Observer
+	observer  Observer
 
 	mu      sync.Mutex
 	clients map[uuid.UUID]Client

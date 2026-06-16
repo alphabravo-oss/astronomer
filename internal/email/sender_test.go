@@ -17,17 +17,17 @@ import (
 // below can prove the protocol sequence (HELO -> AUTH -> MAIL -> RCPT
 // -> DATA -> body -> QUIT) without speaking to a real relay.
 type recordingClient struct {
-	steps     []string
-	body      bytes.Buffer
-	authMech  string
-	failOn    string // step name to fail at; "" for success
+	steps       []string
+	body        bytes.Buffer
+	authMech    string
+	failOn      string // step name to fail at; "" for success
 	hasStartTLS bool
 }
 
 type stepWriter struct{ c *recordingClient }
 
 func (w *stepWriter) Write(p []byte) (int, error) { return w.c.body.Write(p) }
-func (w *stepWriter) Close() error                 { w.c.steps = append(w.c.steps, "body-close"); return nil }
+func (w *stepWriter) Close() error                { w.c.steps = append(w.c.steps, "body-close"); return nil }
 
 func (c *recordingClient) record(step string) error {
 	c.steps = append(c.steps, step)
@@ -37,7 +37,7 @@ func (c *recordingClient) record(step string) error {
 	return nil
 }
 
-func (c *recordingClient) Hello(_ string) error     { return c.record("HELLO") }
+func (c *recordingClient) Hello(_ string) error         { return c.record("HELLO") }
 func (c *recordingClient) StartTLS(_ *tls.Config) error { return c.record("STARTTLS") }
 func (c *recordingClient) Extension(ext string) (bool, string) {
 	if ext == "STARTTLS" {
@@ -105,7 +105,10 @@ func TestSender_RendersTemplate(t *testing.T) {
 	}
 }
 
-type fakeBrandingProvider struct{ called atomic.Int32; brand Branding }
+type fakeBrandingProvider struct {
+	called atomic.Int32
+	brand  Branding
+}
 
 func (f *fakeBrandingProvider) Branding(_ context.Context) Branding {
 	f.called.Add(1)
@@ -118,7 +121,9 @@ func TestSender_FallbackBranding(t *testing.T) {
 		Enabled: true, Host: "smtp", Port: 25, FromAddress: "n@e.com",
 		AuthMechanism: "none", Encryption: "none", Timeout: time.Second,
 	}}, nil, nil)
-	s.SetDialer(func(_ context.Context, _ string, _ *tls.Config, _ bool, _ time.Duration) (SMTPClient, error) { return rc, nil })
+	s.SetDialer(func(_ context.Context, _ string, _ *tls.Config, _ bool, _ time.Duration) (SMTPClient, error) {
+		return rc, nil
+	})
 
 	// Brand provider returns empty strings — Sender should fall back
 	// to DefaultBranding rather than render with blank values.
@@ -209,7 +214,9 @@ func TestSender_RequireTLS_FailsClosedWhenNotAdvertised(t *testing.T) {
 		AuthMechanism: "plain", Encryption: "starttls", RequireTLS: true,
 		Username: "u", Password: "p", Timeout: time.Second,
 	}}, nil, nil)
-	s.SetDialer(func(_ context.Context, _ string, _ *tls.Config, _ bool, _ time.Duration) (SMTPClient, error) { return rc, nil })
+	s.SetDialer(func(_ context.Context, _ string, _ *tls.Config, _ bool, _ time.Duration) (SMTPClient, error) {
+		return rc, nil
+	})
 	err := s.Send(context.Background(), Message{To: "a@b.com", Template: TemplateAPITokenCreated, Data: map[string]any{
 		"Username": "x", "TokenName": "ci", "TokenPrefix": "ast_", "CreatedAt": "now",
 	}})

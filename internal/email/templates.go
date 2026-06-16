@@ -5,15 +5,15 @@
 //
 // The package is built around three concrete types:
 //
-//   * Sender — wraps net/smtp. Decrypts the stored SMTP password,
+//   - Sender — wraps net/smtp. Decrypts the stored SMTP password,
 //     renders the template, dials the relay, and returns. Send is
 //     synchronous; the dispatch worker calls it in a loop with a
 //     short timeout.
 //
-//   * Message — the per-send payload (recipient, template name,
+//   - Message — the per-send payload (recipient, template name,
 //     template data). Lives in messages.go.
 //
-//   * Branding — the small bag of strings rendered into every
+//   - Branding — the small bag of strings rendered into every
 //     template (product_name, support_url). Source-of-truth is the
 //     existing platform_configuration row from migration 001; the
 //     parallel agent's platform_settings additions are picked up

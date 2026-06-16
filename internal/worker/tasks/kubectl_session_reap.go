@@ -67,4 +67,3 @@ func HandleKubectlSessionReap(ctx context.Context, _ *asynq.Task) error {
 	}
 	return kubectl.Reap(ctx, kubectlReapDeps.Deps)
 }
-

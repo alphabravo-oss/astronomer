@@ -85,8 +85,8 @@ also: ${other:foo#bar}
 // --- Fixture for Resolve tests -----------------------------------------
 
 type fakeQuerier struct {
-	conns         map[string]sqlc.VaultConnection // keyed by name
-	byID          map[uuid.UUID]sqlc.VaultConnection
+	conns          map[string]sqlc.VaultConnection // keyed by name
+	byID           map[uuid.UUID]sqlc.VaultConnection
 	projectDefault pgtype.UUID
 }
 
@@ -124,10 +124,10 @@ func newFakeQuerier() *fakeQuerier {
 // table of (engine/path) → data map; on each FetchSecret call we
 // increment callsByPath so tests can assert dedupe semantics.
 type fakeClient struct {
-	mu     sync.Mutex
-	data   map[string]map[string]any
-	calls  map[string]int
-	denyN  int // first N calls return permission-denied
+	mu    sync.Mutex
+	data  map[string]map[string]any
+	calls map[string]int
+	denyN int // first N calls return permission-denied
 }
 
 func (c *fakeClient) FetchSecret(_ context.Context, engine, path string) (map[string]any, error) {

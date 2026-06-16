@@ -65,15 +65,15 @@ type ClusterRegistration struct {
 // Sensitive credentials are *not* returned (config.bearerToken is "" on
 // reads); we re-send them on every update.
 type Cluster struct {
-	Name        string            `json:"name"`
-	Server      string            `json:"server"`
-	Namespaces  []string          `json:"namespaces,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	Project     string            `json:"project,omitempty"`
+	Name            string            `json:"name"`
+	Server          string            `json:"server"`
+	Namespaces      []string          `json:"namespaces,omitempty"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	Annotations     map[string]string `json:"annotations,omitempty"`
+	Project         string            `json:"project,omitempty"`
 	ConnectionState struct {
-		Status     string `json:"status,omitempty"`
-		Message    string `json:"message,omitempty"`
+		Status      string `json:"status,omitempty"`
+		Message     string `json:"message,omitempty"`
 		AttemptedAt string `json:"attemptedAt,omitempty"`
 	} `json:"connectionState,omitempty"`
 }

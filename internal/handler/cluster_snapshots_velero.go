@@ -134,14 +134,14 @@ func renderPerClusterBackup(in PerClusterSnapshotRender) map[string]any {
 // Restore specs are simpler than Backup specs — most operators only
 // override the includedNamespaces filter and the namespace remapping.
 type PerClusterRestoreRender struct {
-	Name             string
-	Namespace        string
-	BackupName       string
+	Name               string
+	Namespace          string
+	BackupName         string
 	IncludedNamespaces []string
 	ExcludedNamespaces []string
-	NamespaceMapping map[string]string
-	LabelSelector    string
-	RestorePVs       *bool
+	NamespaceMapping   map[string]string
+	LabelSelector      string
+	RestorePVs         *bool
 	// Origin labels stamped on the CR.
 	RestoreID  string
 	SnapshotID string
@@ -398,14 +398,14 @@ func veleroNamespaceFromBody(body map[string]any) string {
 // keeping the struct small forces a deliberate change when we want to
 // surface a new Velero status field via the API.
 type VeleroBackupStatus struct {
-	Phase           string `json:"phase"`
-	StartTimestamp  string `json:"startTimestamp"`
+	Phase               string `json:"phase"`
+	StartTimestamp      string `json:"startTimestamp"`
 	CompletionTimestamp string `json:"completionTimestamp"`
-	Warnings        int    `json:"warnings"`
-	Errors          int    `json:"errors"`
-	Progress        struct {
-		TotalItems     int `json:"totalItems"`
-		ItemsBackedUp  int `json:"itemsBackedUp"`
+	Warnings            int    `json:"warnings"`
+	Errors              int    `json:"errors"`
+	Progress            struct {
+		TotalItems    int `json:"totalItems"`
+		ItemsBackedUp int `json:"itemsBackedUp"`
 	} `json:"progress"`
 	ValidationErrors []string `json:"validationErrors"`
 }
@@ -433,12 +433,12 @@ func decodeBackupStatus(cr map[string]any) VeleroBackupStatus {
 // VeleroBackupStatus but Velero uses a different Phase set on Restore
 // (New / InProgress / Completed / PartiallyFailed / Failed / FailedValidation).
 type VeleroRestoreStatus struct {
-	Phase           string `json:"phase"`
-	StartTimestamp  string `json:"startTimestamp"`
-	CompletionTimestamp string `json:"completionTimestamp"`
-	Warnings        int    `json:"warnings"`
-	Errors          int    `json:"errors"`
-	ValidationErrors []string `json:"validationErrors"`
+	Phase               string   `json:"phase"`
+	StartTimestamp      string   `json:"startTimestamp"`
+	CompletionTimestamp string   `json:"completionTimestamp"`
+	Warnings            int      `json:"warnings"`
+	Errors              int      `json:"errors"`
+	ValidationErrors    []string `json:"validationErrors"`
 }
 
 func decodeRestoreStatus(cr map[string]any) VeleroRestoreStatus {

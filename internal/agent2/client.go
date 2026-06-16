@@ -3,11 +3,11 @@
 //
 // Conceptually all the agent does now is:
 //
-//	1. Open a long-lived WS connection to the management server.
-//	2. Tell remotedialer "any inbound dial request is OK" (or filter by host).
-//	3. remotedialer takes care of everything else — when the server-side code
-//	   calls dialer.DialContext, this end opens a normal net.Dial to the local
-//	   address and ferries bytes through the WS multiplex.
+//  1. Open a long-lived WS connection to the management server.
+//  2. Tell remotedialer "any inbound dial request is OK" (or filter by host).
+//  3. remotedialer takes care of everything else — when the server-side code
+//     calls dialer.DialContext, this end opens a normal net.Dial to the local
+//     address and ferries bytes through the WS multiplex.
 //
 // There is no per-feature handler registration any more. K8s API calls
 // initiated by the server arrive as dial requests to kubernetes.default.svc:443

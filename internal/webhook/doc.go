@@ -6,21 +6,21 @@
 //
 // Architecture overview:
 //
-//   internal/events.Bus      ─┐
-//                              ├─►  Tap (filter by glob)  ─►  InsertWebhookDelivery
-//   audit.Record (via bridge) ─┘
+//	internal/events.Bus      ─┐
+//	                           ├─►  Tap (filter by glob)  ─►  InsertWebhookDelivery
+//	audit.Record (via bridge) ─┘
 //
-//                  Worker tick (every 15s)
-//                         │
-//                         ▼
-//                  ListPendingWebhookDeliveries
-//                         │
-//                         ▼
-//                  Sender.Send (HMAC sign, POST)
-//                         │
-//                         ├──► 2xx → MarkDelivered
-//                         ├──► 4xx → MarkDropped (permanent — operator fixes URL)
-//                         └──► 5xx / timeout → MarkFailed + reschedule
+//	               Worker tick (every 15s)
+//	                      │
+//	                      ▼
+//	               ListPendingWebhookDeliveries
+//	                      │
+//	                      ▼
+//	               Sender.Send (HMAC sign, POST)
+//	                      │
+//	                      ├──► 2xx → MarkDelivered
+//	                      ├──► 4xx → MarkDropped (permanent — operator fixes URL)
+//	                      └──► 5xx / timeout → MarkFailed + reschedule
 //
 // The webhook secret is Fernet-encrypted under auth.Encryptor. Decryption
 // happens inside Sender right before signing; plaintext NEVER reaches a
@@ -28,7 +28,7 @@
 //
 // Migration 048 defines the persistent state.
 //
-// Recipes
+// # Recipes
 //
 // Slack incoming-webhook target — POST to a Slack URL with their
 // expected {text, blocks} shape. event_filters: ["audit.*"],

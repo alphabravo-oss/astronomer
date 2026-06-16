@@ -76,11 +76,11 @@ func (e envMap) lookup(key string) (string, bool) {
 func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{}
 	env := envMap{
-		"DEX_BUNDLED_ENABLED":         "true",
-		"DEX_BUNDLED_NAMESPACE":       "astronomer",
-		"DEX_BUNDLED_RELEASE_NAME":    "astronomer-dex",
-		"DEX_BUNDLED_CONFIGMAP_NAME":  "astronomer-dex-config",
-		"DEX_BUNDLED_ISSUER_URL":      "https://astronomer.example.com/dex",
+		"DEX_BUNDLED_ENABLED":        "true",
+		"DEX_BUNDLED_NAMESPACE":      "astronomer",
+		"DEX_BUNDLED_RELEASE_NAME":   "astronomer-dex",
+		"DEX_BUNDLED_CONFIGMAP_NAME": "astronomer-dex-config",
+		"DEX_BUNDLED_ISSUER_URL":     "https://astronomer.example.com/dex",
 	}
 	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
 	if err != nil {

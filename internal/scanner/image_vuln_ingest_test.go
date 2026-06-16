@@ -17,7 +17,7 @@ import (
 // uniqueness explicitly so the idempotency test can assert "second
 // ingest does not produce a second report row".
 type fakeQuerier struct {
-	mu          sync.Mutex
+	mu           sync.Mutex
 	reportsByKey map[string]sqlc.ImageVulnerabilityReport // key = cluster_id|report_name
 	cves         map[uuid.UUID][]sqlc.InsertImageVulnerabilityParams
 	upsertCalls  int
@@ -156,10 +156,10 @@ func sampleReport(name string, cves int) TrivyVulnerabilityReport {
 			Name:      name,
 			Namespace: "default",
 			Labels: map[string]string{
-				labelResourceKind: "Deployment",
-				labelResourceName: "api-server",
+				labelResourceKind:  "Deployment",
+				labelResourceName:  "api-server",
 				labelContainerName: "app",
-				labelResourceNs:   "default",
+				labelResourceNs:    "default",
 			},
 		},
 		Report: TrivyReport{
@@ -380,10 +380,10 @@ func TestIngestUnstructured_DecodesAndForwards(t *testing.T) {
 			"name":      "rep-unstruct",
 			"namespace": "default",
 			"labels": map[string]string{
-				labelResourceKind: "Deployment",
-				labelResourceName: "api",
+				labelResourceKind:  "Deployment",
+				labelResourceName:  "api",
 				labelContainerName: "main",
-				labelResourceNs:   "default",
+				labelResourceNs:    "default",
 			},
 		},
 		"report": map[string]any{

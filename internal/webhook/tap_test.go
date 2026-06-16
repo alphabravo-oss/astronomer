@@ -35,13 +35,13 @@ func (f *fakeTapQuerier) InsertWebhookDelivery(_ context.Context, arg sqlc.Inser
 func newTapSubscription(name string, filters []string) sqlc.WebhookSubscription {
 	raw, _ := json.Marshal(filters)
 	return sqlc.WebhookSubscription{
-		ID:           uuid.New(),
-		Name:         name,
-		Url:          "http://example.invalid/" + name,
-		EventFilters: raw,
-		ExtraHeaders: json.RawMessage(`{}`),
-		Enabled:      true,
-		MaxRetries:   5,
+		ID:             uuid.New(),
+		Name:           name,
+		Url:            "http://example.invalid/" + name,
+		EventFilters:   raw,
+		ExtraHeaders:   json.RawMessage(`{}`),
+		Enabled:        true,
+		MaxRetries:     5,
 		TimeoutSeconds: 10,
 	}
 }

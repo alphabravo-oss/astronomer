@@ -18,9 +18,9 @@ import (
 func TestSender_PostsSignedPayload(t *testing.T) {
 	const secret = "topsecret"
 	var (
-		gotSig    string
-		gotEvent  string
-		gotBody   []byte
+		gotSig         string
+		gotEvent       string
+		gotBody        []byte
 		gotContentType string
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -248,9 +248,9 @@ func TestSender_AppliesExtraHeaders(t *testing.T) {
 		URL:    srv.URL,
 		Secret: "k",
 		ExtraHeaders: map[string]string{
-			"X-API-Key":          "abc123",
-			"Content-Type":       "application/vnd.custom+json",
-			SignatureHeader:      "spoofed",
+			"X-API-Key":     "abc123",
+			"Content-Type":  "application/vnd.custom+json",
+			SignatureHeader: "spoofed",
 		},
 	}, Event{EventName: "x"})
 	if got.Get("X-Api-Key") != "abc123" {
@@ -270,13 +270,13 @@ func TestNextBackoff_MatchesSchedule(t *testing.T) {
 		attempts int
 		want     time.Duration
 	}{
-		{0, 30 * time.Second},  // never-attempted maps to first slot
-		{1, 30 * time.Second},  // first retry
-		{2, 2 * time.Minute},   // second retry
-		{3, 10 * time.Minute},  // third retry
-		{4, 1 * time.Hour},     // fourth retry
-		{5, 6 * time.Hour},     // fifth retry
-		{6, 6 * time.Hour},     // past the schedule clamps to the last slot
+		{0, 30 * time.Second}, // never-attempted maps to first slot
+		{1, 30 * time.Second}, // first retry
+		{2, 2 * time.Minute},  // second retry
+		{3, 10 * time.Minute}, // third retry
+		{4, 1 * time.Hour},    // fourth retry
+		{5, 6 * time.Hour},    // fifth retry
+		{6, 6 * time.Hour},    // past the schedule clamps to the last slot
 		{100, 6 * time.Hour},
 	}
 	for _, tc := range cases {

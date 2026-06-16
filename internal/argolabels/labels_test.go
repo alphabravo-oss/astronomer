@@ -52,11 +52,11 @@ func TestManagedClusterLabelsWithSingleProject(t *testing.T) {
 	}, []sqlc.Project{{ID: projectID, Name: "Platform Team"}})
 
 	want := map[string]string{
-		ManagedByLabelKey:                              ManagedByLabelValue,
-		ClusterIDLabelKey:                              clusterID.String(),
-		ClusterNameLabelKey:                            "prod-east",
-		EnvironmentLabelKey:                            "production",
-		IsLocalLabelKey:                                "false",
+		ManagedByLabelKey:   ManagedByLabelValue,
+		ClusterIDLabelKey:   clusterID.String(),
+		ClusterNameLabelKey: "prod-east",
+		EnvironmentLabelKey: "production",
+		IsLocalLabelKey:     "false",
 		// No explicit privilege-profile annotation -> full management control
 		// (default; matches Rancher's cluster-admin agent model).
 		AgentProfileLabelKey:                           "admin",

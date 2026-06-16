@@ -35,10 +35,10 @@ import (
 // object as a string.
 func RenderSparkline(matrix PromMatrix) []byte {
 	const (
-		width   = 200
-		height  = 60
-		padX    = 4
-		padY    = 4
+		width  = 200
+		height = 60
+		padX   = 4
+		padY   = 4
 	)
 	innerW := float64(width - 2*padX)
 	innerH := float64(height - 2*padY)

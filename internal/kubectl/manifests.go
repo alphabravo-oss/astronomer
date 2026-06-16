@@ -253,8 +253,8 @@ func PodManifest(n Names, image string) []byte {
 			},
 		},
 		"spec": map[string]any{
-			"serviceAccountName": n.SAName,
-			"restartPolicy":      "Never",
+			"serviceAccountName":            n.SAName,
+			"restartPolicy":                 "Never",
 			"terminationGracePeriodSeconds": int64(2),
 			// The pod auto-suicides after 4 hours so an orphaned reaper
 			// run still cleans up — defense in depth alongside the

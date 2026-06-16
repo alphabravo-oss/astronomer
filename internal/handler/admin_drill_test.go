@@ -21,16 +21,16 @@ import (
 // Each method either returns a pre-canned value or pgx.ErrNoRows when
 // the test wants the "never run" branch.
 type fakeDrillQuerier struct {
-	user        sqlc.User
-	userErr     error
-	latest      sqlc.BackupDrillResult
-	latestErr   error
-	success     sqlc.BackupDrillResult
-	successErr  error
-	history     []sqlc.BackupDrillResult
-	historyErr  error
-	total       int64
-	totalErr    error
+	user       sqlc.User
+	userErr    error
+	latest     sqlc.BackupDrillResult
+	latestErr  error
+	success    sqlc.BackupDrillResult
+	successErr error
+	history    []sqlc.BackupDrillResult
+	historyErr error
+	total      int64
+	totalErr   error
 	// CreateAuditLogV1 is invoked by recordAudit; satisfy the interface
 	// so the audit best-effort path is a no-op in tests.
 	auditCalls int

@@ -8,7 +8,7 @@
 // feature gating — the field list is the API surface, the values are
 // the open-source defaults.
 //
-//   GET /api/v1/license/   — returns {state, features_enabled}
+//	GET /api/v1/license/   — returns {state, features_enabled}
 //
 // No auth gate beyond the standard /api/v1/* middleware. Anyone with
 // an authed session can read the entitlement summary; that's the

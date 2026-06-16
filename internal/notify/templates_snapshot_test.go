@@ -65,8 +65,8 @@ func TestRegistry_HasExpectedKeys(t *testing.T) {
 // would tautologically pass.
 func TestRegistry_DefaultsSnapshot(t *testing.T) {
 	cases := []struct {
-		key             string
-		wantSubject     string
+		key              string
+		wantSubject      string
 		wantBodyMustHave []string // substrings that MUST appear in the body
 	}{
 		{
@@ -87,8 +87,8 @@ func TestRegistry_DefaultsSnapshot(t *testing.T) {
 			},
 		},
 		{
-			key:         KeyEmailAccountUnlocked,
-			wantSubject: "Your {{.Branding.ProductName}} account has been unlocked",
+			key:              KeyEmailAccountUnlocked,
+			wantSubject:      "Your {{.Branding.ProductName}} account has been unlocked",
 			wantBodyMustHave: []string{"An administrator has unlocked"},
 		},
 		{

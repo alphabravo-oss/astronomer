@@ -245,10 +245,10 @@ func TestPoller_UpdatesPhase(t *testing.T) {
 	})
 
 	d.backupStatus["snap-1"] = VeleroBackupStatusSnapshot{
-		Phase:    "Completed",
-		Warnings: 1,
-		Errors:   0,
-		StartTime: time.Now().Add(-time.Hour),
+		Phase:          "Completed",
+		Warnings:       1,
+		Errors:         0,
+		StartTime:      time.Now().Add(-time.Hour),
 		CompletionTime: time.Now(),
 	}
 
@@ -476,12 +476,12 @@ func TestParseScheduleLabelSelector(t *testing.T) {
 
 func TestOutcomeForPhase(t *testing.T) {
 	cases := map[string]string{
-		"Completed":       "completed",
-		"PartiallyFailed": "partial",
-		"Failed":          "failed",
+		"Completed":        "completed",
+		"PartiallyFailed":  "partial",
+		"Failed":           "failed",
 		"FailedValidation": "failed",
-		"Deleted":         "failed",
-		"InProgress":      "",
+		"Deleted":          "failed",
+		"InProgress":       "",
 	}
 	for in, want := range cases {
 		if got := outcomeForPhase(in); got != want {

@@ -87,9 +87,9 @@ type Event struct {
 
 // Bus is a multi-subscriber, lossy-on-slow-consumer in-memory pub/sub.
 type Bus struct {
-	mu      sync.RWMutex
-	subs    map[*subscription]struct{}
-	nextID  atomic.Uint64
+	mu     sync.RWMutex
+	subs   map[*subscription]struct{}
+	nextID atomic.Uint64
 }
 
 type subscription struct {

@@ -54,7 +54,7 @@ type ClusterGenerator struct {
 // LabelSelector is the same shape as metav1.LabelSelector but kept local
 // to avoid a kubernetes/api dependency in this small package.
 type LabelSelector struct {
-	MatchLabels      map[string]string         `json:"matchLabels,omitempty"`
+	MatchLabels      map[string]string          `json:"matchLabels,omitempty"`
 	MatchExpressions []LabelSelectorRequirement `json:"matchExpressions,omitempty"`
 }
 

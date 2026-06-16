@@ -104,7 +104,7 @@ func TestDetectHashScheme(t *testing.T) {
 		"pbkdf2_sha256$390000$salt$payload": HashSchemePBKDF2SHA256,
 		"pbkdf2_sha1$390000$salt$payload":   HashSchemePBKDF2SHA1,
 		"argon2$argon2id$v=19$m=64,t=1,p=4$salt$hash": HashSchemeArgon2,
-		"random-other":                      HashSchemeUnknown,
+		"random-other": HashSchemeUnknown,
 	}
 	for input, want := range cases {
 		if got := DetectHashScheme(input); got != want {

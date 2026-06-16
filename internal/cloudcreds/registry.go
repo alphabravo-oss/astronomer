@@ -99,8 +99,8 @@ func (p ProviderSpec) secretKeysSet() map[string]struct{} {
 // knowledge of the provider set.
 var BuiltinProviders = map[string]ProviderSpec{
 	"aws": {
-		Name:        "aws",
-		DisplayName: "Amazon Web Services",
+		Name:         "aws",
+		DisplayName:  "Amazon Web Services",
 		RequiredKeys: []string{"access_key_id", "secret_access_key"},
 		OptionalKeys: []string{"region", "assume_role_arn"},
 		SecretKeys:   []string{"access_key_id", "secret_access_key"},
@@ -112,8 +112,8 @@ var BuiltinProviders = map[string]ProviderSpec{
 		},
 	},
 	"gcp": {
-		Name:        "gcp",
-		DisplayName: "Google Cloud Platform",
+		Name:         "gcp",
+		DisplayName:  "Google Cloud Platform",
 		RequiredKeys: []string{"service_account_json"},
 		OptionalKeys: []string{"project_id"},
 		SecretKeys:   []string{"service_account_json"},
@@ -127,8 +127,8 @@ var BuiltinProviders = map[string]ProviderSpec{
 		},
 	},
 	"azure": {
-		Name:        "azure",
-		DisplayName: "Microsoft Azure",
+		Name:         "azure",
+		DisplayName:  "Microsoft Azure",
 		RequiredKeys: []string{"client_id", "client_secret", "tenant_id", "subscription_id"},
 		OptionalKeys: []string{},
 		SecretKeys:   []string{"client_secret"},

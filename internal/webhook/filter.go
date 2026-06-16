@@ -8,9 +8,9 @@ import "strings"
 // Glob syntax (deliberately small — most operators expect path.Match
 // semantics from prior tooling):
 //
-//	*  — matches zero or more characters of any kind
-//	?  — matches exactly one character
-//	,  — alternative separator inside a single glob string
+//   - — matches zero or more characters of any kind
+//     ?  — matches exactly one character
+//     ,  — alternative separator inside a single glob string
 //
 // Examples:
 //

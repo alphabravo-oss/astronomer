@@ -21,14 +21,14 @@ import (
 // Repository is the projection ArgoCD returns for a repo. Secrets such as
 // password / sshPrivateKey are *not* returned on reads.
 type Repository struct {
-	Repo                string `json:"repo"`
-	Name                string `json:"name,omitempty"`
-	Type                string `json:"type,omitempty"` // "git" or "helm"
-	Username            string `json:"username,omitempty"`
-	Insecure            bool   `json:"insecure,omitempty"`
-	EnableLFS           bool   `json:"enableLfs,omitempty"`
-	Project             string `json:"project,omitempty"`
-	ConnectionState     struct {
+	Repo            string `json:"repo"`
+	Name            string `json:"name,omitempty"`
+	Type            string `json:"type,omitempty"` // "git" or "helm"
+	Username        string `json:"username,omitempty"`
+	Insecure        bool   `json:"insecure,omitempty"`
+	EnableLFS       bool   `json:"enableLfs,omitempty"`
+	Project         string `json:"project,omitempty"`
+	ConnectionState struct {
 		Status      string `json:"status,omitempty"`
 		Message     string `json:"message,omitempty"`
 		AttemptedAt string `json:"attemptedAt,omitempty"`
@@ -38,17 +38,17 @@ type Repository struct {
 // RepositoryCreate is the writeable shape — union of git + helm fields.
 // Empty fields are omitted from the JSON body.
 type RepositoryCreate struct {
-	Repo            string `json:"repo"`
-	Name            string `json:"name,omitempty"`
-	Type            string `json:"type,omitempty"` // "git" or "helm"; default git
-	Username        string `json:"username,omitempty"`
-	Password        string `json:"password,omitempty"`
-	SSHPrivateKey   string `json:"sshPrivateKey,omitempty"`
-	TLSClientCert   string `json:"tlsClientCertData,omitempty"`
-	TLSClientKey    string `json:"tlsClientCertKey,omitempty"`
-	Insecure        bool   `json:"insecure,omitempty"`
-	EnableLFS       bool   `json:"enableLfs,omitempty"`
-	Project         string `json:"project,omitempty"`
+	Repo          string `json:"repo"`
+	Name          string `json:"name,omitempty"`
+	Type          string `json:"type,omitempty"` // "git" or "helm"; default git
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	SSHPrivateKey string `json:"sshPrivateKey,omitempty"`
+	TLSClientCert string `json:"tlsClientCertData,omitempty"`
+	TLSClientKey  string `json:"tlsClientCertKey,omitempty"`
+	Insecure      bool   `json:"insecure,omitempty"`
+	EnableLFS     bool   `json:"enableLfs,omitempty"`
+	Project       string `json:"project,omitempty"`
 }
 
 // CreateRepository registers a repo (git or helm) with upstream ArgoCD.

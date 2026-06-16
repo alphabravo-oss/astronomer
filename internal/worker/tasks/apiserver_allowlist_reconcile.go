@@ -11,15 +11,15 @@
 //     prune on apiserver_allowlist_snapshots.
 //
 // Reconcile algorithm (per row):
-//   1. Detect provider via the registry.
-//   2. GetEffective from the cloud LB / firewall.
-//   3. Render desired from operator CIDRs + Astronomer egress + emergency.
-//   4. If mode='monitor': snapshot (with drift flag), mark sync_status
-//      based on diff, NO patch.
-//   5. If mode='enforce' AND set differs: Apply(desired), snapshot,
-//      mark sync_status accordingly.
-//   6. If detected_provider is in {'unknown','self_managed'} and mode='enforce':
-//      LOG warning, treat as monitor for this tick (audit-only).
+//  1. Detect provider via the registry.
+//  2. GetEffective from the cloud LB / firewall.
+//  3. Render desired from operator CIDRs + Astronomer egress + emergency.
+//  4. If mode='monitor': snapshot (with drift flag), mark sync_status
+//     based on diff, NO patch.
+//  5. If mode='enforce' AND set differs: Apply(desired), snapshot,
+//     mark sync_status accordingly.
+//  6. If detected_provider is in {'unknown','self_managed'} and mode='enforce':
+//     LOG warning, treat as monitor for this tick (audit-only).
 //
 // The cleartext credentials for the cloud API client live inside the
 // provider driver's per-call materializer resolution; nothing persists
@@ -44,9 +44,9 @@ import (
 
 // Task type identifiers. Exported for the worker mux + scheduler.
 const (
-	ApiserverAllowlistReconcileType         = "apiserver_allowlist:reconcile"
-	ApiserverAllowlistReconcileAllType      = "apiserver_allowlist:reconcile_all"
-	ApiserverAllowlistCleanupSnapshotsType  = "apiserver_allowlist:cleanup_snapshots"
+	ApiserverAllowlistReconcileType        = "apiserver_allowlist:reconcile"
+	ApiserverAllowlistReconcileAllType     = "apiserver_allowlist:reconcile_all"
+	ApiserverAllowlistCleanupSnapshotsType = "apiserver_allowlist:cleanup_snapshots"
 )
 
 // SnapshotRetentionDays is the cleanup horizon. Documented contract from
@@ -87,9 +87,9 @@ type ApiserverAllowlistClusterShaper func(sqlc.Cluster) providers.Cluster
 
 // ApiserverAllowlistReconcileDeps wires the reconciler.
 type ApiserverAllowlistReconcileDeps struct {
-	Queries         ApiserverAllowlistQuerier
-	Registry        *providers.Registry
-	ClusterShaper   ApiserverAllowlistClusterShaper
+	Queries       ApiserverAllowlistQuerier
+	Registry      *providers.Registry
+	ClusterShaper ApiserverAllowlistClusterShaper
 	// AstronomerEgress is the runtime-known tunnel egress CIDR list.
 	// Defaults to allowlist.AstronomerEgressFromEnv() when nil.
 	AstronomerEgress []string

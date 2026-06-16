@@ -146,13 +146,13 @@ type QuotaPlanSpec struct {
 // the maintenance worker reads the template (so we don't ship a
 // migration dependency between sprints).
 type MaintenanceWindowSpec struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 	// DaysOfWeek: ISO weekdays, 1=Mon..7=Sun. Empty = every day.
-	DaysOfWeek  []int    `json:"days_of_week,omitempty"`
-	StartHour   int      `json:"start_hour"` // 0–23 UTC
-	StartMinute int      `json:"start_minute"`
-	DurationMin int      `json:"duration_min"`
+	DaysOfWeek  []int `json:"days_of_week,omitempty"`
+	StartHour   int   `json:"start_hour"` // 0–23 UTC
+	StartMinute int   `json:"start_minute"`
+	DurationMin int   `json:"duration_min"`
 }
 
 // AlertRuleSpec mirrors the alert_rules columns Apply pins. The
@@ -160,11 +160,11 @@ type MaintenanceWindowSpec struct {
 // interprets per rule_type; baselines populate it with the
 // canonical thresholds for the control they're satisfying.
 type AlertRuleSpec struct {
-	Name            string            `json:"name"`
-	RuleType        string            `json:"rule_type"`
-	Severity        string            `json:"severity"`
-	CooldownMinutes int               `json:"cooldown_minutes,omitempty"`
-	Configuration   map[string]any    `json:"configuration"`
+	Name            string         `json:"name"`
+	RuleType        string         `json:"rule_type"`
+	Severity        string         `json:"severity"`
+	CooldownMinutes int            `json:"cooldown_minutes,omitempty"`
+	Configuration   map[string]any `json:"configuration"`
 }
 
 // Registry returns the four built-in baselines with their canonical
@@ -201,13 +201,13 @@ func BySlug(slug string) (Baseline, bool) {
 //
 // Auditor-facing controls (informational mapping, not third-party-attested):
 //
-//   3.5.1  — Render PAN unreadable: enforced at the application layer
-//            (out of scope for this baseline; not a platform-managed knob).
-//   8.3.6  — MFA on all access: required_totp = true.
-//   8.6.x  — Account lockout after failures: locked-accounts alert rule.
-//   10.5.1 — Audit log retention >= 1 year: audit_retention_days = 365.
-//   10.7.3 — Audit log review: read_audit_policies enabled.
-//   12.10.x — Incident response: audit_log_sink webhook required.
+//	3.5.1  — Render PAN unreadable: enforced at the application layer
+//	         (out of scope for this baseline; not a platform-managed knob).
+//	8.3.6  — MFA on all access: required_totp = true.
+//	8.6.x  — Account lockout after failures: locked-accounts alert rule.
+//	10.5.1 — Audit log retention >= 1 year: audit_retention_days = 365.
+//	10.7.3 — Audit log review: read_audit_policies enabled.
+//	12.10.x — Incident response: audit_log_sink webhook required.
 //
 // Numbers are PCI-DSS 4.0 references. Update the comment + the
 // Version field when the underlying standard ticks.
@@ -282,14 +282,14 @@ func pciDSS40() Baseline {
 //
 // Auditor-facing controls (informational mapping):
 //
-//   §164.308(a)(1)  — Risk management: alerting + audit retention.
-//   §164.308(a)(3)  — Workforce access: required_totp.
-//   §164.312(a)(1)  — Access control: PSS restricted.
-//   §164.312(b)     — Audit controls: 6-year audit retention.
-//   §164.312(c)(1)  — Integrity: webhook export of audit log to a
-//                    tamper-evident sink (encouraged, not enforced
-//                    at the platform layer for v1).
-//   §164.530(j)     — 6-year retention of policies & procedures.
+//	§164.308(a)(1)  — Risk management: alerting + audit retention.
+//	§164.308(a)(3)  — Workforce access: required_totp.
+//	§164.312(a)(1)  — Access control: PSS restricted.
+//	§164.312(b)     — Audit controls: 6-year audit retention.
+//	§164.312(c)(1)  — Integrity: webhook export of audit log to a
+//	                 tamper-evident sink (encouraged, not enforced
+//	                 at the platform layer for v1).
+//	§164.530(j)     — 6-year retention of policies & procedures.
 //
 // HIPAA's 6-year retention floor is the single biggest delta from
 // the other baselines — 2190 days = 6 × 365.
@@ -327,14 +327,14 @@ func hipaa() Baseline {
 // Auditor-facing controls (informational mapping to NIST SP 800-53r5
 // via the FedRAMP Moderate baseline catalog):
 //
-//   AC-7  — Unsuccessful logon attempts: lock-after-3 setting +
-//           alert rule.
-//   AC-11 — Session lock: session.timeout_minutes = 20 (moderate
-//           baseline minimum; high-impact = 15).
-//   AU-11 — Audit record retention: 3-year retention (1095 days).
-//   IA-2(1) — MFA for privileged accounts: required_totp.
-//   IA-2(2) — MFA for non-privileged accounts: required_totp.
-//   SI-4  — System monitoring: all read_audit policies enabled.
+//	AC-7  — Unsuccessful logon attempts: lock-after-3 setting +
+//	        alert rule.
+//	AC-11 — Session lock: session.timeout_minutes = 20 (moderate
+//	        baseline minimum; high-impact = 15).
+//	AU-11 — Audit record retention: 3-year retention (1095 days).
+//	IA-2(1) — MFA for privileged accounts: required_totp.
+//	IA-2(2) — MFA for non-privileged accounts: required_totp.
+//	SI-4  — System monitoring: all read_audit policies enabled.
 //
 // FedRAMP's 3-year retention sits between PCI (1 year) and HIPAA
 // (6 years).
@@ -385,12 +385,12 @@ func fedRAMPModerate() Baseline {
 //
 // Auditor-facing controls (informational mapping to the AICPA TSC):
 //
-//   CC6.1 — Logical access controls: required_smtp + baseline PSS.
-//   CC6.6 — Restricted access: required_smtp for notification path.
-//   CC7.2 — System monitoring: change-management maintenance windows.
-//   CC7.5 — Operational availability: maintenance window template
-//           gives the auditor a documented patching cadence.
-//   CC8.1 — Change management: maintenance windows + audit retention.
+//	CC6.1 — Logical access controls: required_smtp + baseline PSS.
+//	CC6.6 — Restricted access: required_smtp for notification path.
+//	CC7.2 — System monitoring: change-management maintenance windows.
+//	CC7.5 — Operational availability: maintenance window template
+//	        gives the auditor a documented patching cadence.
+//	CC8.1 — Change management: maintenance windows + audit retention.
 //
 // SOC2 is the least prescriptive of the four — operators looking for
 // a "we have controls" baseline use it as a starting point and

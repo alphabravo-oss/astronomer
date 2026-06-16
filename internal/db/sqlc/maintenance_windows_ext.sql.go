@@ -131,17 +131,17 @@ RETURNING ` + maintenanceWindowSelectColumns
 
 // CreateMaintenanceWindowParams is the bind set for CreateMaintenanceWindow.
 type CreateMaintenanceWindowParams struct {
-	Name             string          `json:"name"`
-	Description      string          `json:"description"`
-	Mode             string          `json:"mode"`
-	CronOpen         string          `json:"cron_open"`
-	DurationMinutes  int32           `json:"duration_minutes"`
-	Timezone         string          `json:"timezone"`
-	ClusterSelector  json.RawMessage `json:"cluster_selector"`
-	OperationTypes   json.RawMessage `json:"operation_types"`
-	OnBlock          string          `json:"on_block"`
-	Enabled          bool            `json:"enabled"`
-	CreatedBy        pgtype.UUID     `json:"created_by"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	Mode            string          `json:"mode"`
+	CronOpen        string          `json:"cron_open"`
+	DurationMinutes int32           `json:"duration_minutes"`
+	Timezone        string          `json:"timezone"`
+	ClusterSelector json.RawMessage `json:"cluster_selector"`
+	OperationTypes  json.RawMessage `json:"operation_types"`
+	OnBlock         string          `json:"on_block"`
+	Enabled         bool            `json:"enabled"`
+	CreatedBy       pgtype.UUID     `json:"created_by"`
 }
 
 func (q *Queries) CreateMaintenanceWindow(ctx context.Context, arg CreateMaintenanceWindowParams) (MaintenanceWindow, error) {
@@ -178,17 +178,17 @@ WHERE id = $1
 RETURNING ` + maintenanceWindowSelectColumns
 
 type UpdateMaintenanceWindowParams struct {
-	ID               uuid.UUID       `json:"id"`
-	Name             string          `json:"name"`
-	Description      string          `json:"description"`
-	Mode             string          `json:"mode"`
-	CronOpen         string          `json:"cron_open"`
-	DurationMinutes  int32           `json:"duration_minutes"`
-	Timezone         string          `json:"timezone"`
-	ClusterSelector  json.RawMessage `json:"cluster_selector"`
-	OperationTypes   json.RawMessage `json:"operation_types"`
-	OnBlock          string          `json:"on_block"`
-	Enabled          bool            `json:"enabled"`
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	Mode            string          `json:"mode"`
+	CronOpen        string          `json:"cron_open"`
+	DurationMinutes int32           `json:"duration_minutes"`
+	Timezone        string          `json:"timezone"`
+	ClusterSelector json.RawMessage `json:"cluster_selector"`
+	OperationTypes  json.RawMessage `json:"operation_types"`
+	OnBlock         string          `json:"on_block"`
+	Enabled         bool            `json:"enabled"`
 }
 
 func (q *Queries) UpdateMaintenanceWindow(ctx context.Context, arg UpdateMaintenanceWindowParams) (MaintenanceWindow, error) {

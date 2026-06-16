@@ -90,8 +90,8 @@ type vaultClient struct {
 	authData   map[string]string
 	connName   string
 
-	mu        sync.Mutex
-	tokenSet  bool
+	mu       sync.Mutex
+	tokenSet bool
 }
 
 // FetchSecret implements Client. Tries KV v2 first

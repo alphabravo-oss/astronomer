@@ -20,14 +20,14 @@
 //
 // v1 cloud-LB writers:
 //   - EKS  : aws eks update-cluster-config --resources-vpc-config
-//            endpointPublicAccess=true,publicAccessCidrs=...
+//     endpointPublicAccess=true,publicAccessCidrs=...
 //   - GKE  : gcloud container clusters update --master-authorized-networks
 //   - AKS  : az aks update --api-server-authorized-ip-ranges ...
-//             (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
+//     (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
 //   - DOKS : doctl k8s cluster update via firewall API
-//             (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
+//     (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
 //   - SelfManaged : SSA patch on a NetworkPolicy as fallback
-//             (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
+//     (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
 //
 // Each provider uses the existing cloud-credentials materialization
 // (sprint 053) to get its API client. NO new cloud-credential storage —

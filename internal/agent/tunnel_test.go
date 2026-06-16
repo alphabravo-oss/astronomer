@@ -118,7 +118,7 @@ func TestBackoffDuration(t *testing.T) {
 		{attempt: 3, base: 5, max: 300, wantSeconds: 40},
 		{attempt: 4, base: 5, max: 300, wantSeconds: 80},
 		{attempt: 5, base: 5, max: 300, wantSeconds: 160},
-		{attempt: 6, base: 5, max: 300, wantSeconds: 300}, // capped at max
+		{attempt: 6, base: 5, max: 300, wantSeconds: 300},  // capped at max
 		{attempt: 10, base: 5, max: 300, wantSeconds: 300}, // still capped
 		{attempt: 0, base: 1, max: 10, wantSeconds: 1},
 		{attempt: 5, base: 1, max: 10, wantSeconds: 10}, // capped

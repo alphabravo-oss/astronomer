@@ -69,11 +69,11 @@ type MirrorQuerier interface {
 // GroupVersionKind shape) so the cardinality of the {kind=…} label is
 // fixed at compile time.
 const (
-	KindIngressClass        = "IngressClass"
-	KindGatewayClass        = "GatewayClass"
-	KindNetworkPolicy       = "NetworkPolicy"
-	KindResourceQuota       = "ResourceQuota"
-	KindLimitRange          = "LimitRange"
+	KindIngressClass  = "IngressClass"
+	KindGatewayClass  = "GatewayClass"
+	KindNetworkPolicy = "NetworkPolicy"
+	KindResourceQuota = "ResourceQuota"
+	KindLimitRange    = "LimitRange"
 	// Sprint 062 hooks into the same mirror channel: the agent forwards
 	// aquasecurity.github.io/v1alpha1 VulnerabilityReport CRs through
 	// MsgMirrorEvent with Kind=KindVulnerabilityReport; the server's
@@ -103,7 +103,7 @@ const (
 	// ManagedByLabel is the canonical app.kubernetes.io label key.
 	// is_managed on mirrored_network_policies is true when this label
 	// has the value "astronomer".
-	ManagedByLabel    = "app.kubernetes.io/managed-by"
+	ManagedByLabel      = "app.kubernetes.io/managed-by"
 	ManagedByAstronomer = "astronomer"
 )
 

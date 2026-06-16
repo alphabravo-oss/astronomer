@@ -75,12 +75,12 @@ func (f *fakeAllowlistQuerier) GetClusterByID(ctx context.Context, id uuid.UUID)
 
 // fakeAllowlistProvider lets each test wire its own Detect/GetEffective/Apply behaviour.
 type fakeAllowlistProvider struct {
-	id            providers.ProviderID
-	detect        func(providers.Cluster) string
-	getEffective  func(providers.Cluster) ([]string, error)
-	apply         func(providers.Cluster, []string) error
-	applyCalls    int
-	getCalls      int
+	id           providers.ProviderID
+	detect       func(providers.Cluster) string
+	getEffective func(providers.Cluster) ([]string, error)
+	apply        func(providers.Cluster, []string) error
+	applyCalls   int
+	getCalls     int
 }
 
 func (f *fakeAllowlistProvider) ID() providers.ProviderID { return f.id }

@@ -93,12 +93,12 @@ func ConfigureEmail(deps EmailDeps) {
 // HandleEmailDispatch is the periodic worker that drains queued rows.
 // Pattern matches the other periodic tasks in this package:
 //
-//   1. Acquire the leader lease so only one worker pod runs the loop.
-//   2. Pull a batch of queued rows.
-//   3. Iterate: render is already baked into the row at enqueue time,
-//      so the dispatcher only re-fetches branding for the live SMTP
-//      Settings and ships the bytes.
-//   4. Mark each row sent/failed/skipped.
+//  1. Acquire the leader lease so only one worker pod runs the loop.
+//  2. Pull a batch of queued rows.
+//  3. Iterate: render is already baked into the row at enqueue time,
+//     so the dispatcher only re-fetches branding for the live SMTP
+//     Settings and ships the bytes.
+//  4. Mark each row sent/failed/skipped.
 //
 // We DON'T re-render the body here — the row already contains the
 // rendered text/html because the Enqueuer rendered them at

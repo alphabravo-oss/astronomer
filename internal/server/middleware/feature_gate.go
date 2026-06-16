@@ -6,11 +6,11 @@
 // operator's stance is "this feature is not present in this install"
 // rather than "you can't use it". 403 would be wrong because:
 //
-//   1. Even a superuser sees 404. A 403 implies "ask for permission",
-//      which is misleading when the surface is intentionally absent.
-//   2. The frontend pre-fetches the branding/feature subset and hides
-//      tabs on `false`; defense-in-depth on the API side renders any
-//      stale frontend a clean 404 instead of a leaky 403.
+//  1. Even a superuser sees 404. A 403 implies "ask for permission",
+//     which is misleading when the surface is intentionally absent.
+//  2. The frontend pre-fetches the branding/feature subset and hides
+//     tabs on `false`; defense-in-depth on the API side renders any
+//     stale frontend a clean 404 instead of a leaky 403.
 //
 // Cache: the per-request DB hit is avoided by holding the result in a
 // process-local SettingsCache with a 30s TTL. Mutations via the
