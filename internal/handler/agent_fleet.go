@@ -930,9 +930,10 @@ func buildAgentFleetItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, connec
 			reasons = append(reasons, "cluster heartbeat is stale")
 		}
 	}
-	if profile == agenttemplate.PrivilegeProfileAdmin {
-		reasons = append(reasons, "agent is using full-admin privilege profile")
-	}
+	// Note: the full-admin privilege profile is a least-privilege *posture*
+	// advisory (surfaced via PrivilegeProfile + the admin-posture endpoint),
+	// not a health fault. A connected, fresh, compatible admin-profile agent
+	// is fully functional, so it no longer flips the agent to "degraded".
 	if compatibility.DegradedReason != "" {
 		reasons = append(reasons, compatibility.DegradedReason)
 	}

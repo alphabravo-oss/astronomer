@@ -272,7 +272,7 @@ export function useDeleteClusterTemplate() {
 // ============================================================
 
 /** Shape of the current user we care about for permission gating. */
-type RoleHolder = { globalRoles?: string[] } | null | undefined;
+type RoleHolder = { globalRoles?: string[]; is_superuser?: boolean; isSuperuser?: boolean } | null | undefined;
 
 /**
  * Roughly model the backend's RBAC: admin/superadmin can do anything,
@@ -283,6 +283,10 @@ type RoleHolder = { globalRoles?: string[] } | null | undefined;
  */
 export function hasPermission(user: RoleHolder, role: string): boolean {
   if (!user) return false;
+  // Superusers (e.g. the bootstrap admin) bypass role checks — the server
+  // grants them everything, but /auth/me reports is_superuser with empty
+  // named roles, so the string-based check below would wrongly deny them.
+  if (user.is_superuser || user.isSuperuser) return true;
   const roles = user.globalRoles || [];
   if (roles.includes('admin') || roles.includes('superadmin')) return true;
   return roles.includes(role);
