@@ -762,6 +762,29 @@ func (h *LoggingHandler) FluentbitConfig(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// FluentBitConfigMapName is the single aggregate config ConfigMap the controller
+// writes and Fluent Bit consumes (mounted via the chart's existingConfigMap).
+const FluentBitConfigMapName = "astronomer-fluent-bit-config"
+
+// refreshAggregateFluentBitConfig re-renders the cluster's full Fluent Bit
+// config from all enabled outputs/pipelines and writes it to the single
+// aggregate ConfigMap that the Fluent Bit DaemonSet mounts. This is the link
+// that makes configured outputs actually take effect: the installed Fluent Bit
+// reads this ConfigMap (existingConfigMap) and hot-reloads on change.
+func (h *LoggingHandler) refreshAggregateFluentBitConfig(ctx context.Context, clusterID string) error {
+	cu, err := uuid.Parse(clusterID)
+	if err != nil {
+		return fmt.Errorf("parse cluster id: %w", err)
+	}
+	config := h.renderFullFluentbitConfig(ctx, cu)
+	if err := ensureNamespace(ctx, h.requester, clusterID, LoggingNamespace); err != nil {
+		return fmt.Errorf("ensure namespace: %w", err)
+	}
+	return applyConfigMap(ctx, h.requester, clusterID, LoggingNamespace, FluentBitConfigMapName, map[string]string{
+		"fluent-bit.conf": config,
+	})
+}
+
 // renderFullFluentbitConfig assembles the complete Fluent Bit configuration for
 // a cluster from its enabled pipelines (filters) and outputs, reusing the same
 // block renderers the controller applies to the cluster. Previously this view
@@ -773,6 +796,13 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 	writeKV(&b, "Daemon", "Off")
 	writeKV(&b, "Log_Level", "info")
 	writeKV(&b, "Parsers_File", "parsers.conf")
+	// HTTP server + hot reload let the configmap-reload sidecar push new
+	// outputs/pipelines without a pod restart when the controller rewrites
+	// the aggregate config ConfigMap.
+	writeKV(&b, "HTTP_Server", "On")
+	writeKV(&b, "HTTP_Listen", "0.0.0.0")
+	writeKV(&b, "HTTP_Port", "2020")
+	writeKV(&b, "Hot_Reload", "On")
 	b.WriteString("\n[INPUT]\n")
 	writeKV(&b, "Name", "tail")
 	writeKV(&b, "Path", "/var/log/containers/*.log")
@@ -1149,14 +1179,23 @@ func (h *LoggingHandler) executeOperation(ctx context.Context, op sqlc.LoggingOp
 		if err := ensureNamespace(ctx, h.requester, env.ClusterID, LoggingNamespace); err != nil {
 			return fmt.Errorf("ensure namespace: %w", err)
 		}
-		return applyConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName, data)
+		if err := applyConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName, data); err != nil {
+			return err
+		}
+		// Refresh the single aggregate config ConfigMap that Fluent Bit actually
+		// consumes (via existingConfigMap). The per-target ConfigMap above is
+		// kept for provenance/debugging.
+		return h.refreshAggregateFluentBitConfig(ctx, env.ClusterID)
 	case "delete":
 		h.recordEvent(ctx, op.ID, "info", "delete", "deleting logging configmap", map[string]any{
 			"clusterId":     env.ClusterID,
 			"namespace":     LoggingNamespace,
 			"configMapName": configMapName,
 		})
-		return deleteConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName)
+		if err := deleteConfigMap(ctx, h.requester, env.ClusterID, LoggingNamespace, configMapName); err != nil {
+			return err
+		}
+		return h.refreshAggregateFluentBitConfig(ctx, env.ClusterID)
 	default:
 		return fmt.Errorf("unsupported logging operation type: %s", op.OperationType)
 	}
