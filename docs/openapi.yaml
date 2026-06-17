@@ -5216,36 +5216,232 @@ paths:
       responses:
         '204':
           description: Closed
-  /api/v1/clusters/{id}/k8s/{path}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: path
-        in: path
-        required: true
-        schema:
-          type: string
-        description: any k8s API path, e.g. api/v1/pods or apis/apps/v1/namespaces/default/deployments
+  /api/v1/clusters/{cluster_id}/shell/sessions/{id}:
     get:
-      tags:
-        - K8s
-      summary: Proxy a k8s GET through the tunnel
+      summary: Get a kubectl shell session
       description: |
-        Forwards the request to the managed cluster's apiserver via
-        the agent's WebSocket tunnel. Supports both Watch
-        (`?watch=true`) streams and standard list/get calls. Auth
-        propagates from the JWT — the agent's ServiceAccount has
-        cluster-admin, but RBAC on the management plane gates which
-        clusters the caller can reach. Rate-limited.
+        Returns the current state of a single in-browser kubectl shell session
+        scoped to the given cluster. Gated on clusters:update RBAC (opening or
+        inspecting a privileged shell is treated as a write action). A caller may
+        only read a session they own; superusers may read any session. The
+        response includes the live command count and the configured idle timeout.
+      tags:
+        - kubectl-shell
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster the session belongs to.
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          description: Shell session id.
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
-          description: K8s response body
+          description: The shell session.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          cluster_id:
+                            type: string
+                            format: uuid
+                          user_id:
+                            type: string
+                            format: uuid
+                          status:
+                            type: string
+                            description: 'Lifecycle status, e.g. starting, active, closed, failed.'
+                          pod_name:
+                            type: string
+                          pod_namespace:
+                            type: string
+                          container:
+                            type: string
+                          started_at:
+                            type: string
+                            format: date-time
+                          last_input_at:
+                            type: string
+                            format: date-time
+                          expires_at:
+                            type: string
+                            format: date-time
+                          idle_timeout_seconds:
+                            type: integer
+                            format: int64
+                          command_count:
+                            type: integer
+                            format: int64
+                            description: Omitted when zero.
+                        required:
+                          - id
+                          - cluster_id
+                          - user_id
+                          - status
+                          - pod_name
+                          - pod_namespace
+                          - container
+                          - started_at
+                          - last_input_at
+                          - expires_at
+                          - idle_timeout_seconds
+        '400':
+          description: Invalid cluster_id or session id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Session belongs to another operator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Session not found, or not found in this cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Database error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '503':
-          description: Agent not connected
+          description: Kubectl shell is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands:
+    get:
+      summary: List recorded commands for a kubectl shell session
+      description: |
+        Returns the audit trail of shell commands recorded for a single kubectl
+        session, newest-first, as a DRF-style paginated list. Gated on
+        clusters:update RBAC. A caller may only read commands for a session they
+        own; superusers may read any session's commands. Use the limit/offset
+        query parameters to page; limit is clamped to the range 1-1000 (default
+        100) and offset is clamped to a minimum of 0 (default 0).
+      tags:
+        - kubectl-shell
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster the session belongs to.
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          description: Shell session id.
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          description: Max items per page. Values below 1 fall back to 100; values above 1000 are clamped to 1000.
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          required: false
+          description: Number of items to skip. Negative values fall back to 0.
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Paginated page of recorded commands.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            command_at:
+                              type: string
+                              format: date-time
+                            command_line:
+                              type: string
+                          required:
+                            - command_at
+                            - command_line
+        '400':
+          description: Invalid cluster_id or session id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Session belongs to another operator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Session not found, or not found in this cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Database error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Kubectl shell is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/alerting/channels/:
     get:
       tags:

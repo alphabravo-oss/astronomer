@@ -64,7 +64,6 @@ const KNOWN_NIL_GATED = new Set([
   'GET /api/v1/alerting/events',
   'GET /api/v1/argocd/instances',
   'GET /api/v1/argocd/instances/{}/orphan-report',
-  'GET /api/v1/clusters/{}/k8s/{}',
   'GET /api/v1/clusters/{}/vulnerabilities/images',
   'GET /api/v1/clusters/{}/vulnerabilities/summary',
   'GET /api/v1/extensions',
@@ -83,8 +82,19 @@ const KNOWN_NIL_GATED = new Set([
 //     router and the spec use different parameter names for the same slot
 //     (router {id} vs spec {name}/{cluster_id}).
 function normalizePath(p) {
+  // Detect a trailing catch-all segment BEFORE collapsing param names, so we
+  // can tell a real catch-all ('*' on the router, '{path}'/'{...path}' on the
+  // spec) apart from an ordinary trailing single-segment id (e.g. '{id}').
+  //   - router side: a literal trailing '/*'
+  //   - spec side:   a trailing path template whose PARAMETER NAME is 'path'
+  //                  (or ends in 'path'), e.g. '/{path}' or '/{...path}'.
+  // Both model chi's '*' wildcard (they consume the remainder of the URL), so
+  // they are folded to the same '/*' sentinel. Non-terminal '{}' params and
+  // ordinary trailing ids (e.g. '/{session_id}') are left as real '{}' slots.
+  const trailingCatchAll = /\/(\*|\{\.{0,3}[^}]*path\})$/.test(p);
   let out = p.replace(/\{[^}]*\}/g, '{}');
   if (out.length > 1) out = out.replace(/\/+$/, '');
+  if (trailingCatchAll) out = out.replace(/\/\{\}$/, '/*');
   return out;
 }
 
@@ -96,6 +106,12 @@ function opKey(method, p) {
 const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
 const routerOps = new Map(); // key -> { method, pattern }
 for (const r of routes) {
+  // OpenAPI 3 has no `connect` operation object, so the spec can never emit a
+  // CONNECT operation. chi registers CONNECT on every HandleFunc/catch-all
+  // route, but those are not documentable; counting them would permanently
+  // inflate `missing` and depress coverage. Exclude CONNECT from both the
+  // numerator and the denominator.
+  if (r.method.toUpperCase() === 'CONNECT') continue;
   routerOps.set(opKey(r.method, r.pattern), { method: r.method.toUpperCase(), pattern: r.pattern });
 }
 
