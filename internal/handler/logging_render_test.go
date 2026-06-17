@@ -130,7 +130,7 @@ func TestRenderConfigMapDataUnsupportedOutput(t *testing.T) {
 		TargetID:   uuid.New().String(),
 		TargetType: "output",
 		Name:       "mystery",
-		OutputType: "splunk",
+		OutputType: "kafka",
 		Enabled:    true,
 	}
 	data, err := h.renderConfigMapData(env)
@@ -138,7 +138,7 @@ func TestRenderConfigMapDataUnsupportedOutput(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	conf := data["output.conf"]
-	if !strings.Contains(conf, "# unsupported output_type splunk") {
+	if !strings.Contains(conf, "# unsupported output_type kafka") {
 		t.Errorf("expected unsupported comment; got:\n%s", conf)
 	}
 	// Verify there's no real `[OUTPUT]` block opener (only the inert one

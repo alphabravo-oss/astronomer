@@ -440,11 +440,13 @@ func TestReconcilerAppliesPendingApplyOperationViaConfigMap(t *testing.T) {
 	if len(requester.calls) == 0 {
 		t.Fatalf("expected requester to be invoked")
 	}
-	// Find the POST /configmaps call and verify the body shape.
+	// Find the per-target POST /configmaps call and verify the body shape.
+	// The reconciler also POSTs the aggregate astronomer-fluent-bit-config
+	// ConfigMap that Fluent Bit consumes; match the per-target one by name.
+	expectedName := loggingConfigMapName("output", outputID.String())
 	foundPost := false
 	for _, c := range requester.calls {
 		if c.method == http.MethodPost && strings.HasSuffix(c.path, "/configmaps") {
-			foundPost = true
 			var body map[string]any
 			if err := json.Unmarshal(c.body, &body); err != nil {
 				t.Fatalf("body decode: %v", err)
@@ -456,10 +458,10 @@ func TestReconcilerAppliesPendingApplyOperationViaConfigMap(t *testing.T) {
 			if meta["namespace"] != LoggingNamespace {
 				t.Fatalf("namespace = %v, want %q", meta["namespace"], LoggingNamespace)
 			}
-			expectedName := loggingConfigMapName("output", outputID.String())
 			if meta["name"] != expectedName {
-				t.Fatalf("name = %v, want %q", meta["name"], expectedName)
+				continue
 			}
+			foundPost = true
 			data, _ := body["data"].(map[string]any)
 			if _, ok := data["meta.json"]; !ok {
 				t.Fatalf("data missing meta.json; got keys=%v", keysOf(data))
@@ -467,7 +469,7 @@ func TestReconcilerAppliesPendingApplyOperationViaConfigMap(t *testing.T) {
 		}
 	}
 	if !foundPost {
-		t.Fatalf("expected a POST /configmaps call, got: %+v", requester.calls)
+		t.Fatalf("expected a POST /configmaps call for %q, got: %+v", expectedName, requester.calls)
 	}
 
 	// At least one event should be persisted.
