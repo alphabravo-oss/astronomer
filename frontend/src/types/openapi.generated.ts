@@ -151,6 +151,33 @@ export interface OpenAPIComponents {
           "max_unavailable"?: number;
           "rollback_image"?: string;
         };
+    AllowlistResponse: Record<string, unknown>;
+    AllowlistSnapshotResponse: Record<string, unknown>;
+    AllowlistUpdateRequest: Record<string, unknown>;
+    ApiTokenCreated: {
+          "id"?: string;
+          "name"?: string;
+          "token"?: string;
+          "prefix"?: string;
+          "expires_at"?: string | null;
+          "created_at"?: string;
+          "scopes"?: string[];
+          "allowed_cidrs"?: string;
+        };
+    ApiTokenListItem: {
+          "id"?: string;
+          "name"?: string;
+          "prefix"?: string;
+          "expires_at"?: string | null;
+          "last_used_at"?: string | null;
+          "is_revoked"?: boolean;
+          "created_at"?: string;
+          "scopes"?: string[];
+          "allowed_cidrs"?: string;
+          "last_seen_remote_ip"?: string;
+        };
+    ApplyClusterTemplateRequest: Record<string, unknown>;
+    ApplyNetworkPolicyRequest: Record<string, unknown>;
     ArgoOrphanApplication: {
           "id"?: string;
           "name"?: string;
@@ -173,6 +200,196 @@ export interface OpenAPIComponents {
           "live_error"?: string;
           "generated_at"?: string;
         };
+    AuditLogEntry: {
+          "id"?: string;
+          "user_id"?: string | null;
+          "user"?: string;
+          "source"?: string;
+          "correlation_id"?: string;
+          "action"?: string;
+          "action_class"?: string;
+          "resource_type"?: string;
+          "resource_id"?: string;
+          "resource_name"?: string;
+          "detail"?: unknown | null;
+          "details"?: unknown | null;
+          "actor_auth_method"?: string;
+          "http_method"?: string;
+          "path"?: string;
+          "status_code"?: number;
+          "status"?: string;
+          "duration_ms"?: number;
+          "ip_address"?: string | null;
+          "source_ip"?: string;
+          "user_agent"?: string;
+          "request_id"?: string;
+          "timestamp"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    BackupControllerStatus: {
+          "reconciler"?: {
+            "enabled"?: boolean;
+            "engine"?: string;
+          };
+          "health"?: "healthy" | "degraded";
+          "healthReasons"?: string[];
+          "storage"?: {
+            "count"?: number;
+          };
+          "backups"?: {
+            "total"?: number;
+            "runningCount"?: number;
+            "failedCount"?: number;
+            "statuses"?: Record<string, number>;
+          };
+          "schedules"?: {
+            "total"?: number;
+            "enabledCount"?: number;
+          };
+          "restores"?: {
+            "total"?: number;
+            "runningCount"?: number;
+            "failedCount"?: number;
+          };
+        };
+    BackupCreateRequest: {
+          "name": string;
+          "storage_id": string;
+          "backup_type"?: string;
+          "database_tables"?: unknown;
+          "included_namespaces"?: string[];
+          "excluded_namespaces"?: string[];
+        };
+    BackupResponse: {
+          "id"?: string;
+          "name"?: string;
+          "storage_id"?: string;
+          "backup_type"?: string;
+          "status"?: string;
+          "file_path"?: string;
+          "file_size_bytes"?: number;
+          "database_tables"?: unknown;
+          "started_at"?: string | null;
+          "completed_at"?: string | null;
+          "error_message"?: string;
+          "created_by_id"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+          "cluster_id"?: string | null;
+          "velero_backup_name"?: string;
+          "velero_namespace"?: string;
+          "included_namespaces"?: unknown;
+          "excluded_namespaces"?: unknown;
+          "poll_attempts"?: number;
+          "last_polled_at"?: string | null;
+        };
+    BackupRestoreRequest: {
+          "included_namespaces"?: string[];
+          "namespace_mapping"?: Record<string, string>;
+        };
+    BackupScheduleRequest: {
+          "name": string;
+          "storage_id": string;
+          "backup_type"?: string;
+          "cron_expression": string;
+          "retention_count"?: number;
+          "enabled"?: boolean;
+          "cluster_id"?: string;
+          "velero_namespace"?: string;
+          "included_namespaces"?: string[];
+          "excluded_namespaces"?: string[];
+          "ttl"?: string;
+        };
+    BackupScheduleResponse: {
+          "id"?: string;
+          "name"?: string;
+          "storage_id"?: string;
+          "backup_type"?: string;
+          "cron_expression"?: string;
+          "retention_count"?: number;
+          "enabled"?: boolean;
+          "last_backup_id"?: string | null;
+          "created_by_id"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+          "cluster_id"?: string | null;
+          "velero_namespace"?: string;
+          "velero_schedule_name"?: string;
+          "included_namespaces"?: unknown;
+          "excluded_namespaces"?: unknown;
+          "ttl"?: string;
+        };
+    BackupStorageConfigRequest: {
+          "name": string;
+          "storage_type"?: string;
+          "bucket": string;
+          "prefix"?: string;
+          "region"?: string;
+          "endpoint_url"?: string;
+          "access_key"?: string;
+          "secret_key"?: string;
+          "is_default"?: boolean;
+          "cluster_id"?: string;
+          "velero_namespace"?: string;
+          "bsl_name"?: string;
+        };
+    BackupStorageConfigResponse: {
+          "id"?: string;
+          "name"?: string;
+          "storage_type"?: string;
+          "bucket"?: string;
+          "prefix"?: string;
+          "region"?: string;
+          "endpoint_url"?: string;
+          "is_default"?: boolean;
+          "velero_namespace"?: string;
+          "bsl_name"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+          "has_credentials"?: boolean;
+          "cluster_id"?: string;
+        };
+    CatalogOperation: {
+          "id"?: string;
+          "targetType"?: string;
+          "targetKey"?: string;
+          "operationType"?: string;
+          "status"?: string;
+          "attemptCount"?: number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage"?: string;
+          "createdAt"?: string;
+          "updatedAt"?: string;
+        };
+    CatalogOperationEvent: {
+          "id"?: string;
+          "level"?: string;
+          "stage"?: string;
+          "message"?: string;
+          "detail"?: Record<string, unknown>;
+          "createdAt"?: string;
+        };
+    CloudCredential: {
+          "id"?: string;
+          "project_id"?: string;
+          "name"?: string;
+          "provider"?: string;
+          "description"?: string;
+          "data"?: Record<string, string>;
+          "target_refs"?: Record<string, unknown>[];
+          "created_at"?: string;
+          "updated_at"?: string;
+        } & Record<string, unknown>;
+    CloudCredentialRequest: {
+          "name": string;
+          "provider": string;
+          "description"?: string;
+          "data"?: Record<string, string>;
+          "target_refs"?: Record<string, unknown>[];
+        };
+    CloudProviderSpec: Record<string, unknown>;
     Cluster: {
           "id"?: string;
           "name"?: string;
@@ -221,6 +438,30 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
         };
+    ClusterConditionResponse: Record<string, unknown>;
+    ClusterEvent: {
+          "id"?: string;
+          "type"?: string;
+          "reason"?: string;
+          "message"?: string;
+          "involvedObject"?: {
+            "kind"?: string;
+            "name"?: string;
+            "namespace"?: string;
+          };
+          "count"?: number;
+          "firstTimestamp"?: string;
+          "lastTimestamp"?: string;
+        } & Record<string, unknown>;
+    ClusterGroupResponse: Record<string, unknown>;
+    ClusterRegistryConfigLegacy: Record<string, unknown>;
+    ClusterRegistryRequest: Record<string, unknown>;
+    ClusterRegistryResponse: Record<string, unknown>;
+    ClusterRegistryTestResponse: Record<string, unknown>;
+    ClusterResponse: Record<string, unknown>;
+    ClusterTemplateApplicationResponse: Record<string, unknown>;
+    ClusterTemplateResponse: Record<string, unknown>;
+    CreateClusterGroupRequest: Record<string, unknown>;
     CreateClusterRequest: {
           "name": string;
           "display_name"?: string;
@@ -230,8 +471,72 @@ export interface OpenAPIComponents {
           "provider"?: string;
           "distribution"?: string;
         };
+    CreateClusterTemplateRequest: Record<string, unknown>;
+    CreateFleetOperationRequest: Record<string, unknown>;
+    CreateNetworkPolicyTemplateRequest: Record<string, unknown>;
+    CreateProjectCatalogRequest: {
+          "name": string;
+          "url": string;
+          "description"?: string;
+          "auth_type"?: string;
+          "auth_config"?: Record<string, unknown>;
+        };
+    CreateProjectRequest: {
+          "name": string;
+          "cluster_id": string;
+          "description"?: string;
+          "namespaces"?: string[];
+          "pod_security_profile"?: string;
+        };
     DataEnvelope: {
           "data": unknown;
+        };
+    DecommissionStatusResponse: Record<string, unknown>;
+    DexConnector: {
+          "id"?: string;
+          "name"?: string;
+          "type"?: string;
+          "config"?: Record<string, unknown>;
+          "enabled"?: boolean;
+          "created_at"?: string;
+          "updated_at"?: string;
+        } & Record<string, unknown>;
+    DexConnectorRequest: {
+          "name"?: string;
+          "type"?: string;
+          "config"?: Record<string, unknown>;
+          "enabled"?: boolean;
+        };
+    DexConnectorType: {
+          "type"?: string;
+          "display_name"?: string;
+          "required_fields"?: string[];
+          "optional_fields"?: string[];
+          "secret_fields"?: string[];
+        } & Record<string, unknown>;
+    DexRegisterSSOResult: {
+          "id"?: string;
+          "provider"?: string;
+          "client_id"?: string;
+          "display_name"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        } & Record<string, unknown>;
+    DexSettings: {
+          "configured"?: boolean;
+          "issuer_url"?: string;
+          "namespace"?: string;
+          "release_name"?: string;
+          "configmap_name"?: string;
+          "cluster_id"?: string | null;
+          "updated_at"?: string;
+        } & Record<string, unknown>;
+    DexSettingsRequest: {
+          "issuer_url": string;
+          "namespace"?: string;
+          "release_name"?: string;
+          "configmap_name"?: string;
+          "cluster_id"?: string;
         };
     Error: {
           "error": {
@@ -285,6 +590,95 @@ export interface OpenAPIComponents {
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
         };
+    FleetOperationResponse: Record<string, unknown>;
+    FleetOperationTargetResponse: Record<string, unknown>;
+    HelmChart: {
+          "id"?: string;
+          "repository_id"?: string;
+          "name"?: string;
+          "display_name"?: string;
+          "description"?: string;
+          "icon_url"?: string;
+          "home_url"?: string;
+          "category"?: string;
+          "keywords"?: string[];
+          "maintainers"?: Record<string, unknown>[];
+          "deprecated"?: boolean;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    HelmChartVersion: {
+          "id"?: string;
+          "chart_id"?: string;
+          "version"?: string;
+          "app_version"?: string;
+          "digest"?: string;
+          "urls"?: string[];
+          "values_schema"?: Record<string, unknown>;
+          "default_values"?: string;
+          "readme"?: string;
+          "created_at_upstream"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    HelmRepository: {
+          "id"?: string;
+          "name"?: string;
+          "url"?: string;
+          "repo_type"?: string;
+          "description"?: string;
+          "is_default"?: boolean;
+          "auth_type"?: string;
+          "auth_config"?: Record<string, unknown>;
+          "enabled"?: boolean;
+          "last_synced_at"?: string | null;
+          "created_by_id"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+          "owner_project_id"?: string | null;
+        };
+    InstalledAppEnriched: {
+          "id"?: string;
+          "cluster_id"?: string;
+          "chart_id"?: string;
+          "chart_version_id"?: string;
+          "release_name"?: string;
+          "namespace"?: string;
+          "status"?: string;
+          "revision"?: number;
+          "values_override"?: string;
+          "tool_slug"?: string;
+          "preset_used"?: string;
+          "source_kind"?: "app" | "tool";
+          "display_name"?: string;
+          "chart_name"?: string;
+          "chart_version"?: string;
+          "chart_app_version"?: string;
+          "chart_description"?: string;
+          "chart_icon_url"?: string;
+          "chart_category"?: string;
+          "repo_name"?: string;
+          "repo_type"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    InstalledChart: {
+          "id"?: string;
+          "cluster_id"?: string;
+          "chart_version_id"?: string | null;
+          "release_name"?: string;
+          "namespace"?: string;
+          "values_override"?: string;
+          "status"?: string;
+          "revision"?: number;
+          "notes"?: string;
+          "installed_by_id"?: string | null;
+          "request_id"?: string | null;
+          "tool_slug"?: string | null;
+          "preset_used"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
     KubectlSession: {
           "id"?: string;
           "cluster_id"?: string;
@@ -309,6 +703,23 @@ export interface OpenAPIComponents {
             "user"?: OpenAPIComponents['schemas']['User'];
           };
         };
+    MTLSBreakdownResponse: Record<string, unknown>;
+    MoveClustersRequest: Record<string, unknown>;
+    Namespace: {
+          "name"?: string;
+          "clusterId"?: string;
+          "status"?: string;
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "podCount"?: number;
+          "cpuUsage"?: number;
+          "cpuLimit"?: number;
+          "memoryUsage"?: number;
+          "memoryLimit"?: number;
+          "createdAt"?: string;
+        } & Record<string, unknown>;
+    NetworkPolicyApplicationResponse: Record<string, unknown>;
+    NetworkPolicyTemplateResponse: Record<string, unknown>;
     NodeActionResponse: {
           "node"?: string;
           "status"?: string;
@@ -316,6 +727,32 @@ export interface OpenAPIComponents {
           "value"?: string;
           "removed"?: boolean;
         };
+    NodeDetail: {
+          "name"?: string;
+          "status"?: string;
+          "roles"?: string[];
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "createdAt"?: string;
+          "nodeInfo"?: Record<string, unknown>;
+          "kubeletVersion"?: string;
+          "cpuCapacity"?: number;
+          "cpuUsage"?: number;
+          "memoryCapacity"?: number;
+          "memoryUsage"?: number;
+          "podCapacity"?: number;
+          "podCount"?: number;
+          "addresses"?: Record<string, unknown>[];
+          "conditions"?: Record<string, unknown>[];
+          "taints"?: Record<string, unknown>[];
+          "images"?: Array<{
+            "name"?: string;
+            "sizeBytes"?: number;
+          }>;
+          "pods"?: Record<string, unknown>[];
+          "events"?: Record<string, unknown>[];
+          "unschedulable"?: boolean;
+        } & Record<string, unknown>;
     NodeDrainPodRef: {
           "namespace"?: string;
           "name"?: string;
@@ -343,6 +780,23 @@ export interface OpenAPIComponents {
           "key": string;
           "value"?: string;
         };
+    NodeSummary: {
+          "name"?: string;
+          "status"?: string;
+          "roles"?: string[];
+          "kubernetesVersion"?: string;
+          "os"?: string;
+          "architecture"?: string;
+          "containerRuntime"?: string;
+          "cpuCapacity"?: number;
+          "cpuUsage"?: number;
+          "memoryCapacity"?: number;
+          "memoryUsage"?: number;
+          "podCapacity"?: number;
+          "podCount"?: number;
+          "conditions"?: Record<string, unknown>[];
+          "createdAt"?: string;
+        } & Record<string, unknown>;
     NodeTaintActionResponse: {
           "node"?: string;
           "status"?: string;
@@ -374,6 +828,153 @@ export interface OpenAPIComponents {
           "next": string | null;
           "previous": string | null;
         };
+    Pod: {
+          "name"?: string;
+          "namespace"?: string;
+          "clusterId"?: string;
+          "phase"?: string;
+          "status"?: string;
+          "ready"?: string;
+          "restarts"?: number;
+          "node"?: string;
+          "ip"?: string;
+          "containers"?: Record<string, unknown>[];
+          "conditions"?: Record<string, unknown>[];
+          "createdAt"?: string;
+          "age"?: string;
+          "images"?: string[];
+        } & Record<string, unknown>;
+    PodLogEntry: {
+          "timestamp"?: string;
+          "message"?: string;
+          "container"?: string;
+        };
+    Project: {
+          "id"?: string;
+          "name"?: string;
+          "cluster_id"?: string;
+          "description"?: string;
+          "namespaces"?: string[];
+          "pod_security_profile"?: string;
+          "resource_quota_cpu"?: string;
+          "resource_quota_memory"?: string;
+          "resource_quota_pods"?: number;
+          "created_at"?: string;
+          "updated_at"?: string;
+        } & Record<string, unknown>;
+    ProjectCatalog: {
+          "id"?: string;
+          "name"?: string;
+          "url"?: string;
+          "visibility"?: "global" | "own" | "subscribed";
+        } & Record<string, unknown>;
+    ProjectCatalogSubscription: {
+          "id"?: string;
+          "project_id"?: string;
+          "catalog_id"?: string;
+          "created_at"?: string;
+        };
+    ProjectNamespaceRequest: {
+          "namespace": string;
+        };
+    RBACBindingRequest: {
+          "role_id": string;
+          "user_id"?: string;
+          "group"?: string;
+        };
+    RBACClusterBindingRequest: {
+          "role_id": string;
+          "cluster_id": string;
+          "user_id"?: string;
+          "group"?: string;
+        };
+    RBACClusterRoleBinding: {
+          "id"?: string;
+          "role_id"?: string;
+          "cluster_id"?: string;
+          "user_id"?: string | null;
+          "group"?: string;
+          "created_at"?: string;
+        } & Record<string, unknown>;
+    RBACEffectivePermissions: {
+          "user_id"?: string;
+          "bindings"?: Record<string, unknown>[];
+          "grants"?: Array<{
+            "resource"?: string;
+            "verbs"?: string[];
+          }>;
+        } & Record<string, unknown>;
+    RBACGlobalRoleBinding: {
+          "id"?: string;
+          "role_id"?: string;
+          "user_id"?: string | null;
+          "group"?: string;
+          "created_at"?: string;
+        } & Record<string, unknown>;
+    RBACPermissionPreview: {
+          "grants"?: Array<{
+            "resource"?: string;
+            "verbs"?: string[];
+          }>;
+          "risk_level"?: string;
+          "sensitive"?: boolean;
+          "warnings"?: string[];
+        } & Record<string, unknown>;
+    RBACPermissionPreviewRequest: {
+          "template_name"?: string;
+          "role_id"?: string;
+          "scope"?: "global" | "cluster" | "project";
+          "rules"?: Array<{
+            "resource"?: string;
+            "verbs"?: string[];
+          }>;
+        };
+    RBACProjectBindingRequest: {
+          "role_id": string;
+          "project_id": string;
+          "user_id"?: string;
+          "group"?: string;
+        };
+    RBACProjectRoleBinding: {
+          "id"?: string;
+          "role_id"?: string;
+          "project_id"?: string;
+          "user_id"?: string | null;
+          "group"?: string;
+          "created_at"?: string;
+        } & Record<string, unknown>;
+    RBACRole: {
+          "id"?: string;
+          "name"?: string;
+          "display_name"?: string;
+          "scope"?: "global" | "cluster" | "project";
+          "is_builtin"?: boolean;
+          "rules"?: Array<{
+            "resource"?: string;
+            "verbs"?: string[];
+          }>;
+          "created_at"?: string;
+          "updated_at"?: string;
+        } & Record<string, unknown>;
+    RBACRoleRequest: {
+          "name": string;
+          "display_name"?: string;
+          "scope"?: "global" | "cluster" | "project";
+          "rules"?: Array<{
+            "resource"?: string;
+            "verbs"?: string[];
+          }>;
+        };
+    RBACTemplate: {
+          "name"?: string;
+          "display_name"?: string;
+          "description"?: string;
+          "scope"?: "global" | "cluster" | "project";
+          "rules"?: Array<{
+            "resource"?: string;
+            "verbs"?: string[];
+          }>;
+        } & Record<string, unknown>;
     RegistrationStatus: {
           "cluster_id"?: string;
           "phase"?: "created" | "awaiting_agent" | "connected" | "provisioning" | "ready" | "failed";
@@ -395,6 +996,49 @@ export interface OpenAPIComponents {
           "step_order"?: number;
           "created_at"?: string;
         };
+    ResourceRow: {
+          "name"?: string;
+          "namespace"?: string;
+          "clusterId"?: string;
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "createdAt"?: string;
+        } & Record<string, unknown>;
+    ResourceSearchResult: {
+          "results": Array<OpenAPIComponents['schemas']['ResourceRow'] & {
+            "cluster_id"?: string;
+            "cluster_name"?: string;
+            "clusterName"?: string;
+          }>;
+          "errors": Array<{
+            "cluster_id": string;
+            "cluster_name": string;
+            "error": string;
+          }>;
+          "clusters_queried": number;
+          "clusters_failed": number;
+          "type": string;
+          "truncated": boolean;
+        };
+    RestoreOperationResponse: {
+          "id"?: string;
+          "backup_id"?: string;
+          "status"?: string;
+          "started_at"?: string | null;
+          "completed_at"?: string | null;
+          "error_message"?: string;
+          "initiated_by_id"?: string | null;
+          "created_at"?: string;
+          "updated_at"?: string;
+          "cluster_id"?: string | null;
+          "velero_namespace"?: string;
+          "velero_restore_name"?: string;
+          "included_namespaces"?: unknown;
+          "namespace_mapping"?: unknown;
+          "poll_attempts"?: number;
+          "last_polled_at"?: string | null;
+        };
+    ServiceMeshDetectionResponse: Record<string, unknown>;
     ServiceMeshInventory: {
           "cluster_id"?: string;
           "mesh"?: string;
@@ -431,6 +1075,137 @@ export interface OpenAPIComponents {
     SetOptionsRequest: {
           "install_baseline": boolean;
         };
+    ShellSession: {
+          "id"?: string;
+          "cluster_id"?: string;
+          "user_id"?: string;
+          "status"?: string;
+          "pod_name"?: string;
+          "pod_namespace"?: string;
+          "container"?: string;
+          "started_at"?: string;
+          "last_input_at"?: string;
+          "expires_at"?: string;
+          "idle_timeout_seconds"?: number;
+          "command_count"?: number;
+        };
+    SmtpSettings: {
+          "enabled"?: boolean;
+          "host"?: string;
+          "port"?: number;
+          "username"?: string;
+          "password"?: string;
+          "password_configured"?: boolean;
+          "from_address"?: string;
+          "from_name"?: string;
+          "auth_mechanism"?: "plain" | "login" | "cram-md5" | "none";
+          "encryption"?: "starttls" | "tls" | "none";
+          "require_tls"?: boolean;
+          "timeout_seconds"?: number;
+          "updated_at"?: string;
+        };
+    SnapshotCreateRequest: OpenAPIComponents['schemas']['SnapshotSpec'] & {
+          "source"?: string;
+          "velero_name"?: string;
+          "velero_namespace"?: string;
+        };
+    SnapshotResponse: {
+          "id"?: string;
+          "cluster_id"?: string;
+          "velero_name"?: string;
+          "velero_namespace"?: string;
+          "source"?: string;
+          "spec"?: OpenAPIComponents['schemas']['SnapshotSpec'];
+          "phase"?: string;
+          "start_time"?: string | null;
+          "completion_time"?: string | null;
+          "expires_at"?: string | null;
+          "warnings_count"?: number;
+          "errors_count"?: number;
+          "last_poll_at"?: string | null;
+          "last_poll_error"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    SnapshotRestoreRequest: {
+          "target_cluster_id"?: string;
+          "velero_namespace"?: string;
+          "spec"?: {
+            "includedNamespaces"?: string[];
+            "excludedNamespaces"?: string[];
+            "namespaceMapping"?: Record<string, string>;
+            "labelSelector"?: string;
+            "restorePVs"?: boolean | null;
+          };
+        };
+    SnapshotRestoreResponse: {
+          "id"?: string;
+          "snapshot_id"?: string;
+          "target_cluster_id"?: string;
+          "velero_name"?: string;
+          "velero_namespace"?: string;
+          "spec"?: Record<string, unknown>;
+          "phase"?: string;
+          "start_time"?: string | null;
+          "completion_time"?: string | null;
+          "warnings_count"?: number;
+          "errors_count"?: number;
+          "last_poll_at"?: string | null;
+          "last_poll_error"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    SnapshotScheduleRequest: {
+          "name": string;
+          "cron_schedule"?: string;
+          "spec"?: OpenAPIComponents['schemas']['SnapshotSpec'];
+          "enabled"?: boolean | null;
+        };
+    SnapshotScheduleResponse: {
+          "id"?: string;
+          "cluster_id"?: string;
+          "name"?: string;
+          "cron_schedule"?: string;
+          "spec"?: OpenAPIComponents['schemas']['SnapshotSpec'];
+          "enabled"?: boolean;
+          "last_run_at"?: string | null;
+          "last_run_status"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    SnapshotSpec: {
+          "includedNamespaces"?: string[];
+          "excludedNamespaces"?: string[];
+          "includedResources"?: string[];
+          "excludedResources"?: string[];
+          "labelSelector"?: string;
+          "snapshotVolumes"?: boolean | null;
+          "ttl"?: string;
+          "storageLocation"?: string;
+          "volumeSnapshotLocations"?: string[];
+        };
+    StorageTestResult: {
+          "success"?: boolean;
+          "message"?: string;
+        };
+    UpdateClusterGroupRequest: Record<string, unknown>;
+    UpdateClusterRequest: Record<string, unknown>;
+    UpdateProjectPolicyRequest: {
+          "pod_security_profile"?: string;
+          "resource_quota_cpu"?: string;
+          "resource_quota_memory"?: string;
+          "resource_quota_pods"?: number;
+        };
+    UpdateProjectRequest: {
+          "name"?: string;
+          "description"?: string;
+          "namespaces"?: string[];
+          "pod_security_profile"?: string;
+          "resource_quota_cpu"?: string;
+          "resource_quota_memory"?: string;
+          "resource_quota_pods"?: number;
+        };
+    UpdateRegistryConfigRequest: Record<string, unknown>;
     User: {
           "id"?: string;
           "username"?: string;
@@ -443,6 +1218,126 @@ export interface OpenAPIComponents {
           "date_joined"?: string;
           "last_login"?: string | null;
           "must_change_password"?: boolean;
+        };
+    UsersSettingsAuditLogEntry: {
+          "id"?: string;
+          "action"?: string;
+          "resourceType"?: string;
+          "resourceName"?: string;
+          "user"?: string | null;
+          "userAgent"?: string;
+          "sourceIP"?: string;
+          "status"?: string;
+          "details"?: unknown;
+          "timestamp"?: string;
+        };
+    UsersSettingsCreatedToken: {
+          "id"?: string;
+          "name"?: string;
+          "token"?: string;
+          "prefix"?: string;
+          "expires_at"?: string | null;
+          "created_at"?: string;
+          "scopes"?: string[];
+          "allowed_cidrs"?: string;
+        };
+    UsersSettingsGeneral: {
+          "platformName"?: string;
+          "agentHeartbeatInterval"?: number;
+          "defaultSessionTimeout"?: number;
+          "enableAuditLogging"?: boolean;
+          "metricsCollection"?: boolean;
+        };
+    UsersSettingsSSOProvider: {
+          "id"?: string;
+          "provider"?: string;
+          "type"?: string;
+          "name"?: string;
+          "enabled"?: boolean;
+          "config"?: Record<string, string>;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    UsersSettingsTokenListItem: {
+          "id"?: string;
+          "name"?: string;
+          "prefix"?: string;
+          "expires_at"?: string | null;
+          "last_used_at"?: string | null;
+          "is_revoked"?: boolean;
+          "created_at"?: string;
+          "scopes"?: string[];
+          "allowed_cidrs"?: string;
+          "last_seen_remote_ip"?: string;
+        };
+    UsersSettingsUpdateUserRequest: {
+          "email"?: string;
+          "username"?: string;
+          "first_name"?: string;
+          "last_name"?: string;
+          "is_active"?: boolean | null;
+        };
+    UsersSettingsUserListItem: {
+          "id"?: string;
+          "username"?: string;
+          "email"?: string;
+          "displayName"?: string;
+          "provider"?: string;
+          "globalRoles"?: string[];
+          "enabled"?: boolean;
+          "lastLogin"?: string;
+          "createdAt"?: string;
+        };
+    VaultConnection: {
+          "id"?: string;
+          "name"?: string;
+          "description"?: string;
+          "addr"?: string;
+          "auth_method"?: "token" | "approle" | "kubernetes";
+          "auth"?: Record<string, string>;
+          "namespace"?: string;
+          "tls_skip_verify"?: boolean;
+          "ca_cert_pem"?: string;
+          "default_mount"?: string;
+          "enabled"?: boolean;
+          "last_health_at"?: string;
+          "last_health_ok"?: boolean;
+          "last_error"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    VaultConnectionRequest: {
+          "name": string;
+          "description"?: string;
+          "addr": string;
+          "auth_method": "token" | "approle" | "kubernetes";
+          "auth"?: Record<string, string>;
+          "namespace"?: string;
+          "tls_skip_verify"?: boolean;
+          "ca_cert_pem"?: string;
+          "default_mount"?: string;
+          "enabled"?: boolean;
+        };
+    VaultTestResult: {
+          "ok"?: boolean;
+          "reachable"?: boolean;
+          "auth_ok"?: boolean;
+          "latency_ms"?: number;
+          "message"?: string;
+          "probe_path"?: string;
+        };
+    VeleroStatusResponse: {
+          "installed"?: boolean;
+          "namespace"?: string;
+          "storage_ready"?: boolean;
+          "storage_locations"?: Array<{
+            "name"?: string;
+            "provider"?: string;
+            "default"?: boolean;
+            "phase"?: string;
+            "bucket"?: string;
+          }>;
+          "reason"?: string;
         };
     VulnImage: {
           "id"?: string;
@@ -476,6 +1371,86 @@ export interface OpenAPIComponents {
           "report_count"?: number;
           "last_scanned_at"?: string | null;
         };
+    WebhookDelivery: {
+          "id"?: string;
+          "event_name"?: string;
+          "event_id"?: string;
+          "status"?: string;
+          "attempts"?: number;
+          "payload_size"?: number;
+          "response_status"?: number;
+          "response_body"?: string;
+          "last_error"?: string;
+          "delivered_at"?: string | null;
+          "next_attempt_at"?: string | null;
+          "created_at"?: string;
+        };
+    WebhookSubscription: {
+          "id"?: string;
+          "name"?: string;
+          "url"?: string;
+          "secret"?: string;
+          "secret_configured"?: boolean;
+          "event_filters"?: string[];
+          "payload_template"?: string;
+          "extra_headers"?: Record<string, string>;
+          "enabled"?: boolean;
+          "max_retries"?: number;
+          "timeout_seconds"?: number;
+          "created_by"?: string;
+          "created_at"?: string;
+          "updated_at"?: string;
+        };
+    WebhookSubscriptionRequest: {
+          "name"?: string;
+          "url"?: string;
+          "secret"?: string;
+          "event_filters"?: string[];
+          "payload_template"?: string;
+          "extra_headers"?: Record<string, string>;
+          "enabled"?: boolean;
+          "max_retries"?: number;
+          "timeout_seconds"?: number;
+        };
+    Workload: {
+          "name"?: string;
+          "namespace"?: string;
+          "kind"?: string;
+          "clusterId"?: string;
+          "clusterName"?: string;
+          "status"?: string;
+          "ready"?: string;
+          "upToDate"?: number;
+          "available"?: number;
+          "replicas"?: number;
+          "desiredReplicas"?: number;
+          "images"?: string[];
+          "labels"?: Record<string, string>;
+          "annotations"?: Record<string, string>;
+          "createdAt"?: string;
+          "age"?: string;
+        } & Record<string, unknown>;
+    WorkloadOperation: {
+          "id"?: string;
+          "targetType"?: string;
+          "targetKey"?: string;
+          "operationType"?: string;
+          "status"?: string;
+          "attemptCount"?: number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage"?: string;
+          "createdAt"?: string;
+          "updatedAt"?: string;
+        } & Record<string, unknown>;
+    WorkloadOperationEvent: {
+          "id"?: string;
+          "level"?: string;
+          "stage"?: string;
+          "message"?: string;
+          "detail"?: Record<string, unknown>;
+          "createdAt"?: string;
+        } & Record<string, unknown>;
   };
 }
 
@@ -492,37 +1467,149 @@ export type AgentSelfTest = OpenAPIComponents['schemas']['AgentSelfTest'];
 export type AgentUpgradeOperationResponse = OpenAPIComponents['schemas']['AgentUpgradeOperationResponse'];
 export type AgentUpgradePlan = OpenAPIComponents['schemas']['AgentUpgradePlan'];
 export type AgentUpgradePlanRequest = OpenAPIComponents['schemas']['AgentUpgradePlanRequest'];
+export type AllowlistResponse = OpenAPIComponents['schemas']['AllowlistResponse'];
+export type AllowlistSnapshotResponse = OpenAPIComponents['schemas']['AllowlistSnapshotResponse'];
+export type AllowlistUpdateRequest = OpenAPIComponents['schemas']['AllowlistUpdateRequest'];
+export type ApiTokenCreated = OpenAPIComponents['schemas']['ApiTokenCreated'];
+export type ApiTokenListItem = OpenAPIComponents['schemas']['ApiTokenListItem'];
+export type ApplyClusterTemplateRequest = OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
+export type ApplyNetworkPolicyRequest = OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
 export type ArgoOrphanApplication = OpenAPIComponents['schemas']['ArgoOrphanApplication'];
 export type ArgoOrphanReport = OpenAPIComponents['schemas']['ArgoOrphanReport'];
+export type AuditLogEntry = OpenAPIComponents['schemas']['AuditLogEntry'];
+export type BackupControllerStatus = OpenAPIComponents['schemas']['BackupControllerStatus'];
+export type BackupCreateRequest = OpenAPIComponents['schemas']['BackupCreateRequest'];
+export type BackupResponse = OpenAPIComponents['schemas']['BackupResponse'];
+export type BackupRestoreRequest = OpenAPIComponents['schemas']['BackupRestoreRequest'];
+export type BackupScheduleRequest = OpenAPIComponents['schemas']['BackupScheduleRequest'];
+export type BackupScheduleResponse = OpenAPIComponents['schemas']['BackupScheduleResponse'];
+export type BackupStorageConfigRequest = OpenAPIComponents['schemas']['BackupStorageConfigRequest'];
+export type BackupStorageConfigResponse = OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
+export type CatalogOperation = OpenAPIComponents['schemas']['CatalogOperation'];
+export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperationEvent'];
+export type CloudCredential = OpenAPIComponents['schemas']['CloudCredential'];
+export type CloudCredentialRequest = OpenAPIComponents['schemas']['CloudCredentialRequest'];
+export type CloudProviderSpec = OpenAPIComponents['schemas']['CloudProviderSpec'];
 export type Cluster = OpenAPIComponents['schemas']['Cluster'];
+export type ClusterConditionResponse = OpenAPIComponents['schemas']['ClusterConditionResponse'];
+export type ClusterEvent = OpenAPIComponents['schemas']['ClusterEvent'];
+export type ClusterGroupResponse = OpenAPIComponents['schemas']['ClusterGroupResponse'];
+export type ClusterRegistryConfigLegacy = OpenAPIComponents['schemas']['ClusterRegistryConfigLegacy'];
+export type ClusterRegistryRequest = OpenAPIComponents['schemas']['ClusterRegistryRequest'];
+export type ClusterRegistryResponse = OpenAPIComponents['schemas']['ClusterRegistryResponse'];
+export type ClusterRegistryTestResponse = OpenAPIComponents['schemas']['ClusterRegistryTestResponse'];
+export type ClusterResponse = OpenAPIComponents['schemas']['ClusterResponse'];
+export type ClusterTemplateApplicationResponse = OpenAPIComponents['schemas']['ClusterTemplateApplicationResponse'];
+export type ClusterTemplateResponse = OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+export type CreateClusterGroupRequest = OpenAPIComponents['schemas']['CreateClusterGroupRequest'];
 export type CreateClusterRequest = OpenAPIComponents['schemas']['CreateClusterRequest'];
+export type CreateClusterTemplateRequest = OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
+export type CreateFleetOperationRequest = OpenAPIComponents['schemas']['CreateFleetOperationRequest'];
+export type CreateNetworkPolicyTemplateRequest = OpenAPIComponents['schemas']['CreateNetworkPolicyTemplateRequest'];
+export type CreateProjectCatalogRequest = OpenAPIComponents['schemas']['CreateProjectCatalogRequest'];
+export type CreateProjectRequest = OpenAPIComponents['schemas']['CreateProjectRequest'];
 export type DataEnvelope = OpenAPIComponents['schemas']['DataEnvelope'];
+export type DecommissionStatusResponse = OpenAPIComponents['schemas']['DecommissionStatusResponse'];
+export type DexConnector = OpenAPIComponents['schemas']['DexConnector'];
+export type DexConnectorRequest = OpenAPIComponents['schemas']['DexConnectorRequest'];
+export type DexConnectorType = OpenAPIComponents['schemas']['DexConnectorType'];
+export type DexRegisterSSOResult = OpenAPIComponents['schemas']['DexRegisterSSOResult'];
+export type DexSettings = OpenAPIComponents['schemas']['DexSettings'];
+export type DexSettingsRequest = OpenAPIComponents['schemas']['DexSettingsRequest'];
 export type Error = OpenAPIComponents['schemas']['Error'];
 export type ErrorEnvelope = OpenAPIComponents['schemas']['ErrorEnvelope'];
 export type ExtensionManifest = OpenAPIComponents['schemas']['ExtensionManifest'];
 export type ExtensionRecord = OpenAPIComponents['schemas']['ExtensionRecord'];
 export type ExtensionValidation = OpenAPIComponents['schemas']['ExtensionValidation'];
 export type FeatureFlags = OpenAPIComponents['schemas']['FeatureFlags'];
+export type FleetOperationResponse = OpenAPIComponents['schemas']['FleetOperationResponse'];
+export type FleetOperationTargetResponse = OpenAPIComponents['schemas']['FleetOperationTargetResponse'];
+export type HelmChart = OpenAPIComponents['schemas']['HelmChart'];
+export type HelmChartVersion = OpenAPIComponents['schemas']['HelmChartVersion'];
+export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];
+export type InstalledAppEnriched = OpenAPIComponents['schemas']['InstalledAppEnriched'];
+export type InstalledChart = OpenAPIComponents['schemas']['InstalledChart'];
 export type KubectlSession = OpenAPIComponents['schemas']['KubectlSession'];
 export type LoginRequest = OpenAPIComponents['schemas']['LoginRequest'];
 export type LoginResponse = OpenAPIComponents['schemas']['LoginResponse'];
+export type MTLSBreakdownResponse = OpenAPIComponents['schemas']['MTLSBreakdownResponse'];
+export type MoveClustersRequest = OpenAPIComponents['schemas']['MoveClustersRequest'];
+export type Namespace = OpenAPIComponents['schemas']['Namespace'];
+export type NetworkPolicyApplicationResponse = OpenAPIComponents['schemas']['NetworkPolicyApplicationResponse'];
+export type NetworkPolicyTemplateResponse = OpenAPIComponents['schemas']['NetworkPolicyTemplateResponse'];
 export type NodeActionResponse = OpenAPIComponents['schemas']['NodeActionResponse'];
+export type NodeDetail = OpenAPIComponents['schemas']['NodeDetail'];
 export type NodeDrainPodRef = OpenAPIComponents['schemas']['NodeDrainPodRef'];
 export type NodeDrainRequest = OpenAPIComponents['schemas']['NodeDrainRequest'];
 export type NodeDrainResponse = OpenAPIComponents['schemas']['NodeDrainResponse'];
 export type NodeKeyRequest = OpenAPIComponents['schemas']['NodeKeyRequest'];
 export type NodeKeyValueRequest = OpenAPIComponents['schemas']['NodeKeyValueRequest'];
+export type NodeSummary = OpenAPIComponents['schemas']['NodeSummary'];
 export type NodeTaintActionResponse = OpenAPIComponents['schemas']['NodeTaintActionResponse'];
 export type NodeTaintRemoveRequest = OpenAPIComponents['schemas']['NodeTaintRemoveRequest'];
 export type NodeTaintRequest = OpenAPIComponents['schemas']['NodeTaintRequest'];
 export type OwnershipTransferResponse = OpenAPIComponents['schemas']['OwnershipTransferResponse'];
 export type PaginatedClusters = OpenAPIComponents['schemas']['PaginatedClusters'];
 export type PaginatedEnvelope = OpenAPIComponents['schemas']['PaginatedEnvelope'];
+export type Pod = OpenAPIComponents['schemas']['Pod'];
+export type PodLogEntry = OpenAPIComponents['schemas']['PodLogEntry'];
+export type Project = OpenAPIComponents['schemas']['Project'];
+export type ProjectCatalog = OpenAPIComponents['schemas']['ProjectCatalog'];
+export type ProjectCatalogSubscription = OpenAPIComponents['schemas']['ProjectCatalogSubscription'];
+export type ProjectNamespaceRequest = OpenAPIComponents['schemas']['ProjectNamespaceRequest'];
+export type RBACBindingRequest = OpenAPIComponents['schemas']['RBACBindingRequest'];
+export type RBACClusterBindingRequest = OpenAPIComponents['schemas']['RBACClusterBindingRequest'];
+export type RBACClusterRoleBinding = OpenAPIComponents['schemas']['RBACClusterRoleBinding'];
+export type RBACEffectivePermissions = OpenAPIComponents['schemas']['RBACEffectivePermissions'];
+export type RBACGlobalRoleBinding = OpenAPIComponents['schemas']['RBACGlobalRoleBinding'];
+export type RBACPermissionPreview = OpenAPIComponents['schemas']['RBACPermissionPreview'];
+export type RBACPermissionPreviewRequest = OpenAPIComponents['schemas']['RBACPermissionPreviewRequest'];
+export type RBACProjectBindingRequest = OpenAPIComponents['schemas']['RBACProjectBindingRequest'];
+export type RBACProjectRoleBinding = OpenAPIComponents['schemas']['RBACProjectRoleBinding'];
+export type RBACRole = OpenAPIComponents['schemas']['RBACRole'];
+export type RBACRoleRequest = OpenAPIComponents['schemas']['RBACRoleRequest'];
+export type RBACTemplate = OpenAPIComponents['schemas']['RBACTemplate'];
 export type RegistrationStatus = OpenAPIComponents['schemas']['RegistrationStatus'];
 export type RegistrationStep = OpenAPIComponents['schemas']['RegistrationStep'];
+export type ResourceRow = OpenAPIComponents['schemas']['ResourceRow'];
+export type ResourceSearchResult = OpenAPIComponents['schemas']['ResourceSearchResult'];
+export type RestoreOperationResponse = OpenAPIComponents['schemas']['RestoreOperationResponse'];
+export type ServiceMeshDetectionResponse = OpenAPIComponents['schemas']['ServiceMeshDetectionResponse'];
 export type ServiceMeshInventory = OpenAPIComponents['schemas']['ServiceMeshInventory'];
 export type ServiceMeshPolicyValidation = OpenAPIComponents['schemas']['ServiceMeshPolicyValidation'];
 export type SetOptionsRequest = OpenAPIComponents['schemas']['SetOptionsRequest'];
+export type ShellSession = OpenAPIComponents['schemas']['ShellSession'];
+export type SmtpSettings = OpenAPIComponents['schemas']['SmtpSettings'];
+export type SnapshotCreateRequest = OpenAPIComponents['schemas']['SnapshotCreateRequest'];
+export type SnapshotResponse = OpenAPIComponents['schemas']['SnapshotResponse'];
+export type SnapshotRestoreRequest = OpenAPIComponents['schemas']['SnapshotRestoreRequest'];
+export type SnapshotRestoreResponse = OpenAPIComponents['schemas']['SnapshotRestoreResponse'];
+export type SnapshotScheduleRequest = OpenAPIComponents['schemas']['SnapshotScheduleRequest'];
+export type SnapshotScheduleResponse = OpenAPIComponents['schemas']['SnapshotScheduleResponse'];
+export type SnapshotSpec = OpenAPIComponents['schemas']['SnapshotSpec'];
+export type StorageTestResult = OpenAPIComponents['schemas']['StorageTestResult'];
+export type UpdateClusterGroupRequest = OpenAPIComponents['schemas']['UpdateClusterGroupRequest'];
+export type UpdateClusterRequest = OpenAPIComponents['schemas']['UpdateClusterRequest'];
+export type UpdateProjectPolicyRequest = OpenAPIComponents['schemas']['UpdateProjectPolicyRequest'];
+export type UpdateProjectRequest = OpenAPIComponents['schemas']['UpdateProjectRequest'];
+export type UpdateRegistryConfigRequest = OpenAPIComponents['schemas']['UpdateRegistryConfigRequest'];
 export type User = OpenAPIComponents['schemas']['User'];
+export type UsersSettingsAuditLogEntry = OpenAPIComponents['schemas']['UsersSettingsAuditLogEntry'];
+export type UsersSettingsCreatedToken = OpenAPIComponents['schemas']['UsersSettingsCreatedToken'];
+export type UsersSettingsGeneral = OpenAPIComponents['schemas']['UsersSettingsGeneral'];
+export type UsersSettingsSSOProvider = OpenAPIComponents['schemas']['UsersSettingsSSOProvider'];
+export type UsersSettingsTokenListItem = OpenAPIComponents['schemas']['UsersSettingsTokenListItem'];
+export type UsersSettingsUpdateUserRequest = OpenAPIComponents['schemas']['UsersSettingsUpdateUserRequest'];
+export type UsersSettingsUserListItem = OpenAPIComponents['schemas']['UsersSettingsUserListItem'];
+export type VaultConnection = OpenAPIComponents['schemas']['VaultConnection'];
+export type VaultConnectionRequest = OpenAPIComponents['schemas']['VaultConnectionRequest'];
+export type VaultTestResult = OpenAPIComponents['schemas']['VaultTestResult'];
+export type VeleroStatusResponse = OpenAPIComponents['schemas']['VeleroStatusResponse'];
 export type VulnImage = OpenAPIComponents['schemas']['VulnImage'];
 export type VulnSummary = OpenAPIComponents['schemas']['VulnSummary'];
+export type WebhookDelivery = OpenAPIComponents['schemas']['WebhookDelivery'];
+export type WebhookSubscription = OpenAPIComponents['schemas']['WebhookSubscription'];
+export type WebhookSubscriptionRequest = OpenAPIComponents['schemas']['WebhookSubscriptionRequest'];
+export type Workload = OpenAPIComponents['schemas']['Workload'];
+export type WorkloadOperation = OpenAPIComponents['schemas']['WorkloadOperation'];
+export type WorkloadOperationEvent = OpenAPIComponents['schemas']['WorkloadOperationEvent'];
