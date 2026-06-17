@@ -230,10 +230,20 @@ export interface OpenAPIComponents {
           "provider"?: string;
           "distribution"?: string;
         };
+    DataEnvelope: {
+          "data": unknown;
+        };
     Error: {
           "error": {
             "code": string;
             "message": string;
+          };
+        };
+    ErrorEnvelope: {
+          "error": {
+            "code": string;
+            "message": string;
+            "request_id"?: string;
           };
         };
     ExtensionManifest: {
@@ -358,6 +368,12 @@ export interface OpenAPIComponents {
           "next"?: string | null;
           "previous"?: string | null;
         };
+    PaginatedEnvelope: {
+          "data": unknown[];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+        };
     RegistrationStatus: {
           "cluster_id"?: string;
           "phase"?: "created" | "awaiting_agent" | "connected" | "provisioning" | "ready" | "failed";
@@ -480,7 +496,9 @@ export type ArgoOrphanApplication = OpenAPIComponents['schemas']['ArgoOrphanAppl
 export type ArgoOrphanReport = OpenAPIComponents['schemas']['ArgoOrphanReport'];
 export type Cluster = OpenAPIComponents['schemas']['Cluster'];
 export type CreateClusterRequest = OpenAPIComponents['schemas']['CreateClusterRequest'];
+export type DataEnvelope = OpenAPIComponents['schemas']['DataEnvelope'];
 export type Error = OpenAPIComponents['schemas']['Error'];
+export type ErrorEnvelope = OpenAPIComponents['schemas']['ErrorEnvelope'];
 export type ExtensionManifest = OpenAPIComponents['schemas']['ExtensionManifest'];
 export type ExtensionRecord = OpenAPIComponents['schemas']['ExtensionRecord'];
 export type ExtensionValidation = OpenAPIComponents['schemas']['ExtensionValidation'];
@@ -499,6 +517,7 @@ export type NodeTaintRemoveRequest = OpenAPIComponents['schemas']['NodeTaintRemo
 export type NodeTaintRequest = OpenAPIComponents['schemas']['NodeTaintRequest'];
 export type OwnershipTransferResponse = OpenAPIComponents['schemas']['OwnershipTransferResponse'];
 export type PaginatedClusters = OpenAPIComponents['schemas']['PaginatedClusters'];
+export type PaginatedEnvelope = OpenAPIComponents['schemas']['PaginatedEnvelope'];
 export type RegistrationStatus = OpenAPIComponents['schemas']['RegistrationStatus'];
 export type RegistrationStep = OpenAPIComponents['schemas']['RegistrationStep'];
 export type ServiceMeshInventory = OpenAPIComponents['schemas']['ServiceMeshInventory'];

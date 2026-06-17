@@ -1,0 +1,1626 @@
+[
+  {
+    "method": "GET",
+    "pattern": "/api/v1/activity"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/agents/cluster-admin-posture"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/emails"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/key-status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/network-policy-templates"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/network-policy-templates"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/network-policy-templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/network-policy-templates/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/network-policy-templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/shell-sessions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/shell-sessions/{id}/commands"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/smtp"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/smtp"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/smtp/test"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/users/{id}/disable-totp"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/users/{id}/force-logout"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/users/{id}/unlock"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/vault-connections"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/vault-connections"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/vault-connections/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/vault-connections/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/vault-connections/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/vault-connections/{id}/health"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/vault-connections/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/webhooks"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/webhooks"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/webhooks/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/webhooks/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/webhooks/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/webhooks/{id}/deliveries"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/webhooks/{id}/deliveries/{delivery_id}/retry"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/webhooks/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/agents/fleet"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/agents/fleet/{cluster_id}/diagnostics"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/agents/fleet/{cluster_id}/diagnostics/bundle"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/agents/fleet/{cluster_id}/operations"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/agents/fleet/{cluster_id}/self-test"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/agents/fleet/{cluster_id}/upgrade"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/agents/fleet/{cluster_id}/upgrade-plan"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/audit"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/audit/export"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/audit/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/change-password"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/dex/apply"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/dex/connector-types"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/dex/connectors"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/dex/connectors"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/auth/dex/connectors/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/dex/connectors/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/auth/dex/connectors/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/dex/register-as-sso"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/dex/settings"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/auth/dex/settings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/login"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/logout"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/logout-done"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/logout-done"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/me"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/password-reset/complete"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/password-reset/request"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/refresh"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/tokens"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/tokens"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/auth/tokens/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/totp/disable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/totp/enroll/confirm"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/totp/enroll/start"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/totp/recovery-codes/regenerate"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/totp/status"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/totp/verify"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/restores"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/runs"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/schedules"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/schedules"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/backups/schedules/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/schedules/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/backups/schedules/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/schedules/{id}/trigger-now"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/storage"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/storage"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/storage-configs"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/storage-configs"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/backups/storage-configs/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/storage-configs/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/backups/storage-configs/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/storage-configs/{id}/test-connection"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/backups/storage/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/storage/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/backups/storage/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/storage/{id}/test"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/storage/{id}/test-connection"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/backups/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/backups/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/backups/{id}/restore"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/charts"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/charts/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/charts/{id}/readme"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/charts/{id}/values"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/charts/{id}/versions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/installed"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/installed"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/catalog/installed/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/installed/{id}/rollback"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/catalog/installed/{id}/upgrade"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/installed/{id}/values"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/operations/{id}/retry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/repositories"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/repositories"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/catalog/repositories/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/repositories/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/catalog/repositories/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/repositories/{id}/sync"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/repositories/{id}/test-connection"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cloud-credentials/providers"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-groups"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/cluster-groups"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/cluster-groups/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-groups/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/cluster-groups/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/cluster-groups/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-groups/{id}/clusters"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/cluster-groups/{id}/move"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-templates"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/cluster-templates"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/cluster-templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/cluster-templates/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/cluster-templates/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/cluster-templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-allowlist"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-allowlist"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/reconcile"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-allowlist/snapshots"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/apps"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/apps/failed"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/events"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/namespaces"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/network-policies/applications"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/network-policies/applications"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/network-policies/applications/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/network-policies/applications/{id}/reapply"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/nodes"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/nodes/{node_name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/pods"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/projects"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/registries"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/registries"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/registries/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/registries/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{cluster_id}/registries/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/registries/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/generic/{resource_type}"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/{group}/{version}/{kind}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/{resource_type}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/{resource_type}"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/resources/{resource_type}/{namespace}/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/service-mesh"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/service-mesh/detect"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/service-mesh/inventory"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/service-mesh/mtls"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/service-mesh/validate"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/shell/sessions"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/shell/sessions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/shell/sessions/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/close"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-schedules"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-schedules"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-schedules/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshots"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshots"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshots/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshots/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshots/{id}/restore"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/template"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/template"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/template"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/template/reapply"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/velero-status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/condition-remediation"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/conditions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/decommission"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/generate-kubeconfig"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/generate_kubeconfig"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/health"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/kubeconfig"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/kubeconfig-preview"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/manifest"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/metrics"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/metrics/summary"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/ownership/takeover"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/register"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/registration/cancel"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/registration/confirm"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/registration/events"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/registration/options"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/registration/retry/{step_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/registration/status"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}/registry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/registry"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/registry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/v2/pods"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/fleet-operations"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/fleet-operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/fleet-operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/fleet-operations/{id}/abort"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/fleet-operations/{id}/pause"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/fleet-operations/{id}/resume"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/fleet-operations/{id}/retry-failed"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/fleet-operations/{id}/targets"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/annotations"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/annotations/remove"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/cordon"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/drain"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/labels"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/labels/remove"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/taints"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/taints/remove"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/uncordon"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/projects/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/projects/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/projects/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{id}/add-namespace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}/clusters"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}/default-vault-connection"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/projects/{id}/default-vault-connection"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{id}/ownership/takeover"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/projects/{id}/policy"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}/quota-usage"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}/rbac"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{id}/remove-namespace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{project_id}/catalogs"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{project_id}/catalogs"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/projects/{project_id}/catalogs/{catalog_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{project_id}/catalogs/{catalog_id}/charts"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{project_id}/catalogs/{catalog_id}/subscribe"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{project_id}/cloud-credentials/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/cluster-bindings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/cluster-bindings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/cluster-bindings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/cluster-role-bindings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/cluster-role-bindings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/cluster-role-bindings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/cluster-roles"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/cluster-roles"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/cluster-roles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/cluster-roles/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/rbac/cluster-roles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/effective-permissions/{user_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/global-bindings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/global-bindings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/global-bindings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/global-role-bindings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/global-role-bindings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/global-role-bindings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/global-roles"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/global-roles"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/global-roles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/global-roles/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/rbac/global-roles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/my-permissions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/my-roles"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/my-roles/check"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/permission-preview"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/project-bindings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/project-bindings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/project-bindings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/project-role-bindings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/project-role-bindings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/project-role-bindings/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/project-roles"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/project-roles"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/rbac/project-roles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/project-roles/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/rbac/project-roles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/templates"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/templates/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/register/ca.crt"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/register/{token}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/resources/search"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/audit-logs"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/general"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/general"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/sso"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/sso"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/sso/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/tokens"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/tokens"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/tokens/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/users"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/users"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/users/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/users/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/users/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/users/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/users/{id}/reset-password"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/workloads/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/workloads/operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/workloads/operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/workloads/operations/{id}/retry"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/logs"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "GET",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "POST",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/argocd"
+  },
+  {
+    "method": "CONNECT",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "TRACE",
+    "pattern": "/argocd/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/health"
+  },
+  {
+    "method": "GET",
+    "pattern": "/health"
+  },
+  {
+    "method": "POST",
+    "pattern": "/internal/tunnel/helm/{cluster_id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/internal/tunnel/k8s/{cluster_id}"
+  }
+]

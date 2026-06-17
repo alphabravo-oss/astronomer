@@ -69,6 +69,64 @@ components:
           required: [code, message]
       required: [error]
 
+    # --- Reusable response envelopes ------------------------------------
+    # These mirror internal/handler/response.go. Reference them from
+    # responses via allOf to override the inner `data`/payload shape, e.g.:
+    #   schema:
+    #     allOf:
+    #       - $ref: "#/components/schemas/DataEnvelope"
+    #       - properties: { data: { $ref: "#/components/schemas/Cluster" } }
+
+    # {"data": <payload>} — produced by RespondJSON.
+    DataEnvelope:
+      type: object
+      description: Standard success envelope. The handler payload is nested under `data`.
+      properties:
+        data: {}
+      required: [data]
+
+    # {"error": {"code","message","request_id?"}} — produced by RespondError
+    # and RespondRequestError. RespondRequestError additionally injects
+    # `request_id` (a sibling string) when the request middleware populated one.
+    ErrorEnvelope:
+      type: object
+      description: Standard error envelope.
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id:
+              type: string
+              description: Correlation id, present only when set by request middleware.
+          required: [code, message]
+      required: [error]
+
+    # {"data":[...], "count", "next", "previous"} — produced by RespondPaginated
+    # (DRF-style, always HTTP 200). next/previous are ?limit=&offset= URLs off
+    # the request path, null when there is no further page.
+    PaginatedEnvelope:
+      type: object
+      description: DRF-style paginated list envelope. `data` is the page of items.
+      properties:
+        data:
+          type: array
+          items: {}
+        count:
+          type: integer
+          format: int64
+          description: Total number of items across all pages.
+        next:
+          type: string
+          nullable: true
+          description: URL of the next page, or null on the last page.
+        previous:
+          type: string
+          nullable: true
+          description: URL of the previous page, or null on the first page.
+      required: [data, count, next, previous]
+
     LoginRequest:
       type: object
       required: [email, password]
