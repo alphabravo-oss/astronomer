@@ -52,6 +52,9 @@ authoritative and complete, then gate it.
       (clusters, argocd, tools, auth, logging, monitoring, backup, rbac,
       settings…). Each wave: request/response schemas, error responses, auth +
       scope, examples. (L — the bulk of the work; parallelizable per domain)
+      **Progress: coverage 9.2% → 89.9% (363/404) this run** — all 12 domain
+      fragments merged; 41 router operations still undocumented + 31 wildcard
+      `{path}` drift entries to reconcile. Left unchecked until 100%.
 - [x] **A4.** Add shared components: the `{data: …}` envelope, the error
       envelope, the pagination envelope (see D), and common path params, as
       reusable `$ref`s so handlers don't redefine them. (S)
@@ -71,10 +74,10 @@ spirit, but no single source of truth, untyped, undocumentable, typo-prone.
       from the existing top codes (`not_found` ×297, `invalid_id` ×264,
       `invalid_body` ×144, `validation_error` ×128, `list_error`, `db_error`,
       `create_error`, `update_error`, …). (M)
-- [ ] **B2.** Mechanical migration: replace literal codes in
+- [x] **B2.** Mechanical migration: replace literal codes in
       `RespondRequestError(...)` calls with the constants (codemod / gofmt
       rewrite). Behaviour-preserving; covered by handler tests. (M)
-- [ ] **B3.** Add a lint check (`go vet`-style or a small AST test) that fails
+- [x] **B3.** Add a lint check (`go vet`-style or a small AST test) that fails
       if `RespondRequestError` is called with a string literal instead of a
       catalog constant. (S)
 - [ ] **B4.** Document the catalog (auto-generate `docs/error-codes.md` from the
@@ -135,9 +138,11 @@ they've reached the end.
 
 `routes.go` carries all 626 routes in one file — readable but unwieldy.
 
-- [ ] **F1.** Split into `routes_<domain>.go` (clusters, argocd, auth, tools,
+- [x] **F1.** Split into `routes_<domain>.go` (clusters, argocd, auth, tools,
       logging, monitoring, backup, rbac, settings, platform), each registering
-      on a passed `chi.Router`. Pure move; behaviour identical. (M)
+      on a passed `chi.Router`. Pure move; behaviour identical. (M) — verified by
+      the F2 golden (`TestRouteTableMatchesGolden`) and `TestRouteDumpCanBeGenerated`,
+      both PASS; the route table is byte-identical after the split.
 - [x] **F2.** Add a route-table test that snapshots the full method+path set so
       the split provably changes nothing. (S)
 
@@ -323,4 +328,97 @@ this run; a single worked example/helper establishes the pattern for each:
 - **F1** — split `routes.go` into `routes_<domain>.go` (guarded by F2 golden).
 - **G2** — generate CLI command groups from the spec
   (tools/argocd/projects/rbac/settings/backup/logs/monitoring/audit).
+- **H** — generated Go + TS SDKs from the spec (H1–H3).
+
+---
+
+## Run log (undefined) — bulk pass
+
+The bulk/mechanical follow-through on the foundations the previous run seeded:
+the error-code codemod (B2/B3), the OpenAPI domain backfill (A3, partial), and
+the `routes.go` split (F1). Build GREEN, tests GREEN after the fix pass, route
+snapshot held. Nothing was reverted.
+
+### B2/B3 — error-code codemod (DONE, verified)
+
+- `internal/handler/apierror/codes.go` expanded **17 → 217 constants** (216 from
+  the codemod + `ScopeDenied` restored in the fix pass), grouped by HTTP-status
+  family with doc comments and "Collapses legacy literal(s)" notes for the 6
+  near-duplicate merges (AggregateError, ComponentInvalid, InvalidSince,
+  LookupError, RetryError, TransitionError).
+- Deterministic `gofmt -r` codemod across all non-test handler files:
+  **2020 of 2024 `RespondRequestError` call sites** now use `apierror.*`
+  selectors; **0 bare-literal code args remain**. The 4 untouched sites are
+  genuinely dynamic (a `code` variable in `response.go`/`authorization.go`,
+  `handlerErr.code` in `agent_fleet.go`) — outside the lint by design.
+- `goimports -w` added the `apierror` import to the 73 referencing files.
+- **B3:** `TestApierrorCatalogCoverage` un-skipped and rewritten to parse each
+  file with `go/ast` and fail on any `RespondRequestError` whose 4th arg is a
+  bare string literal (multi-line-safe; replaces the old single-line regex).
+  PASSES; verified to fail on an injected literal.
+- Test assertions updated for intentional canonicalization wire-value changes
+  (auth_test.go, cluster_groups_test.go, kubectl_shell_test.go).
+- Fix pass corrected 3 semantic remaps **within the catalog** (no legacy-literal
+  revert): `stream_tickets.go` restored `scope_denied` (added `ScopeDenied`
+  constant — a missing-token-scope denial is distinct from an RBAC forbidden);
+  `auth.go:473` 400 "Email is required" remapped to `ValidationError` (was wrongly
+  collapsed to `AuthenticationRequired`); `argocd.go:844` 500 remapped to
+  `InternalError` (was wrongly carrying `Forbidden`).
+
+### A3 — OpenAPI domain backfill (PARTIAL: 9.2% → 89.9%)
+
+- Merged **all 12 domain fragments** into `docs/openapi.yaml` (path-level deep
+  merge, method-level last-wins, schemas de-duped by name). One dup operation
+  collision resolved last-wins: `GET /api/v1/clusters/{id}/v2/pods`.
+- **Coverage before: 9.2% (37/404) → after: 89.9% (363/404)** — +220 paths,
+  +359 operations, +82 component schemas (0 duplicate schemas).
+- Fix pass added 30 missing `$ref`'d schemas as permissive stubs (dangling refs
+  30 → 0) and hardened `scripts/generate-openapi-types.mjs` with
+  `validateSchemaRefs` that walks the **entire** spec (not just
+  `components.schemas`) and exits 1 on any dangling `#/components/schemas/<name>`
+  ref — closing the false-validity gap where dangling path refs were invisible
+  to `--check`.
+- Regenerated `frontend/src/types/openapi.generated.ts`; `--check` exit 0.
+- **Left unchecked:** 41 router operations still undocumented; 31 wildcard
+  `{path}` passthrough drift entries (tunnel/proxy/argocd) to reconcile to reach
+  100%.
+
+### F1 — routes.go split (DONE, verified)
+
+- Routes split out of `internal/server/routes.go` into per-domain
+  `internal/server/routes_*.go` (e.g. `routes_clusters.go`). The registration
+  wizard routes now live in `routes_clusters.go` with correct
+  writeClusters + VerbUpdate / VerbRead gating.
+- `TestRegistrationWizard_RequiresClustersUpdateOnWrites` updated to glob+concat
+  all `routes*.go` (was hardcoded to `routes.go`); its gating assertions hold.
+- **F2 golden held:** `TestRouteTableMatchesGolden` and
+  `TestRouteDumpCanBeGenerated` both PASS — route table byte-identical after the
+  split.
+
+### Build / test / snapshot status (verified)
+
+- `go build ./...` — GREEN (exit 0). `go vet ./...` — GREEN.
+- `go test ./internal/...` — GREEN after the fix pass (the 6 verify-stage
+  failures — registration-wizard routes ×4, exec/shell `scope_denied` ×2 — are
+  all resolved).
+- `TestApierrorCatalogCoverage` — PASS. `TestLogin` (incl. updated validation
+  cases) — PASS.
+- `node scripts/generate-openapi-types.mjs --check` — exit 0 (types in sync).
+- `node scripts/openapi-coverage.mjs` — exit 0; coverage 89.9% (363/404).
+- Route snapshot — HELD.
+- Coverage of statements: `internal/handler` 42.0%, `internal/server` 44.2%
+  (`internal/handler/apierror` has no test files).
+
+### Still deferred
+
+- **A3 remainder** — 41 undocumented router ops + 31 wildcard `{path}` drift
+  entries to reach 100%; replace the permissive schema stubs with authoritative
+  field shapes.
+- **A5/A6** — wire `openapi-coverage --check` into the PR CI gate; publish the
+  versioned spec artifact.
+- **C2** — mass migration of remaining handlers to `decodeAndValidate`.
+- **D3** — remaining `RespondPaginated`/ad-hoc list handlers to `RespondList`
+  (+ D2 companion `COUNT(*)` queries).
+- **E** — idempotency keys, rate-limit headers, Location/201 bodies (E1–E5).
+- **G2** — generate CLI command groups from the spec.
 - **H** — generated Go + TS SDKs from the spec (H1–H3).
