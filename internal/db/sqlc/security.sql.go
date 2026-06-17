@@ -131,7 +131,7 @@ func (q *Queries) CreateClusterSecurityPolicy(ctx context.Context, arg CreateClu
 const createPodSecurityTemplate = `-- name: CreatePodSecurityTemplate :one
 INSERT INTO pod_security_templates (name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at
+RETURNING id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at, is_builtin
 `
 
 type CreatePodSecurityTemplateParams struct {
@@ -184,6 +184,7 @@ func (q *Queries) CreatePodSecurityTemplate(ctx context.Context, arg CreatePodSe
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsBuiltin,
 	)
 	return i, err
 }
@@ -276,7 +277,7 @@ func (q *Queries) GetClusterSecurityPolicyByID(ctx context.Context, id uuid.UUID
 }
 
 const getDefaultPodSecurityTemplate = `-- name: GetDefaultPodSecurityTemplate :one
-SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at FROM pod_security_templates WHERE is_default = true LIMIT 1
+SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at, is_builtin FROM pod_security_templates WHERE is_default = true LIMIT 1
 `
 
 func (q *Queries) GetDefaultPodSecurityTemplate(ctx context.Context) (PodSecurityTemplate, error) {
@@ -299,13 +300,14 @@ func (q *Queries) GetDefaultPodSecurityTemplate(ctx context.Context) (PodSecurit
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsBuiltin,
 	)
 	return i, err
 }
 
 const getPodSecurityTemplateByID = `-- name: GetPodSecurityTemplateByID :one
 
-SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at FROM pod_security_templates WHERE id = $1
+SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at, is_builtin FROM pod_security_templates WHERE id = $1
 `
 
 // Pod Security Templates
@@ -329,6 +331,7 @@ func (q *Queries) GetPodSecurityTemplateByID(ctx context.Context, id uuid.UUID) 
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsBuiltin,
 	)
 	return i, err
 }
@@ -423,7 +426,7 @@ func (q *Queries) ListClusterSecurityPolicies(ctx context.Context, arg ListClust
 }
 
 const listPodSecurityTemplates = `-- name: ListPodSecurityTemplates :many
-SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at FROM pod_security_templates ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at, is_builtin FROM pod_security_templates ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListPodSecurityTemplatesParams struct {
@@ -457,6 +460,7 @@ func (q *Queries) ListPodSecurityTemplates(ctx context.Context, arg ListPodSecur
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsBuiltin,
 		); err != nil {
 			return nil, err
 		}
@@ -641,7 +645,7 @@ UPDATE pod_security_templates SET
     exempt_runtime_classes = $12,
     exempt_namespaces = $13
 WHERE id = $1
-RETURNING id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at
+RETURNING id, name, description, is_default, enforce_level, enforce_version, audit_level, audit_version, warn_level, warn_version, exempt_usernames, exempt_runtime_classes, exempt_namespaces, created_by_id, created_at, updated_at, is_builtin
 `
 
 type UpdatePodSecurityTemplateParams struct {
@@ -694,6 +698,7 @@ func (q *Queries) UpdatePodSecurityTemplate(ctx context.Context, arg UpdatePodSe
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsBuiltin,
 	)
 	return i, err
 }

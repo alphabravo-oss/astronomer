@@ -1526,6 +1526,7 @@ type PodSecurityTemplate struct {
 	CreatedByID          pgtype.UUID     `json:"created_by_id"`
 	CreatedAt            time.Time       `json:"created_at"`
 	UpdatedAt            time.Time       `json:"updated_at"`
+	IsBuiltin            bool            `json:"is_builtin"`
 }
 
 type Project struct {

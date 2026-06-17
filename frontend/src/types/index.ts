@@ -1513,6 +1513,12 @@ export interface PodSecurityTemplate {
   name: string;
   description?: string;
   isDefault: boolean;
+  /**
+   * Platform-owned starter template seeded by migration 107. Built-in
+   * templates are delivered (and assignable to clusters) but cannot be
+   * edited or deleted — the backend refuses those mutations with a 403.
+   */
+  isBuiltin?: boolean;
   enforceLevel: PodSecurityLevel;
   enforceVersion?: string;
   auditLevel: PodSecurityLevel;

@@ -322,6 +322,16 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 
 	templateName := ""
 	if existing, lookupErr := h.queries.GetPodSecurityTemplateByID(r.Context(), id); lookupErr == nil {
+		// Built-in PSA starter templates are platform-owned: operators may
+		// inspect them and assign them to clusters, but Update/Delete are
+		// refused so an upgrade doesn't have to handle a half-edited or
+		// missing default. Mirrors the platform-baseline guard on
+		// cluster_templates.
+		if existing.IsBuiltin {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinTemplate,
+				fmt.Sprintf("%q is a built-in PSA template and cannot be deleted.", existing.Name))
+			return
+		}
 		templateName = existing.Name
 	}
 	if err := h.queries.DeletePodSecurityTemplate(r.Context(), id); err != nil {
@@ -338,6 +348,14 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		return
+	}
+	// Refuse mutations to built-in PSA starter templates (mirrors the
+	// platform-baseline guard on cluster_templates). Loaded here so we can
+	// pre-empt the SQL UPDATE and return a clean 403.
+	if existing, gerr := h.queries.GetPodSecurityTemplateByID(r.Context(), id); gerr == nil && existing.IsBuiltin {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinTemplate,
+			fmt.Sprintf("%q is a built-in PSA template and cannot be edited.", existing.Name))
 		return
 	}
 	var req CreateTemplateRequest

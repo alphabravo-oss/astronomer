@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useTabParam } from '@/lib/use-tab-param';
 import {
   usePodSecurityTemplates,
   useCreatePodSecurityTemplate,
@@ -33,6 +34,8 @@ import {
   Play,
   ScanSearch,
   ShieldCheck,
+  Info,
+  Lock,
 } from 'lucide-react';
 
 /**
@@ -50,6 +53,8 @@ import {
  */
 type TabKey = 'cis' | 'templates' | 'policies';
 
+const TAB_KEYS = ['cis', 'templates', 'policies'] as const;
+
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'cis', label: 'CIS Scans', icon: ScanSearch },
   { key: 'templates', label: 'PSA Templates', icon: Shield },
@@ -64,22 +69,102 @@ const psaLevelColors: Record<PodSecurityLevel, string> = {
   restricted: 'bg-status-success/10 text-status-success',
 };
 
+// On-page reference copy for the three Pod Security Standards and the three
+// admission modes. Kept here next to psaLevelColors so the explainer and the
+// table badges stay in lockstep.
+const psaLevelDefs: { level: PodSecurityLevel; summary: string }[] = [
+  {
+    level: 'privileged',
+    summary: 'Unrestricted — no policy applied. For trusted/system namespaces or to opt out of PSA.',
+  },
+  {
+    level: 'baseline',
+    summary: 'Minimally restrictive — blocks known privilege escalations while staying broadly compatible.',
+  },
+  {
+    level: 'restricted',
+    summary: 'Heavily restricted — follows current pod-hardening best practices. Recommended for production.',
+  },
+];
+
+const psaModeDefs: { mode: string; summary: string }[] = [
+  { mode: 'enforce', summary: 'Rejects pods that violate the standard at admission time.' },
+  { mode: 'audit', summary: 'Allows the pod but records a violation in the audit log.' },
+  { mode: 'warn', summary: 'Allows the pod but returns a user-facing warning to the client.' },
+];
+
+/**
+ * PSAExplainer renders the on-page definition of Pod Security Admission: a
+ * short intro, the three Pod Security Standards (levels), and the three
+ * admission modes. Styled as a callout card consistent with the rest of the
+ * dashboard.
+ */
+function PSAExplainer() {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4">
+      <div className="flex items-start gap-2">
+        <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">What is Pod Security Admission (PSA)?</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            PSA is the built-in Kubernetes admission controller (the successor to PodSecurityPolicy)
+            that enforces the three Pod Security Standards on a per-namespace basis. A template defines
+            which standard applies in each of three modes; it only takes effect once you assign and apply
+            it to a cluster from the Security Policies tab.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Standards (levels)
+          </p>
+          <ul className="space-y-1.5">
+            {psaLevelDefs.map((d) => (
+              <li key={d.level} className="flex items-start gap-2">
+                <span
+                  className={cn(
+                    'text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0',
+                    psaLevelColors[d.level],
+                  )}
+                >
+                  {d.level}
+                </span>
+                <span className="text-xs text-muted-foreground leading-relaxed">{d.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Modes</p>
+          <ul className="space-y-1.5">
+            {psaModeDefs.map((d) => (
+              <li key={d.mode} className="flex items-start gap-2">
+                <span className="text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0 bg-accent text-foreground">
+                  {d.mode}
+                </span>
+                <span className="text-xs text-muted-foreground leading-relaxed">{d.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SecurityPage() {
   // Default-tab heuristic: the spec says CIS should default-select when
   // scans exist. We need the count *before* committing, so kick off a
-  // tiny page-1 query and pick once it lands. Default to `cis` while
-  // loading — the tab is always enabled regardless.
+  // tiny page-1 query and use it to pick the fallback tab. Default to `cis`
+  // while loading (the tab is always enabled), fall back to `templates`
+  // once we know there are no scans. An explicit `?tab=` in the URL always
+  // wins over this heuristic.
   const { data: scansPage } = useCISScans({ pageSize: 1 });
-  const [activeTab, setActiveTab] = useState<TabKey>('cis');
-  const [tabUserOverridden, setTabUserOverridden] = useState(false);
-
-  useEffect(() => {
-    if (tabUserOverridden) return;
-    if (!scansPage) return;
-    if ((scansPage.total ?? 0) === 0) {
-      setActiveTab('templates');
-    }
-  }, [scansPage, tabUserOverridden]);
+  const defaultTab: TabKey = scansPage && (scansPage.total ?? 0) === 0 ? 'templates' : 'cis';
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, defaultTab);
 
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -193,6 +278,12 @@ export default function SecurityPage() {
           {row.isDefault && (
             <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Default</span>
           )}
+          {row.isBuiltin && (
+            <span className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-accent text-muted-foreground font-medium">
+              <Lock className="h-2.5 w-2.5" />
+              Built-in
+            </span>
+          )}
         </div>
       ),
     },
@@ -243,8 +334,10 @@ export default function SecurityPage() {
               setEditingTemplate(row);
               setShowTemplateModal(true);
             }}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Edit template"
+            disabled={row.isBuiltin}
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent
+              transition-colors disabled:opacity-30 disabled:pointer-events-none"
+            title={row.isBuiltin ? 'Built-in templates cannot be edited' : 'Edit template'}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -254,10 +347,10 @@ export default function SecurityPage() {
                 deleteTemplate.mutate(row.id);
               }
             }}
-            disabled={row.isDefault}
+            disabled={row.isDefault || row.isBuiltin}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title="Delete template"
+            title={row.isBuiltin ? 'Built-in templates cannot be deleted' : 'Delete template'}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -312,10 +405,7 @@ export default function SecurityPage() {
             return (
               <button
                 key={tab.key}
-                onClick={() => {
-                  setActiveTab(tab.key);
-                  setTabUserOverridden(true);
-                }}
+                onClick={() => setActiveTab(tab.key)}
                 className={cn(
                   'flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors',
                   activeTab === tab.key
@@ -336,25 +426,38 @@ export default function SecurityPage() {
         {activeTab === 'cis' && <CISScansTab />}
 
         {activeTab === 'policies' && (
-          <DataTable
-            data={policies || []}
-            columns={policyColumns}
-            keyExtractor={(row) => row.id}
-            searchPlaceholder="Search cluster policies..."
-            loading={policiesLoading}
-            emptyMessage="No security policies assigned"
-          />
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-muted/30 p-4 flex items-start gap-2">
+              <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                A security policy binds a PSA template to a cluster. Until you assign and apply a
+                template here, Pod Security Admission is not enforced — defining or seeding a template
+                alone changes nothing on your clusters.
+              </p>
+            </div>
+            <DataTable
+              data={policies || []}
+              columns={policyColumns}
+              keyExtractor={(row) => row.id}
+              searchPlaceholder="Search cluster policies..."
+              loading={policiesLoading}
+              emptyMessage="No security policies assigned"
+            />
+          </div>
         )}
 
         {activeTab === 'templates' && (
-          <DataTable
-            data={templates || []}
-            columns={templateColumns}
-            keyExtractor={(row) => row.id}
-            searchPlaceholder="Search templates..."
-            loading={templatesLoading}
-            emptyMessage="No PSA templates defined"
-          />
+          <div className="space-y-4">
+            <PSAExplainer />
+            <DataTable
+              data={templates || []}
+              columns={templateColumns}
+              keyExtractor={(row) => row.id}
+              searchPlaceholder="Search templates..."
+              loading={templatesLoading}
+              emptyMessage="No PSA templates defined"
+            />
+          </div>
         )}
       </div>
 
