@@ -1,0 +1,32 @@
+# oapi-codegen configuration for the Astronomer Go SDK.
+#
+# Generates a typed net/http client + models from docs/openapi.yaml into
+# pkg/astroclient. Mirrors the repo's pinned-tool pattern (cf. sqlc.yaml):
+# the generator is invoked via `go run github.com/oapi-codegen/oapi-codegen/v2/...`
+# pinned to a version (see Makefile OAPI_CODEGEN_VERSION).
+#
+# NOTE: client + models only — the HTTP server is hand-written on go-chi, so
+# no chi/gin/echo/strict-server generator is enabled here (that would conflict).
+#
+# Auth: oapi-codegen emits no authentication. Callers must supply a
+# WithRequestEditorFn that sets `Authorization: Bearer <token>` (both the
+# bearerJWT and bearerAuth security schemes are http/bearer/JWT).
+package: astroclient
+output: pkg/astroclient/astroclient.gen.go
+generate:
+  models: true
+  client: true
+  embedded-spec: false
+output-options:
+  # Keep every component schema even if it's not referenced from an operation,
+  # so the 30 permissive stub schemas (type:object + additionalProperties:true)
+  # and other models survive. These stubs render as map[string]interface{} and
+  # carry no field-level type safety.
+  skip-prune: true
+  # Patch a handful of codegen-only collisions (duplicate-normalizing path names
+  # and camel/snake duplicate fields) without editing docs/openapi.yaml.
+  # See oapi-codegen.overlay.yaml for the rationale.
+  overlay:
+    path: oapi-codegen.overlay.yaml
+compatibility:
+  always-prefix-enum-values: true

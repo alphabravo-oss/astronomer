@@ -1,0 +1,55 @@
+# OpenAPI Overlay (https://github.com/OAI/Overlay-Specification) applied by
+# oapi-codegen BEFORE generation (see oapi-codegen.yaml -> output-options.overlay).
+#
+# WHY THIS EXISTS
+# docs/openapi.yaml is the source of truth and is owned by another track, so we
+# do not edit it here. Instead this overlay patches three spots that make the
+# *generated Go* fail to compile, without changing the wire contract:
+#
+#   1. Two pairs of paths normalize to the SAME Go method name because they lack
+#      operationIds (315/407 ops have none):
+#        - GET  /api/v1/activity/                 vs GET  /api/v1/activity
+#        - POST .../generate_kubeconfig (alias)   vs POST .../generate-kubeconfig
+#      We give the legacy/alias variant an explicit operationId so the two get
+#      distinct, stable Go names instead of colliding.
+#
+#   2. Two object schemas declare both a camelCase and a snake_case spelling of
+#      the same logical field (e.g. clusterId + cluster_id). Both normalize to
+#      the same Go field name, producing "X redeclared" in a single struct. We
+#      attach x-go-name to the snake_case duplicates so each gets a distinct Go
+#      field while keeping its JSON tag (wire name) intact.
+#
+# These are codegen-only renames: JSON tags, paths, and request/response bodies
+# are unchanged.
+overlay: 1.0.0
+info:
+  title: astroclient codegen fixups
+  version: 1.0.0
+actions:
+  # --- 1. operationId disambiguation -----------------------------------------
+  - target: $.paths['/api/v1/activity/'].get
+    description: Distinguish trailing-slash activity feed from /api/v1/activity.
+    update:
+      operationId: getActivityFeedLegacy
+  - target: $.paths['/api/v1/clusters/{id}/generate_kubeconfig'].post
+    description: Distinguish underscore alias from generate-kubeconfig.
+    update:
+      operationId: generateClusterKubeconfigUnderscore
+
+  # --- 2. duplicate camel/snake field names in one struct --------------------
+  # ResourceSearchResult.results[].(cluster_id|cluster_name) collide with
+  # ResourceRow.clusterId and the sibling clusterName.
+  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_id
+    description: Rename snake_case dup so it does not collide with ResourceRow.clusterId.
+    update:
+      x-go-name: ClusterIdSnake
+  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_name
+    description: Rename snake_case dup so it does not collide with clusterName.
+    update:
+      x-go-name: ClusterNameSnake
+
+  # PUT /api/v1/settings/general body declares platformName + platform_name.
+  - target: $.paths['/api/v1/settings/general'].put.requestBody.content['application/json'].schema.properties.platform_name
+    description: Rename snake_case alias so it does not collide with platformName.
+    update:
+      x-go-name: PlatformNameSnake
