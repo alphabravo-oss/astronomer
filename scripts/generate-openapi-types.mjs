@@ -28,6 +28,38 @@ if (!schemas || typeof schemas !== 'object' || Array.isArray(schemas)) {
   process.exit(1);
 }
 
+// validateSchemaRefs walks the ENTIRE spec (paths, responses, nested schemas —
+// not just components.schemas) and fails if any `#/components/schemas/<name>`
+// $ref targets a schema that is never defined. The type emitter below only
+// iterates components.schemas, so on its own it cannot observe dangling refs
+// from path operations; this guard closes that gap so `--check` reflects spec
+// validity rather than merely "the emitted types are up to date".
+function validateSchemaRefs(root, defined) {
+  const prefix = '#/components/schemas/';
+  const dangling = new Set();
+  const visit = (node) => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    for (const [key, value] of Object.entries(node)) {
+      if (key === '$ref' && typeof value === 'string' && value.startsWith(prefix)) {
+        const name = value.slice(prefix.length);
+        if (!Object.prototype.hasOwnProperty.call(defined, name)) dangling.add(name);
+      } else {
+        visit(value);
+      }
+    }
+  };
+  visit(root);
+  if (dangling.size > 0) {
+    console.error('OpenAPI spec references schemas that are not defined in components.schemas:');
+    for (const name of [...dangling].sort()) console.error(`  - ${name}`);
+    process.exit(1);
+  }
+}
+
 function assertIdentifier(name) {
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) {
     throw new Error(`OpenAPI schema name ${JSON.stringify(name)} is not a valid TypeScript identifier`);
@@ -173,6 +205,8 @@ function generate() {
   lines.push('');
   return lines.join('\n');
 }
+
+validateSchemaRefs(spec, schemas);
 
 const generated = generate();
 
