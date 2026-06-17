@@ -52,10 +52,24 @@ dashboard can perform, this CLI can — and vice versa.`,
 		SilenceErrors: true,
 	}
 
+	// We register our own `completion` command (completion.go), so turn
+	// off cobra's auto-injected default to avoid a duplicate.
+	root.CompletionOptions.DisableDefaultCmd = true
+
 	// Global flags. --server overrides config.yaml for this run; useful
 	// for one-off commands against a different environment without
 	// re-logging-in.
 	root.PersistentFlags().String("server", "", "Astronomer server URL (overrides ~/.config/astronomer/config.yaml)")
+
+	// --output controls how every command renders structured data.
+	// --json is the legacy alias for --output json, kept so existing
+	// scripts keep working; resolveOutput() reconciles the two.
+	root.PersistentFlags().StringP(outputFlagName, "o", string(outputTable), "output format: table|json|yaml")
+	root.PersistentFlags().Bool(jsonFlagName, false, "alias for --output json (deprecated)")
+
+	// --token / ASTRO_API_TOKEN supply a bearer token for one-off,
+	// credential-less invocations (CI, automation) without `astro login`.
+	root.PersistentFlags().String("token", "", "API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)")
 
 	root.AddCommand(
 		newLoginCmd(),
@@ -64,6 +78,8 @@ dashboard can perform, this CLI can — and vice versa.`,
 		newClusterCmd(),
 		newK8sCmd(),
 		newDocsCmd(),
+		newConfigCmd(),
+		newCompletionCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

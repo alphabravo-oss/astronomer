@@ -104,5 +104,12 @@ func SaveConfig(c *Config) error {
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
+	// os.WriteFile only applies the mode when creating a new file; an
+	// existing config.yaml with looser perms (e.g. 0644 from an older
+	// CLI or a manual chmod) would keep them and leave the bearer token
+	// world-readable. Tighten explicitly on every write.
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("chmod %s: %w", path, err)
+	}
 	return nil
 }

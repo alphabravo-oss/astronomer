@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"syscall"
@@ -160,9 +161,17 @@ func newWhoamiCmd() *cobra.Command {
 			if err := client.Do(cmd.Context(), "GET", "/api/v1/auth/me/", nil, &resp); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Server: %s\nUser:   %s\nEmail:  %s\nAdmin:  %v\n",
-				cfg.ServerURL, resp.Data.Username, resp.Data.Email, resp.Data.IsSuperuser)
-			return err
+			payload := map[string]any{
+				"server":       cfg.ServerURL,
+				"username":     resp.Data.Username,
+				"email":        resp.Data.Email,
+				"is_superuser": resp.Data.IsSuperuser,
+			}
+			return render(cmd, payload, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "Server: %s\nUser:   %s\nEmail:  %s\nAdmin:  %v\n",
+					cfg.ServerURL, resp.Data.Username, resp.Data.Email, resp.Data.IsSuperuser)
+				return err
+			})
 		},
 	}
 }
@@ -171,6 +180,11 @@ func newWhoamiCmd() *cobra.Command {
 // a Client preloaded with the stored bearer token. Returns a helpful
 // error when the user hasn't logged in yet so they don't see "401
 // Unauthorized" with no context.
+//
+// A token supplied via --token or $ASTRO_API_TOKEN takes precedence over
+// the stored JWT, letting credential-less invocations (CI, automation)
+// run without a prior `astro login`. The --server flag is still required
+// (or a stored ServerURL) so we know where to point.
 func authedClient(cmd *cobra.Command) (*astrocli.Client, *astrocli.Config, error) {
 	cfg, err := astrocli.LoadConfig()
 	if err != nil {
@@ -180,8 +194,26 @@ func authedClient(cmd *cobra.Command) (*astrocli.Client, *astrocli.Config, error
 	if override, _ := cmd.Root().PersistentFlags().GetString("server"); strings.TrimSpace(override) != "" {
 		server = strings.TrimSpace(override)
 	}
-	if server == "" || cfg.AccessToken == "" {
-		return nil, nil, fmt.Errorf("not logged in — run `astro login --server <url>` first")
+
+	token := cfg.AccessToken
+	if override := bearerOverride(cmd); override != "" {
+		token = override
 	}
-	return astrocli.NewClient(server, cfg.AccessToken), cfg, nil
+
+	if server == "" {
+		return nil, nil, fmt.Errorf("no server configured — pass --server <url> or run `astro login` first")
+	}
+	if token == "" {
+		return nil, nil, fmt.Errorf("not logged in — run `astro login --server <url>` first (or pass --token / set ASTRO_API_TOKEN)")
+	}
+	return astrocli.NewClient(server, token), cfg, nil
+}
+
+// bearerOverride returns an explicit bearer token from --token or the
+// ASTRO_API_TOKEN env (flag wins), or "" when neither is set.
+func bearerOverride(cmd *cobra.Command) string {
+	if flagTok, _ := cmd.Root().PersistentFlags().GetString("token"); strings.TrimSpace(flagTok) != "" {
+		return strings.TrimSpace(flagTok)
+	}
+	return strings.TrimSpace(os.Getenv("ASTRO_API_TOKEN"))
 }

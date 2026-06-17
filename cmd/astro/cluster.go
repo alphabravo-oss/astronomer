@@ -78,7 +78,6 @@ func newClusterCmd() *cobra.Command {
 }
 
 func newClusterListCmd() *cobra.Command {
-	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all clusters",
@@ -91,18 +90,15 @@ func newClusterListCmd() *cobra.Command {
 			if err := client.Do(cmd.Context(), "GET", "/api/v1/clusters/", nil, &lst); err != nil {
 				return err
 			}
-			if jsonOut {
-				return writeJSON(cmd.OutOrStdout(), lst.Data)
-			}
-			return writeClusterTable(cmd.OutOrStdout(), lst.Data)
+			return render(cmd, lst.Data, func(w io.Writer) error {
+				return writeClusterTable(w, lst.Data)
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON instead of a human-readable table")
 	return cmd
 }
 
 func newClusterGetCmd() *cobra.Command {
-	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "get <id>",
 		Short: "Show one cluster's details",
@@ -116,13 +112,11 @@ func newClusterGetCmd() *cobra.Command {
 			if err := client.Do(cmd.Context(), "GET", "/api/v1/clusters/"+args[0]+"/", nil, &out); err != nil {
 				return err
 			}
-			if jsonOut {
-				return writeJSON(cmd.OutOrStdout(), out.Data)
-			}
-			return writeClusterTable(cmd.OutOrStdout(), []clusterRow{out.Data})
+			return render(cmd, out.Data, func(w io.Writer) error {
+				return writeClusterTable(w, []clusterRow{out.Data})
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }
 
@@ -251,7 +245,6 @@ Each call mints a fresh 24h registration token; safe to re-run.`,
 }
 
 func newClusterSelfTestCmd() *cobra.Command {
-	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "self-test <id>",
 		Short: "Run agent health checks for a cluster",
@@ -265,13 +258,11 @@ func newClusterSelfTestCmd() *cobra.Command {
 			if err := client.Do(cmd.Context(), "POST", "/api/v1/agents/fleet/"+args[0]+"/self-test/", map[string]any{}, &out); err != nil {
 				return err
 			}
-			if jsonOut {
-				return writeJSON(cmd.OutOrStdout(), out.Data)
-			}
-			return writeAgentSelfTest(cmd.OutOrStdout(), out.Data)
+			return render(cmd, out.Data, func(w io.Writer) error {
+				return writeAgentSelfTest(w, out.Data)
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }
 
