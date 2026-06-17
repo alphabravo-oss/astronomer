@@ -33,7 +33,10 @@ mechanical refactor behind unchanged behaviour, guarded by the existing tests.
       `--output`, shell completion, and config management. Today: auth/cluster/
       k8s/docs only.
 - [ ] **A generated, versioned SDK** (at least Go + TypeScript) ships from the
-      spec.
+      spec. *PARTIAL: a generated Go SDK (`pkg/astroclient`, oapi-codegen v2.5.0)
+      now ships and builds GREEN (H1); the TypeScript side is still only the
+      generated **types** (`openapi.generated.ts`), not a full client (H2), and
+      no CI drift gate regenerates either SDK (H3). Not yet versioned.*
 - [ ] `routes.go` is split by domain; no single file > ~150 routes.
 
 ---
@@ -67,8 +70,12 @@ authoritative and complete, then gate it.
 - [x] **A4.** Add shared components: the `{data: …}` envelope, the error
       envelope, the pagination envelope (see D), and common path params, as
       reusable `$ref`s so handlers don't redefine them. (S)
-- [ ] **A5.** CI gate: `openapi-coverage --check` + `generate-openapi-types --check`
-      (already exists) both run on PR; drift fails. (S)
+- [x] **A5.** CI gate: `openapi-coverage --check` + `generate-openapi-types --check`
+      (already exists) both run on PR; drift fails. (S) **DONE** — new
+      `.github/workflows/api-contract.yaml` gate runs both checks plus Go
+      build/vet, API package tests, the F2 route-table golden, and the apierror
+      catalog lint on every PR/push to main; each command fails the job. `make
+      verify` mirrors it locally.
 - [ ] **A6.** Publish the spec: keep the served Swagger UI, add a versioned
       `docs/openapi.yaml` artifact to releases, and a changelog of breaking
       changes. (S)
@@ -89,9 +96,15 @@ spirit, but no single source of truth, untyped, undocumentable, typo-prone.
 - [x] **B3.** Add a lint check (`go vet`-style or a small AST test) that fails
       if `RespondRequestError` is called with a string literal instead of a
       catalog constant. (S)
-- [ ] **B4.** Document the catalog (auto-generate `docs/error-codes.md` from the
+- [x] **B4.** Document the catalog (auto-generate `docs/error-codes.md` from the
       constants + doc comments) and reference codes from the OpenAPI error
-      responses. (S)
+      responses. (S) **DONE for the doc generator** — new
+      `scripts/error-code-docs.mjs` parses `internal/handler/apierror/codes.go`
+      and emits `docs/error-codes.md` (217/217 constants, 10 category sections,
+      6 legacy aliases surfaced); `make error-codes` writes, `make
+      error-codes-check` is a `--check` freshness guard. *Caveat: the generated
+      doc is not yet cross-referenced from the OpenAPI error-response schemas,
+      and `error-codes-check` is not yet wired into a CI workflow.*
 - [ ] **B5.** Audit for over-fragmentation: collapse near-duplicates
       (`list_error`/`db_error` semantics) where they leak storage details to
       clients; map internal failures to a small stable public set. (S)
@@ -216,11 +229,23 @@ first-class.
 
 Once A is complete, the spec generates clients for free.
 
-- [ ] **H1.** Generate a typed Go SDK (`oapi-codegen`) published as
-      `pkg/astroclient` and consumed by `cmd/astro` (dogfood it). (M)
+- [x] **H1.** Generate a typed Go SDK (`oapi-codegen`) published as
+      `pkg/astroclient` and consumed by `cmd/astro` (dogfood it). (M) **DONE for
+      generation** — `pkg/astroclient` generated from `docs/openapi.yaml` via
+      oapi-codegen v2.5.0 (pinned, models+client, std net/http; no server
+      stubs). 414 operations, 901 types; `go build ./pkg/...` and `go build
+      ./...` both GREEN, `go mod tidy` idempotent. Wired via a `make sdk` target
+      + `//go:generate` in `pkg/astroclient/doc.go`. Collision/dup-field issues
+      fixed via an OpenAPI Overlay (`oapi-codegen.overlay.yaml`) so
+      `docs/openapi.yaml` is untouched. *Caveat: `cmd/astro` does NOT yet consume
+      it — the dogfood step is deferred to G2 (needs a NewClient wrapper that
+      injects the Bearer-auth RequestEditorFn).*
 - [ ] **H2.** Keep the existing generated TS types; optionally emit a full TS
       client for external integrators. (S)
 - [ ] **H3.** Version SDKs with the API; CI regenerates and fails on drift. (S)
+      *Not done — the `api-contract.yaml` gate does not regenerate or diff
+      `pkg/astroclient`; an `sdk-check` target mirroring
+      `scripts/check-sqlc-generated.sh` is still needed.*
 
 ## Workstream I — CI gates (lock it in)
 
@@ -577,3 +602,110 @@ suite GREEN, route-table golden HELD, coverage 100%. Nothing was reverted.
   operation idempotency).
 - **G2** — generated CLI command groups from the spec.
 - **H** — generated, versioned Go + TS SDKs (H1–H3) and **I** CI gates.
+
+---
+
+## Run log (undefined) — tail pass
+
+The tail pass closing the surfacing/lock-in gaps: the CI contract gate (A5),
+the generated Go SDK (H1), and the auto-generated error-code reference (B4).
+Three concurrent tracks integrated; the full authoritative verification suite
+was re-run and is GREEN.
+
+### A5 — API contract CI gate (DONE, verified)
+
+- New `.github/workflows/api-contract.yaml` — single `api-contract` job,
+  one named step per command, triggered on `pull_request`/`push` to main and
+  `workflow_dispatch`. Follows repo conventions (checkout@v4, setup-go@v5 via
+  `go-version-file: go.mod`, setup-node@v4 node 22 + npm cache, ubuntu-24.04,
+  `permissions: contents: read`). `npm ci` (working-directory `frontend`) runs
+  before the node scripts because they resolve `js-yaml` from frontend deps.
+- Steps in order: `go build ./...`; `go vet ./...`;
+  `go test ./internal/handler/ ./internal/server/ ./internal/auth/
+  ./internal/server/middleware/`; `node scripts/openapi-coverage.mjs --check`;
+  `node scripts/generate-openapi-types.mjs --check`; route-table golden
+  (`TestRouteTableMatchesGolden`); apierror catalog lint
+  (`TestApierrorCatalogCoverage`).
+- Added a `make verify` target mirroring the gate and documented it in
+  `.github/workflows/README.md`.
+
+### H1 — generated Go SDK (DONE for generation, verified)
+
+- `pkg/astroclient` generated from `docs/openapi.yaml` via oapi-codegen v2.5.0
+  (pinned; models+client, std net/http; no server stubs — the server is the
+  hand-written go-chi router). 414 operations, 901 types (31 are permissive
+  `map[string]interface{}` stubs, mirroring the spec's `additionalProperties`
+  schemas). `go build ./pkg/...` and `go build ./...` GREEN; `go vet
+  ./pkg/astroclient/` clean; `go mod tidy` idempotent (pulled
+  `github.com/oapi-codegen/runtime`).
+- Name collisions and dup camelCase/snake_case fields fixed via an OpenAPI
+  Overlay (`oapi-codegen.overlay.yaml`) — `docs/openapi.yaml` untouched, JSON
+  wire tags preserved. Wired via `make sdk` + `//go:generate` in
+  `pkg/astroclient/doc.go`.
+- `cmd/astro` does NOT yet consume the SDK (dogfood deferred to G2).
+
+### B4 — error-code reference generator (DONE for the doc, verified)
+
+- New `scripts/error-code-docs.mjs` parses
+  `internal/handler/apierror/codes.go` and emits `docs/error-codes.md`
+  (GENERATED banner, intro, per-category Constant/Wire/HTTP/Description tables,
+  legacy-alias table). 217/217 constants documented, 10 category sections,
+  6 legacy aliases; literal wire values emitted verbatim (e.g.
+  `InvalidClusterID -> invalid_cluster`, `PersistError -> persist_failed`).
+- `make error-codes` writes; `make error-codes-check` (`--check`) is a freshness
+  guard (exit 0 current / 1 stale). Not yet cross-referenced from the OpenAPI
+  error schemas, and `error-codes-check` is not yet in a CI workflow.
+
+### Build / test status (verified this pass)
+
+- `go build ./...` — exit 0. `go vet ./...` — exit 0.
+- `go test ./internal/handler/ ./internal/server/ ./internal/auth/
+  ./internal/server/middleware/ -count=1` — all GREEN.
+- `go build ./pkg/...` (new SDK) — exit 0.
+- `node scripts/openapi-coverage.mjs --check` — exit 0; **100.0% (397/397)**,
+  0 missing, 0 extra, 16 nil-gated.
+- `node scripts/generate-openapi-types.mjs --check` — exit 0.
+- `TestRouteTableMatchesGolden` — PASS; `TestApierrorCatalogCoverage` — PASS.
+- Reverted: nothing.
+
+### FINAL elite scorecard — 7 exit criteria
+
+1. **100% routes in OpenAPI** — **MET** (100.0%, 397/397, drift 0) **and now
+   CI-gated** (A5). *Quality caveat: stub-schema fidelity still open.*
+2. **Every error uses a typed, documented catalog** — **MET in substance**:
+   217-constant catalog, codemod done (0 bare literals), B3 lint gated in CI,
+   and B4 now auto-generates `docs/error-codes.md`. *Open: OpenAPI error
+   responses don't yet `$ref` the catalog codes.*
+3. **Every bare-`{data}` list endpoint returns pagination metadata** — **MET**
+   (D1/D3). *Open: D2 COUNT-driven totals partial, D4 stable ordering, D5
+   keyset pagination.*
+4. **Request bodies validated declaratively (uniform 422)** — **MET for the
+   safe set** (C1–C4). *Open: deliberately-deferred cross-field/domain-coded
+   validators (C2 remainder).*
+5. **CLI drives every resource, with `--output`/completion/config** — **NOT
+   MET**: ergonomics shipped (G1/G3/G4/G5), but the generated command groups
+   (G2) that achieve full resource parity are still missing.
+6. **Generated, versioned SDK (Go + TS)** — **PARTIAL**: Go SDK ships and builds
+   (H1); TS is types-only not a full client (H2); no version stamping and no SDK
+   drift gate (H3).
+7. **`routes.go` split by domain (no file > ~150 routes)** — **MET** (F1/F2,
+   golden held).
+
+Net: **4 of 7 fully met (1, 3, 4, 7), 2 partial (2 lacks the OpenAPI
+cross-ref; 6 has Go-only/ungated SDK), 1 not met (5 — CLI parity via G2).**
+
+### What genuinely remains for full elite
+
+- **G2** — generate CLI command groups from the spec / `pkg/astroclient` (with a
+  Bearer-auth `NewClient` wrapper); the single biggest remaining gap (criterion 5).
+- **H2** — full TS client (not just types); **H3** — version both SDKs and add an
+  `sdk-check` CI drift gate mirroring `check-sqlc-generated.sh`.
+- **A6** — publish the versioned spec artifact + breaking-change changelog.
+- **Stub-schema fidelity** — replace the ~31 permissive `additionalProperties`
+  stub schemas with authoritative field shapes (also removes the SDK's loose
+  `map[string]interface{}` types).
+- **D2/D4/D5** — COUNT backfill, stable ordering + `sort`/`order`, keyset
+  pagination for the big tables.
+- **C2 remainder** — the deferred domain-coded/cross-field validators.
+- **B4 cross-ref** — reference the catalog codes from OpenAPI error responses,
+  and wire `make error-codes-check` into CI.
