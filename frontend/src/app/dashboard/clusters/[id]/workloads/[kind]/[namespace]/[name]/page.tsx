@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import { detailHref } from '@/lib/k8s-paths';
 import { useWorkload, useWorkloadPods, useWorkloadMetrics } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -16,6 +17,8 @@ import { Link } from '@/lib/link';
 
 type TabKey = 'pods' | 'logs' | 'metrics';
 
+const TAB_KEYS = ['pods', 'logs', 'metrics'] as const;
+
 export default function WorkloadDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -24,7 +27,7 @@ export default function WorkloadDetailPage() {
   const namespace = params.namespace as string;
   const name = params.name as string;
 
-  const [activeTab, setActiveTab] = useState<TabKey>('pods');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'pods');
   const [selectedPod, setSelectedPod] = useState<string>('');
   const [metricsRange, setMetricsRange] = useState('1h');
 

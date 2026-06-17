@@ -13,6 +13,7 @@
 
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
@@ -65,7 +66,7 @@ export default function ApplicationDetailPage() {
 
   const queryClient = useQueryClient();
   const [showSync, setShowSync] = useState(false);
-  const [tab, setTab] = useState<'resources' | 'history' | 'events'>('resources');
+  const [tab, setTab] = useTabParam(['resources', 'history', 'events'] as const, 'resources');
 
   // Resolve the DB app to learn its name (needed for the live-app lookup).
   const { data: dbApp } = useQuery({

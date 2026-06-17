@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTabParam } from '@/lib/use-tab-param';
 import {
   useAlertRules,
   useCreateAlertRule,
@@ -50,6 +51,8 @@ import {
 
 type TabKey = 'rules' | 'active' | 'channels' | 'silences';
 
+const TAB_KEYS = ['rules', 'active', 'channels', 'silences'] as const;
+
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'rules', label: 'Alert Rules', icon: Shield },
   { key: 'active', label: 'Active Alerts', icon: AlertTriangle },
@@ -72,7 +75,7 @@ const channelTypeIcons: Record<string, React.ElementType> = {
 };
 
 export default function AlertingPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('rules');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'rules');
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [showChannelModal, setShowChannelModal] = useState(false);

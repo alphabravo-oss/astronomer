@@ -17,6 +17,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import {
@@ -85,6 +86,8 @@ import type {
 
 type TabId = 'overview' | 'apps' | 'projects' | 'appsets' | 'clusters' | 'repos' | 'operations';
 
+const TAB_KEYS = ['overview', 'apps', 'projects', 'appsets', 'clusters', 'repos', 'operations'] as const;
+
 // isBrowserReachable returns false for cluster-internal URLs (`*.svc.cluster.local`,
 // `localhost`, RFC1918 IPs) — those are valid for the in-cluster Astronomer
 // server to reach but a browser can't follow them. Used to swap a clickable
@@ -119,7 +122,7 @@ export default function InstanceDetailPage() {
   const router = useRouter();
   const instanceId = params.instanceId as string;
 
-  const [tab, setTab] = useState<TabId>('overview');
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'overview');
 
   const { data: instance, isLoading: instanceLoading } = useQuery({
     queryKey: queryKeys.argocd.instance(instanceId),

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTabParam } from '@/lib/use-tab-param';
 import {
   useLoggingOutputs,
   useCreateLoggingOutput,
@@ -43,6 +44,8 @@ import { toastError, toastSuccess } from '@/lib/toast';
 import { useQueryClient } from '@tanstack/react-query';
 
 type TabKey = 'outputs' | 'pipelines' | 'operations';
+
+const TAB_KEYS = ['outputs', 'pipelines', 'operations'] as const;
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'outputs', label: 'Outputs', icon: Database },
@@ -160,7 +163,7 @@ const outputTypeFields: Record<
 
 export default function LoggingPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabKey>('outputs');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'outputs');
   const [showOutputModal, setShowOutputModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [opsStatusFilter, setOpsStatusFilter] = useState<string>('');

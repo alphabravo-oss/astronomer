@@ -18,6 +18,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import {
   Archive,
   Clock,
@@ -62,6 +63,8 @@ import type {
 
 type TabKey = 'storage' | 'schedules' | 'runs';
 
+const TAB_KEYS = ['storage', 'schedules', 'runs'] as const;
+
 const STORAGE_TYPE_LABELS: Record<BackupStorageType, string> = {
   s3: 'Amazon S3',
   gcs: 'Google Cloud Storage',
@@ -77,7 +80,7 @@ const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
 
 export default function BackupsPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<TabKey>('storage');
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'storage');
   const [restoreTarget, setRestoreTarget] = useState<BackupRun | null>(null);
   const [deleteStorage, setDeleteStorage] = useState<BackupStorageLocation | null>(null);
   const [deleteSchedule, setDeleteSchedule] = useState<BackupScheduleRow | null>(null);

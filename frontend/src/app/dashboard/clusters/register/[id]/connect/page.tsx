@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from '@/lib/navigation';
 import { useParams } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import { queryKeys } from '@/lib/query-keys';
 import { toastError } from '@/lib/toast';
 import { Loader2, Copy, Check, Download, Server } from 'lucide-react';
@@ -23,12 +24,14 @@ import { useLiveEvents } from '@/lib/live-events';
 type Tab = 'curl' | 'quick' | 'yaml' | 'airgapped';
 type CurlVariant = 'public_ca' | 'private_ca' | 'insecure';
 
+const TAB_KEYS = ['curl', 'quick', 'yaml', 'airgapped'] as const;
+
 export default function ConnectStepPage() {
   const router = useRouter();
   const params = useParams();
   const clusterId = String(params?.id ?? '');
 
-  const [tab, setTab] = useState<Tab>('curl');
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'curl');
   const [copied, setCopied] = useState<CurlVariant | 'quick' | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [autoDetect, setAutoDetect] = useState(true);

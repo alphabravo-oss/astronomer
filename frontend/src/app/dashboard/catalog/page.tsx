@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import {
   useHelmRepositories,
   useCreateHelmRepository,
@@ -63,6 +64,8 @@ import {
 
 type TabKey = 'browse' | 'installed' | 'repositories';
 
+const TAB_KEYS = ['browse', 'installed', 'repositories'] as const;
+
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'browse', label: 'Browse Charts' },
   { key: 'installed', label: 'Installed' },
@@ -95,7 +98,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function CatalogPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('browse');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'browse');
   const [selectedCategory, setSelectedCategory] = useState<HelmChartCategory | 'all'>('all');
   const initialSearchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(initialSearchParams?.get('search') ?? '');

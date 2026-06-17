@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import { Link } from '@/lib/link';
 import {
   ArrowLeft,
@@ -39,6 +40,8 @@ import type {
 } from '@/lib/api/settings';
 
 type Tab = 'config' | 'deliveries' | 'test';
+
+const TAB_KEYS = ['config', 'deliveries', 'test'] as const;
 
 const AVAILABLE_EVENTS = [
   'cluster.unhealthy',
@@ -387,7 +390,7 @@ function WebhookDetail() {
   const id = params?.id ?? '';
   const { data, isLoading, error } = useWebhook(id);
   const del = useDeleteWebhook();
-  const [tab, setTab] = useState<Tab>('config');
+  const [tab, setTab] = useTabParam(TAB_KEYS, 'config');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (isLoading) {

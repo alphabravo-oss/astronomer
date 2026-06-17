@@ -2,6 +2,7 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useParams, useRouter } from '@/lib/navigation';
+import { useTabParam } from '@/lib/use-tab-param';
 import { useState } from 'react';
 import { useNodeDetail } from '@/lib/hooks';
 import * as apiClient from '@/lib/api';
@@ -289,7 +290,10 @@ export default function NodeDetailPage() {
   const router = useRouter();
   const clusterId = params.id as string;
   const nodeName = params.nodeName as string;
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [activeTab, setActiveTab] = useTabParam<TabId>(
+    TABS.map((t) => t.id),
+    'overview',
+  );
 
   const { data: node, isLoading, refetch } = useNodeDetail(clusterId, nodeName);
   const [showYaml, setShowYaml] = useState(false);

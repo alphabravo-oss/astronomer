@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTabParam } from '@/lib/use-tab-param';
 import {
   useGlobalRoles,
   useClusterRoles,
@@ -49,6 +50,15 @@ import { copyToClipboard } from '@/lib/utils';
 
 type TabKey = 'global-roles' | 'cluster-roles' | 'project-roles' | 'users' | 'bindings' | 'effective';
 
+const TAB_KEYS = [
+  'global-roles',
+  'cluster-roles',
+  'project-roles',
+  'users',
+  'bindings',
+  'effective',
+] as const;
+
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'global-roles', label: 'Global Roles', icon: Shield },
   { key: 'cluster-roles', label: 'Cluster Roles', icon: Lock },
@@ -59,7 +69,7 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function RBACPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('global-roles');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'global-roles');
   const [showRoleEditor, setShowRoleEditor] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);

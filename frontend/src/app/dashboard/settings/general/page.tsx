@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTabParam } from '@/lib/use-tab-param';
 import { useSSOProviders, useAPITokens, useCreateAPIToken, useDeleteAPIToken, useAuditLogs, useGeneralSettings, useSaveGeneralSettings, useCreateSSOProvider } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -28,6 +29,8 @@ import { toastError, toastSuccess } from '@/lib/toast';
 
 type TabKey = 'sso' | 'general' | 'tokens' | 'audit' | 'support';
 
+const TAB_KEYS = ['sso', 'general', 'tokens', 'audit', 'support'] as const;
+
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'sso', label: 'SSO Providers', icon: Shield },
   { key: 'general', label: 'General', icon: Settings },
@@ -37,7 +40,7 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('sso');
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'sso');
   const [showCreateToken, setShowCreateToken] = useState(false);
   const [newTokenForm, setNewTokenForm] = useState({ name: '', description: '', expiresInDays: 30 });
   const [createdToken, setCreatedToken] = useState<string | null>(null);
