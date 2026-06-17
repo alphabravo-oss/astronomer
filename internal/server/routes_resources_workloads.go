@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -13,10 +15,18 @@ import (
 
 func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 	mutationWriteScope := appmiddleware.RequireWriteScopeForMutations(iauth.ScopeWriteClusters)
+	// In-memory short-TTL idempotency guard for the resource/workload/node
+	// mutations below. Self-skips reads, so applying it to these groups
+	// covers every POST/PUT/PATCH/DELETE without per-route tagging. These
+	// typed verbs are NOT on the DB-backed operation-idempotency path (that
+	// covers tools/catalog/clusters/fleet/backups), so there is no double
+	// dedup. Janitor lifetime is process-scoped, matching the rate limiter.
+	idem := appmiddleware.Idempotency(context.Background())
 
 	if deps.Resources != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(mutationWriteScope)
+			r.Use(idem)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
 				Get("/clusters/{cluster_id}/resources/{group}/{version}/{kind}/", deps.Resources.ListResources)
 			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbList)).
@@ -76,6 +86,7 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 	if deps.Workloads != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(mutationWriteScope)
+			r.Use(idem)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/controller/status/", deps.Workloads.ControllerStatus)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/", deps.Workloads.ListOperations)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/{id}/", deps.Workloads.GetOperation)

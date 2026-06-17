@@ -42,27 +42,75 @@ func newLoginRateLimiter(limit int, window time.Duration, now func() time.Time) 
 	}
 }
 
-func (l *loginRateLimiter) allow(key string) (allowed bool, retryAfter time.Duration) {
+// loginRateDecision carries the standard rate-limit header inputs for the
+// fixed-window login counter: Limit is the per-window cap, Remaining is the
+// attempts left in the current window, Reset is the seconds until the window
+// rolls over.
+type loginRateDecision struct {
+	allowed    bool
+	retryAfter time.Duration
+	limit      int
+	remaining  int
+	reset      int
+}
+
+func (l *loginRateLimiter) allow(key string) loginRateDecision {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := l.now()
 	bucket, ok := l.buckets[key]
 	if !ok || !now.Before(bucket.resetAt) {
+		resetAt := now.Add(l.window)
 		l.buckets[key] = loginRateLimitBucket{
 			count:   1,
-			resetAt: now.Add(l.window),
+			resetAt: resetAt,
 		}
-		return true, 0
+		return loginRateDecision{
+			allowed:   true,
+			limit:     l.limit,
+			remaining: l.limit - 1,
+			reset:     loginResetSeconds(resetAt.Sub(now)),
+		}
 	}
 
 	if bucket.count >= l.limit {
-		return false, bucket.resetAt.Sub(now)
+		return loginRateDecision{
+			retryAfter: bucket.resetAt.Sub(now),
+			limit:      l.limit,
+			remaining:  0,
+			reset:      loginResetSeconds(bucket.resetAt.Sub(now)),
+		}
 	}
 
 	bucket.count++
 	l.buckets[key] = bucket
-	return true, 0
+	remaining := l.limit - bucket.count
+	if remaining < 0 {
+		remaining = 0
+	}
+	return loginRateDecision{
+		allowed:   true,
+		limit:     l.limit,
+		remaining: remaining,
+		reset:     loginResetSeconds(bucket.resetAt.Sub(now)),
+	}
+}
+
+// loginResetSeconds renders a window-remaining duration as a whole-second
+// count for the RateLimit-Reset header (ceil, min 1 while the window is open).
+func loginResetSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+	secs := int(d.Seconds())
+	if d > time.Duration(secs)*time.Second {
+		secs++
+	}
+	if secs < 1 {
+		secs = 1
+	}
+	return secs
 }
 
 // evictExpired removes buckets whose reset window has already passed.
@@ -135,14 +183,15 @@ func newLoginRateLimitMiddleware(ctx context.Context, limit int, window time.Dur
 			if key == "" {
 				key = "unknown"
 			}
-			allowed, retryAfter := limiter.allow(key)
-			if allowed {
+			d := limiter.allow(key)
+			setLoginRateLimitHeaders(w, d)
+			if d.allowed {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Retry-After", formatRetryAfter(retryAfter))
+			w.Header().Set("Retry-After", formatRetryAfter(d.retryAfter))
 			w.WriteHeader(http.StatusTooManyRequests)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"code":    "rate_limited",
@@ -150,6 +199,16 @@ func newLoginRateLimitMiddleware(ctx context.Context, limit int, window time.Dur
 			})
 		})
 	}
+}
+
+// setLoginRateLimitHeaders emits the IETF draft standard rate-limit headers
+// for the login limiter on every response (allowed or 429) so a client can
+// see how many attempts remain in the current window.
+func setLoginRateLimitHeaders(w http.ResponseWriter, d loginRateDecision) {
+	h := w.Header()
+	h.Set("RateLimit-Limit", strconv.Itoa(d.limit))
+	h.Set("RateLimit-Remaining", strconv.Itoa(d.remaining))
+	h.Set("RateLimit-Reset", strconv.Itoa(d.reset))
 }
 
 func clientKey(r *http.Request) string {

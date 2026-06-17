@@ -142,14 +142,30 @@ func newAPIRateLimiterWithCeilings(configs, clusterCeilings map[APIRateLimitClas
 	}
 }
 
+// rateLimitDecision carries the standard-header inputs alongside the
+// allow/deny verdict so the middleware can emit RateLimit-Limit /
+// -Remaining / -Reset on both the success and the 429 path. Limit is the
+// bucket burst (the policy quota), Remaining is the whole tokens left
+// after this request, Reset is the seconds until the bucket is full again.
+type rateLimitDecision struct {
+	allowed   bool
+	wait      time.Duration
+	limit     int
+	remaining int
+	reset     int
+	// known is false for an unknown class (fail-open) where there is no
+	// configured quota to report; the middleware then emits no headers.
+	known bool
+}
+
 // allow consults (and creates) the bucket for (class, key). Returns
 // allowed + the wait suggested by the limiter when blocked.
-func (l *apiRateLimiter) allow(class APIRateLimitClass, key string) (bool, time.Duration) {
+func (l *apiRateLimiter) allow(class APIRateLimitClass, key string) rateLimitDecision {
 	cfg, ok := l.configs[class]
 	if !ok {
 		// Unknown class: allow. Better to fail open on misconfig than
 		// to lock the whole API.
-		return true, 0
+		return rateLimitDecision{allowed: true}
 	}
 	return l.allowBucket(string(class)+":"+key, cfg)
 }
@@ -161,20 +177,21 @@ func (l *apiRateLimiter) allow(class APIRateLimitClass, key string) (bool, time.
 // independent buckets and stay unaffected. A class with no configured
 // ceiling, or a request with no resolvable cluster id, is not capped here
 // (the per-user limit still applies).
-func (l *apiRateLimiter) allowClusterCeiling(class APIRateLimitClass, clusterID string) (bool, time.Duration) {
+func (l *apiRateLimiter) allowClusterCeiling(class APIRateLimitClass, clusterID string) rateLimitDecision {
 	if clusterID == "" {
-		return true, 0
+		return rateLimitDecision{allowed: true}
 	}
 	cfg, ok := l.clusterCeilings[class]
 	if !ok {
-		return true, 0
+		return rateLimitDecision{allowed: true}
 	}
 	return l.allowBucket(string(class)+":cluster:"+clusterID, cfg)
 }
 
 // allowBucket is the shared token-bucket primitive: consult (and create)
-// the bucket at mapKey under cfg, returning allowed + suggested wait.
-func (l *apiRateLimiter) allowBucket(mapKey string, cfg APIRateLimitConfig) (bool, time.Duration) {
+// the bucket at mapKey under cfg, returning the allow/deny verdict plus the
+// standard-header inputs (limit/remaining/reset).
+func (l *apiRateLimiter) allowBucket(mapKey string, cfg APIRateLimitConfig) rateLimitDecision {
 	l.mu.Lock()
 	b, found := l.buckets[mapKey]
 	if !found {
@@ -186,16 +203,48 @@ func (l *apiRateLimiter) allowBucket(mapKey string, cfg APIRateLimitConfig) (boo
 	b.lastSeen = l.now()
 	l.mu.Unlock()
 
+	d := rateLimitDecision{known: true, limit: cfg.Burst}
 	if !b.lim.Allow() {
 		// Reserve to learn the wait. Cancel immediately so the reserved
 		// token returns to the bucket — the caller is being rejected, not
 		// throttled-and-served.
 		res := b.lim.Reserve()
-		wait := res.Delay()
+		d.wait = res.Delay()
 		res.Cancel()
-		return false, wait
+		d.allowed = false
+		d.remaining = 0
+		d.reset = rateLimitResetSeconds(d.wait)
+		return d
 	}
-	return true, 0
+	d.allowed = true
+	// Whole tokens left after consuming this request. TokensAt reflects the
+	// bucket state right after Allow() debited a token; floor so we never
+	// over-report headroom to a client.
+	d.remaining = int(b.lim.TokensAt(l.now()))
+	if d.remaining < 0 {
+		d.remaining = 0
+	}
+	// Seconds until the bucket refills to full burst from its current level.
+	if missing := cfg.Burst - d.remaining; missing > 0 && cfg.RatePerSecond > 0 {
+		d.reset = rateLimitResetSeconds(time.Duration(float64(missing)/cfg.RatePerSecond * float64(time.Second)))
+	}
+	return d
+}
+
+// rateLimitResetSeconds renders a duration as a whole-second count for the
+// RateLimit-Reset header (ceil, min 1 when there is any wait).
+func rateLimitResetSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+	secs := int(d.Seconds())
+	if d > time.Duration(secs)*time.Second {
+		secs++
+	}
+	if secs < 1 {
+		secs = 1
+	}
+	return secs
 }
 
 // evictExpired drops idle buckets. Same shape as the login limiter's
@@ -253,23 +302,42 @@ func apiRateLimitWith(ctx context.Context, class APIRateLimitClass, configs map[
 			// checking it first avoids spending a per-user token on a
 			// request the cluster gate would reject anyway.
 			clusterID := apiRateLimitClusterID(r)
-			if allowed, wait := limiter.allowClusterCeiling(class, clusterID); !allowed {
-				writeRateLimited(w, wait)
+			if d := limiter.allowClusterCeiling(class, clusterID); !d.allowed {
+				writeRateLimited(w, d)
 				return
 			}
 			key := apiRateLimitKey(r)
-			if allowed, wait := limiter.allow(class, key); !allowed {
-				writeRateLimited(w, wait)
+			d := limiter.allow(class, key)
+			if !d.allowed {
+				writeRateLimited(w, d)
 				return
 			}
+			// Advertise the per-caller quota on the success path so clients
+			// can self-pace before they ever hit a 429.
+			setRateLimitHeaders(w, d)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func writeRateLimited(w http.ResponseWriter, wait time.Duration) {
+// setRateLimitHeaders emits the IETF draft standard rate-limit headers
+// (RateLimit-Limit / -Remaining / -Reset) for a decision that carries a
+// known quota. Unknown-class (fail-open) decisions carry no quota and emit
+// nothing.
+func setRateLimitHeaders(w http.ResponseWriter, d rateLimitDecision) {
+	if !d.known {
+		return
+	}
+	h := w.Header()
+	h.Set("RateLimit-Limit", strconv.Itoa(d.limit))
+	h.Set("RateLimit-Remaining", strconv.Itoa(d.remaining))
+	h.Set("RateLimit-Reset", strconv.Itoa(d.reset))
+}
+
+func writeRateLimited(w http.ResponseWriter, d rateLimitDecision) {
+	setRateLimitHeaders(w, d)
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Retry-After", formatAPIRetryAfter(wait))
+	w.Header().Set("Retry-After", formatAPIRetryAfter(d.wait))
 	w.WriteHeader(http.StatusTooManyRequests)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"code":    "rate_limited",

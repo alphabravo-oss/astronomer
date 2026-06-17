@@ -63,6 +63,56 @@ func TestAPIRateLimitMiddleware_BurstThenBlock(t *testing.T) {
 	}
 }
 
+// The standard IETF rate-limit headers are present on both the success
+// path (advertising remaining headroom) and the 429 path (Remaining 0).
+func TestAPIRateLimitMiddleware_StandardHeaders(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	configs := map[APIRateLimitClass]APIRateLimitConfig{
+		"test": {RatePerSecond: 1.0, Burst: 2},
+	}
+	mw := apiRateLimitWith(ctx, "test", configs, time.Now)
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	do := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/anything", nil)
+		req.RemoteAddr = "10.9.9.9:1111"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	first := do()
+	if first.Code != http.StatusNoContent {
+		t.Fatalf("first status = %d", first.Code)
+	}
+	if first.Header().Get("RateLimit-Limit") != "2" {
+		t.Errorf("RateLimit-Limit = %q, want 2", first.Header().Get("RateLimit-Limit"))
+	}
+	if first.Header().Get("RateLimit-Remaining") == "" {
+		t.Error("success response must carry RateLimit-Remaining")
+	}
+	if first.Header().Get("RateLimit-Reset") == "" {
+		t.Error("success response must carry RateLimit-Reset")
+	}
+
+	// Exhaust the burst, then assert the 429 carries Remaining 0.
+	do()
+	blocked := do()
+	if blocked.Code != http.StatusTooManyRequests {
+		t.Fatalf("third call should be 429, got %d", blocked.Code)
+	}
+	if blocked.Header().Get("RateLimit-Limit") != "2" {
+		t.Errorf("429 RateLimit-Limit = %q, want 2", blocked.Header().Get("RateLimit-Limit"))
+	}
+	if blocked.Header().Get("RateLimit-Remaining") != "0" {
+		t.Errorf("429 RateLimit-Remaining = %q, want 0", blocked.Header().Get("RateLimit-Remaining"))
+	}
+}
+
 // Distinct callers (different keys) must not share buckets. The test
 // uses different RemoteAddr values to drive the key derivation.
 func TestAPIRateLimitMiddleware_PerCallerBuckets(t *testing.T) {
@@ -164,12 +214,12 @@ func TestAPIRateLimit_PerClusterCeiling_ManyUsersOnOneCluster(t *testing.T) {
 
 	mw := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if allowed, wait := limiter.allowClusterCeiling(class, apiRateLimitClusterID(r)); !allowed {
-				writeRateLimited(w, wait)
+			if d := limiter.allowClusterCeiling(class, apiRateLimitClusterID(r)); !d.allowed {
+				writeRateLimited(w, d)
 				return
 			}
-			if allowed, wait := limiter.allow(class, apiRateLimitKey(r)); !allowed {
-				writeRateLimited(w, wait)
+			if d := limiter.allow(class, apiRateLimitKey(r)); !d.allowed {
+				writeRateLimited(w, d)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -298,12 +348,12 @@ func TestAPIRateLimit_PerUserLimitStillEnforced(t *testing.T) {
 
 	mw := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if allowed, wait := limiter.allowClusterCeiling(class, apiRateLimitClusterID(r)); !allowed {
-				writeRateLimited(w, wait)
+			if d := limiter.allowClusterCeiling(class, apiRateLimitClusterID(r)); !d.allowed {
+				writeRateLimited(w, d)
 				return
 			}
-			if allowed, wait := limiter.allow(class, apiRateLimitKey(r)); !allowed {
-				writeRateLimited(w, wait)
+			if d := limiter.allow(class, apiRateLimitKey(r)); !d.allowed {
+				writeRateLimited(w, d)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -339,8 +389,7 @@ func TestAPIRateLimit_PerUserLimitStillEnforced(t *testing.T) {
 // route is wired with a typo'd class name.
 func TestAPIRateLimiter_UnknownClassAllows(t *testing.T) {
 	lim := newAPIRateLimiter(map[APIRateLimitClass]APIRateLimitConfig{}, nil)
-	allowed, _ := lim.allow("typo-class", "anyone")
-	if !allowed {
+	if d := lim.allow("typo-class", "anyone"); !d.allowed {
 		t.Error("unknown class must fail open, not block")
 	}
 }

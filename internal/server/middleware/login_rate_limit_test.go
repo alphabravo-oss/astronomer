@@ -14,18 +14,18 @@ func TestLoginRateLimiterAllowAndReset(t *testing.T) {
 	now := time.Unix(0, 0)
 	limiter := newLoginRateLimiter(2, time.Minute, func() time.Time { return now })
 
-	if allowed, _ := limiter.allow("127.0.0.1"); !allowed {
+	if d := limiter.allow("127.0.0.1"); !d.allowed {
 		t.Fatal("first attempt should pass")
 	}
-	if allowed, _ := limiter.allow("127.0.0.1"); !allowed {
+	if d := limiter.allow("127.0.0.1"); !d.allowed {
 		t.Fatal("second attempt should pass")
 	}
-	if allowed, retryAfter := limiter.allow("127.0.0.1"); allowed || retryAfter <= 0 {
-		t.Fatalf("third attempt should be blocked with retryAfter>0, got allowed=%v retryAfter=%v", allowed, retryAfter)
+	if d := limiter.allow("127.0.0.1"); d.allowed || d.retryAfter <= 0 {
+		t.Fatalf("third attempt should be blocked with retryAfter>0, got allowed=%v retryAfter=%v", d.allowed, d.retryAfter)
 	}
 
 	now = now.Add(time.Minute + time.Second)
-	if allowed, _ := limiter.allow("127.0.0.1"); !allowed {
+	if d := limiter.allow("127.0.0.1"); !d.allowed {
 		t.Fatal("attempt after window reset should pass")
 	}
 }
@@ -48,6 +48,13 @@ func TestLoginRateLimitMiddlewareReturnsJSON429(t *testing.T) {
 	if firstRec.Code != http.StatusNoContent {
 		t.Fatalf("expected first status 204, got %d", firstRec.Code)
 	}
+	// Standard headers on the allowed response: limit 1, 0 remaining.
+	if got := firstRec.Header().Get("RateLimit-Limit"); got != "1" {
+		t.Fatalf("first RateLimit-Limit=%q, want 1", got)
+	}
+	if got := firstRec.Header().Get("RateLimit-Remaining"); got != "0" {
+		t.Fatalf("first RateLimit-Remaining=%q, want 0", got)
+	}
 
 	second := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", nil)
 	second.RemoteAddr = "198.51.100.10:5678"
@@ -59,6 +66,12 @@ func TestLoginRateLimitMiddlewareReturnsJSON429(t *testing.T) {
 	}
 	if got := secondRec.Header().Get("Retry-After"); got != "60" {
 		t.Fatalf("expected Retry-After=60, got %q", got)
+	}
+	if got := secondRec.Header().Get("RateLimit-Limit"); got != "1" {
+		t.Fatalf("429 RateLimit-Limit=%q, want 1", got)
+	}
+	if got := secondRec.Header().Get("RateLimit-Remaining"); got != "0" {
+		t.Fatalf("429 RateLimit-Remaining=%q, want 0", got)
 	}
 	if nextCalls != 1 {
 		t.Fatalf("expected next handler to be called once, got %d", nextCalls)
