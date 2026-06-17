@@ -71,12 +71,40 @@ dashboard can perform, this CLI can — and vice versa.`,
 	// credential-less invocations (CI, automation) without `astro login`.
 	root.PersistentFlags().String("token", "", "API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)")
 
+	// Cobra renders --help alphabetically by command name regardless of
+	// registration order; the grouping below is purely for readability.
 	root.AddCommand(
+		// Auth & session.
 		newLoginCmd(),
 		newLogoutCmd(),
 		newWhoamiCmd(),
+
+		// Cluster & in-cluster access.
 		newClusterCmd(),
 		newK8sCmd(),
+		newNodesCmd(),
+		newWorkloadsCmd(),
+
+		// Fleet & lifecycle operations.
+		newFleetCmd(),
+		newBackupCmd(),
+		newMonitoringCmd(),
+
+		// Catalog & GitOps.
+		newCatalogCmd(),
+		newArgocdCmd(),
+
+		// Tenancy: projects, identity, access control.
+		newProjectsCmd(),
+		newUsersCmd(),
+		newRbacCmd(),
+
+		// Platform administration & observability.
+		newAdminCmd(),
+		newSettingsCmd(),
+		newAuditCmd(),
+
+		// CLI meta.
 		newDocsCmd(),
 		newConfigCmd(),
 		newCompletionCmd(),

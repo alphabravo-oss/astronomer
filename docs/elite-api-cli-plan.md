@@ -29,9 +29,13 @@ mechanical refactor behind unchanged behaviour, guarded by the existing tests.
       set of risky cross-field/domain-coded validations was deliberately left on
       hand-rolled checks to preserve 400 codes — see C2 below.* Today:
       hand-rolled `if req.X == ""` per handler.
-- [ ] **The CLI can drive every resource the API exposes**, with global
-      `--output`, shell completion, and config management. Today: auth/cluster/
-      k8s/docs only.
+- [x] **The CLI can drive every resource the API exposes**, with global
+      `--output`, shell completion, and config management. *DONE (G2): 13
+      SDK-backed command groups — projects, fleet, nodes, workloads, backup,
+      monitoring, catalog, argocd, rbac, admin, users, settings, audit — wired
+      into root over the generated `pkg/astroclient`; build/vet GREEN, `-o
+      table|json|yaml` honored on every command.* Today: auth/cluster/k8s/docs
+      plus the 13 generated groups.
 - [ ] **A generated, versioned SDK** (at least Go + TypeScript) ships from the
       spec. *PARTIAL: a generated Go SDK (`pkg/astroclient`, oapi-codegen v2.5.0)
       now ships and builds GREEN (H1); the TypeScript side is still only the
@@ -209,10 +213,16 @@ first-class.
 
 - [x] **G1.** Global `--output table|json|yaml` (replace per-command `--json`);
       a shared renderer so every command supports all three. (M)
-- [ ] **G2.** Generate command groups from the OpenAPI spec (or a thin
+- [x] **G2.** Generate command groups from the OpenAPI spec (or a thin
       generated client) so the CLI tracks the API: `astro tools`, `astro argocd`,
       `astro projects`, `astro rbac`, `astro settings`, `astro backup`,
-      `astro logs`, `astro monitoring`, `astro audit`. (L)
+      `astro logs`, `astro monitoring`, `astro audit`. (L) **DONE** — 13
+      command groups built on a shared `cmd/astro/client.go` foundation
+      (`newAstroClient` injects the Bearer-auth `RequestEditorFn`; `renderSDK`
+      routes typed SDK bodies through the global `-o/--output` renderer). Each
+      group calls the verified generated `pkg/astroclient` `*WithResponse`
+      methods. Wired into root in `main.go`; `go build`/`go vet ./cmd/astro/`
+      GREEN. Dogfoods the H1 Go SDK (closes that H1 caveat).
 - [x] **G3.** `astro completion bash|zsh|fish|powershell` (Cobra built-in, wire
       it up) + docs. (S)
 - [x] **G4.** `astro config` subcommand (get/set/use-context) for multiple
@@ -709,3 +719,130 @@ cross-ref; 6 has Go-only/ungated SDK), 1 not met (5 — CLI parity via G2).**
 - **C2 remainder** — the deferred domain-coded/cross-field validators.
 - **B4 cross-ref** — reference the catalog codes from OpenAPI error responses,
   and wire `make error-codes-check` into CI.
+
+---
+
+## Run log (undefined) — G2 CLI parity
+
+The CLI-parity pass: a foundation client wrapper plus 13 SDK-backed command
+groups generated against `pkg/astroclient`, all wired into the root command.
+Closes exit criterion 5 ("CLI can drive every resource") and the dogfood caveat
+left open by H1. Build GREEN across the tree, `go vet ./cmd/astro/` clean, the
+`astro` binary builds and `--help` lists every group; the global `-o/--output`
+flag parses and is honored on every command.
+
+### Foundation — `cmd/astro/client.go` (DONE, verified)
+
+- New `cmd/astro/client.go` exposing the shared dependency every group uses:
+  - `newAstroClient(cmd) (*astroclient.ClientWithResponses, error)` — resolves
+    server URL + bearer token reusing the existing `authedClient`/`bearerOverride`
+    plumbing (precedence unchanged: `--server` > stored `ServerURL`; `--token` >
+    `$ASTRO_API_TOKEN` > stored `AccessToken`), and wires the generated SDK with
+    a `WithRequestEditorFn` that sets `Authorization: Bearer <token>` on every
+    request. This is the Bearer-auth `NewClient` wrapper G2 needed — **dogfoods
+    the H1 Go SDK**, closing H1's "cmd/astro does NOT yet consume it" caveat.
+  - `renderSDK(cmd, body)` — routes any typed SDK JSON body through the existing
+    `render()`/output.go path so `-o table|json|yaml` is honored uniformly.
+- **Table-rendering fix (high-severity):** `writeGenericTable` originally used a
+  Go type switch (`case []any` / `map[string]any`), which only matches the exact
+  dynamic type — so the *typed* payloads every group passes (`[]Project`,
+  `*AgentFleetResponse`, typed monitoring/rbac structs) fell through to a `%v`
+  dump, making `-o table` unusable for list/get. Fixed by round-tripping any
+  non-dynamic payload through `json.Marshal`/`Unmarshal` into a generic `any`
+  before the type switch, so typed slices become `[]any` (column table) and
+  typed structs become `map[string]any` (KEY/VALUE table). `-o json`/`-o yaml`
+  untouched; scalars/nil unchanged. Verified a typed `[]Project` now prints an
+  ID/NAME column table.
+
+### Command groups — 13 SDK-backed groups (DONE, verified)
+
+Each group is its own file in package `main`, exposes a `newXxxCmd()
+*cobra.Command`, builds the client via `newAstroClient`, calls verified
+generated `pkg/astroclient` `*WithResponse` methods, renders via
+`renderSDK`/bespoke tables, parses path UUIDs up front with clean errors, and
+maps non-2xx responses to a non-zero exit via a group-namespaced SDK-error
+helper (prefers the typed `ErrorEnvelope` code+message, falls back to raw
+body/HTTP status):
+
+- **projects** (`projects.go.go`) — list/get/create/update/delete, clusters,
+  add-/remove-namespace, quota, policy, takeover, plus `cloud-credentials`
+  list/get/create/update/delete/test.
+- **fleet** (`fleet.go`) — agent fleet inspection + fleet/cluster lifecycle ops.
+- **nodes** (`nodes.go.go`) — node inspect/manage.
+- **workloads** (`workloads.go`) — list/get/pods/delete/scale/restart/logs,
+  pod delete, operations list/get/retry, controller-status.
+- **backup** (`backup.go`) — backups list/get/create/delete/restore, runs,
+  restores, schedules (+trigger), storage, storage-configs, controller-status
+  (28 generated methods).
+- **monitoring** (`monitoring.go`) — metrics, metrics-summary, health,
+  conditions, condition-remediation, vulnerabilities (summary/images), events,
+  service-mesh (get/inventory/mtls/detect/validate).
+- **catalog** (`catalog.go`) — charts/repositories/installs/operations.
+- **argocd** (`argocd.go`) — ArgoCD instance inspection + UI/k8s proxy.
+- **rbac** (`rbac.go`) — roles, bindings, permissions.
+- **admin** (`admin.go`) — SMTP, webhooks, vault, network policies, keys.
+- **users** (`users.go`) — list/get/create/update/delete, reset-password,
+  admin unlock/force-logout/disable-totp.
+- **settings** (`settings.go.go`) — general get/set, features, tokens, sso,
+  audit-logs.
+- **audit** (`audit.go`) — audit logs, activity feed, alerting, API tools,
+  extensions.
+
+### Integration — root wiring (DONE, verified)
+
+- `cmd/astro/main.go` wires all 13 `newXxxCmd()` constructors into
+  `root.AddCommand(...)` alongside the existing auth/cluster/k8s/docs commands.
+- Repairs to make the package link: deleted a duplicate `audit.go.go` (it
+  redeclared `newAuditCmd` + ~20 siblings already in `audit.go`); fixed
+  `fleet.go`'s references to non-existent shared helpers (added file-local
+  `fleetLimitOffsetFlags`/`fleetPageParam`/`fleetSDKError` + a `net/http`
+  import, and `parseUUID(args[0])` → `parseUUID("id", args[0])`). Cross-group
+  helper collisions were avoided by each group namespacing its private helpers
+  (`bk*`, `mon*`, `project*`, `users*`, `settings*`, `fleet*`, `workload*`).
+
+### Build / verification status (verified this pass)
+
+- `go build ./...` — exit 0. `go vet ./cmd/astro/...` — exit 0.
+- `go build -o /tmp/astro ./cmd/astro` — exit 0; binary produced.
+- `astro --help` — lists all groups: admin, argocd, audit, backup, catalog,
+  cluster, completion, config, docs, fleet, k8s, login, logout, monitoring,
+  nodes, projects, rbac, settings, users, whoami, workloads. Global
+  `-o/--output table|json|yaml`, `--json`, `--server`, `--token` present at root.
+- `astro backup list -o json` (no server) parses `-o json` cleanly and fails
+  only on "no server configured", confirming flag parsing works end-to-end.
+- Reverted: nothing (one duplicate-file deletion; the table-render bug fixed
+  forward).
+
+### What remains after G2 (the still-open tail)
+
+- **D5** — cursor/keyset pagination for the big tables (`audit_logs`,
+  `kubectl_session_commands`) where offset is O(n). (also D2 COUNT backfill,
+  D4 stable ordering + `sort`/`order`.)
+- **A6** — publish the versioned `docs/openapi.yaml` spec artifact + a
+  breaking-change changelog to releases.
+- **H2** — full TypeScript client (today the TS side is generated *types* only,
+  not a client); **H3** — version both SDKs and add an `sdk-check` CI drift gate
+  mirroring `check-sqlc-generated.sh` (the `api-contract.yaml` gate does not yet
+  regenerate/diff `pkg/astroclient`).
+- **Stub-schema fidelity** — replace the ~31 permissive
+  `additionalProperties`/`map[string]interface{}` stub schemas with
+  authoritative field shapes; this also tightens the SDK types the CLI groups
+  render, which is why a few group `-o table` views fall back to single-value
+  output for loosely-typed payloads.
+- **CLI followups (non-blocking for criterion 5):** rename the three doubled
+  `.go.go` files (`projects.go.go`, `settings.go.go`, `nodes.go.go`) to `.go`
+  for hygiene (they compile today since Go globs `*.go`); a few endpoints with
+  no typed request body in the generated SDK (e.g. `audit` alerting-channels
+  create, which takes no body) or oneOf-union bodies (`service-mesh validate`,
+  driven via the `WithBody` variant + `--file`) are GAP-noted and clear once the
+  SDK is regenerated with richer schemas; **G6** (error-catalog-mapped exit
+  codes + `--debug` tracing + `NO_COLOR`) and **G7** (man pages, ship
+  completions in the release tarball) are still open CLI ergonomics.
+
+### Updated elite scorecard
+
+Criterion 5 (**CLI drives every resource**) flips **NOT MET → MET**. Net now:
+**5 of 7 fully met (1, 3, 4, 5, 7)**, 2 partial (criterion 2 lacks the OpenAPI
+error-response cross-ref; criterion 6 — SDK — is Go-only/ungated: H1 ships and
+is now *dogfooded by the CLI*, but H2 full TS client and H3 versioning/drift
+gate remain).
