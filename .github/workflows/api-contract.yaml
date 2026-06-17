@@ -1,0 +1,62 @@
+name: api-contract
+
+# API contract gate. Proves the Go API surface still builds, vets, and passes
+# its handler/server/auth/middleware tests, AND that the OpenAPI spec, generated
+# TypeScript types, the golden route table, and the apierror catalog are all in
+# sync with the committed tree. Each command is a separate, clearly-named step so
+# a non-zero exit pins the failure to one contract.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-contract:
+    name: api contract gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The openapi .mjs scripts resolve js-yaml via createRequire from
+      # frontend/package.json, so the frontend deps must be installed first.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Go build
+        run: go build ./...
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: API package tests
+        run: go test ./internal/handler/ ./internal/server/ ./internal/auth/ ./internal/server/middleware/ -count=1
+
+      - name: OpenAPI coverage check
+        run: node scripts/openapi-coverage.mjs --check
+
+      - name: OpenAPI generated types check
+        run: node scripts/generate-openapi-types.mjs --check
+
+      - name: Route table golden check
+        run: go test ./internal/server/ -run RouteTable -count=1
+
+      - name: Apierror catalog coverage (lint)
+        run: go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1

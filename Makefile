@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vet run sqlc sqlc-generate sqlc-check \
+.PHONY: help build test lint fmt vet run verify sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -17,6 +17,10 @@ LDFLAGS      = -s -w \
 DATABASE_URL ?= postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
 SQLC_VERSION ?= v1.31.1
 SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+
+# Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
+OAPI_CODEGEN_VERSION ?= v2.5.0
+OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
 # Image naming — override IMG_TAG=... to push semantic versions.
 IMG_TAG     ?= $(VERSION)
@@ -74,8 +78,23 @@ fmt: ## Format Go source files
 vet: ## Vet Go source files
 	go vet ./...
 
+verify: ## Run the api-contract CI gate locally (mirrors .github/workflows/api-contract.yaml)
+	go build ./...
+	go vet ./...
+	go test ./internal/handler/ ./internal/server/ ./internal/auth/ ./internal/server/middleware/ -count=1
+	node scripts/openapi-coverage.mjs --check
+	node scripts/generate-openapi-types.mjs --check
+	go test ./internal/server/ -run RouteTable -count=1
+	go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1
+
 run: ## Run the server locally
 	go run -ldflags '$(LDFLAGS)' ./cmd/server
+
+error-codes: ## Regenerate docs/error-codes.md from internal/handler/apierror/codes.go
+	node scripts/error-code-docs.mjs --write
+
+error-codes-check: ## Fail if docs/error-codes.md is stale vs the apierror catalog
+	node scripts/error-code-docs.mjs --check
 
 sqlc-generate: ## Generate sqlc code
 	$(SQLC) generate
@@ -84,6 +103,9 @@ sqlc: sqlc-generate ## Alias for sqlc-generate
 
 sqlc-check: ## Regenerate sqlc and fail if generated files are stale
 	SQLC_VERSION=$(SQLC_VERSION) ./scripts/check-sqlc-generated.sh
+
+sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
+	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml
 
 migrate-up: ## Run all migrations up
 	migrate -database "$(DATABASE_URL)" -path internal/db/migrations up
