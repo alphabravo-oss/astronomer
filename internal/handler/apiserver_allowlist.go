@@ -294,8 +294,7 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req AllowlistUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	if req.Mode == "" {

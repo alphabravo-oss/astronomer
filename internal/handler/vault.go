@@ -307,6 +307,7 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"auth_method": row.AuthMethod,
 		"namespace":   row.Namespace,
 	})
+	w.Header().Set("Location", "/api/v1/admin/vault-connections/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.toResponse(row, true))
 }
 

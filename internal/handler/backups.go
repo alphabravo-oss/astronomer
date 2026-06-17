@@ -250,9 +250,9 @@ func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Reques
 
 // CreateStorageConfigRequest represents the request body for creating a storage config.
 type CreateStorageConfigRequest struct {
-	Name            string `json:"name"`
+	Name            string `json:"name" validate:"required"`
 	StorageType     string `json:"storage_type"`
-	Bucket          string `json:"bucket"`
+	Bucket          string `json:"bucket" validate:"required"`
 	Prefix          string `json:"prefix"`
 	Region          string `json:"region"`
 	EndpointURL     string `json:"endpoint_url"`
@@ -267,17 +267,7 @@ type CreateStorageConfigRequest struct {
 // CreateStorageConfig handles POST /api/v1/backups/storage/.
 func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Request) {
 	var req CreateStorageConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Storage config name is required")
-		return
-	}
-	if req.Bucket == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Bucket is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -341,6 +331,7 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 		"is_default":   config.IsDefault,
 	})
 
+	w.Header().Set("Location", "/api/v1/backups/storage/"+config.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.storageResponse(config))
 }
 
@@ -523,7 +514,7 @@ func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 
 // CreateBackupRequest represents the request body for creating a backup.
 type CreateBackupRequest struct {
-	Name               string          `json:"name"`
+	Name               string          `json:"name" validate:"required"`
 	StorageID          string          `json:"storage_id"`
 	BackupType         string          `json:"backup_type"`
 	DatabaseTables     json.RawMessage `json:"database_tables"`
@@ -534,13 +525,7 @@ type CreateBackupRequest struct {
 // CreateBackup handles POST /api/v1/backups/.
 func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	var req CreateBackupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Backup name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -600,6 +585,7 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		"on_demand":   true,
 	})
 
+	w.Header().Set("Location", "/api/v1/backups/"+backup.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, backupToResponse(backup))
 }
 
@@ -670,10 +656,10 @@ func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 
 // CreateScheduleRequest represents the request body for creating a backup schedule.
 type CreateScheduleRequest struct {
-	Name               string   `json:"name"`
+	Name               string   `json:"name" validate:"required"`
 	StorageID          string   `json:"storage_id"`
 	BackupType         string   `json:"backup_type"`
-	CronExpression     string   `json:"cron_expression"`
+	CronExpression     string   `json:"cron_expression" validate:"required"`
 	RetentionCount     int32    `json:"retention_count"`
 	Enabled            bool     `json:"enabled"`
 	ClusterID          string   `json:"cluster_id"`
@@ -686,17 +672,7 @@ type CreateScheduleRequest struct {
 // CreateSchedule handles POST /api/v1/backups/schedules/.
 func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	var req CreateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Schedule name is required")
-		return
-	}
-	if req.CronExpression == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Cron expression is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -764,6 +740,7 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		"retention_count": schedule.RetentionCount,
 	})
 
+	w.Header().Set("Location", "/api/v1/backups/schedules/"+schedule.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, backupScheduleToResponse(schedule))
 }
 
@@ -954,6 +931,7 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 		"backup_name": backup.Name,
 	})
 
+	w.Header().Set("Location", "/api/v1/backups/"+backup.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, backupToResponse(backup))
 }
 
@@ -1023,6 +1001,7 @@ func (h *BackupHandler) CreateRestore(w http.ResponseWriter, r *http.Request) {
 		"included_namespaces": req.IncludedNamespaces,
 	})
 
+	w.Header().Set("Location", "/api/v1/backups/restores/"+restore.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, restoreOperationToResponse(restore))
 }
 

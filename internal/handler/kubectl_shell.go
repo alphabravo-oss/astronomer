@@ -279,6 +279,7 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 		"elevation_request": elevate,
 		"elevated":          elevated,
 	})
+	w.Header().Set("Location", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/"+info.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, info)
 }
 
@@ -303,7 +304,9 @@ func (h *KubectlShellHandler) List(w http.ResponseWriter, r *http.Request) {
 		count, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
 		out = append(out, kubectl.ToSessionInfo(row, count, h.idleTimeout()))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// Active-session list is unpaginated (no limit/offset, no COUNT query);
+	// report the page length as the total. // TODO(total)
+	RespondList(w, out, NewPagination(len(out), queryInt(r, "limit", 0), queryInt(r, "offset", 0), len(out)))
 }
 
 // Get handles GET /clusters/{cluster_id}/shell/sessions/{id}/.
@@ -398,7 +401,9 @@ func (h *KubectlShellHandler) AdminListAll(w http.ResponseWriter, r *http.Reques
 		count, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
 		out = append(out, kubectl.ToSessionInfo(row, count, h.idleTimeout()))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// Admin active-session list is unpaginated (no limit/offset, no COUNT
+	// query); report the page length as the total. // TODO(total)
+	RespondList(w, out, NewPagination(len(out), queryInt(r, "limit", 0), queryInt(r, "offset", 0), len(out)))
 }
 
 // AdminCommands handles GET /admin/shell-sessions/{id}/commands/.

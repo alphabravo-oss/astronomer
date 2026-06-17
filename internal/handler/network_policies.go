@@ -346,6 +346,7 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 	recordAudit(r, h.queries, "admin.network_policy_template.created", "network_policy_template", tmpl.ID.String(), tmpl.Name, map[string]any{
 		"slug": tmpl.Slug,
 	})
+	w.Header().Set("Location", "/api/v1/admin/network-policy-templates/"+tmpl.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, networkPolicyTemplateToResponse(tmpl))
 }
 
@@ -458,7 +459,11 @@ func (h *NetworkPolicyHandler) ListApplications(w http.ResponseWriter, r *http.R
 		}
 		resp = append(resp, networkPolicyApplicationToResponse(a, slug))
 	}
-	RespondJSON(w, http.StatusOK, resp)
+	// ListApplicationsForCluster returns the full per-cluster set in one
+	// shot (no SQL limit/offset), so the page is the whole result and the
+	// total is its length. // TODO(total): add a counted, paged query if
+	// per-cluster application counts ever grow unbounded.
+	RespondList(w, resp, NewPagination(len(resp), len(resp), 0, len(resp)))
 }
 
 // CreateApplications handles POST /api/v1/clusters/{cluster_id}/network-policies/applications/.

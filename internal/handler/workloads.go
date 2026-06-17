@@ -606,7 +606,10 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i]["name"].(string) < items[j]["name"].(string) })
-	RespondJSON(w, http.StatusOK, items)
+	// Namespaces come straight from the cluster's API unpaginated; there is no
+	// COUNT query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 }
 
 func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
@@ -616,7 +619,10 @@ func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, nodes)
+	// Nodes come straight from the cluster's API unpaginated; there is no COUNT
+	// query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, nodes, NewPagination(len(nodes), limit, offset, len(nodes)))
 }
 
 func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
@@ -658,7 +664,11 @@ func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 			"lastTimestamp":  evt.LastTimestamp,
 		})
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// Events come straight from the cluster's API (capped by the limit query
+	// param the agent honours); there is no COUNT query, so Total is the page
+	// length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 }
 
 func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
@@ -669,7 +679,10 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, pods)
+	// Pods come straight from the cluster's API unpaginated; there is no COUNT
+	// query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, pods, NewPagination(len(pods), limit, offset, len(pods)))
 }
 
 func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Request) {
@@ -685,7 +698,10 @@ func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, pods)
+	// Selector-scoped pods come straight from the cluster's API unpaginated;
+	// there is no COUNT query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, pods, NewPagination(len(pods), limit, offset, len(pods)))
 }
 
 func (h *WorkloadHandler) DeletePod(w http.ResponseWriter, r *http.Request) {

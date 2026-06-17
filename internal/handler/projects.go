@@ -299,7 +299,7 @@ func projectToResponse(p sqlc.Project) ProjectResponse {
 //   - PodSecurityProfile: omitted ⇒ defaultPodSecurityProfile (baseline).
 //   - ResourceQuota*:     omitted ⇒ unbounded (empty string / 0).
 type CreateProjectRequest struct {
-	Name                     string          `json:"name"`
+	Name                     string          `json:"name" validate:"required"`
 	DisplayName              string          `json:"display_name"`
 	Description              string          `json:"description"`
 	ClusterID                string          `json:"cluster_id"`
@@ -378,13 +378,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateProjectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Project name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -466,6 +460,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, ns)
 	}
 
+	w.Header().Set("Location", "/api/v1/projects/"+project.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, projectToResponse(project))
 }
 

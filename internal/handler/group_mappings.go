@@ -260,6 +260,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"cluster_id":   uuidPgOrEmpty(row.ClusterID),
 		"project_id":   uuidPgOrEmpty(row.ProjectID),
 	})
+	w.Header().Set("Location", "/api/v1/admin/group-mappings/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toGroupMappingResponse(row))
 }
 

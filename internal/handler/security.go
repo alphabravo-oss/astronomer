@@ -205,7 +205,7 @@ func (h *SecurityHandler) controllerSummary(ctx context.Context) (map[string]any
 
 // CreateTemplateRequest represents the request body for creating a pod security template.
 type CreateTemplateRequest struct {
-	Name                 string          `json:"name"`
+	Name                 string          `json:"name" validate:"required"`
 	Description          string          `json:"description"`
 	IsDefault            bool            `json:"is_default"`
 	EnforceLevel         string          `json:"enforce_level"`
@@ -247,13 +247,7 @@ func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 // CreateTemplate handles POST /api/v1/security/templates/.
 func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var req CreateTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Template name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -297,6 +291,7 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 		"is_default":    template.IsDefault,
 	})
 
+	w.Header().Set("Location", "/api/v1/security/templates/"+template.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, template)
 }
 
@@ -464,8 +459,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		ClusterID  uuid.UUID `json:"cluster_id"`
 		TemplateID uuid.UUID `json:"template_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	policy, err := h.queries.CreateClusterSecurityPolicy(r.Context(), sqlc.CreateClusterSecurityPolicyParams{
@@ -481,6 +475,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		"cluster_id":  req.ClusterID.String(),
 		"template_id": req.TemplateID.String(),
 	})
+	w.Header().Set("Location", "/api/v1/security/policies/"+policy.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, policy)
 }
 
@@ -566,8 +561,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		Profile  string `json:"profile"`
 		ScanType string `json:"scan_type"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	if req.ClusterID == uuid.Nil {
@@ -644,6 +638,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		"profile":    profile,
 	})
 
+	w.Header().Set("Location", "/api/v1/security/scans/"+scan.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, scanWithFindings(scan))
 }
 

@@ -1435,6 +1435,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	if respScopes == nil {
 		respScopes = []string{}
 	}
+	w.Header().Set("Location", "/api/v1/auth/tokens/"+token.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, CreateTokenResponse{
 		ID:           token.ID.String(),
 		Name:         token.Name,

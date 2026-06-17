@@ -219,6 +219,7 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		"max_projects_per_user":    p.MaxProjectsPerUser,
 		"max_tokens_per_user":      p.MaxTokensPerUser,
 	})
+	w.Header().Set("Location", "/api/v1/admin/quota-plans/"+p.Name+"/")
 	RespondJSON(w, http.StatusCreated, planToResponse(p))
 }
 

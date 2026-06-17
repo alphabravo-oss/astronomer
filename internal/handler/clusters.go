@@ -704,6 +704,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// drift_check sweep picks up any 'pending' row left behind.
 	h.autoAttachDefaultTemplate(r, cluster.ID)
 
+	w.Header().Set("Location", "/api/v1/clusters/"+cluster.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, clusterToResponse(cluster))
 }
 
@@ -812,8 +813,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req UpdateClusterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -1273,7 +1273,8 @@ func (h *ClusterHandler) ListConditions(w http.ResponseWriter, r *http.Request) 
 			LastProbeTime:      c.LastProbeTime.UTC().Format(time.RFC3339),
 		})
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// TODO(total): no COUNT query for cluster conditions; use page length.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // GenerateRegistrationToken handles POST /api/v1/clusters/{id}/register/.
@@ -1451,7 +1452,8 @@ func (h *ClusterHandler) ListConditionRemediation(w http.ResponseWriter, r *http
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list remediation attempts")
 		return
 	}
-	RespondJSON(w, http.StatusOK, rows)
+	// TODO(total): no COUNT query for remediation attempts; use page length.
+	RespondList(w, rows, NewPagination(len(rows), len(rows), 0, len(rows)))
 }
 
 // GetCABundle handles GET /api/v1/register/ca.crt.
@@ -1807,8 +1809,7 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 	}
 
 	var req UpdateRegistryConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	registryPassword, registryPasswordEncrypted, err := h.encryptLegacyRegistryPassword(req.RegistryPassword)

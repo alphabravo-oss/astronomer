@@ -439,6 +439,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render created credential")
 		return
 	}
+	w.Header().Set("Location", fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/%s/", projectID.String(), created.ID.String()))
 	RespondJSON(w, http.StatusCreated, resp)
 }
 

@@ -40,6 +40,26 @@ func NewPagination(total, limit, offset, pageLen int) Pagination {
 	return p
 }
 
+// NewPaginationFromPage builds a Pagination for endpoints that run a real
+// LIMIT/OFFSET query but have no COUNT available for the total. Total is left
+// as the running count seen so far (offset+pageLen), and HasMore is inferred
+// from the page being full: when the DB returns exactly `limit` rows, more rows
+// may exist beyond this page, so NextOffset advances by the page length. This
+// avoids the always-false HasMore that results from passing pageLen as Total.
+func NewPaginationFromPage(limit, offset, pageLen int) Pagination {
+	p := Pagination{
+		Total:  offset + pageLen,
+		Limit:  limit,
+		Offset: offset,
+	}
+	if limit > 0 && pageLen >= limit {
+		p.HasMore = true
+		next := offset + pageLen
+		p.NextOffset = &next
+	}
+	return p
+}
+
 // RespondList writes a list response of the shape:
 //
 //	{"data": [...], "pagination": {...}}

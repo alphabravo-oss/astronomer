@@ -93,7 +93,7 @@ func (h *AlertingHandler) SetEnqueuer(e tasks.Enqueuer) { h.enqueuer = e }
 
 // CreateChannelRequest represents the request body for creating a notification channel.
 type CreateChannelRequest struct {
-	Name          string          `json:"name"`
+	Name          string          `json:"name" validate:"required"`
 	ChannelType   string          `json:"channel_type"`
 	Type          string          `json:"type"`
 	Configuration json.RawMessage `json:"configuration"`
@@ -108,7 +108,7 @@ type CreateChannelRequest struct {
 // AnomalyStddev + AnomalyWindowSeconds; the other anomaly fields
 // default sensibly (stddev=3, direction=above, min_samples=50).
 type CreateAlertRuleRequest struct {
-	Name                   string            `json:"name"`
+	Name                   string            `json:"name" validate:"required"`
 	Description            string            `json:"description"`
 	ClusterID              *uuid.UUID        `json:"cluster_id"`
 	RuleType               string            `json:"rule_type"`
@@ -139,7 +139,7 @@ type CreateAlertRuleRequest struct {
 type CreateSilenceRequest struct {
 	RuleID    *uuid.UUID        `json:"rule_id"`
 	ClusterID *uuid.UUID        `json:"cluster_id"`
-	Reason    string            `json:"reason"`
+	Reason    string            `json:"reason" validate:"required"`
 	StartsAt  time.Time         `json:"starts_at"`
 	EndsAt    time.Time         `json:"ends_at"`
 	Duration  string            `json:"duration"`
@@ -166,19 +166,14 @@ func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
 	for _, channel := range channels {
 		items = append(items, notificationChannelResponse(channel))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	total, _ := h.queries.CountNotificationChannels(r.Context())
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
 
 // CreateChannel handles POST /api/v1/alerting/channels/.
 func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	var req CreateChannelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Channel name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -224,6 +219,7 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 		"enabled":      channel.Enabled,
 	})
 
+	w.Header().Set("Location", "/api/v1/alerting/channels/"+channel.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, notificationChannelResponse(channel))
 }
 
@@ -390,19 +386,14 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 	for _, rule := range rules {
 		items = append(items, h.alertRuleResponse(r.Context(), rule))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	total, _ := h.queries.CountAlertRules(r.Context())
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
 
 // CreateRule handles POST /api/v1/alerting/rules/.
 func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 	var req CreateAlertRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Rule name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	if msg := validateAnomalyRuleRequest(req); msg != "" {
@@ -447,6 +438,7 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		"enabled":   rule.Enabled,
 	})
 
+	w.Header().Set("Location", "/api/v1/alerting/rules/"+rule.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.alertRuleResponse(r.Context(), rule))
 }
 
@@ -588,7 +580,11 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// Filters (status/severity/cluster) are applied in-memory after the
+	// page query, so a COUNT of all events wouldn't match the filtered
+	// page. Use the page length as the total. // TODO(total): push the
+	// status/severity/cluster filters into a counted SQL query.
+	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 // GetEvent handles GET /api/v1/alerting/events/{id}/.
@@ -674,19 +670,14 @@ func (h *AlertingHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 	for _, silence := range silences {
 		items = append(items, alertSilenceResponse(silence))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	total, _ := h.queries.CountAlertSilences(r.Context())
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
 
 // CreateSilence handles POST /api/v1/alerting/silences/.
 func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
 	var req CreateSilenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Reason == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Silence reason is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -746,6 +737,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 		"ends_at":   endsAt.UTC().Format(time.RFC3339),
 	})
 
+	w.Header().Set("Location", "/api/v1/alerting/silences/"+silence.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, alertSilenceResponse(silence))
 }
 

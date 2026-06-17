@@ -224,6 +224,7 @@ func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) 
 		"sample_rate":  row.SampleRate,
 		"enabled":      row.Enabled,
 	})
+	w.Header().Set("Location", "/api/v1/admin/read-audit-policies/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, policyToResponse(row))
 }
 

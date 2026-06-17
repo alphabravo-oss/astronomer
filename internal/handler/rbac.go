@@ -150,7 +150,7 @@ func (h *RBACHandler) lookupProjectBindingUserID(ctx context.Context, id uuid.UU
 }
 
 type roleRequest struct {
-	Name           string          `json:"name"`
+	Name           string          `json:"name" validate:"required"`
 	DisplayName    string          `json:"display_name"`
 	DisplayNameAlt string          `json:"displayName"`
 	Description    string          `json:"description"`
@@ -194,12 +194,7 @@ func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Role name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	role, err := h.queries.CreateGlobalRole(r.Context(), sqlc.CreateGlobalRoleParams{
@@ -218,6 +213,7 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		"scope":      "global",
 		"is_builtin": role.IsBuiltin,
 	})
+	w.Header().Set("Location", "/api/v1/rbac/global-roles/"+role.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, role)
 }
 
@@ -297,12 +293,7 @@ func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Role name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	role, err := h.queries.CreateClusterRole(r.Context(), sqlc.CreateClusterRoleParams{
@@ -321,6 +312,7 @@ func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) 
 		"scope":      "cluster",
 		"is_builtin": role.IsBuiltin,
 	})
+	w.Header().Set("Location", "/api/v1/rbac/cluster-roles/"+role.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, role)
 }
 
@@ -400,12 +392,7 @@ func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Role name is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	role, err := h.queries.CreateProjectRole(r.Context(), sqlc.CreateProjectRoleParams{
@@ -424,6 +411,7 @@ func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) 
 		"scope":      "project",
 		"is_builtin": role.IsBuiltin,
 	})
+	w.Header().Set("Location", "/api/v1/rbac/project-roles/"+role.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, role)
 }
 
@@ -493,13 +481,13 @@ func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global role bindings")
 		return
 	}
-	RespondJSON(w, http.StatusOK, bindingListResponse(items))
+	// TODO(total): no COUNT query for global role bindings; use page length.
+	RespondList(w, bindingListResponse(items), NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -528,6 +516,7 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 		"user_id": req.UserID,
 		"group":   req.Group,
 	})
+	w.Header().Set("Location", "/api/v1/rbac/global-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))
 }
 
@@ -573,13 +562,13 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster role bindings")
 		return
 	}
-	RespondJSON(w, http.StatusOK, bindingListResponse(items))
+	// TODO(total): no COUNT query for cluster role bindings; use page length.
+	RespondList(w, bindingListResponse(items), NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -609,6 +598,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		"group":      req.Group,
 		"cluster_id": clusterID.String(),
 	})
+	w.Header().Set("Location", "/api/v1/rbac/cluster-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))
 }
 
@@ -653,13 +643,13 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project role bindings")
 		return
 	}
-	RespondJSON(w, http.StatusOK, bindingListResponse(items))
+	// TODO(total): no COUNT query for project role bindings; use page length.
+	RespondList(w, bindingListResponse(items), NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -716,6 +706,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		"group":      req.Group,
 		"project_id": projectID.String(),
 	})
+	w.Header().Set("Location", "/api/v1/rbac/project-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))
 }
 

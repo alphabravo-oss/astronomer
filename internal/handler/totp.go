@@ -236,9 +236,9 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 // --- Enrollment: confirm ---
 
 type enrollConfirmRequest struct {
-	ChallengeToken string `json:"challenge_token"`
-	Challenge      string `json:"challenge"`
-	Code           string `json:"code"`
+	ChallengeToken string `json:"challenge_token" validate:"required"`
+	Challenge      string `json:"challenge" validate:"required"`
+	Code           string `json:"code" validate:"required"`
 }
 
 type enrollConfirmResponse struct {
@@ -265,12 +265,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req enrollConfirmRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.ChallengeToken == "" || req.Challenge == "" || req.Code == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "challenge_token, challenge and code are required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -382,8 +377,8 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 // --- Disable ---
 
 type disableRequest struct {
-	Password string `json:"password"`
-	Code     string `json:"code"`
+	Password string `json:"password" validate:"required"`
+	Code     string `json:"code" validate:"required"`
 }
 
 // Disable handles POST /api/v1/auth/totp/disable/.
@@ -404,12 +399,7 @@ func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req disableRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.Password == "" || req.Code == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "password and code are required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -512,7 +502,7 @@ func (h *TOTPHandler) Status(w http.ResponseWriter, r *http.Request) {
 // --- Recovery code regeneration ---
 
 type regenerateRequest struct {
-	Code string `json:"code"`
+	Code string `json:"code" validate:"required"`
 }
 
 type regenerateResponse struct {
@@ -535,12 +525,7 @@ func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Req
 	}
 
 	var req regenerateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.Code == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "code is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -598,8 +583,8 @@ func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Req
 // --- Verify (challenge -> session JWT) ---
 
 type verifyRequest struct {
-	ChallengeToken string `json:"challenge_token"`
-	Code           string `json:"code"`
+	ChallengeToken string `json:"challenge_token" validate:"required"`
+	Code           string `json:"code" validate:"required"`
 	// Optional explicit hint so the client can choose to send a
 	// recovery code (e.g. user's phone is dead). When empty, we try
 	// TOTP first then fall back to recovery; both paths emit distinct
@@ -619,12 +604,7 @@ type verifyRequest struct {
 // challenge_token is the user's proof of identity at this stage.
 func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	var req verifyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.ChallengeToken == "" || req.Code == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "challenge_token and code are required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	claims, err := h.jwt.ValidateToken(req.ChallengeToken)

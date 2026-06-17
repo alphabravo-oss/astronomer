@@ -150,7 +150,10 @@ func (h *MaintenanceHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, windowToWire(row))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// ListMaintenanceWindows returns every window unpaginated; there is no
+	// COUNT query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, out, NewPagination(len(out), limit, offset, len(out)))
 }
 
 // Get handles GET /api/v1/admin/maintenance-windows/{id}/.
@@ -229,6 +232,7 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"on_block": row.OnBlock,
 		"enabled":  row.Enabled,
 	})
+	w.Header().Set("Location", "/api/v1/admin/maintenance-windows/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, windowToWire(row))
 }
 
@@ -367,7 +371,10 @@ func (h *MaintenanceHandler) ListActive(w http.ResponseWriter, r *http.Request) 
 		}
 		out = append(out, entry)
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// The active-windows widget returns the filtered enabled set unpaginated;
+	// there is no COUNT query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, out, NewPagination(len(out), limit, offset, len(out)))
 }
 
 // ListDeferred handles GET /api/v1/admin/deferred-operations/.

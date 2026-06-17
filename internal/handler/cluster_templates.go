@@ -214,14 +214,14 @@ func applicationToResponse(a sqlc.ClusterTemplateApplication, templateName strin
 
 // CreateClusterTemplateRequest is the POST/PUT body shape.
 type CreateClusterTemplateRequest struct {
-	Name        string          `json:"name"`
+	Name        string          `json:"name" validate:"required"`
 	Description string          `json:"description"`
 	Spec        json.RawMessage `json:"spec"`
 }
 
 // ApplyClusterTemplateRequest is the POST /clusters/{id}/template/ body.
 type ApplyClusterTemplateRequest struct {
-	TemplateID string `json:"template_id"`
+	TemplateID string `json:"template_id" validate:"required"`
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -364,8 +364,7 @@ func (h *ClusterTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/cluster-templates/.
 func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateClusterTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
@@ -408,6 +407,7 @@ func (h *ClusterTemplateHandler) Create(w http.ResponseWriter, r *http.Request) 
 	recordAudit(r, h.queries, "admin.cluster_template.created", "cluster_template", tmpl.ID.String(), tmpl.Name, map[string]any{
 		"description": tmpl.Description,
 	})
+	w.Header().Set("Location", "/api/v1/cluster-templates/"+tmpl.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, templateToResponse(tmpl))
 }
 
@@ -431,8 +431,7 @@ func (h *ClusterTemplateHandler) Update(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	var req CreateClusterTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
@@ -566,8 +565,7 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req ApplyClusterTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	templateID, err := uuid.Parse(req.TemplateID)

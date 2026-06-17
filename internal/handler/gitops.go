@@ -259,6 +259,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"branch":    row.Branch,
 		"on_delete": row.OnDelete,
 	})
+	w.Header().Set("Location", "/api/v1/admin/gitops-sources/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toGitOpsSourceResponse(row))
 }
 

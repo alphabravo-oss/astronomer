@@ -424,7 +424,7 @@ func (h *SMTPHandler) validate(s rawSettings) string {
 
 // TestRequest is the body POST'd to /smtp/test/.
 type TestRequest struct {
-	Recipient string `json:"recipient"`
+	Recipient string `json:"recipient" validate:"required,email"`
 }
 
 // Test handles POST /api/v1/admin/smtp/test/. The admin supplies a
@@ -438,19 +438,10 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req TestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	recipient := strings.TrimSpace(req.Recipient)
-	if recipient == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "recipient is required")
-		return
-	}
-	if _, err := mail.ParseAddress(recipient); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "recipient is not a valid email address")
-		return
-	}
 
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil {

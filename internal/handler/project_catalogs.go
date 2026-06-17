@@ -227,7 +227,11 @@ func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
 		_, subbed := subSet[row.ID]
 		out = append(out, toCatalogResponse(row, projectID, subbed))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// ListCatalogsForProject returns the full visible set in one query (no
+	// SQL limit/offset), so the page is the whole result. // TODO(total):
+	// add a counted, paged query if a project's visible catalog count ever
+	// grows unbounded.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // Create handles POST /api/v1/projects/{project_id}/catalogs/.
@@ -302,6 +306,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"project_id":            projectID.String(),
 			"auto_subscribe_failed": err.Error(),
 		})
+		w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+cat.ID.String()+"/")
 		RespondJSON(w, http.StatusCreated, toCatalogResponse(cat, projectID, false))
 		return
 	}
@@ -310,6 +315,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"url":        cat.Url,
 		"repo_type":  cat.RepoType,
 	})
+	w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+cat.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toCatalogResponse(cat, projectID, true))
 }
 
@@ -374,6 +380,7 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 	recordAudit(r, h.auditor, auditKey, "helm_repository", cat.ID.String(), cat.Name, map[string]any{
 		"project_id": projectID.String(),
 	})
+	w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+catalogID.String()+"/")
 	RespondJSON(w, http.StatusCreated, row)
 }
 
@@ -469,5 +476,10 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
 		return
 	}
-	RespondJSON(w, http.StatusOK, charts)
+	// ListChartsByRepository is limit/offset paged but no COUNT query is
+	// exposed for it, so has_more is inferred from a full page.
+	// // TODO(total): add a CountChartsByRepository query.
+	limit := queryInt(r, "limit", 100)
+	offset := queryInt(r, "offset", 0)
+	RespondList(w, charts, NewPaginationFromPage(limit, offset, len(charts)))
 }

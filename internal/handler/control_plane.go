@@ -73,9 +73,9 @@ type UpdateControlPlanePolicyRequest struct {
 }
 
 type CreateControlPlaneSilenceRequest struct {
-	Controller    string `json:"controller"`
+	Controller    string `json:"controller" validate:"required"`
 	ConditionType string `json:"conditionType"`
-	Reason        string `json:"reason"`
+	Reason        string `json:"reason" validate:"required"`
 	Duration      string `json:"duration"`
 }
 
@@ -185,7 +185,10 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	for _, alert := range alerts {
 		resp = append(resp, controlPlaneAlertResponse(alert))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": resp, "limit": arg.Limit, "offset": arg.Offset})
+	// No COUNT query is exposed for control-plane alerts, so the page
+	// length stands in as the total. // TODO(total): add a
+	// CountControlPlaneAlerts query honoring the status/controller filters.
+	RespondList(w, resp, NewPagination(len(resp), int(arg.Limit), int(arg.Offset), len(resp)))
 }
 
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
@@ -222,17 +225,15 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 	for _, item := range items {
 		resp = append(resp, controlPlaneSilenceResponse(item))
 	}
-	RespondJSON(w, http.StatusOK, resp)
+	// No COUNT query is exposed for control-plane silences, so the page
+	// length stands in as the total. // TODO(total): add a
+	// CountControlPlaneSilences query.
+	RespondList(w, resp, NewPagination(len(resp), queryInt(r, "limit", 50), queryInt(r, "offset", 0), len(resp)))
 }
 
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
 	var req CreateControlPlaneSilenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	if req.Controller == "" || req.Reason == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Controller and reason are required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	duration := time.Hour
@@ -258,6 +259,7 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 		"condition_type": req.ConditionType,
 		"duration":       duration.String(),
 	})
+	w.Header().Set("Location", "/api/v1/controllers/silences/"+item.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, controlPlaneSilenceResponse(item))
 }
 

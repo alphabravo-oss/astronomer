@@ -229,7 +229,9 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project catalogs")
 			return
 		}
-		RespondJSON(w, http.StatusOK, rows)
+		// TODO(total): ListCatalogsForProject returns the full unpaged set;
+		// no COUNT query exists, so total is the returned length.
+		RespondList(w, rows, NewPagination(len(rows), int(limit), int(offset), len(rows)))
 		return
 	}
 
@@ -306,8 +308,8 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 
 // CreateRepoRequest represents the request body for creating a helm repository.
 type CreateRepoRequest struct {
-	Name        string          `json:"name"`
-	URL         string          `json:"url"`
+	Name        string          `json:"name" validate:"required"`
+	URL         string          `json:"url" validate:"required"`
 	RepoType    string          `json:"repo_type"`
 	Description string          `json:"description"`
 	IsDefault   bool            `json:"is_default"`
@@ -319,17 +321,7 @@ type CreateRepoRequest struct {
 // CreateRepo handles POST /api/v1/catalog/repositories/.
 func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	var req CreateRepoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Repository name is required")
-		return
-	}
-	if req.URL == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Repository URL is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -365,6 +357,7 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		"auth_type": repo.AuthType,
 	})
 
+	w.Header().Set("Location", "/api/v1/catalog/repositories/"+repo.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, repo)
 }
 
@@ -406,8 +399,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req UpdateRepoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -774,16 +766,20 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")
 		return
 	}
+	limit := queryInt(r, "limit", 50)
+	offset := queryInt(r, "offset", 0)
 	versions, err := h.queries.ListChartVersions(r.Context(), sqlc.ListChartVersionsParams{
 		ChartID: chartID,
-		Limit:   int32(queryInt(r, "limit", 50)),
-		Offset:  int32(queryInt(r, "offset", 0)),
+		Limit:   int32(limit),
+		Offset:  int32(offset),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list chart versions")
 		return
 	}
-	RespondJSON(w, http.StatusOK, versions)
+	// TODO(total): no COUNT query for chart versions; infer has_more from a
+	// full page since this runs a real LIMIT/OFFSET query.
+	RespondList(w, versions, NewPaginationFromPage(limit, offset, len(versions)))
 }
 
 // --- Installed Charts (Installations) ---
@@ -821,8 +817,8 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 // CreateInstallationRequest represents the request body for creating an installation.
 type CreateInstallationRequest struct {
 	ChartVersionID string `json:"chart_version_id"`
-	ReleaseName    string `json:"release_name"`
-	Namespace      string `json:"namespace"`
+	ReleaseName    string `json:"release_name" validate:"required"`
+	Namespace      string `json:"namespace" validate:"required"`
 	ValuesOverride string `json:"values_override"`
 	Notes          string `json:"notes"`
 	ToolSlug       string `json:"tool_slug"`
@@ -860,17 +856,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req CreateInstallationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-
-	if req.ReleaseName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Release name is required")
-		return
-	}
-	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Namespace is required")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -1367,9 +1353,9 @@ func (h *CatalogHandler) resolveChartVersion(r *http.Request, chart sqlc.HelmCha
 }
 
 func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 50))
-	offset := int32(queryInt(r, "offset", 0))
-	arg := sqlc.ListCatalogOperationsParams{Limit: limit, Offset: offset}
+	limit := queryInt(r, "limit", 50)
+	offset := queryInt(r, "offset", 0)
+	arg := sqlc.ListCatalogOperationsParams{Limit: int32(limit), Offset: int32(offset)}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}
 	}
@@ -1399,7 +1385,9 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		}
 		items = append(items, catalogOperationResponse(op))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// TODO(total): list is filtered in-Go by RBAC; no COUNT matches the
+	// visible set, so use the post-filter page length.
+	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 }
 
 func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {

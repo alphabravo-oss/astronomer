@@ -276,6 +276,7 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 		"chart_id": chartID.String(),
 		"stars":    body.Stars,
 	})
+	w.Header().Set("Location", "/charts/"+chartID.String()+"/ratings/"+created.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toRatingResponse(created))
 }
 
@@ -506,7 +507,9 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, results)
+	// TopCharts returns a ranked, limit-capped slice with no COUNT query, so
+	// Total is the page length. // TODO(total)
+	RespondList(w, results, NewPagination(len(results), limit, 0, len(results)))
 }
 
 // SimilarRecommendations handles GET /catalog/recommendations/similar/{chart_id}/.
@@ -525,7 +528,9 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, results)
+	// SimilarCharts returns a similarity-ranked, limit-capped slice with no
+	// COUNT query, so Total is the page length. // TODO(total)
+	RespondList(w, results, NewPagination(len(results), limit, 0, len(results)))
 }
 
 // --- shared helpers --------------------------------------------------

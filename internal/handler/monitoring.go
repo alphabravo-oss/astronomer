@@ -283,7 +283,7 @@ func (h *MonitoringHandler) StartReconciler(ctx context.Context) {
 
 func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondJSON(w, http.StatusOK, map[string]any{"data": []any{}})
+		RespondList(w, []any{}, NewPagination(0, queryInt(r, "limit", 50), queryInt(r, "offset", 0), 0))
 		return
 	}
 	limit := int32(queryInt(r, "limit", 50))
@@ -321,7 +321,9 @@ func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Reques
 		}
 		resp = append(resp, monitoringOperationResponse(item))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": resp, "limit": limit, "offset": offset})
+	// No COUNT query exists for monitoring operations; report the page
+	// length as the total. // TODO(total): add CountMonitoringOperations.
+	RespondList(w, resp, NewPagination(len(resp), int(limit), int(offset), len(resp)))
 }
 
 func (h *MonitoringHandler) GetOperation(w http.ResponseWriter, r *http.Request) {

@@ -116,6 +116,7 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		"is_staff":     user.IsStaff,
 		"is_superuser": user.IsSuperuser,
 	})
+	w.Header().Set("Location", "/api/v1/users/"+user.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, mapUser(user))
 }
 

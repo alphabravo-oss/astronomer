@@ -384,6 +384,7 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		"verify_ssl": instance.VerifySsl,
 	})
 
+	w.Header().Set("Location", "/api/v1/argocd/instances/"+instance.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.instanceResponse(instance))
 }
 
@@ -854,7 +855,10 @@ func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, argocdOperationResponse(op))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": items, "limit": limit, "offset": offset})
+	// No COUNT query exists for the RBAC-filtered operation list, so Total
+	// reflects the items on this page. // TODO(total): add a COUNT that
+	// honours the same target/status/RBAC filters for a true grand total.
+	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 func (h *ArgoCDHandler) GetOperation(w http.ResponseWriter, r *http.Request) {

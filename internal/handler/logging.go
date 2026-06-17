@@ -254,8 +254,8 @@ func (h *LoggingHandler) controllerSummary(ctx context.Context) (map[string]any,
 // ID in the body rather than the URL. Query (?cluster_id=) is preferred when
 // present; otherwise we fall back to this body field.
 type CreateLoggingOutputRequest struct {
-	Name          string          `json:"name"`
-	OutputType    string          `json:"output_type"`
+	Name          string          `json:"name" validate:"required"`
+	OutputType    string          `json:"output_type" validate:"required"`
 	Configuration json.RawMessage `json:"configuration"`
 	ClusterID     string          `json:"cluster_id"`
 	Enabled       bool            `json:"enabled"`
@@ -263,7 +263,7 @@ type CreateLoggingOutputRequest struct {
 
 // CreateLoggingPipelineRequest represents the request body for creating a logging pipeline.
 type CreateLoggingPipelineRequest struct {
-	Name       string          `json:"name"`
+	Name       string          `json:"name" validate:"required"`
 	Namespaces json.RawMessage `json:"namespaces"`
 	Labels     json.RawMessage `json:"labels"`
 	Filters    json.RawMessage `json:"filters"`
@@ -305,8 +305,7 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 // CreateOutput handles POST /api/v1/clusters/{cluster_id}/logging/outputs/.
 func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 	var req CreateLoggingOutputRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	// Prefer URL/query cluster_id; fall back to the top-level body field, then
@@ -322,16 +321,6 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Output name is required")
-		return
-	}
-
-	if req.OutputType == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Output type is required")
 		return
 	}
 
@@ -365,6 +354,7 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		"operation_id": operationIDOrEmpty(op),
 	})
 
+	w.Header().Set("Location", "/api/v1/logging/outputs/"+output.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, output)
 }
 
@@ -503,18 +493,12 @@ func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 // CreatePipeline handles POST /api/v1/clusters/{cluster_id}/logging/pipelines/.
 func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) {
 	var req CreateLoggingPipelineRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	clusterID, err := clusterIDFromRequest(r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Pipeline name is required")
 		return
 	}
 
@@ -556,6 +540,7 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		"operation_id": operationIDOrEmpty(op),
 	})
 
+	w.Header().Set("Location", "/api/v1/logging/pipelines/"+pipeline.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, pipeline)
 }
 
@@ -910,7 +895,11 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		}
 		items = append(items, loggingOperationResponse(op))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// Operations are filtered in-memory by per-cluster RBAC after the page
+	// query, so a COUNT of all operations wouldn't match the visible page.
+	// Use the page length as the total. // TODO(total): push the RBAC
+	// cluster filter into a counted SQL query.
+	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 // GetOperation handles GET /api/v1/logging/operations/{id}/.

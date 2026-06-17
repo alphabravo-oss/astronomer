@@ -420,6 +420,7 @@ func (h *FleetOperationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"on_error":       op.OnError,
 	})
 	h.kickOrchestrator(r.Context())
+	w.Header().Set("Location", "/api/v1/fleet-operations/"+op.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, fleetOperationToResponse(op))
 }
 

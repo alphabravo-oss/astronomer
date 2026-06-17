@@ -550,8 +550,7 @@ func (h *ToolHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req toolActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
@@ -604,8 +603,7 @@ func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req toolActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
@@ -718,13 +716,15 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		statuses = append(statuses, status)
 	}
-	RespondJSON(w, http.StatusOK, statuses)
+	// TODO(total): per-cluster tool status is an unpaged full scan of
+	// enabled tools; no COUNT query matches it, so use the page length.
+	RespondList(w, statuses, NewPagination(len(statuses), len(statuses), 0, len(statuses)))
 }
 
 func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 50))
-	offset := int32(queryInt(r, "offset", 0))
-	arg := sqlc.ListToolOperationsParams{Limit: limit, Offset: offset}
+	limit := queryInt(r, "limit", 50)
+	offset := queryInt(r, "offset", 0)
+	arg := sqlc.ListToolOperationsParams{Limit: int32(limit), Offset: int32(offset)}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}
 	}
@@ -754,7 +754,10 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, toolOperationResponse(op))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// TODO(total): list is filtered in-Go by RBAC; no COUNT matches the
+	// visible set. has_more is inferred from the DB page (len(ops)) being full,
+	// not the post-filter items, so next_offset advances over skipped rows.
+	RespondList(w, items, NewPaginationFromPage(limit, offset, len(ops)))
 }
 
 func (h *ToolHandler) GetOperation(w http.ResponseWriter, r *http.Request) {

@@ -337,7 +337,10 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, widgetToResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// ListDashboardWidgets returns the full set in one query (no SQL
+	// limit/offset), so the page is the whole result. // TODO(total): add a
+	// counted, paged query if widget counts ever grow unbounded.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // AdminGet handles GET /api/v1/admin/dashboard-widgets/{id}/.
@@ -407,6 +410,7 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 		"widget_type": row.WidgetType,
 		"scope":       row.Scope,
 	})
+	w.Header().Set("Location", "/api/v1/admin/dashboard-widgets/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, widgetToResponse(row))
 }
 
@@ -510,7 +514,10 @@ func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.R
 	for _, row := range rows {
 		out = append(out, datasourceToResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// ListPrometheusDatasources returns the full set in one query (no SQL
+	// limit/offset), so the page is the whole result. // TODO(total): add a
+	// counted, paged query if datasource counts ever grow unbounded.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // AdminCreateDatasource handles POST /api/v1/admin/prometheus-datasources/.
@@ -550,6 +557,7 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 	recordAudit(r, h.auditor, "admin.prometheus_datasource.created", "prometheus_datasource", row.ID.String(), row.Name, map[string]any{
 		"url": row.Url,
 	})
+	w.Header().Set("Location", "/api/v1/admin/prometheus-datasources/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, datasourceToResponse(row))
 }
 

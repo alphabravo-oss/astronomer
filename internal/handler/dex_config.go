@@ -493,6 +493,7 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		"type":    row.Type,
 		"enabled": row.Enabled,
 	})
+	w.Header().Set("Location", "/api/v1/auth/dex/connectors/"+row.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, h.connectorResponse(row))
 }
 

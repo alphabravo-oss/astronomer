@@ -635,7 +635,7 @@ func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, 
 
 func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Request) {
 	if h.sso == nil {
-		RespondJSON(w, http.StatusOK, []any{})
+		RespondList(w, []any{}, NewPagination(0, 0, 0, 0))
 		return
 	}
 	rows, err := h.sso.GetEnabledSSOProviders(r.Context())
@@ -647,7 +647,10 @@ func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Reques
 	for _, row := range rows {
 		items = append(items, ssoConfigurationToResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// GetEnabledSSOProviders returns every enabled provider unpaginated; there
+	// is no COUNT query, so Total is the page length. // TODO(total)
+	limit, offset := queryLimitOffset(r, 20)
+	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 }
 
 type SSOProviderRequest struct {
@@ -780,6 +783,7 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 		"type":     ssoProviderType(created),
 		"enabled":  created.IsEnabled,
 	})
+	w.Header().Set("Location", "/api/v1/settings/sso/"+created.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, ssoConfigurationToResponse(created))
 }
 
@@ -814,12 +818,13 @@ func (h *ResourceHandler) DeleteSSOProvider(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
+	limit := queryInt(r, "limit", 20)
 	if h.queries == nil {
-		RespondJSON(w, http.StatusOK, []any{})
+		RespondList(w, []any{}, NewPagination(0, limit, 0, 0))
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(limit),
 		Offset: 0,
 	})
 	if err != nil {
@@ -837,7 +842,10 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 			"timestamp": item.CreatedAt.UTC().Format(timeLayout),
 		})
 	}
-	RespondJSON(w, http.StatusOK, items)
+	// The activity feed is a fixed-size most-recent window (offset always 0);
+	// CountAuditLogV1 exists but the feed isn't offset-paginated, so Total is
+	// the page length. // TODO(total)
+	RespondList(w, items, NewPagination(len(items), limit, 0, len(items)))
 }
 
 func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {

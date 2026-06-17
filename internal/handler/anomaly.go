@@ -65,7 +65,11 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		for _, b := range rows {
 			items = append(items, anomalyBaselineResponse(b))
 		}
-		RespondJSON(w, http.StatusOK, items)
+		// Per-cluster listing has no COUNT query and returns the full
+		// (cluster-scoped) set unpaginated, so Total is the page length.
+		// TODO(total)
+		limit, offset := queryLimitOffset(r, 50)
+		RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 		return
 	}
 	limit := int32(queryInt(r, "limit", 50))
@@ -82,7 +86,8 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, b := range rows {
 		items = append(items, anomalyBaselineResponse(b))
 	}
-	RespondJSON(w, http.StatusOK, items)
+	total, _ := h.queries.CountAnomalyBaselines(r.Context())
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
 
 // Get handles GET /api/v1/anomaly-baselines/{id}/.
