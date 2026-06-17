@@ -19,6 +19,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"strings"
 	"time"
@@ -112,19 +115,36 @@ func GenerateSecret(accountName, issuer string) (secret string, otpauthURL strin
 // the handler doesn't need to reach into a 3rd-party QR library —
 // pquerna/otp wraps boombuler/barcode for us.
 //
-// The image is 512x512 so it stays crisp when displayed larger (easier to
-// scan on dense/retina screens) while still tiny on the wire (~3-5kB).
+// The QR is rendered at 512x512 (crisp on dense screens, ~3-5kB) and then
+// composited onto a white canvas with a quiet zone (margin) baked in. The
+// underlying encoder draws the modules edge-to-edge with NO border, but the QR
+// spec requires a >=4-module quiet zone — without it many authenticator apps'
+// in-app scanners refuse to lock on even though a phone camera decodes the code
+// fine. Baking the margin into the PNG (vs. relying on CSS padding) makes the
+// code scannable regardless of how/where the image is displayed.
 func QRCodePNG(otpauthURL string) ([]byte, error) {
 	key, err := otp.NewKeyFromURL(otpauthURL)
 	if err != nil {
 		return nil, fmt.Errorf("totp: parse otpauth url: %w", err)
 	}
-	img, err := key.Image(512, 512)
+	const qrSize = 512
+	const margin = qrSize / 8 // 64px — comfortably more than the 4-module minimum
+	qr, err := key.Image(qrSize, qrSize)
 	if err != nil {
 		return nil, fmt.Errorf("totp: encode qr: %w", err)
 	}
+
+	// Fill an opaque white canvas, then composite the QR with draw.Over so any
+	// transparent ("light") pixels in the encoder's output become white. This
+	// bakes a solid white background into the PNG — the code then scans on a
+	// dark page too, where a transparent background was leaving black modules on
+	// the dark page with no contrast.
+	canvas := image.NewRGBA(image.Rect(0, 0, qrSize+2*margin, qrSize+2*margin))
+	draw.Draw(canvas, canvas.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(canvas, image.Rect(margin, margin, margin+qrSize, margin+qrSize), qr, image.Point{}, draw.Over)
+
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err := png.Encode(&buf, canvas); err != nil {
 		return nil, fmt.Errorf("totp: encode png: %w", err)
 	}
 	return buf.Bytes(), nil
