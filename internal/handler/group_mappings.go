@@ -130,12 +130,12 @@ func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to list group mappings")
 		return
 	}
 	total, err := h.queries.CountGroupMappings(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to count group mappings")
 		return
 	}
 	out := make([]GroupMappingResponse, 0, len(rows))
@@ -161,7 +161,7 @@ func (h *GroupMappingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Group mapping not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to get group mapping")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toGroupMappingResponse(row))
@@ -248,7 +248,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	row, err := h.queries.CreateGroupMapping(r.Context(), params)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create group mapping")
 		return
 	}
 	recordAudit(r, h.queries, "admin.group_mapping.created", "group_mapping", row.ID.String(), row.GroupName, map[string]any{
@@ -278,11 +278,11 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Group mapping not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to get group mapping")
 		return
 	}
 	if err := h.queries.DeleteGroupMapping(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete group mapping")
 		return
 	}
 	recordAudit(r, h.queries, "admin.group_mapping.deleted", "group_mapping", existing.ID.String(), existing.GroupName, map[string]any{
@@ -317,7 +317,7 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 			RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to load user")
 		return
 	}
 	snapshot, err := h.queries.GetUserIDPGroups(r.Context(), user.ID)
@@ -327,21 +327,21 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 				"User has no IdP-groups snapshot yet; ask them to log in via SSO once")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to load user IdP-groups snapshot")
 		return
 	}
 
 	var groups []string
 	if len(snapshot.Groups) > 0 {
 		if err := json.Unmarshal(snapshot.Groups, &groups); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "snapshot_parse", err.Error())
+			RespondRequestError(w, r, http.StatusInternalServerError, "snapshot_parse", "Failed to parse IdP-groups snapshot")
 			return
 		}
 	}
 
 	result, err := auth.SyncUserGroups(r.Context(), h.queries, user.ID, snapshot.ConnectorID, groups, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", "Failed to sync user groups")
 		return
 	}
 

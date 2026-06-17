@@ -15,6 +15,7 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
@@ -569,7 +570,7 @@ func pluralSuffix(n int) string {
 
 // CreateClusterRequest represents the request body for creating a cluster.
 type CreateClusterRequest struct {
-	Name         string `json:"name"`
+	Name         string `json:"name" validate:"required,rfc1123"`
 	DisplayName  string `json:"display_name"`
 	Description  string `json:"description"`
 	Environment  string `json:"environment"`
@@ -629,18 +630,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/clusters/.
 func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateClusterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
-		return
-	}
-
-	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Cluster name is required")
-		return
-	}
-	if !validClusterName(req.Name) {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error",
-			"Cluster name must be RFC-1123 (lowercase letters, digits, hyphens; start and end with an alphanumeric; max 63 chars)")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 
@@ -669,7 +659,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedByID:  currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create cluster")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster")
 		return
 	}
 
@@ -800,13 +790,13 @@ func (h *ClusterHandler) enqueueTemplateApply(r *http.Request, clusterID uuid.UU
 func (h *ClusterHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 

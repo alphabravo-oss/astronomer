@@ -168,7 +168,7 @@ type UpdateClusterGroupRequest struct {
 
 // MoveClustersRequest is the POST /{id}/move/ body shape.
 type MoveClustersRequest struct {
-	ClusterIDs []string `json:"cluster_ids"`
+	ClusterIDs []string `json:"cluster_ids" validate:"required,min=1"`
 }
 
 // clusterGroupSlugPattern matches the kebab-case shape the slug field accepts.
@@ -336,7 +336,10 @@ func (h *ClusterGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 			Depth:                row.Depth,
 		})
 	}
-	RespondJSON(w, http.StatusOK, out)
+	// TODO(total): this endpoint returns the full tree without LIMIT/OFFSET and
+	// has no COUNT companion query, so Total is the page length and the page is
+	// the whole list. Add a CountClusterGroups query if pagination is introduced.
+	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
 }
 
 // Get handles GET /api/v1/cluster-groups/{id}/.
@@ -613,12 +616,7 @@ func (h *ClusterGroupHandler) MoveClusters(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req MoveClustersRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
-		return
-	}
-	if len(req.ClusterIDs) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, "no_clusters", "cluster_ids must be a non-empty array")
+	if !decodeAndValidate(w, r, &req) {
 		return
 	}
 	moved := 0
