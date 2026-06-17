@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -157,7 +158,7 @@ func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list notification channels")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list notification channels")
 		return
 	}
 
@@ -172,12 +173,12 @@ func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	var req CreateChannelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Channel name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Channel name is required")
 		return
 	}
 
@@ -198,9 +199,10 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 	// canonical one the dispatcher actually formats for —
 	// see internal/worker/tasks/notification_dispatch.go.
 	if !isSupportedChannelType(channelType) {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error",
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
 			fmt.Sprintf("Unsupported channel type %q; supported: %s",
 				channelType, strings.Join(tasks.SupportedNotificationChannels, ", ")))
+
 		return
 	}
 
@@ -212,7 +214,7 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 		CreatedByID:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create notification channel")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create notification channel")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -229,13 +231,13 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) GetChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
 		return
 	}
 
 	channel, err := h.queries.GetNotificationChannelByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Notification channel not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
 		return
 	}
 
@@ -246,19 +248,19 @@ func (h *AlertingHandler) GetChannel(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
 		return
 	}
 
 	current, err := h.queries.GetNotificationChannelByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Notification channel not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
 		return
 	}
 
 	var req CreateChannelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Configuration == nil {
@@ -278,9 +280,10 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 		req.ChannelType = current.ChannelType
 	}
 	if !isSupportedChannelType(req.ChannelType) {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error",
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
 			fmt.Sprintf("Unsupported channel type %q; supported: %s",
 				req.ChannelType, strings.Join(tasks.SupportedNotificationChannels, ", ")))
+
 		return
 	}
 
@@ -292,7 +295,7 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 		Enabled:       req.Enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update notification channel")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update notification channel")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -309,21 +312,21 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
 		return
 	}
 	channel, err := h.queries.GetNotificationChannelByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Notification channel not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
 		return
 	}
 	if h.enqueuer == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "dispatcher_unavailable", "Notification dispatcher is not available")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.DispatcherUnavailable, "Notification dispatcher is not available")
 		return
 	}
 	recipients := tasks.NotificationRecipients(channel)
 	if len(recipients) == 0 && strings.ToLower(channel.ChannelType) != "email" {
-		RespondRequestError(w, r, http.StatusBadRequest, "no_destination", "Channel has no configured destination to test")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoDestination, "Channel has no configured destination to test")
 		return
 	}
 	task, err := tasks.NewNotificationSendTask(tasks.NotificationSendPayload{
@@ -334,11 +337,11 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 		Severity:   "info",
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "build_error", "Failed to build test notification")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.BuildError, "Failed to build test notification")
 		return
 	}
 	if _, err := h.enqueuer.Enqueue(task); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "enqueue_error", "Failed to enqueue test notification")
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.EnqueueError, "Failed to enqueue test notification")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Test notification sent to " + channel.Name})
@@ -348,7 +351,7 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid channel ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
 		return
 	}
 
@@ -357,7 +360,7 @@ func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) 
 		channelName = existing.Name
 	}
 	if err := h.queries.DeleteNotificationChannel(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Notification channel not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -379,7 +382,7 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list alert rules")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert rules")
 		return
 	}
 
@@ -394,16 +397,16 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 	var req CreateAlertRuleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Rule name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Rule name is required")
 		return
 	}
 	if msg := validateAnomalyRuleRequest(req); msg != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", msg)
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, msg)
 		return
 	}
 
@@ -429,11 +432,11 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		CreatedByID:     currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create alert rule")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert rule")
 		return
 	}
 	if err := h.syncRuleChannels(r.Context(), rule.ID, req.NotificationChannelIDs); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to associate notification channels")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to associate notification channels")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -451,13 +454,13 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) GetRule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid rule ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
 		return
 	}
 
 	rule, err := h.queries.GetAlertRuleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert rule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
 		return
 	}
 
@@ -468,19 +471,19 @@ func (h *AlertingHandler) GetRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid rule ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
 		return
 	}
 
 	current, err := h.queries.GetAlertRuleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert rule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
 		return
 	}
 
 	var req CreateAlertRuleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
@@ -510,12 +513,12 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 		CooldownMinutes: req.CooldownMinutes,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update alert rule")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule")
 		return
 	}
 	if len(req.NotificationChannelIDs) > 0 {
 		if err := h.syncRuleChannels(r.Context(), rule.ID, req.NotificationChannelIDs); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update notification channels")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update notification channels")
 			return
 		}
 	}
@@ -533,7 +536,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid rule ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
 		return
 	}
 
@@ -542,7 +545,7 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		ruleName = existing.Name
 	}
 	if err := h.queries.DeleteAlertRule(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert rule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -564,7 +567,7 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list alert events")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert events")
 		return
 	}
 
@@ -592,13 +595,13 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid event ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid event ID")
 		return
 	}
 
 	event, err := h.queries.GetAlertEventByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert event not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
 		return
 	}
 
@@ -609,18 +612,18 @@ func (h *AlertingHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid event ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid event ID")
 		return
 	}
 	if _, err := h.queries.GetAlertEventByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert event not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
 		return
 	}
 	if err := h.queries.AcknowledgeAlertEvent(r.Context(), sqlc.AcknowledgeAlertEventParams{
 		ID:               id,
 		AcknowledgedByID: currentUserUUID(r),
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to acknowledge alert event")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to acknowledge alert event")
 		return
 	}
 	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
@@ -632,18 +635,18 @@ func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Reques
 func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid event ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid event ID")
 		return
 	}
 	if _, err := h.queries.GetAlertEventByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert event not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
 		return
 	}
 	if err := h.queries.UpdateAlertEventStatus(r.Context(), sqlc.UpdateAlertEventStatusParams{
 		ID:     id,
 		Status: "resolved",
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to resolve alert event")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to resolve alert event")
 		return
 	}
 	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
@@ -663,7 +666,7 @@ func (h *AlertingHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list alert silences")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert silences")
 		return
 	}
 
@@ -678,18 +681,18 @@ func (h *AlertingHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
 	var req CreateSilenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	if req.Reason == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Silence reason is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Silence reason is required")
 		return
 	}
 
 	if req.EndsAt.IsZero() {
 		if req.Duration == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Silence end time is required")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Silence end time is required")
 			return
 		}
 	}
@@ -718,7 +721,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 	if endsAt.IsZero() {
 		duration, err := time.ParseDuration(req.Duration)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Invalid silence duration")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid silence duration")
 			return
 		}
 		endsAt = startsAt.Add(duration)
@@ -733,7 +736,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 		CreatedByID: currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create alert silence")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert silence")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -759,12 +762,12 @@ func (h *AlertingHandler) DisableRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid rule ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
 		return
 	}
 	current, err := h.queries.GetAlertRuleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert rule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
 		return
 	}
 	rule, err := h.queries.UpdateAlertRule(r.Context(), sqlc.UpdateAlertRuleParams{
@@ -777,7 +780,7 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 		CooldownMinutes: current.CooldownMinutes,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update alert rule")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -797,12 +800,12 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid silence ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
 	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load silence")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load silence")
 		return
 	}
 	var match *sqlc.AlertSilence
@@ -813,15 +816,15 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if match == nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert silence not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
 	if !match.EndsAt.After(time.Now()) {
-		RespondRequestError(w, r, http.StatusBadRequest, "already_expired", "This silence has already expired.")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.AlreadyExpired, "This silence has already expired.")
 		return
 	}
 	if err := h.queries.DeleteAlertSilence(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to expire silence")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to expire silence")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -835,13 +838,13 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid silence ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
 
 	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load silence")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load silence")
 		return
 	}
 	var match *sqlc.AlertSilence
@@ -852,11 +855,11 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if match == nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert silence not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
 	if err := h.queries.DeleteAlertSilence(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Alert silence not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())

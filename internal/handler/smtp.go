@@ -17,6 +17,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -156,7 +157,7 @@ type smtpSettingsResponse struct {
 // configured (PasswordConfigured carries that bit).
 func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
 	}
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
@@ -175,7 +176,7 @@ func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read SMTP settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SMTP settings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, smtpSettingsResponse{
@@ -216,12 +217,12 @@ type smtpSettingsUpdate struct {
 // Update handles PUT /api/v1/admin/smtp/.
 func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
 	}
 	var req smtpSettingsUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -229,13 +230,13 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// below is straightforward.
 	existing, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read SMTP settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SMTP settings")
 		return
 	}
 
 	merged := h.mergeUpdate(existing, req)
 	if vErr := h.validate(merged); vErr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", vErr)
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
 		return
 	}
 	// T6.064 — refuse to disable SMTP (or blank the host) when the
@@ -244,8 +245,9 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// mailer; we treat either as the disable signal.
 	if !merged.Enabled || merged.Host == "" {
 		if slug, required := activeBaselineRequiresSMTP(r.Context(), h.queries); required {
-			RespondRequestError(w, r, http.StatusConflict, "baseline_required",
+			RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
 				fmt.Sprintf("SMTP is required by the active compliance baseline %q; cannot disable.", slug))
+
 			return
 		}
 	}
@@ -258,12 +260,12 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 			encryptedPassword = ""
 		} else {
 			if h.encryptor == nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Encryptor is not configured; cannot store SMTP password")
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor is not configured; cannot store SMTP password")
 				return
 			}
 			enc, err := h.encryptor.Encrypt(*req.Password)
 			if err != nil {
-				RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt password")
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt password")
 				return
 			}
 			encryptedPassword = enc
@@ -285,7 +287,7 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds:    merged.TimeoutSeconds,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "write_error", "Failed to save SMTP settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to save SMTP settings")
 		return
 	}
 	if h.provider != nil {
@@ -432,31 +434,31 @@ type TestRequest struct {
 // from doing the same thing) and send a templated test message.
 func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
 	}
 	var req TestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	recipient := strings.TrimSpace(req.Recipient)
 	if recipient == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "recipient is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "recipient is required")
 		return
 	}
 	if _, err := mail.ParseAddress(recipient); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "recipient is not a valid email address")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "recipient is not a valid email address")
 		return
 	}
 
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "SMTP settings are not configured yet")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "SMTP settings are not configured yet")
 		return
 	}
 	if !row.Enabled {
-		RespondRequestError(w, r, http.StatusBadRequest, "smtp_disabled", "SMTP is disabled; enable it before sending a test message")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.SMTPDisabled, "SMTP is disabled; enable it before sending a test message")
 		return
 	}
 
@@ -475,7 +477,7 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if row.PasswordEncrypted != "" && h.encryptor != nil {
 		plain, err := h.encryptor.Decrypt(row.PasswordEncrypted)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "decrypt_error", "Failed to decrypt stored SMTP password")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored SMTP password")
 			return
 		}
 		cfg.Password = plain
@@ -494,7 +496,7 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 		recordAudit(r, h.audit, "admin.smtp.test_failed", "smtp", row.ID.String(), recipient, map[string]any{
 			"error": err.Error(),
 		})
-		RespondRequestError(w, r, http.StatusBadGateway, "test_failed", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.TestFailed, err.Error())
 		return
 	}
 	recordAudit(r, h.audit, "admin.smtp.test", "smtp", row.ID.String(), recipient, nil)
@@ -524,7 +526,7 @@ type emailListItem struct {
 // page, max 200.
 func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
@@ -534,7 +536,7 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "read_error", "Failed to read email messages")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read email messages")
 		return
 	}
 	total, _ := h.queries.CountEmailMessages(r.Context())

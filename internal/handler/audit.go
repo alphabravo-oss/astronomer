@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type auditReaderV1 interface {
@@ -124,7 +125,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	offset := int32(queryInt(r, "offset", 0))
 	filter, filterErr := auditFilterFromRequest(r, limit, offset)
 	if filterErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_filter", filterErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
 		return
 	}
 
@@ -145,7 +146,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		filterReader := h.queries.(auditFilterReader)
 		logs, err = filterReader.ListAuditLogV1Filtered(r.Context(), filter)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = filterReader.CountAuditLogV1Filtered(r.Context(), filter)
@@ -156,7 +157,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset:      offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.queries.CountAuditLogV1ByActionClass(r.Context(), actionClass)
@@ -164,7 +165,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	case sinceIDStr != "":
 		sinceID, parseErr := uuid.Parse(sinceIDStr)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_since", "Invalid since cursor")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince, "Invalid since cursor")
 			return
 		}
 		logs, err = h.listAuditLogsSince(r.Context(), sqlc.ListAuditLogsSinceParams{
@@ -172,14 +173,14 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Limit:   limit,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total = int64(len(logs))
 	case userIDStr != "":
 		uid, parseErr := uuid.Parse(userIDStr)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_user_id", "Invalid user_id")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user_id")
 			return
 		}
 		pgtypeUID := pgtype.UUID{Bytes: uid, Valid: true}
@@ -189,7 +190,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogsByUser(r.Context(), pgtypeUID)
@@ -201,7 +202,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset:       offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogs(r.Context())
@@ -213,7 +214,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogs(r.Context())
@@ -224,14 +225,14 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list audit logs")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogs(r.Context())
 	}
 
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count audit logs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count audit logs")
 		return
 	}
 
@@ -251,18 +252,18 @@ func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
 		format = "csv"
 	}
 	if format != "csv" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_format", "Only 'csv' export format is supported")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "Only 'csv' export format is supported")
 		return
 	}
 
 	filter, filterErr := auditFilterFromRequest(r, 500, 0)
 	if filterErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_filter", filterErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
 		return
 	}
 	sinceIDStr := r.URL.Query().Get("since")
 	if sinceIDStr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_since", "since cursor export is not supported")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince, "since cursor export is not supported")
 		return
 	}
 
@@ -497,13 +498,13 @@ func (h *AuditHandler) Get(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid audit log ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid audit log ID")
 		return
 	}
 
 	auditLog, err := h.getAuditLogByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Audit log entry not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Audit log entry not found")
 		return
 	}
 

@@ -20,6 +20,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -350,13 +351,13 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list projects")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
 		return
 	}
 
 	total, err := h.queries.CountProjects(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count projects")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
 		return
 	}
 
@@ -372,24 +373,24 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
 	}
 
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Project name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Project name is required")
 		return
 	}
 
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Invalid cluster_id")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid cluster_id")
 		return
 	}
 
@@ -420,7 +421,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			pssProfile = defaultPodSecurityProfile
 		}
 		if !isValidPodSecurityProfile(pssProfile) {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Invalid pod_security_profile (must be privileged | baseline | restricted)")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod_security_profile (must be privileged | baseline | restricted)")
 			return
 		}
 	}
@@ -453,7 +454,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    podCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create project")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project")
 		return
 	}
 	h.recordProjectAudit(r, "project.create", project, map[string]any{"clusterId": req.ClusterID, "namespaces": decodeJSONArray(req.Namespaces)})
@@ -473,13 +474,13 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, projectToResponse(project))
@@ -490,13 +491,13 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 
 	var req UpdateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -518,14 +519,14 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// reset them to "" on every PUT.
 	existing, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to check project ownership")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
 		return
 	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, "ownership_conflict", blocked)
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
 		return
 	}
 	pssProfile := existing.PodSecurityProfile
@@ -535,7 +536,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 			candidate = defaultPodSecurityProfile
 		}
 		if !isValidPodSecurityProfile(candidate) {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Invalid pod_security_profile (must be privileged | baseline | restricted)")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod_security_profile (must be privileged | baseline | restricted)")
 			return
 		}
 		pssProfile = candidate
@@ -577,7 +578,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    podCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	h.recordProjectAudit(r, "project.update", project, map[string]any{"namespaces": decodeJSONArray(req.Namespaces)})
@@ -620,23 +621,23 @@ func (h *ProjectHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Reques
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	previous, updated, transferred, err := transferProjectOwnershipToAPI(r.Context(), h.queries, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		case errors.Is(err, errProjectOwnershipTransferUnsupported):
-			RespondRequestError(w, r, http.StatusConflict, "ownership_conflict", "Only CRD-owned projects can be transferred through this endpoint")
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Only CRD-owned projects can be transferred through this endpoint")
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to transfer project ownership")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to transfer project ownership")
 		}
 		return
 	}
@@ -693,26 +694,26 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 
 	var req UpdateProjectPolicyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	existing, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to check project ownership")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
 		return
 	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, "ownership_conflict", blocked)
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
 		return
 	}
 
@@ -720,7 +721,7 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	if req.PodSecurityProfile != nil {
 		candidate := strings.TrimSpace(*req.PodSecurityProfile)
 		if !isValidPodSecurityProfile(candidate) {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Invalid pod_security_profile (must be privileged | baseline | restricted)")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod_security_profile (must be privileged | baseline | restricted)")
 			return
 		}
 		pssProfile = strings.ToLower(candidate)
@@ -750,7 +751,7 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    podCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update project policy")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project policy")
 		return
 	}
 	h.recordProjectAudit(r, "project.update_policy", updated, map[string]any{
@@ -773,23 +774,23 @@ func (h *ProjectHandler) QuotaUsage(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "tunnel_unavailable", "Cluster tunnel is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable, "Cluster tunnel is not configured")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 
 	rows, err := h.queries.ListProjectNamespaces(r.Context(), project.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list project namespaces")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project namespaces")
 		return
 	}
 
@@ -916,13 +917,13 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 
@@ -948,7 +949,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.queries.DeleteProject(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	h.recordProjectAudit(r, "project.delete", project, map[string]any{"clusterId": project.ClusterID.String()})
@@ -969,12 +970,12 @@ func (h *ProjectHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	projectIDStr := chi.URLParam(r, "id")
 	projectID, err := uuid.Parse(projectIDStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	rows, err := h.queries.ListProjectNamespaces(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list project namespaces")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project namespaces")
 		return
 	}
 	// Aggregate distinct cluster_ids with namespace counts.
@@ -1024,7 +1025,7 @@ func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 	clusterIDStr := chi.URLParam(r, "cluster_id")
 	clusterID, err := uuid.Parse(clusterIDStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
@@ -1037,13 +1038,13 @@ func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list projects")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
 		return
 	}
 
 	total, err := h.queries.CountProjectsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count projects")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
 		return
 	}
 
@@ -1071,30 +1072,30 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	var req ProjectNamespaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Namespace = strings.TrimSpace(req.Namespace)
 	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "namespace is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 
 	namespaces := decodeNamespaceList(project.Namespaces)
 	for _, ns := range namespaces {
 		if ns == req.Namespace {
-			RespondRequestError(w, r, http.StatusConflict, "namespace_exists", "Namespace '"+req.Namespace+"' is already in this project.")
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
 			return
 		}
 	}
@@ -1112,7 +1113,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, ns := range decodeNamespaceList(other.Namespaces) {
 				if ns == req.Namespace {
-					RespondRequestError(w, r, http.StatusConflict, "namespace_claimed", "Namespace '"+req.Namespace+"' is already assigned to project '"+other.Name+"'.")
+					RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already assigned to project '"+other.Name+"'.")
 					return
 				}
 			}
@@ -1122,7 +1123,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	namespaces = append(namespaces, req.Namespace)
 	encoded, err := json.Marshal(namespaces)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "marshal_error", "Failed to encode namespaces")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
 		return
 	}
 
@@ -1140,7 +1141,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    project.ResourceQuotaPodCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update project")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
 		return
 	}
 	h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, req.Namespace)
@@ -1157,23 +1158,23 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	var req ProjectNamespaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Namespace = strings.TrimSpace(req.Namespace)
 	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "namespace is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 
@@ -1188,13 +1189,13 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 		filtered = append(filtered, ns)
 	}
 	if !found {
-		RespondRequestError(w, r, http.StatusNotFound, "namespace_not_found", "Namespace '"+req.Namespace+"' is not in this project.")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
 		return
 	}
 
 	encoded, err := json.Marshal(filtered)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "marshal_error", "Failed to encode namespaces")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
 		return
 	}
 
@@ -1216,7 +1217,7 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 		ResourceQuotaPodCount:    project.ResourceQuotaPodCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update project")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
 		return
 	}
 	h.recordProjectAudit(r, "project.remove_namespace", updated, map[string]any{"namespace": req.Namespace})

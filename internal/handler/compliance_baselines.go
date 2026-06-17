@@ -38,6 +38,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/compliance"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -180,7 +181,7 @@ func (h *ComplianceBaselinesHandler) List(w http.ResponseWriter, r *http.Request
 	}
 	rows, err := h.reader.ListComplianceBaselines(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	activeSlug := ""
@@ -211,10 +212,10 @@ func (h *ComplianceBaselinesHandler) Get(w http.ResponseWriter, r *http.Request)
 	row, err := h.reader.GetComplianceBaseline(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Baseline not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Baseline not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	activeSlug := ""
@@ -240,10 +241,10 @@ func (h *ComplianceBaselinesHandler) Diff(w http.ResponseWriter, r *http.Request
 	res, err := compliance.Diff(r.Context(), readerAsQuerier{h.reader}, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Baseline not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Baseline not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "diff_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DiffError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, res)
@@ -260,7 +261,7 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Compliance apply not wired (no tx pool)")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Compliance apply not wired (no tx pool)")
 		return
 	}
 	id, ok := parseUUID(w, r)
@@ -270,7 +271,7 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 	var req ApplyRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
@@ -292,18 +293,18 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 	})
 	if txErr != nil {
 		if errors.Is(txErr, compliance.ErrAuditRetentionDowngrade) {
-			RespondRequestError(w, r, http.StatusConflict, "audit_retention_downgrade", txErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, apierror.AuditRetentionDowngrade, txErr.Error())
 			return
 		}
 		if errors.Is(txErr, compliance.ErrBaselineDisabled) {
-			RespondRequestError(w, r, http.StatusConflict, "baseline_disabled", txErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, apierror.BaselineDisabled, txErr.Error())
 			return
 		}
 		if errors.Is(txErr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Baseline not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Baseline not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "apply_error", txErr.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ApplyError, txErr.Error())
 		return
 	}
 
@@ -335,7 +336,7 @@ func (h *ComplianceBaselinesHandler) Active(w http.ResponseWriter, r *http.Reque
 			RespondJSON(w, http.StatusOK, map[string]any{"active": nil})
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	base, _ := h.reader.GetComplianceBaseline(r.Context(), app.BaselineID)
@@ -351,7 +352,7 @@ func (h *ComplianceBaselinesHandler) History(w http.ResponseWriter, r *http.Requ
 	}
 	rows, err := h.reader.ListComplianceBaselineApplications(r.Context(), 100)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	out := make([]applicationResponse, 0, len(rows))
@@ -368,7 +369,7 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Compliance revert not wired (no tx pool)")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Compliance revert not wired (no tx pool)")
 		return
 	}
 	id, ok := parseUUID(w, r)
@@ -382,14 +383,14 @@ func (h *ComplianceBaselinesHandler) Revert(w http.ResponseWriter, r *http.Reque
 	})
 	if txErr != nil {
 		if errors.Is(txErr, compliance.ErrNewerApplicationExists) {
-			RespondRequestError(w, r, http.StatusConflict, "newer_application_exists", txErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, apierror.NewerApplicationExists, txErr.Error())
 			return
 		}
 		if errors.Is(txErr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Application not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Application not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "revert_error", txErr.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RevertError, txErr.Error())
 		return
 	}
 
@@ -439,7 +440,7 @@ func parseUUID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid UUID")
 		return uuid.Nil, false
 	}
 	return id, true

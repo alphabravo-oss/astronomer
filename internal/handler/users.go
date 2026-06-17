@@ -15,6 +15,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -64,30 +65,30 @@ type ResetPasswordRequest struct {
 // CreateUser handles POST /api/v1/users/.
 func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
 	}
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Email is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Email is required")
 		return
 	}
 	if req.Username == "" {
 		req.Username = req.Email
 	}
 	if req.Password == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Password is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Password is required")
 		return
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "hash_error", "Failed to hash password")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HashError, "Failed to hash password")
 		return
 	}
 	// Default to active when not specified.
@@ -106,7 +107,7 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		IsSuperuser: req.IsSuperuser,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create user")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create user")
 		return
 	}
 	recordAudit(r, h.queries, "user.create", "user", user.ID.String(), user.Username, map[string]any{
@@ -121,22 +122,22 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 // UpdateUser handles PUT/PATCH /api/v1/users/{id}/.
 func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
 	current, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
 	var req UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	email := strings.TrimSpace(req.Email)
@@ -168,7 +169,7 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		IsActive:  isActive,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update user")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update user")
 		return
 	}
 	recordAudit(r, h.queries, "user.update", "user", user.ID.String(), user.Username, map[string]any{
@@ -181,21 +182,21 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // DeleteUser handles DELETE /api/v1/users/{id}/.
 func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
 	if err := h.queries.DeleteUser(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete user")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete user")
 		return
 	}
 	// ON DELETE CASCADE on the role-binding tables means every binding for
@@ -213,17 +214,17 @@ func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 // ResetUserPassword handles POST /api/v1/users/{id}/reset-password/.
 func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
 	// Body is optional: if empty / no `password` field, we generate a random
@@ -236,14 +237,14 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 	)
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
 	if req.Password == "" {
 		tmp, err := generateTempPassword()
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "generate_error", "Failed to generate temporary password")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.GenerateError, "Failed to generate temporary password")
 			return
 		}
 		req.Password = tmp
@@ -251,14 +252,14 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "hash_error", "Failed to hash password")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HashError, "Failed to hash password")
 		return
 	}
 	if err := h.queries.UpdateUserPassword(r.Context(), sqlc.UpdateUserPasswordParams{
 		ID:       id,
 		Password: string(hashed),
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to reset password")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset password")
 		return
 	}
 	recordAudit(r, h.queries, "user.reset_password", "user", existing.ID.String(), existing.Username, map[string]any{
@@ -285,25 +286,25 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 // the route gets a clean 403 rather than a generic permission rejection.
 func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
 	if err := h.queries.UnlockUser(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to unlock user")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to unlock user")
 		return
 	}
 	recordAudit(r, h.queries, "admin.user.unlocked", "user", existing.ID.String(), existing.Username, map[string]any{
@@ -332,21 +333,21 @@ func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 // Auth: superuser. Same in-handler gating as UnlockUser.
 func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "users_error", "user store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
 	now := time.Now()
@@ -354,7 +355,7 @@ func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request
 		ID:                  id,
 		TokensInvalidatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to invalidate tokens")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to invalidate tokens")
 		return
 	}
 	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "admin_force_logout")...).Inc()

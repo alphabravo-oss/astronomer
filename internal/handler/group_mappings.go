@@ -32,6 +32,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // GroupMappingsQuerier is the narrow DB surface the admin handler
@@ -130,12 +131,12 @@ func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to list group mappings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to list group mappings")
 		return
 	}
 	total, err := h.queries.CountGroupMappings(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to count group mappings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to count group mappings")
 		return
 	}
 	out := make([]GroupMappingResponse, 0, len(rows))
@@ -152,16 +153,16 @@ func (h *GroupMappingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid mapping ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid mapping ID")
 		return
 	}
 	row, err := h.queries.GetGroupMappingByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Group mapping not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Group mapping not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to get group mapping")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get group mapping")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toGroupMappingResponse(row))
@@ -176,22 +177,22 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	var req GroupMappingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
 		return
 	}
 	req.GroupName = strings.TrimSpace(req.GroupName)
 	if req.GroupName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_group_name", "group_name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidGroupName, "group_name is required")
 		return
 	}
 	scope := strings.ToLower(strings.TrimSpace(req.Scope))
 	if scope != "global" && scope != "cluster" && scope != "project" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_scope", "scope must be one of global|cluster|project")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScope, "scope must be one of global|cluster|project")
 		return
 	}
 	roleID, err := uuid.Parse(req.RoleID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_role_id", "role_id must be a UUID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "role_id must be a UUID")
 		return
 	}
 
@@ -203,7 +204,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.ConnectorID != "" {
 		cid, err := uuid.Parse(req.ConnectorID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_connector_id", "connector_id must be a UUID or empty")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "connector_id must be a UUID or empty")
 			return
 		}
 		params.ConnectorID = pgtype.UUID{Bytes: cid, Valid: true}
@@ -211,44 +212,44 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	switch scope {
 	case "cluster":
 		if req.ClusterID == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "cluster_id is required for scope=cluster")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "cluster_id is required for scope=cluster")
 			return
 		}
 		cl, err := uuid.Parse(req.ClusterID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "cluster_id must be a UUID")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "cluster_id must be a UUID")
 			return
 		}
 		params.ClusterID = pgtype.UUID{Bytes: cl, Valid: true}
 		if req.ProjectID != "" {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_scope_params", "project_id must be empty for scope=cluster")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScopeParams, "project_id must be empty for scope=cluster")
 			return
 		}
 	case "project":
 		if req.ProjectID == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_project_id", "project_id is required for scope=project")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "project_id is required for scope=project")
 			return
 		}
 		pj, err := uuid.Parse(req.ProjectID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_project_id", "project_id must be a UUID")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "project_id must be a UUID")
 			return
 		}
 		params.ProjectID = pgtype.UUID{Bytes: pj, Valid: true}
 		if req.ClusterID != "" {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_scope_params", "cluster_id must be empty for scope=project")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScopeParams, "cluster_id must be empty for scope=project")
 			return
 		}
 	case "global":
 		if req.ClusterID != "" || req.ProjectID != "" {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_scope_params", "cluster_id and project_id must be empty for scope=global")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScopeParams, "cluster_id and project_id must be empty for scope=global")
 			return
 		}
 	}
 
 	row, err := h.queries.CreateGroupMapping(r.Context(), params)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create group mapping")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create group mapping")
 		return
 	}
 	recordAudit(r, h.queries, "admin.group_mapping.created", "group_mapping", row.ID.String(), row.GroupName, map[string]any{
@@ -269,20 +270,20 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid mapping ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid mapping ID")
 		return
 	}
 	existing, err := h.queries.GetGroupMappingByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Group mapping not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Group mapping not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to get group mapping")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get group mapping")
 		return
 	}
 	if err := h.queries.DeleteGroupMapping(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete group mapping")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete group mapping")
 		return
 	}
 	recordAudit(r, h.queries, "admin.group_mapping.deleted", "group_mapping", existing.ID.String(), existing.GroupName, map[string]any{
@@ -308,40 +309,41 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 	}
 	uid, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
 	user, err := h.queries.GetUserByID(r.Context(), uid)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to load user")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load user")
 		return
 	}
 	snapshot, err := h.queries.GetUserIDPGroups(r.Context(), user.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusConflict, "no_snapshot",
+			RespondRequestError(w, r, http.StatusConflict, apierror.NoSnapshot,
 				"User has no IdP-groups snapshot yet; ask them to log in via SSO once")
+
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to load user IdP-groups snapshot")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load user IdP-groups snapshot")
 		return
 	}
 
 	var groups []string
 	if len(snapshot.Groups) > 0 {
 		if err := json.Unmarshal(snapshot.Groups, &groups); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "snapshot_parse", "Failed to parse IdP-groups snapshot")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SnapshotParse, "Failed to parse IdP-groups snapshot")
 			return
 		}
 	}
 
 	result, err := auth.SyncUserGroups(r.Context(), h.queries, user.ID, snapshot.ConnectorID, groups, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", "Failed to sync user groups")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to sync user groups")
 		return
 	}
 
@@ -388,11 +390,11 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 // unauthenticated or non-superuser callers.
 func (h *GroupMappingsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "store_unavailable", "Group-mapping store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Group-mapping store not configured")
 		return false
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", err.Error())
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return false
 	}
 	return true

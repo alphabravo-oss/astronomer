@@ -43,6 +43,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -198,23 +199,23 @@ func parseProjectID(r *http.Request) (uuid.UUID, error) {
 func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	rows, err := h.queries.ListCatalogsForProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list catalogs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalogs")
 		return
 	}
 	// Build a subscription-set so we can flip visibility = "subscribed_public"
 	// for public catalogs the project has explicitly opted into.
 	subs, err := h.queries.ListProjectSubscriptions(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list subscriptions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list subscriptions")
 		return
 	}
 	subSet := map[uuid.UUID]struct{}{}
@@ -237,24 +238,24 @@ func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	var req CreateProjectCatalogRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Catalog name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Catalog name is required")
 		return
 	}
 	if strings.TrimSpace(req.URL) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Catalog URL is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Catalog URL is required")
 		return
 	}
 	if req.AuthConfig == nil {
@@ -283,7 +284,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create catalog")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create catalog")
 		return
 	}
 	// Auto-subscribe so the project sees it in browse + List immediately.
@@ -320,21 +321,21 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid catalog ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid catalog ID")
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	cat, err := h.queries.GetHelmRepositoryWithOwner(r.Context(), catalogID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Catalog not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Catalog not found")
 		return
 	}
 	// Foreign-private gate: a non-superuser can't subscribe to another
@@ -343,7 +344,7 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 	// the UNIQUE constraint catch that case via the idempotent path.
 	if cat.OwnerProjectID.Valid && uuid.UUID(cat.OwnerProjectID.Bytes) != projectID {
 		if !h.callerIsSuperuser(r) {
-			RespondRequestError(w, r, http.StatusForbidden, "forbidden", "Cannot subscribe to another project's private catalog")
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot subscribe to another project's private catalog")
 			return
 		}
 	}
@@ -367,7 +368,7 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 			RespondJSON(w, http.StatusOK, existing)
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "subscribe_error", "Failed to subscribe to catalog")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SubscribeError, "Failed to subscribe to catalog")
 		return
 	}
 	recordAudit(r, h.auditor, auditKey, "helm_repository", cat.ID.String(), cat.Name, map[string]any{
@@ -390,23 +391,23 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid catalog ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid catalog ID")
 		return
 	}
 	cat, err := h.queries.GetHelmRepositoryWithOwner(r.Context(), catalogID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Catalog not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Catalog not found")
 		return
 	}
 	if cat.OwnerProjectID.Valid && uuid.UUID(cat.OwnerProjectID.Bytes) == projectID {
 		// Owned by caller → drop the row entirely.
 		if err := h.queries.DeleteHelmRepository(r.Context(), catalogID); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete catalog")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete catalog")
 			return
 		}
 		recordAudit(r, h.auditor, "project.catalog.unsubscribed_owned_deleted", "helm_repository", cat.ID.String(), cat.Name, map[string]any{
@@ -422,7 +423,7 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		ProjectID: projectID,
 		CatalogID: catalogID,
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to unsubscribe from catalog")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to unsubscribe from catalog")
 		return
 	}
 	recordAudit(r, h.auditor, "project.catalog.unsubscribed_subscription", "helm_repository", cat.ID.String(), cat.Name, map[string]any{
@@ -438,25 +439,25 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid catalog ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid catalog ID")
 		return
 	}
 	vis, err := h.queries.GetCatalogVisibilityForProject(r.Context(), projectID, catalogID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Catalog not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Catalog not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to resolve catalog visibility")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to resolve catalog visibility")
 		return
 	}
 	if vis == sqlc.CatalogVisibilityForeignPrivate && !h.callerIsSuperuser(r) {
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "Catalog not accessible to this project")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Catalog not accessible to this project")
 		return
 	}
 	charts, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
@@ -465,7 +466,7 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 		Offset:       int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list charts")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
 		return
 	}
 	RespondJSON(w, http.StatusOK, charts)

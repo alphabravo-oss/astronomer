@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -84,7 +85,7 @@ func NewMonitoringHandlerWithDeps(queries MonitoringQuerier, requester K8sReques
 func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
 	} else if ok {
 		RespondJSON(w, http.StatusOK, summary)
@@ -92,7 +93,7 @@ func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Reque
 	}
 	summary, err := h.clusterSummary(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -104,7 +105,7 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 	namespace := chi.URLParam(r, "namespace")
 	kind := chi.URLParam(r, "kind")
 	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, kind, namespace, name, r.URL.Query().Get("range")); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
 	} else if ok {
 		RespondJSON(w, http.StatusOK, data)
@@ -112,7 +113,7 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 	}
 	summary, err := h.workloadSummary(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, h.metricsSeries(summary, r.URL.Query().Get("range"), namespace+"/"+name))
@@ -128,7 +129,7 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 	}
 	if r.URL.Path == "/api/v1/clusters/"+clusterID+"/metrics/summary/" {
 		if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 			return
 		} else if ok {
 			RespondJSON(w, http.StatusOK, summary)
@@ -136,7 +137,7 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 		}
 	} else {
 		if data, ok, err := h.realClusterMetrics(r.Context(), clusterID, r.URL.Query().Get("range")); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 			return
 		} else if ok {
 			RespondJSON(w, http.StatusOK, data)
@@ -145,7 +146,7 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 	}
 	summary, err := h.clusterSummary(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "metrics_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
 	}
 
@@ -302,12 +303,12 @@ func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Reques
 	}
 	items, err := h.queries.ListMonitoringOperations(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to list monitoring operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to list monitoring operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	resp := make([]map[string]any, 0, len(items))
@@ -325,21 +326,21 @@ func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Reques
 
 func (h *MonitoringHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "monitoring_error", "monitoring store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetMonitoringOperation(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Monitoring operation not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring operation not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to load monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring operation")
 		return
 	}
 	if !h.authorizeMonitoringOperationRead(w, r, op) {
@@ -354,21 +355,21 @@ func (h *MonitoringHandler) GetOperation(w http.ResponseWriter, r *http.Request)
 
 func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "monitoring_error", "monitoring store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetMonitoringOperation(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Monitoring operation not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring operation not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to load monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring operation")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -379,7 +380,7 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 	}
 	requeued, err := h.queries.RequeueMonitoringOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to requeue monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to requeue monitoring operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -417,7 +418,7 @@ func (h *MonitoringHandler) GetBackendConfig(w http.ResponseWriter, r *http.Requ
 			RespondJSON(w, http.StatusOK, map[string]any{})
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to load monitoring backend")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring backend")
 		return
 	}
 	RespondJSON(w, http.StatusOK, monitoringBackendResponse(backend))
@@ -425,12 +426,12 @@ func (h *MonitoringHandler) GetBackendConfig(w http.ResponseWriter, r *http.Requ
 
 func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "monitoring_error", "monitoring store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
 	var req UpdateMonitoringBackendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	authConfig := req.AuthConfig
@@ -450,14 +451,14 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 	authConfigMap["operationPolicies"] = policies
 	rawAuthConfig, err := json.Marshal(authConfigMap)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid authConfig")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid authConfig")
 		return
 	}
 	if req.BackendType == "" {
 		req.BackendType = "thanos"
 	}
 	if req.QueryURL == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "queryUrl is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "queryUrl is required")
 		return
 	}
 	backend, err := h.queries.UpsertDefaultMonitoringBackend(r.Context(), sqlc.UpsertDefaultMonitoringBackendParams{
@@ -472,7 +473,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		CreatedByID:        currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to save monitoring backend")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save monitoring backend")
 		return
 	}
 	// UpdateBackendConfig is the upsert behind both CreateEndpoint and
@@ -491,7 +492,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 func (h *MonitoringHandler) PreviewSharedThanosStack(w http.ResponseWriter, r *http.Request) {
 	req, values, _, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	replaceRequired, reasons := sharedThanosReplaceRequired(sharedThanosMetadata(backend), req)
@@ -511,16 +512,16 @@ func (h *MonitoringHandler) PreviewSharedThanosStack(w http.ResponseWriter, r *h
 func (h *MonitoringHandler) InstallSharedThanosStack(w http.ResponseWriter, r *http.Request) {
 	req, values, secretSpec, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if err := h.updateSharedThanosMetadata(r.Context(), backend, req, "installing"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Thanos metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Thanos metadata")
 		return
 	}
 	op, err := h.enqueueSharedThanosOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "install", req, values, &secretSpec)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_thanos.install", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -535,7 +536,7 @@ func (h *MonitoringHandler) InstallSharedThanosStack(w http.ResponseWriter, r *h
 func (h *MonitoringHandler) UpgradeSharedThanosStack(w http.ResponseWriter, r *http.Request) {
 	req, values, secretSpec, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if replaceRequired, reasons := sharedThanosReplaceRequired(sharedThanosMetadata(backend), req); replaceRequired {
@@ -548,12 +549,12 @@ func (h *MonitoringHandler) UpgradeSharedThanosStack(w http.ResponseWriter, r *h
 		return
 	}
 	if err := h.updateSharedThanosMetadata(r.Context(), backend, req, "updating"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Thanos metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Thanos metadata")
 		return
 	}
 	op, err := h.enqueueSharedThanosOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "upgrade", req, values, &secretSpec)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_thanos.upgrade", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -568,7 +569,7 @@ func (h *MonitoringHandler) UpgradeSharedThanosStack(w http.ResponseWriter, r *h
 func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *http.Request) {
 	req, values, secretSpec, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	metadata := sharedThanosMetadata(backend)
@@ -576,11 +577,11 @@ func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *h
 	namespace := defaultString(req.Namespace, defaultString(stringFromMap(metadata, "namespace"), "monitoring"))
 	releaseName := defaultString(req.ReleaseName, defaultString(stringFromMap(metadata, "releaseName"), "thanos"))
 	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "managementClusterId is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "managementClusterId is required")
 		return
 	}
 	if err := h.updateSharedThanosMetadata(r.Context(), backend, req, "reinstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Thanos metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Thanos metadata")
 		return
 	}
 	op, err := h.enqueueSharedThanosOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "replace", SharedThanosStackRequest{
@@ -595,7 +596,7 @@ func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *h
 		CompactorReplicas:       req.CompactorReplicas,
 	}, values, &secretSpec)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_thanos.replace", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -609,12 +610,12 @@ func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *h
 
 func (h *MonitoringHandler) UninstallSharedThanosStack(w http.ResponseWriter, r *http.Request) {
 	if h.helm == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "helm_error", "monitoring deployment is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "monitoring deployment is not configured")
 		return
 	}
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "monitoring_error", "Default monitoring backend is not configured")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MonitoringError, "Default monitoring backend is not configured")
 		return
 	}
 	metadata := sharedThanosMetadata(backend)
@@ -623,7 +624,7 @@ func (h *MonitoringHandler) UninstallSharedThanosStack(w http.ResponseWriter, r 
 		clusterID = stringFromMap(metadata, "managementClusterId")
 	}
 	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "clusterId is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "clusterId is required")
 		return
 	}
 	namespace := defaultString(stringFromMap(metadata, "namespace"), "monitoring")
@@ -633,7 +634,7 @@ func (h *MonitoringHandler) UninstallSharedThanosStack(w http.ResponseWriter, r 
 		Namespace:           namespace,
 		ReleaseName:         releaseName,
 	}, "uninstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Thanos metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Thanos metadata")
 		return
 	}
 	op, err := h.enqueueSharedThanosOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "uninstall", SharedThanosStackRequest{
@@ -642,7 +643,7 @@ func (h *MonitoringHandler) UninstallSharedThanosStack(w http.ResponseWriter, r 
 		ReleaseName:         releaseName,
 	}, nil, nil)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_thanos.uninstall", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -718,7 +719,7 @@ func (h *MonitoringHandler) GetSharedThanosStatus(w http.ResponseWriter, r *http
 func (h *MonitoringHandler) PreviewSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	replaceRequired, reasons := sharedAlertmanagerReplaceRequired(sharedAlertmanagerMetadata(backend), req)
@@ -738,16 +739,16 @@ func (h *MonitoringHandler) PreviewSharedAlertmanager(w http.ResponseWriter, r *
 func (h *MonitoringHandler) InstallSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if err := h.updateSharedAlertmanagerMetadata(r.Context(), backend, req, "installing"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Alertmanager metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Alertmanager metadata")
 		return
 	}
 	op, err := h.enqueueSharedAlertmanagerOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "install", req, values)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_alertmanager.install", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -762,7 +763,7 @@ func (h *MonitoringHandler) InstallSharedAlertmanager(w http.ResponseWriter, r *
 func (h *MonitoringHandler) UpgradeSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if replaceRequired, reasons := sharedAlertmanagerReplaceRequired(sharedAlertmanagerMetadata(backend), req); replaceRequired {
@@ -775,12 +776,12 @@ func (h *MonitoringHandler) UpgradeSharedAlertmanager(w http.ResponseWriter, r *
 		return
 	}
 	if err := h.updateSharedAlertmanagerMetadata(r.Context(), backend, req, "updating"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Alertmanager metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Alertmanager metadata")
 		return
 	}
 	op, err := h.enqueueSharedAlertmanagerOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "upgrade", req, values)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_alertmanager.upgrade", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -795,7 +796,7 @@ func (h *MonitoringHandler) UpgradeSharedAlertmanager(w http.ResponseWriter, r *
 func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 
@@ -805,12 +806,12 @@ func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *
 	releaseName := defaultString(req.ReleaseName, defaultString(stringFromMap(metadata, "releaseName"), "astronomer-alertmanager"))
 
 	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "managementClusterId is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "managementClusterId is required")
 		return
 	}
 
 	if err := h.updateSharedAlertmanagerMetadata(r.Context(), backend, req, "reinstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Alertmanager metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Alertmanager metadata")
 		return
 	}
 	op, err := h.enqueueSharedAlertmanagerOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "replace", SharedAlertmanagerRequest{
@@ -823,7 +824,7 @@ func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *
 		StorageSize:         req.StorageSize,
 	}, values)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_alertmanager.replace", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -837,12 +838,12 @@ func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *
 
 func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
 	if h.helm == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "helm_error", "monitoring deployment is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "monitoring deployment is not configured")
 		return
 	}
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "monitoring_error", "Default monitoring backend is not configured")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MonitoringError, "Default monitoring backend is not configured")
 		return
 	}
 	metadata := sharedAlertmanagerMetadata(backend)
@@ -851,7 +852,7 @@ func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r
 		clusterID = stringFromMap(metadata, "managementClusterId")
 	}
 	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "clusterId is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "clusterId is required")
 		return
 	}
 	namespace := defaultString(stringFromMap(metadata, "namespace"), "monitoring")
@@ -861,7 +862,7 @@ func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r
 		Namespace:           namespace,
 		ReleaseName:         releaseName,
 	}, "uninstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist shared Alertmanager metadata")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist shared Alertmanager metadata")
 		return
 	}
 	op, err := h.enqueueSharedAlertmanagerOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "uninstall", SharedAlertmanagerRequest{
@@ -870,7 +871,7 @@ func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r
 		ReleaseName:         releaseName,
 	}, nil)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.shared_alertmanager.uninstall", "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
@@ -948,7 +949,7 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cfg, err := h.queries.GetClusterMonitoringConfig(r.Context(), clusterID)
@@ -957,7 +958,7 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 			RespondJSON(w, http.StatusOK, map[string]any{})
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to load cluster monitoring config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load cluster monitoring config")
 		return
 	}
 	RespondJSON(w, http.StatusOK, clusterMonitoringConfigResponse(cfg))
@@ -965,17 +966,17 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 
 func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "monitoring_error", "monitoring store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	var req UpdateClusterMonitoringConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	var backendID uuid.UUID
@@ -984,7 +985,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 	} else {
 		backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "monitoring_error", "Default monitoring backend is not configured")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.MonitoringError, "Default monitoring backend is not configured")
 			return
 		}
 		backendID = backend.ID
@@ -1026,7 +1027,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		CreatedByID:             currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to save cluster monitoring config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save cluster monitoring config")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.cluster_config.update", "cluster_monitoring_config", clusterCfg.ClusterID.String(), clusterCfg.PrometheusReleaseName, map[string]any{
@@ -1040,7 +1041,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request) {
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	cfg, ok, _ := h.loadStackConfig(r.Context(), clusterID)
@@ -1061,16 +1062,16 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request) {
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if err := h.persistStackConfig(r.Context(), clusterID, req, "installing"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist monitoring stack config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
 		return
 	}
 	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "install", clusterID, req, values)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.stack.install", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
@@ -1083,12 +1084,12 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request) {
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	cfg, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
 	if loadErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", loadErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, loadErr.Error())
 		return
 	}
 	if replaceRequired, reasons := clusterMonitoringReplaceRequired(cfg, ok, req); replaceRequired {
@@ -1101,12 +1102,12 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := h.persistStackConfig(r.Context(), clusterID, req, "updating"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist monitoring stack config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
 		return
 	}
 	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "upgrade", clusterID, req, values)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.stack.upgrade", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
@@ -1119,22 +1120,22 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request) {
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	_, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
 	if loadErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", loadErr.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, loadErr.Error())
 		return
 	}
 	if err := h.persistStackConfig(r.Context(), clusterID, req, "reinstalled"); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to persist monitoring stack config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
 		return
 	}
 	_ = ok
 	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "replace", clusterID, req, values)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.stack.replace", "cluster_monitoring_config", clusterID, req.ReleaseName, map[string]any{
@@ -1146,13 +1147,13 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 
 func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Request) {
 	if h.helm == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "helm_error", "helm requester not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "helm requester not configured")
 		return
 	}
 	clusterID := chi.URLParam(r, "cluster_id")
 	cfg, _, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if h.queries != nil {
@@ -1188,7 +1189,7 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		Namespace:   cfg.StackNamespace,
 	}, nil)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "monitoring_error", "Failed to create monitoring operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
 		return
 	}
 	recordAudit(r, h.queries, "monitoring.stack.uninstall", "cluster_monitoring_config", clusterID, cfg.PrometheusReleaseName, map[string]any{
@@ -1202,7 +1203,7 @@ func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Reques
 	clusterID := chi.URLParam(r, "cluster_id")
 	cfg, ok, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
 	if !ok {
@@ -2937,7 +2938,7 @@ func (h *MonitoringHandler) authorizeMonitoringOperationUpdate(w http.ResponseWr
 func (h *MonitoringHandler) authorizeMonitoringOperation(w http.ResponseWriter, r *http.Request, op sqlc.MonitoringOperation, verb rbac.Verb) bool {
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
@@ -2945,11 +2946,11 @@ func (h *MonitoringHandler) authorizeMonitoringOperation(w http.ResponseWriter, 
 	}
 	allowed, err := h.canAccessMonitoringOperation(r.Context(), bindings, op, verb)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve monitoring operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve monitoring operation target")
 		return false
 	}
 	if !allowed {
-		RespondRequestError(w, r, http.StatusForbidden, "permission_denied", "You do not have permission to access this operation")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to access this operation")
 		return false
 	}
 	return true
@@ -3597,7 +3598,7 @@ func (h *MonitoringHandler) ListEndpoints(w http.ResponseWriter, r *http.Request
 	}
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil && err != pgx.ErrNoRows {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to load monitoring endpoints")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load monitoring endpoints")
 		return
 	}
 	items := []map[string]any{}
@@ -3610,17 +3611,17 @@ func (h *MonitoringHandler) ListEndpoints(w http.ResponseWriter, r *http.Request
 // GetEndpoint handles GET /api/v1/monitoring/endpoints/{id}/.
 func (h *MonitoringHandler) GetEndpoint(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "monitoring_error", "monitoring store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
 	idStr := chi.URLParam(r, "id")
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Monitoring endpoint not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring endpoint not found")
 		return
 	}
 	if backend.ID.String() != idStr {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Monitoring endpoint not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring endpoint not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, monitoringBackendResponse(backend))
@@ -3640,7 +3641,7 @@ func (h *MonitoringHandler) UpdateEndpoint(w http.ResponseWriter, r *http.Reques
 // DeleteEndpoint handles DELETE /api/v1/monitoring/endpoints/{id}/.
 // We do not currently support deleting the default backend; return 501.
 func (h *MonitoringHandler) DeleteEndpoint(w http.ResponseWriter, r *http.Request) {
-	RespondRequestError(w, r, http.StatusNotImplemented, "not_implemented", "Deleting the default monitoring backend is not yet supported")
+	RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "Deleting the default monitoring backend is not yet supported")
 }
 
 // --- Legacy path aliases ---
@@ -3689,5 +3690,5 @@ func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http
 // Returns 501 because there is no cluster-scoped node metrics endpoint yet.
 func (h *MonitoringHandler) LegacyNodeMetrics(w http.ResponseWriter, r *http.Request) {
 	// TODO: wire up to a cluster-node metrics endpoint once a Go-side equivalent exists.
-	RespondRequestError(w, r, http.StatusNotImplemented, "not_implemented", "node metrics not yet implemented")
+	RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "node metrics not yet implemented")
 }

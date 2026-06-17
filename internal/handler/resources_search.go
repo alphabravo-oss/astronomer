@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -175,19 +176,19 @@ type searchClusterError struct {
 //	} }
 func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil || h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "search_unavailable", "Cross-cluster search is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SearchUnavailable, "Cross-cluster search is not configured")
 		return
 	}
 
 	q := r.URL.Query()
 	resourceType := strings.ToLower(strings.TrimSpace(q.Get("type")))
 	if resourceType == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", "type query parameter is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "type query parameter is required")
 		return
 	}
 	def, ok := searchResourceDefs[resourceType]
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, "unsupported_type", fmt.Sprintf("unsupported resource type %q", resourceType))
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.UnsupportedType, fmt.Sprintf("unsupported resource type %q", resourceType))
 		return
 	}
 
@@ -213,16 +214,16 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 		QueryLimit:  1000,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_clusters_failed", "Failed to list active clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListClustersFailed, "Failed to list active clusters")
 		return
 	}
 	clusters, authErr := h.authorizedSearchClusters(r.Context(), clusters, def.rbacResource)
 	if authErr != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	if len(clusters) == 0 {
-		RespondRequestError(w, r, http.StatusForbidden, "permission_denied", "You do not have permission to search this resource type")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to search this resource type")
 		return
 	}
 

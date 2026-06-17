@@ -18,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -310,7 +311,7 @@ func (e *agentFleetHandlerError) Error() string {
 
 func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 
@@ -325,17 +326,17 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	total, err := h.queries.CountClusters(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
 		return
 	}
 	clusters, err := h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 		return
 	}
 	active, err := h.queries.ListActiveConnections(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "agent_connection_error", "Failed to list active agent connections")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AgentConnectionError, "Failed to list active agent connections")
 		return
 	}
 
@@ -399,12 +400,12 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *AgentFleetHandler) Diagnostics(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	_, diagnostics, err := h.buildDiagnostics(r.Context(), clusterID)
@@ -417,12 +418,12 @@ func (h *AgentFleetHandler) Diagnostics(w http.ResponseWriter, r *http.Request) 
 
 func (h *AgentFleetHandler) DiagnosticsBundle(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, diagnostics, err := h.buildDiagnostics(r.Context(), clusterID)
@@ -451,12 +452,12 @@ func (h *AgentFleetHandler) DiagnosticsBundle(w http.ResponseWriter, r *http.Req
 
 func (h *AgentFleetHandler) SelfTest(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, diagnostics, err := h.buildDiagnostics(r.Context(), clusterID)
@@ -710,12 +711,12 @@ func agentSelfTestOverallStatus(checks []agentSelfTestCheck) string {
 
 func (h *AgentFleetHandler) UpgradePlan(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	var req agentUpgradePlanRequest
@@ -732,12 +733,12 @@ func (h *AgentFleetHandler) UpgradePlan(w http.ResponseWriter, r *http.Request) 
 
 func (h *AgentFleetHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	var req agentUpgradePlanRequest
@@ -763,7 +764,7 @@ func (h *AgentFleetHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		"cluster_name": firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encode_error", "Failed to encode lifecycle operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode lifecycle operation")
 		return
 	}
 	op, err := h.createAgentLifecycleOperation(withOperationIdempotency(r, "agent_lifecycle"), sqlc.CreateAgentLifecycleOperationParams{
@@ -777,7 +778,7 @@ func (h *AgentFleetHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RequestedBy:    currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to queue agent upgrade operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to queue agent upgrade operation")
 		return
 	}
 	recordAudit(r, h.queries, "agent.upgrade.queued", "agent_lifecycle_operation", op.ID.String(), firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name), map[string]any{
@@ -818,16 +819,16 @@ func (h *AgentFleetHandler) createAgentLifecycleOperation(ctx context.Context, p
 
 func (h *AgentFleetHandler) Operations(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "agent_fleet_unavailable", "Agent fleet inventory is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentFleetUnavailable, "Agent fleet inventory is not configured")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	limit := int32(queryInt(r, "limit", 20))
@@ -844,7 +845,7 @@ func (h *AgentFleetHandler) Operations(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list agent lifecycle operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list agent lifecycle operations")
 		return
 	}
 	items := make([]agentLifecycleOperationResponse, 0, len(ops))
@@ -1594,7 +1595,7 @@ func respondAgentFleetError(w http.ResponseWriter, r *http.Request, err error) {
 		RespondRequestError(w, r, handlerErr.status, handlerErr.code, handlerErr.message)
 		return
 	}
-	RespondRequestError(w, r, http.StatusInternalServerError, "agent_fleet_error", "Agent fleet request failed")
+	RespondRequestError(w, r, http.StatusInternalServerError, apierror.AgentFleetError, "Agent fleet request failed")
 }
 
 func agentLifecycleOperationDTO(op sqlc.AgentLifecycleOperation) agentLifecycleOperationResponse {

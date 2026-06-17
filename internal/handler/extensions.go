@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -143,12 +144,12 @@ var extensionNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 
 func (h *ExtensionHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Extension registry is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	rows, err := h.queries.ListUIExtensions(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_failed", "Failed to list extensions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list extensions")
 		return
 	}
 	items := make([]ExtensionRecordResponse, 0, len(rows))
@@ -168,7 +169,7 @@ func (h *ExtensionHandler) SampleManifest(w http.ResponseWriter, r *http.Request
 func (h *ExtensionHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	manifest, err := decodeExtensionManifest(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_manifest", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidManifest, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, validateExtensionManifest(manifest, h.current))
@@ -176,12 +177,12 @@ func (h *ExtensionHandler) Validate(w http.ResponseWriter, r *http.Request) {
 
 func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Extension registry is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	var req InstallExtensionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_json", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	validation := validateExtensionManifest(req.Manifest, h.current)
@@ -203,7 +204,7 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 		InstalledBy:         currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "install_failed", "Failed to install extension")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InstallFailed, "Failed to install extension")
 		return
 	}
 	recordAudit(r, h.auditor, "admin.extension.installed", "ui_extension", row.ID.String(), row.Name, map[string]any{
@@ -225,36 +226,36 @@ func (h *ExtensionHandler) Disable(w http.ResponseWriter, r *http.Request) {
 
 func (h *ExtensionHandler) setEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Extension registry is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	if !extensionNameRE.MatchString(name) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "Invalid extension name")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Invalid extension name")
 		return
 	}
 	if enabled {
 		existing, err := h.findExtension(r.Context(), name)
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Extension not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
 			return
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "lookup_failed", "Failed to read extension")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to read extension")
 			return
 		}
 		if existing.CompatibilityStatus != "compatible" {
-			RespondRequestError(w, r, http.StatusConflict, "incompatible_extension", "Incompatible extensions cannot be enabled")
+			RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Incompatible extensions cannot be enabled")
 			return
 		}
 	}
 	row, err := h.queries.SetUIExtensionEnabled(r.Context(), sqlc.SetUIExtensionEnabledParams{Name: name, Enabled: enabled})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Extension not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_failed", "Failed to update extension")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update extension")
 		return
 	}
 	action := "admin.extension.disabled"

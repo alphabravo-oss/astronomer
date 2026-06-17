@@ -16,7 +16,7 @@ func TestSelectBackupsToPrune(t *testing.T) {
 	backups := []sqlc.Backup{
 		bk("nightly-5", "completed"), // newest
 		bk("nightly-4", "completed"),
-		bk("nightly-3", "failed"),    // not completed → ignored for count
+		bk("nightly-3", "failed"), // not completed → ignored for count
 		bk("nightly-2", "completed"),
 		bk("nightly-1", "completed"), // oldest
 		bk("hourly-9", "completed"),  // different schedule
@@ -26,7 +26,7 @@ func TestSelectBackupsToPrune(t *testing.T) {
 		{VeleroScheduleName: "nightly", RetentionCount: 2},
 		{VeleroScheduleName: "hourly", RetentionCount: 5}, // only 1 backup → nothing to prune
 		{VeleroScheduleName: "", RetentionCount: 3},       // unnamed → skipped
-		{VeleroScheduleName: "weekly", RetentionCount: 0},  // no count cap → skipped
+		{VeleroScheduleName: "weekly", RetentionCount: 0}, // no count cap → skipped
 	}
 
 	got := selectBackupsToPrune(schedules, backups)

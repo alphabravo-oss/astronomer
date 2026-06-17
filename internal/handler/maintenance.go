@@ -40,6 +40,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 )
 
@@ -142,7 +143,7 @@ func (h *MaintenanceHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListMaintenanceWindows(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	out := make([]MaintenanceWindowResponse, 0, len(rows))
@@ -159,16 +160,16 @@ func (h *MaintenanceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid window ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
 		return
 	}
 	row, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Window not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Window not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, windowToWire(row))
@@ -181,16 +182,16 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	var req MaintenanceWindowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req = applyRequestDefaults(req)
 	if msg, ok := validateRequest(req); !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", msg)
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, msg)
 		return
 	}
 	if _, err := h.queries.GetMaintenanceWindowByName(r.Context(), req.Name); err == nil {
-		RespondRequestError(w, r, http.StatusConflict, "name_taken", "A window with that name already exists")
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A window with that name already exists")
 		return
 	}
 	sel, _ := json.Marshal(req.ClusterSelector)
@@ -219,7 +220,7 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:       currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, err.Error())
 		return
 	}
 	h.invalidate()
@@ -238,31 +239,31 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid window ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
 		return
 	}
 	existing, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Window not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Window not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	var req MaintenanceWindowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req = applyRequestDefaults(req)
 	if msg, ok := validateRequest(req); !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_request", msg)
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, msg)
 		return
 	}
 	if req.Name != existing.Name {
 		if other, err := h.queries.GetMaintenanceWindowByName(r.Context(), req.Name); err == nil && other.ID != id {
-			RespondRequestError(w, r, http.StatusConflict, "name_taken", "A different window already uses that name")
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A different window already uses that name")
 			return
 		}
 	}
@@ -292,7 +293,7 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Enabled:         enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, err.Error())
 		return
 	}
 	h.invalidate()
@@ -311,20 +312,20 @@ func (h *MaintenanceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid window ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
 		return
 	}
 	existing, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Window not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Window not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	if err := h.queries.DeleteMaintenanceWindow(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, err.Error())
 		return
 	}
 	h.invalidate()
@@ -341,7 +342,7 @@ func (h *MaintenanceHandler) ListActive(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := h.queries.ListMaintenanceWindows(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	now := time.Now().UTC()
@@ -380,12 +381,12 @@ func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	total, err := h.queries.CountDeferredOperations(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	out := make([]DeferredOperationResponse, 0, len(rows))
@@ -402,28 +403,29 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid deferred-operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid deferred-operation ID")
 		return
 	}
 	row, err := h.queries.GetDeferredOperation(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Deferred operation not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Deferred operation not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	if row.Status != "pending" {
-		RespondRequestError(w, r, http.StatusConflict, "not_cancellable",
+		RespondRequestError(w, r, http.StatusConflict, apierror.NotCancellable,
 			"Only pending operations can be cancelled; this one is "+row.Status)
+
 		return
 	}
 	if err := h.queries.MarkDeferredCancelled(r.Context(), sqlc.MarkDeferredCancelledParams{
 		ID:        id,
 		LastError: "cancelled by operator",
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "cancel_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CancelFailed, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.deferred_operation.cancelled", "deferred_operation", id.String(), row.OperationType, map[string]any{

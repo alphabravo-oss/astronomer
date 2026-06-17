@@ -41,6 +41,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -251,12 +252,12 @@ func encodeNamespaces(ns []string) json.RawMessage {
 func parseClusterAndRegistryIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	registryID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid registry ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid registry ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, registryID, true
@@ -266,16 +267,16 @@ func parseClusterAndRegistryIDs(w http.ResponseWriter, r *http.Request) (uuid.UU
 func (h *ClusterRegistriesHandler) List(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterRegistryConfigs(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list registry configs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list registry configs")
 		return
 	}
 	out := make([]ClusterRegistryResponse, 0, len(rows))
@@ -293,13 +294,13 @@ func (h *ClusterRegistriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.queries.GetClusterRegistryConfigByID(r.Context(), registryID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 	if row.ClusterID != clusterID {
 		// Treat a wrong-cluster lookup as a 404 — never leak that the row
 		// exists under a different cluster.
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, clusterRegistryConfigToResponse(row))
@@ -309,31 +310,31 @@ func (h *ClusterRegistriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
 	var req ClusterRegistryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.PrivateRegistryUrl) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "private_registry_url is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "private_registry_url is required")
 		return
 	}
 	if req.RegistryPassword == RegistryPasswordSentinel {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Cannot use password sentinel on create")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Cannot use password sentinel on create")
 		return
 	}
 	registryPassword, registryPasswordEncrypted, err := h.encryptRegistryPassword(req.RegistryPassword)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "crypto_error", "Failed to encrypt registry password")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt registry password")
 		return
 	}
 
@@ -355,7 +356,7 @@ func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request
 		SecretName:                strings.TrimSpace(req.SecretName),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create registry config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registry config")
 		return
 	}
 
@@ -381,26 +382,26 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	existing, err := h.queries.GetClusterRegistryConfigByID(r.Context(), registryID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 	if existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 
 	var req ClusterRegistryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.PrivateRegistryUrl) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "private_registry_url is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "private_registry_url is required")
 		return
 	}
 
@@ -416,7 +417,7 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 	} else {
 		password, passwordEncrypted, err = h.encryptRegistryPassword(password)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "crypto_error", "Failed to encrypt registry password")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt registry password")
 			return
 		}
 	}
@@ -439,7 +440,7 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 		SecretName:                strings.TrimSpace(req.SecretName),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update registry config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
 		return
 	}
 
@@ -469,22 +470,22 @@ func (h *ClusterRegistriesHandler) Delete(w http.ResponseWriter, r *http.Request
 	}
 	existing, err := h.queries.GetClusterRegistryConfigByID(r.Context(), registryID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 	if existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 
 	task, err := h.newUnapplyTask(r, existing)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "task_error", "Failed to build registry cleanup task")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TaskError, "Failed to build registry cleanup task")
 		return
 	}
 	deletedWithOutbox, err := h.deleteWithUnapplyOutbox(r.Context(), existing, task)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete registry config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
 		return
 	}
 	if !deletedWithOutbox {
@@ -493,7 +494,7 @@ func (h *ClusterRegistriesHandler) Delete(w http.ResponseWriter, r *http.Request
 		// matter that the row vanishes during the worker's run.
 		h.enqueueUnapplyTask(task)
 		if err := h.queries.DeleteClusterRegistryConfigByID(r.Context(), registryID); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete registry config")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
 			return
 		}
 	}
@@ -526,21 +527,21 @@ func (h *ClusterRegistriesHandler) Test(w http.ResponseWriter, r *http.Request) 
 	}
 	existing, err := h.queries.GetClusterRegistryConfigByID(r.Context(), registryID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 	if existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found")
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "tunnel_unwired", "Tunnel requester not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnwired, "Tunnel requester not configured")
 		return
 	}
 
 	url := tasks.RegistryProbeURL(existing.PrivateRegistryUrl)
 	if url == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_url", "Could not derive a probe URL from the stored registry URL")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "Could not derive a probe URL from the stored registry URL")
 		return
 	}
 
@@ -549,7 +550,7 @@ func (h *ClusterRegistriesHandler) Test(w http.ResponseWriter, r *http.Request) 
 	}
 	password, err := h.registryPassword(existing)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "crypto_error", "Failed to decrypt registry password")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to decrypt registry password")
 		return
 	}
 	if existing.RegistryUsername != "" && password != "" {

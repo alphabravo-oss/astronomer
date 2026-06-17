@@ -49,6 +49,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -311,12 +312,12 @@ func (h *CloudCredentialHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	rows, err := h.queries.ListCloudCredentialsForProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list cloud credentials")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cloud credentials")
 		return
 	}
 	out := make([]CloudCredentialResponse, 0, len(rows))
@@ -341,7 +342,7 @@ func (h *CloudCredentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.rowToResponse(r.Context(), row, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "decode_error", "Failed to decode credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to decode credential")
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)
@@ -355,55 +356,55 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 	}
 	project, err := h.queries.GetProjectByID(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 	var req CloudCredentialRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if err := validateCredentialName(req.Name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, err.Error())
 		return
 	}
 	if _, ok := cloudcreds.LookupProvider(req.Provider); !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_provider", fmt.Sprintf("Unknown provider %q", req.Provider))
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidProvider, fmt.Sprintf("Unknown provider %q", req.Provider))
 		return
 	}
 	// Reject sentinel values on create — there's nothing to preserve.
 	for k, v := range req.Data {
 		if s, isStr := v.(string); isStr && s == cloudcreds.SecretSentinel {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_data", fmt.Sprintf("Cannot use sentinel value on create for key %q", k))
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, fmt.Sprintf("Cannot use sentinel value on create for key %q", k))
 			return
 		}
 	}
 	if err := cloudcreds.Validate(req.Provider, req.Data); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_data", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Encryption key not configured; cannot store credentials")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryption key not configured; cannot store credentials")
 		return
 	}
 	plain, err := cloudcreds.EncodeBlob(req.Data)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_data", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
 	ciphertext, err := h.encryptor.Encrypt(string(plain))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
 		return
 	}
 	targetRefs, err := h.canonicaliseTargetRefs(r.Context(), req.TargetRefs, req.Name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_target_refs", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTargetRefs, err.Error())
 		return
 	}
 	refsJSON, err := json.Marshal(targetRefs)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encode_error", "Failed to encode target refs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode target refs")
 		return
 	}
 	// Uniqueness (project_id, name) is enforced by the DB; we check
@@ -412,7 +413,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		ProjectID: projectID,
 		Name:      req.Name,
 	}); err == nil {
-		RespondRequestError(w, r, http.StatusConflict, "name_taken", "A credential with that name already exists in this project")
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A credential with that name already exists in this project")
 		return
 	}
 	created, err := h.queries.CreateCloudCredential(r.Context(), sqlc.CreateCloudCredentialParams{
@@ -425,7 +426,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		CreatedBy:     userIDFromRequest(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create credential")
 		return
 	}
 	h.materializeCredentialRefs(r.Context(), created, targetRefs, "apply")
@@ -435,7 +436,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 	})
 	resp, err := h.rowToResponse(r.Context(), created, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "decode_error", "Failed to render created credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render created credential")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, resp)
@@ -450,7 +451,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	}
 	var req CloudCredentialRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Name + provider are immutable post-create — operators delete +
@@ -458,17 +459,17 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	// keeps the materialization story simple (no provider-switch
 	// midflight where the rendered Secret shape would change).
 	if req.Name != "" && req.Name != existing.Name {
-		RespondRequestError(w, r, http.StatusBadRequest, "immutable_name", "Credential name cannot be changed")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ImmutableName, "Credential name cannot be changed")
 		return
 	}
 	if req.Provider != "" && !strings.EqualFold(req.Provider, existing.Provider) {
-		RespondRequestError(w, r, http.StatusBadRequest, "immutable_provider", "Credential provider cannot be changed")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ImmutableProvider, "Credential provider cannot be changed")
 		return
 	}
 	// Decrypt existing for the merge step (sentinel-preserves-stored).
 	priorBlob, err := h.decryptToMap(existing.DataEncrypted)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "decrypt_error", "Failed to decrypt stored credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored credential")
 		return
 	}
 	// Validate the incoming patch first (which uses raw map[string]any).
@@ -478,7 +479,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		// validation that only rejects unknown keys + non-string
 		// values + non-sentinel empty strings.
 		if err := validatePatchData(existing.Provider, req.Data); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_data", err.Error())
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 			return
 		}
 	}
@@ -500,21 +501,21 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		mergedAny[k] = v
 	}
 	if err := cloudcreds.Validate(existing.Provider, mergedAny); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_data", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Encryption key not configured; cannot store credentials")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryption key not configured; cannot store credentials")
 		return
 	}
 	plain, err := cloudcreds.EncodeBlob(mergedAny)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encode_error", "Failed to encode credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode credential")
 		return
 	}
 	ciphertext, err := h.encryptor.Encrypt(string(plain))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
 		return
 	}
 	// Target refs: omitted in the request body → preserve stored.
@@ -532,14 +533,14 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	if req.TargetRefs != nil {
 		canon, err := h.canonicaliseTargetRefs(r.Context(), req.TargetRefs, existing.Name)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_target_refs", err.Error())
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTargetRefs, err.Error())
 			return
 		}
 		refsCanonical = canon
 	}
 	refsJSON, err := json.Marshal(refsCanonical)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encode_error", "Failed to encode target refs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode target refs")
 		return
 	}
 	description := existing.Description
@@ -555,7 +556,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		TargetRefs:    refsJSON,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update credential")
 		return
 	}
 	// On target_ref shrink: enqueue Secret deletion for the dropped pairs
@@ -573,7 +574,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	})
 	resp, err := h.rowToResponse(r.Context(), updated, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "decode_error", "Failed to render updated credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render updated credential")
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)
@@ -591,7 +592,7 @@ func (h *CloudCredentialHandler) Delete(w http.ResponseWriter, r *http.Request) 
 	stored := decodeStoredTargetRefs(existing.TargetRefs)
 	h.deleteMaterializationRefs(r.Context(), existing.ID, stored)
 	if err := h.queries.DeleteCloudCredential(r.Context(), existing.ID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete credential")
 		return
 	}
 	h.audit(r, "cloud_credentials.deleted", existing, "", map[string]any{
@@ -612,7 +613,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	blob, err := h.decryptToMap(row.DataEncrypted)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "decrypt_error", "Failed to decrypt stored credential")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored credential")
 		return
 	}
 	if h.tester == nil {
@@ -660,7 +661,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 func (h *CloudCredentialHandler) parseProjectID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "project_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return uuid.Nil, false
 	}
 	return id, true
@@ -676,17 +677,17 @@ func (h *CloudCredentialHandler) loadCredentialForRequest(w http.ResponseWriter,
 	}
 	credentialID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid credential ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid credential ID")
 		return sqlc.CloudCredential{}, false
 	}
 	row, err := h.queries.GetCloudCredentialByID(r.Context(), credentialID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Credential not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Credential not found")
 		return sqlc.CloudCredential{}, false
 	}
 	if row.ProjectID != projectID {
 		// Don't leak that the credential exists under a different project.
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Credential not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Credential not found")
 		return sqlc.CloudCredential{}, false
 	}
 	return row, true

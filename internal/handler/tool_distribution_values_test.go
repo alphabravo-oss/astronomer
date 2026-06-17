@@ -7,17 +7,17 @@ import (
 
 func TestDistributionFamily(t *testing.T) {
 	cases := map[string]string{
-		"k3s":               "k3s",
-		"k3s-v1.30":         "k3s",
-		"k3d":               "k3s",
-		"rke2":              "rke2",
-		"OpenShift 4.15":    "openshift",
-		"okd":               "openshift",
-		"eks":               "eks",
-		"aks":               "aks",
-		"gke":               "gke",
-		"kubeadm":           "vanilla",
-		"":                  "",
+		"k3s":            "k3s",
+		"k3s-v1.30":      "k3s",
+		"k3d":            "k3s",
+		"rke2":           "rke2",
+		"OpenShift 4.15": "openshift",
+		"okd":            "openshift",
+		"eks":            "eks",
+		"aks":            "aks",
+		"gke":            "gke",
+		"kubeadm":        "vanilla",
+		"":               "",
 	}
 	for in, want := range cases {
 		if got := distributionFamily(in); got != want {

@@ -26,6 +26,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -315,13 +316,13 @@ func (h *ArgoCDHandler) ListInstances(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list ArgoCD instances")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list ArgoCD instances")
 		return
 	}
 
 	total, err := h.queries.CountArgoCDInstances(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count ArgoCD instances")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count ArgoCD instances")
 		return
 	}
 
@@ -332,20 +333,20 @@ func (h *ArgoCDHandler) ListInstances(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	var req CreateArgoCDInstanceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Instance name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Instance name is required")
 		return
 	}
 	if req.ClusterID == uuid.Nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "cluster_id is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cluster_id is required")
 		return
 	}
 	if strings.TrimSpace(req.ApiUrl) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "api_url is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "api_url is required")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, req.ClusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
@@ -354,7 +355,7 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 
 	tokenColumn, err := h.resolveAuthToken(req)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encryption_error", "Failed to encrypt auth token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptionError, "Failed to encrypt auth token")
 		return
 	}
 
@@ -370,10 +371,10 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		// cluster that doesn't exist) — surface that as 400 rather than a
 		// generic 500 so the caller can fix their request.
 		if isForeignKeyViolation(err) {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster", "cluster_id does not match any registered cluster")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidClusterID, "cluster_id does not match any registered cluster")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create ArgoCD instance: "+err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create ArgoCD instance: "+err.Error())
 		return
 	}
 
@@ -390,13 +391,13 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) GetInstance(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 
@@ -407,20 +408,20 @@ func (h *ArgoCDHandler) GetInstance(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
 	if err := h.queries.DeleteArgoCDInstance(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 
@@ -435,18 +436,18 @@ func (h *ArgoCDHandler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 
 	var req CreateArgoCDInstanceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	current, err := h.queries.GetArgoCDInstanceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
@@ -455,7 +456,7 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 
 	tokenColumn, err := h.resolveAuthToken(req)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encryption_error", "Failed to encrypt auth token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptionError, "Failed to encrypt auth token")
 		return
 	}
 	if req.AuthToken == "" && req.AuthTokenEncrypted == "" {
@@ -471,7 +472,7 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 		VerifySsl:          req.VerifySsl,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update ArgoCD instance")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update ArgoCD instance")
 		return
 	}
 
@@ -488,7 +489,7 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) ListAppsByInstance(w http.ResponseWriter, r *http.Request) {
 	instanceID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 
@@ -501,13 +502,13 @@ func (h *ArgoCDHandler) ListAppsByInstance(w http.ResponseWriter, r *http.Reques
 		Offset:           offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list ArgoCD applications")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list ArgoCD applications")
 		return
 	}
 
 	total, err := h.queries.CountAppsByInstance(r.Context(), instanceID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count ArgoCD applications")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count ArgoCD applications")
 		return
 	}
 
@@ -524,13 +525,13 @@ func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list ArgoCD applications")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list ArgoCD applications")
 		return
 	}
 
 	total, err := h.queries.CountArgoCDApplications(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count ArgoCD applications")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count ArgoCD applications")
 		return
 	}
 
@@ -541,13 +542,13 @@ func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) GetApp(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid application ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
 		return
 	}
 
 	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD application not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
 		return
 	}
 
@@ -561,18 +562,18 @@ func (h *ArgoCDHandler) GetApp(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid application ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
 		return
 	}
 
 	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD application not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
 		return
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
@@ -585,14 +586,14 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		if len(strings.TrimSpace(string(raw))) > 0 {
 			if err := json.Unmarshal(raw, &req); err != nil {
-				RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+				RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 				return
 			}
 		}
 	}
 	req, err = normalizeSyncRequest(req)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 
@@ -602,7 +603,7 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 		DryRun:   req.DryRun,
 	}, req.Reason, req.SyncWindowOverride)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "sync_error", "Failed to enqueue ArgoCD sync")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to enqueue ArgoCD sync")
 		return
 	}
 	recordAudit(r, h.queries, "argocd.app.sync", "argocd_application", app.ID.String(), app.Name, map[string]any{
@@ -622,12 +623,12 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) InstanceHealth(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -651,12 +652,12 @@ func (h *ArgoCDHandler) InstanceHealth(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) LiveApplications(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -664,7 +665,7 @@ func (h *ArgoCDHandler) LiveApplications(w http.ResponseWriter, r *http.Request)
 	}
 	apps, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "argocd_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, apps)
@@ -674,17 +675,17 @@ func (h *ArgoCDHandler) LiveApplications(w http.ResponseWriter, r *http.Request)
 func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid application ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
 		return
 	}
 	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD application not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
 		return
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -692,7 +693,7 @@ func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	history, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications/"+app.Name+"/revisions")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "argocd_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, history)
@@ -702,17 +703,17 @@ func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid application ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
 		return
 	}
 	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD application not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
 		return
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -720,7 +721,7 @@ func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
 	}
 	manifests, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications/"+app.Name+"/manifests")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "argocd_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, manifests)
@@ -730,17 +731,17 @@ func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) RefreshApp(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid application ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
 		return
 	}
 	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD application not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
 		return
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
@@ -756,7 +757,7 @@ func (h *ArgoCDHandler) RefreshApp(w http.ResponseWriter, r *http.Request) {
 		} else if argocdclient.IsKind(err, argocdclient.ErrNotFound) {
 			status = http.StatusNotFound
 		}
-		RespondRequestError(w, r, status, "argocd_error", err.Error())
+		RespondRequestError(w, r, status, apierror.ArgoCDError, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "argocd.app.refresh", "argocd_application", app.ID.String(), app.Name, map[string]any{
@@ -802,7 +803,7 @@ func (h *ArgoCDHandler) callInstance(ctx context.Context, instance sqlc.ArgocdIn
 func (h *ArgoCDHandler) SyncAppByName(w http.ResponseWriter, r *http.Request) {
 	instanceID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return
 	}
 	name := chi.URLParam(r, "name")
@@ -811,7 +812,7 @@ func (h *ArgoCDHandler) SyncAppByName(w http.ResponseWriter, r *http.Request) {
 		Name:             name,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD application not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
 		return
 	}
 
@@ -835,12 +836,12 @@ func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	}
 	ops, err := h.queries.ListArgoCDOperations(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list ArgoCD operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list ArgoCD operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	items := make([]map[string]any, 0, len(ops))
@@ -859,17 +860,17 @@ func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetArgoCDOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD operation not found")
 		return
 	}
 	clusterID, err := h.operationClusterID(r.Context(), op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve ArgoCD operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve ArgoCD operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -885,12 +886,12 @@ func (h *ArgoCDHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetArgoCDOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD operation not found")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -898,7 +899,7 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	clusterID, err := h.operationClusterID(r.Context(), op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve ArgoCD operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve ArgoCD operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
@@ -906,7 +907,7 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	requeued, err := h.queries.RequeueArgoCDOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to retry ArgoCD operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry ArgoCD operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -946,7 +947,7 @@ func (h *ArgoCDHandler) operationClusterID(ctx context.Context, op sqlc.ArgocdOp
 func (h *ArgoCDHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load ArgoCD controller status")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load ArgoCD controller status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -1965,12 +1966,12 @@ func findArgoCDClusterSecretByServer(ctx context.Context, client kubernetes.Inte
 func (h *ArgoCDHandler) loadInstance(w http.ResponseWriter, r *http.Request, verb rbac.Verb) (sqlc.ArgocdInstance, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid instance ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
 		return sqlc.ArgocdInstance{}, false
 	}
 	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD instance not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return sqlc.ArgocdInstance{}, false
 	}
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, verb) {
@@ -1996,7 +1997,7 @@ func translateClientError(w http.ResponseWriter, r *http.Request, err error) boo
 	case argocdclient.IsKind(err, argocdclient.ErrUnreachable):
 		status = http.StatusBadGateway
 	}
-	RespondRequestError(w, r, status, "argocd_error", err.Error())
+	RespondRequestError(w, r, status, apierror.ArgoCDError, err.Error())
 	return true
 }
 
@@ -2020,11 +2021,11 @@ func (h *ArgoCDHandler) CreateApplication(w http.ResponseWriter, r *http.Request
 	}
 	var req CreateApplicationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2049,7 +2050,7 @@ func (h *ArgoCDHandler) PatchApplication(w http.ResponseWriter, r *http.Request)
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "application name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "application name is required")
 		return
 	}
 	raw, _ := io.ReadAll(r.Body)
@@ -2076,7 +2077,7 @@ func (h *ArgoCDHandler) DeleteApplication(w http.ResponseWriter, r *http.Request
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "application name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "application name is required")
 		return
 	}
 	cascade := strings.EqualFold(r.URL.Query().Get("cascade"), "true")
@@ -2107,15 +2108,15 @@ func (h *ArgoCDHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	var req CreateArgoProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
 		return
 	}
 	if err := validateArgoProjectSpec(req.Spec); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2138,7 +2139,7 @@ func (h *ArgoCDHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	projects, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/projects")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "argocd_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, projects)
@@ -2152,12 +2153,12 @@ func (h *ArgoCDHandler) PatchProject(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "project name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "project name is required")
 		return
 	}
 	raw, _ := io.ReadAll(r.Body)
 	if err := validateArgoProjectPatch(raw); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2180,7 +2181,7 @@ func (h *ArgoCDHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "project name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "project name is required")
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2212,19 +2213,19 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 	}
 	var req CreateApplicationSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
 		return
 	}
 	if len(req.Spec.Generators) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "at least one generator is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "at least one generator is required")
 		return
 	}
 	if err := validateApplicationSetClusterGenerators(req.Spec); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2292,7 +2293,7 @@ func (h *ArgoCDHandler) ListApplicationSets(w http.ResponseWriter, r *http.Reque
 	}
 	out, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applicationsets")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "argocd_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, out)
@@ -2306,7 +2307,7 @@ func (h *ArgoCDHandler) DeleteApplicationSet(w http.ResponseWriter, r *http.Requ
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "applicationset name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "applicationset name is required")
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2367,12 +2368,12 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
@@ -2381,7 +2382,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		raw, _ := io.ReadAll(r.Body)
 		if len(strings.TrimSpace(string(raw))) > 0 {
 			if err := json.Unmarshal(raw, &req); err != nil {
-				RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+				RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 				return
 			}
 		}
@@ -2392,7 +2393,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		server = h.defaultManagedClusterServer(cluster)
 	}
 	if server == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "cluster has no api_server_url; supply 'server' override")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cluster has no api_server_url; supply 'server' override")
 		return
 	}
 	caData := req.CAData
@@ -2403,16 +2404,16 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	if bearerToken == "" && cluster.IsLocal {
 		bearerToken, err = h.createLocalArgoCDServiceAccountToken(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, "token_error", "Failed to mint local cluster token: "+err.Error())
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.TokenError, "Failed to mint local cluster token: "+err.Error())
 			return
 		}
 	}
 	if bearerToken == "" && !req.Insecure {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "bearer_token is required (or set insecure=true with caution)")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "bearer_token is required (or set insecure=true with caution)")
 		return
 	}
 	if err := validateManagedClusterLabelOverrides(req.Labels); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 
@@ -2422,7 +2423,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	// not overwrite Astronomer-owned or ArgoCD-owned labels.
 	labels, err := h.managedClusterLabels(r.Context(), cluster)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "project_lookup_error", "Failed to load project labels")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ProjectLookupError, "Failed to load project labels")
 		return
 	}
 	mergeManagedClusterLabelOverrides(labels, req.Labels)
@@ -2485,7 +2486,7 @@ func (h *ArgoCDHandler) ListManagedClusters(w http.ResponseWriter, r *http.Reque
 	}
 	rows, err := h.queries.ListArgoCDManagedClusters(r.Context(), instance.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list managed clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list managed clusters")
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -2517,12 +2518,12 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	row, err := h.queries.GetArgoCDManagedCluster(r.Context(), sqlc.GetArgoCDManagedClusterParams{
@@ -2530,29 +2531,29 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 		ClusterID:        clusterID,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster is not registered with this ArgoCD")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster is not registered with this ArgoCD")
 		return
 	}
 	secret, err := h.lookupArgoCDClusterSecret(r.Context(), row.ClusterSecretName, row.ServerUrl)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "argocd_secret_error", "Failed to load ArgoCD cluster Secret: "+err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDSecretError, "Failed to load ArgoCD cluster Secret: "+err.Error())
 		return
 	}
 	if secret == nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "ArgoCD cluster Secret not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD cluster Secret not found")
 		return
 	}
 
 	labels, err := h.managedClusterLabels(r.Context(), cluster)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "project_lookup_error", "Failed to load project labels")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ProjectLookupError, "Failed to load project labels")
 		return
 	}
 	merged := mergeAstronomerManagedLabels(secret.Labels, labels)
 	if !stringMapEqual(secret.Labels, merged) {
 		patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"labels": astronomerManagedLabelsPatch(secret.Labels, labels)}})
 		if _, err := h.k8s.CoreV1().Secrets(argocdNamespace).Patch(r.Context(), secret.Name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, "argocd_secret_error", "Failed to patch ArgoCD cluster Secret: "+err.Error())
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDSecretError, "Failed to patch ArgoCD cluster Secret: "+err.Error())
 			return
 		}
 	}
@@ -2563,7 +2564,7 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 		Labels:           labelsJSON,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update managed cluster labels")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update managed cluster labels")
 		return
 	}
 	recordAudit(r, h.queries, "argocd.cluster.refresh_labels", "argocd_managed_cluster", clusterID.String(), row.ClusterSecretName, map[string]any{
@@ -2593,7 +2594,7 @@ func (h *ArgoCDHandler) UnregisterManagedCluster(w http.ResponseWriter, r *http.
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	row, err := h.queries.GetArgoCDManagedCluster(r.Context(), sqlc.GetArgoCDManagedClusterParams{
@@ -2601,7 +2602,7 @@ func (h *ArgoCDHandler) UnregisterManagedCluster(w http.ResponseWriter, r *http.
 		ClusterID:        clusterID,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster is not registered with this ArgoCD")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster is not registered with this ArgoCD")
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2663,11 +2664,11 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	var req RepoCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Repo) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "repo URL is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL is required")
 		return
 	}
 	// Defense-in-depth: round-trip the secret through the Encryptor so
@@ -2728,7 +2729,7 @@ func (h *ArgoCDHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	repoURL := strings.TrimSpace(r.URL.Query().Get("repo"))
 	if repoURL == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "repo query parameter is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo query parameter is required")
 		return
 	}
 	client := h.argoCDClient(instance)
@@ -2750,11 +2751,11 @@ func (h *ArgoCDHandler) TestRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	var req RepoCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Repo) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "repo URL is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL is required")
 		return
 	}
 	client := h.argoCDClient(instance)

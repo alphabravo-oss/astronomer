@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -318,7 +319,7 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workloads, err := h.listWorkloads(r.Context(), clusterID, namespace, kind)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 
@@ -340,7 +341,7 @@ func (h *WorkloadHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resource, err := h.getWorkload(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, resource)
@@ -352,11 +353,11 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		Replicas int32 `json:"replicas"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if _, err := scalePath(kind, namespace, name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_kind", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
 		return
 	}
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "workloads"), "workload", workloadTargetKey(clusterID, kind, namespace, name), "scale", workloadOperationEnvelope{
@@ -367,7 +368,7 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		Replicas:  req.Replicas,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload scale")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue workload scale")
 		return
 	}
 	h.recordWorkloadAudit(r, "workload.scale", kind, namespace, name, map[string]any{"clusterId": clusterID, "replicas": req.Replicas})
@@ -389,7 +390,7 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = patch
 	if _, err := workloadPath(kind, namespace, name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_kind", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
 		return
 	}
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "workloads"), "workload", workloadTargetKey(clusterID, kind, namespace, name), "restart", workloadOperationEnvelope{
@@ -399,7 +400,7 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		Name:      name,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload restart")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue workload restart")
 		return
 	}
 	h.recordWorkloadAudit(r, "workload.restart", kind, namespace, name, map[string]any{"clusterId": clusterID})
@@ -409,7 +410,7 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	clusterID, kind, namespace, name := chi.URLParam(r, "cluster_id"), chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	if _, err := workloadPath(kind, namespace, name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_kind", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
 		return
 	}
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "workloads"), "workload", workloadTargetKey(clusterID, kind, namespace, name), "delete", workloadOperationEnvelope{
@@ -419,7 +420,7 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		Name:      name,
 	}, currentUserUUID(r))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue workload delete")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue workload delete")
 		return
 	}
 	h.recordWorkloadAudit(r, "workload.delete", kind, namespace, name, map[string]any{"clusterId": clusterID})
@@ -428,7 +429,7 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "workload_error", "workload store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.WorkloadError, "workload store not configured")
 		return
 	}
 	arg := sqlc.ListWorkloadOperationsParams{
@@ -446,12 +447,12 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 	}
 	ops, err := h.queries.ListWorkloadOperations(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "workload_error", "Failed to list workload operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WorkloadError, "Failed to list workload operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	resp := make([]map[string]any, 0, len(ops))
@@ -470,17 +471,17 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 func (h *WorkloadHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Workload operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Workload operation not found")
 		return
 	}
 	clusterID, err := workloadOperationClusterID(op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve workload operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve workload operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
@@ -496,12 +497,12 @@ func (h *WorkloadHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Workload operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Workload operation not found")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -509,7 +510,7 @@ func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request)
 	}
 	clusterID, err := workloadOperationClusterID(op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve workload operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve workload operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
@@ -517,7 +518,7 @@ func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request)
 	}
 	requeued, err := h.queries.RequeueWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to retry workload operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry workload operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -535,12 +536,12 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 	}
 	ops, err := h.queries.ListWorkloadOperations(r.Context(), sqlc.ListWorkloadOperationsParams{Limit: 1000, Offset: 0})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load workload controller status")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load workload controller status")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	opSummary := summarizeOperations(r.Context(), ops, operationStatusSummaryConfig[sqlc.WorkloadOperation]{
@@ -579,7 +580,7 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 	clusterID := chi.URLParam(r, "cluster_id")
 	var namespaces namespaceList
 	if err := h.getJSON(r.Context(), clusterID, "/api/v1/namespaces", &namespaces); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	var pods podList
@@ -612,7 +613,7 @@ func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	nodes, err := h.getNodes(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, nodes)
@@ -623,7 +624,7 @@ func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 	nodeName := chi.URLParam(r, "node_name")
 	detail, err := h.getNodeDetail(r.Context(), clusterID, nodeName)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, detail)
@@ -637,7 +638,7 @@ func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		path += "?limit=" + url.QueryEscape(limit)
 	}
 	if err := h.getJSON(r.Context(), clusterID, path, &events); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	items := make([]map[string]any, 0, len(events.Items))
@@ -665,7 +666,7 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 	namespace := r.URL.Query().Get("namespace")
 	pods, err := h.listPods(r.Context(), clusterID, namespace, "")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, pods)
@@ -675,13 +676,13 @@ func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Reques
 	clusterID, kind, namespace, name := chi.URLParam(r, "cluster_id"), chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	resource, err := h.fetchWorkloadResource(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	selector := labelSelector(resource.Spec.Selector.MatchLabels)
 	pods, err := h.listPods(r.Context(), clusterID, namespace, selector)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, pods)
@@ -694,7 +695,7 @@ func (h *WorkloadHandler) DeletePod(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -734,7 +735,7 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "proxy_error", err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	body, _ := decodeResponseBody(resp)

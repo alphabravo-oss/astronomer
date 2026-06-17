@@ -40,6 +40,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // dexSettingsSingletonID is the fixed UUID we use for the singleton settings
@@ -411,7 +412,7 @@ func nestedRequirementsToJSON(in []nestedRequirement) []map[string]any {
 func (h *DexHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.ListDexConnectors(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list Dex connectors")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list Dex connectors")
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
@@ -425,12 +426,12 @@ func (h *DexHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid connector ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connector ID")
 		return
 	}
 	row, err := h.queries.GetDexConnectorByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Connector not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, h.connectorResponse(row))
@@ -440,33 +441,33 @@ func (h *DexHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	var req connectorRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "Connector name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Connector name is required")
 		return
 	}
 	if _, ok := dexConnectorRegistry[req.Type]; !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_type", fmt.Sprintf("Unknown connector type %q", req.Type))
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, fmt.Sprintf("Unknown connector type %q", req.Type))
 		return
 	}
 	if req.Config == nil {
 		req.Config = map[string]any{}
 	}
 	if err := validateConnectorConfig(req.Type, req.Config); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	if err := h.encryptSecretFields(req.Type, req.Config); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt secret fields")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret fields")
 		return
 	}
 	cfgBytes, err := json.Marshal(req.Config)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "marshal_error", "Failed to encode connector config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode connector config")
 		return
 	}
 	enabled := true
@@ -482,10 +483,10 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
-			RespondRequestError(w, r, http.StatusConflict, "duplicate", "A connector with that name already exists")
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A connector with that name already exists")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create connector")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create connector")
 		return
 	}
 	recordAudit(r, h.queries, "dex.connector.create", "dex_connector", row.ID.String(), row.Name, map[string]any{
@@ -503,23 +504,23 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid connector ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connector ID")
 		return
 	}
 	existing, err := h.queries.GetDexConnectorByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Connector not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
 		return
 	}
 	var req connectorRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	connectorType := existing.Type
 	if t := strings.ToLower(strings.TrimSpace(req.Type)); t != "" {
 		if _, ok := dexConnectorRegistry[t]; !ok {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_type", fmt.Sprintf("Unknown connector type %q", t))
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, fmt.Sprintf("Unknown connector type %q", t))
 			return
 		}
 		connectorType = t
@@ -538,16 +539,16 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// the existing row (so the UI can PATCH without resending the secret).
 		merged := mergeSecretFromExisting(connectorType, existing.Config, req.Config)
 		if err := validateConnectorConfig(connectorType, merged); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 			return
 		}
 		if err := h.encryptSecretFields(connectorType, merged); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt secret fields")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret fields")
 			return
 		}
 		raw, err := json.Marshal(merged)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "marshal_error", "Failed to encode connector config")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode connector config")
 			return
 		}
 		cfgBytes = raw
@@ -560,7 +561,7 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		Enabled:     enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update connector")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update connector")
 		return
 	}
 	recordAudit(r, h.queries, "dex.connector.update", "dex_connector", row.ID.String(), row.Name, map[string]any{
@@ -574,16 +575,16 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid connector ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connector ID")
 		return
 	}
 	existing, err := h.queries.GetDexConnectorByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Connector not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
 		return
 	}
 	if err := h.queries.DeleteDexConnector(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete connector")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete connector")
 		return
 	}
 	recordAudit(r, h.queries, "dex.connector.delete", "dex_connector", id.String(), existing.Name, map[string]any{
@@ -609,11 +610,11 @@ func (h *DexHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req settingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.IssuerURL) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "missing_issuer", "issuer_url is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingIssuer, "issuer_url is required")
 		return
 	}
 	if req.Namespace == "" {
@@ -629,7 +630,7 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if req.ClusterID != "" {
 		id, err := uuid.Parse(req.ClusterID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster_id")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster_id")
 			return
 		}
 		clusterUUID = pgtype.UUID{Bytes: id, Valid: true}
@@ -658,7 +659,7 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		Extra:         extraBytes,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "save_error", "Failed to save Dex settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to save Dex settings")
 		return
 	}
 	recordAudit(r, h.queries, "dex.settings.update", "dex_settings", row.ID.String(), row.ReleaseName, map[string]any{
@@ -677,39 +678,39 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 // POST /api/v1/auth/dex/apply/
 func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	if h.k8s == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "tunnel_unavailable", "Kubernetes requester is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable, "Kubernetes requester is not configured")
 		return
 	}
 	settings, err := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "no_settings", "Dex settings have not been configured yet; PUT /settings first")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoSettings, "Dex settings have not been configured yet; PUT /settings first")
 		return
 	}
 	if settings.IssuerUrl == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "missing_issuer", "Dex settings have no issuer_url; PUT /settings first")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingIssuer, "Dex settings have no issuer_url; PUT /settings first")
 		return
 	}
 	if !settings.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusBadRequest, "missing_cluster", "Dex settings have no cluster_id; PUT /settings first")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingCluster, "Dex settings have no cluster_id; PUT /settings first")
 		return
 	}
 	connectors, err := h.queries.ListEnabledDexConnectors(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list Dex connectors")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list Dex connectors")
 		return
 	}
 	configYAML, err := h.renderDexConfig(settings, connectors)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "render_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RenderError, err.Error())
 		return
 	}
 	clusterID := uuid.UUID(settings.ClusterID.Bytes).String()
 	if err := h.applyConfigMap(r.Context(), clusterID, settings.Namespace, settings.ConfigmapName, configYAML); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "apply_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, err.Error())
 		return
 	}
 	if err := h.restartDeployment(r.Context(), clusterID, settings.Namespace, settings.ReleaseName); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "restart_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.RestartError, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "dex.config.apply", "dex_settings", settings.ID.String(), settings.ReleaseName, map[string]any{
@@ -752,13 +753,13 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Body != http.NoBody {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, http.ErrBodyReadAfterClose) {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
 	settings, err := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
 	if err != nil || settings.IssuerUrl == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "no_settings", "Dex settings have not been configured yet")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoSettings, "Dex settings have not been configured yet")
 		return
 	}
 	if req.ClientID == "" {
@@ -770,12 +771,12 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	encryptedSecret := ""
 	if req.ClientSecret != "" {
 		if h.encryptor == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, "encrypt_unavailable", "Encryptor is not configured; cannot store client_secret")
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured; cannot store client_secret")
 			return
 		}
 		ct, err := h.encryptor.Encrypt(req.ClientSecret)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "encrypt_error", "Failed to encrypt client secret")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt client secret")
 			return
 		}
 		encryptedSecret = ct
@@ -783,7 +784,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	if updatedSettings, err := h.syncAstronomerPublicClient(r.Context(), settings, req.ClientID, req.ClientSecret); err == nil {
 		settings = updatedSettings
 	} else {
-		RespondRequestError(w, r, http.StatusInternalServerError, "settings_error", "Failed to update Dex public client settings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Failed to update Dex public client settings")
 		return
 	}
 	cfgBytes, _ := json.Marshal(map[string]any{"issuer_url": settings.IssuerUrl})
@@ -807,7 +808,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 			DefaultGlobalRoleID:   existing.DefaultGlobalRoleID,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, "save_error", "Failed to update SSO row")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to update SSO row")
 			return
 		}
 		recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", updated.ID.String(), updated.Provider, map[string]any{
@@ -839,7 +840,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		DefaultGlobalRoleID:   pgtype.UUID{},
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "save_error", "Failed to create SSO row")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to create SSO row")
 		return
 	}
 	recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", created.ID.String(), created.Provider, map[string]any{

@@ -610,13 +610,13 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 		return
 	}
 
 	total, err := h.queries.CountClusters(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
 		return
 	}
 
@@ -643,7 +643,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 				WriteQuotaExceeded(w, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate cluster quota")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate cluster quota")
 			return
 		}
 	}
@@ -807,13 +807,13 @@ func (h *ClusterHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	var req UpdateClusterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -828,13 +828,13 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	if blocked, err := clusterUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to check cluster ownership")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check cluster ownership")
 		return
 	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, "ownership_conflict", blocked)
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
 		return
 	}
 
@@ -848,7 +848,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Annotations: annotations,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
@@ -904,23 +904,23 @@ func clusterUpdateBlockedByOwnership(ctx context.Context, q any, id uuid.UUID) (
 func (h *ClusterHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	previous, updated, transferred, err := transferClusterOwnershipToAPI(r.Context(), h.queries, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		case errors.Is(err, errClusterOwnershipTransferUnsupported):
-			RespondRequestError(w, r, http.StatusConflict, "ownership_conflict", "Only CRD-owned clusters can be transferred through this endpoint")
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Only CRD-owned clusters can be transferred through this endpoint")
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to transfer cluster ownership")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to transfer cluster ownership")
 		}
 		return
 	}
@@ -1081,19 +1081,19 @@ func renderDecommission(row sqlc.ClusterDecommission, statusURL string) Decommis
 func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	if cluster.IsLocal {
 		// The local cluster represents the host this server itself runs in;
 		// decommissioning it would tear down the management plane. Refuse.
-		RespondRequestError(w, r, http.StatusForbidden, "forbidden", "Cannot decommission the local cluster")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot decommission the local cluster")
 		return
 	}
 
@@ -1128,7 +1128,7 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		ClusterName:   cluster.Name,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_decommission_failed", "Failed to enqueue cluster decommission")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateDecommissionFailed, "Failed to enqueue cluster decommission")
 		return
 	}
 
@@ -1205,12 +1205,12 @@ func (h *ClusterHandler) enqueueClusterDecommission(ctx context.Context, decommi
 func (h *ClusterHandler) GetDecommission(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	row, err := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "No decommission for cluster")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No decommission for cluster")
 		return
 	}
 	statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
@@ -1221,13 +1221,13 @@ func (h *ClusterHandler) GetDecommission(w http.ResponseWriter, r *http.Request)
 func (h *ClusterHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	health, err := h.queries.GetClusterHealthStatus(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Health status not found for cluster")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Health status not found for cluster")
 		return
 	}
 
@@ -1254,12 +1254,12 @@ type ClusterConditionResponse struct {
 func (h *ClusterHandler) ListConditions(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	rows, err := h.queries.ListClusterConditions(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "Failed to list conditions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to list conditions")
 		return
 	}
 	out := make([]ClusterConditionResponse, 0, len(rows))
@@ -1280,20 +1280,20 @@ func (h *ClusterHandler) ListConditions(w http.ResponseWriter, r *http.Request) 
 func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	// Verify cluster exists.
 	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
 	// Generate a random registration token.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to generate registration token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate registration token")
 		return
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
@@ -1304,7 +1304,7 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create registration token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
 		return
 	}
 	token.Token = tokenStr
@@ -1321,13 +1321,13 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 func (h *ClusterHandler) GetRegistryConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	config, err := h.queries.GetClusterRegistryConfig(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registry config not found for cluster")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found for cluster")
 		return
 	}
 
@@ -1339,12 +1339,12 @@ func (h *ClusterHandler) GetRegistryConfig(w http.ResponseWriter, r *http.Reques
 func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
@@ -1356,7 +1356,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	// can keep regenerating from the wizard.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to generate registration token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate registration token")
 		return
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
@@ -1366,7 +1366,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create registration token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
 		return
 	}
 	token.Token = tokenStr
@@ -1406,7 +1406,7 @@ func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Reque
 	rawToken := chi.URLParam(r, "token")
 	tokenStr := strings.TrimSuffix(rawToken, ".yaml")
 	if tokenStr == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_token", "Missing registration token")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Missing registration token")
 		return
 	}
 	token, err := h.queries.GetRegistrationTokenByToken(r.Context(), tokenStr)
@@ -1414,12 +1414,12 @@ func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Reque
 		// GetRegistrationTokenByToken already filters expired rows
 		// (WHERE expires_at > now()), so any error here is "no such
 		// token". 404 keeps the response opaque.
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Registration token not found or expired")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registration token not found or expired")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), token.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
@@ -1439,16 +1439,16 @@ func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Reque
 func (h *ClusterHandler) ListConditionRemediation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterConditionRemediationByCluster(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list remediation attempts")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list remediation attempts")
 		return
 	}
 	RespondJSON(w, http.StatusOK, rows)
@@ -1475,7 +1475,7 @@ func (h *ClusterHandler) GetCABundle(w http.ResponseWriter, r *http.Request) {
 	}
 	pem = strings.TrimSpace(pem)
 	if pem == "" {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "No CA bundle configured for cluster registration")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No CA bundle configured for cluster registration")
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -1489,16 +1489,16 @@ func (h *ClusterHandler) GetCABundle(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterHandler) GetKubeconfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	if cluster.ApiServerUrl == "" {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster API server URL is not yet available")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster API server URL is not yet available")
 		return
 	}
 	userEmail := authenticatedEmail(r)
@@ -1511,12 +1511,12 @@ func (h *ClusterHandler) GetKubeconfig(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)
@@ -1524,7 +1524,7 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL)
 	yamlBytes, err := yaml.Marshal(kubeconfig)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "render_error", "Failed to render kubeconfig")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RenderError, "Failed to render kubeconfig")
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-yaml")
@@ -1537,12 +1537,12 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 func (h *ClusterHandler) PreviewKubeconfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)
@@ -1556,12 +1556,12 @@ func (h *ClusterHandler) PreviewKubeconfig(w http.ResponseWriter, r *http.Reques
 func (h *ClusterHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	isConnected := cluster.LastHeartbeat.Valid && time.Since(cluster.LastHeartbeat.Time) < 5*time.Minute
@@ -1594,12 +1594,12 @@ func (h *ClusterHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterHandler) GetMetricsSummary(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	nodeCount := int(cluster.NodeCount)
@@ -1802,18 +1802,18 @@ func authenticatedEmail(r *http.Request) string {
 func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	var req UpdateRegistryConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	registryPassword, registryPasswordEncrypted, err := h.encryptLegacyRegistryPassword(req.RegistryPassword)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "crypto_error", "Failed to encrypt registry password")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt registry password")
 		return
 	}
 
@@ -1827,7 +1827,7 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 		CaBundle:                  req.CaBundle,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update registry config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
 		return
 	}
 
@@ -1846,12 +1846,12 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 func (h *ClusterHandler) DeleteRegistryConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	if err := h.queries.DeleteClusterRegistryConfig(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete registry config")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
 		return
 	}
 

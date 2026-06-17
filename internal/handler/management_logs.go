@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // ManagementLogsQuerier is the slice of sqlc.Queries the handler reads
@@ -152,20 +153,23 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.k8s == nil || h.namespace == "" {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "logs_unavailable",
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.LogsUnavailable,
 			"management log tail is unavailable: the server has no in-cluster Kubernetes client")
+
 		return
 	}
 
 	component := strings.TrimSpace(r.URL.Query().Get("component"))
 	if component == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "component_required",
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ComponentRequired,
 			"the component query parameter is required (server | worker | agent)")
+
 		return
 	}
 	if !allowedComponents[component] {
-		RespondRequestError(w, r, http.StatusBadRequest, "component_invalid",
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ComponentInvalid,
 			fmt.Sprintf("component must be one of: server, worker, agent (got %q)", component))
+
 		return
 	}
 
@@ -177,8 +181,9 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 			if t2, err2 := time.Parse(time.RFC3339Nano, s); err2 == nil {
 				t = t2
 			} else {
-				RespondRequestError(w, r, http.StatusBadRequest, "since_invalid",
+				RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince,
 					"the since query parameter must be an RFC3339 timestamp")
+
 				return
 			}
 		}
@@ -200,8 +205,9 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 
 	pods, err := h.listComponentPods(ctx, component)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "k8s_error",
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.K8sError,
 			fmt.Sprintf("failed to list pods for component %q: %v", component, err))
+
 		return
 	}
 	if len(pods) == 0 {

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type AdminTaskOutboxQuerier interface {
@@ -59,7 +60,7 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	status := r.URL.Query().Get("status")
 	if status != "" && !validTaskOutboxStatus(status) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_status", "Invalid task outbox status")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStatus, "Invalid task outbox status")
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
@@ -69,12 +70,12 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	total, err := h.queries.CountTaskOutbox(r.Context(), status)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	out := make([]TaskOutboxResponse, 0, len(rows))
@@ -91,20 +92,20 @@ func (h *AdminTaskOutboxHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid task outbox ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid task outbox ID")
 		return
 	}
 	existing, err := h.queries.GetTaskOutbox(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Task outbox row not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Task outbox row not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	if existing.Status == "delivered" {
-		RespondRequestError(w, r, http.StatusConflict, "already_delivered", "Delivered task outbox rows cannot be retried")
+		RespondRequestError(w, r, http.StatusConflict, apierror.AlreadyDelivered, "Delivered task outbox rows cannot be retried")
 		return
 	}
 	now := h.now
@@ -117,10 +118,10 @@ func (h *AdminTaskOutboxHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusConflict, "already_delivered", "Delivered task outbox rows cannot be retried")
+			RespondRequestError(w, r, http.StatusConflict, apierror.AlreadyDelivered, "Delivered task outbox rows cannot be retried")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "retry_failed", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.task_outbox.retry", "task_outbox", id.String(), existing.TaskType, map[string]any{
@@ -133,7 +134,7 @@ func (h *AdminTaskOutboxHandler) Retry(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminTaskOutboxHandler) gate(w http.ResponseWriter, r *http.Request) bool {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "db_unavailable", "task outbox database not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.DBUnavailable, "task outbox database not wired")
 		return false
 	}
 	_, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{

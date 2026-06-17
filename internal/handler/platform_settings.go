@@ -48,6 +48,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // PlatformSettingsQuerier is the narrow DB surface this handler needs.
@@ -200,12 +201,12 @@ func (h *PlatformSettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
 		return
 	}
 	rows, err := h.queries.ListPlatformSettings(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	rowByKey := make(map[string]sqlc.PlatformSetting, len(rows))
@@ -230,16 +231,16 @@ func (h *PlatformSettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondRequestError(w, r, http.StatusNotFound, "unknown_key", "Unknown setting key")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key")
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
 		return
 	}
 	row, err := h.queries.GetPlatformSetting(r.Context(), key)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, buildResponse(key, spec, row))
@@ -263,24 +264,24 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondRequestError(w, r, http.StatusNotFound, "unknown_key", "Unknown setting key")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key")
 		return
 	}
 	var req updateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if len(req.Value) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "value is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "value is required")
 		return
 	}
 	if err := validateValue(spec, req.Value); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
 		return
 	}
 
@@ -290,7 +291,7 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	if prev, err := h.queries.GetPlatformSetting(r.Context(), key); err == nil {
 		oldValueJSON = prev.Value
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 
@@ -301,7 +302,7 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 		UpdatedBy:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 
@@ -329,11 +330,11 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondRequestError(w, r, http.StatusNotFound, "unknown_key", "Unknown setting key")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key")
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Settings store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
 		return
 	}
 	var oldValueJSON json.RawMessage
@@ -341,7 +342,7 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 		oldValueJSON = prev.Value
 	}
 	if err := h.queries.DeletePlatformSetting(r.Context(), key); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	if h.cache != nil {
@@ -389,7 +390,7 @@ func (h *PlatformSettingsHandler) Features(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := h.queries.ListPlatformSettingsByPrefix(r.Context(), NamespaceFeature+".")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, featureSubsetResponse(rows))
@@ -404,7 +405,7 @@ func (h *PlatformSettingsHandler) servePublicNamespace(w http.ResponseWriter, r 
 	// check against the explicit allowlist so accidental additions to
 	// servePublicNamespace's callsites can't widen the exposure.
 	if _, ok := preAuthAllowedNamespaces[canonical]; !ok {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Unknown public settings namespace")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown public settings namespace")
 		return
 	}
 	if h.queries == nil {
@@ -415,7 +416,7 @@ func (h *PlatformSettingsHandler) servePublicNamespace(w http.ResponseWriter, r 
 	}
 	rows, err := h.queries.ListPlatformSettingsByPrefix(r.Context(), canonical+".")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, publicSubsetResponse(canonical, rows))

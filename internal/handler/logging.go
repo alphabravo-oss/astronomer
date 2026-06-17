@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -167,7 +168,7 @@ func (h *LoggingHandler) runReconciler(ctx context.Context) {
 func (h *LoggingHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "status_error", "Failed to load logging outputs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load logging outputs")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -275,7 +276,7 @@ type CreateLoggingPipelineRequest struct {
 func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := clusterIDFromRequest(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
@@ -288,13 +289,13 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list logging outputs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging outputs")
 		return
 	}
 
 	total, err := h.queries.CountLoggingOutputs(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count logging outputs")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging outputs")
 		return
 	}
 
@@ -305,7 +306,7 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 	var req CreateLoggingOutputRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Prefer URL/query cluster_id; fall back to the top-level body field, then
@@ -320,17 +321,17 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Output name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Output name is required")
 		return
 	}
 
 	if req.OutputType == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Output type is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Output type is required")
 		return
 	}
 
@@ -348,7 +349,7 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		CreatedByID:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create logging output")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging output")
 		return
 	}
 
@@ -371,12 +372,12 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid output ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
 		return
 	}
 	var req CreateLoggingOutputRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
@@ -387,7 +388,7 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 		Enabled:       req.Enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update logging output")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
 		return
 	}
 	op, opErr := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
@@ -410,17 +411,17 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid output ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
 		return
 	}
 	output, err := h.queries.GetLoggingOutputByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging output not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
 	op, err := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "enqueue_error", "Failed to enqueue apply test")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue apply test")
 		return
 	}
 	RespondJSON(w, http.StatusAccepted, map[string]any{
@@ -434,7 +435,7 @@ func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid output ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
 		return
 	}
 
@@ -456,7 +457,7 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.queries.DeleteLoggingOutput(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging output not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
 
@@ -473,7 +474,7 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := clusterIDFromRequest(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
@@ -486,13 +487,13 @@ func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list logging pipelines")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging pipelines")
 		return
 	}
 
 	total, err := h.queries.CountLoggingPipelines(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count logging pipelines")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging pipelines")
 		return
 	}
 
@@ -503,17 +504,17 @@ func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) {
 	var req CreateLoggingPipelineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	clusterID, err := clusterIDFromRequest(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Pipeline name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Pipeline name is required")
 		return
 	}
 
@@ -540,7 +541,7 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		CreatedByID: currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create logging pipeline")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging pipeline")
 		return
 	}
 
@@ -562,12 +563,12 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid pipeline ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid pipeline ID")
 		return
 	}
 	var req CreateLoggingPipelineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
@@ -579,7 +580,7 @@ func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) 
 		Enabled:    req.Enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update logging pipeline")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging pipeline")
 		return
 	}
 	op, opErr := h.enqueuePipelineApply(withOperationIdempotency(r, "logging"), pipeline, currentUserUUID(r))
@@ -597,7 +598,7 @@ func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) 
 func (h *LoggingHandler) DeletePipeline(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid pipeline ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid pipeline ID")
 		return
 	}
 
@@ -616,7 +617,7 @@ func (h *LoggingHandler) DeletePipeline(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.queries.DeleteLoggingPipeline(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging pipeline not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
 		return
 	}
 
@@ -640,12 +641,12 @@ func (h *LoggingHandler) DisableOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid output ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
 		return
 	}
 	current, err := h.queries.GetLoggingOutputByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging output not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
@@ -656,7 +657,7 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 		Enabled:       enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update logging output")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
 		return
 	}
 	// Re-render the ConfigMap on enable/disable so cluster state tracks
@@ -682,16 +683,16 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 func (h *LoggingHandler) QueryOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid output ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
 		return
 	}
 	if _, err := h.queries.GetLoggingOutputByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging output not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
 	// TODO: Implement per-backend log query (Loki/ES/etc) once a query client
 	// is wired through. For now respond with a clear not-implemented status.
-	RespondRequestError(w, r, http.StatusNotImplemented, "not_implemented", "Querying logs from this output backend is not yet implemented")
+	RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "Querying logs from this output backend is not yet implemented")
 }
 
 // EnablePipeline handles POST /api/v1/logging/pipelines/{id}/enable/.
@@ -707,12 +708,12 @@ func (h *LoggingHandler) DisablePipeline(w http.ResponseWriter, r *http.Request)
 func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid pipeline ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid pipeline ID")
 		return
 	}
 	current, err := h.queries.GetLoggingPipelineByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging pipeline not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
 		return
 	}
 	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
@@ -724,7 +725,7 @@ func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Reque
 		Enabled:    enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update logging pipeline")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging pipeline")
 		return
 	}
 	op, opErr := h.enqueuePipelineApply(withOperationIdempotency(r, "logging"), pipeline, currentUserUUID(r))
@@ -747,12 +748,12 @@ func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Reque
 func (h *LoggingHandler) FluentbitConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid pipeline ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid pipeline ID")
 		return
 	}
 	pipeline, err := h.queries.GetLoggingPipelineByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging pipeline not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
 		return
 	}
 	config := h.renderFullFluentbitConfig(r.Context(), pipeline.ClusterID)
@@ -891,12 +892,12 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	}
 	ops, err := h.queries.ListLoggingOperations(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list logging operations")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "permission_error", "Failed to retrieve user permissions")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	items := make([]map[string]any, 0, len(ops))
@@ -916,17 +917,17 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 func (h *LoggingHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetLoggingOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging operation not found")
 		return
 	}
 	clusterID, err := h.loggingOperationClusterID(r.Context(), op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve logging operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve logging operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbRead) {
@@ -943,12 +944,12 @@ func (h *LoggingHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid operation ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetLoggingOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Logging operation not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging operation not found")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -956,7 +957,7 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	}
 	clusterID, err := h.loggingOperationClusterID(r.Context(), op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "resolve_error", "Failed to resolve logging operation target")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve logging operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
@@ -964,7 +965,7 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	}
 	requeued, err := h.queries.RequeueLoggingOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to retry logging operation")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry logging operation")
 		return
 	}
 	h.TriggerReconcile()

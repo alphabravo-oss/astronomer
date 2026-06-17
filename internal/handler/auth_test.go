@@ -18,6 +18,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -120,7 +121,9 @@ func TestLogin(t *testing.T) {
 			body:       map[string]string{"username": "testuser", "password": "testpassword"},
 			users:      []sqlc.User{makeTestUser(t, true)},
 			wantStatus: http.StatusBadRequest,
-			wantError:  "missing_credentials",
+			// A 400 "Email is required" is field validation, not an auth
+			// challenge: legacy "missing_credentials" maps to ValidationError.
+			wantError: apierror.ValidationError,
 		},
 		{
 			name:       "rejects malformed email",
@@ -134,14 +137,16 @@ func TestLogin(t *testing.T) {
 			body:       LoginRequest{Email: "test@example.com", Password: "wrongpassword"},
 			users:      []sqlc.User{makeTestUser(t, true)},
 			wantStatus: http.StatusUnauthorized,
-			wantError:  "invalid_credentials",
+			// "invalid_credentials" was canonicalized to apierror.AuthenticationRequired.
+			wantError: apierror.AuthenticationRequired,
 		},
 		{
 			name:       "user not found",
 			body:       LoginRequest{Email: "nobody@example.com", Password: "testpassword"},
 			users:      []sqlc.User{},
 			wantStatus: http.StatusUnauthorized,
-			wantError:  "invalid_credentials",
+			// "invalid_credentials" was canonicalized to apierror.AuthenticationRequired.
+			wantError: apierror.AuthenticationRequired,
 		},
 		{
 			name:       "inactive user",
@@ -155,7 +160,9 @@ func TestLogin(t *testing.T) {
 			body:       LoginRequest{Password: "testpassword"},
 			users:      []sqlc.User{},
 			wantStatus: http.StatusBadRequest,
-			wantError:  "missing_credentials",
+			// A 400 "Email is required" is field validation, not an auth
+			// challenge: legacy "missing_credentials" maps to ValidationError.
+			wantError: apierror.ValidationError,
 		},
 		{
 			name:       "invalid JSON body",

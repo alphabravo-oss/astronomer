@@ -24,6 +24,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // AdminQueuesQuerier is the slice of sqlc.Queries the handler needs.
@@ -65,12 +66,12 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
 	queues, err := h.inspector.Queues()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AsynqError, err.Error())
 		return
 	}
 	now := time.Now().UTC()
@@ -113,19 +114,19 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
 	queueName := chi.URLParam(r, "queue")
 	if queueName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "queue_required", "queue name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.QueueRequired, "queue name is required")
 		return
 	}
 	// Page size of 100 — big enough to spot patterns, small enough to
 	// keep the response under a scrolled UI panel.
 	archived, err := h.inspector.ListArchivedTasks(queueName, asynq.PageSize(100))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AsynqError, err.Error())
 		return
 	}
 	out := make([]DLQEntry, 0, len(archived))
@@ -156,17 +157,17 @@ func (h *AdminQueuesHandler) RetryDLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
 	queue := chi.URLParam(r, "queue")
 	id := chi.URLParam(r, "id")
 	if queue == "" || id == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "missing_params", "queue and id are required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingParams, "queue and id are required")
 		return
 	}
 	if err := h.inspector.RunTask(queue, id); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.AsynqError, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.queue.dlq_retried", "queue", queue, id, map[string]any{
@@ -185,17 +186,17 @@ func (h *AdminQueuesHandler) DiscardDLQ(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.inspector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "inspector_unavailable", "asynq inspector not wired")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
 	queue := chi.URLParam(r, "queue")
 	id := chi.URLParam(r, "id")
 	if queue == "" || id == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "missing_params", "queue and id are required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingParams, "queue and id are required")
 		return
 	}
 	if err := h.inspector.DeleteTask(queue, id); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "asynq_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.AsynqError, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "admin.queue.dlq_discarded", "queue", queue, id, map[string]any{

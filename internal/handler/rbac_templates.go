@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -37,7 +38,7 @@ func (h *RBACHandler) SetTemplateCatalog(c *rbac.Catalog) {
 // consumes this on the /dashboard/admin/templates page.
 func (h *RBACHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	if h.templates == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "catalog_unavailable", "RBAC template catalog not loaded")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CatalogUnavailable, "RBAC template catalog not loaded")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -50,17 +51,17 @@ func (h *RBACHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 // the name doesn't exist in the catalog.
 func (h *RBACHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	if h.templates == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "catalog_unavailable", "RBAC template catalog not loaded")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CatalogUnavailable, "RBAC template catalog not loaded")
 		return
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "template name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "template name is required")
 		return
 	}
 	t, ok := h.templates.Get(name)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "template not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "template not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, t)

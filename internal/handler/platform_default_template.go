@@ -44,6 +44,7 @@ import (
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -129,12 +130,12 @@ func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Platform configuration not available")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Platform configuration not available")
 		return
 	}
 	cfg, err := h.queries.GetPlatformConfig(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	resp := defaultTemplateResponse{}
@@ -158,7 +159,7 @@ func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Requ
 			RespondJSON(w, http.StatusOK, resp)
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	id := tmpl.ID.String()
@@ -194,13 +195,13 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Platform configuration not available")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Platform configuration not available")
 		return
 	}
 
 	var req putRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -218,7 +219,7 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 	if req.TemplateID != nil && *req.TemplateID != "" {
 		parsed, err := uuid.Parse(*req.TemplateID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "template_id must be a UUID or null")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id must be a UUID or null")
 			return
 		}
 		// Validate the template exists BEFORE writing so we return a
@@ -229,10 +230,10 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 		// rare race).
 		if _, err := h.queries.GetClusterTemplateByID(r.Context(), parsed); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "template_id does not reference an existing cluster_templates row")
+				RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id does not reference an existing cluster_templates row")
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 			return
 		}
 		target = pgtype.UUID{Bytes: parsed, Valid: true}
@@ -243,7 +244,7 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 
 	updated, err := h.queries.SetPlatformDefaultClusterTemplate(r.Context(), target)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 
@@ -272,26 +273,26 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Platform configuration not available")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Platform configuration not available")
 		return
 	}
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	cfg, err := h.queries.GetPlatformConfig(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	if !cfg.DefaultClusterTemplateID.Valid {
@@ -300,7 +301,7 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		// is set; configure one first") is the better operator UX —
 		// it's a state error, not a missing resource. The frontend
 		// renders it as a banner pointing back at the PUT endpoint.
-		RespondRequestError(w, r, http.StatusConflict, "no_default", "No platform default cluster template is configured. Set one via PUT /admin/platform-settings/default-cluster-template/ first.")
+		RespondRequestError(w, r, http.StatusConflict, apierror.NoDefault, "No platform default cluster template is configured. Set one via PUT /admin/platform-settings/default-cluster-template/ first.")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), uuid.UUID(cfg.DefaultClusterTemplateID.Bytes))
@@ -308,7 +309,7 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		// Stale FK target — surface as 409 so the operator sees a
 		// recoverable state error (pick a new default) rather than a
 		// generic 500.
-		RespondRequestError(w, r, http.StatusConflict, "stale_default", "Platform default cluster template no longer exists. Pick a new one.")
+		RespondRequestError(w, r, http.StatusConflict, apierror.StaleDefault, "Platform default cluster template no longer exists. Pick a new one.")
 		return
 	}
 	app, err := h.queries.UpsertClusterTemplateApplication(r.Context(), sqlc.UpsertClusterTemplateApplicationParams{
@@ -317,7 +318,7 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		SpecSnapshot: tmpl.Spec,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	recordAudit(r, h.queries, "cluster.template.reapplied", "cluster", cluster.ID.String(), cluster.Name, map[string]any{

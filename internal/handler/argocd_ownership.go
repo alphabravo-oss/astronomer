@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -66,7 +67,7 @@ func (h *ArgoCDHandler) ClusterOwnership(w http.ResponseWriter, r *http.Request)
 	}
 	resp, err := h.clusterOwnershipResponse(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "ownership_error", "Failed to load ArgoCD ownership state")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.OwnershipError, "Failed to load ArgoCD ownership state")
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)
@@ -79,17 +80,17 @@ func (h *ArgoCDHandler) SetClusterOwnershipDecision(w http.ResponseWriter, r *ht
 	}
 	componentSlug := strings.TrimSpace(chi.URLParam(r, "component_slug"))
 	if !isKnownBaselineComponent(componentSlug) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_component", "Unknown baseline component")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ComponentInvalid, "Unknown baseline component")
 		return
 	}
 	var req argoCDBaselineOwnershipDecisionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	decision := strings.TrimSpace(req.Decision)
 	if !validArgoOwnershipDecision(decision) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_decision", "decision must be adopt, leave_local, or replace")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidDecision, "decision must be adopt, leave_local, or replace")
 		return
 	}
 	reason := strings.TrimSpace(req.Reason)
@@ -97,11 +98,11 @@ func (h *ArgoCDHandler) SetClusterOwnershipDecision(w http.ResponseWriter, r *ht
 	if strings.TrimSpace(req.ExpiresAt) != "" {
 		t, err := time.Parse(time.RFC3339, strings.TrimSpace(req.ExpiresAt))
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_expires_at", "expires_at must be RFC3339")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidExpiresAt, "expires_at must be RFC3339")
 			return
 		}
 		if !t.After(time.Now()) {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_expires_at", "expires_at must be in the future")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidExpiresAt, "expires_at must be in the future")
 			return
 		}
 		expiresAt = pgtype.Timestamptz{Time: t, Valid: true}
@@ -118,7 +119,7 @@ func (h *ArgoCDHandler) SetClusterOwnershipDecision(w http.ResponseWriter, r *ht
 		DecidedByID:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "decision_error", "Failed to record ownership decision")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecisionError, "Failed to record ownership decision")
 		return
 	}
 	recordAudit(r, h.queries, "argocd.baseline_ownership.decision", "cluster", clusterID.String(), componentSlug, map[string]any{
@@ -135,25 +136,25 @@ func (h *ArgoCDHandler) validateArgoOwnershipDecision(w http.ResponseWriter, r *
 		return true
 	}
 	if reason == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "reason_required", "replace decisions require a reason")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ReasonRequired, "replace decisions require a reason")
 		return false
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return false
 	}
 	if cluster.IsLocal {
-		RespondRequestError(w, r, http.StatusConflict, "unsafe_replacement_blocked", "local management cluster baseline components cannot be replaced by ArgoCD")
+		RespondRequestError(w, r, http.StatusConflict, apierror.UnsafeReplacementBlocked, "local management cluster baseline components cannot be replaced by ArgoCD")
 		return false
 	}
 	managedRows, err := h.queries.ListArgoCDManagedClustersByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "ownership_error", "Failed to load ArgoCD registration state")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.OwnershipError, "Failed to load ArgoCD registration state")
 		return false
 	}
 	if len(managedRows) == 0 {
-		RespondRequestError(w, r, http.StatusConflict, "unsafe_replacement_blocked", "cluster must be registered with ArgoCD before replace can be recorded")
+		RespondRequestError(w, r, http.StatusConflict, apierror.UnsafeReplacementBlocked, "cluster must be registered with ArgoCD before replace can be recorded")
 		return false
 	}
 	return true
@@ -162,11 +163,11 @@ func (h *ArgoCDHandler) validateArgoOwnershipDecision(w http.ResponseWriter, r *
 func (h *ArgoCDHandler) requireArgoCluster(w http.ResponseWriter, r *http.Request, verb rbac.Verb) (uuid.UUID, bool) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return uuid.Nil, false
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return uuid.Nil, false
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceArgoCD, verb) {

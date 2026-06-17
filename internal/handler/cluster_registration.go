@@ -28,6 +28,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -164,16 +165,16 @@ func (h *ClusterRegistrationHandler) SetBaselineTemplateID(id uuid.UUID) {
 func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load registration status")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load registration status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -184,26 +185,26 @@ func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Re
 func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	var req struct {
 		InstallBaseline *bool `json:"install_baseline"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.InstallBaseline == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "install_baseline is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "install_baseline is required")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	if _, err := h.service.SetInstallBaseline(r.Context(), id, *req.InstallBaseline); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to record options")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to record options")
 		return
 	}
 	recordAudit(r, h.auditQueries, "cluster.registration.options", "cluster", id.String(), "", map[string]any{
@@ -211,7 +212,7 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 	})
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load status")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -224,21 +225,21 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	record, advErr := h.service.Advance(r.Context(), id, registration.EventConfirm)
 	if advErr != nil {
 		if h.isIllegal(advErr) {
-			RespondRequestError(w, r, http.StatusConflict, "illegal_transition", advErr.Error())
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, advErr.Error())
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "transition_error", advErr.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TransitionError, advErr.Error())
 		return
 	}
 
@@ -268,13 +269,13 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 		})
 		if err != nil {
 			h.recordTemplateAttachFailure(r.Context(), id, err)
-			RespondRequestError(w, r, http.StatusInternalServerError, "attach_error", "Failed to attach platform baseline")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.AttachError, "Failed to attach platform baseline")
 			return
 		}
 		if !atomic {
 			if _, err := h.queries.UpsertClusterTemplateApplication(r.Context(), appParams); err != nil {
 				h.recordTemplateAttachFailure(r.Context(), id, err)
-				RespondRequestError(w, r, http.StatusInternalServerError, "attach_error", "Failed to attach platform baseline")
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.AttachError, "Failed to attach platform baseline")
 				return
 			}
 			h.enqueueTemplateApply(r.Context(), id, dedupeKey)
@@ -295,37 +296,37 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_step", "Invalid step ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStep, "Invalid step ID")
 		return
 	}
 	step, err := h.queries.GetClusterRegistrationStep(r.Context(), stepID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Step not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Step not found")
 		return
 	}
 	if step.ClusterID != id {
-		RespondRequestError(w, r, http.StatusBadRequest, "step_mismatch", "Step does not belong to cluster")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.StepMismatch, "Step does not belong to cluster")
 		return
 	}
 	if step.Status != "failed" {
-		RespondRequestError(w, r, http.StatusConflict, "not_failed", "Only failed steps can be retried")
+		RespondRequestError(w, r, http.StatusConflict, apierror.NotFailed, "Only failed steps can be retried")
 		return
 	}
 	// Advance back to provisioning so the timeline doesn't lie about
 	// being stuck at failed while the task is re-running.
 	if _, err := h.service.Advance(r.Context(), id, registration.EventRetry); err != nil {
-		RespondRequestError(w, r, http.StatusConflict, "illegal_transition", err.Error())
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
 		return
 	}
 	task, queueName, maxRetry, dedupeKey := h.registrationRetryTask(id, stepID, step.StepName)
 	updatedStep, atomic, err := h.updateRetryStepWithTaskOutbox(r.Context(), stepID, task, dedupeKey, queueName, maxRetry)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "retry_error", "Failed to queue retry")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to queue retry")
 		return
 	}
 	if atomic {
@@ -352,7 +353,7 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
@@ -364,10 +365,10 @@ func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.R
 	if _, err := h.service.Advance(r.Context(), id, registration.EventCancel,
 		registration.WithError("cancelled by superuser")); err != nil {
 		if h.isIllegal(err) {
-			RespondRequestError(w, r, http.StatusConflict, "illegal_transition", err.Error())
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "transition_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TransitionError, err.Error())
 		return
 	}
 	recordAudit(r, h.auditQueries, "cluster.registration.cancel", "cluster", id.String(), "", nil)
@@ -382,7 +383,7 @@ func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.R
 func (h *ClusterRegistrationHandler) StreamEvents(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if h.bus == nil {

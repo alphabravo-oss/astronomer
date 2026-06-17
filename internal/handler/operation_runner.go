@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 )
 
@@ -96,7 +97,7 @@ func requireRetryableOperation(w http.ResponseWriter, r *http.Request, status st
 	if isRetryableOperationStatus(status) {
 		return true
 	}
-	RespondRequestError(w, r, http.StatusConflict, "invalid_state", operationRetryInvalidStateMessage)
+	RespondRequestError(w, r, http.StatusConflict, apierror.InvalidState, operationRetryInvalidStateMessage)
 	return false
 }
 

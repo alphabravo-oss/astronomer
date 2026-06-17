@@ -43,6 +43,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -154,7 +155,7 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListQuotaPlans(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list quota plans")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list quota plans")
 		return
 	}
 	out := make([]quotaPlanResponse, 0, len(rows))
@@ -171,16 +172,16 @@ func (h *QuotaHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "Plan name required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Plan name required")
 		return
 	}
 	p, err := h.queries.GetQuotaPlan(r.Context(), name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Quota plan not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to fetch quota plan")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to fetch quota plan")
 		return
 	}
 	RespondJSON(w, http.StatusOK, planToResponse(p))
@@ -193,23 +194,23 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	var req quotaPlanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Plan name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Plan name is required")
 		return
 	}
 	if req.Enforcement == "" {
 		req.Enforcement = "hard"
 	}
 	if !validEnforcement(req.Enforcement) {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "enforcement must be 'soft' or 'hard'")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
 	p, err := h.queries.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create quota plan")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create quota plan")
 		return
 	}
 	recordAudit(r, h.queries, "quota.plan_create", "quota_plan", p.Name, p.Name, map[string]any{
@@ -228,12 +229,12 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "Plan name required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Plan name required")
 		return
 	}
 	var req quotaPlanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Body's `name` is ignored — URL is authoritative.
@@ -242,22 +243,22 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		req.Enforcement = "hard"
 	}
 	if !validEnforcement(req.Enforcement) {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "enforcement must be 'soft' or 'hard'")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
 	// Pre-check exists so the operator gets a clean 404 instead of an
 	// upsert insert silently materializing a new row.
 	if _, err := h.queries.GetQuotaPlan(r.Context(), name); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Quota plan not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "get_error", "Failed to fetch quota plan")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to fetch quota plan")
 		return
 	}
 	p, err := h.queries.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update quota plan")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update quota plan")
 		return
 	}
 	recordAudit(r, h.queries, "quota.plan_update", "quota_plan", p.Name, p.Name, map[string]any{
@@ -277,7 +278,7 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_name", "Plan name required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Plan name required")
 		return
 	}
 	// Block deleting any seeded singleton plan — 'free' is the default
@@ -287,26 +288,27 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 	// to 0 (unlimited) rather than dropping the row entirely.
 	switch name {
 	case "free", "global":
-		RespondRequestError(w, r, http.StatusConflict, "plan_is_reserved", "The 'free' and 'global' quota plans are reserved and cannot be deleted")
+		RespondRequestError(w, r, http.StatusConflict, apierror.PlanIsReserved, "The 'free' and 'global' quota plans are reserved and cannot be deleted")
 		return
 	}
 	projCount, err := h.queries.CountProjectsUsingQuotaPlan(r.Context(), name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count plan references")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count plan references")
 		return
 	}
 	userCount, err := h.queries.CountUsersUsingQuotaPlan(r.Context(), name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count plan references")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count plan references")
 		return
 	}
 	if projCount > 0 || userCount > 0 {
-		RespondRequestError(w, r, http.StatusConflict, "plan_in_use",
+		RespondRequestError(w, r, http.StatusConflict, apierror.PlanInUse,
 			"Quota plan is still referenced by at least one project or user; reassign them first")
+
 		return
 	}
 	if err := h.queries.DeleteQuotaPlan(r.Context(), name); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete quota plan")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete quota plan")
 		return
 	}
 	recordAudit(r, h.queries, "quota.plan_delete", "quota_plan", name, name, nil)
@@ -464,22 +466,22 @@ func collectUserOffenders(rows []sqlc.UserQuotaSnapshotRow) []userOffenderRow {
 // don't re-check here.
 func (h *QuotaHandler) ProjectQuota(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Quota store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Quota store not configured")
 		return
 	}
 	idStr := chi.URLParam(r, "id")
 	projectID, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	plan, err := h.queries.GetEffectiveQuotaForProject(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to load project quota")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load project quota")
 		return
 	}
 	clusters, _ := h.queries.CountClustersInProject(r.Context(), projectID)
@@ -512,25 +514,25 @@ func (h *QuotaHandler) ProjectQuota(w http.ResponseWriter, r *http.Request) {
 func (h *QuotaHandler) MyQuota(w http.ResponseWriter, r *http.Request) {
 	caller, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || caller == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "not_configured", "Quota store not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Quota store not configured")
 		return
 	}
 	userID, err := uuid.Parse(caller.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "internal_error", "Invalid caller ID")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid caller ID")
 		return
 	}
 	plan, err := h.queries.GetEffectiveQuotaForUser(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, "not_found", "User not found")
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, "lookup_error", "Failed to load user quota")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load user quota")
 		return
 	}
 	projects, _ := h.queries.CountProjectsForUser(r.Context(), userID)

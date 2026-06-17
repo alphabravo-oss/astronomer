@@ -20,6 +20,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // SSOQuerier abstracts the database queries the SSO handler needs in order
@@ -145,28 +146,28 @@ func (h *SSOHandler) SetEncryptor(e *auth.Encryptor) {
 // a CSRF state value in a short-lived cookie + the in-memory state map.
 func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if h.manager == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "sso_not_configured", "Single sign-on is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSONotConfigured, "Single sign-on is not configured")
 		return
 	}
 	provider := strings.ToLower(chi.URLParam(r, "provider"))
 	if provider == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_provider", "Provider is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidProvider, "Provider is required")
 		return
 	}
 	if !h.manager.HasProvider(provider) {
-		RespondRequestError(w, r, http.StatusNotFound, "provider_not_found", fmt.Sprintf("SSO provider %q is not enabled", provider))
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, fmt.Sprintf("SSO provider %q is not enabled", provider))
 		return
 	}
 
 	authURL, state, err := h.manager.GetAuthorizationURL(provider)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "sso_error", "Failed to start SSO flow")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to start SSO flow")
 		return
 	}
 	h.rememberState(state, provider)
 	cookieValue, err := h.signStateCookie(provider, state)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "sso_error", "Failed to persist SSO state")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to persist SSO state")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -185,66 +186,66 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 // browser back to the frontend with JWT tokens in the query string.
 func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if h.manager == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "sso_not_configured", "Single sign-on is not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSONotConfigured, "Single sign-on is not configured")
 		return
 	}
 	provider := strings.ToLower(chi.URLParam(r, "provider"))
 	if provider == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_provider", "Provider is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidProvider, "Provider is required")
 		return
 	}
 	if !h.manager.HasProvider(provider) {
-		RespondRequestError(w, r, http.StatusNotFound, "provider_not_found", fmt.Sprintf("SSO provider %q is not enabled", provider))
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, fmt.Sprintf("SSO provider %q is not enabled", provider))
 		return
 	}
 	if errParam := r.URL.Query().Get("error"); errParam != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "sso_provider_error", errParam)
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOProviderError, errParam)
 		return
 	}
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
 	if code == "" || state == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "sso_invalid_request", "Missing code or state")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOInvalidRequest, "Missing code or state")
 		return
 	}
 	if !h.consumeState(state, provider) {
-		RespondRequestError(w, r, http.StatusForbidden, "sso_invalid_state", "OAuth state did not match")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state did not match")
 		return
 	}
 	cookie, err := r.Cookie("astro_sso_state")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, "sso_invalid_state", "OAuth state cookie missing")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie missing")
 		return
 	}
 	if !h.verifyStateCookie(cookie.Value, provider, state) {
-		RespondRequestError(w, r, http.StatusForbidden, "sso_invalid_state", "OAuth state cookie mismatch")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie mismatch")
 		return
 	}
 	defer http.SetCookie(w, &http.Cookie{Name: "astro_sso_state", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 
 	info, err := h.manager.HandleCallback(r.Context(), provider, code, state)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, "sso_callback_error", err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.SSOCallbackError, err.Error())
 		return
 	}
 	if info == nil || info.Email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "sso_missing_email", "SSO provider did not return an email address")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOMissingEmail, "SSO provider did not return an email address")
 		return
 	}
 
 	user, provisioned, err := h.findOrCreateUser(r.Context(), info)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "sso_user_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOUserError, err.Error())
 		return
 	}
 	if !user.IsActive {
-		RespondRequestError(w, r, http.StatusForbidden, "account_disabled", "Account is disabled")
+		RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
 		return
 	}
 
 	access, refresh, err := h.jwt.GenerateTokenPair(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "token_error", "Failed to generate token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
 		return
 	}
 	if h.queries != nil {

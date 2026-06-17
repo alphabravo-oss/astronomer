@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -122,7 +123,7 @@ func (h *ControlPlaneHandler) Status(w http.ResponseWriter, r *http.Request) {
 func (h *ControlPlaneHandler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 	policy, err := h.queries.GetDefaultControlPlanePolicy(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "policy_error", "Failed to load control plane policy")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PolicyError, "Failed to load control plane policy")
 		return
 	}
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
@@ -131,7 +132,7 @@ func (h *ControlPlaneHandler) GetPolicy(w http.ResponseWriter, r *http.Request) 
 func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	var req UpdateControlPlanePolicyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	policy, err := h.queries.UpsertDefaultControlPlanePolicy(r.Context(), sqlc.UpsertDefaultControlPlanePolicyParams{
@@ -150,7 +151,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		RecentFailureWindowMinutes:       atLeastOne(req.RecentFailureWindowMinutes),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "policy_error", "Failed to update control plane policy")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PolicyError, "Failed to update control plane policy")
 		return
 	}
 	go h.evaluate(context.Background())
@@ -177,7 +178,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	}
 	alerts, err := h.queries.ListControlPlaneAlerts(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "alert_error", "Failed to list control plane alerts")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AlertError, "Failed to list control plane alerts")
 		return
 	}
 	resp := make([]map[string]any, 0, len(alerts))
@@ -190,7 +191,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid alert ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid alert ID")
 		return
 	}
 	alert, err := h.queries.AcknowledgeControlPlaneAlert(r.Context(), sqlc.AcknowledgeControlPlaneAlertParams{
@@ -198,7 +199,7 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 		AcknowledgedByID: currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Control plane alert not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane alert not found")
 		return
 	}
 	recordAudit(r, h.queries, "controlplane.alert.acknowledge", "control_plane_alert", id.String(), alert.Controller, map[string]any{
@@ -214,7 +215,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "silence_error", "Failed to list control plane silences")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to list control plane silences")
 		return
 	}
 	resp := make([]map[string]any, 0, len(items))
@@ -227,11 +228,11 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
 	var req CreateControlPlaneSilenceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Controller == "" || req.Reason == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Controller and reason are required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Controller and reason are required")
 		return
 	}
 	duration := time.Hour
@@ -249,7 +250,7 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 		CreatedByID:   currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "silence_error", "Failed to create control plane silence")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to create control plane silence")
 		return
 	}
 	recordAudit(r, h.queries, "controlplane.silence.create", "control_plane_silence", item.ID.String(), req.Reason, map[string]any{
@@ -263,11 +264,11 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid silence ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
 	if err := h.queries.DeleteControlPlaneSilence(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Control plane silence not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane silence not found")
 		return
 	}
 	recordAudit(r, h.queries, "controlplane.silence.delete", "control_plane_silence", id.String(), "", nil)

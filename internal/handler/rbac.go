@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -180,12 +181,12 @@ func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListGlobalRoles(r.Context(), sqlc.ListGlobalRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list global roles")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global roles")
 		return
 	}
 	total, err := h.queries.CountGlobalRoles(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count global roles")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count global roles")
 		return
 	}
 	RespondPaginated(w, r, items, total)
@@ -194,11 +195,11 @@ func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Role name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Role name is required")
 		return
 	}
 	role, err := h.queries.CreateGlobalRole(r.Context(), sqlc.CreateGlobalRoleParams{
@@ -210,7 +211,7 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		IsBuiltin:   req.IsBuiltin,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create global role")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role")
 		return
 	}
 	recordAudit(r, h.queries, "role.create", "global_role", role.ID.String(), role.Name, map[string]any{
@@ -235,7 +236,7 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	}
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	role, err := h.queries.UpdateGlobalRole(r.Context(), sqlc.UpdateGlobalRoleParams{
@@ -247,7 +248,7 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		Rules:       defaultJSON(req.Rules),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update global role")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update global role")
 		return
 	}
 	// Role rules are denormalised into every cached binding for every user
@@ -268,7 +269,7 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 		roleName = existing.Name
 	}
 	if err := h.queries.DeleteGlobalRole(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Global role not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
 		return
 	}
 	// ON DELETE CASCADE on global_role_bindings means every binding for this
@@ -283,12 +284,12 @@ func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListClusterRoles(r.Context(), sqlc.ListClusterRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list cluster roles")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster roles")
 		return
 	}
 	total, err := h.queries.CountClusterRoles(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count cluster roles")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count cluster roles")
 		return
 	}
 	RespondPaginated(w, r, items, total)
@@ -297,11 +298,11 @@ func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Role name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Role name is required")
 		return
 	}
 	role, err := h.queries.CreateClusterRole(r.Context(), sqlc.CreateClusterRoleParams{
@@ -313,7 +314,7 @@ func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) 
 		IsBuiltin:   req.IsBuiltin,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create cluster role")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role")
 		return
 	}
 	recordAudit(r, h.queries, "role.create", "cluster_role", role.ID.String(), role.Name, map[string]any{
@@ -330,7 +331,7 @@ func (h *RBACHandler) GetClusterRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.queries.GetClusterRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster role not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, role)
@@ -343,7 +344,7 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 	}
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	role, err := h.queries.UpdateClusterRole(r.Context(), sqlc.UpdateClusterRoleParams{
@@ -355,7 +356,7 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 		Rules:       defaultJSON(req.Rules),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update cluster role")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster role")
 		return
 	}
 	h.invalidateAll()
@@ -373,7 +374,7 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 		roleName = existing.Name
 	}
 	if err := h.queries.DeleteClusterRole(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster role not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
 		return
 	}
 	h.invalidateAll()
@@ -386,12 +387,12 @@ func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListProjectRoles(r.Context(), sqlc.ListProjectRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list project roles")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project roles")
 		return
 	}
 	total, err := h.queries.CountProjectRoles(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "count_error", "Failed to count project roles")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project roles")
 		return
 	}
 	RespondPaginated(w, r, items, total)
@@ -400,11 +401,11 @@ func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) {
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Role name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Role name is required")
 		return
 	}
 	role, err := h.queries.CreateProjectRole(r.Context(), sqlc.CreateProjectRoleParams{
@@ -416,7 +417,7 @@ func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) 
 		IsBuiltin:   req.IsBuiltin,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create project role")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role")
 		return
 	}
 	recordAudit(r, h.queries, "role.create", "project_role", role.ID.String(), role.Name, map[string]any{
@@ -433,7 +434,7 @@ func (h *RBACHandler) GetProjectRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.queries.GetProjectRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project role not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, role)
@@ -446,7 +447,7 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 	}
 	var req roleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	role, err := h.queries.UpdateProjectRole(r.Context(), sqlc.UpdateProjectRoleParams{
@@ -458,7 +459,7 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 		Rules:       defaultJSON(req.Rules),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update project role")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project role")
 		return
 	}
 	h.invalidateAll()
@@ -476,7 +477,7 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 		roleName = existing.Name
 	}
 	if err := h.queries.DeleteProjectRole(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project role not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
 		return
 	}
 	h.invalidateAll()
@@ -489,7 +490,7 @@ func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Requ
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListGlobalRoleBindings(r.Context(), sqlc.ListGlobalRoleBindingsParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list global role bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global role bindings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, bindingListResponse(items))
@@ -498,7 +499,7 @@ func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Requ
 func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -511,7 +512,7 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 		RoleID: roleID,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create global role binding")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role binding")
 		return
 	}
 	// Targeted invalidation when this is a user-scoped binding. Group-scoped
@@ -538,7 +539,7 @@ func (h *RBACHandler) DeleteGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	// Look up the affected user before deleting so we can invalidate after.
 	affectedUserID := h.lookupGlobalBindingUserID(r.Context(), id)
 	if err := h.queries.DeleteGlobalRoleBinding(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Global role binding not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
@@ -557,7 +558,7 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 	if clusterID != "" {
 		parsed, parseErr := uuid.Parse(clusterID)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Invalid cluster ID")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 			return
 		}
 		items, err = h.queries.ListClusterRoleBindingsByCluster(r.Context(), sqlc.ListClusterRoleBindingsByClusterParams{
@@ -569,7 +570,7 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 		items, err = h.queries.ListClusterRoleBindings(r.Context(), sqlc.ListClusterRoleBindingsParams{Limit: limit, Offset: offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list cluster role bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster role bindings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, bindingListResponse(items))
@@ -578,7 +579,7 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -587,7 +588,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_cluster_id", "Cluster ID is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Cluster ID is required")
 		return
 	}
 	binding, err := h.queries.CreateClusterRoleBinding(r.Context(), sqlc.CreateClusterRoleBindingParams{
@@ -597,7 +598,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		ClusterID: clusterID,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create cluster role binding")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role binding")
 		return
 	}
 	h.invalidateUser(req.UserID)
@@ -618,7 +619,7 @@ func (h *RBACHandler) DeleteClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	}
 	affectedUserID := h.lookupClusterBindingUserID(r.Context(), id)
 	if err := h.queries.DeleteClusterRoleBinding(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster role binding not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
@@ -637,7 +638,7 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 	if projectID != "" {
 		parsed, parseErr := uuid.Parse(projectID)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_project_id", "Invalid project ID")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 			return
 		}
 		items, err = h.queries.ListProjectRoleBindingsByProject(r.Context(), sqlc.ListProjectRoleBindingsByProjectParams{
@@ -649,7 +650,7 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 		items, err = h.queries.ListProjectRoleBindings(r.Context(), sqlc.ListProjectRoleBindingsParams{Limit: limit, Offset: offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list project role bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project role bindings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, bindingListResponse(items))
@@ -658,7 +659,7 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -667,7 +668,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	}
 	projectID, err := uuid.Parse(req.ProjectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_project_id", "Project ID is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Project ID is required")
 		return
 	}
 
@@ -682,7 +683,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 				WriteQuotaExceeded(w, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate project member quota")
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate project member quota")
 			return
 		}
 		if userID.Valid {
@@ -691,7 +692,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 					WriteQuotaExceeded(w, qe)
 					return
 				}
-				RespondRequestError(w, r, http.StatusInternalServerError, "quota_check_error", "Failed to evaluate user project quota")
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate user project quota")
 				return
 			}
 		}
@@ -704,7 +705,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		ProjectID: projectID,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create project role binding")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role binding")
 		return
 	}
 	h.invalidateUser(req.UserID)
@@ -725,7 +726,7 @@ func (h *RBACHandler) DeleteProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	}
 	affectedUserID := h.lookupProjectBindingUserID(r.Context(), id)
 	if err := h.queries.DeleteProjectRoleBinding(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project role binding not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
@@ -738,7 +739,7 @@ func (h *RBACHandler) DeleteProjectRoleBinding(w http.ResponseWriter, r *http.Re
 func (h *RBACHandler) MyRoles(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if h.bindings == nil {
@@ -750,7 +751,7 @@ func (h *RBACHandler) MyRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	bindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load user bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load user bindings")
 		return
 	}
 	items := make([]map[string]any, 0, len(bindings))
@@ -781,13 +782,13 @@ func (h *RBACHandler) MyRoles(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandler) CheckMyRole(w http.ResponseWriter, r *http.Request) {
 	user, ok := middleware.GetAuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
 	}
 	resource := r.URL.Query().Get("resource")
 	verb := r.URL.Query().Get("verb")
 	if resource == "" || verb == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "validation_error", "Both 'resource' and 'verb' query params are required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Both 'resource' and 'verb' query params are required")
 		return
 	}
 	clusterIDStr := r.URL.Query().Get("cluster_id")
@@ -819,7 +820,7 @@ func (h *RBACHandler) CheckMyRole(w http.ResponseWriter, r *http.Request) {
 
 	bindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "load_error", "Failed to load user bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load user bindings")
 		return
 	}
 	allowed := h.engine.CheckPermission(bindings, rbac.Resource(resource), rbac.Verb(verb), clusterID, projectID)
@@ -839,7 +840,7 @@ func (h *RBACHandler) getGlobalRole(w http.ResponseWriter, r *http.Request) (sql
 	}
 	role, err := h.queries.GetGlobalRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Global role not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
 		return sqlc.GlobalRole{}, false
 	}
 	return role, true
@@ -848,7 +849,7 @@ func (h *RBACHandler) getGlobalRole(w http.ResponseWriter, r *http.Request) (sql
 func parseUUIDURLParam(w http.ResponseWriter, r *http.Request, param, label string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, param))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid "+label+" ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid "+label+" ID")
 		return uuid.UUID{}, false
 	}
 	return id, true
@@ -864,7 +865,7 @@ func defaultJSON(raw json.RawMessage) json.RawMessage {
 func parseBindingRefs(w http.ResponseWriter, r *http.Request, req roleBindingRequest) (uuid.UUID, pgtype.UUID, bool) {
 	roleID, err := uuid.Parse(req.RoleID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_role_id", "Role ID is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Role ID is required")
 		return uuid.UUID{}, pgtype.UUID{}, false
 	}
 	if req.UserID == "" {
@@ -872,7 +873,7 @@ func parseBindingRefs(w http.ResponseWriter, r *http.Request, req roleBindingReq
 	}
 	userID, err := uuid.Parse(req.UserID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_user_id", "Invalid user ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return uuid.UUID{}, pgtype.UUID{}, false
 	}
 	return roleID, pgtype.UUID{Bytes: userID, Valid: true}, true

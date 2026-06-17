@@ -1,86 +1,83 @@
 package handler
 
 import (
-	"os"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-// catalogCodes is the set of error-code string literals that the
-// internal/handler/apierror package has canonicalized. A RespondRequestError
-// call whose 4th argument is a bare string literal NOT in this set is a
-// candidate for migration to an apierror.* constant.
+// TestApierrorCatalogCoverage enforces that every RespondRequestError call site
+// passes its `code` (4th positional) argument as an apierror.* catalog selector
+// rather than a bare string literal.
 //
-// Keep this in sync with internal/handler/apierror/codes.go.
-var catalogCodes = map[string]bool{
-	"invalid_body":            true,
-	"invalid_id":              true,
-	"validation_error":        true,
-	"invalid_request":         true,
-	"invalid_name":            true,
-	"invalid_token":           true,
-	"not_found":               true,
-	"conflict":                true,
-	"authentication_required": true,
-	"forbidden":               true,
-	"internal_error":          true,
-	"db_error":                true,
-	"list_error":              true,
-	"count_error":             true,
-	"create_error":            true,
-	"update_error":            true,
-	"delete_error":            true,
-}
-
-// respondRequestErrorCode matches a single-line RespondRequestError(...) call
-// and captures the 4th positional argument when it is a double-quoted string
-// literal. Multi-line calls and constant (non-literal) code arguments are not
-// matched and are therefore ignored by this lint.
-var respondRequestErrorCode = regexp.MustCompile(
-	`RespondRequestError\([^,]+,[^,]+,[^,]+,\s*"([a-z0-9_]+)"`,
-)
-
-// TestApierrorCatalogCoverage flags RespondRequestError call sites that pass a
-// bare error-code string literal which is not part of the apierror catalog.
+// The Track B2 codemod expanded internal/handler/apierror/codes.go to the full
+// canonical catalog and rewrote all ~2,000 legacy bare-literal call sites to
+// reference constants. This test guards that migration: a newly introduced
+// RespondRequestError(..., "some_code", ...) literal will fail here, pointing
+// the author at the catalog.
 //
-// It is intentionally skipped: the repository still has ~2,000 legacy call
-// sites across ~260 distinct code spellings, and this catalog deliberately
-// migrates only one worked example (clusters.go Create/Get) for now. Enabling
-// this assertion today would fail CI.
+// A handful of shared error-translation helpers pass a code that is computed at
+// runtime (a local variable or a struct field) rather than a string literal:
 //
-// TODO(apierror-codemod): once a codemod has (a) expanded the apierror catalog
-// to cover the full canonical set and (b) rewritten every RespondRequestError
-// call site to reference an apierror.* constant, delete the t.Skip below so
-// this test enforces that no new bare-literal codes are introduced.
+//   - response.go: the RespondRequestError definition itself (param `code`).
+//   - authorization.go: requireSuperuser forwards cfg.InvalidUserCode /
+//     cfg.StoreUnavailableCode (each falling back to a catalog string).
+//   - agent_fleet.go: respondAgentFleetError forwards handlerErr.code from a
+//     typed *agentFleetHandlerError.
+//
+// Those arguments are not string literals, so they are inherently outside this
+// lint (it only flags *bare literal* code args) and need no allowlist. If one
+// of them is ever changed to pass a literal directly, this test will flag it.
 func TestApierrorCatalogCoverage(t *testing.T) {
-	t.Skip("TODO(apierror-codemod): enable after the catalog is expanded and call sites are migrated; see internal/handler/apierror/codes.go")
-
 	matches, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("glob handler files: %v", err)
 	}
 
+	fset := token.NewFileSet()
 	var offenders []string
+
 	for _, path := range matches {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		src, err := os.ReadFile(path)
+		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
+			t.Fatalf("parse %s: %v", path, err)
 		}
-		for _, m := range respondRequestErrorCode.FindAllStringSubmatch(string(src), -1) {
-			code := m[1]
-			if !catalogCodes[code] {
-				offenders = append(offenders, path+": "+code)
+
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
 			}
-		}
+			fn, ok := call.Fun.(*ast.Ident)
+			if !ok || fn.Name != "RespondRequestError" {
+				return true
+			}
+			if len(call.Args) < 4 {
+				return true
+			}
+			lit, ok := call.Args[3].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true // dynamic (variable / selector) code arg — out of scope
+			}
+			val, _ := strconv.Unquote(lit.Value)
+			pos := fset.Position(lit.Pos())
+			offenders = append(offenders,
+				pos.Filename+":"+strconv.Itoa(pos.Line)+": bare code literal "+
+					strconv.Quote(val)+
+					" (use an apierror.* constant from internal/handler/apierror/codes.go)")
+			return true
+		})
 	}
 
 	if len(offenders) > 0 {
-		t.Errorf("RespondRequestError calls using non-catalog code literals:\n%s",
+		t.Errorf("RespondRequestError calls passing a bare error-code string literal instead of an apierror.* constant:\n%s",
 			strings.Join(offenders, "\n"))
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // AdminDrillQuerier is the slice of sqlc.Queries the handler needs.
@@ -92,7 +93,7 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		// don't 500. The dashboard will show "never run" and the
 		// staleness alert will fire on the metric side.
 	default:
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 
@@ -106,7 +107,7 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pgx.ErrNoRows):
 		// No successful drill yet.
 	default:
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 
@@ -126,13 +127,13 @@ func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) 
 		Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 
 	total, err := h.queries.CountBackupDrillResults(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "db_error", err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 

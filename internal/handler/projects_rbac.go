@@ -54,6 +54,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type rbacBindingRow struct {
@@ -84,11 +85,11 @@ type rbacMatrixSummary struct {
 func (h *ProjectHandler) RBACMatrix(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid project ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Project not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
 
@@ -102,7 +103,7 @@ func (h *ProjectHandler) RBACMatrix(w http.ResponseWriter, r *http.Request) {
 		Offset:    0,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list bindings")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list bindings")
 		return
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -75,12 +76,12 @@ func (h *ArgoCDHandler) InstanceOrphanReport(w http.ResponseWriter, r *http.Requ
 		Offset:           0,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list cached ArgoCD applications")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cached ArgoCD applications")
 		return
 	}
 	rows, err := h.queries.ListArgoCDManagedClusters(r.Context(), instance.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list ArgoCD managed clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list ArgoCD managed clusters")
 		return
 	}
 	liveApps, liveErr := h.argoCDClient(instance).ListApplications(r.Context())

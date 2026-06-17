@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -114,7 +115,7 @@ func (h *ComplianceHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 	from, to, err := parseComplianceRange(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_range", err.Error())
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRange, err.Error())
 		return
 	}
 
@@ -140,15 +141,15 @@ func (h *ComplianceHandler) GetExportStatus(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	idx := strings.LastIndex(path, "/")
 	if idx == -1 {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Missing export id")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Missing export id")
 		return
 	}
 	id := path[idx+1:]
 	if id == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Missing export id")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Missing export id")
 		return
 	}
-	RespondRequestError(w, r, http.StatusNotFound, "not_found", "Async compliance exports are not enabled; request a new export")
+	RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Async compliance exports are not enabled; request a new export")
 }
 
 // ── inline streaming path ──────────────────────────────────────────────

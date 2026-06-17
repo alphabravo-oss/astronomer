@@ -49,6 +49,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -342,12 +343,12 @@ func scheduleToResponse(row sqlc.ClusterSnapshotSchedule) ScheduleResponse {
 func parseClusterAndSnapshotIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	snapshotID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid snapshot ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid snapshot ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, snapshotID, true
@@ -356,12 +357,12 @@ func parseClusterAndSnapshotIDs(w http.ResponseWriter, r *http.Request) (uuid.UU
 func parseClusterAndScheduleIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	scheduleID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid schedule ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid schedule ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, scheduleID, true
@@ -375,16 +376,16 @@ func parseClusterAndScheduleIDs(w http.ResponseWriter, r *http.Request) (uuid.UU
 func (h *ClusterSnapshotsHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterSnapshots(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list snapshots")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list snapshots")
 		return
 	}
 	out := make([]SnapshotResponse, 0, len(rows))
@@ -402,7 +403,7 @@ func (h *ClusterSnapshotsHandler) GetSnapshot(w http.ResponseWriter, r *http.Req
 	}
 	row, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Snapshot not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, snapshotToResponse(row))
@@ -420,12 +421,12 @@ func (h *ClusterSnapshotsHandler) GetSnapshot(w http.ResponseWriter, r *http.Req
 func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
@@ -436,7 +437,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		Namespace  string `json:"velero_namespace,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	spec := req.SnapshotSpec
@@ -453,7 +454,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		veleroName = newVeleroBackupName(cluster.Name)
 	}
 	if !validVeleroResourceName(veleroName) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "velero_name must be a valid RFC 1123 subdomain (1-253 chars)")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "velero_name must be a valid RFC 1123 subdomain (1-253 chars)")
 		return
 	}
 
@@ -478,7 +479,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		CreatedBy:       currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create snapshot row")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create snapshot row")
 		return
 	}
 
@@ -523,7 +524,7 @@ func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.
 	}
 	row, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Snapshot not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
 		return
 	}
 
@@ -534,7 +535,7 @@ func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.
 	crdErr := h.postDeleteBackupRequestCRD(r.Context(), clusterID.String(), row)
 
 	if err := h.queries.DeleteClusterSnapshot(r.Context(), snapshotID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete snapshot row")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete snapshot row")
 		return
 	}
 
@@ -561,11 +562,11 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	}
 	snapshot, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || snapshot.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Snapshot not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
 		return
 	}
 	if snapshot.Phase != "Completed" && snapshot.Phase != "PartiallyFailed" {
-		RespondRequestError(w, r, http.StatusConflict, "snapshot_not_ready", "Snapshot is not yet Completed; cannot restore")
+		RespondRequestError(w, r, http.StatusConflict, apierror.SnapshotNotReady, "Snapshot is not yet Completed; cannot restore")
 		return
 	}
 
@@ -575,21 +576,21 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		Spec            RestoreSpec `json:"spec"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	targetID := clusterID
 	if strings.TrimSpace(req.TargetClusterID) != "" {
 		parsed, err := uuid.Parse(strings.TrimSpace(req.TargetClusterID))
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid target_cluster_id")
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid target_cluster_id")
 			return
 		}
 		targetID = parsed
 	}
 	target, err := h.queries.GetClusterByID(r.Context(), targetID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Target cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Target cluster not found")
 		return
 	}
 
@@ -601,11 +602,11 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	if targetID != clusterID {
 		bsls, vErr := listVeleroBSLs(r.Context(), h.requester, targetID.String(), defaultVeleroNamespace)
 		if vErr != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, "velero_unreachable", fmt.Sprintf("could not check Velero on target cluster: %v", vErr))
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.VeleroUnreachable, fmt.Sprintf("could not check Velero on target cluster: %v", vErr))
 			return
 		}
 		if len(bsls) == 0 {
-			RespondRequestError(w, r, http.StatusConflict, "velero_missing_on_target", "Target cluster has no Velero BackupStorageLocation; install Velero before cross-cluster restore")
+			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Target cluster has no Velero BackupStorageLocation; install Velero before cross-cluster restore")
 			return
 		}
 	}
@@ -629,7 +630,7 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		CreatedBy:       currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create restore row")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create restore row")
 		return
 	}
 
@@ -664,16 +665,16 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 func (h *ClusterSnapshotsHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterSnapshotSchedules(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "list_error", "Failed to list schedules")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list schedules")
 		return
 	}
 	out := make([]ScheduleResponse, 0, len(rows))
@@ -690,7 +691,7 @@ func (h *ClusterSnapshotsHandler) GetSchedule(w http.ResponseWriter, r *http.Req
 	}
 	row, err := h.queries.GetClusterSnapshotScheduleByID(r.Context(), scheduleID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Schedule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, scheduleToResponse(row))
@@ -699,30 +700,30 @@ func (h *ClusterSnapshotsHandler) GetSchedule(w http.ResponseWriter, r *http.Req
 func (h *ClusterSnapshotsHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 
 	var req ScheduleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "name is required")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name is required")
 		return
 	}
 	if !validVeleroResourceName(strings.ToLower(req.Name)) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "name must be a valid DNS subdomain")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name must be a valid DNS subdomain")
 		return
 	}
 	if _, err := parseCronExpression(req.CronSchedule); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", fmt.Sprintf("invalid cron_schedule: %v", err))
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, fmt.Sprintf("invalid cron_schedule: %v", err))
 		return
 	}
 	enabled := true
@@ -739,7 +740,7 @@ func (h *ClusterSnapshotsHandler) CreateSchedule(w http.ResponseWriter, r *http.
 		CreatedBy:    currentUserUUID(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "create_error", "Failed to create schedule (name conflict?)")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create schedule (name conflict?)")
 		return
 	}
 
@@ -759,18 +760,18 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	existing, err := h.queries.GetClusterSnapshotScheduleByID(r.Context(), scheduleID)
 	if err != nil || existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Schedule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
 		return
 	}
 
 	var req ScheduleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -778,7 +779,7 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 		name = existing.Name
 	}
 	if !validVeleroResourceName(strings.ToLower(name)) {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", "name must be a valid DNS subdomain")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name must be a valid DNS subdomain")
 		return
 	}
 	cronExpr := strings.TrimSpace(req.CronSchedule)
@@ -786,7 +787,7 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 		cronExpr = existing.CronSchedule
 	}
 	if _, err := parseCronExpression(cronExpr); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_body", fmt.Sprintf("invalid cron_schedule: %v", err))
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, fmt.Sprintf("invalid cron_schedule: %v", err))
 		return
 	}
 	enabled := existing.Enabled
@@ -802,7 +803,7 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 		Enabled:      enabled,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "update_error", "Failed to update schedule")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
 		return
 	}
 	recordAudit(r, h.queries, "cluster.snapshot.schedule_updated", "cluster_snapshot_schedule", row.ID.String(), cluster.Name, map[string]any{
@@ -821,11 +822,11 @@ func (h *ClusterSnapshotsHandler) DeleteSchedule(w http.ResponseWriter, r *http.
 	}
 	existing, err := h.queries.GetClusterSnapshotScheduleByID(r.Context(), scheduleID)
 	if err != nil || existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Schedule not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
 		return
 	}
 	if err := h.queries.DeleteClusterSnapshotSchedule(r.Context(), scheduleID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, "delete_error", "Failed to delete schedule")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
 		return
 	}
 	recordAudit(r, h.queries, "cluster.snapshot.schedule_deleted", "cluster_snapshot_schedule", scheduleID.String(), "", map[string]any{
@@ -842,15 +843,15 @@ func (h *ClusterSnapshotsHandler) DeleteSchedule(w http.ResponseWriter, r *http.
 func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Request) {
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, "not_found", "Cluster not found")
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, "tunnel_unwired", "Tunnel requester not configured")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnwired, "Tunnel requester not configured")
 		return
 	}
 

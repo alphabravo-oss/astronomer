@@ -425,21 +425,35 @@ func TestRegistrationWizard_SuperuserRequiredOnCancel(t *testing.T) {
 // reach into the route resolution machinery; the assertion catches
 // drift in either direction.
 func TestRegistrationWizard_RequiresClustersUpdateOnWrites(t *testing.T) {
-	// routes.go lives at ../server/routes.go relative to the
-	// handler test directory.
-	candidates := []string{
-		filepath.Join("..", "server", "routes.go"),
-		filepath.Join("..", "..", "internal", "server", "routes.go"),
+	// The protected-route table originally lived in a single
+	// ../server/routes.go; it was later split into per-domain
+	// routes_*.go files (the cluster routes, including the
+	// registration wizard, moved to routes_clusters.go). We
+	// concatenate every routes*.go in the server package so the
+	// gating assertions below hold regardless of which file the
+	// route currently lives in.
+	dirs := []string{
+		filepath.Join("..", "server"),
+		filepath.Join("..", "..", "internal", "server"),
 	}
 	var content string
-	for _, c := range candidates {
-		if b, err := os.ReadFile(c); err == nil {
-			content = string(b)
-			break
+	for _, d := range dirs {
+		matches, _ := filepath.Glob(filepath.Join(d, "routes*.go"))
+		if len(matches) == 0 {
+			continue
 		}
+		var b strings.Builder
+		for _, m := range matches {
+			if data, err := os.ReadFile(m); err == nil {
+				b.Write(data)
+				b.WriteByte('\n')
+			}
+		}
+		content = b.String()
+		break
 	}
 	if content == "" {
-		t.Skip("routes.go not found in expected locations")
+		t.Skip("routes*.go not found in expected locations")
 	}
 	// The writes (options/confirm/retry/cancel) MUST require
 	// VerbUpdate; the read (status) MUST require VerbRead.

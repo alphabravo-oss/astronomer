@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // fakeClusterGroupQuerier implements ClusterGroupQuerier in memory.
@@ -457,8 +458,9 @@ func TestCreateGroup_DuplicateSlugUnderSameParent_400(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "duplicate_slug") {
-		t.Errorf("expected duplicate_slug, got: %s", rec.Body.String())
+	// "duplicate_slug" was canonicalized to apierror.Conflict ("conflict").
+	if !strings.Contains(rec.Body.String(), apierror.Conflict) {
+		t.Errorf("expected %s, got: %s", apierror.Conflict, rec.Body.String())
 	}
 
 	// Same slug under parentB — should succeed (slug uniqueness is scoped
