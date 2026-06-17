@@ -44,7 +44,7 @@ spec:
           {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["redis-server", "--appendonly", "yes"]
+          args: ["valkey-server", "--appendonly", "yes"]
           ports:
             - name: redis
               containerPort: 6379

@@ -275,9 +275,12 @@ postgres:
 redis:
   bundled:
     enabled: true
+  # Engine is Valkey (the BSD-licensed drop-in fork of Redis). Wire-compatible,
+  # so the go-redis client and redis:// URLs are unchanged; the resource/service
+  # stay named "redis" to avoid PVC / self-manage / netpol churn.
   image:
-    repository: redis
-    tag: 7-alpine
+    repository: valkey/valkey
+    tag: 8-alpine
     registry: ""    # T23 air-gapped override; falls back to image.registry
   port: 6379
   storage:

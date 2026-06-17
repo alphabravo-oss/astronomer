@@ -21,4 +21,4 @@ bitnami/kubectl:1.31.4
 busybox:1.36
 dexidp/dex:v2.41.1
 postgres:16-alpine
-redis:7-alpine
+valkey/valkey:8-alpine
