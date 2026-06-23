@@ -316,6 +316,10 @@ func (h *SCIMHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// avoids spurious duplicate-create attempts.
 	if userName := parseUserNameEqFilter(r.URL.Query().Get("filter")); userName != "" {
 		u, err := h.queries.GetUserByUsername(r.Context(), userName)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			h.scimError(w, http.StatusInternalServerError, "failed to look up user")
+			return
+		}
 		resources := []any{}
 		var total int64
 		if err == nil {

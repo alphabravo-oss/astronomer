@@ -163,8 +163,14 @@ func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event 
 			"event_id", event.ID.String(), "rule_id", rule.ID.String(), "error", err)
 		return
 	}
+	// Prefer the cluster the event actually fired on. Global rules have an
+	// empty rule.ClusterID, so without this the operator could not tell which
+	// cluster triggered the alert. Fall back to the rule's cluster when the
+	// event carries none.
 	clusterStr := ""
-	if rule.ClusterID.Valid {
+	if event.ClusterID.Valid {
+		clusterStr = uuid.UUID(event.ClusterID.Bytes).String()
+	} else if rule.ClusterID.Valid {
 		clusterStr = uuid.UUID(rule.ClusterID.Bytes).String()
 	}
 	for _, channel := range channels {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -21,6 +22,9 @@ import (
 type fakeSCIMQuerier struct {
 	tokenHash string
 	users     map[string]sqlc.User // username -> row
+	// lookupErr, when non-nil, is returned by GetUserByUsername to
+	// simulate a transient DB failure (not a "no rows" miss).
+	lookupErr error
 }
 
 func (f *fakeSCIMQuerier) GetSCIMTokenByHash(_ context.Context, hash string) (sqlc.ScimToken, error) {
@@ -75,6 +79,9 @@ func (f *fakeSCIMQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.Use
 }
 
 func (f *fakeSCIMQuerier) GetUserByUsername(_ context.Context, username string) (sqlc.User, error) {
+	if f.lookupErr != nil {
+		return sqlc.User{}, f.lookupErr
+	}
 	if u, ok := f.users[username]; ok {
 		return u, nil
 	}
@@ -220,6 +227,29 @@ func TestSCIMUserLifecycle(t *testing.T) {
 	}
 	if got := q.users["alice@example.com"]; got.IsActive {
 		t.Fatalf("re-POST active:false: stored user still is_active=true")
+	}
+}
+
+// TestSCIMListUsersFilterDBError asserts that a transient DB error in the
+// userName-filter branch of ListUsers surfaces as a 500, rather than being
+// swallowed into an empty 200 that an IdP would read as "user not found".
+func TestSCIMListUsersFilterDBError(t *testing.T) {
+	token := "astro_scim_testtoken"
+	q := &fakeSCIMQuerier{
+		tokenHash: auth.HashSCIMToken(token),
+		users:     map[string]sqlc.User{},
+		lookupErr: pgx.ErrTxClosed, // any non-ErrNoRows error => transient failure
+	}
+	h := NewSCIMHandler(q)
+
+	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?filter="+
+		url.QueryEscape(`userName eq "alice@example.com"`), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.ListUsers)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("filter DB error: want 500, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 

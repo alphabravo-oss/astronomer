@@ -97,6 +97,49 @@ func TestApiserverAuditIngest(t *testing.T) {
 	}
 }
 
+// A present-but-malformed stageTimestamp must skip the event rather than
+// substitute now(), which would sort the row to the top and misrepresent when
+// the event happened.
+func TestApiserverAuditIngestMalformedTimestamp(t *testing.T) {
+	store := &fakeApiserverAuditStore{}
+	h := NewApiserverAuditHandler(store)
+	clusterID := uuid.New()
+
+	body := map[string]any{
+		"events": []map[string]any{
+			{ // malformed timestamp -> skipped, not stamped with now()
+				"auditID":        "bad-ts",
+				"stageTimestamp": "not-a-timestamp",
+			},
+		},
+	}
+	raw, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/apiserver-audit/", bytes.NewReader(raw))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cluster_id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+
+	h.Ingest(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	var wrapped struct {
+		Data ingestApiserverAuditResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &wrapped); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if wrapped.Data.Accepted != 0 || wrapped.Data.Skipped != 1 {
+		t.Fatalf("expected accepted=0 skipped=1, got %+v", wrapped.Data)
+	}
+	if len(store.inserted) != 0 {
+		t.Fatalf("expected no events persisted, got %d", len(store.inserted))
+	}
+}
+
 // An oversized ingest body must be rejected with 413 rather than read into
 // memory, and a negative offset on List must be clamped to 0 rather than
 // flowing into the SQL OFFSET.

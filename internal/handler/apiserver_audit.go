@@ -108,9 +108,14 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 		}
 		eventTime := time.Now().UTC()
 		if ev.StageTimestamp != "" {
-			if t, perr := time.Parse(time.RFC3339, ev.StageTimestamp); perr == nil {
-				eventTime = t.UTC()
+			t, perr := time.Parse(time.RFC3339, ev.StageTimestamp)
+			if perr != nil {
+				// Present-but-malformed timestamp: skip rather than substitute
+				// now(), which would misrepresent when the event happened.
+				resp.Skipped++
+				continue
 			}
+			eventTime = t.UTC()
 		}
 		if err := h.queries.InsertApiserverAuditEvent(r.Context(), sqlc.InsertApiserverAuditEventParams{
 			ClusterID:  clusterID,
