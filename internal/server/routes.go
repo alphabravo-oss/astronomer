@@ -416,6 +416,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.Post("/Users", deps.SCIM.CreateUser)
 			r.Get("/Users", deps.SCIM.ListUsers)
 			r.Get("/Users/{id}", deps.SCIM.GetUser)
+			r.Put("/Users/{id}", deps.SCIM.PutUser)
 			r.Delete("/Users/{id}", deps.SCIM.DeleteUser)
 			r.Get("/Groups", deps.SCIM.ListGroups)
 			r.Get("/Groups/{id}", deps.SCIM.GetGroup)

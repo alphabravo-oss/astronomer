@@ -65,6 +65,19 @@ func (h *HelmHandler) actionConfig(namespace string) (*action.Configuration, err
 }
 
 // helmResult constructs a HELM_RESULT response message.
+// defaultHelmReadyTimeout bounds how long an install/upgrade waits for
+// workloads to become Ready before giving up. Matches the helm CLI default.
+const defaultHelmReadyTimeout = 5 * time.Minute
+
+// helmReadyTimeout returns the wait timeout for an install/upgrade, honoring
+// the caller-provided seconds and falling back to the helm CLI default.
+func helmReadyTimeout(seconds int) time.Duration {
+	if seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	return defaultHelmReadyTimeout
+}
+
 func helmResult(streamID string, releaseName, namespace, status string, revision int, err error) *protocol.Message {
 	result := protocol.HelmResultPayload{
 		Success:     err == nil,
@@ -166,9 +179,13 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 	if req.Version != "" {
 		install.Version = req.Version
 	}
-	if req.Timeout > 0 {
-		install.Timeout = time.Duration(req.Timeout) * time.Second
-	}
+	// Block until the release's workloads are actually Ready so the
+	// reported "deployed" status implies readiness rather than merely
+	// "manifests applied". Without Wait, helm returns "deployed" the moment
+	// the objects are created, which the server treats as Ready — a false
+	// positive while pods are still rolling out.
+	install.Wait = true
+	install.Timeout = helmReadyTimeout(req.Timeout)
 
 	chartPath, err := h.locateChart(req)
 	if err != nil {
@@ -208,9 +225,10 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 	if req.Version != "" {
 		upgrade.Version = req.Version
 	}
-	if req.Timeout > 0 {
-		upgrade.Timeout = time.Duration(req.Timeout) * time.Second
-	}
+	// See HandleInstall: block until workloads are Ready so "deployed"
+	// implies readiness instead of just "manifests applied".
+	upgrade.Wait = true
+	upgrade.Timeout = helmReadyTimeout(req.Timeout)
 
 	chartPath, err := h.locateChart(req)
 	if err != nil {

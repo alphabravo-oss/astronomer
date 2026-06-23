@@ -1324,6 +1324,7 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 				ID:             *env.InstalledChart,
 				ValuesOverride: env.ValuesYAML,
 				Status:         normalizeToolStatus(result.Status),
+				Revision:       int32(result.Revision),
 			}); err != nil {
 				return err
 			}
@@ -1337,6 +1338,7 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 			ID:             item.ID,
 			ValuesOverride: env.ValuesYAML,
 			Status:         normalizeToolStatus(result.Status),
+			Revision:       int32(result.Revision),
 		}); err != nil {
 			return err
 		}
@@ -1396,10 +1398,11 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 
 // helmReleaseReady reports whether a Helm release status payload
 // describes a release that is actually ready (not merely "the helm
-// install command returned"). Helm reports "deployed" once the release
-// object exists and its resources applied cleanly; a release that is
-// still rolling out, failed, or pending sits in another phase. We treat
-// "deployed" as ready and everything else as not-ready.
+// install command returned"). The agent runs install/upgrade with
+// Wait=true, so helm only reports "deployed" once the release's
+// workloads have become Ready; a release that is still rolling out,
+// failed, or pending sits in another phase. We treat "deployed" as
+// ready and everything else as not-ready.
 func helmReleaseReady(status *protocol.HelmResultPayload) bool {
 	return status != nil && status.Success && status.Status == "deployed"
 }

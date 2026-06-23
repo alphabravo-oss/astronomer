@@ -3974,6 +3974,27 @@ paths:
           description: SCIM User resource
         '404':
           description: User not found
+    put:
+      tags:
+        - SCIM
+      summary: Replace a user via SCIM 2.0 (de/reactivate)
+      description: |
+        Full-resource replace. Applies core attributes and the `active`
+        flag; `active:false` deactivates the user (blocks login), `active:true`
+        reactivates. `userName` is immutable and falls back to the stored value.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated SCIM User resource
+        '400':
+          description: Invalid request body or user id
+        '404':
+          description: User not found
     delete:
       tags:
         - SCIM

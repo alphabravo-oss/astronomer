@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -15,7 +16,8 @@ import (
 )
 
 type fakeApiserverAuditStore struct {
-	inserted []sqlc.InsertApiserverAuditEventParams
+	inserted   []sqlc.InsertApiserverAuditEventParams
+	listOffset int32
 }
 
 func (f *fakeApiserverAuditStore) InsertApiserverAuditEvent(_ context.Context, arg sqlc.InsertApiserverAuditEventParams) error {
@@ -23,7 +25,8 @@ func (f *fakeApiserverAuditStore) InsertApiserverAuditEvent(_ context.Context, a
 	return nil
 }
 
-func (f *fakeApiserverAuditStore) ListApiserverAuditEventsByCluster(_ context.Context, _ sqlc.ListApiserverAuditEventsByClusterParams) ([]sqlc.ApiserverAuditEvent, error) {
+func (f *fakeApiserverAuditStore) ListApiserverAuditEventsByCluster(_ context.Context, arg sqlc.ListApiserverAuditEventsByClusterParams) ([]sqlc.ApiserverAuditEvent, error) {
+	f.listOffset = arg.Offset
 	return nil, nil
 }
 
@@ -91,5 +94,52 @@ func TestApiserverAuditIngest(t *testing.T) {
 	}
 	if got.EventTime.Year() != 2026 || got.EventTime.Month() != 6 {
 		t.Errorf("event_time not parsed from stageTimestamp: %v", got.EventTime)
+	}
+}
+
+// An oversized ingest body must be rejected with 413 rather than read into
+// memory, and a negative offset on List must be clamped to 0 rather than
+// flowing into the SQL OFFSET.
+func TestApiserverAuditIngestBodyTooLarge(t *testing.T) {
+	store := &fakeApiserverAuditStore{}
+	h := NewApiserverAuditHandler(store)
+	clusterID := uuid.New()
+
+	// Build a body larger than maxIngestBody (4 MiB).
+	big := `{"events":[` + `"` + strings.Repeat("a", maxIngestBody+1) + `"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/apiserver-audit/", strings.NewReader(big))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cluster_id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+
+	h.Ingest(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(store.inserted) != 0 {
+		t.Fatalf("expected no events persisted, got %d", len(store.inserted))
+	}
+}
+
+func TestApiserverAuditListNegativeOffset(t *testing.T) {
+	store := &fakeApiserverAuditStore{}
+	h := NewApiserverAuditHandler(store)
+	clusterID := uuid.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/apiserver-audit/?offset=-5", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cluster_id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if store.listOffset != 0 {
+		t.Fatalf("expected offset clamped to 0, got %d", store.listOffset)
 	}
 }

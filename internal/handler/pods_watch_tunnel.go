@@ -137,6 +137,17 @@ func (r *TunnelK8sRequester) WatchPods(ctx context.Context, clusterID, namespace
 						return
 					}
 					buf.Write(decoded)
+					// A server streaming a single huge unterminated line would
+					// grow buf without bound (emitLines only drains on '\n'). Cap
+					// the unparsed remainder: a single watch event is far smaller
+					// than maxAssembledResponseBytes, so crossing it means the
+					// peer is misbehaving — surface a terminal error and stop
+					// rather than buffer forever.
+					if buf.Len() > maxAssembledResponseBytes {
+						msg, _ := json.Marshal(fmt.Sprintf("watch reassembly buffer exceeded %d-byte cap", maxAssembledResponseBytes))
+						emitErr(json.RawMessage(msg))
+						return
+					}
 					if !emitLines() {
 						return
 					}

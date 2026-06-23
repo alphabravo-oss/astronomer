@@ -10,6 +10,7 @@
 //	POST   /scim/v2/Users        — create (provision) a user
 //	GET    /scim/v2/Users        — list users (SCIM ListResponse)
 //	GET    /scim/v2/Users/{id}   — get one
+//	PUT    /scim/v2/Users/{id}   — replace attrs + active (de/reactivate)
 //	DELETE /scim/v2/Users/{id}   — de-provision (delete) a user
 //	GET    /scim/v2/Groups       — list groups (from group_mappings)
 //	GET    /scim/v2/Groups/{id}  — get one group by name
@@ -51,6 +52,7 @@ type SCIMQuerier interface {
 	GetSCIMTokenByHash(ctx context.Context, tokenHash string) (sqlc.ScimToken, error)
 	TouchSCIMToken(ctx context.Context, id uuid.UUID) error
 	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
+	UpdateUser(ctx context.Context, arg sqlc.UpdateUserParams) (sqlc.User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
 	GetUserByEmail(ctx context.Context, email string) (sqlc.User, error)
@@ -195,10 +197,26 @@ func (h *SCIMHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		active = *req.Active
 	}
 
-	// Idempotency: if the IdP re-provisions an existing user, return the
-	// existing resource rather than a 500 on the unique constraint.
+	// Idempotency: if the IdP re-provisions an existing user, update the
+	// core attributes + active flag in place (an IdP commonly re-PUTs/POSTs
+	// the full resource, including active:false to deactivate) rather than
+	// returning a 500 on the unique constraint or silently ignoring the
+	// change. active=false maps to is_active=false, which the login + stream
+	// auth paths treat as disabled.
 	if existing, err := h.queries.GetUserByUsername(r.Context(), userName); err == nil {
-		h.writeSCIM(w, http.StatusOK, toSCIMUser(existing))
+		updated, err := h.queries.UpdateUser(r.Context(), sqlc.UpdateUserParams{
+			ID:        existing.ID,
+			Email:     email,
+			Username:  userName,
+			FirstName: req.Name.GivenName,
+			LastName:  req.Name.FamilyName,
+			IsActive:  active,
+		})
+		if err != nil {
+			h.scimError(w, http.StatusInternalServerError, "failed to update user")
+			return
+		}
+		h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
 		return
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		h.scimError(w, http.StatusInternalServerError, "failed to look up user")
@@ -233,6 +251,61 @@ func (h *SCIMHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeSCIM(w, http.StatusOK, toSCIMUser(u))
+}
+
+// PutUser handles PUT /scim/v2/Users/{id}: a full-resource replace. The
+// IdP sends the complete User representation, including `active`; this is
+// how deactivation (active:false) and reactivation (active:true) reach the
+// backend. active maps to is_active, which gates login + stream auth.
+func (h *SCIMHandler) PutUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.scimError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	var req scimCreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.scimError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	existing, err := h.queries.GetUserByID(r.Context(), id)
+	if err != nil {
+		h.scimError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	// userName is immutable here: PUT replaces attributes of the resource
+	// identified by {id}, not its identity. Keep the stored username if the
+	// IdP omits or changes it.
+	userName := strings.TrimSpace(req.UserName)
+	if userName == "" {
+		userName = existing.Username
+	}
+	email := ""
+	for _, e := range req.Emails {
+		if e.Primary || email == "" {
+			email = strings.TrimSpace(e.Value)
+		}
+	}
+	if email == "" {
+		email = existing.Email
+	}
+	active := true
+	if req.Active != nil {
+		active = *req.Active
+	}
+	updated, err := h.queries.UpdateUser(r.Context(), sqlc.UpdateUserParams{
+		ID:        id,
+		Email:     email,
+		Username:  userName,
+		FirstName: req.Name.GivenName,
+		LastName:  req.Name.FamilyName,
+		IsActive:  active,
+	})
+	if err != nil {
+		h.scimError(w, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+	h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
 }
 
 // ListUsers handles GET /scim/v2/Users. Supports SCIM startIndex/count

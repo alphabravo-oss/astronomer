@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -45,6 +46,23 @@ func (f *fakeSCIMQuerier) CreateUser(_ context.Context, arg sqlc.CreateUserParam
 	}
 	f.users[arg.Username] = u
 	return u, nil
+}
+
+func (f *fakeSCIMQuerier) UpdateUser(_ context.Context, arg sqlc.UpdateUserParams) (sqlc.User, error) {
+	for k, u := range f.users {
+		if u.ID == arg.ID {
+			u.Email = arg.Email
+			u.Username = arg.Username
+			u.FirstName = arg.FirstName
+			u.LastName = arg.LastName
+			u.IsActive = arg.IsActive
+			// Re-key in case the username changed.
+			delete(f.users, k)
+			f.users[u.Username] = u
+			return u, nil
+		}
+	}
+	return sqlc.User{}, pgx.ErrNoRows
 }
 
 func (f *fakeSCIMQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -151,4 +169,64 @@ func TestSCIMUserLifecycle(t *testing.T) {
 	if list.TotalResults != 1 || len(list.Resources) != 1 {
 		t.Fatalf("list: want 1 user, got total=%d resources=%d", list.TotalResults, len(list.Resources))
 	}
+
+	// --- PUT active:false deactivates ---
+	deReq := httptest.NewRequest(http.MethodPut, "/scim/v2/Users/"+created.ID,
+		strings.NewReader(`{"userName":"alice@example.com","active":false}`))
+	withToken(deReq)
+	deReq = withChiID(deReq, created.ID)
+	deRec := httptest.NewRecorder()
+	authed(h.PutUser).ServeHTTP(deRec, deReq)
+	if deRec.Code != http.StatusOK {
+		t.Fatalf("deactivate: want 200, got %d (%s)", deRec.Code, deRec.Body.String())
+	}
+	var deactivated scimUser
+	if err := json.Unmarshal(deRec.Body.Bytes(), &deactivated); err != nil {
+		t.Fatalf("decode deactivate response: %v", err)
+	}
+	if deactivated.Active {
+		t.Fatalf("deactivate: want active=false, got true")
+	}
+	if got := q.users["alice@example.com"]; got.IsActive {
+		t.Fatalf("deactivate: stored user still is_active=true")
+	}
+
+	// --- PUT active:true reactivates ---
+	reReq := httptest.NewRequest(http.MethodPut, "/scim/v2/Users/"+created.ID,
+		strings.NewReader(`{"userName":"alice@example.com","active":true}`))
+	withToken(reReq)
+	reReq = withChiID(reReq, created.ID)
+	reRec := httptest.NewRecorder()
+	authed(h.PutUser).ServeHTTP(reRec, reReq)
+	if reRec.Code != http.StatusOK {
+		t.Fatalf("reactivate: want 200, got %d (%s)", reRec.Code, reRec.Body.String())
+	}
+	var reactivated scimUser
+	if err := json.Unmarshal(reRec.Body.Bytes(), &reactivated); err != nil {
+		t.Fatalf("decode reactivate response: %v", err)
+	}
+	if !reactivated.Active {
+		t.Fatalf("reactivate: want active=true, got false")
+	}
+
+	// --- idempotent re-POST with active:false also deactivates ---
+	rpReq := httptest.NewRequest(http.MethodPost, "/scim/v2/Users",
+		strings.NewReader(`{"userName":"alice@example.com","active":false}`))
+	withToken(rpReq)
+	rpRec := httptest.NewRecorder()
+	authed(h.CreateUser).ServeHTTP(rpRec, rpReq)
+	if rpRec.Code != http.StatusOK {
+		t.Fatalf("re-POST: want 200, got %d (%s)", rpRec.Code, rpRec.Body.String())
+	}
+	if got := q.users["alice@example.com"]; got.IsActive {
+		t.Fatalf("re-POST active:false: stored user still is_active=true")
+	}
+}
+
+// withChiID injects {id} into the chi route context so the handler's
+// chi.URLParam(r, "id") resolves without standing up a full router.
+func withChiID(r *http.Request, id string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }

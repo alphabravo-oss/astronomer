@@ -47,6 +47,7 @@ type toolQueryRecorder struct {
 	operations      []sqlc.CreateToolOperationParams
 	idemOperations  []sqlc.CreateToolOperationIdempotentParams
 	idemByKey       map[string]sqlc.ToolOperation
+	valuesUpdates   []sqlc.UpdateInstalledChartValuesParams
 }
 
 func newToolQueryRecorder(clusterID uuid.UUID) *toolQueryRecorder {
@@ -135,8 +136,14 @@ func (q *toolQueryRecorder) AdoptInstalledChartByRelease(_ context.Context, arg 
 	}
 	return item, nil
 }
-func (q *toolQueryRecorder) UpdateInstalledChartValues(context.Context, sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error) {
-	return sqlc.InstalledChart{}, nil
+func (q *toolQueryRecorder) UpdateInstalledChartValues(_ context.Context, arg sqlc.UpdateInstalledChartValuesParams) (sqlc.InstalledChart, error) {
+	q.valuesUpdates = append(q.valuesUpdates, arg)
+	return sqlc.InstalledChart{
+		ID:             arg.ID,
+		ValuesOverride: arg.ValuesOverride,
+		Status:         arg.Status,
+		Revision:       arg.Revision,
+	}, nil
 }
 func (q *toolQueryRecorder) DeleteInstalledChart(context.Context, uuid.UUID) error { return nil }
 func (q *toolQueryRecorder) CreateToolOperation(_ context.Context, arg sqlc.CreateToolOperationParams) (sqlc.ToolOperation, error) {
@@ -334,6 +341,54 @@ func TestAdoptExistingToolReleaseUpdatesExistingRow(t *testing.T) {
 	}
 	if !adopted.PresetUsed.Valid || adopted.PresetUsed.String != "default" {
 		t.Fatalf("adopted preset = %+v", adopted.PresetUsed)
+	}
+}
+
+func TestExecuteOperationUpgradePersistsHelmRevision(t *testing.T) {
+	t.Parallel()
+
+	clusterID := uuid.New()
+	chartID := uuid.New()
+	queries := newToolQueryRecorder(clusterID)
+	helm := &toolHelmStub{
+		// Helm returns the real post-upgrade revision (e.g. after an
+		// out-of-band rollback the next upgrade jumps to 9, not prev+1).
+		doResult:     &protocol.HelmResultPayload{Success: true, Status: "deployed", Revision: 9},
+		statusResult: &protocol.HelmResultPayload{Success: true, Status: "deployed", Revision: 9},
+	}
+	h := &ToolHandler{queries: queries, helm: helm}
+
+	env := toolOperationEnvelope{
+		ClusterID:      clusterID.String(),
+		ToolSlug:       "argocd",
+		ReleaseName:    "argocd",
+		Namespace:      "argocd",
+		ValuesYAML:     "server:\n  insecure: true\n",
+		InstalledChart: &chartID,
+	}
+	payload, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal env: %v", err)
+	}
+	op := sqlc.ToolOperation{
+		ID:            uuid.New(),
+		OperationType: "upgrade",
+		Payload:       payload,
+		Status:        "running",
+		CreatedAt:     time.Now().UTC(),
+	}
+
+	if err := h.executeOperation(context.Background(), op); err != nil {
+		t.Fatalf("executeOperation() error = %v", err)
+	}
+	if len(queries.valuesUpdates) != 1 {
+		t.Fatalf("values updates = %d, want 1", len(queries.valuesUpdates))
+	}
+	if got := queries.valuesUpdates[0].Revision; got != 9 {
+		t.Fatalf("persisted revision = %d, want 9 (the real Helm revision)", got)
+	}
+	if queries.valuesUpdates[0].ID != chartID {
+		t.Fatalf("updated chart id = %s, want %s", queries.valuesUpdates[0].ID, chartID)
 	}
 }
 

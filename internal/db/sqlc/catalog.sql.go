@@ -1096,7 +1096,7 @@ const updateInstalledChartValues = `-- name: UpdateInstalledChartValues :one
 UPDATE installed_charts SET
     values_override = $2,
     status = $3,
-    revision = revision + 1
+    revision = $4
 WHERE id = $1
 RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
 `
@@ -1105,10 +1105,16 @@ type UpdateInstalledChartValuesParams struct {
 	ID             uuid.UUID `json:"id"`
 	ValuesOverride string    `json:"values_override"`
 	Status         string    `json:"status"`
+	Revision       int32     `json:"revision"`
 }
 
 func (q *Queries) UpdateInstalledChartValues(ctx context.Context, arg UpdateInstalledChartValuesParams) (InstalledChart, error) {
-	row := q.db.QueryRow(ctx, updateInstalledChartValues, arg.ID, arg.ValuesOverride, arg.Status)
+	row := q.db.QueryRow(ctx, updateInstalledChartValues,
+		arg.ID,
+		arg.ValuesOverride,
+		arg.Status,
+		arg.Revision,
+	)
 	var i InstalledChart
 	err := row.Scan(
 		&i.ID,

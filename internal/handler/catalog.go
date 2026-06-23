@@ -1072,6 +1072,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		ID:             id,
 		ValuesOverride: req.ValuesOverride,
 		Status:         "pending_upgrade",
+		Revision:       installed.Revision,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to stage installed chart upgrade")
@@ -1717,6 +1718,7 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 			ID:             installation.ID,
 			ValuesOverride: env.ValuesOverride,
 			Status:         normalizeToolStatus(result.Status),
+			Revision:       int32(result.Revision),
 		})
 		return err
 	case "rollback":

@@ -62,6 +62,14 @@ type ingestApiserverAuditRequest struct {
 	Events []json.RawMessage `json:"events"`
 }
 
+// maxIngestBody bounds the request body the ingest endpoint will read, and
+// maxIngestEvents caps how many events a single request may carry. Both guard
+// against an unbounded agent (or attacker) exhausting memory.
+const (
+	maxIngestBody   = 4 << 20 // 4 MiB
+	maxIngestEvents = 1000
+)
+
 type ingestApiserverAuditResponse struct {
 	Accepted int `json:"accepted"`
 	Skipped  int `json:"skipped"`
@@ -77,10 +85,18 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxIngestBody)
 	var req ingestApiserverAuditRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if _, ok := err.(*http.MaxBytesError); ok {
+			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.ValidationError, "Request body too large")
+			return
+		}
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid request body")
 		return
+	}
+	if len(req.Events) > maxIngestEvents {
+		req.Events = req.Events[:maxIngestEvents]
 	}
 
 	resp := ingestApiserverAuditResponse{}
@@ -133,6 +149,9 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		limit = 500
 	}
 	offset := int32(queryInt(r, "offset", 0))
+	if offset < 0 {
+		offset = 0
+	}
 
 	events, err := h.queries.ListApiserverAuditEventsByCluster(r.Context(), sqlc.ListApiserverAuditEventsByClusterParams{
 		ClusterID: clusterID,

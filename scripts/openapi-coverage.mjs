@@ -81,6 +81,7 @@ const KNOWN_NIL_GATED = new Set([
   'POST /scim/v2/Users',
   'GET /scim/v2/Users',
   'GET /scim/v2/Users/{}',
+  'PUT /scim/v2/Users/{}',
   'DELETE /scim/v2/Users/{}',
   'GET /scim/v2/Groups',
   'GET /scim/v2/Groups/{}',

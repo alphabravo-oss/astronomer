@@ -459,8 +459,13 @@ func (h *ClusterHandler) enqueueArgoCDAutoRegister(r *http.Request, clusterID uu
 		return
 	}
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
-	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5), asynq.Unique(10*time.Minute))
-	_, _ = h.argoCDRefreshQueue.Enqueue(task)
+	// Dedup on a stable task id rather than asynq.Unique: the enriched payload
+	// carries a per-request correlation_id/traceparent, so Unique (which hashes
+	// type+payload) would treat every PUT as distinct and never collapse them.
+	// A stable TaskID keyed on the cluster makes asynq reject re-enqueues while
+	// an auto-register task for the same cluster is still active.
+	task = asynq.NewTask(task.Type(), payload)
+	_, _ = h.argoCDRefreshQueue.Enqueue(task, asynq.MaxRetry(5), asynq.TaskID("argocd-auto-register:"+clusterID.String()))
 }
 
 // The previous clusterWithMetrics struct (anonymous-embed sqlc.Cluster +

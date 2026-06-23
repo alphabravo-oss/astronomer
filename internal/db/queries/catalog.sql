@@ -151,7 +151,7 @@ RETURNING *;
 UPDATE installed_charts SET
     values_override = $2,
     status = $3,
-    revision = revision + 1
+    revision = $4
 WHERE id = $1
 RETURNING *;
 
