@@ -86,6 +86,14 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 					}); err != nil {
 						return err
 					}
+					// Only "firing"/"acknowledged" events represent an
+					// alert that actually paged someone; "silenced" ones
+					// never notified on trigger, so we don't notify on
+					// resolve either.
+					if event.Status == "firing" || event.Status == "acknowledged" {
+						dispatchAlertNotifications(ctx, rule, event, "Astronomer alert resolved: "+rule.Name,
+							fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
+					}
 				}
 				continue
 			}
@@ -134,64 +142,78 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 				runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
 				continue
 			}
-			channels, err := runtimeDeps.Queries.ListChannelsForAlertRule(ctx, rule.ID)
-			if err != nil {
-				return err
-			}
-			for _, channel := range channels {
-				if !channel.Enabled {
-					continue
-				}
-				clusterStr := ""
-				if rule.ClusterID.Valid {
-					clusterStr = uuid.UUID(rule.ClusterID.Bytes).String()
-				}
-				task, err := NewNotificationSendTask(NotificationSendPayload{
-					Channel:    channel.ChannelType,
-					Subject:    "Astronomer alert: " + rule.Name,
-					Body:       message,
-					Recipients: notificationRecipients(channel),
-					// Plumb severity/cluster/rule through so the
-					// Slack / PagerDuty / Teams formatters can render
-					// colours + dedup keys + facts instead of just a
-					// dumb text dump.
-					Severity:  rule.Severity,
-					ClusterID: clusterStr,
-					RuleID:    rule.ID.String(),
-				})
-				if err != nil || task == nil {
-					runtimeLogger().ErrorContext(ctx, "failed to build alert notification task",
-						"event_id", event.ID.String(),
-						"channel_id", channel.ID.String(),
-						"error", err)
-					continue
-				}
-				if runtimeDeps.Enqueuer == nil {
-					runtimeLogger().WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
-						"event_id", event.ID.String(),
-						"channel_id", channel.ID.String())
-					continue
-				}
-				if _, enqErr := runtimeDeps.Enqueuer.Enqueue(task); enqErr != nil {
-					runtimeLogger().ErrorContext(ctx, "failed to enqueue alert notification",
-						"event_id", event.ID.String(),
-						"channel_id", channel.ID.String(),
-						"channel_type", channel.ChannelType,
-						"error", enqErr)
-					continue
-				}
-				runtimeLogger().InfoContext(ctx, "enqueued alert notification",
-					"event_id", event.ID.String(),
-					"channel_id", channel.ID.String(),
-					"channel_type", channel.ChannelType,
-					"severity", rule.Severity,
-					"recipient_count", len(notificationRecipients(channel)))
-			}
+			dispatchAlertNotifications(ctx, rule, event, "Astronomer alert: "+rule.Name, message, false)
 		}
 
 		slog.InfoContext(ctx, "alert evaluation complete")
 		return nil
 	})
+}
+
+// dispatchAlertNotifications enqueues a notification:send task for every
+// enabled channel bound to the rule. resolved=true marks it as a
+// recovery notification so the formatters render the resolved variant
+// (green swatch, PagerDuty event_action=resolve). Errors are logged but
+// not returned: a single channel/enqueue failure must not abort the
+// evaluation loop for the remaining rules.
+func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event sqlc.AlertEvent, subject, body string, resolved bool) {
+	channels, err := runtimeDeps.Queries.ListChannelsForAlertRule(ctx, rule.ID)
+	if err != nil {
+		runtimeLogger().ErrorContext(ctx, "failed to list channels for alert rule",
+			"event_id", event.ID.String(), "rule_id", rule.ID.String(), "error", err)
+		return
+	}
+	clusterStr := ""
+	if rule.ClusterID.Valid {
+		clusterStr = uuid.UUID(rule.ClusterID.Bytes).String()
+	}
+	for _, channel := range channels {
+		if !channel.Enabled {
+			continue
+		}
+		task, err := NewNotificationSendTask(NotificationSendPayload{
+			Channel:    channel.ChannelType,
+			Subject:    subject,
+			Body:       body,
+			Recipients: notificationRecipients(channel),
+			// Plumb severity/cluster/rule through so the
+			// Slack / PagerDuty / Teams formatters can render
+			// colours + dedup keys + facts instead of just a
+			// dumb text dump.
+			Severity:  rule.Severity,
+			ClusterID: clusterStr,
+			RuleID:    rule.ID.String(),
+			Resolved:  resolved,
+		})
+		if err != nil || task == nil {
+			runtimeLogger().ErrorContext(ctx, "failed to build alert notification task",
+				"event_id", event.ID.String(),
+				"channel_id", channel.ID.String(),
+				"error", err)
+			continue
+		}
+		if runtimeDeps.Enqueuer == nil {
+			runtimeLogger().WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
+				"event_id", event.ID.String(),
+				"channel_id", channel.ID.String())
+			continue
+		}
+		if _, enqErr := runtimeDeps.Enqueuer.Enqueue(task); enqErr != nil {
+			runtimeLogger().ErrorContext(ctx, "failed to enqueue alert notification",
+				"event_id", event.ID.String(),
+				"channel_id", channel.ID.String(),
+				"channel_type", channel.ChannelType,
+				"error", enqErr)
+			continue
+		}
+		runtimeLogger().InfoContext(ctx, "enqueued alert notification",
+			"event_id", event.ID.String(),
+			"channel_id", channel.ID.String(),
+			"channel_type", channel.ChannelType,
+			"severity", rule.Severity,
+			"resolved", resolved,
+			"recipient_count", len(notificationRecipients(channel)))
+	}
 }
 
 func alertRulesForEvaluation(ctx context.Context, ruleID string) ([]sqlc.AlertRule, error) {

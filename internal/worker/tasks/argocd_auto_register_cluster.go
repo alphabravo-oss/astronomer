@@ -27,9 +27,10 @@ import (
 const ArgoCDAutoRegisterClusterType = "argocd:auto_register_cluster"
 
 const (
-	argoCDApplicationControllerSA     = "argocd-application-controller"
-	platformSettingArgoCDAutoAdoptKey = "argocd.auto_adopt_clusters"
-	ConditionArgoCDAdopted            = "ArgoCDAdopted"
+	argoCDApplicationControllerSA        = "argocd-application-controller"
+	platformSettingArgoCDAutoAdoptKey    = "argocd.auto_adopt_clusters"
+	platformSettingArgoCDAutoRegSelector = "argocd.auto_register_selector"
+	ConditionArgoCDAdopted               = "ArgoCDAdopted"
 )
 
 var argoCDProxyTokenTTL = 180 * 24 * time.Hour
@@ -228,11 +229,68 @@ func readArgoCDAutoAdoptSetting(ctx context.Context, q ArgoCDAutoRegisterQuerier
 	return enabled, nil
 }
 
+// readArgoCDAutoRegisterSelector loads the optional label selector that gates
+// which clusters are auto-registered into ArgoCD. An unset/empty selector
+// matches every cluster (current behavior). The selector is stored as a JSON
+// object of label key/value pairs in the platform_settings table, matching the
+// maintenance-window cluster_selector convention.
+func readArgoCDAutoRegisterSelector(ctx context.Context, q ArgoCDAutoRegisterQuerier) (map[string]string, error) {
+	row, err := q.GetPlatformSetting(ctx, platformSettingArgoCDAutoRegSelector)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read %s setting: %w", platformSettingArgoCDAutoRegSelector, err)
+	}
+	if len(row.Value) == 0 || string(row.Value) == "null" {
+		return nil, nil
+	}
+	var sel map[string]string
+	if err := json.Unmarshal(row.Value, &sel); err != nil {
+		return nil, fmt.Errorf("parse %s setting: %w", platformSettingArgoCDAutoRegSelector, err)
+	}
+	return sel, nil
+}
+
+// clusterMatchesAutoRegisterSelector reports whether the cluster's labels
+// satisfy every key/value pair in the selector. An empty selector matches all
+// clusters; a non-empty selector against an unlabeled cluster never matches.
+func clusterMatchesAutoRegisterSelector(cluster sqlc.Cluster, selector map[string]string) bool {
+	if len(selector) == 0 {
+		return true
+	}
+	labels := map[string]string{}
+	if len(cluster.Labels) > 0 {
+		_ = json.Unmarshal(cluster.Labels, &labels)
+	}
+	for k, v := range selector {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterDeps, cluster sqlc.Cluster) error {
 	if !cluster.IsLocal && !cluster.LastHeartbeat.Valid {
 		return nil
 	}
 	managedRows := argoCDManagedClusterRows(ctx, deps, cluster.ID)
+	if len(managedRows) == 0 {
+		// Lazy, label-based gate: only first-time registration is selector
+		// scoped. A cluster that already has managed-cluster rows is kept
+		// in sync (drift repair / label refresh) regardless of selector so
+		// removing a label doesn't silently orphan it here.
+		selector, err := readArgoCDAutoRegisterSelector(ctx, deps.Queries)
+		if err != nil {
+			return err
+		}
+		if !clusterMatchesAutoRegisterSelector(cluster, selector) {
+			runtimeLogger().InfoContext(ctx, "argocd auto-register skipped: cluster does not match selector",
+				"cluster_id", cluster.ID.String())
+			return nil
+		}
+	}
 	alreadyManaged := len(managedRows) > 0
 	repairReasons := detectArgoCDManagedClusterDrift(ctx, deps, cluster, managedRows)
 	if !alreadyManaged {

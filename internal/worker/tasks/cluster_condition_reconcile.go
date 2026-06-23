@@ -70,7 +70,16 @@ const (
 	ccrActionNoopCap            = "noop_daily_cap"
 	ccrActionTokenReissued      = "registration_token_reissued"
 	ccrActionApplyResetToFailed = "template_apply_reset_to_failed"
+	ccrActionNoopReconnected    = "noop_agent_reconnected"
 )
+
+// ccrConnectedFreshWindow mirrors the heartbeat-freshness window the
+// health check uses to derive Connected=True (see updateClusterHealth).
+// The remediation precheck re-reads the cluster's live last-heartbeat
+// just before minting a token; if a heartbeat has landed within this
+// window the agent has reconnected since the condition row was written,
+// so reissuing a token would be wasted (and noisy) traffic.
+const ccrConnectedFreshWindow = 2 * time.Minute
 
 // Backoff schedule. The reconciler picks the smallest entry that's
 // greater than the time since the last non-skipped attempt; once we
@@ -270,6 +279,31 @@ func remediateTemplateApplyStuck(ctx context.Context, row sqlc.ClusterCondition)
 // agent back up — by definition the tunnel is down — but we prepare
 // the artifact so the next step is a single command.
 func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) error {
+	// Live connectivity re-check. The Connected=False condition row may be
+	// stale by up to a full health-check tick (30s) plus the backoff delay
+	// before we get here. Re-read the cluster's current heartbeat; if the
+	// agent has reconnected (a heartbeat within the freshness window) the
+	// tunnel is back and reissuing a token would be wasted, confusing
+	// traffic. Skip and record it so the next tick re-evaluates cheaply.
+	cluster, err := runtimeDeps.Queries.GetClusterByID(ctx, row.ClusterID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Cluster gone — condition is stale, nothing to remediate.
+			return insertAttempt(ctx, row, ccrActionNoopReconnected, ccrOutcomeSkip, "", map[string]any{
+				"reason": "cluster_not_found",
+			})
+		}
+		return insertAttempt(ctx, row, ccrActionTokenReissued, ccrOutcomeFail, "get_cluster: "+err.Error(), nil)
+	}
+	if cluster.LastHeartbeat.Valid && time.Since(cluster.LastHeartbeat.Time) <= ccrConnectedFreshWindow {
+		return insertAttempt(ctx, row, ccrActionNoopReconnected, ccrOutcomeSkip, "", map[string]any{
+			"reason":            "agent_reconnected",
+			"last_heartbeat":    cluster.LastHeartbeat.Time.UTC().Format(time.RFC3339),
+			"heartbeat_age_sec": int(time.Since(cluster.LastHeartbeat.Time).Seconds()),
+			"window_sec":        int(ccrConnectedFreshWindow.Seconds()),
+		})
+	}
+
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return insertAttempt(ctx, row, ccrActionTokenReissued, ccrOutcomeFail, "rand.Read: "+err.Error(), nil)

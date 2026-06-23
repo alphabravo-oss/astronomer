@@ -109,6 +109,58 @@ func TestPagerDutyPayloadShape(t *testing.T) {
 	}
 }
 
+// TestResolvedNotificationShape verifies the recovery/resolved variant:
+// PagerDuty must emit event_action=resolve (with the same dedup_key so
+// the open incident closes), and Slack must render the green swatch.
+func TestResolvedNotificationShape(t *testing.T) {
+	t.Run("pagerduty resolve", func(t *testing.T) {
+		// pagerDutyEventsURL is a hardcoded prod constant, so we verify
+		// the resolve body shape directly (same approach as
+		// TestPagerDutyPayloadShape for the trigger path).
+		p := NotificationSendPayload{
+			Channel:  ChannelTypePagerDuty,
+			Subject:  "db recovered",
+			RuleID:   "rule-uuid-123",
+			Resolved: true,
+		}
+		body := pagerDutyResolveBody("R0UTING_KEY", p)
+		if body["event_action"] != "resolve" {
+			t.Errorf("event_action: got %v want resolve", body["event_action"])
+		}
+		if body["dedup_key"] != "astronomer-rule-uuid-123" {
+			t.Errorf("dedup_key: got %v", body["dedup_key"])
+		}
+		if _, ok := body["payload"]; ok {
+			t.Errorf("resolve body should omit payload block, got %v", body["payload"])
+		}
+	})
+
+	t.Run("slack green", func(t *testing.T) {
+		var captured map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &captured)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		p := NotificationSendPayload{
+			Channel:    ChannelTypeSlack,
+			Subject:    "alert resolved",
+			Severity:   "critical",
+			Recipients: []string{srv.URL},
+			Resolved:   true,
+		}
+		if err := postSlack(context.Background(), http.DefaultClient, srv.URL, p); err != nil {
+			t.Fatalf("postSlack: %v", err)
+		}
+		att := captured["attachments"].([]any)[0].(map[string]any)
+		if att["color"] != "#16a34a" {
+			t.Errorf("resolved color: got %v want #16a34a (green)", att["color"])
+		}
+	})
+}
+
 // TestMSTeamsPayloadShape locks down the Adaptive Card envelope.
 func TestMSTeamsPayloadShape(t *testing.T) {
 	var captured map[string]any

@@ -75,7 +75,7 @@ export default function ClusterDetailPage() {
 
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
   const { data: conditions } = useClusterConditions(clusterId);
-  const { data: metricsSummary } = useClusterMetricsSummary(clusterId);
+  const { data: metricsSummary, isError: metricsError } = useClusterMetricsSummary(clusterId);
   const { data: events } = useClusterEvents(clusterId, { limit: 10 });
   const { data: toolsStatus } = useClusterToolsStatus(clusterId);
   // Image-vuln severity rollup — same endpoint the Image Scans tab
@@ -357,6 +357,20 @@ export default function ClusterDetailPage() {
         const memUsage = metricsSummary?.memoryUsage ?? cluster.memoryUsage ?? null;
         const memCap = metricsSummary?.memoryCapacity ?? cluster.memoryCapacity ?? null;
         return (
+      <div className="space-y-2">
+        {/* Metrics are non-optional: the panel always renders. When the
+            summary query errors (e.g. Prometheus unreachable) we surface a
+            "metrics unavailable" banner rather than hiding the cards, so the
+            distinction between "no data" and "couldn't reach metrics" is
+            visible to operators. */}
+        {metricsError ? (
+          <p
+            data-testid="metrics-unavailable"
+            className="text-sm text-muted-foreground"
+          >
+            Metrics unavailable
+          </p>
+        ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="CPU Usage"
@@ -383,6 +397,7 @@ export default function ClusterDetailPage() {
           subtitle={metricsSummary ? `of ${metricsSummary.podCapacity} capacity` : undefined}
           icon={<Box className="h-4 w-4" />}
         />
+      </div>
       </div>
         );
       })()}

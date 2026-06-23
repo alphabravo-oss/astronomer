@@ -75,6 +75,11 @@ type NotificationSendPayload struct {
 	ClusterID  string   `json:"cluster_id,omitempty"` // optional source cluster, surfaced as a field
 	RuleID     string   `json:"rule_id,omitempty"`    // optional alert-rule UUID
 	FiredAt    string   `json:"fired_at,omitempty"`   // RFC3339; defaults to time.Now() inside the formatter
+	// Resolved marks this as a recovery/resolved notification (the alert
+	// transitioned firing->resolved). Formatters render a green
+	// "resolved" variant and PagerDuty emits event_action=resolve so the
+	// open incident auto-closes instead of paging again.
+	Resolved bool `json:"resolved,omitempty"`
 }
 
 // NewNotificationSendTask builds an asynq task. MaxRetry=3 with the
@@ -167,10 +172,14 @@ func HandleNotificationSend(ctx context.Context, t *asynq.Task) error {
 // webhook target is configured in legacy mode.
 
 func postSlack(ctx context.Context, client *http.Client, webhookURL string, p NotificationSendPayload) error {
+	color := slackSeverityColor(p.Severity)
+	if p.Resolved {
+		color = "#16a34a" // green-600 — recovered
+	}
 	body := map[string]any{
 		"text": p.Subject,
 		"attachments": []map[string]any{{
-			"color":  slackSeverityColor(p.Severity),
+			"color":  color,
 			"title":  p.Subject,
 			"text":   p.Body,
 			"footer": "Astronomer",
@@ -218,6 +227,12 @@ func slackFields(p NotificationSendPayload) []map[string]any {
 const pagerDutyEventsURL = "https://events.pagerduty.com/v2/enqueue"
 
 func postPagerDuty(ctx context.Context, client *http.Client, routingKey string, p NotificationSendPayload) error {
+	// On resolve, send event_action=resolve with the same dedup_key so
+	// PagerDuty closes the incident this rule opened. The Events API v2
+	// ignores the payload block for resolve, so we only send the keys.
+	if p.Resolved {
+		return postJSON(ctx, client, pagerDutyEventsURL, pagerDutyResolveBody(routingKey, p), http.StatusAccepted)
+	}
 	body := map[string]any{
 		"routing_key":  routingKey,
 		"event_action": "trigger",
@@ -236,6 +251,17 @@ func postPagerDuty(ctx context.Context, client *http.Client, routingKey string, 
 	}
 	// PagerDuty returns 202 on accept; treat anything < 300 as success.
 	return postJSON(ctx, client, pagerDutyEventsURL, body, http.StatusAccepted)
+}
+
+// pagerDutyResolveBody is the Events API v2 resolve payload. The
+// payload block is omitted because PagerDuty ignores it on resolve; the
+// dedup_key must match the trigger so the right incident closes.
+func pagerDutyResolveBody(routingKey string, p NotificationSendPayload) map[string]any {
+	return map[string]any{
+		"routing_key":  routingKey,
+		"event_action": "resolve",
+		"dedup_key":    pagerDutyDedupKey(p),
+	}
 }
 
 func pagerDutySeverity(sev string) string {
@@ -296,7 +322,7 @@ func postMSTeams(ctx context.Context, client *http.Client, webhookURL string, p 
 						"size":   "Medium",
 						"weight": "Bolder",
 						"text":   p.Subject,
-						"color":  msTeamsSeverityColor(p.Severity),
+						"color":  msTeamsResolveColor(p),
 						"wrap":   true,
 					},
 					{
@@ -314,6 +340,15 @@ func postMSTeams(ctx context.Context, client *http.Client, webhookURL string, p 
 		}},
 	}
 	return postJSON(ctx, client, webhookURL, body, http.StatusOK)
+}
+
+// msTeamsResolveColor renders the title in green ("Good") for a
+// resolved notification, otherwise falls back to the severity color.
+func msTeamsResolveColor(p NotificationSendPayload) string {
+	if p.Resolved {
+		return "Good"
+	}
+	return msTeamsSeverityColor(p.Severity)
 }
 
 func msTeamsSeverityColor(sev string) string {
@@ -342,6 +377,7 @@ func postGenericWebhook(ctx context.Context, client *http.Client, url string, p 
 		"cluster_id": p.ClusterID,
 		"rule_id":    p.RuleID,
 		"fired_at":   p.FiredAt,
+		"resolved":   p.Resolved,
 	}
 	return postJSON(ctx, client, url, body, http.StatusOK)
 }

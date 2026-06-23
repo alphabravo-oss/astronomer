@@ -42,6 +42,9 @@ type WorkloadHandler struct {
 	// handler can pick the in-process fast path when the request targets it.
 	// Empty when the local cluster hasn't been bootstrapped yet.
 	localClusterID string
+	// podWatcher backs the WatchPods SSE endpoint. Optional; nil makes
+	// WatchPods return 501.
+	podWatcher PodWatcher
 }
 
 func NewWorkloadHandler() *WorkloadHandler {

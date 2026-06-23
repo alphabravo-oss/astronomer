@@ -24,18 +24,19 @@ import (
 )
 
 type argoCDAutoRegisterTestQuerier struct {
-	setting       *sqlc.PlatformSetting
-	listTouched   bool
-	cluster       sqlc.Cluster
-	clusters      []sqlc.Cluster
-	projects      []sqlc.Project
-	instances     []sqlc.ArgocdInstance
-	managed       []sqlc.ArgocdManagedCluster
-	created       []sqlc.CreateArgoCDManagedClusterParams
-	conditions    []sqlc.UpsertClusterConditionParams
-	managedLookup bool
-	repairSuccess []sqlc.RecordRepairJobSuccessParams
-	repairFailure []sqlc.RecordRepairJobFailureParams
+	setting         *sqlc.PlatformSetting
+	selectorSetting *sqlc.PlatformSetting
+	listTouched     bool
+	cluster         sqlc.Cluster
+	clusters        []sqlc.Cluster
+	projects        []sqlc.Project
+	instances       []sqlc.ArgocdInstance
+	managed         []sqlc.ArgocdManagedCluster
+	created         []sqlc.CreateArgoCDManagedClusterParams
+	conditions      []sqlc.UpsertClusterConditionParams
+	managedLookup   bool
+	repairSuccess   []sqlc.RecordRepairJobSuccessParams
+	repairFailure   []sqlc.RecordRepairJobFailureParams
 }
 
 func (q *argoCDAutoRegisterTestQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -54,7 +55,13 @@ func (q *argoCDAutoRegisterTestQuerier) ListProjectsByCluster(context.Context, s
 	return q.projects, nil
 }
 
-func (q *argoCDAutoRegisterTestQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
+func (q *argoCDAutoRegisterTestQuerier) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {
+	if key == platformSettingArgoCDAutoRegSelector {
+		if q.selectorSetting == nil {
+			return sqlc.PlatformSetting{}, pgx.ErrNoRows
+		}
+		return *q.selectorSetting, nil
+	}
 	if q.setting == nil {
 		return sqlc.PlatformSetting{}, pgx.ErrNoRows
 	}
@@ -632,4 +639,80 @@ func TestArgoCDManagedClusterIndexRepairDoesNotDuplicateExistingRow(t *testing.T
 func boolPlatformSetting(v bool) *sqlc.PlatformSetting {
 	raw, _ := json.Marshal(v)
 	return &sqlc.PlatformSetting{Key: platformSettingArgoCDAutoAdoptKey, Value: raw}
+}
+
+func selectorPlatformSetting(sel map[string]string) *sqlc.PlatformSetting {
+	raw, _ := json.Marshal(sel)
+	return &sqlc.PlatformSetting{Key: platformSettingArgoCDAutoRegSelector, Value: raw}
+}
+
+// TestArgoCDAutoRegisterSkipsClusterNotMatchingSelector locks the label-based
+// gate: an unmanaged cluster whose labels don't satisfy the configured
+// auto-register selector is skipped entirely (no registration timeline, no
+// managed-cluster row) even though an ArgoCD instance is configured.
+func TestArgoCDAutoRegisterSkipsClusterNotMatchingSelector(t *testing.T) {
+	ResetArgoCDAutoRegister()
+	t.Cleanup(ResetArgoCDAutoRegister)
+	clusterID := uuid.New()
+	q := &argoCDAutoRegisterTestQuerier{
+		selectorSetting: selectorPlatformSetting(map[string]string{"astronomer.io/label-tier": "gold"}),
+		cluster: sqlc.Cluster{
+			ID:            clusterID,
+			Name:          "prod-1",
+			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+			Labels:        json.RawMessage(`{"astronomer.io/label-tier":"bronze"}`),
+		},
+		instances: []sqlc.ArgocdInstance{{ID: uuid.New(), Name: "argo"}},
+	}
+	timeline := &argoCDTimelineRecorder{}
+	ConfigureArgoCDAutoRegister(ArgoCDAutoRegisterDeps{Queries: q, Registration: timeline})
+
+	task, err := NewArgoCDAutoRegisterClusterTask(clusterID)
+	if err != nil {
+		t.Fatalf("task: %v", err)
+	}
+	if err := HandleArgoCDAutoRegisterCluster(context.Background(), task); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if len(timeline.steps) != 0 {
+		t.Fatalf("steps = %+v, want none for non-matching cluster", timeline.steps)
+	}
+	if len(q.created) != 0 {
+		t.Fatalf("created = %+v, want no managed-cluster rows for non-matching cluster", q.created)
+	}
+	if len(q.conditions) != 0 {
+		t.Fatalf("conditions = %+v, want none for non-matching cluster", q.conditions)
+	}
+}
+
+// TestArgoCDAutoRegisterMatchingSelectorProceeds is the positive counterpart:
+// a matching cluster is not short-circuited by the selector and reaches the
+// registration timeline (failing later only because no credential is wired,
+// which is out of scope here).
+func TestArgoCDAutoRegisterMatchingSelectorProceeds(t *testing.T) {
+	ResetArgoCDAutoRegister()
+	t.Cleanup(ResetArgoCDAutoRegister)
+	clusterID := uuid.New()
+	q := &argoCDAutoRegisterTestQuerier{
+		selectorSetting: selectorPlatformSetting(map[string]string{"astronomer.io/label-tier": "gold"}),
+		cluster: sqlc.Cluster{
+			ID:            clusterID,
+			Name:          "prod-1",
+			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+			Labels:        json.RawMessage(`{"astronomer.io/label-tier":"gold"}`),
+		},
+	}
+	timeline := &argoCDTimelineRecorder{}
+	ConfigureArgoCDAutoRegister(ArgoCDAutoRegisterDeps{Queries: q, Registration: timeline})
+
+	task, err := NewArgoCDAutoRegisterClusterTask(clusterID)
+	if err != nil {
+		t.Fatalf("task: %v", err)
+	}
+	if err := HandleArgoCDAutoRegisterCluster(context.Background(), task); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if len(timeline.steps) == 0 || timeline.steps[0].StepName != "argocd_registering" {
+		t.Fatalf("steps = %+v, want registration to proceed for matching cluster", timeline.steps)
+	}
 }
