@@ -568,6 +568,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	trivyIngester := scanner.NewIngester(queries, database.Pool(), nil, trivyAuditHook)
 	mirrorRouter.SetVulnIngester(crd.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
 	hub.SetMirrorIngester(mirrorRouter)
+	apiserverAuditHandler := handler.NewApiserverAuditHandler(queries)
+	hub.SetAuditPersister(apiserverAuditHandler)
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
@@ -1005,7 +1007,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		RBACQueries:    rbacQuerier,
 		RBACEngine:     rbacEngine,
 		Security:       securityHandler,
-		ApiserverAudit: handler.NewApiserverAuditHandler(queries),
+		ApiserverAudit: apiserverAuditHandler,
 		ImageVulns: func() *handler.ImageVulnHandler {
 			h := handler.NewImageVulnHandler(queries)
 			h.SetK8sRequester(requester)
