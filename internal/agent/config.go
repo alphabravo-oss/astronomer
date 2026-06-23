@@ -30,6 +30,7 @@ type AgentConfig struct {
 	AuditCheckpointPath string `mapstructure:"audit_checkpoint_path"` // Path where the tail offset is persisted (default audit_log_path + ".checkpoint")
 	AuditBatchSize     int    `mapstructure:"audit_batch_size"`     // Max events per forwarded batch (default 100)
 	AuditPollInterval  int    `mapstructure:"audit_poll_interval"`  // Seconds between tail polls (default 10)
+	AuditDelivery      string `mapstructure:"audit_delivery"`       // How batches are delivered: tunnel (default) | http | stub
 }
 
 // LoadAgentConfig reads agent configuration from environment variables with
@@ -55,6 +56,7 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "audit_checkpoint_path", Value: ""},
 		envconfig.Default{Key: "audit_batch_size", Value: 100},
 		envconfig.Default{Key: "audit_poll_interval", Value: 10},
+		envconfig.Default{Key: "audit_delivery", Value: "tunnel"},
 	)
 
 	cfg := &AgentConfig{}

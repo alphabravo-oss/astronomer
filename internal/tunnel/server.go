@@ -97,6 +97,10 @@ type Hub struct {
 	// mirrored_* DB tables. Optional; nil-safe so existing tests that
 	// don't wire CRD-mirror v2 stay green.
 	mirror MirrorIngester
+	// auditPersister persists APISERVER_AUDIT batches under the
+	// authenticated session's cluster ID. Optional; nil-safe so installs
+	// without apiserver-audit wiring drop the frames.
+	auditPersister AuditPersister
 	// locator publishes the cluster_id → this-pod address mapping into
 	// redis on each accepted WS so sibling replicas can reverse-proxy
 	// to us. Optional: nil collapses to single-pod behavior (the proxy
@@ -135,6 +139,24 @@ type MirrorIngester interface {
 func (h *Hub) SetMirrorIngester(m MirrorIngester) {
 	h.mu.Lock()
 	h.mirror = m
+	h.mu.Unlock()
+}
+
+// AuditPersister is the narrow handler-side interface the Hub calls when an
+// agent emits an APISERVER_AUDIT frame. It is satisfied by
+// *handler.ApiserverAuditHandler.PersistAuditEvents. Kept as an interface so
+// the tunnel package doesn't import internal/handler (which would import-cycle
+// via the route wiring). The cluster ID passed in is always the AUTHENTICATED
+// session's, never anything from the agent's payload.
+type AuditPersister interface {
+	PersistAuditEvents(ctx context.Context, clusterID uuid.UUID, events []json.RawMessage) (accepted, skipped int, err error)
+}
+
+// SetAuditPersister attaches the apiserver-audit persister (set once at
+// startup). Nil-safe.
+func (h *Hub) SetAuditPersister(p AuditPersister) {
+	h.mu.Lock()
+	h.auditPersister = p
 	h.mu.Unlock()
 }
 

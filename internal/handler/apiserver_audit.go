@@ -42,10 +42,10 @@ func NewApiserverAuditHandler(queries apiserverAuditStore) *ApiserverAuditHandle
 // the fields we promote to indexed columns are pulled out by name; the whole
 // object is preserved verbatim in `raw`.
 type auditEventInput struct {
-	AuditID  string `json:"auditID"`
-	Stage    string `json:"stage"`
-	Verb     string `json:"verb"`
-	User     struct {
+	AuditID string `json:"auditID"`
+	Stage   string `json:"stage"`
+	Verb    string `json:"verb"`
+	User    struct {
 		Username string `json:"username"`
 	} `json:"user"`
 	ObjectRef struct {
@@ -99,11 +99,26 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 		req.Events = req.Events[:maxIngestEvents]
 	}
 
-	resp := ingestApiserverAuditResponse{}
-	for _, raw := range req.Events {
+	accepted, skipped, err := h.PersistAuditEvents(r.Context(), clusterID, req.Events)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to persist audit event")
+		return
+	}
+
+	RespondJSON(w, http.StatusAccepted, ingestApiserverAuditResponse{Accepted: accepted, Skipped: skipped})
+}
+
+// PersistAuditEvents maps each raw audit.k8s.io Event to its indexed columns
+// and writes it, idempotent on (cluster_id, audit_id). Events without an
+// auditID, or with a present-but-malformed stageTimestamp, are skipped (not
+// errored). It returns the accepted/skipped counts; a non-nil error means a
+// row write failed and the batch must be retried. Shared by the HTTP ingest
+// handler and the tunnel receiver so both persist identically.
+func (h *ApiserverAuditHandler) PersistAuditEvents(ctx context.Context, clusterID uuid.UUID, events []json.RawMessage) (accepted, skipped int, err error) {
+	for _, raw := range events {
 		var ev auditEventInput
 		if err := json.Unmarshal(raw, &ev); err != nil || ev.AuditID == "" {
-			resp.Skipped++
+			skipped++
 			continue
 		}
 		eventTime := time.Now().UTC()
@@ -112,12 +127,12 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 			if perr != nil {
 				// Present-but-malformed timestamp: skip rather than substitute
 				// now(), which would misrepresent when the event happened.
-				resp.Skipped++
+				skipped++
 				continue
 			}
 			eventTime = t.UTC()
 		}
-		if err := h.queries.InsertApiserverAuditEvent(r.Context(), sqlc.InsertApiserverAuditEventParams{
+		if err := h.queries.InsertApiserverAuditEvent(ctx, sqlc.InsertApiserverAuditEventParams{
 			ClusterID:  clusterID,
 			AuditID:    ev.AuditID,
 			Stage:      ev.Stage,
@@ -129,13 +144,11 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 			EventTime:  eventTime,
 			Raw:        raw,
 		}); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to persist audit event")
-			return
+			return accepted, skipped, err
 		}
-		resp.Accepted++
+		accepted++
 	}
-
-	RespondJSON(w, http.StatusAccepted, resp)
+	return accepted, skipped, nil
 }
 
 // List handles GET /api/v1/clusters/{cluster_id}/apiserver-audit/.

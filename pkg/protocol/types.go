@@ -125,7 +125,24 @@ const (
 	// upsert succeeded; periodic prune (every 30m) covers any missed
 	// deliveries.
 	MsgMirrorEvent MessageType = "MIRROR_EVENT"
+
+	// MsgApiserverAudit carries a batch of kube-apiserver audit.k8s.io Event
+	// JSON documents the agent tailed from the apiserver audit log. The server
+	// persists the batch under the AUTHENTICATED tunnel session's cluster ID —
+	// the cluster_id is never taken from the payload, so a compromised agent
+	// cannot forge events for another cluster. There is no Ack today; the
+	// agent's checkpoint advances on a successful WS send (the tunnel send
+	// channel backpressures / fail-closes when the server can't keep up).
+	MsgApiserverAudit MessageType = "APISERVER_AUDIT"
 )
+
+// ApiserverAuditPayload is the body of a MsgApiserverAudit frame: a batch of
+// raw audit.k8s.io Event JSON documents exactly as the agent read them from
+// the apiserver audit log. The cluster the events belong to is NOT in the
+// payload — the server derives it from the authenticated tunnel session.
+type ApiserverAuditPayload struct {
+	Events []json.RawMessage `json:"events"`
+}
 
 // DecommissionPayload tells the agent which managed-side resources to remove.
 // Fields are intentionally explicit (rather than an opaque "do everything"
@@ -219,8 +236,14 @@ type ConnectAckPayload struct {
 	SessionID     string `json:"session_id"`
 	ServerVersion string `json:"server_version"`
 	AgentToken    string `json:"agent_token,omitempty"`
-	Accepted      bool   `json:"accepted"`
-	Reason        string `json:"reason,omitempty"`
+	// AuditIngestToken is the scoped outbound API token (clusters:write only)
+	// the agent uses with httpAuditSender to POST audit batches over plain
+	// HTTP instead of the WS tunnel (PATH A). Empty when the server does not
+	// issue one — the agent then falls back to the tunnel sender. Delivered
+	// once on connect; treated as a credential and never logged.
+	AuditIngestToken string `json:"audit_ingest_token,omitempty"`
+	Accepted         bool   `json:"accepted"`
+	Reason           string `json:"reason,omitempty"`
 }
 
 // K8sRequestPayload represents a proxied Kubernetes API request.

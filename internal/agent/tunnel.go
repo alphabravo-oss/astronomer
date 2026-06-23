@@ -32,6 +32,11 @@ type TunnelClient struct {
 	mu        sync.RWMutex
 	connected bool
 
+	// auditIngestToken is the scoped clusters:write API token the server
+	// delivers in CONNECT_ACK for PATH A HTTP audit delivery. Empty until/
+	// unless the server issues one. Guarded by mu.
+	auditIngestToken string
+
 	// failCloseOnce ensures the buffer-full eager close only
 	// fires once per connection — repeated congestion shouldn't
 	// hammer tc.conn.Close. Reset by dial() on each new connection.
@@ -59,6 +64,15 @@ func (tc *TunnelClient) IsConnected() bool {
 	tc.mu.RLock()
 	defer tc.mu.RUnlock()
 	return tc.connected
+}
+
+// AuditIngestToken returns the scoped apiserver-audit ingest token delivered
+// by the server in CONNECT_ACK (PATH A), or "" if none was issued. Used to
+// decide whether to wire an httpAuditSender.
+func (tc *TunnelClient) AuditIngestToken() string {
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
+	return tc.auditIngestToken
 }
 
 func (tc *TunnelClient) setConnected(v bool) {
@@ -154,6 +168,15 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 		} else {
 			tc.log.Info("rotated durable agent token")
 		}
+	}
+	// PATH A delivery: capture the scoped apiserver-audit ingest token if the
+	// server issued one, so an httpAuditSender can be wired on top of it. Never
+	// logged — it is a credential. Empty when the server doesn't issue one (the
+	// audit tailer then keeps using its configured sender).
+	if ack.AuditIngestToken != "" {
+		tc.mu.Lock()
+		tc.auditIngestToken = ack.AuditIngestToken
+		tc.mu.Unlock()
 	}
 
 	tc.mu.Lock()

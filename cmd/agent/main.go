@@ -244,13 +244,14 @@ func runConnect(logger *slog.Logger) error {
 		// kube-apiserver audit-log forwarder (opt-in; disabled by default).
 		// Requires a cluster-admin prerequisite: the apiserver must be started
 		// with --audit-policy-file + --audit-log-path and that path hostPath-
-		// mounted into this pod. See docs/agent-apiserver-audit.md. The sender
-		// is currently a stub: the agent has no outbound HTTP auth path to the
-		// ingest endpoint yet (it holds only a WS registration token), so this
-		// tails+batches+checkpoints but does not yet deliver. Wiring a real
-		// sender is the remaining work once the agent can authenticate.
+		// mounted into this pod. See docs/agent-apiserver-audit.md. The delivery
+		// path is selected by AUDIT_DELIVERY: tunnel (default; reuses the
+		// authenticated WS tunnel so no second credential is needed), http
+		// (direct POST with the scoped ingest token from CONNECT_ACK), or stub
+		// (drops batches, logging only).
 		if cfg.AuditEnabled {
-			if tailer, terr := agent.NewAuditTailer(cfg, nil, logger); terr != nil {
+			sender := agent.SelectAuditSender(cfg, tunnel, tunnel.AuditIngestToken(), logger)
+			if tailer, terr := agent.NewAuditTailer(cfg, sender, logger); terr != nil {
 				logger.Warn("apiserver-audit: tailer disabled", "error", terr)
 			} else {
 				go tailer.Run(ctx)

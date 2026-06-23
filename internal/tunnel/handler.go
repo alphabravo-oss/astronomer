@@ -75,6 +75,9 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 	case protocol.MsgMirrorEvent:
 		h.handleMirrorEvent(conn, msg)
 
+	case protocol.MsgApiserverAudit:
+		h.handleApiserverAudit(conn, msg)
+
 	case protocol.MsgError:
 		h.handleError(conn, msg)
 
@@ -591,6 +594,51 @@ func (h *Hub) handleMirrorEvent(conn *AgentConnection, msg *protocol.Message) {
 			slog.String("error", err.Error()),
 		)
 	}
+}
+
+// handleApiserverAudit persists a batch of kube-apiserver audit events the
+// agent tailed and forwarded over the tunnel. The cluster ID is taken from the
+// AUTHENTICATED connection (conn.ClusterID), NOT from the payload — that is the
+// security property of carrying the batch over the tunnel rather than the open
+// HTTP ingest endpoint. Nil-safe: when no persister is wired the frame is
+// logged at DEBUG and dropped.
+func (h *Hub) handleApiserverAudit(conn *AgentConnection, msg *protocol.Message) {
+	h.mu.RLock()
+	persister := h.auditPersister
+	h.mu.RUnlock()
+	if persister == nil {
+		h.log.Debug("APISERVER_AUDIT received but no persister wired", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+	var payload protocol.ApiserverAuditPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		h.log.Warn("invalid APISERVER_AUDIT payload",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	clusterID, err := uuid.Parse(conn.ClusterID)
+	if err != nil {
+		h.log.Warn("APISERVER_AUDIT from cluster with invalid UUID",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	accepted, skipped, err := persister.PersistAuditEvents(context.Background(), clusterID, payload.Events)
+	if err != nil {
+		h.log.Warn("APISERVER_AUDIT persist failed",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	h.log.Debug("APISERVER_AUDIT persisted",
+		slog.String("cluster_id", conn.ClusterID),
+		slog.Int("accepted", accepted),
+		slog.Int("skipped", skipped),
+	)
 }
 
 // handleError processes ERROR messages from agents.

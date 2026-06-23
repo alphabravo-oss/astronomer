@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,9 +19,13 @@ import (
 type fakeApiserverAuditStore struct {
 	inserted   []sqlc.InsertApiserverAuditEventParams
 	listOffset int32
+	insertErr  error
 }
 
 func (f *fakeApiserverAuditStore) InsertApiserverAuditEvent(_ context.Context, arg sqlc.InsertApiserverAuditEventParams) error {
+	if f.insertErr != nil {
+		return f.insertErr
+	}
 	f.inserted = append(f.inserted, arg)
 	return nil
 }
@@ -94,6 +99,55 @@ func TestApiserverAuditIngest(t *testing.T) {
 	}
 	if got.EventTime.Year() != 2026 || got.EventTime.Month() != 6 {
 		t.Errorf("event_time not parsed from stageTimestamp: %v", got.EventTime)
+	}
+}
+
+// PersistAuditEvents is the extracted persistence core shared by the HTTP
+// handler and the tunnel receiver. Tested directly: it promotes indexed
+// fields, skips events without an auditID or with a malformed timestamp, and
+// surfaces an insert failure as an error (so the caller can retry the batch).
+func TestPersistAuditEvents(t *testing.T) {
+	store := &fakeApiserverAuditStore{}
+	h := NewApiserverAuditHandler(store)
+	clusterID := uuid.New()
+
+	events := []json.RawMessage{
+		json.RawMessage(`{"auditID":"a1","verb":"delete","user":{"username":"alice"},"objectRef":{"resource":"secrets","namespace":"kube-system"},"responseStatus":{"code":200},"stageTimestamp":"2026-06-22T10:00:00Z"}`),
+		json.RawMessage(`{"verb":"get"}`),                                 // no auditID -> skipped
+		json.RawMessage(`{"auditID":"a3","stageTimestamp":"not-a-time"}`), // malformed ts -> skipped
+		json.RawMessage(`not-json`),                                       // unmarshal fails -> skipped
+	}
+
+	accepted, skipped, err := h.PersistAuditEvents(context.Background(), clusterID, events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if accepted != 1 || skipped != 3 {
+		t.Fatalf("expected accepted=1 skipped=3, got accepted=%d skipped=%d", accepted, skipped)
+	}
+	if len(store.inserted) != 1 {
+		t.Fatalf("expected 1 persisted event, got %d", len(store.inserted))
+	}
+	got := store.inserted[0]
+	if got.ClusterID != clusterID || got.AuditID != "a1" || got.Verb != "delete" ||
+		got.Username != "alice" || got.Resource != "secrets" || got.Namespace != "kube-system" ||
+		got.StatusCode != 200 {
+		t.Errorf("promoted fields wrong: %+v", got)
+	}
+	if got.EventTime.Year() != 2026 || got.EventTime.Month() != 6 {
+		t.Errorf("event_time not parsed from stageTimestamp: %v", got.EventTime)
+	}
+}
+
+func TestPersistAuditEventsInsertError(t *testing.T) {
+	wantErr := errors.New("db down")
+	store := &fakeApiserverAuditStore{insertErr: wantErr}
+	h := NewApiserverAuditHandler(store)
+
+	events := []json.RawMessage{json.RawMessage(`{"auditID":"a1"}`)}
+	_, _, err := h.PersistAuditEvents(context.Background(), uuid.New(), events)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected insert error to propagate, got %v", err)
 	}
 }
 

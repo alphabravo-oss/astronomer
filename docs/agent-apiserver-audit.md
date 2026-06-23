@@ -8,27 +8,33 @@ This feature is **opt-in and disabled by default**. Enabling it requires a
 cluster-admin prerequisite (below) because the kube-apiserver does not emit an
 audit log unless explicitly configured to.
 
-## Status / known gap
+## Delivery path
 
 The tail + batch + checkpoint core is implemented and tested
-(`internal/agent/apiserver_audit.go`). The forwarder currently uses a **stub
-sender** that batches and checkpoints but does not deliver, because the agent
-has no usable outbound HTTP auth path to the ingest endpoint yet:
+(`internal/agent/apiserver_audit.go`). Batches are delivered using the path
+selected by `ASTRONOMER_AUDIT_DELIVERY`:
 
-- The ingest route is mounted behind `requireAuth` (a JWT session **or** a
-  user/service API token), and additionally requires the `clusters:write`
-  scope and the `cluster:update` RBAC permission
-  (`internal/server/routes_security.go`).
-- The agent holds only its WebSocket **registration/durable token**, used for
-  the tunnel `CONNECT` handshake (`internal/agent/tunnel.go`). That token is
-  not an API token recognised by `RequireAuthWithQueries`, and the agent has
-  no JWT.
+- **`tunnel`** (default, recommended): forward each batch over the existing
+  authenticated agent WS tunnel as a `protocol.MsgApiserverAudit` frame
+  (`internal/agent/tunnel.go`). The server attributes events to the session's
+  cluster ID, so the agent needs **no second credential** — audit works
+  out-of-the-box once the tailer is enabled. This is also the fallback used for
+  any unrecognized value.
+- **`http`**: direct outbound HTTPS POST to the ingest endpoint
+  (`POST /api/v1/clusters/{cluster_id}/apiserver-audit/`), authenticating with a
+  narrowly-scoped `clusters:write` API token the server delivers to the agent in
+  the tunnel `CONNECT_ACK`. Use this when you want audit events to take a
+  different path than the proxy tunnel (e.g. so they don't share its
+  backpressure). If no ingest token has been delivered, this falls back to the
+  tunnel path.
+- **`stub`**: a no-op sender that batches and checkpoints but **drops** events
+  (logging the batch size). For local development / wiring tests only.
 
-Closing the gap requires either (a) issuing the agent a scoped API token at
-registration, or (b) accepting batched audit events over the existing
-WebSocket tunnel (a new `protocol.Message` type handled server-side and
-written through the same ingest store). Once that path exists, swap
-`stubAuditSender` for a real sender in `cmd/agent/main.go`.
+The ingest route is mounted behind `requireAuth` (a JWT session or a
+user/service API token), and additionally requires the `clusters:write` scope
+and the `cluster:update` RBAC permission
+(`internal/server/routes_security.go`). The default `tunnel` path satisfies
+this implicitly via the tunnel session, which is why it needs no extra token.
 
 ## Enabling
 
@@ -41,6 +47,7 @@ Set on the agent (env vars are prefixed `ASTRONOMER_`):
 | `ASTRONOMER_AUDIT_CHECKPOINT_PATH` | (auto)  | Offset file; defaults to `<log_path>.checkpoint`.  |
 | `ASTRONOMER_AUDIT_BATCH_SIZE`      | `100`   | Max events per forwarded batch.                    |
 | `ASTRONOMER_AUDIT_POLL_INTERVAL`   | `10`    | Seconds between tail polls.                         |
+| `ASTRONOMER_AUDIT_DELIVERY`        | `tunnel`| Delivery path: `tunnel` (default/recommended), `http`, or `stub`. See above. |
 
 The checkpoint is a persisted byte offset, written atomically after each
 accepted batch, so events are not re-forwarded on agent restart. The
