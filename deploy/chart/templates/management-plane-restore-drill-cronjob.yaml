@@ -1,4 +1,4 @@
-{{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.credentialsSecretRef.name }}
+{{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name }}
 {{- /*
   Management-plane DR: weekly automated proof that the nightly pg_dump
   is actually restorable.
@@ -18,9 +18,9 @@
   The drill NEVER touches the production database except for that one
   audit row write. The actual restore goes into the sidecar Postgres.
 
-  Gate: requires managementBackup to be enabled AND credentials wired,
-  because both prerequisites are needed for the drill to even resolve a
-  backup to restore.
+  Gate: requires managementBackup to be enabled AND an s3.bucket set AND
+  credentials wired, because all three prerequisites are needed for the
+  drill to even resolve a backup to restore.
 
   Companion bits:
     - internal/db/migrations/041_backup_drill.up.sql  (status table)

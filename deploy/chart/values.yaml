@@ -710,11 +710,12 @@ observability:
 # Redis — Redis is ephemeral asynq queue state that periodic re-evaluators
 # rebuild after restore.
 #
-# Off by default because it requires an operator-supplied S3 bucket and an AWS
-# credentials secret. values-production.yaml turns this on with sensible
-# defaults; the operator still has to wire up bucket + credentials.
+# On by default, but inert until the operator wires up an S3 bucket and an AWS
+# credentials secret: the CronJob only renders once s3.credentialsSecretRef.name
+# is set, so an unconfigured install produces no backup workload (and no false
+# sense of safety). values-k3d.yaml opts dev out explicitly.
 managementBackup:
-  enabled: false
+  enabled: true
   # Daily at 03:00 UTC. Cron is interpreted in the kube-controller-manager's
   # local timezone (almost always UTC in cluster).
   schedule: "0 3 * * *"
@@ -800,11 +801,11 @@ managementBackup:
 # the latest result; PrometheusRule fires when no successful drill has
 # happened in 14 days (AstronomerBackupRestoreDrillStale).
 #
-# Off by default — this is operator-opt-in because it only makes sense
-# when managementBackup is enabled AND backups have actually been
-# written. The chart template gates render-time on both.
+# On by default, but only renders when managementBackup is enabled AND
+# credentials are wired (the template gates render-time on both), so it stays
+# inert until backups are actually being written. values-k3d.yaml opts dev out.
 managementRestoreDrill:
-  enabled: false
+  enabled: true
   # 4 AM UTC every Monday. Far enough from the nightly backup (3 AM)
   # that they never overlap; weekly cadence is the audit minimum and
   # matches NIST CP-9's "periodic" requirement without burning the cluster

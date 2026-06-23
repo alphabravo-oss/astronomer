@@ -50,7 +50,15 @@ func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
 		if hook == "" {
 			continue
 		}
-		key := fmt.Sprintf("%s/%s", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"))
+		name := stringAt(doc, "metadata", "name")
+		// The bundled astro-argocd subchart vendors upstream ArgoCD, which ships
+		// its own pre-install hooks (e.g. redis-secret-init); those are outside
+		// this chart's control and are not the astronomer lifecycle Jobs this
+		// contract guards.
+		if strings.HasPrefix(name, "astro-argocd-") {
+			continue
+		}
+		key := fmt.Sprintf("%s/%s", stringValue(doc["kind"]), name)
 		want, ok := allowedHooks[key]
 		if !ok {
 			t.Fatalf("only short-lived migration/preflight Jobs may use Helm hooks; found hook on %s", key)
@@ -168,7 +176,9 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/astronomer-frontend:v-frontend", "Always")
 	assertContainerImage(t, docs, "Job", "astronomer-migrate", "containers", "migrate", "registry.example.com/platform/astronomer-go-migrate:v-migrate", "Always")
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-postgres", "containers", "postgres", "registry.example.com/platform/postgres:16-alpine", "Always")
-	assertContainerImage(t, docs, "StatefulSet", "astronomer-redis", "containers", "redis", "registry.example.com/platform/redis:7-alpine", "Always")
+	// The bundled cache engine is Valkey (BSD-licensed Redis fork); the resource
+	// stays named "redis" but the image is valkey/valkey (see values.yaml).
+	assertContainerImage(t, docs, "StatefulSet", "astronomer-redis", "containers", "redis", "registry.example.com/platform/valkey/valkey:8-alpine", "Always")
 }
 
 func assertContainerImage(t *testing.T, docs []renderedDoc, kind, name, field, containerName, wantImage, wantPullPolicy string) {

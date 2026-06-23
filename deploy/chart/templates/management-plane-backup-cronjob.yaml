@@ -1,4 +1,4 @@
-{{- if .Values.managementBackup.enabled }}
+{{- if and .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name }}
 {{- /*
   Management-plane DR: nightly pg_dump of Astronomer's own Postgres pushed to
   S3-compatible object storage.
@@ -194,7 +194,7 @@ spec:
           volumes:
             - name: aws-credentials
               secret:
-                secretName: {{ required "managementBackup.s3.credentialsSecretRef.name is required when managementBackup.enabled=true" .Values.managementBackup.s3.credentialsSecretRef.name | quote }}
+                secretName: {{ .Values.managementBackup.s3.credentialsSecretRef.name | quote }}
                 items:
                   - key: {{ .Values.managementBackup.s3.credentialsSecretRef.key | default "credentials" | quote }}
                     path: credentials

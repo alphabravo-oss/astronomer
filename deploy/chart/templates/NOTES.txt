@@ -67,7 +67,26 @@ To check pod status:
 To watch worker logs:
   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=worker --tail=100 -f
 
-{{- if .Values.managementBackup.enabled }}
+{{- if and .Values.managementBackup.enabled (not (and .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name)) }}
+
+Management-plane DR
+-------------------
+WARNING: managementBackup.enabled=true but the backup is NOT configured, so
+NO backup CronJob was rendered (and the management plane has no automated
+point-in-time recovery from this chart). The CronJob only renders once both
+of these are set:
+
+  --set managementBackup.s3.bucket=<bucket> \
+  --set managementBackup.s3.credentialsSecretRef.name=<secret>
+{{- if not .Values.managementBackup.s3.bucket }}
+  (missing: managementBackup.s3.bucket)
+{{- end }}
+{{- if not .Values.managementBackup.s3.credentialsSecretRef.name }}
+  (missing: managementBackup.s3.credentialsSecretRef.name)
+{{- end }}
+
+See docs/management-plane-dr-runbook.md for the matching restore procedure.
+{{- else if .Values.managementBackup.enabled }}
 
 Management-plane DR
 -------------------

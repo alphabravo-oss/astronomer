@@ -1,6 +1,9 @@
 package crd
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +49,57 @@ func TestManagementCRDsRegisterWithScheme(t *testing.T) {
 		if len(kinds) == 0 || kinds[0].GroupVersion() != GroupVersion {
 			t.Fatalf("ObjectKinds(%T) = %+v, want group version %s", obj, kinds, GroupVersion)
 		}
+	}
+}
+
+func TestManagementCRDsServeBothVersions(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme: %v", err)
+	}
+	// The Go scheme registers the shared types under the storage version ONLY,
+	// so controller-runtime's typed client resolves each kind to a single,
+	// unambiguous GVK (registering the same struct under v1beta1 too would make
+	// apiutil.GVKForObject refuse to guess and panic every typed Get/Reconcile).
+	for _, kind := range []string{"Cluster", "Project", "ClusterBaseline", "ComponentBundle", "AgentProfile", "GitOpsTarget"} {
+		if _, err := scheme.New(GroupVersion.WithKind(kind)); err != nil {
+			t.Fatalf("scheme.New(%s): %v", GroupVersion.WithKind(kind), err)
+		}
+		if _, err := scheme.New(GroupVersionV1Beta1.WithKind(kind)); err == nil {
+			t.Fatalf("scheme.New(%s) unexpectedly succeeded: the Go scheme must register the storage version only", GroupVersionV1Beta1.WithKind(kind))
+		}
+	}
+	if GroupVersionV1Beta1.Version != "v1beta1" || GroupVersionV1Beta1.Group != GroupVersion.Group {
+		t.Fatalf("GroupVersionV1Beta1 = %s, want group %s version v1beta1", GroupVersionV1Beta1, GroupVersion.Group)
+	}
+
+	// Both versions are SERVED at the apiserver level — that contract lives in
+	// the CRD manifest, not the Go scheme. Every management.astronomer.io kind
+	// must serve both versions identically.
+	templates, err := filepath.Glob(filepath.Join("..", "..", "deploy", "chart", "templates", "crd-*.yaml"))
+	if err != nil {
+		t.Fatalf("glob CRD manifests: %v", err)
+	}
+	// crd-rbac.yaml is the controller RBAC, not a CustomResourceDefinition.
+	kindCRDs := 0
+	for _, path := range templates {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read CRD manifest %s: %v", path, err)
+		}
+		manifest := string(raw)
+		if !strings.Contains(manifest, "kind: CustomResourceDefinition") {
+			continue
+		}
+		kindCRDs++
+		for _, want := range []string{`"name" "v1alpha1"`, `"name" "v1beta1"`} {
+			if !strings.Contains(manifest, want) {
+				t.Fatalf("CRD manifest %s does not serve %s:\n%s", path, want, manifest)
+			}
+		}
+	}
+	if kindCRDs != 6 {
+		t.Fatalf("found %d management.astronomer.io CRD manifests, want 6", kindCRDs)
 	}
 }
 

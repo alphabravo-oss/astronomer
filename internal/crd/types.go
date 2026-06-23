@@ -30,7 +30,18 @@ import (
 )
 
 // GroupVersion identifies the API group + version for the management CRDs.
+// This stays the storage version: it is what the controller stamps onto the
+// apiVersion of objects it creates / annotates and what the DB-mirror logic
+// treats as canonical.
 var GroupVersion = schema.GroupVersion{Group: "management.astronomer.io", Version: "v1alpha1"}
+
+// GroupVersionV1Beta1 is the promoted, additionally-served version of the
+// management CRD group. The Go types are shared verbatim across v1alpha1 and
+// v1beta1, so conversion between the two is the identity transform — no field
+// renames or shape changes. Serving both versions lets operators start writing
+// manifests at the more stable apiVersion while existing v1alpha1 manifests
+// keep working unchanged. See docs/crd-versioning.md.
+var GroupVersionV1Beta1 = schema.GroupVersion{Group: "management.astronomer.io", Version: "v1beta1"}
 
 // TrivyGroupVersion identifies the upstream Trivy-operator CRD group.
 // Sprint 062: the CRD-mirror watcher subscribes to VulnerabilityReports
@@ -56,6 +67,15 @@ var SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 func AddToScheme(s *runtime.Scheme) error { return SchemeBuilder.AddToScheme(s) }
 
 func addKnownTypes(s *runtime.Scheme) error {
+	// v1alpha1 and v1beta1 are both SERVED by the apiserver (see the CRD chart
+	// templates' versions list) with an identical schema, so conversion is the
+	// identity transform and no conversion webhook is required. The Go scheme,
+	// however, registers the shared Go types under the storage version only:
+	// controller-runtime's typed client resolves a Go type to exactly one GVK
+	// (apiutil.GVKForObject refuses to guess among several), so registering the
+	// same struct under both versions would break every typed Get/List/Reconcile.
+	// The v1beta1 served version lives purely in the CRD manifest; the Go client
+	// always works against the storage version. See docs/crd-versioning.md.
 	s.AddKnownTypes(GroupVersion,
 		&Cluster{}, &ClusterList{},
 		&Project{}, &ProjectList{},

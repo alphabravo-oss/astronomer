@@ -13,7 +13,10 @@ func TestNetworkPolicyRendersNamespaceDefaultDeny(t *testing.T) {
 	for _, want := range []string{
 		"name: astronomer-default-deny",
 		"app.kubernetes.io/component: network-policy",
-		"podSelector: {}",
+		// The default-deny selector carves out the bundled astro-argocd pods
+		// (see networkpolicy.yaml) so their pre-install hooks aren't blocked.
+		"key: app.kubernetes.io/part-of",
+		`values: ["argocd"]`,
 		"- Ingress",
 		"- Egress",
 	} {
@@ -73,8 +76,16 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
 
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
-	if selector := nestedMap(defaultDeny, "spec", "podSelector"); selector == nil || len(selector) != 0 {
-		t.Fatalf("default-deny policy should select every pod with an empty selector: %#v", selector)
+	// The default-deny selects every pod EXCEPT the bundled astro-argocd pods,
+	// which are carved out via a part-of NotIn argocd expression so their
+	// pre-install/upgrade hooks aren't blocked (see networkpolicy.yaml).
+	exprs, _ := nestedMap(defaultDeny, "spec", "podSelector")["matchExpressions"].([]any)
+	if len(exprs) != 1 {
+		t.Fatalf("default-deny podSelector should carve out argocd via one matchExpression: %#v", nestedMap(defaultDeny, "spec", "podSelector"))
+	}
+	expr, _ := exprs[0].(map[string]any)
+	if stringValue(expr["key"]) != "app.kubernetes.io/part-of" || stringValue(expr["operator"]) != "NotIn" {
+		t.Fatalf("default-deny carve-out expression = %#v, want part-of NotIn", expr)
 	}
 	assertPolicyTypes(t, defaultDeny, "Ingress", "Egress")
 

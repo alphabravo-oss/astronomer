@@ -25,10 +25,16 @@ spec:
       - astrobaseline
     categories:
       - astronomer
+  # Multi-version serving: v1alpha1 and v1beta1 are both served with an
+  # identical schema (identity conversion — the Go types are shared verbatim,
+  # see internal/crd/types.go). v1alpha1 stays the storage version so existing
+  # stored objects are untouched by the promotion. No conversion webhook is
+  # needed while the schemas are byte-identical. See docs/crd-versioning.md.
   versions:
-    - name: v1alpha1
+    {{- range $v := list (dict "name" "v1alpha1" "storage" true) (dict "name" "v1beta1" "storage" false) }}
+    - name: {{ $v.name }}
       served: true
-      storage: true
+      storage: {{ $v.storage }}
       subresources:
         status: {}
       schema:
@@ -211,4 +217,5 @@ spec:
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
+    {{- end }}
 {{- end }}

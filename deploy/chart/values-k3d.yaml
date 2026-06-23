@@ -89,3 +89,10 @@ redis:
     enabled: true
   storage:
     size: 512Mi
+
+# Dev opt-out: no S3 bucket/credentials in local smoke tests, so keep the
+# management-plane backup + restore-drill CronJobs off (they default on upstream).
+managementBackup:
+  enabled: false
+managementRestoreDrill:
+  enabled: false
