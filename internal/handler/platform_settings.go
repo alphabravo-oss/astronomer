@@ -132,6 +132,14 @@ var settingsRegistry = map[string]settingSpec{
 	"token.max_ttl_min":               {Type: typeInt, Default: 525600, Description: "Maximum allowed API token expiry in minutes (1 year default)", MinInt: 1, MaxInt: 525600 * 10},
 	"telemetry.enabled":               {Type: typeBool, Default: false, Description: "Opt-in: send anonymized aggregate telemetry nightly"},
 	"telemetry.endpoint":              {Type: typeString, Default: "https://telemetry.alphabravo.io/astronomer", Description: "HTTPS endpoint that anonymized telemetry POSTs land at"},
+	// MFA enforcement (migration 043 + compliance baselines). When true,
+	// every local-password user must complete TOTP enrollment + challenge
+	// at login; unenrolled accounts are forced into the enroll-only
+	// challenge before a session is issued. Also written by a compliance
+	// baseline (see compliance/apply.go). The auth handler reads this at
+	// login time via its TOTP policy resolver, so flipping it takes
+	// effect without a redeploy.
+	"totp.required": {Type: typeBool, Default: false, Description: "Enforce TOTP/2FA enrollment for all local-password users at login"},
 	// Migration 058 — dashboard widget iframe allow-list. Comma-
 	// separated list of hosts grafana_panel + url_iframe widget specs
 	// may point at. Empty (the default) blocks every iframe widget;

@@ -41,6 +41,29 @@ func (e *Engine) CheckPermission(bindings []RoleBinding, resource Resource, verb
 	return false
 }
 
+// CheckExplicitPermission evaluates resource+verb at the given scope WITHOUT
+// the superuser short-circuit: only a matching role rule grants access. This
+// is for break-glass guards (e.g. the compliance deletion guard) where the
+// implicit superuser bypass would defeat the check — a superuser must hold an
+// explicit grant of the override permission, not merely be a superuser.
+func (e *Engine) CheckExplicitPermission(bindings []RoleBinding, resource Resource, verb Verb, clusterID, projectID uuid.UUID, namespace ...string) bool {
+	requestNamespace := ""
+	if len(namespace) > 0 {
+		requestNamespace = namespace[0]
+	}
+	for _, b := range bindings {
+		if !e.bindingApplies(b, clusterID, projectID, requestNamespace) {
+			continue
+		}
+		for _, rule := range b.RoleRules {
+			if e.matchRule(rule, resource, verb) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // CheckSuperuser returns true if any binding marks the user as a superuser.
 // This is a convenience helper for callers that only need the bypass check.
 func (e *Engine) CheckSuperuser(bindings []RoleBinding) bool {

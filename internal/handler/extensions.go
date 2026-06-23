@@ -2,7 +2,10 @@ package handler
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -33,10 +36,38 @@ type ExtensionHandler struct {
 	queries ExtensionQuerier
 	auditor any
 	current string
+	// trustedKey is the Ed25519 public key extension bundles must be
+	// signed with. Nil means no key is configured: bundle verification
+	// fails closed (executable bundles are gated) until an operator
+	// supplies a trusted key via SetTrustedBundleKey.
+	trustedKey ed25519.PublicKey
 }
 
 func NewExtensionHandler(queries ExtensionQuerier) *ExtensionHandler {
 	return &ExtensionHandler{queries: queries, auditor: queries, current: version.Version}
+}
+
+// SetTrustedBundleKey installs the base64 (std encoding) Ed25519 public key
+// that executable extension bundles must be signed with. An empty string is a
+// no-op (leaves verification failing closed). Returns an error if the key is
+// present but not a valid 32-byte Ed25519 public key.
+func (h *ExtensionHandler) SetTrustedBundleKey(b64 string) error {
+	if h == nil {
+		return nil
+	}
+	b64 = strings.TrimSpace(b64)
+	if b64 == "" {
+		return nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return fmt.Errorf("trusted bundle key is not valid base64: %w", err)
+	}
+	if len(raw) != ed25519.PublicKeySize {
+		return fmt.Errorf("trusted bundle key must be %d bytes, got %d", ed25519.PublicKeySize, len(raw))
+	}
+	h.trustedKey = ed25519.PublicKey(raw)
+	return nil
 }
 
 func (h *ExtensionHandler) SetAuditWriter(a any) {
@@ -140,7 +171,91 @@ type InstallExtensionRequest struct {
 	Enable   bool              `json:"enable,omitempty"`
 }
 
+// VerifyBundleRequest carries an executable extension bundle for signature +
+// checksum verification. Bundle and Signature are base64 (std encoding); the
+// signature is an Ed25519 signature over the raw bundle bytes. Checksum, if
+// supplied, is the "sha256:<hex>" digest the caller expects and is checked
+// against the bundle so a tampered bundle is rejected even before the
+// signature is examined.
+type VerifyBundleRequest struct {
+	Bundle    string `json:"bundle"`
+	Signature string `json:"signature"`
+	Checksum  string `json:"checksum,omitempty"`
+}
+
+type VerifyBundleResponse struct {
+	Verified bool   `json:"verified"`
+	Checksum string `json:"checksum"`
+}
+
+var (
+	errBundleNoTrustedKey = errors.New("no trusted extension bundle key is configured")
+	errBundleChecksum     = errors.New("bundle checksum does not match")
+	errBundleSignature    = errors.New("bundle signature is not valid for the trusted key")
+)
+
 var extensionNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+
+// VerifyBundle verifies an executable extension bundle's SHA-256 checksum and
+// Ed25519 signature against the configured trusted public key. It fails closed
+// when no trusted key is configured.
+func (h *ExtensionHandler) VerifyBundle(w http.ResponseWriter, r *http.Request) {
+	var req VerifyBundleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	bundle, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Bundle))
+	if err != nil || len(bundle) == 0 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "bundle must be non-empty base64")
+		return
+	}
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Signature))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "signature must be base64")
+		return
+	}
+	checksum := bundleChecksum(bundle)
+	if vErr := verifyExtensionBundle(bundle, sig, req.Checksum, h.trustedKey); vErr != nil {
+		switch {
+		case errors.Is(vErr, errBundleNoTrustedKey):
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension bundle verification is not configured")
+		case errors.Is(vErr, errBundleChecksum):
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "Bundle checksum mismatch")
+		default:
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSignature, "Bundle signature verification failed")
+		}
+		return
+	}
+	RespondJSON(w, http.StatusOK, VerifyBundleResponse{Verified: true, Checksum: checksum})
+}
+
+// verifyExtensionBundle checks a bundle's expected checksum (if supplied) and
+// its Ed25519 signature against trustedKey. It returns nil only when the
+// bundle is trusted. A nil trustedKey always fails (gated).
+func verifyExtensionBundle(bundle, signature []byte, expectedChecksum string, trustedKey ed25519.PublicKey) error {
+	if len(trustedKey) != ed25519.PublicKeySize {
+		return errBundleNoTrustedKey
+	}
+	if expected := strings.TrimSpace(expectedChecksum); expected != "" {
+		// Constant-time compare of the hex digests guards against
+		// timing oracles on the checksum path.
+		got := bundleChecksum(bundle)
+		if subtle.ConstantTimeCompare([]byte(strings.ToLower(expected)), []byte(got)) != 1 {
+			return errBundleChecksum
+		}
+	}
+	if !ed25519.Verify(trustedKey, bundle, signature) {
+		return errBundleSignature
+	}
+	return nil
+}
+
+// bundleChecksum returns the "sha256:<hex>" digest of raw bundle bytes.
+func bundleChecksum(bundle []byte) string {
+	sum := sha256.Sum256(bundle)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
 
 func (h *ExtensionHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {

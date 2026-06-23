@@ -174,6 +174,9 @@ type roleBindingRequest struct {
 	RoleID    string `json:"role_id"`
 	ClusterID string `json:"cluster_id"`
 	ProjectID string `json:"project_id"`
+	// Namespace optionally narrows a cluster binding to one Kubernetes
+	// namespace. Empty means the binding applies to the full cluster scope.
+	Namespace string `json:"namespace"`
 }
 
 func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
@@ -585,6 +588,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		Group:     req.Group,
 		RoleID:    roleID,
 		ClusterID: clusterID,
+		Namespace: req.Namespace,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role binding")
@@ -597,6 +601,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		"user_id":    req.UserID,
 		"group":      req.Group,
 		"cluster_id": clusterID.String(),
+		"namespace":  req.Namespace,
 	})
 	w.Header().Set("Location", "/api/v1/rbac/cluster-role-bindings/"+binding.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, bindingResponse(binding))

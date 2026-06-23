@@ -350,3 +350,51 @@ func BenchmarkRBACCache_Hit(b *testing.B) {
 	var rbinding rbac.RoleBinding
 	_ = rbinding // silence unused import warnings in some toolchains
 }
+
+// TestRBACCache_ClusterBindingNamespaceMapped verifies the persisted namespace
+// scope on a cluster role binding flows from the DB row into the in-memory
+// rbac.RoleBinding.Namespace so the engine can fail closed on namespace
+// mismatch. Global/project rows must stay namespace-less.
+func TestRBACCache_ClusterBindingNamespaceMapped(t *testing.T) {
+	t.Parallel()
+	fake := newFakeUserBindingsQuerier()
+	userID := uuid.New().String()
+	clusterID := uuid.New()
+
+	clusterRow := mkRow("cluster", "ns-operator")
+	clusterRow.ClusterID = pgtype.UUID{Bytes: clusterID, Valid: true}
+	clusterRow.Namespace = "team-a"
+	globalRow := mkRow("global", "viewer")
+
+	fake.setRows(userID, []sqlc.ListUserBindingsWithRolesRow{clusterRow, globalRow})
+
+	cache := NewRBACCacheWithOptions(15*time.Second, 100)
+	q := NewSQLCRBACQuerierWithCache(fake, cache)
+
+	bindings, err := q.GetUserBindings(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("GetUserBindings: %v", err)
+	}
+
+	var cluster, global *rbac.RoleBinding
+	for i := range bindings {
+		switch bindings[i].Scope {
+		case "cluster":
+			cluster = &bindings[i]
+		case "global":
+			global = &bindings[i]
+		}
+	}
+	if cluster == nil || global == nil {
+		t.Fatalf("expected one cluster and one global binding, got %+v", bindings)
+	}
+	if cluster.Namespace != "team-a" {
+		t.Fatalf("cluster binding namespace = %q, want %q", cluster.Namespace, "team-a")
+	}
+	if cluster.ClusterID != clusterID.String() {
+		t.Fatalf("cluster binding cluster_id = %q, want %q", cluster.ClusterID, clusterID.String())
+	}
+	if global.Namespace != "" {
+		t.Fatalf("global binding namespace = %q, want empty", global.Namespace)
+	}
+}

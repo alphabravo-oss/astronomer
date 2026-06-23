@@ -125,6 +125,13 @@ type AuthHandler struct {
 	// global enforcement bit.
 	totpGate       TOTPEnrollmentGate
 	totpRequireAll bool
+	// totpPolicy, when set, is consulted at login to read the runtime
+	// admin-toggleable `totp.required` platform setting. It is OR'd with
+	// the static chart knob (totpRequireAll): either source flipping
+	// enforcement on forces unenrolled local-password users into the
+	// enroll-only challenge. nil disables the runtime read (test fakes
+	// that only want the static knob leave it unset).
+	totpPolicy func(ctx context.Context) bool
 
 	// emails is the optional email-enqueue hook used by the
 	// lockout + token-created hot paths. Optional and best-effort:
@@ -327,6 +334,27 @@ type PasswordResetStore interface {
 // path returns an enrollment-only challenge for unenrolled accounts.
 func (h *AuthHandler) SetTOTPRequireAll(require bool) {
 	h.totpRequireAll = require
+}
+
+// SetTOTPPolicy wires the runtime resolver for the admin-toggleable
+// `totp.required` platform setting. It is consulted (and OR'd with the
+// static SetTOTPRequireAll knob) on every Login, so an operator flipping
+// the setting via PUT /admin/settings/totp.required/ enforces MFA without
+// a redeploy. nil leaves only the static knob in force.
+func (h *AuthHandler) SetTOTPPolicy(fn func(ctx context.Context) bool) {
+	h.totpPolicy = fn
+}
+
+// totpEnforced reports whether MFA enrollment is mandatory for this
+// login, combining the static chart knob with the runtime admin setting.
+func (h *AuthHandler) totpEnforced(ctx context.Context) bool {
+	if h.totpRequireAll {
+		return true
+	}
+	if h.totpPolicy != nil {
+		return h.totpPolicy(ctx)
+	}
+	return false
 }
 
 // effectiveLockoutPolicy returns the runtime threshold + duration with
@@ -591,7 +619,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// require=true enforcement: the account passed password but hasn't
 	// enrolled. Hand back an enrollment-only challenge so the SPA can
 	// drive the user through the QR flow before letting them in.
-	if h.totpRequireAll && h.totpGate != nil && !h.totpGate.IsEnrolled(ctx, user.ID) {
+	if h.totpEnforced(ctx) && h.totpGate != nil && !h.totpGate.IsEnrolled(ctx, user.ID) {
 		enrollChallenge, gerr := h.jwt.GeneratePurposeToken(user.ID, auth.PurposeTOTPEnrollOnly, auth.TOTPChallengeTTL)
 		if gerr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to mint enrollment challenge")

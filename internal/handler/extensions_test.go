@@ -2,6 +2,9 @@ package handler
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -146,6 +149,57 @@ func TestExtensionHandler_InstallPersistsCompatibleManifest(t *testing.T) {
 	}
 	if q.audit != 1 {
 		t.Fatalf("audit rows=%d, want 1", q.audit)
+	}
+}
+
+func TestExtensionHandler_VerifyBundleSignatureAndChecksum(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("keygen: %v", err)
+	}
+	bundle := []byte("console.log('hello from extension');")
+	sig := ed25519.Sign(priv, bundle)
+
+	h := NewExtensionHandler(newFakeExtensionQuerier())
+	if err := h.SetTrustedBundleKey(base64.StdEncoding.EncodeToString(pub)); err != nil {
+		t.Fatalf("set key: %v", err)
+	}
+
+	reqBody := func(b, s []byte, checksum string) string {
+		raw, _ := json.Marshal(VerifyBundleRequest{
+			Bundle:    base64.StdEncoding.EncodeToString(b),
+			Signature: base64.StdEncoding.EncodeToString(s),
+			Checksum:  checksum,
+		})
+		return string(raw)
+	}
+
+	// Happy path: correct signature + matching checksum verifies.
+	rr := httptest.NewRecorder()
+	h.VerifyBundle(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/verify-bundle/", reqBody(bundle, sig, bundleChecksum(bundle))))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	resp := decodeExtensionResp[VerifyBundleResponse](t, rr)
+	if !resp.Verified {
+		t.Fatalf("verified=false, want true")
+	}
+
+	// Tampered bundle: signature no longer valid -> 400.
+	tampered := append([]byte{}, bundle...)
+	tampered[0] ^= 0xFF
+	rr = httptest.NewRecorder()
+	h.VerifyBundle(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/verify-bundle/", reqBody(tampered, sig, "")))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("tampered status=%d body=%s, want 400", rr.Code, rr.Body.String())
+	}
+
+	// No trusted key configured: fails closed with 503.
+	hNoKey := NewExtensionHandler(newFakeExtensionQuerier())
+	rr = httptest.NewRecorder()
+	hNoKey.VerifyBundle(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/verify-bundle/", reqBody(bundle, sig, "")))
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("no-key status=%d body=%s, want 503", rr.Code, rr.Body.String())
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
@@ -547,6 +549,138 @@ func TestRequireMode_NewUserMustEnroll(t *testing.T) {
 	}
 	if _, ok := resp["challenge_token"].(string); !ok {
 		t.Errorf("missing challenge_token")
+	}
+}
+
+// TestTOTPPolicy_RuntimeEnforcement covers the admin-toggleable
+// `totp.required` platform setting (mfa-enforcement). Unlike the static
+// SetTOTPRequireAll chart knob, the policy resolver is read on every
+// login: when it reports true, an unenrolled local-password user is
+// forced into the enroll-only challenge; when false, the same login
+// succeeds with a session.
+func TestTOTPPolicy_RuntimeEnforcement(t *testing.T) {
+	user := makeTestUser(t, true)
+	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	store := newFakeTOTPStore()
+	enc := mustEncryptor(t)
+
+	mock := newMockQuerier(user)
+	authH := NewAuthHandler(mock, jwtMgr)
+	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	authH.SetTOTPGate(totpH)
+
+	// Runtime switch driven by the platform setting (here a closure-over
+	// bool standing in for queries.GetPlatformSetting("totp.required")).
+	enforced := false
+	authH.SetTOTPPolicy(func(context.Context) bool { return enforced })
+
+	login := func() *httptest.ResponseRecorder {
+		body := mustJSON(t, map[string]string{"email": user.Email, "password": "testpassword"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		authH.Login(w, req)
+		return w
+	}
+
+	// Policy off → password-only login succeeds with a session.
+	if w := login(); w.Code != http.StatusOK {
+		t.Fatalf("policy off: status = %d; want 200 (body=%s)", w.Code, w.Body.String())
+	}
+
+	// Flip the runtime policy on → same unenrolled user is now blocked
+	// with an enrollment-only challenge.
+	enforced = true
+	w := login()
+	if w.Code != http.StatusLocked {
+		t.Fatalf("policy on: status = %d; want 423 Locked", w.Code)
+	}
+	var resp map[string]any
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp["error"] != "totp_enrollment_required" {
+		t.Errorf("policy on: error = %v; want totp_enrollment_required", resp["error"])
+	}
+}
+
+// TestTOTPPolicy_FailsClosedOnDBError is the regression test for the
+// MFA-enforcement read failing OPEN on a transient DB error. The runtime
+// resolver (server.NewApp wires it over queries.GetPlatformSetting) must
+// distinguish a genuine not-found / empty value (default: not enforced)
+// from any other error — connection drop, pool exhaustion, statement
+// timeout, ctx cancellation, failover — which must fail CLOSED (enforce).
+// This mirrors the production closure exactly and injects a non-ErrNoRows
+// error to assert Login forces the unenrolled user into the 423 challenge
+// rather than minting a privileged session.
+func TestTOTPPolicy_FailsClosedOnDBError(t *testing.T) {
+	user := makeTestUser(t, true)
+	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	store := newFakeTOTPStore()
+	enc := mustEncryptor(t)
+
+	mock := newMockQuerier(user)
+	authH := NewAuthHandler(mock, jwtMgr)
+	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	authH.SetTOTPGate(totpH)
+
+	// resolver replicates the server.NewApp SetTOTPPolicy closure verbatim,
+	// driven by a pluggable getter so we can inject each failure mode.
+	type getResult struct {
+		val []byte
+		err error
+	}
+	var got getResult
+	resolver := func(context.Context) bool {
+		if errors.Is(got.err, pgx.ErrNoRows) || (got.err == nil && len(got.val) == 0) {
+			return false
+		}
+		if got.err != nil {
+			return true // transient/unknown DB error -> enforce
+		}
+		var v bool
+		if json.Unmarshal(got.val, &v) != nil {
+			return true
+		}
+		return v
+	}
+	authH.SetTOTPPolicy(resolver)
+
+	login := func() *httptest.ResponseRecorder {
+		body := mustJSON(t, map[string]string{"email": user.Email, "password": "testpassword"})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		authH.Login(w, req)
+		return w
+	}
+
+	// Genuine not-found -> documented default: not enforced -> session.
+	got = getResult{err: pgx.ErrNoRows}
+	if w := login(); w.Code != http.StatusOK {
+		t.Fatalf("ErrNoRows: status = %d; want 200 (default off)", w.Code)
+	}
+
+	// Empty value -> not enforced.
+	got = getResult{val: nil, err: nil}
+	if w := login(); w.Code != http.StatusOK {
+		t.Fatalf("empty value: status = %d; want 200 (default off)", w.Code)
+	}
+
+	// Transient DB error (NOT ErrNoRows) -> must fail CLOSED -> 423.
+	got = getResult{err: fmt.Errorf("read tcp: connection reset by peer")}
+	w := login()
+	if w.Code != http.StatusLocked {
+		t.Fatalf("transient DB error: status = %d; want 423 Locked (fail closed)", w.Code)
+	}
+	var resp map[string]any
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp["error"] != "totp_enrollment_required" {
+		t.Errorf("transient DB error: error = %v; want totp_enrollment_required", resp["error"])
+	}
+
+	// Unparseable stored value -> also fail CLOSED -> 423.
+	got = getResult{val: []byte("not-json")}
+	if w := login(); w.Code != http.StatusLocked {
+		t.Fatalf("unparseable value: status = %d; want 423 Locked (fail closed)", w.Code)
 	}
 }
 

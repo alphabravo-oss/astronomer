@@ -110,6 +110,34 @@ func ScopeAllowsRequest(scopes []string, required string) bool {
 	return false
 }
 
+// IsReadOnlyScopeSet reports whether the supplied token scopes grant
+// ONLY read access — i.e. the token can never satisfy a mutating
+// request. It is the default-deny half of the mutation guard: a
+// non-empty scope set that contains no write/admin/wildcard scope is
+// read-only and must be rejected on any mutating verb regardless of
+// which specific write scope a route names.
+//
+//   - Empty scopes => NOT read-only here. Empty means "legacy / no
+//     enforcement" (see ScopeAllowsRequest); the opt-in rollout still
+//     lets those through, so we don't treat them as read-only.
+//   - ScopeAdmin / ScopeWildcard => not read-only (grant everything).
+//   - Any `*:write` scope => not read-only.
+//   - Otherwise (only `read` or unknown read-tier strings) => read-only.
+func IsReadOnlyScopeSet(scopes []string) bool {
+	if len(scopes) == 0 {
+		return false
+	}
+	for _, s := range scopes {
+		if s == ScopeAdmin || s == ScopeWildcard {
+			return false
+		}
+		if strings.HasSuffix(s, ":write") {
+			return false
+		}
+	}
+	return true
+}
+
 // ScopeForMethod returns the canonical scope required by an HTTP
 // method when the route doesn't pin a more specific one. Used by the
 // fallthrough middleware on grouped routes — GET maps to ScopeReadOnly

@@ -748,6 +748,7 @@ func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 		ClusterGroups:       handler.NewClusterGroupHandler(nil),
 		FleetOperations:     handler.NewFleetOperationHandler(nil),
 		AgentFleet:          handler.NewAgentFleetHandler(nil),
+		ApiserverAudit:      handler.NewApiserverAuditHandler(nil),
 		ApiserverAllowlist:  handler.NewApiserverAllowlistHandler(nil),
 		ClusterTemplates:    handler.NewClusterTemplateHandler(nil),
 		NetworkPolicies:     handler.NewNetworkPolicyHandler(nil),
@@ -1850,6 +1851,33 @@ func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 	writeRouter.ServeHTTP(writeRec, writeReq)
 	if writeRec.Code != http.StatusNoContent {
 		t.Fatalf("write-scoped token status = %d, want %d; body=%s", writeRec.Code, http.StatusNoContent, writeRec.Body.String())
+	}
+}
+
+func TestApiserverAuditIngestRequiresWriteScope(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	clusterID := uuid.New()
+	userID := uuid.New()
+	rawToken := "astro_route_security_apiserver_audit_scope"
+
+	// Token carries full admin RBAC (so the cluster:update permission gate
+	// passes) and a NON-read write scope (projects:write). That write scope
+	// clears the group-level RequireWriteScopeForMutations("") backstop, so
+	// only the per-route clusters:write pin can reject it on the audit-ingest
+	// POST — this isolates the fail-open this fix closes.
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT:            jwtMgr,
+		AuthQueries:    routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["projects:write"]`)),
+		RBACEngine:     rbac.NewEngine(),
+		RBACQueries:    routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
+		ApiserverAudit: handler.NewApiserverAuditHandler(nil),
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/apiserver-audit/", nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("read-only token status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 }
 

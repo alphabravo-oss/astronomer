@@ -2,13 +2,19 @@ package handler
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +37,13 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/yaml"
 )
+
+// maxSignedManifestTTL bounds how far in the future an attacker-presented
+// signed-manifest expiry may sit. The wizard mints 15m windows; anything
+// claiming validity past this ceiling is rejected by the verifier even if
+// the HMAC checks out, so a leaked signing key can't be used to forge
+// effectively-permanent URLs.
+const maxSignedManifestTTL = 30 * time.Minute
 
 // rfc1123ClusterName matches the same naming rules Rancher applies to imported
 // cluster CRDs: lowercase letters/digits/hyphens, start+end alphanumeric,
@@ -163,6 +176,11 @@ type ClusterHandler struct {
 	// wizard page-3 timeline has something to render. nil-safe.
 	registration *registration.Service
 	encryptor    *auth.Encryptor
+	// manifestSigningSecret keys the HMAC over (cluster_id, expiry) that
+	// gates the short-TTL signed manifest-download URL. When empty the
+	// signed-URL endpoint refuses every request (503) — there is no
+	// unsigned fallback that path could degrade to.
+	manifestSigningSecret []byte
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -179,6 +197,75 @@ func (h *ClusterHandler) SetEncryptor(e *auth.Encryptor) {
 		return
 	}
 	h.encryptor = e
+}
+
+// SetManifestSigningSecret wires the HMAC key for the signed
+// manifest-download URL. Set once at startup; nil-safe. Empty secret
+// leaves the signed-URL endpoint disabled (503).
+func (h *ClusterHandler) SetManifestSigningSecret(secret string) {
+	if h == nil {
+		return
+	}
+	if secret == "" {
+		h.manifestSigningSecret = nil
+		return
+	}
+	// Domain-separate the manifest HMAC key from the raw secret. When the
+	// wiring layer falls back to cfg.SecretKey (the JWT signing secret),
+	// using it verbatim would make the manifest signer and the JWT signer
+	// share an identical key; derive a distinct subkey so the two are not
+	// the same bytes.
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("manifest-signing"))
+	h.manifestSigningSecret = mac.Sum(nil)
+}
+
+// manifestSignature computes the HMAC-SHA256 over "cluster_id|expiry"
+// (expiry as unix seconds). Hex-encoded so it's URL-safe and constant
+// across encodings.
+func (h *ClusterHandler) manifestSignature(clusterID uuid.UUID, expiry int64) string {
+	mac := hmac.New(sha256.New, h.manifestSigningSecret)
+	mac.Write([]byte(clusterID.String() + "|" + strconv.FormatInt(expiry, 10)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// SignManifestURL returns a relative, time-limited signed path the
+// wizard can hand to operators:
+//
+//	/api/v1/register/signed/{cluster_id}?expires=<unix>&sig=<hmac>
+//
+// ttl bounds the validity window (caller passes 15m). Returns "" when
+// no signing secret is configured.
+func (h *ClusterHandler) SignManifestURL(clusterID uuid.UUID, ttl time.Duration) string {
+	if h == nil || len(h.manifestSigningSecret) == 0 {
+		return ""
+	}
+	expiry := time.Now().Add(ttl).Unix()
+	sig := h.manifestSignature(clusterID, expiry)
+	return fmt.Sprintf("/api/v1/register/signed/%s?expires=%d&sig=%s",
+		clusterID.String(), expiry, url.QueryEscape(sig))
+}
+
+// verifyManifestSignature checks expiry and the constant-time HMAC.
+// Returns nil when valid.
+func (h *ClusterHandler) verifyManifestSignature(clusterID uuid.UUID, expiry int64, sig string) error {
+	if len(h.manifestSigningSecret) == 0 {
+		return errors.New("signing disabled")
+	}
+	now := time.Now()
+	if now.Unix() > expiry {
+		return errors.New("expired")
+	}
+	// Reject expiries further out than we'd ever legitimately mint, so a
+	// forged or replayed URL can't claim a long-lived window.
+	if expiry > now.Add(maxSignedManifestTTL).Unix() {
+		return errors.New("expiry too far in future")
+	}
+	want := h.manifestSignature(clusterID, expiry)
+	if subtle.ConstantTimeCompare([]byte(want), []byte(sig)) != 1 {
+		return errors.New("bad signature")
+	}
+	return nil
 }
 
 func (h *ClusterHandler) encryptLegacyRegistryPassword(password string) (string, string, error) {
@@ -354,6 +441,25 @@ func (h *ClusterHandler) enqueueArgoCDLabelRefresh(r *http.Request, clusterID uu
 	// decommission enqueue.
 	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
+	_, _ = h.argoCDRefreshQueue.Enqueue(task)
+}
+
+// enqueueArgoCDAutoRegister schedules a lazy, label-based ArgoCD auto-register
+// pass for this cluster after a labels mutation. This is what lets a cluster
+// that newly matches the configured auto-register selector get registered into
+// ArgoCD without a Git commit — the worker re-evaluates the selector and
+// registers when it now matches. Best-effort and nil-safe, mirroring
+// enqueueArgoCDLabelRefresh: it reuses the same queue so wiring stays trivial.
+func (h *ClusterHandler) enqueueArgoCDAutoRegister(r *http.Request, clusterID uuid.UUID) {
+	if h == nil || h.argoCDRefreshQueue == nil {
+		return
+	}
+	task, err := tasks.NewArgoCDAutoRegisterClusterTask(clusterID)
+	if err != nil {
+		return
+	}
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5), asynq.Unique(10*time.Minute))
 	_, _ = h.argoCDRefreshQueue.Enqueue(task)
 }
 
@@ -865,6 +971,10 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// and skips the PATCH when they match — so we enqueue on every Update
 	// rather than diffing JSONB here.
 	h.enqueueArgoCDLabelRefresh(r, cluster.ID)
+	// Labels may have changed such that the cluster now matches the
+	// auto-register selector; trigger a lazy re-evaluation so it gets
+	// registered into ArgoCD without requiring a Git commit.
+	h.enqueueArgoCDAutoRegister(r, cluster.ID)
 
 	recordAudit(r, h.queries, "cluster.update", "cluster", cluster.ID.String(), cluster.Name, map[string]any{
 		"display_name": req.DisplayName,
@@ -1454,6 +1564,69 @@ func (h *ClusterHandler) ListConditionRemediation(w http.ResponseWriter, r *http
 	}
 	// TODO(total): no COUNT query for remediation attempts; use page length.
 	RespondList(w, rows, NewPagination(len(rows), len(rows), 0, len(rows)))
+}
+
+// GetSignedManifest handles GET /api/v1/register/signed/{cluster_id}.
+//
+// Public (unauthenticated) endpoint guarded by a short-TTL HMAC
+// signature over (cluster_id, expiry) instead of a registration token.
+// The wizard mints the URL via SignManifestURL with a 15-minute window;
+// a tampered or expired URL is rejected (404, opaque) before any DB
+// work. On success it mints a fresh registration token and returns the
+// install manifest, identically to GetManifestByToken.
+func (h *ClusterHandler) GetSignedManifest(w http.ResponseWriter, r *http.Request) {
+	if len(h.manifestSigningSecret) == 0 {
+		http.Error(w, "signed manifest URLs not enabled", http.StatusServiceUnavailable)
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	expiry, err := strconv.ParseInt(r.URL.Query().Get("expires"), 10, 64)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Invalid or missing expiry")
+		return
+	}
+	if err := h.verifyManifestSignature(id, expiry, r.URL.Query().Get("sig")); err != nil {
+		// Opaque 404 — don't distinguish expired from tampered.
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Manifest link invalid or expired")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		return
+	}
+
+	// Mint a fresh, short-lived registration token for this download.
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate registration token")
+		return
+	}
+	tokenStr := base64.URLEncoding.EncodeToString(b)
+	// Cap the minted token's lifetime to the remaining signature window
+	// rather than a flat hour, so a replayed signed URL can't mint a
+	// token that outlives the URL that authorized it.
+	tokenExpiry := time.Unix(expiry, 0)
+	if max := time.Now().Add(1 * time.Hour); tokenExpiry.After(max) {
+		tokenExpiry = max
+	}
+	if _, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{
+		ClusterID: id,
+		TokenHash: auth.HashOpaqueToken(tokenStr),
+		ExpiresAt: tokenExpiry,
+	}); err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
+		return
+	}
+
+	manifest := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r))
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(manifest))
 }
 
 // GetCABundle handles GET /api/v1/register/ca.crt.

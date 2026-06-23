@@ -89,6 +89,23 @@ func RequireWriteScopeForMutations(required string) func(http.Handler) http.Hand
 				next.ServeHTTP(w, r)
 				return
 			}
+			// Default-deny for read-only tokens: a token whose scope set
+			// grants only read access can never mutate, regardless of the
+			// specific write scope this route names. This guarantees a
+			// read-scoped token is rejected on every mutating verb even if
+			// the route opted into the wrong scope or none would match.
+			// JWT sessions (no api_token row) and legacy empty-scope tokens
+			// fall through to APITokenScopeEnforce, preserving the existing
+			// bypass/opt-in contract.
+			if user, _ := GetAuthenticatedUser(r.Context()); user != nil && user.AuthMethod == "api_token" {
+				if tok, ok := GetAuthenticatedAPIToken(r.Context()); ok && tok != nil {
+					if scopes, err := auth.ParseTokenScopes(tok.Scopes); err == nil && auth.IsReadOnlyScopeSet(scopes) {
+						auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("scope")...).Inc()
+						scopeDenied(w, "Read-only token cannot perform a mutating request")
+						return
+					}
+				}
+			}
 			enforce(next).ServeHTTP(w, r)
 		})
 	}

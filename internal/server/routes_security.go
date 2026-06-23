@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -34,6 +35,18 @@ func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDepende
 		r.Get("/clusters/{cluster_id}/security/policy/", deps.Security.GetPolicy)
 		r.Get("/clusters/{cluster_id}/security/scans/", deps.Security.ListScans)
 		r.Get("/clusters/{cluster_id}/security/scans/{id}/", deps.Security.GetScan)
+	}
+
+	// --- P1 item 7: kube-apiserver audit-event collection -----------------
+	// The per-cluster agent POSTs batched audit.k8s.io events to the ingest
+	// endpoint (a write, gated on cluster:update); operators read them back
+	// via the list endpoint (cluster:read). Cluster-scoped, idempotent on
+	// (cluster_id, auditID) so a re-delivered batch is a no-op.
+	if deps.ApiserverAudit != nil {
+		auditIngest := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)
+		auditRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
+		r.With(requireScope(iauth.ScopeWriteClusters), auditIngest).Post("/clusters/{cluster_id}/apiserver-audit/", deps.ApiserverAudit.Ingest)
+		r.With(auditRead).Get("/clusters/{cluster_id}/apiserver-audit/", deps.ApiserverAudit.List)
 	}
 
 	// --- Sprint 062: image vulnerability scanning -------------------------

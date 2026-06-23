@@ -69,6 +69,29 @@ func TestScopeAllowsRequest(t *testing.T) {
 	}
 }
 
+func TestIsReadOnlyScopeSet(t *testing.T) {
+	cases := []struct {
+		name   string
+		scopes []string
+		want   bool
+	}{
+		{"empty_is_legacy_not_readonly", nil, false},
+		{"read_only", []string{ScopeReadOnly}, true},
+		{"read_plus_write", []string{ScopeReadOnly, ScopeWriteClusters}, false},
+		{"write_only", []string{ScopeWriteProjects}, false},
+		{"admin", []string{ScopeAdmin}, false},
+		{"wildcard", []string{ScopeWildcard}, false},
+		{"unknown_read_tier", []string{"metrics"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsReadOnlyScopeSet(tc.scopes); got != tc.want {
+				t.Errorf("IsReadOnlyScopeSet(%v) = %v, want %v", tc.scopes, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestScopeForMethod(t *testing.T) {
 	if ScopeForMethod("GET") != ScopeReadOnly {
 		t.Errorf("GET should be read-only")

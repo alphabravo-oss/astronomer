@@ -148,6 +148,58 @@ func TestAPITokenScopeMiddleware_NoAuthContextBypass(t *testing.T) {
 	}
 }
 
+// requireWriteHarness wires RequireWriteScopeForMutations around a
+// sentinel handler and drives it with the given method.
+func requireWriteHarness(t *testing.T, method string, scopes json.RawMessage) (*httptest.ResponseRecorder, bool) {
+	t.Helper()
+	called := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+	h := RequireWriteScopeForMutations(auth.ScopeWriteClusters)(inner)
+	req := httptest.NewRequest(method, "/api/v1/clusters/{cluster_id}/workloads/x/", nil)
+	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		ID:         "u1",
+		AuthMethod: "api_token",
+	})
+	ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{Scopes: scopes})
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr, called
+}
+
+func TestRequireWriteScopeForMutations_ReadTokenRejectedOnMutation(t *testing.T) {
+	rr, called := requireWriteHarness(t, http.MethodPost, json.RawMessage(`["read"]`))
+	if called {
+		t.Fatal("read-scoped token must not reach the handler on a mutating route")
+	}
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusForbidden)
+	}
+	if !contains(rr.Body.String(), "scope_denied") {
+		t.Fatalf("body = %s, want scope_denied", rr.Body.String())
+	}
+}
+
+func TestRequireWriteScopeForMutations_ReadTokenAllowedOnRead(t *testing.T) {
+	// GET is a read route — the read-scoped token passes through.
+	_, called := requireWriteHarness(t, http.MethodGet, json.RawMessage(`["read"]`))
+	if !called {
+		t.Fatal("read-scoped token must pass a read (GET) route")
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 func TestAPITokenScopeMiddleware_NoTokenInContextBypass(t *testing.T) {
 	// AuthMethod==api_token but the token row isn't in context — the
 	// auth middleware ran without DB queries. Must NOT crash; behave

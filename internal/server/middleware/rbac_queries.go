@@ -145,6 +145,7 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 			if row.ClusterID.Valid {
 				binding.ClusterID = uuid.UUID(row.ClusterID.Bytes).String()
 			}
+			binding.Namespace = row.Namespace
 		case "project":
 			if row.ProjectID.Valid {
 				binding.ProjectID = uuid.UUID(row.ProjectID.Bytes).String()
