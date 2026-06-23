@@ -160,6 +160,65 @@ export function getValueAtPath(root: unknown, path: string[]): unknown {
   return cursor;
 }
 
+// resolveJSONPointer dereferences a local "#/a/b" pointer against the root.
+function resolveJSONPointer(root: Record<string, unknown>, ref: string): unknown {
+  if (!ref.startsWith('#/')) return undefined;
+  const parts = ref
+    .slice(2)
+    .split('/')
+    .map((p) => p.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let cursor: unknown = root;
+  for (const part of parts) {
+    if (!isPlainObject(cursor)) return undefined;
+    cursor = (cursor as Record<string, unknown>)[part];
+  }
+  return cursor;
+}
+
+// resolveSchemaRefs inlines local $ref/$defs/definitions so the form walker
+// (which only understands properties/items/type) can render schemas generated
+// by tools like helm-values-schema-json — cert-manager et al. wrap everything
+// in {"$ref":"#/$defs/helm-values","$defs":{...}}. Local-only, cycle-guarded,
+// depth-capped. Returns the dereferenced schema (or null if not an object).
+export function resolveSchemaRefs(schema: unknown): HelmValuesSchemaNode | null {
+  if (!isPlainObject(schema)) return null;
+  const root = schema as Record<string, unknown>;
+
+  const resolve = (node: unknown, depth: number, active: Set<string>): unknown => {
+    if (depth > 60 || !isPlainObject(node)) return node;
+    const obj = node as Record<string, unknown>;
+
+    if (typeof obj.$ref === 'string') {
+      const ref = obj.$ref;
+      if (active.has(ref)) return {}; // cycle: render as opaque object
+      const target = resolveJSONPointer(root, ref);
+      if (target === undefined) return {};
+      const nextActive = new Set(active).add(ref);
+      const resolved = resolve(target, depth + 1, nextActive);
+      // Sibling keys alongside $ref win over the resolved node.
+      const siblings: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (k === '$ref' || k === '$defs' || k === 'definitions') continue;
+        siblings[k] = resolve(v, depth + 1, nextActive);
+      }
+      return { ...(isPlainObject(resolved) ? resolved : {}), ...siblings };
+    }
+
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === '$defs' || k === 'definitions') continue; // drop after inlining
+      out[k] = resolve(v, depth + 1, active);
+    }
+    return out;
+  };
+
+  const result = resolve(root, 0, new Set());
+  return isPlainObject(result) ? (result as HelmValuesSchemaNode) : null;
+}
+
 export function hasRenderableSchema(schema: unknown): schema is HelmValuesSchemaNode {
-  return isPlainObject(schema) && Object.keys((schema as Record<string, unknown>)).length > 0;
+  if (!isPlainObject(schema)) return false;
+  const s = schema as Record<string, unknown>;
+  const props = s.properties;
+  return (isPlainObject(props) && Object.keys(props).length > 0) || isPlainObject(s.items);
 }

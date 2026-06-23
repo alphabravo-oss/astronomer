@@ -28,6 +28,7 @@ import { formatRelativeTime, cn } from '@/lib/utils';
 import {
   dumpHelmValuesYAML,
   hasRenderableSchema,
+  resolveSchemaRefs,
   mergeSchemaDefaults,
   parseHelmValuesYAML,
   type HelmValuesObject,
@@ -720,10 +721,11 @@ function InstallChartModal({
   const installChart = useInstallHelmChart();
   const { data: clustersData } = useClusters({ pageSize: 100 });
   const clusters = clustersData?.data || [];
-  const schema = useMemo(
-    () => (hasRenderableSchema(version.valuesSchema) ? (version.valuesSchema as HelmValuesSchemaNode) : null),
-    [version.valuesSchema]
-  );
+  const schema = useMemo(() => {
+    // Inline $ref/$defs first so generator-style schemas (cert-manager etc.) render.
+    const resolved = resolveSchemaRefs(version.valuesSchema);
+    return hasRenderableSchema(resolved) ? (resolved as HelmValuesSchemaNode) : null;
+  }, [version.valuesSchema]);
 
   // Sprint 23: when arriving from an empty-state CTA on a cluster
   // detail page (e.g. "Install trivy-operator from Image Scans"), the

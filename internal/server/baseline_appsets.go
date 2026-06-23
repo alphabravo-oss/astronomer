@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
@@ -117,29 +118,29 @@ type baselineChartCoordinates struct {
 // cert-manager, gatekeeper, …) is installed on demand from the per-cluster
 // Tools view — that is the single, per-cluster ownership path for them, so we
 // deliberately do NOT manage them as global baseline ApplicationSets here.
-var fallbackBaselineApplicationSetComponents = []baselineApplicationSetComponent{
-	{
-		ApplicationSetName: "astronomer-baseline-kube-state-metrics",
-		ApplicationPrefix:  "astronomer-ksm",
-		Slug:               "kube-state-metrics",
-		DefaultEnabled:     true,
-		ChartName:          "kube-state-metrics",
-		RepoURL:            "https://prometheus-community.github.io/helm-charts",
-		Namespace:          "monitoring",
-		ValuesYAML:         "metricLabelsAllowlist:\n  - pods=[*]\n  - deployments=[*]\n",
-		SyncPhase:          baselineSyncPhaseWorkloads,
-	},
-	{
-		ApplicationSetName: "astronomer-baseline-node-exporter",
-		ApplicationPrefix:  "astronomer-node-exporter",
-		Slug:               "prometheus-node-exporter",
-		DefaultEnabled:     true,
-		ChartName:          "prometheus-node-exporter",
-		RepoURL:            "https://prometheus-community.github.io/helm-charts",
-		Namespace:          "monitoring",
-		ValuesYAML:         "hostRootFsMount:\n  enabled: true\n",
-		SyncPhase:          baselineSyncPhaseWorkloads,
-	},
+//
+// It is derived from the single baseline.Registry seam (the dispatcher that
+// routes each component to its lifecycle path) so the DefaultEnabled set no
+// longer has to be hand-kept in sync with handler.platformBaselineComponentCatalog.
+var fallbackBaselineApplicationSetComponents = baselineApplicationSetComponentsFromRegistry()
+
+func baselineApplicationSetComponentsFromRegistry() []baselineApplicationSetComponent {
+	registry := baseline.ApplicationSetComponents()
+	out := make([]baselineApplicationSetComponent, 0, len(registry))
+	for _, c := range registry {
+		out = append(out, baselineApplicationSetComponent{
+			ApplicationSetName: c.ApplicationSetName,
+			ApplicationPrefix:  c.ApplicationPrefix,
+			Slug:               c.Slug,
+			DefaultEnabled:     c.DefaultEnabled,
+			ChartName:          c.ChartName,
+			RepoURL:            c.RepoURL,
+			Namespace:          c.Namespace,
+			ValuesYAML:         c.ValuesYAML,
+			SyncPhase:          baselineSyncPhaseWorkloads,
+		})
+	}
+	return out
 }
 
 type baselineToolQuerier interface {

@@ -1256,16 +1256,13 @@ func (h *CatalogHandler) GetChartReadme(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No versions found for this chart.")
 		return
 	}
-	// Sprint 082: catalog sync stores empty README/default_values to
-	// stay fast. On first request we pull + parse the tarball and
-	// write the content back so subsequent requests are cached.
-	if version.Readme == "" && version.DefaultValues == "" {
-		if hydrated, hErr := h.hydrateChartVersion(r.Context(), version); hErr == nil {
-			version = hydrated
-		} else if h.log != nil {
-			h.log.Warn("chart readme hydration failed",
-				"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
-		}
+	// Lazy hydrate on cache miss. hydrateChartVersion self-guards on
+	// content_hydrated_at, so this is cheap once hydrated.
+	if hydrated, hErr := h.hydrateChartVersion(r.Context(), version); hErr == nil {
+		version = hydrated
+	} else if h.log != nil {
+		h.log.Warn("chart readme hydration failed",
+			"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"chart":   chart.Name,
@@ -1292,16 +1289,16 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No versions found for this chart.")
 		return
 	}
-	// Sprint 082: lazy hydrate default_values + README on cache miss
-	// so the install modal's YAML editor gets real defaults instead
-	// of an empty box.
-	if version.DefaultValues == "" && version.Readme == "" {
-		if hydrated, hErr := h.hydrateChartVersion(r.Context(), version); hErr == nil {
-			version = hydrated
-		} else if h.log != nil {
-			h.log.Warn("chart values hydration failed",
-				"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
-		}
+	// Lazy hydrate default_values + README + values_schema on cache miss so the
+	// install modal gets real defaults + form. hydrateChartVersion self-guards
+	// on content_hydrated_at, so calling it unconditionally is cheap once a row
+	// is hydrated and also backfills schema for rows hydrated before that column
+	// existed (they have values but no schema).
+	if hydrated, hErr := h.hydrateChartVersion(r.Context(), version); hErr == nil {
+		version = hydrated
+	} else if h.log != nil {
+		h.log.Warn("chart values hydration failed",
+			"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"chart":          chart.Name,

@@ -29,8 +29,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/registry"
+	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -45,7 +47,9 @@ const chartArchiveMaxBytes = 50 * 1024 * 1024
 // archive on cache miss. Returns the (possibly updated) version row
 // so callers can pass the hydrated copy back in their response.
 func (h *CatalogHandler) hydrateChartVersion(ctx context.Context, version sqlc.HelmChartVersion) (sqlc.HelmChartVersion, error) {
-	if version.DefaultValues != "" || version.Readme != "" {
+	// Hydrate-once by timestamp: once we've pulled the archive we never pull
+	// again, even for charts that ship no values.schema.json / empty README.
+	if version.ContentHydratedAt.Valid {
 		return version, nil
 	}
 
@@ -78,10 +82,45 @@ func (h *CatalogHandler) hydrateChartVersion(ctx context.Context, version sqlc.H
 		}
 	}
 
+	// values.schema.json drives the typed install form. Prefer the upstream
+	// schema (helm parses it into chart.Schema); else scan Raw for older
+	// layouts; else infer a types-only schema from the chart's default values
+	// so every chart still gets a form (the UI keeps a YAML toggle for the
+	// curated/large cases).
+	schema := json.RawMessage(`{}`)
+	switch {
+	case len(c.Schema) > 0 && json.Valid(c.Schema):
+		schema = json.RawMessage(c.Schema)
+	default:
+		found := false
+		for _, f := range c.Raw {
+			if strings.ToLower(f.Name) == "values.schema.json" && json.Valid(f.Data) {
+				schema = json.RawMessage(f.Data)
+				found = true
+				break
+			}
+		}
+		if !found && valuesYAML != "" {
+			var vals map[string]interface{}
+			if err := yaml.Unmarshal([]byte(valuesYAML), &vals); err != nil {
+				if h.log != nil {
+					h.log.Warn("infer schema: values.yaml parse failed",
+						"chart", chart.Name, "version", version.Version, "bytes", len(valuesYAML), "error", err)
+				}
+			} else if inferred := inferSchema(vals); inferred != nil {
+				schema = inferred
+			} else if h.log != nil {
+				h.log.Warn("infer schema: empty result after parse",
+					"chart", chart.Name, "version", version.Version, "keys", len(vals))
+			}
+		}
+	}
+
 	if err := h.queries.UpdateHelmChartVersionContent(ctx, sqlc.UpdateHelmChartVersionContentParams{
 		ID:            version.ID,
 		DefaultValues: valuesYAML,
 		Readme:        readme,
+		ValuesSchema:  schema,
 	}); err != nil && h.log != nil {
 		// Best-effort cache write. Not fatal.
 		h.log.Warn("persist hydrated chart content failed",
@@ -90,6 +129,8 @@ func (h *CatalogHandler) hydrateChartVersion(ctx context.Context, version sqlc.H
 
 	version.DefaultValues = valuesYAML
 	version.Readme = readme
+	version.ValuesSchema = schema
+	version.ContentHydratedAt = pgtype.Timestamptz{Valid: true}
 	return version, nil
 }
 
@@ -172,4 +213,62 @@ func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.Hel
 		return nil, fmt.Errorf("oci pull returned empty chart for %s", ref)
 	}
 	return pulled.Chart.Data, nil
+}
+
+// inferSchema derives a types-only JSON Schema from a chart's coalesced default
+// values, so charts without an upstream values.schema.json still render a form.
+// Field keys become titles; types come from the default value. There are no
+// descriptions/enums/validation — those live in values.yaml comments, which
+// aren't recoverable on parse. Marked x-astronomer-inferred so the UI can flag
+// the form as auto-generated and keep the YAML editor a click away.
+func inferSchema(values map[string]interface{}) json.RawMessage {
+	if len(values) == 0 {
+		return nil
+	}
+	node, ok := inferNode(values, 0).(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	node["x-astronomer-inferred"] = true
+	data, err := json.Marshal(node)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+const inferMaxDepth = 8
+
+func inferNode(v interface{}, depth int) interface{} {
+	if depth > inferMaxDepth {
+		return map[string]interface{}{} // bail out: treat as opaque object
+	}
+	switch val := v.(type) {
+	case map[string]interface{}:
+		props := map[string]interface{}{}
+		for k, child := range val {
+			n := inferNode(child, depth+1)
+			if cm, ok := n.(map[string]interface{}); ok {
+				cm["title"] = k
+			}
+			props[k] = n
+		}
+		return map[string]interface{}{"type": "object", "properties": props}
+	case []interface{}:
+		items := map[string]interface{}{}
+		if len(val) > 0 {
+			if m, ok := inferNode(val[0], depth+1).(map[string]interface{}); ok {
+				items = m
+			}
+		}
+		return map[string]interface{}{"type": "array", "items": items}
+	case string:
+		return map[string]interface{}{"type": "string"}
+	case bool:
+		return map[string]interface{}{"type": "boolean"}
+	case float64, int, int64:
+		return map[string]interface{}{"type": "number"}
+	default:
+		return map[string]interface{}{} // nil / unknown: no type constraint
+	}
 }

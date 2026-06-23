@@ -337,6 +337,55 @@ func TestAdoptExistingToolReleaseUpdatesExistingRow(t *testing.T) {
 	}
 }
 
+func TestCheckToolReleaseReadyReflectsReadiness(t *testing.T) {
+	t.Parallel()
+
+	clusterID := uuid.New()
+	env := toolOperationEnvelope{
+		ClusterID:   clusterID.String(),
+		ToolSlug:    "argocd",
+		ReleaseName: "argocd",
+		Namespace:   "argocd",
+	}
+	op := sqlc.ToolOperation{ID: uuid.New(), OperationType: "install"}
+
+	// Not-ready release: helm reports a non-"deployed" status. The Helm
+	// apply already committed, so readiness must NOT fail the operation;
+	// it records a warning and lets the drift sweep reconcile readiness.
+	notReady := newToolQueryRecorder(clusterID)
+	hNotReady := &ToolHandler{queries: notReady, helm: &toolHelmStub{
+		statusResult: &protocol.HelmResultPayload{Success: true, Status: "pending-install"},
+	}}
+	if err := hNotReady.checkToolReleaseReady(context.Background(), op, env); err != nil {
+		t.Fatalf("checkToolReleaseReady() error = %v, want nil", err)
+	}
+	if !hasReadinessEvent(notReady.events, "warn") {
+		t.Fatalf("expected a readiness warn event, got %+v", notReady.events)
+	}
+
+	// Ready release: helm reports "deployed", readiness passes and the
+	// recorded event is informational.
+	ready := newToolQueryRecorder(clusterID)
+	hReady := &ToolHandler{queries: ready, helm: &toolHelmStub{
+		statusResult: &protocol.HelmResultPayload{Success: true, Status: "deployed", Revision: 2},
+	}}
+	if err := hReady.checkToolReleaseReady(context.Background(), op, env); err != nil {
+		t.Fatalf("checkToolReleaseReady() error = %v, want nil", err)
+	}
+	if !hasReadinessEvent(ready.events, "info") {
+		t.Fatalf("expected a readiness info event, got %+v", ready.events)
+	}
+}
+
+func hasReadinessEvent(events []sqlc.CreateToolOperationEventParams, level string) bool {
+	for _, e := range events {
+		if e.Stage == "readiness" && e.Level == level {
+			return true
+		}
+	}
+	return false
+}
+
 var _ ToolQuerier = (*toolQueryRecorder)(nil)
 
 func TestToolEnqueueOperationUsesIdempotencyKey(t *testing.T) {

@@ -6,6 +6,7 @@ import {
   mergeSchemaDefaults,
   parseHelmValuesYAML,
   removeArrayItem,
+  resolveSchemaRefs,
   setValueAtPath,
   type HelmValuesSchemaNode,
 } from '@/lib/helm-values-schema';
@@ -73,5 +74,36 @@ describe('helm-values-schema helpers', () => {
   it('recognizes empty vs non-empty schema payloads', () => {
     expect(hasRenderableSchema({})).toBe(false);
     expect(hasRenderableSchema(schema)).toBe(true);
+  });
+});
+
+describe('resolveSchemaRefs', () => {
+  it('inlines a top-level $ref into $defs (cert-manager shape)', () => {
+    const raw = {
+      $ref: '#/$defs/helm-values',
+      $defs: {
+        'helm-values': {
+          type: 'object',
+          properties: {
+            replicaCount: { type: 'number' },
+            image: { $ref: '#/$defs/image' },
+          },
+        },
+        image: { type: 'object', properties: { tag: { type: 'string' } } },
+      },
+    };
+    const out = resolveSchemaRefs(raw)!;
+    expect(hasRenderableSchema(out)).toBe(true);
+    expect(out.properties!.replicaCount.type).toBe('number');
+    // nested $ref resolved too
+    expect((out.properties!.image.properties as Record<string, { type: string }>).tag.type).toBe('string');
+    // $defs stripped from output
+    expect((out as Record<string, unknown>).$defs).toBeUndefined();
+  });
+
+  it('survives a self-referential cycle', () => {
+    const raw = { $ref: '#/$defs/node', $defs: { node: { type: 'object', properties: { child: { $ref: '#/$defs/node' } } } } };
+    const out = resolveSchemaRefs(raw)!;
+    expect(out.properties!.child).toBeDefined(); // opaque, but no infinite loop
   });
 });

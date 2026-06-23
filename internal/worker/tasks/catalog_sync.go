@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,11 +17,16 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/repo"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+// catalogMaxVersionsPerChart caps how many recent versions we ingest per chart.
+// ponytail: last-N only; the form/install UI never needs ancient releases.
+const catalogMaxVersionsPerChart = 3
 
 // CatalogSyncPayload contains parameters for catalog sync.
 type CatalogSyncPayload struct {
@@ -73,7 +79,7 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 			if err != nil {
 				return err
 			}
-			if err := syncRepositoryIndex(ctx, repoRecord.ID, indexFile); err != nil {
+			if err := syncRepositoryIndex(ctx, repoRecord.ID, repoRecord.Url, indexFile); err != nil {
 				return err
 			}
 			if err := runtimeDeps.Queries.UpdateHelmRepositoryLastSynced(ctx, repoRecord.ID); err != nil {
@@ -131,12 +137,17 @@ func decodeIndex(resp *http.Response) (*repo.IndexFile, error) {
 	return index, nil
 }
 
-func syncRepositoryIndex(ctx context.Context, repositoryID uuid.UUID, indexFile *repo.IndexFile) error {
+func syncRepositoryIndex(ctx context.Context, repositoryID uuid.UUID, repositoryURL string, indexFile *repo.IndexFile) error {
 	if indexFile == nil {
 		return nil
 	}
+	// Sort each chart's versions newest-first so the last-N cap keeps recent releases.
+	indexFile.SortEntries()
 	seenCharts := map[string]struct{}{}
 	for chartName, versions := range indexFile.Entries {
+		if len(versions) > catalogMaxVersionsPerChart {
+			versions = versions[:catalogMaxVersionsPerChart]
+		}
 		seenCharts[chartName] = struct{}{}
 		chart, err := runtimeDeps.Queries.GetHelmChartByRepoAndName(ctx, sqlc.GetHelmChartByRepoAndNameParams{
 			RepositoryID: repositoryID,
@@ -176,15 +187,19 @@ func syncRepositoryIndex(ctx context.Context, repositoryID uuid.UUID, indexFile 
 			} else if err != pgx.ErrNoRows {
 				return err
 			}
+			// Pull the chart archive once to populate the values form (schema),
+			// the YAML editor (default values) and the README. Best-effort:
+			// a chart that won't fetch still lands as a card + installable version.
+			defaultValues, valuesSchema, readme := fetchChartAssets(ctx, repositoryURL, version.URLs)
 			if _, err := runtimeDeps.Queries.CreateHelmChartVersion(ctx, sqlc.CreateHelmChartVersionParams{
 				ChartID:       chart.ID,
 				Version:       version.Version,
 				AppVersion:    version.AppVersion,
 				Digest:        version.Digest,
 				Urls:          mustJSON(version.URLs),
-				ValuesSchema:  json.RawMessage(`{}`),
-				DefaultValues: "",
-				Readme:        "",
+				ValuesSchema:  valuesSchema,
+				DefaultValues: defaultValues,
+				Readme:        readme,
 				CreatedAtUpstream: pgtype.Timestamptz{
 					Time:  version.Created,
 					Valid: !version.Created.IsZero(),
@@ -227,6 +242,75 @@ func syncRepositoryIndex(ctx context.Context, repositoryID uuid.UUID, indexFile 
 		}
 	}
 	return nil
+}
+
+// fetchChartAssets pulls the chart .tgz and extracts the three things the UI
+// needs: the raw values.yaml (YAML editor), values.schema.json (the form), and
+// README.md. Pull-read-discard — nothing is stored on disk, no mirror. Returns
+// safe defaults ("" / "{}") on any failure so sync never fails over one chart.
+func fetchChartAssets(ctx context.Context, repositoryURL string, urls []string) (string, json.RawMessage, string) {
+	emptySchema := json.RawMessage(`{}`)
+	if len(urls) == 0 {
+		return "", emptySchema, ""
+	}
+	chartURL, err := resolveChartURL(repositoryURL, urls[0])
+	if err != nil {
+		return "", emptySchema, ""
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, catalogFetchTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, chartURL, nil)
+	if err != nil {
+		return "", emptySchema, ""
+	}
+	resp, err := runtimeHTTPClient().Do(req)
+	if err != nil {
+		return "", emptySchema, ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= http.StatusBadRequest {
+		slog.WarnContext(ctx, "catalog chart fetch failed", "url", chartURL, "status", resp.StatusCode)
+		return "", emptySchema, ""
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20)) // 64MiB ceiling
+	if err != nil {
+		return "", emptySchema, ""
+	}
+	loaded, err := loader.LoadArchive(bytes.NewReader(body))
+	if err != nil {
+		slog.WarnContext(ctx, "catalog chart parse failed", "url", chartURL, "error", err)
+		return "", emptySchema, ""
+	}
+	schema := emptySchema
+	if len(loaded.Schema) > 0 && json.Valid(loaded.Schema) {
+		schema = json.RawMessage(loaded.Schema)
+	}
+	var defaultValues, readme string
+	for _, f := range loaded.Raw {
+		switch path.Base(f.Name) {
+		case "values.yaml":
+			defaultValues = string(f.Data)
+		case "README.md":
+			readme = string(f.Data)
+		}
+	}
+	return defaultValues, schema, readme
+}
+
+// resolveChartURL handles index entries whose URLs are relative to the repo.
+func resolveChartURL(repositoryURL, chartURL string) (string, error) {
+	u, err := url.Parse(chartURL)
+	if err != nil {
+		return "", err
+	}
+	if u.IsAbs() {
+		return u.String(), nil
+	}
+	base, err := url.Parse(repositoryURL)
+	if err != nil {
+		return "", err
+	}
+	return base.ResolveReference(u).String(), nil
 }
 
 func firstNonEmptyEntryField(versions repo.ChartVersions, field func(*repo.ChartVersion) string) string {

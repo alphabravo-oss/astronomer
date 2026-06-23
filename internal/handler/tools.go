@@ -1304,7 +1304,10 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 			ToolSlug:       pgtype.Text{String: env.ToolSlug, Valid: true},
 			PresetUsed:     pgtype.Text{String: env.Preset, Valid: env.Preset != ""},
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return h.checkToolReleaseReady(ctx, op, env)
 	case "upgrade":
 		h.recordToolOperationEvent(ctx, op.ID, "info", "upgrade", "upgrading tool release", map[string]any{
 			"clusterId":   env.ClusterID,
@@ -1317,23 +1320,27 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 			return err
 		}
 		if env.InstalledChart != nil {
-			_, err = h.queries.UpdateInstalledChartValues(ctx, sqlc.UpdateInstalledChartValuesParams{
+			if _, err = h.queries.UpdateInstalledChartValues(ctx, sqlc.UpdateInstalledChartValuesParams{
 				ID:             *env.InstalledChart,
 				ValuesOverride: env.ValuesYAML,
 				Status:         normalizeToolStatus(result.Status),
-			})
-			return err
+			}); err != nil {
+				return err
+			}
+			return h.checkToolReleaseReady(ctx, op, env)
 		}
 		item, err := h.findInstalledTool(ctx, clusterID, env.ToolSlug)
 		if err != nil {
 			return err
 		}
-		_, err = h.queries.UpdateInstalledChartValues(ctx, sqlc.UpdateInstalledChartValuesParams{
+		if _, err = h.queries.UpdateInstalledChartValues(ctx, sqlc.UpdateInstalledChartValuesParams{
 			ID:             item.ID,
 			ValuesOverride: env.ValuesYAML,
 			Status:         normalizeToolStatus(result.Status),
-		})
-		return err
+		}); err != nil {
+			return err
+		}
+		return h.checkToolReleaseReady(ctx, op, env)
 	case "uninstall":
 		h.recordToolOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling tool release", map[string]any{
 			"clusterId":   env.ClusterID,
@@ -1385,6 +1392,63 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 	default:
 		return fmt.Errorf("unsupported tool operation type: %s", op.OperationType)
 	}
+}
+
+// helmReleaseReady reports whether a Helm release status payload
+// describes a release that is actually ready (not merely "the helm
+// install command returned"). Helm reports "deployed" once the release
+// object exists and its resources applied cleanly; a release that is
+// still rolling out, failed, or pending sits in another phase. We treat
+// "deployed" as ready and everything else as not-ready.
+func helmReleaseReady(status *protocol.HelmResultPayload) bool {
+	return status != nil && status.Success && status.Status == "deployed"
+}
+
+// checkToolReleaseReady probes the live Helm release status after an
+// install/upgrade and reflects readiness into the tool operation. The
+// helm install/upgrade RPC returns as soon as helm finishes applying
+// manifests, which is before the release's workloads are necessarily
+// Ready. Re-querying the release status gives us helm's own
+// post-apply view; a non-"deployed" status means the release is not
+// ready, which we surface as an operation error so the tool_operations
+// row lands in 'failed' with a readiness message instead of silently
+// reporting success.
+func (h *ToolHandler) checkToolReleaseReady(ctx context.Context, op sqlc.ToolOperation, env toolOperationEnvelope) error {
+	if h.helm == nil {
+		return nil
+	}
+	status, err := h.helm.Status(ctx, env.ClusterID, env.ReleaseName, env.Namespace)
+	if err != nil {
+		// A transient Status RPC/transport error (e.g. the agent WebSocket
+		// dropping right after a long install) must not flip an already
+		// committed install/upgrade to 'failed'. Record a warning and let
+		// the drift/readiness sweep reconcile real readiness.
+		h.recordToolOperationEvent(ctx, op.ID, "warn", "readiness", "failed to query Helm release status for readiness", map[string]any{
+			"releaseName": env.ReleaseName,
+			"namespace":   env.Namespace,
+			"error":       err.Error(),
+		})
+		return nil
+	}
+	if !helmReleaseReady(status) {
+		// A not-yet-ready release is not an operation failure; the Helm
+		// apply already succeeded. Record a warning and leave readiness
+		// to the drift sweep rather than failing the committed operation.
+		h.recordToolOperationEvent(ctx, op.ID, "warn", "readiness", "Helm release not ready after operation", map[string]any{
+			"releaseName": env.ReleaseName,
+			"namespace":   env.Namespace,
+			"status":      status.Status,
+			"revision":    status.Revision,
+		})
+		return nil
+	}
+	h.recordToolOperationEvent(ctx, op.ID, "info", "readiness", "Helm release Ready", map[string]any{
+		"releaseName": env.ReleaseName,
+		"namespace":   env.Namespace,
+		"status":      status.Status,
+		"revision":    status.Revision,
+	})
+	return nil
 }
 
 func existingHelmReleaseStatus(ctx context.Context, helm HelmRequester, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, bool, error) {

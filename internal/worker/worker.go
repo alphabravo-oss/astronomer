@@ -129,8 +129,13 @@ const (
 	TypeApiserverAllowlistCleanupSnapshots = tasks.ApiserverAllowlistCleanupSnapshotsType
 	// Sprint 072: anomaly-detection rolling baseline recompute.
 	TypeAnomalyBaselineRecompute = tasks.AnomalyBaselineRecomputeType
+	// P1 item 5/22: cross-cluster ("fleet-wide") anomaly baseline recompute.
+	TypeXClusterAnomalyRecompute = tasks.XClusterAnomalyRecomputeType
 	// Sprint 073: nightly chart-rating aggregate + co-installation matrix recompute.
 	TypeChartRecommendationsRecompute = tasks.ChartRecommendationsRecomputeType
+	// P1 item 16/22: tool drift reconciliation sweep. Tunnel-queue task —
+	// probes each installed_charts row's live helm release and flags drift.
+	TypeToolDriftSweep = tasks.ToolDriftSweepType
 )
 
 // Worker wraps the Asynq server for processing background tasks.
@@ -210,6 +215,7 @@ func (w *Worker) RegisterTunnelHandlers() {
 	w.mux.HandleFunc(tasks.MeshDetectType, instrumentTask(tasks.MeshDetectType, tasks.HandleMeshDetect))
 	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
 	w.mux.HandleFunc(tasks.GatekeeperPolicyApplyType, instrumentTask(tasks.GatekeeperPolicyApplyType, tasks.HandleGatekeeperPolicyApply))
+	w.mux.HandleFunc(TypeToolDriftSweep, instrumentTask(TypeToolDriftSweep, tasks.HandleToolDriftSweep))
 	w.log.Info("registered tunnel-queue task handlers")
 }
 
@@ -275,6 +281,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeApiserverAllowlistReconcileAll, instrumentTask(TypeApiserverAllowlistReconcileAll, tasks.HandleApiserverAllowlistReconcileAll))
 	w.mux.HandleFunc(TypeApiserverAllowlistCleanupSnapshots, instrumentTask(TypeApiserverAllowlistCleanupSnapshots, tasks.HandleApiserverAllowlistCleanupSnapshots))
 	w.mux.HandleFunc(TypeAnomalyBaselineRecompute, instrumentTask(TypeAnomalyBaselineRecompute, tasks.HandleAnomalyBaselineRecompute))
+	w.mux.HandleFunc(TypeXClusterAnomalyRecompute, instrumentTask(TypeXClusterAnomalyRecompute, tasks.HandleXClusterAnomalyRecompute))
 	w.mux.HandleFunc(TypeChartRecommendationsRecompute, instrumentTask(TypeChartRecommendationsRecompute, tasks.HandleChartRecommendationsRecompute))
 
 	w.log.Info("registered all task handlers")

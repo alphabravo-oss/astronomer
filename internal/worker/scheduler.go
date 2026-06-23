@@ -166,6 +166,10 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 5m", tasks.CRDOwnershipDriftCheckType, "CRD ownership drift check"},
 		// Sprint 072: anomaly baseline recompute every 5m.
 		{"@every 5m", tasks.AnomalyBaselineRecomputeType, "anomaly baseline recompute"},
+		// P1 item 5/22: cross-cluster ("fleet-wide") anomaly baseline
+		// recompute. Runs after the per-cluster pass has had a chance
+		// to refresh; reads the per-cluster means and flags outliers.
+		{"@every 5m", tasks.XClusterAnomalyRecomputeType, "cross-cluster anomaly baseline recompute"},
 		// Migration 070: apiserver allow-list reconciler. Every 15m
 		// the sweep walks every active (mode != 'disabled') row and
 		// drives per-cluster reconcile (GetEffective → diff → optional
@@ -229,6 +233,19 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 			return err
 		}
 		s.log.Info("registered periodic task", "task", "cluster group metrics refresh (tunnel queue)", "schedule", "@every 5m", "entry_id", entryID)
+	}
+	{
+		// P1 item 16/22: tool drift reconciliation sweep — tunnel queue
+		// (needs the agent WS for helm Status). Hourly cadence; each row is
+		// one helm Status RPC and the result feeds a UI drift badge, not an
+		// auto-correct path. Mirrors cluster_template:drift_check.
+		task := asynq.NewTask(tasks.ToolDriftSweepType, nil)
+		entryID, err := s.scheduler.Register("@every 1h", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+		if err != nil {
+			s.log.Error("failed to register periodic task", "task", tasks.ToolDriftSweepType, "error", err)
+			return err
+		}
+		s.log.Info("registered periodic task", "task", "tool drift sweep (tunnel queue)", "schedule", "@every 1h", "entry_id", entryID)
 	}
 
 	return nil

@@ -17,6 +17,7 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/", deps.Extensions.List)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/sample-manifest/", deps.Extensions.SampleManifest)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/validate/", deps.Extensions.Validate)
+		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/verify-bundle/", deps.Extensions.VerifyBundle)
 		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/", deps.Extensions.Install)
 		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/{name}/enable/", deps.Extensions.Enable)
 		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/{name}/disable/", deps.Extensions.Disable)
