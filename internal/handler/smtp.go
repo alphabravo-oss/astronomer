@@ -93,6 +93,10 @@ type SMTPHandler struct {
 	newTestSender func(cfg email.Settings) SMTPTestSender
 	log           *slog.Logger
 	audit         AuthAuditWriter
+	// override, when set and returning true, lets the caller disable
+	// SMTP that the active compliance baseline marks required (T6.064
+	// deletion guard). nil → guard always enforced.
+	override BaselineOverrideChecker
 }
 
 // NewSMTPHandler wires the production handler.
@@ -121,6 +125,11 @@ func (h *SMTPHandler) SetSettingsProvider(p *email.SQLSettingsProvider) { h.prov
 
 // SetAuditWriter wires the audit log writer.
 func (h *SMTPHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
+
+// SetBaselineOverrideChecker wires the RBAC override predicate used by
+// the compliance deletion guard. Optional — when unset, SMTP the
+// active baseline requires can never be disabled.
+func (h *SMTPHandler) SetBaselineOverrideChecker(c BaselineOverrideChecker) { h.override = c }
 
 // SetTestSenderFactory is a test seam — production never calls it.
 func (h *SMTPHandler) SetTestSenderFactory(f func(cfg email.Settings) SMTPTestSender) {
@@ -245,10 +254,13 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// mailer; we treat either as the disable signal.
 	if !merged.Enabled || merged.Host == "" {
 		if slug, required := activeBaselineRequiresSMTP(r.Context(), h.queries); required {
-			RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
-				fmt.Sprintf("SMTP is required by the active compliance baseline %q; cannot disable.", slug))
-
-			return
+			if !baselineOverrideAllowed(h.override, r) {
+				RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
+					fmt.Sprintf("SMTP is required by the active compliance baseline %q; cannot disable.", slug))
+				return
+			}
+			h.log.Warn("compliance deletion guard overridden",
+				slog.String("config", "smtp"), slog.String("baseline", slug))
 		}
 	}
 

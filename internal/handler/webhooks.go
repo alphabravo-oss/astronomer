@@ -34,6 +34,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/compliance"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 )
 
@@ -81,6 +83,10 @@ type WebhookHandler struct {
 	log       *slog.Logger
 	audit     AuthAuditWriter
 	tap       WebhookTapInvalidator
+	// override, when set and returning true, lets the caller delete a
+	// webhook that the active compliance baseline marks required
+	// (T6.064 deletion guard). nil → guard always enforced.
+	override BaselineOverrideChecker
 }
 
 // NewWebhookHandler builds a usable handler.
@@ -101,6 +107,11 @@ func (h *WebhookHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
 
 // SetTap wires the bus-tap cache invalidator. Optional.
 func (h *WebhookHandler) SetTap(t WebhookTapInvalidator) { h.tap = t }
+
+// SetBaselineOverrideChecker wires the RBAC override predicate used by
+// the compliance deletion guard. Optional — when unset, a webhook the
+// active baseline requires can never be deleted.
+func (h *WebhookHandler) SetBaselineOverrideChecker(c BaselineOverrideChecker) { h.override = c }
 
 // subscriptionResponse mirrors the JSON shape returned by every read.
 // secret is always the sentinel — we NEVER leak the encrypted column
@@ -360,13 +371,17 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// T6.064 — refuse delete when the subscription is named in the
-	// active compliance baseline's required_webhooks. Operators must
-	// either revert the baseline or detach the requirement first.
+	// active compliance baseline's required_webhooks, UNLESS the caller
+	// holds the RBAC override permission. Operators without the override
+	// must either revert the baseline or detach the requirement first.
 	if slug, required := activeBaselineRequiresWebhook(r.Context(), h.queries, existing.Name); required {
-		RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
-			fmt.Sprintf("Webhook %q is required by the active compliance baseline %q.", existing.Name, slug))
-
-		return
+		if !baselineOverrideAllowed(h.override, r) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
+				fmt.Sprintf("Webhook %q is required by the active compliance baseline %q.", existing.Name, slug))
+			return
+		}
+		h.log.Warn("compliance deletion guard overridden",
+			slog.String("webhook", existing.Name), slog.String("baseline", slug))
 	}
 	if err := h.queries.DeleteWebhookSubscription(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WriteError, "Failed to delete webhook subscription")
@@ -740,6 +755,66 @@ func (h *WebhookHandler) requireSuperuser(r *http.Request) error {
 type activeBaselineQuerier interface {
 	GetActiveComplianceBaselineApplication(ctx context.Context) (sqlc.ComplianceBaselineApplication, error)
 	GetComplianceBaseline(ctx context.Context, id uuid.UUID) (sqlc.ComplianceBaseline, error)
+}
+
+// BaselineOverrideChecker reports whether the caller of r holds the
+// RBAC override permission that lets them bypass the compliance
+// deletion guard (deleting a webhook / disabling SMTP that the active
+// baseline marks required). Production wires this from the RBAC
+// engine via NewBaselineOverrideChecker; when a handler's checker is
+// nil the guard is never bypassed (fail-closed — only an explicit
+// override unblocks a required-config mutation).
+type BaselineOverrideChecker func(r *http.Request) bool
+
+// baselineOverrideAllowed is the shared "does the caller hold the
+// override?" predicate. nil checker → false (guard stays in force).
+func baselineOverrideAllowed(check BaselineOverrideChecker, r *http.Request) bool {
+	return check != nil && check(r)
+}
+
+// BaselineOverrideEngine is the narrow RBAC surface
+// NewBaselineOverrideChecker needs: resolve a user's bindings and ask
+// the engine whether they satisfy a (resource, verb). *rbac.Engine +
+// the cached RBAC querier satisfy this in production.
+type BaselineOverrideEngine interface {
+	GetUserBindings(ctx context.Context, userID string) ([]rbac.RoleBinding, error)
+}
+
+// baselineOverrideResource/Verb is the global permission a caller must
+// hold to bypass the compliance deletion guard. settings:manage is the
+// platform-settings/compliance management grant — the built-in
+// owner/admin templates carry it, and an operator can mint a narrow
+// role granting exactly it for a break-glass override.
+const (
+	baselineOverrideResource = rbac.ResourceSettings
+	baselineOverrideVerb     = rbac.VerbManage
+)
+
+// NewBaselineOverrideChecker builds the production override predicate.
+// A request passes when its authenticated user holds an EXPLICIT
+// settings:manage grant at global scope. We use CheckExplicitPermission
+// (not CheckPermission) on purpose: the only role that reaches the
+// guarded delete handlers is superuser, and the implicit superuser
+// bypass in CheckPermission would make every superuser pass the override
+// — turning the 409 guard into dead code. Break-glass requires a real
+// granted permission, so a superuser is held by the guard unless an
+// operator mints a role carrying settings:manage and binds it to them.
+// nil engine → nil checker (guard never bypassed).
+func NewBaselineOverrideChecker(engine *rbac.Engine, q BaselineOverrideEngine) BaselineOverrideChecker {
+	if engine == nil || q == nil {
+		return nil
+	}
+	return func(r *http.Request) bool {
+		user, ok := middleware.GetAuthenticatedUser(r.Context())
+		if !ok || user == nil {
+			return false
+		}
+		bindings, err := q.GetUserBindings(r.Context(), user.ID)
+		if err != nil {
+			return false
+		}
+		return engine.CheckExplicitPermission(bindings, baselineOverrideResource, baselineOverrideVerb, uuid.Nil, uuid.Nil)
+	}
 }
 
 // activeBaselineRequiresWebhook returns (slug, true) when the active

@@ -85,6 +85,35 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 	RespondPaginated(w, r, out, total)
 }
 
+// ListDead handles GET /api/v1/admin/task-outbox/dead/ — the dead-letter view.
+// It is the status=dead slice of List, exposed as a dedicated path so operators
+// (and the runbook) have a stable URL for the DLQ without query-string fiddling.
+func (h *AdminTaskOutboxHandler) ListDead(w http.ResponseWriter, r *http.Request) {
+	if !h.gate(w, r) {
+		return
+	}
+	limit, offset := queryLimitOffset(r, 50)
+	rows, err := h.queries.ListTaskOutbox(r.Context(), sqlc.ListTaskOutboxParams{
+		Status: "dead",
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		return
+	}
+	total, err := h.queries.CountTaskOutbox(r.Context(), "dead")
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		return
+	}
+	out := make([]TaskOutboxResponse, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, taskOutboxToWire(row))
+	}
+	RespondPaginated(w, r, out, total)
+}
+
 // Retry handles POST /api/v1/admin/task-outbox/{id}/retry/.
 func (h *AdminTaskOutboxHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -552,5 +553,83 @@ func TestWebhooksHandler_RetryEndpoint_CrossSubscription_404(t *testing.T) {
 	h.RetryDelivery(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404 on cross-subscription retry, got %d", w.Code)
+	}
+}
+
+// baselineRequiredWebhookQuerier embeds the default fake but reports an
+// active pci_dss_4_0 baseline, whose canonical spec lists the
+// "audit_log_sink" webhook as required_webhooks.
+type baselineRequiredWebhookQuerier struct {
+	*fakeWebhookQuerier
+}
+
+func (b baselineRequiredWebhookQuerier) GetActiveComplianceBaselineApplication(_ context.Context) (sqlc.ComplianceBaselineApplication, error) {
+	return sqlc.ComplianceBaselineApplication{BaselineID: uuid.New()}, nil
+}
+
+func (b baselineRequiredWebhookQuerier) GetComplianceBaseline(_ context.Context, _ uuid.UUID) (sqlc.ComplianceBaseline, error) {
+	return sqlc.ComplianceBaseline{Slug: "pci_dss_4_0"}, nil
+}
+
+// fakeBindingQuerier returns a fixed binding set for the override
+// checker. It satisfies BaselineOverrideEngine.
+type fakeBindingQuerier struct {
+	bindings []rbac.RoleBinding
+}
+
+func (f fakeBindingQuerier) GetUserBindings(_ context.Context, _ string) ([]rbac.RoleBinding, error) {
+	return f.bindings, nil
+}
+
+// TestWebhooksHandler_Delete_BaselineGuard_SuperuserBlocked proves the
+// compliance deletion guard is NOT dead code: a superuser (the only role
+// that can reach Delete) is still blocked with 409 when the webhook is
+// required by the active baseline and they hold no EXPLICIT break-glass
+// grant — the implicit superuser RBAC bypass must not satisfy it.
+func TestWebhooksHandler_Delete_BaselineGuard_SuperuserBlocked(t *testing.T) {
+	superID := uuid.New()
+	base := newFakeWebhookQuerier(sqlc.User{ID: superID, IsSuperuser: true})
+	q := baselineRequiredWebhookQuerier{fakeWebhookQuerier: base}
+	h := newWebhookTestHandler(t, q)
+
+	// The override checker resolves to a single superuser binding with no
+	// explicit settings:manage rule — exactly what a plain superuser has.
+	h.SetBaselineOverrideChecker(NewBaselineOverrideChecker(rbac.NewEngine(), fakeBindingQuerier{
+		bindings: []rbac.RoleBinding{{UserID: superID.String(), IsSuperuser: true}},
+	}))
+
+	subID := uuid.New()
+	base.subsByID[subID] = sqlc.WebhookSubscription{ID: subID, Name: "audit_log_sink"}
+	base.subsByName["audit_log_sink"] = base.subsByID[subID]
+
+	w := httptest.NewRecorder()
+	req := withChiParam(
+		authedWebhookRequest(http.MethodDelete, "/", superID, nil),
+		"id", subID.String(),
+	)
+	h.Delete(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for superuser without explicit override, got %d body=%s", w.Code, w.Body.String())
+	}
+	if _, ok := base.subsByID[subID]; !ok {
+		t.Errorf("guard should not have deleted the baseline-required webhook")
+	}
+
+	// Sanity: an EXPLICIT settings:manage grant breaks the glass and the
+	// delete proceeds — so the guard blocks the bypass, not the override.
+	h.SetBaselineOverrideChecker(NewBaselineOverrideChecker(rbac.NewEngine(), fakeBindingQuerier{
+		bindings: []rbac.RoleBinding{{
+			UserID:    superID.String(),
+			RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceSettings), Verbs: []string{string(rbac.VerbManage)}}},
+		}},
+	}))
+	w = httptest.NewRecorder()
+	req = withChiParam(
+		authedWebhookRequest(http.MethodDelete, "/", superID, nil),
+		"id", subID.String(),
+	)
+	h.Delete(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 with explicit override, got %d body=%s", w.Code, w.Body.String())
 	}
 }

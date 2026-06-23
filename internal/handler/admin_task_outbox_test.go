@@ -95,6 +95,7 @@ func makeAdminTaskOutboxRequest(method, path string, callerID uuid.UUID) *http.R
 func adminTaskOutboxRouter(h *AdminTaskOutboxHandler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Get("/api/v1/admin/task-outbox/", h.List)
+	r.Get("/api/v1/admin/task-outbox/dead/", h.ListDead)
 	r.Post("/api/v1/admin/task-outbox/{id}/retry/", h.Retry)
 	return r
 }
@@ -148,6 +149,37 @@ func TestAdminTaskOutboxListFiltersAndHidesPayload(t *testing.T) {
 	}
 	if got := body.Data[0]["payload_size"].(float64); got == 0 {
 		t.Fatalf("payload_size should be set")
+	}
+}
+
+func TestAdminTaskOutboxListDeadReturnsOnlyDead(t *testing.T) {
+	adminID := uuid.New()
+	q := &fakeAdminTaskOutboxQuerier{
+		users: map[uuid.UUID]sqlc.User{adminID: {ID: adminID, IsSuperuser: true}},
+		rows:  []sqlc.TaskOutbox{makeTaskOutboxRow("dead"), makeTaskOutboxRow("pending"), makeTaskOutboxRow("failed")},
+	}
+	h := NewAdminTaskOutboxHandler(q)
+	router := adminTaskOutboxRouter(h)
+
+	req := makeAdminTaskOutboxRequest(http.MethodGet, "/api/v1/admin/task-outbox/dead/", adminID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Data  []map[string]any `json:"data"`
+		Count int64            `json:"count"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Count != 1 || len(body.Data) != 1 {
+		t.Fatalf("count/data = %d/%d, want 1/1", body.Count, len(body.Data))
+	}
+	if got := body.Data[0]["status"].(string); got != "dead" {
+		t.Fatalf("status = %q, want dead", got)
 	}
 }
 
