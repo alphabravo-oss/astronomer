@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -39,6 +42,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/hibiken/asynq"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -387,6 +391,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	securityHandler.SetLogger(logger)
 	workloadHandler := handler.NewWorkloadHandlerWithDeps(queries, requester)
 	workloadHandler.SetLogger(logger)
+	// The tunnel requester also implements the live pod watch used by the
+	// /pods/watch/ SSE endpoint.
+	workloadHandler.SetPodWatcher(requester)
 	rbacEngine := rbac.NewEngine()
 	rbacQuerier := appmiddleware.NewSQLCRBACQuerier(queries)
 	monitoringHandler.SetAuthorization(rbacEngine, rbacQuerier)
@@ -600,6 +607,26 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		totpHandler.SetRequireAll(cfg.TOTPRequire)
 		authHandler.SetTOTPGate(totpHandler)
 		authHandler.SetTOTPRequireAll(cfg.TOTPRequire)
+		// Runtime MFA-enforcement policy: read the admin-toggleable
+		// `totp.required` platform setting on every login so flipping it
+		// (via the settings API or a compliance baseline) takes effect
+		// without a redeploy. OR'd with the static cfg.TOTPRequire knob
+		// inside the handler.
+		authHandler.SetTOTPPolicy(func(ctx context.Context) bool {
+			row, err := queries.GetPlatformSetting(ctx, "totp.required")
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && len(row.Value) == 0) {
+				return false // setting never written -> documented default
+			}
+			if err != nil {
+				logger.Error("totp.required policy read failed; failing closed (enforcing MFA)", "error", err)
+				return true // transient/unknown DB error -> enforce, do not bypass
+			}
+			var v bool
+			if json.Unmarshal(row.Value, &v) != nil {
+				return true // unparseable value -> enforce rather than silently disable
+			}
+			return v
+		})
 	}
 	// Wire the same revocation + cutoff backend into the JWT validator
 	// so the auth middleware enforces the deny-list on every authenticated
@@ -634,6 +661,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterHandler := handler.NewClusterHandler(queries)
 	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
+	// HMAC key for short-TTL signed manifest-download URLs. Falls back to
+	// the JWT signing secret when a dedicated one isn't configured so a
+	// single-secret install still gets signed URLs.
+	manifestSecret := strings.TrimSpace(cfg.ManifestSigningSecret)
+	if manifestSecret == "" {
+		manifestSecret = cfg.SecretKey
+	}
+	clusterHandler.SetManifestSigningSecret(manifestSecret)
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})
@@ -790,6 +825,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		smtpHandler.SetSettingsProvider(settingsProvider)
 		smtpHandler.SetBrandingProvider(brandingProvider)
 		smtpHandler.SetAuditWriter(queries)
+		smtpHandler.SetBaselineOverrideChecker(handler.NewBaselineOverrideChecker(rbacEngine, rbacQuerier))
 		emailEnqueuer = email.NewEnqueuer(queries, brandingProvider, logger)
 		// Bridge to the notification_templates override layer
 		// (migration 059). Without this the Enqueuer renders only the
@@ -832,6 +868,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if encryptor != nil {
 		webhookHandler = handler.NewWebhookHandler(queries, encryptor, logger)
 		webhookHandler.SetAuditWriter(queries)
+		webhookHandler.SetBaselineOverrideChecker(handler.NewBaselineOverrideChecker(rbacEngine, rbacQuerier))
 		webhookSender := webhook.NewSender(nil) // default http.Client
 		// Bridge to the notification_templates override layer
 		// (migration 059). The webhook precedence order becomes
@@ -965,9 +1002,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 			return h
 		}(),
-		RBACQueries: rbacQuerier,
-		RBACEngine:  rbacEngine,
-		Security:    securityHandler,
+		RBACQueries:    rbacQuerier,
+		RBACEngine:     rbacEngine,
+		Security:       securityHandler,
+		ApiserverAudit: handler.NewApiserverAuditHandler(queries),
 		ImageVulns: func() *handler.ImageVulnHandler {
 			h := handler.NewImageVulnHandler(queries)
 			h.SetK8sRequester(requester)
@@ -1053,6 +1091,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// cache invalidator is wired below once rbacQuerier is known
 		// to support it (it's a *SQLCRBACQuerier in prod).
 		GroupMappings: handler.NewGroupMappingsHandler(queries),
+		// SCIM 2.0 provisioning (migration 114). Bearer-token-authed
+		// /scim/v2/* User CRUD + read-only Group list, mapped onto the
+		// existing users + identity_group_mappings tables.
+		SCIM:          handler.NewSCIMHandler(queries),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
 			// Enable the asynq-queues + schema-
@@ -1077,6 +1119,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Extensions: func() *handler.ExtensionHandler {
 			h := handler.NewExtensionHandler(queries)
 			h.SetAuditWriter(queries)
+			// Ed25519 public key (base64) that signed extension
+			// bundles must verify against. Absent => bundle
+			// verification fails closed.
+			if err := h.SetTrustedBundleKey(os.Getenv("EXTENSION_BUNDLE_TRUSTED_KEY")); err != nil {
+				logger.Warn("invalid EXTENSION_BUNDLE_TRUSTED_KEY; bundle verification will fail closed", "error", err)
+			}
 			return h
 		}(),
 		// Sprint 074 — platform-default cluster template.
@@ -1411,6 +1459,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// when this is unwired (single-binary tests without an asynq
 	// client).
 	tasks.ConfigureFailedApplyEnqueuer(queue)
+	// P1 item 16/22: tool drift reconciliation sweep. Reuses the tunnel
+	// HelmRequester (helm Status RPCs go through the agent WS, which only
+	// terminates on the server pod) — runs on the server-embedded tunnel
+	// worker, same as cluster_template:drift_check.
+	tasks.ConfigureToolDriftSweep(tasks.ToolDriftSweepDeps{
+		Queries: queries,
+		Helm:    helmRequester,
+	})
 	// Spin up the tunnel-queue asynq Server inside the server pod. The
 	// apply path needs the WS-terminated tunnel hub (which lives only
 	// here, not in the standalone worker pod) to execute helm install /
@@ -1518,6 +1574,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// platform within one 6h tick. NEVER fail server startup because the
 	// enqueue didn't land.
 	kickFirstBootCatalogSync(reconcileCtx, logger, queries, queue)
+
+	// Reconcile the blessed catalog (astronomer-catalog/catalog.yaml) into the
+	// default helm_repositories + catalog_blessed_charts overlays. Best-effort:
+	// a blank URL is a no-op, and any fetch/parse error keeps the existing rows.
+	if n, err := catalog.Load(reconcileCtx, queries, &http.Client{Timeout: 15 * time.Second}, cfg.CatalogURL); err != nil {
+		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "url", cfg.CatalogURL, "error", err)
+	} else if n > 0 {
+		logger.Info("blessed catalog reconciled", "entries", n, "url", cfg.CatalogURL)
+	}
 
 	return s, nil
 }

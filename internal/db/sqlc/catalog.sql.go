@@ -21,7 +21,7 @@ UPDATE installed_charts SET
     status = $7,
     revision = $8
 WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
-RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
 `
 
 type AdoptInstalledChartByReleaseParams struct {
@@ -63,6 +63,9 @@ func (q *Queries) AdoptInstalledChartByRelease(ctx context.Context, arg AdoptIns
 		&i.PresetUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DriftDetected,
+		&i.DriftDetail,
+		&i.DriftCheckedAt,
 	)
 	return i, err
 }
@@ -165,7 +168,7 @@ func (q *Queries) CreateHelmChart(ctx context.Context, arg CreateHelmChartParams
 const createHelmChartVersion = `-- name: CreateHelmChartVersion :one
 INSERT INTO helm_chart_versions (chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at
+RETURNING id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at, content_hydrated_at
 `
 
 type CreateHelmChartVersionParams struct {
@@ -206,6 +209,7 @@ func (q *Queries) CreateHelmChartVersion(ctx context.Context, arg CreateHelmChar
 		&i.CreatedAtUpstream,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContentHydratedAt,
 	)
 	return i, err
 }
@@ -263,7 +267,7 @@ func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmReposi
 const createInstalledChart = `-- name: CreateInstalledChart :one
 INSERT INTO installed_charts (cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
 `
 
 type CreateInstalledChartParams struct {
@@ -313,6 +317,9 @@ func (q *Queries) CreateInstalledChart(ctx context.Context, arg CreateInstalledC
 		&i.PresetUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DriftDetected,
+		&i.DriftDetail,
+		&i.DriftCheckedAt,
 	)
 	return i, err
 }
@@ -431,7 +438,7 @@ func (q *Queries) GetHelmChartByRepoAndName(ctx context.Context, arg GetHelmChar
 }
 
 const getHelmChartVersion = `-- name: GetHelmChartVersion :one
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions WHERE chart_id = $1 AND version = $2
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at, content_hydrated_at FROM helm_chart_versions WHERE chart_id = $1 AND version = $2
 `
 
 type GetHelmChartVersionParams struct {
@@ -455,13 +462,14 @@ func (q *Queries) GetHelmChartVersion(ctx context.Context, arg GetHelmChartVersi
 		&i.CreatedAtUpstream,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContentHydratedAt,
 	)
 	return i, err
 }
 
 const getHelmChartVersionByID = `-- name: GetHelmChartVersionByID :one
 
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions WHERE id = $1
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at, content_hydrated_at FROM helm_chart_versions WHERE id = $1
 `
 
 // Helm Chart Versions
@@ -481,6 +489,7 @@ func (q *Queries) GetHelmChartVersionByID(ctx context.Context, id uuid.UUID) (He
 		&i.CreatedAtUpstream,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContentHydratedAt,
 	)
 	return i, err
 }
@@ -515,7 +524,7 @@ func (q *Queries) GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (Helm
 
 const getInstalledChartByID = `-- name: GetInstalledChartByID :one
 
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at FROM installed_charts WHERE id = $1
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE id = $1
 `
 
 // Installed Charts
@@ -538,12 +547,15 @@ func (q *Queries) GetInstalledChartByID(ctx context.Context, id uuid.UUID) (Inst
 		&i.PresetUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DriftDetected,
+		&i.DriftDetail,
+		&i.DriftCheckedAt,
 	)
 	return i, err
 }
 
 const getInstalledChartByRelease = `-- name: GetInstalledChartByRelease :one
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at FROM installed_charts WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
 `
 
 type GetInstalledChartByReleaseParams struct {
@@ -571,12 +583,15 @@ func (q *Queries) GetInstalledChartByRelease(ctx context.Context, arg GetInstall
 		&i.PresetUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DriftDetected,
+		&i.DriftDetail,
+		&i.DriftCheckedAt,
 	)
 	return i, err
 }
 
 const getLatestChartVersion = `-- name: GetLatestChartVersion :one
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at, content_hydrated_at FROM helm_chart_versions
 WHERE chart_id = $1
 ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
 LIMIT 1
@@ -605,12 +620,13 @@ func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) 
 		&i.CreatedAtUpstream,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ContentHydratedAt,
 	)
 	return i, err
 }
 
 const listChartVersions = `-- name: ListChartVersions :many
-SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at FROM helm_chart_versions
+SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at, content_hydrated_at FROM helm_chart_versions
 WHERE chart_id = $1
 ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
 LIMIT $2 OFFSET $3
@@ -647,6 +663,7 @@ func (q *Queries) ListChartVersions(ctx context.Context, arg ListChartVersionsPa
 			&i.CreatedAtUpstream,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ContentHydratedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -829,7 +846,7 @@ func (q *Queries) ListHelmRepositories(ctx context.Context, arg ListHelmReposito
 }
 
 const listInstalledCharts = `-- name: ListInstalledCharts :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at FROM installed_charts ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListInstalledChartsParams struct {
@@ -862,6 +879,9 @@ func (q *Queries) ListInstalledCharts(ctx context.Context, arg ListInstalledChar
 			&i.PresetUsed,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DriftDetected,
+			&i.DriftDetail,
+			&i.DriftCheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -874,7 +894,7 @@ func (q *Queries) ListInstalledCharts(ctx context.Context, arg ListInstalledChar
 }
 
 const listInstalledChartsByCluster = `-- name: ListInstalledChartsByCluster :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at FROM installed_charts WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListInstalledChartsByClusterParams struct {
@@ -908,6 +928,9 @@ func (q *Queries) ListInstalledChartsByCluster(ctx context.Context, arg ListInst
 			&i.PresetUsed,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DriftDetected,
+			&i.DriftDetail,
+			&i.DriftCheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -917,6 +940,74 @@ func (q *Queries) ListInstalledChartsByCluster(ctx context.Context, arg ListInst
 		return nil, err
 	}
 	return items, nil
+}
+
+const listInstalledChartsForDriftSweep = `-- name: ListInstalledChartsForDriftSweep :many
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts
+WHERE status IN ('installed', 'deployed', 'upgraded')
+ORDER BY drift_checked_at ASC NULLS FIRST, updated_at ASC
+LIMIT $1
+`
+
+// Active installed charts the tool-drift sweep probes against their live
+// helm release. Only rows that are supposed to be deployed (not mid-install
+// or already removed) are worth comparing.
+func (q *Queries) ListInstalledChartsForDriftSweep(ctx context.Context, limit int32) ([]InstalledChart, error) {
+	rows, err := q.db.Query(ctx, listInstalledChartsForDriftSweep, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InstalledChart{}
+	for rows.Next() {
+		var i InstalledChart
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.ChartVersionID,
+			&i.ReleaseName,
+			&i.Namespace,
+			&i.ValuesOverride,
+			&i.Status,
+			&i.Revision,
+			&i.Notes,
+			&i.InstalledByID,
+			&i.RequestID,
+			&i.ToolSlug,
+			&i.PresetUsed,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DriftDetected,
+			&i.DriftDetail,
+			&i.DriftCheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markInstalledChartDrift = `-- name: MarkInstalledChartDrift :exec
+UPDATE installed_charts SET
+    drift_detected = $2,
+    drift_detail = $3,
+    drift_checked_at = now()
+WHERE id = $1
+`
+
+type MarkInstalledChartDriftParams struct {
+	ID            uuid.UUID `json:"id"`
+	DriftDetected bool      `json:"drift_detected"`
+	DriftDetail   string    `json:"drift_detail"`
+}
+
+func (q *Queries) MarkInstalledChartDrift(ctx context.Context, arg MarkInstalledChartDriftParams) error {
+	_, err := q.db.Exec(ctx, markInstalledChartDrift, arg.ID, arg.DriftDetected, arg.DriftDetail)
+	return err
 }
 
 const updateHelmRepository = `-- name: UpdateHelmRepository :one
@@ -1007,7 +1098,7 @@ UPDATE installed_charts SET
     status = $3,
     revision = revision + 1
 WHERE id = $1
-RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
 `
 
 type UpdateInstalledChartValuesParams struct {
@@ -1035,6 +1126,9 @@ func (q *Queries) UpdateInstalledChartValues(ctx context.Context, arg UpdateInst
 		&i.PresetUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DriftDetected,
+		&i.DriftDetail,
+		&i.DriftCheckedAt,
 	)
 	return i, err
 }

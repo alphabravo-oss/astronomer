@@ -109,7 +109,7 @@ const createGroupSyncClusterBinding = `-- name: CreateGroupSyncClusterBinding :o
 INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, source)
 VALUES ($1, '', $2, $3, 'group_sync')
 ON CONFLICT (user_id, role_id, cluster_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace
 `
 
 type CreateGroupSyncClusterBindingParams struct {
@@ -130,6 +130,7 @@ func (q *Queries) CreateGroupSyncClusterBinding(ctx context.Context, arg CreateG
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.Namespace,
 	)
 	return i, err
 }
@@ -357,7 +358,7 @@ func (q *Queries) ListGroupMappingsForConnector(ctx context.Context, connectorID
 }
 
 const listGroupSyncClusterBindings = `-- name: ListGroupSyncClusterBindings :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE user_id = $1 AND source = 'group_sync'
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings WHERE user_id = $1 AND source = 'group_sync'
 `
 
 func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error) {
@@ -378,6 +379,7 @@ func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtyp
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.Namespace,
 		); err != nil {
 			return nil, err
 		}

@@ -115,6 +115,7 @@ GET /api/v1/clusters
 GET /api/v1/clusters/{cluster_id}/apiserver-allowlist
 GET /api/v1/clusters/{cluster_id}/apiserver-allowlist/preview
 GET /api/v1/clusters/{cluster_id}/apiserver-allowlist/snapshots
+GET /api/v1/clusters/{cluster_id}/apiserver-audit
 GET /api/v1/clusters/{cluster_id}/apps
 GET /api/v1/clusters/{cluster_id}/events
 GET /api/v1/clusters/{cluster_id}/k8s/*
@@ -123,6 +124,7 @@ GET /api/v1/clusters/{cluster_id}/network-policies/applications
 GET /api/v1/clusters/{cluster_id}/nodes
 GET /api/v1/clusters/{cluster_id}/nodes/{node_name}
 GET /api/v1/clusters/{cluster_id}/pods
+GET /api/v1/clusters/{cluster_id}/pods/watch
 GET /api/v1/clusters/{cluster_id}/projects
 GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
 GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
@@ -194,6 +196,7 @@ GET /api/v1/rbac/project-roles/{id}
 GET /api/v1/rbac/templates
 GET /api/v1/rbac/templates/{name}
 GET /api/v1/register/ca.crt
+GET /api/v1/register/signed/{cluster_id}
 GET /api/v1/register/{token}
 GET /api/v1/resources/search
 GET /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}
@@ -293,6 +296,7 @@ POST /api/v1/cluster-groups/{id}/move
 POST /api/v1/cluster-templates
 POST /api/v1/clusters
 POST /api/v1/clusters/{cluster_id}/apiserver-allowlist/reconcile
+POST /api/v1/clusters/{cluster_id}/apiserver-audit
 POST /api/v1/clusters/{cluster_id}/k8s/*
 POST /api/v1/clusters/{cluster_id}/network-policies/applications
 POST /api/v1/clusters/{cluster_id}/network-policies/applications/{id}/reapply

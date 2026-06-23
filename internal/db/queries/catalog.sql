@@ -121,6 +121,22 @@ RETURNING *;
 -- name: UpdateInstalledChartStatus :exec
 UPDATE installed_charts SET status = $2, revision = $3 WHERE id = $1;
 
+-- name: ListInstalledChartsForDriftSweep :many
+-- Active installed charts the tool-drift sweep probes against their live
+-- helm release. Only rows that are supposed to be deployed (not mid-install
+-- or already removed) are worth comparing.
+SELECT * FROM installed_charts
+WHERE status IN ('installed', 'deployed', 'upgraded')
+ORDER BY drift_checked_at ASC NULLS FIRST, updated_at ASC
+LIMIT $1;
+
+-- name: MarkInstalledChartDrift :exec
+UPDATE installed_charts SET
+    drift_detected = $2,
+    drift_detail = $3,
+    drift_checked_at = now()
+WHERE id = $1;
+
 -- name: AdoptInstalledChartByRelease :one
 UPDATE installed_charts SET
     tool_slug = $4,

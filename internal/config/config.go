@@ -29,6 +29,12 @@ type Config struct {
 	SessionTimeoutMinutes int    `mapstructure:"session_timeout_minutes"`
 	AgentTokenExpiryHours int    `mapstructure:"agent_token_expiry_hours"`
 
+	// ManifestSigningSecret keys the HMAC over (cluster_id, expiry) that
+	// gates the short-TTL signed manifest-download URL
+	// (GET /api/v1/register/signed/{cluster_id}). Empty falls back to
+	// SecretKey at wiring time so a single-secret install still works.
+	ManifestSigningSecret string `mapstructure:"manifest_signing_secret"`
+
 	// ServerURL is the externally-reachable URL of this Astronomer install
 	// (e.g. http://astronomer.example.com:8080). It seeds
 	// platform_configuration.server_url on first boot, which the local
@@ -110,6 +116,12 @@ type Config struct {
 	// bundled Dex is deployed.
 	DexBundledEnabled     bool `mapstructure:"dex_bundled_enabled"`
 	AuthLocalPasswordOnly bool `mapstructure:"auth_local_password_only"`
+
+	// CatalogURL points at the astronomer-catalog repo's catalog.yaml (raw
+	// HTTPS). On boot the server fetches it and reconciles the platform-default
+	// helm_repositories + catalog_blessed_charts overlays. Empty = skip (keep
+	// whatever defaults are already seeded). Fetch failures are non-fatal.
+	CatalogURL string `mapstructure:"astronomer_catalog_url"`
 }
 
 // CORSOrigins returns the allowed origins as a slice.
@@ -156,8 +168,10 @@ func Load() (*Config, error) {
 		"argocd_ui_upstream",
 		"argocd_cluster_proxy_base_url",
 		"argocd_internal_proxy_addr",
+		"manifest_signing_secret",
 		"dex_bundled_enabled",
 		"auth_local_password_only",
+		"astronomer_catalog_url",
 	); err != nil {
 		return nil, err
 	}

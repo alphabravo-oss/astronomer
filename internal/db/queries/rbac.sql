@@ -84,8 +84,8 @@ SELECT * FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 SELECT * FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateClusterRoleBinding :one
-INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, namespace)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: DeleteClusterRoleBinding :exec
@@ -151,6 +151,7 @@ SELECT
     gb.role_id                           AS role_id,
     NULL::uuid                           AS cluster_id,
     NULL::uuid                           AS project_id,
+    ''::text                             AS namespace,
     gr.name                              AS role_name,
     gr.rules                             AS role_rules
 FROM global_role_bindings gb
@@ -164,6 +165,7 @@ SELECT
     cb.role_id                           AS role_id,
     cb.cluster_id                        AS cluster_id,
     NULL::uuid                           AS project_id,
+    cb.namespace                         AS namespace,
     cr.name                              AS role_name,
     cr.rules                             AS role_rules
 FROM cluster_role_bindings cb
@@ -177,6 +179,7 @@ SELECT
     pb.role_id                           AS role_id,
     NULL::uuid                           AS cluster_id,
     pb.project_id                        AS project_id,
+    ''::text                             AS namespace,
     pr.name                              AS role_name,
     pr.rules                             AS role_rules
 FROM project_role_bindings pb

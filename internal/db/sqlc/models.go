@@ -156,6 +156,21 @@ type ApiserverAllowlistSnapshot struct {
 	Drift          bool            `json:"drift"`
 }
 
+type ApiserverAuditEvent struct {
+	ID         uuid.UUID       `json:"id"`
+	ClusterID  uuid.UUID       `json:"cluster_id"`
+	AuditID    string          `json:"audit_id"`
+	Stage      string          `json:"stage"`
+	Verb       string          `json:"verb"`
+	Username   string          `json:"username"`
+	Resource   string          `json:"resource"`
+	Namespace  string          `json:"namespace"`
+	StatusCode int32           `json:"status_code"`
+	EventTime  time.Time       `json:"event_time"`
+	Raw        json.RawMessage `json:"raw"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
 type ArgocdApplication struct {
 	ID                   uuid.UUID          `json:"id"`
 	ArgocdInstanceID     uuid.UUID          `json:"argocd_instance_id"`
@@ -398,6 +413,21 @@ type BackupStorageConfig struct {
 	VeleroNamespace      string      `json:"velero_namespace"`
 	BslName              string      `json:"bsl_name"`
 	EncryptedCredentials string      `json:"encrypted_credentials"`
+}
+
+type CatalogBlessedChart struct {
+	ID            uuid.UUID `json:"id"`
+	RepoUrl       string    `json:"repo_url"`
+	ChartName     string    `json:"chart_name"`
+	DisplayName   string    `json:"display_name"`
+	Description   string    `json:"description"`
+	Category      string    `json:"category"`
+	IconUrl       string    `json:"icon_url"`
+	MgmtSafe      bool      `json:"mgmt_safe"`
+	VersionPolicy string    `json:"version_policy"`
+	Source        string    `json:"source"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type CatalogOperation struct {
@@ -712,6 +742,7 @@ type ClusterRoleBinding struct {
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
 	Source    string      `json:"source"`
+	Namespace string      `json:"namespace"`
 }
 
 type ClusterSecurityPolicy struct {
@@ -1095,6 +1126,7 @@ type HelmChartVersion struct {
 	CreatedAtUpstream pgtype.Timestamptz `json:"created_at_upstream"`
 	CreatedAt         time.Time          `json:"created_at"`
 	UpdatedAt         time.Time          `json:"updated_at"`
+	ContentHydratedAt pgtype.Timestamptz `json:"content_hydrated_at"`
 }
 
 type HelmRepository struct {
@@ -1179,21 +1211,24 @@ type ImageVulnerabilityReportSnapshot struct {
 }
 
 type InstalledChart struct {
-	ID             uuid.UUID   `json:"id"`
-	ClusterID      uuid.UUID   `json:"cluster_id"`
-	ChartVersionID pgtype.UUID `json:"chart_version_id"`
-	ReleaseName    string      `json:"release_name"`
-	Namespace      string      `json:"namespace"`
-	ValuesOverride string      `json:"values_override"`
-	Status         string      `json:"status"`
-	Revision       int32       `json:"revision"`
-	Notes          string      `json:"notes"`
-	InstalledByID  pgtype.UUID `json:"installed_by_id"`
-	RequestID      pgtype.UUID `json:"request_id"`
-	ToolSlug       pgtype.Text `json:"tool_slug"`
-	PresetUsed     pgtype.Text `json:"preset_used"`
-	CreatedAt      time.Time   `json:"created_at"`
-	UpdatedAt      time.Time   `json:"updated_at"`
+	ID             uuid.UUID          `json:"id"`
+	ClusterID      uuid.UUID          `json:"cluster_id"`
+	ChartVersionID pgtype.UUID        `json:"chart_version_id"`
+	ReleaseName    string             `json:"release_name"`
+	Namespace      string             `json:"namespace"`
+	ValuesOverride string             `json:"values_override"`
+	Status         string             `json:"status"`
+	Revision       int32              `json:"revision"`
+	Notes          string             `json:"notes"`
+	InstalledByID  pgtype.UUID        `json:"installed_by_id"`
+	RequestID      pgtype.UUID        `json:"request_id"`
+	ToolSlug       pgtype.Text        `json:"tool_slug"`
+	PresetUsed     pgtype.Text        `json:"preset_used"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+	DriftDetected  bool               `json:"drift_detected"`
+	DriftDetail    string             `json:"drift_detail"`
+	DriftCheckedAt pgtype.Timestamptz `json:"drift_checked_at"`
 }
 
 type JwtRevocation struct {
@@ -1672,6 +1707,15 @@ type RestoreOperation struct {
 	LastPolledAt       pgtype.Timestamptz `json:"last_polled_at"`
 }
 
+type ScimToken struct {
+	ID         uuid.UUID          `json:"id"`
+	Name       string             `json:"name"`
+	TokenHash  string             `json:"token_hash"`
+	Prefix     string             `json:"prefix"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+}
+
 type SecurityScanResult struct {
 	ID              uuid.UUID          `json:"id"`
 	ClusterID       uuid.UUID          `json:"cluster_id"`
@@ -1963,4 +2007,18 @@ type WorkloadOperationEvent struct {
 	Message     string          `json:"message"`
 	Detail      json.RawMessage `json:"detail"`
 	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type XclusterAnomalyBaseline struct {
+	ID                uuid.UUID       `json:"id"`
+	MetricName        string          `json:"metric_name"`
+	WindowSeconds     int32           `json:"window_seconds"`
+	ClusterCount      int32           `json:"cluster_count"`
+	FleetMean         float64         `json:"fleet_mean"`
+	FleetStddev       float64         `json:"fleet_stddev"`
+	FleetMin          float64         `json:"fleet_min"`
+	FleetMax          float64         `json:"fleet_max"`
+	StddevMult        float64         `json:"stddev_mult"`
+	OutlierClusterIds json.RawMessage `json:"outlier_cluster_ids"`
+	UpdatedAt         time.Time       `json:"updated_at"`
 }

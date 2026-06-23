@@ -885,6 +885,7 @@ export interface OpenAPIComponents {
     RBACClusterBindingRequest: {
           "role_id": string;
           "cluster_id": string;
+          "namespace"?: string;
           "user_id"?: string;
           "group"?: string;
         };
@@ -892,6 +893,7 @@ export interface OpenAPIComponents {
           "id"?: string;
           "role_id"?: string;
           "cluster_id"?: string;
+          "namespace"?: string;
           "user_id"?: string | null;
           "group"?: string;
           "created_at"?: string;

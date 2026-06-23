@@ -28,6 +28,7 @@ classification.
 | `cluster_registration_tokens.token_hash` | hashed | Lookup hash for short-lived cluster registration tokens. |
 | `cluster_agent_tokens.token_hash` | hashed | Lookup hash for durable cluster agent tokens. |
 | `cluster_registry_configs.registry_password_encrypted` | encrypted | Fernet ciphertext for registry passwords; new registry writes use this column when a Fernet key is configured. |
+| `scim_tokens.token_hash` | hashed | Lookup hash for SCIM provisioning bearer tokens; plaintext is shown once at creation and never stored. |
 
 ## Legacy Plaintext To Migrate
 

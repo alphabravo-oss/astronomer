@@ -240,6 +240,10 @@ const (
 	// InvalidScope indicates a invalid scope condition.
 	InvalidScope Code = "invalid_scope"
 
+	// InvalidSignature indicates a supplied cryptographic signature failed
+	// verification against the trusted key.
+	InvalidSignature Code = "invalid_signature"
+
 	// InvalidScopeParams indicates a invalid scope params condition.
 	InvalidScopeParams Code = "invalid_scope_params"
 

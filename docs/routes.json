@@ -565,6 +565,14 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-audit"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/apiserver-audit"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/apps"
   },
   {
@@ -642,6 +650,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/pods"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/pods/watch"
   },
   {
     "method": "GET",
@@ -1410,6 +1422,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/register/ca.crt"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/register/signed/{cluster_id}"
   },
   {
     "method": "GET",

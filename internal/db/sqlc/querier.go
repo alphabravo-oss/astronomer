@@ -65,6 +65,7 @@ type Querier interface {
 	CountAlertRules(ctx context.Context) (int64, error)
 	CountAlertSilences(ctx context.Context) (int64, error)
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
+	CountApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountAppsByInstance(ctx context.Context, argocdInstanceID uuid.UUID) (int64, error)
 	CountArgoCDApplications(ctx context.Context) (int64, error)
 	CountArgoCDApplicationsBySyncHealth(ctx context.Context) ([]CountArgoCDApplicationsBySyncHealthRow, error)
@@ -77,6 +78,7 @@ type Querier interface {
 	CountBackupSchedules(ctx context.Context) (int64, error)
 	CountBackupStorageConfigs(ctx context.Context) (int64, error)
 	CountBackups(ctx context.Context) (int64, error)
+	CountBlessedCharts(ctx context.Context) (int64, error)
 	// Counts attempts for a (cluster, type) within a window. The reconciler
 	// uses this as a daily-cap circuit breaker so a permanently-broken
 	// cluster can't drive unbounded token reissuance / audit-log growth.
@@ -128,6 +130,7 @@ type Querier interface {
 	CountRestoreOperations(ctx context.Context) (int64, error)
 	// Gate for the max_concurrent dispatcher.
 	CountRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) (int64, error)
+	CountSCIMGroupNames(ctx context.Context) (int64, error)
 	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
 	CountSecurityScanResults(ctx context.Context) (int64, error)
 	// A target is terminal when it's completed/failed/skipped/aborted.
@@ -163,6 +166,7 @@ type Querier interface {
 	CreateBackup(ctx context.Context, arg CreateBackupParams) (Backup, error)
 	CreateBackupSchedule(ctx context.Context, arg CreateBackupScheduleParams) (BackupSchedule, error)
 	CreateBackupStorageConfig(ctx context.Context, arg CreateBackupStorageConfigParams) (BackupStorageConfig, error)
+	CreateBlessedChart(ctx context.Context, arg CreateBlessedChartParams) error
 	// Creates the initial admin user that ensure_admin runs on first boot of a
 	// fresh database. The password is either operator-provided through Helm values
 	// or auto-generated into the bootstrap Secret; the account is immediately
@@ -279,6 +283,10 @@ type Querier interface {
 	CreateProjectRoleBinding(ctx context.Context, arg CreateProjectRoleBindingParams) (ProjectRoleBinding, error)
 	CreatePrometheusDatasource(ctx context.Context, arg CreatePrometheusDatasourceParams) (PrometheusDatasource, error)
 	CreateRestoreOperation(ctx context.Context, arg CreateRestoreOperationParams) (RestoreOperation, error)
+	// SCIM 2.0 provisioning queries (migration 114). Bearer-token auth +
+	// the User/Group provisioning surface mapped onto the existing users +
+	// identity_group_mappings tables.
+	CreateSCIMToken(ctx context.Context, arg CreateSCIMTokenParams) (ScimToken, error)
 	CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForwarderParams) (SiemForwarder, error)
 	CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfigurationParams) (SsoConfiguration, error)
 	CreateSecurityScanResult(ctx context.Context, arg CreateSecurityScanResultParams) (SecurityScanResult, error)
@@ -314,6 +322,7 @@ type Querier interface {
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
+	DeleteBlessedChartsBySource(ctx context.Context, source string) error
 	DeleteCloudCredential(ctx context.Context, id uuid.UUID) error
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
 	DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
@@ -424,6 +433,7 @@ type Querier interface {
 	// Wipes every code (used or not) so a regen invalidates the old sheet
 	// entirely, not just the unused entries.
 	DeleteRecoveryCodesByUser(ctx context.Context, userID uuid.UUID) error
+	DeleteSCIMToken(ctx context.Context, id uuid.UUID) error
 	// ON DELETE CASCADE on siem_forward_queue.forwarder_id +
 	// siem_forwarder_status.forwarder_id cleans up the queued events + the
 	// status row; the handler doesn't have to do that explicitly.
@@ -505,6 +515,7 @@ type Querier interface {
 	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
 	// Backup Storage Configs
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
+	GetBlessedChart(ctx context.Context, arg GetBlessedChartParams) (CatalogBlessedChart, error)
 	GetCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	GetCloudCredentialByID(ctx context.Context, id uuid.UUID) (CloudCredential, error)
 	GetCloudCredentialByProjectAndName(ctx context.Context, arg GetCloudCredentialByProjectAndNameParams) (CloudCredential, error)
@@ -653,6 +664,7 @@ type Querier interface {
 	GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error)
 	// Restore Operations
 	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (RestoreOperation, error)
+	GetSCIMTokenByHash(ctx context.Context, tokenHash string) (ScimToken, error)
 	GetSIEMForwarder(ctx context.Context, id uuid.UUID) (SiemForwarder, error)
 	GetSIEMForwarderByName(ctx context.Context, name string) (SiemForwarder, error)
 	GetSIEMForwarderStatus(ctx context.Context, forwarderID uuid.UUID) (SiemForwarderStatus, error)
@@ -703,6 +715,7 @@ type Querier interface {
 	GetWebhookSubscription(ctx context.Context, id uuid.UUID) (WebhookSubscription, error)
 	GetWebhookSubscriptionByName(ctx context.Context, name string) (WebhookSubscription, error)
 	GetWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	GetXClusterAnomalyBaseline(ctx context.Context, arg GetXClusterAnomalyBaselineParams) (XclusterAnomalyBaseline, error)
 	// Account lockout (NIST 800-53 AC-7).
 	//
 	// The Login handler increments on every bcrypt miss, locks the account
@@ -717,6 +730,13 @@ type Querier interface {
 	IncrementSIEMQueueAttempts(ctx context.Context, dollar_1 []int64) error
 	// Snapshots ------------------------------------------------------------
 	InsertApiserverAllowlistSnapshot(ctx context.Context, arg InsertApiserverAllowlistSnapshotParams) (ApiserverAllowlistSnapshot, error)
+	// kube-apiserver audit-event ingest + read (migration 112).
+	//
+	// The agent streams batched audit.k8s.io events to the management plane;
+	// InsertApiserverAuditEvent is idempotent on (cluster_id, audit_id) so a
+	// re-delivered batch is a no-op. ListApiserverAuditEventsByCluster powers
+	// the operator read view.
+	InsertApiserverAuditEvent(ctx context.Context, arg InsertApiserverAuditEventParams) error
 	InsertClusterConditionRemediation(ctx context.Context, arg InsertClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
 	InsertClusterRegistrationStep(ctx context.Context, arg InsertClusterRegistrationStepParams) (ClusterRegistrationStep, error)
 	// Persists a "we want to send this" record. The handler that wraps a
@@ -799,6 +819,7 @@ type Querier interface {
 	ListAnomalyBaselines(ctx context.Context, arg ListAnomalyBaselinesParams) ([]AnomalyBaseline, error)
 	ListAnomalyBaselinesByCluster(ctx context.Context, clusterID uuid.UUID) ([]AnomalyBaseline, error)
 	ListApiserverAllowlistSnapshots(ctx context.Context, arg ListApiserverAllowlistSnapshotsParams) ([]ApiserverAllowlistSnapshot, error)
+	ListApiserverAuditEventsByCluster(ctx context.Context, arg ListApiserverAuditEventsByClusterParams) ([]ApiserverAuditEvent, error)
 	ListApplicationsForCluster(ctx context.Context, clusterID uuid.UUID) ([]NetworkPolicyApplication, error)
 	ListApplicationsForTemplate(ctx context.Context, templateID uuid.UUID) ([]NetworkPolicyApplication, error)
 	// For the drift sweep: walks only 'applied' rows, GETs the in-cluster
@@ -836,6 +857,7 @@ type Querier interface {
 	ListBackupStorageConfigs(ctx context.Context, arg ListBackupStorageConfigsParams) ([]BackupStorageConfig, error)
 	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)
 	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
+	ListBlessedCharts(ctx context.Context) ([]CatalogBlessedChart, error)
 	ListCRDOwnedClusters(ctx context.Context, limit int32) ([]ListCRDOwnedClustersRow, error)
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
@@ -1019,6 +1041,10 @@ type Querier interface {
 	ListHelmRepositories(ctx context.Context, arg ListHelmRepositoriesParams) ([]HelmRepository, error)
 	ListInstalledCharts(ctx context.Context, arg ListInstalledChartsParams) ([]InstalledChart, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg ListInstalledChartsByClusterParams) ([]InstalledChart, error)
+	// Active installed charts the tool-drift sweep probes against their live
+	// helm release. Only rows that are supposed to be deployed (not mid-install
+	// or already removed) are worth comparing.
+	ListInstalledChartsForDriftSweep(ctx context.Context, limit int32) ([]InstalledChart, error)
 	ListInstancesByCluster(ctx context.Context, arg ListInstancesByClusterParams) ([]ArgocdInstance, error)
 	ListKubectlSessionCommands(ctx context.Context, arg ListKubectlSessionCommandsParams) ([]KubectlSessionCommand, error)
 	ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]LoggingOperationEvent, error)
@@ -1152,6 +1178,12 @@ type Querier interface {
 	// running target. Bounded by the operation's max_concurrent so this
 	// can never return more than that many rows.
 	ListRunningTargetsForOperation(ctx context.Context, operationID uuid.UUID) ([]FleetOperationTarget, error)
+	// SCIM Groups are read off the distinct group_name values an operator
+	// has configured in identity_group_mappings (migration 042). Each name
+	// becomes one SCIM Group resource. Paginated to match the SCIM list
+	// contract.
+	ListSCIMGroupNames(ctx context.Context, arg ListSCIMGroupNamesParams) ([]string, error)
+	ListSCIMTokens(ctx context.Context) ([]ScimToken, error)
 	// SIEM forwarder + queue + status queries (migration 055). Backs:
 	//
 	//   * /api/v1/admin/siem-forwarders/* CRUD + test + status (handler)
@@ -1234,6 +1266,10 @@ type Querier interface {
 	ListWidgetsForScope(ctx context.Context, arg ListWidgetsForScopeParams) ([]DashboardWidget, error)
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
 	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)
+	// Migration 111 — cross-cluster ("fleet-wide") anomaly baselines.
+	// Aggregates the per-cluster anomaly_baselines means across clusters
+	// and records which clusters are outliers vs. the fleet.
+	ListXClusterAnomalyBaselines(ctx context.Context) ([]XclusterAnomalyBaseline, error)
 	LockUser(ctx context.Context, arg LockUserParams) error
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)
@@ -1285,6 +1321,7 @@ type Querier interface {
 	MarkFleetTargetDispatched(ctx context.Context, arg MarkFleetTargetDispatchedParams) (FleetOperationTarget, error)
 	MarkFleetTargetFailed(ctx context.Context, arg MarkFleetTargetFailedParams) (FleetOperationTarget, error)
 	MarkFleetTargetSkipped(ctx context.Context, arg MarkFleetTargetSkippedParams) (FleetOperationTarget, error)
+	MarkInstalledChartDrift(ctx context.Context, arg MarkInstalledChartDriftParams) error
 	MarkLoggingOperationCompleted(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	MarkLoggingOperationFailed(ctx context.Context, arg MarkLoggingOperationFailedParams) (LoggingOperation, error)
 	MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
@@ -1412,6 +1449,7 @@ type Querier interface {
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
 	TouchKubectlSessionInput(ctx context.Context, id uuid.UUID) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
+	TouchSCIMToken(ctx context.Context, id uuid.UUID) error
 	// Best-effort timestamp update after a successful verify. Audit + the
 	// /status endpoint surface this so users can spot "I never logged in
 	// yesterday" anomalies.
@@ -1543,6 +1581,11 @@ type Querier interface {
 	// 'pending' on every call so the apply worker re-runs convergence.
 	UpsertClusterTemplateApplication(ctx context.Context, arg UpsertClusterTemplateApplicationParams) (ClusterTemplateApplication, error)
 	UpsertDefaultControlPlanePolicy(ctx context.Context, arg UpsertDefaultControlPlanePolicyParams) (ControlPlanePolicy, error)
+	// Blessed-chart catalog overlays (sourced from astronomer-catalog/catalog.yaml).
+	// Seed/refresh a platform-default repo. On conflict we update the URL/description
+	// and re-assert is_default, but deliberately leave `enabled` alone so an operator
+	// who disabled a default repo keeps it disabled across reconciles.
+	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
 	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
 	// The sync worker calls this after a YAML's contents have been applied
@@ -1584,6 +1627,7 @@ type Querier interface {
 	// without first calling DeleteUserTOTPEnrollment. confirmed_at is
 	// replaced on the conflict path so the audit detail is accurate.
 	UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error)
+	UpsertXClusterAnomalyBaseline(ctx context.Context, arg UpsertXClusterAnomalyBaselineParams) (XclusterAnomalyBaseline, error)
 }
 
 var _ Querier = (*Queries)(nil)

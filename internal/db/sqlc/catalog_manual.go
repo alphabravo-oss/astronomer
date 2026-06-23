@@ -25,6 +25,7 @@ package sqlc
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,29 +35,37 @@ import (
 
 const updateHelmChartVersionContent = `-- name: UpdateHelmChartVersionContent :exec
 UPDATE helm_chart_versions
-SET default_values = $2,
-    readme         = $3,
-    updated_at     = now()
+SET default_values      = $2,
+    readme              = $3,
+    values_schema       = $4,
+    content_hydrated_at = now(),
+    updated_at          = now()
 WHERE id = $1
 `
 
 // UpdateHelmChartVersionContentParams is what the hydrate path writes
-// back after loading the chart archive. Schema fields kept text-typed
-// because helm's values.yaml + README.md are large free-form strings;
-// no need for JSON validation here.
+// back after loading the chart archive: values.yaml (default_values),
+// README.md (readme) and values.schema.json (values_schema, the typed
+// install form). content_hydrated_at is stamped server-side so a chart
+// that ships no schema isn't re-pulled on every view.
 type UpdateHelmChartVersionContentParams struct {
-	ID            uuid.UUID `json:"id"`
-	DefaultValues string    `json:"default_values"`
-	Readme        string    `json:"readme"`
+	ID            uuid.UUID       `json:"id"`
+	DefaultValues string          `json:"default_values"`
+	Readme        string          `json:"readme"`
+	ValuesSchema  json.RawMessage `json:"values_schema"`
 }
 
-// UpdateHelmChartVersionContent persists hydrated values.yaml + README
-// onto an existing helm_chart_versions row. Best-effort: failures here
-// are logged but don't fail the handler — the in-memory hydration
-// still serves the request, the row just stays empty for next time.
+// UpdateHelmChartVersionContent persists hydrated values.yaml + README +
+// values.schema.json onto an existing helm_chart_versions row and marks
+// it hydrated. Best-effort: failures here are logged but don't fail the
+// handler — the in-memory hydration still serves the request.
 func (q *Queries) UpdateHelmChartVersionContent(ctx context.Context, arg UpdateHelmChartVersionContentParams) error {
+	schema := arg.ValuesSchema
+	if len(schema) == 0 {
+		schema = json.RawMessage(`{}`)
+	}
 	_, err := q.db.Exec(ctx, updateHelmChartVersionContent,
-		arg.ID, arg.DefaultValues, arg.Readme,
+		arg.ID, arg.DefaultValues, arg.Readme, schema,
 	)
 	return err
 }

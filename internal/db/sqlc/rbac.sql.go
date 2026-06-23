@@ -86,9 +86,9 @@ func (q *Queries) CreateClusterRole(ctx context.Context, arg CreateClusterRolePa
 }
 
 const createClusterRoleBinding = `-- name: CreateClusterRoleBinding :one
-INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source
+INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, namespace)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace
 `
 
 type CreateClusterRoleBindingParams struct {
@@ -96,6 +96,7 @@ type CreateClusterRoleBindingParams struct {
 	Group     string      `json:"group"`
 	RoleID    uuid.UUID   `json:"role_id"`
 	ClusterID uuid.UUID   `json:"cluster_id"`
+	Namespace string      `json:"namespace"`
 }
 
 func (q *Queries) CreateClusterRoleBinding(ctx context.Context, arg CreateClusterRoleBindingParams) (ClusterRoleBinding, error) {
@@ -104,6 +105,7 @@ func (q *Queries) CreateClusterRoleBinding(ctx context.Context, arg CreateCluste
 		arg.Group,
 		arg.RoleID,
 		arg.ClusterID,
+		arg.Namespace,
 	)
 	var i ClusterRoleBinding
 	err := row.Scan(
@@ -115,6 +117,7 @@ func (q *Queries) CreateClusterRoleBinding(ctx context.Context, arg CreateCluste
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.Namespace,
 	)
 	return i, err
 }
@@ -314,7 +317,7 @@ func (q *Queries) DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) er
 
 const getClusterRoleBindingByID = `-- name: GetClusterRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings WHERE id = $1
 `
 
 // Cluster Role Bindings
@@ -330,6 +333,7 @@ func (q *Queries) GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.Namespace,
 	)
 	return i, err
 }
@@ -447,7 +451,7 @@ func (q *Queries) GetProjectRoleByID(ctx context.Context, id uuid.UUID) (Project
 }
 
 const listClusterRoleBindings = `-- name: ListClusterRoleBindings :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClusterRoleBindingsParams struct {
@@ -473,6 +477,7 @@ func (q *Queries) ListClusterRoleBindings(ctx context.Context, arg ListClusterRo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.Namespace,
 		); err != nil {
 			return nil, err
 		}
@@ -485,7 +490,7 @@ func (q *Queries) ListClusterRoleBindings(ctx context.Context, arg ListClusterRo
 }
 
 const listClusterRoleBindingsByCluster = `-- name: ListClusterRoleBindingsByCluster :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListClusterRoleBindingsByClusterParams struct {
@@ -512,6 +517,7 @@ func (q *Queries) ListClusterRoleBindingsByCluster(ctx context.Context, arg List
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.Namespace,
 		); err != nil {
 			return nil, err
 		}
@@ -762,6 +768,7 @@ SELECT
     gb.role_id                           AS role_id,
     NULL::uuid                           AS cluster_id,
     NULL::uuid                           AS project_id,
+    ''::text                             AS namespace,
     gr.name                              AS role_name,
     gr.rules                             AS role_rules
 FROM global_role_bindings gb
@@ -775,6 +782,7 @@ SELECT
     cb.role_id                           AS role_id,
     cb.cluster_id                        AS cluster_id,
     NULL::uuid                           AS project_id,
+    cb.namespace                         AS namespace,
     cr.name                              AS role_name,
     cr.rules                             AS role_rules
 FROM cluster_role_bindings cb
@@ -788,6 +796,7 @@ SELECT
     pb.role_id                           AS role_id,
     NULL::uuid                           AS cluster_id,
     pb.project_id                        AS project_id,
+    ''::text                             AS namespace,
     pr.name                              AS role_name,
     pr.rules                             AS role_rules
 FROM project_role_bindings pb
@@ -802,6 +811,7 @@ type ListUserBindingsWithRolesRow struct {
 	RoleID    uuid.UUID       `json:"role_id"`
 	ClusterID pgtype.UUID     `json:"cluster_id"`
 	ProjectID pgtype.UUID     `json:"project_id"`
+	Namespace string          `json:"namespace"`
 	RoleName  string          `json:"role_name"`
 	RoleRules json.RawMessage `json:"role_rules"`
 }
@@ -826,6 +836,7 @@ func (q *Queries) ListUserBindingsWithRoles(ctx context.Context, userID pgtype.U
 			&i.RoleID,
 			&i.ClusterID,
 			&i.ProjectID,
+			&i.Namespace,
 			&i.RoleName,
 			&i.RoleRules,
 		); err != nil {

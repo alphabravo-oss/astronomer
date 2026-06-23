@@ -72,8 +72,18 @@ const KNOWN_NIL_GATED = new Set([
   'POST /api/v1/extensions/{}/enable',
   'GET /api/v1/extensions/sample-manifest',
   'POST /api/v1/extensions/validate',
+  'POST /api/v1/extensions/verify-bundle',
   'GET /api/v1/settings/features',
   'GET /api/v1/tools',
+  // SCIM 2.0 provisioning (migration 114). The SCIM handler is nil in
+  // the route-dump test router, so chi omits these routes from
+  // docs/routes.json even though they are real, served routes in prod.
+  'POST /scim/v2/Users',
+  'GET /scim/v2/Users',
+  'GET /scim/v2/Users/{}',
+  'DELETE /scim/v2/Users/{}',
+  'GET /scim/v2/Groups',
+  'GET /scim/v2/Groups/{}',
 ]);
 
 // Normalize a path so router and spec forms compare equal:

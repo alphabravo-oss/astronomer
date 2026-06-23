@@ -13,6 +13,17 @@
       ],
       "classification": "covered-auth-flow",
       "reason": "Core auth session endpoints are public or token/cookie-gated by design and have dedicated auth/rate-limit test coverage outside the high-risk route registry."
+    },
+    {
+      "id": "apiserver-audit-ingest",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/clusters/{cluster_id}/apiserver-audit"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the cluster:update RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
     }
   ]
 }

@@ -170,6 +170,10 @@ type RouterDependencies struct {
 	// AgentFleet exposes read-only fleet inventory for connected and
 	// disconnected adopted-cluster agents.
 	AgentFleet *handler.AgentFleetHandler
+	// ApiserverAudit ingests kube-apiserver audit events streamed by the
+	// per-cluster agent and exposes them for operator read-back
+	// (migration 112). Nil-safe — when unwired the routes are omitted.
+	ApiserverAudit *handler.ApiserverAuditHandler
 	// Readyz exposes control-plane dependency readiness checks.
 	Readyz http.Handler
 	// DexConfig owns CRUD for Dex connectors / settings and renders the
@@ -291,6 +295,12 @@ type RouterDependencies struct {
 	// ServiceMesh owns /api/v1/clusters/{cluster_id}/service-mesh/*
 	// (migration 071). Read-only detection + on-demand re-detect; nil-safe.
 	ServiceMesh *handler.ServiceMeshHandler
+	// SCIM owns the /scim/v2/* provisioning surface (migration 114).
+	// Mounted OUTSIDE the JWT auth chain — SCIM clients (Okta, Azure AD,
+	// OneLogin) authenticate with a static bearer token validated by the
+	// handler's own Auth middleware. Nil-safe: when unwired (test fakes,
+	// pre-migration boots) the routes are omitted.
+	SCIM *handler.SCIMHandler
 }
 
 type ArgoCDClusterProxyTokenQuerier interface {
@@ -394,6 +404,22 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		}
 		r.With(argoAuth).Handle("/argocd", deps.ArgoCDUIProxy)
 		r.With(argoAuth).Handle("/argocd/*", deps.ArgoCDUIProxy)
+	}
+
+	// SCIM 2.0 provisioning (migration 114). Mounted at top-level
+	// `/scim/v2/*` (NOT under `/api/v1`) and OUTSIDE the JWT auth chain —
+	// SCIM clients authenticate with a static bearer token validated by
+	// the handler's own Auth middleware. Nil-safe.
+	if deps.SCIM != nil {
+		r.Route("/scim/v2", func(r chi.Router) {
+			r.Use(deps.SCIM.Auth)
+			r.Post("/Users", deps.SCIM.CreateUser)
+			r.Get("/Users", deps.SCIM.ListUsers)
+			r.Get("/Users/{id}", deps.SCIM.GetUser)
+			r.Delete("/Users/{id}", deps.SCIM.DeleteUser)
+			r.Get("/Groups", deps.SCIM.ListGroups)
+			r.Get("/Groups/{id}", deps.SCIM.GetGroup)
+		})
 	}
 
 	// API v1
@@ -597,6 +623,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// dispatcher to send again.
 		if deps.AdminTaskOutbox != nil {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/task-outbox/", deps.AdminTaskOutbox.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/task-outbox/dead/", deps.AdminTaskOutbox.ListDead)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/task-outbox/{id}/retry/", deps.AdminTaskOutbox.Retry)
 		}
 
@@ -737,6 +764,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// apply -f -` works without redirect dance.
 		if deps.Clusters != nil {
 			r.Get("/register/{token}", deps.Clusters.GetManifestByToken)
+			// Short-TTL HMAC-signed manifest URL — no token in the URL,
+			// the signature over (cluster_id, expiry) is the credential.
+			// Registered before /register/{token} would otherwise match
+			// "signed" as a token; chi's static-vs-param routing prefers
+			// the literal segment so order is informational.
+			// IP-keyed rate limit: the signed URL is replayable within its
+			// 15m TTL and each hit mints a fresh registration token, so cap
+			// the request rate the same way the auth routes do.
+			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Get("/register/signed/{cluster_id}", deps.Clusters.GetSignedManifest)
 			// Companion endpoint for the `curl --cacert ca.crt …`
 			// variant; returns operator-uploaded PEM bundle when the
 			// platform runs behind a private CA. 404 when unset.
@@ -836,6 +872,16 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
 			authenticated.Use(appmiddleware.RequireAuthWithQueries(deps.JWT, deps.AuthQueries))
+			// Default-deny scope backstop: a read-only API token can never
+			// reach a mutating handler, regardless of whether the specific
+			// subtree opted into a write scope. Wired right after auth so
+			// the token row is in context. `required=""` keeps this purely
+			// a read-only-token rejector — subtree-level
+			// RequireWriteScopeForMutations / requireScope still enforce the
+			// specific write scope on top, and RBAC remains the primary gate.
+			// GET/HEAD/OPTIONS, JWT sessions, and legacy empty-scope tokens
+			// pass through untouched (see RequireWriteScopeForMutations).
+			authenticated.Use(appmiddleware.RequireWriteScopeForMutations(""))
 			if deps.RemoteQueries != nil {
 				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
 			}
@@ -871,6 +917,18 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			requireStreamTicketOrAuth(deps.JWT, deps.AuthQueries, deps.StreamTicketStore, iauth.StreamKindRegistration, "id"),
 			requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
 		).Get("/api/v1/clusters/{id}/registration/events/", deps.ClusterRegistration.StreamEvents)
+	}
+	if deps.Workloads != nil {
+		// Live pod watch SSE stream — streams ADDED/MODIFIED/DELETED events
+		// through the agent tunnel instead of the UI polling the pod list.
+		// Long-lived, so register outside the /api/v1 Timeout middleware group
+		// (same contract as the event/registration SSE streams above). Auth is
+		// a one-use stream ticket (scoped to the cluster) or a normal token,
+		// plus the pods:read RBAC gate.
+		r.With(
+			requireStreamTicketOrAuth(deps.JWT, deps.AuthQueries, deps.StreamTicketStore, iauth.StreamKindLogs, "cluster_id"),
+			requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbRead),
+		).Get("/api/v1/clusters/{cluster_id}/pods/watch/", deps.Workloads.WatchPods)
 	}
 	if deps.RemoteServer != nil {
 		// remotedialer hijacks the connection for a WS upgrade, so this MUST
