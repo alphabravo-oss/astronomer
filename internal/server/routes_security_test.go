@@ -301,6 +301,21 @@ func (routeSecurityClusterQuerier) ListClusterConditionRemediationByCluster(cont
 	return nil, nil
 }
 
+type routeSecuritySCIMTokenQuerier struct{}
+
+func (routeSecuritySCIMTokenQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc.User, error) {
+	return sqlc.User{}, pgx.ErrNoRows
+}
+func (routeSecuritySCIMTokenQuerier) CreateSCIMToken(context.Context, sqlc.CreateSCIMTokenParams) (sqlc.ScimToken, error) {
+	return sqlc.ScimToken{}, nil
+}
+func (routeSecuritySCIMTokenQuerier) ListSCIMTokens(context.Context) ([]sqlc.ScimToken, error) {
+	return nil, nil
+}
+func (routeSecuritySCIMTokenQuerier) DeleteSCIMToken(context.Context, uuid.UUID) error {
+	return nil
+}
+
 type routeSecurityShellQuerier struct{}
 
 func (routeSecurityShellQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc.User, error) {
@@ -764,6 +779,7 @@ func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 		RemoteServer:        tunnel2.NewRemoteServer(slog.Default(), nil),
 		ArgoCDUIProxy:       argoUIProxy,
 		KubectlShell:        shellHandler,
+		SCIMTokenAdmin:      handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
 	})
 	return router, clusterID.String()
 }

@@ -24,6 +24,19 @@
       ],
       "classification": "covered-rbac-cluster-scoped",
       "reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the cluster:update RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
+    },
+    {
+      "id": "scim-token-admin",
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/admin/scim-tokens",
+        "/api/v1/admin/scim-tokens/{id}"
+      ],
+      "classification": "covered-superuser-gated",
+      "reason": "Mint/revoke the static bearer tokens the /scim/v2 provisioning chain authenticates against; the routes sit inside the JWT auth chain and are superuser-gated inside the handler (RequireSuperuser), the same posture as /admin/settings. The plaintext token is returned once on create and only its SHA-256 hash is persisted, with create/revoke audited via RecordAuditFromRequest."
     }
   ]
 }

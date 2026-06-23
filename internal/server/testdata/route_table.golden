@@ -6,6 +6,7 @@ CONNECT /api/v1/internal/argocd/clusters/{cluster_id}/k8s/*
 CONNECT /argocd
 CONNECT /argocd/*
 DELETE /api/v1/admin/network-policy-templates/{id}
+DELETE /api/v1/admin/scim-tokens/{id}
 DELETE /api/v1/admin/vault-connections/{id}
 DELETE /api/v1/admin/webhooks/{id}
 DELETE /api/v1/auth/dex/connectors/{id}
@@ -59,6 +60,7 @@ GET /api/v1/admin/emails
 GET /api/v1/admin/key-status
 GET /api/v1/admin/network-policy-templates
 GET /api/v1/admin/network-policy-templates/{id}
+GET /api/v1/admin/scim-tokens
 GET /api/v1/admin/shell-sessions
 GET /api/v1/admin/shell-sessions/{id}/commands
 GET /api/v1/admin/smtp
@@ -248,6 +250,7 @@ PATCH /api/v1/users/{id}
 PATCH /argocd
 PATCH /argocd/*
 POST /api/v1/admin/network-policy-templates
+POST /api/v1/admin/scim-tokens
 POST /api/v1/admin/smtp/test
 POST /api/v1/admin/users/{id}/disable-totp
 POST /api/v1/admin/users/{id}/force-logout

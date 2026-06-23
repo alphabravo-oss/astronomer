@@ -11,14 +11,18 @@
 //	GET    /scim/v2/Users        — list users (SCIM ListResponse)
 //	GET    /scim/v2/Users/{id}   — get one
 //	PUT    /scim/v2/Users/{id}   — replace attrs + active (de/reactivate)
+//	PATCH  /scim/v2/Users/{id}   — partial update (replace active/core attrs)
 //	DELETE /scim/v2/Users/{id}   — de-provision (delete) a user
 //	GET    /scim/v2/Groups       — list groups (from group_mappings)
 //	GET    /scim/v2/Groups/{id}  — get one group by name
+//	GET    /scim/v2/ServiceProviderConfig — advertise supported features
+//	GET    /scim/v2/ResourceTypes — User + Group resource types
+//	GET    /scim/v2/Schemas      — core User + Group schema definitions
 //
-// Deferred (full RFC): PATCH ops, filtering, ServiceProviderConfig,
-// Schemas/ResourceTypes discovery, Group membership writes. The
-// distinct-group-name read is enough for an IdP to enumerate the
-// targets an operator has wired via identity_group_mappings.
+// Deferred (full RFC): add/remove PATCH ops, richer filtering, Group
+// membership writes. The distinct-group-name read is enough for an IdP
+// to enumerate the targets an operator has wired via
+// identity_group_mappings.
 package handler
 
 import (
@@ -42,6 +46,7 @@ const (
 	scimUserSchema    = "urn:ietf:params:scim:schemas:core:2.0:User"
 	scimGroupSchema   = "urn:ietf:params:scim:schemas:core:2.0:Group"
 	scimListSchema    = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
+	scimPatchSchema   = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
 	scimErrorSchema   = "urn:ietf:params:scim:api:messages:2.0:Error"
 	scimMaxListResult = 200
 )
@@ -308,6 +313,192 @@ func (h *SCIMHandler) PutUser(w http.ResponseWriter, r *http.Request) {
 	h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
 }
 
+// scimPatchRequest is the RFC 7644 §3.5.2 PatchOp envelope.
+type scimPatchRequest struct {
+	Schemas    []string      `json:"schemas"`
+	Operations []scimPatchOp `json:"Operations"`
+}
+
+// scimPatchOp is a single modification. value is left as raw JSON because
+// its shape depends on path: a scalar (active), a string (displayName), an
+// array (emails), or — for a path-less op — the partial User object itself.
+type scimPatchOp struct {
+	Op    string          `json:"op"`
+	Path  string          `json:"path"`
+	Value json.RawMessage `json:"value"`
+}
+
+// PatchUser handles PATCH /scim/v2/Users/{id} (RFC 7644 §3.5.2). It supports
+// the operations real IdPs emit: `replace` of `active` (Okta/Azure AD's
+// primary deactivation mechanism — mapped to is_active) and `replace` of the
+// core attributes (displayName/name, emails, userName), both as targeted
+// (path-set) ops and as the path-less merge of a partial User object. `op` is
+// matched case-insensitively. add/remove and other ops are accepted but
+// ignored — an IdP reads the returned resource as the source of truth.
+func (h *SCIMHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.scimError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	var req scimPatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.scimError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	// Tolerate a missing/lowercased schemas list (some IdPs omit it), but
+	// reject an explicit non-PatchOp schema rather than silently misapplying.
+	for _, s := range req.Schemas {
+		if !strings.EqualFold(s, scimPatchSchema) {
+			h.scimError(w, http.StatusBadRequest, "unsupported patch schema")
+			return
+		}
+	}
+	existing, err := h.queries.GetUserByID(r.Context(), id)
+	if err != nil {
+		h.scimError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	// Start from the current resource; each replace op mutates it in place.
+	params := sqlc.UpdateUserParams{
+		ID:        id,
+		Email:     existing.Email,
+		Username:  existing.Username,
+		FirstName: existing.FirstName,
+		LastName:  existing.LastName,
+		IsActive:  existing.IsActive,
+	}
+	for _, op := range req.Operations {
+		// Only replace mutates state here; add/remove are no-ops for the
+		// attributes this slice manages.
+		if !strings.EqualFold(strings.TrimSpace(op.Op), "replace") {
+			continue
+		}
+		if !applyPatchReplace(&params, strings.TrimSpace(op.Path), op.Value) {
+			h.scimError(w, http.StatusBadRequest, "invalid patch value")
+			return
+		}
+	}
+	updated, err := h.queries.UpdateUser(r.Context(), params)
+	if err != nil {
+		h.scimError(w, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+	h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
+}
+
+// applyPatchReplace mutates params for one `replace` op. A path-less op
+// merges a partial User object (the value is the User attrs); a path-set op
+// replaces the single named attribute. Unknown paths are ignored (safe SCIM
+// degradation). Returns false only when the value JSON cannot be decoded.
+func applyPatchReplace(params *sqlc.UpdateUserParams, path string, value json.RawMessage) bool {
+	if len(value) == 0 {
+		return true
+	}
+	switch strings.ToLower(path) {
+	case "":
+		// Path-less replace: value is a partial User object. Decode the
+		// attributes we manage and merge any that are present.
+		var patch struct {
+			UserName    *string     `json:"userName"`
+			DisplayName *string     `json:"displayName"`
+			Name        *scimName   `json:"name"`
+			Emails      []scimEmail `json:"emails"`
+			Active      *bool       `json:"active"`
+		}
+		if err := json.Unmarshal(value, &patch); err != nil {
+			return false
+		}
+		if patch.UserName != nil && strings.TrimSpace(*patch.UserName) != "" {
+			params.Username = strings.TrimSpace(*patch.UserName)
+		}
+		if patch.Name != nil {
+			params.FirstName = patch.Name.GivenName
+			params.LastName = patch.Name.FamilyName
+		} else if patch.DisplayName != nil {
+			setNameFromDisplay(params, *patch.DisplayName)
+		}
+		if e := primaryEmail(patch.Emails); e != "" {
+			params.Email = e
+		}
+		if patch.Active != nil {
+			params.IsActive = *patch.Active
+		}
+		return true
+	case "active":
+		var active bool
+		if err := json.Unmarshal(value, &active); err != nil {
+			return false
+		}
+		params.IsActive = active
+	case "displayname":
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			return false
+		}
+		setNameFromDisplay(params, s)
+	case "username":
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			return false
+		}
+		if strings.TrimSpace(s) != "" {
+			params.Username = strings.TrimSpace(s)
+		}
+	case "name.givenname":
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			return false
+		}
+		params.FirstName = s
+	case "name.familyname":
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			return false
+		}
+		params.LastName = s
+	case "emails":
+		// IdPs send emails either as the array or as a single primary value
+		// (path `emails[type eq "work"].value`, which we don't sub-parse —
+		// callers should target `emails` with the array form).
+		var emails []scimEmail
+		if err := json.Unmarshal(value, &emails); err != nil {
+			return false
+		}
+		if e := primaryEmail(emails); e != "" {
+			params.Email = e
+		}
+	}
+	return true
+}
+
+// setNameFromDisplay splits a SCIM displayName into given/family the same way
+// the surrounding code stores names: first token => given, remainder => family.
+func setNameFromDisplay(params *sqlc.UpdateUserParams, display string) {
+	display = strings.TrimSpace(display)
+	if display == "" {
+		return
+	}
+	if first, rest, ok := strings.Cut(display, " "); ok {
+		params.FirstName = first
+		params.LastName = strings.TrimSpace(rest)
+		return
+	}
+	params.FirstName = display
+}
+
+// primaryEmail picks the primary email (or the first one) from a SCIM emails
+// array, matching CreateUser/PutUser's selection.
+func primaryEmail(emails []scimEmail) string {
+	out := ""
+	for _, e := range emails {
+		if e.Primary || out == "" {
+			out = strings.TrimSpace(e.Value)
+		}
+	}
+	return out
+}
+
 // ListUsers handles GET /scim/v2/Users. Supports SCIM startIndex/count
 // pagination (1-based startIndex) and the common userName eq filter.
 func (h *SCIMHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +641,124 @@ func toSCIMGroup(name string) scimGroup {
 		DisplayName: name,
 		Meta:        scimMeta{ResourceType: "Group"},
 	}
+}
+
+// --- Discovery endpoints (read-only, static documents) ---
+//
+// Azure AD / Okta probe these before they ever provision. They are
+// constant documents describing what this slice actually supports, so
+// they are served from in-code literals rather than the DB. They sit
+// under the same static-bearer Auth chain as the rest of /scim/v2/*.
+
+const (
+	scimServiceProviderConfigSchema = "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
+	scimResourceTypeSchema          = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
+)
+
+// ServiceProviderConfig handles GET /scim/v2/ServiceProviderConfig
+// (RFC 7643 §5). It advertises exactly what this slice implements:
+// PATCH yes, filter yes (the userName-eq we support), bulk/sort/etag/
+// changePassword no.
+func (h *SCIMHandler) ServiceProviderConfig(w http.ResponseWriter, r *http.Request) {
+	h.writeSCIM(w, http.StatusOK, map[string]any{
+		"schemas":          []string{scimServiceProviderConfigSchema},
+		"documentationUri": "https://datatracker.ietf.org/doc/html/rfc7644",
+		"patch":            map[string]any{"supported": true},
+		"bulk":             map[string]any{"supported": false, "maxOperations": 0, "maxPayloadSize": 0},
+		// We only implement `userName eq "x"`, but filter is advertised as
+		// supported because IdPs gate the pre-create lookup on this flag.
+		"filter":         map[string]any{"supported": true, "maxResults": scimMaxListResult},
+		"changePassword": map[string]any{"supported": false},
+		"sort":           map[string]any{"supported": false},
+		"etag":           map[string]any{"supported": false},
+		"authenticationSchemes": []map[string]any{
+			{
+				"type":        "oauthbearertoken",
+				"name":        "OAuth Bearer Token",
+				"description": "Authentication via the static SCIM bearer token.",
+				"primary":     true,
+			},
+		},
+		"meta": map[string]any{"resourceType": "ServiceProviderConfig"},
+	})
+}
+
+// ResourceTypes handles GET /scim/v2/ResourceTypes (RFC 7643 §6): the
+// User and Group resources this provider exposes.
+func (h *SCIMHandler) ResourceTypes(w http.ResponseWriter, r *http.Request) {
+	resources := []any{
+		map[string]any{
+			"schemas":     []string{scimResourceTypeSchema},
+			"id":          "User",
+			"name":        "User",
+			"endpoint":    "/Users",
+			"description": "User Account",
+			"schema":      scimUserSchema,
+			"meta":        map[string]any{"resourceType": "ResourceType"},
+		},
+		map[string]any{
+			"schemas":     []string{scimResourceTypeSchema},
+			"id":          "Group",
+			"name":        "Group",
+			"endpoint":    "/Groups",
+			"description": "Group",
+			"schema":      scimGroupSchema,
+			"meta":        map[string]any{"resourceType": "ResourceType"},
+		},
+	}
+	h.writeSCIM(w, http.StatusOK, scimListResponse{
+		Schemas:      []string{scimListSchema},
+		TotalResults: int64(len(resources)),
+		StartIndex:   1,
+		ItemsPerPage: len(resources),
+		Resources:    resources,
+	})
+}
+
+// Schemas handles GET /scim/v2/Schemas (RFC 7643 §7): the core User and
+// Group schema definitions, limited to the attributes this slice maps.
+func (h *SCIMHandler) Schemas(w http.ResponseWriter, r *http.Request) {
+	attr := func(name, typ string, multi bool) map[string]any {
+		return map[string]any{
+			"name":        name,
+			"type":        typ,
+			"multiValued": multi,
+			"required":    false,
+			"mutability":  "readWrite",
+			"returned":    "default",
+			"uniqueness":  "none",
+		}
+	}
+	resources := []any{
+		map[string]any{
+			"id":          scimUserSchema,
+			"name":        "User",
+			"description": "User Account",
+			"attributes": []any{
+				attr("userName", "string", false),
+				attr("name", "complex", false),
+				attr("emails", "complex", true),
+				attr("active", "boolean", false),
+			},
+			"meta": map[string]any{"resourceType": "Schema"},
+		},
+		map[string]any{
+			"id":          scimGroupSchema,
+			"name":        "Group",
+			"description": "Group",
+			"attributes": []any{
+				attr("displayName", "string", false),
+			},
+			"meta": map[string]any{"resourceType": "Schema"},
+		},
+	}
+	h.writeSCIM(w, http.StatusOK, scimListResponse{
+		Schemas:      []string{scimListSchema},
+		TotalResults: int64(len(resources)),
+		StartIndex:   1,
+		ItemsPerPage: len(resources),
+		Resources:    resources,
+	})
 }
 
 // --- helpers ---

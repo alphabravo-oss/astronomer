@@ -301,6 +301,11 @@ type RouterDependencies struct {
 	// handler's own Auth middleware. Nil-safe: when unwired (test fakes,
 	// pre-migration boots) the routes are omitted.
 	SCIM *handler.SCIMHandler
+	// SCIMTokenAdmin owns /api/v1/admin/scim-tokens/* — the superuser
+	// surface to mint/list/revoke the static bearer tokens the /scim/v2/*
+	// chain authenticates against. Unlike SCIM itself this lives INSIDE
+	// the JWT auth chain. Nil-safe: omitted when unwired.
+	SCIMTokenAdmin *handler.SCIMTokenAdminHandler
 }
 
 type ArgoCDClusterProxyTokenQuerier interface {
@@ -417,9 +422,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.Get("/Users", deps.SCIM.ListUsers)
 			r.Get("/Users/{id}", deps.SCIM.GetUser)
 			r.Put("/Users/{id}", deps.SCIM.PutUser)
+			r.Patch("/Users/{id}", deps.SCIM.PatchUser)
 			r.Delete("/Users/{id}", deps.SCIM.DeleteUser)
 			r.Get("/Groups", deps.SCIM.ListGroups)
 			r.Get("/Groups/{id}", deps.SCIM.GetGroup)
+			// Discovery (read-only, static) — Azure AD/Okta probe these
+			// before provisioning.
+			r.Get("/ServiceProviderConfig", deps.SCIM.ServiceProviderConfig)
+			r.Get("/ResourceTypes", deps.SCIM.ResourceTypes)
+			r.Get("/Schemas", deps.SCIM.Schemas)
 		})
 	}
 
@@ -753,6 +764,18 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.Get("/settings/banner/", deps.PlatformSettings.PublicBanner)
 			r.Get("/settings/registration/", deps.PlatformSettings.PublicRegistration)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/settings/features/", deps.PlatformSettings.Features)
+		}
+
+		// SCIM provisioning-token admin (migration 114). Mints/lists/
+		// revokes the static bearer tokens the top-level /scim/v2/* chain
+		// authenticates against. INSIDE the JWT auth chain and superuser-
+		// gated inside the handler (same pattern as /admin/settings/*).
+		// The create response returns the plaintext astro_scim_<random>
+		// token exactly once; only the hash is stored.
+		if deps.SCIMTokenAdmin != nil {
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/admin/scim-tokens/", deps.SCIMTokenAdmin.Create)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/scim-tokens/", deps.SCIMTokenAdmin.List)
+			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Delete("/admin/scim-tokens/{id}/", deps.SCIMTokenAdmin.Delete)
 		}
 
 		// Rancher-style one-liner manifest fetch. Unauthenticated by

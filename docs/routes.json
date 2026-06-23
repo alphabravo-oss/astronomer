@@ -37,6 +37,18 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/scim-tokens"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/scim-tokens"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/scim-tokens/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/shell-sessions"
   },
   {

@@ -1095,6 +1095,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// /scim/v2/* User CRUD + read-only Group list, mapped onto the
 		// existing users + identity_group_mappings tables.
 		SCIM:          handler.NewSCIMHandler(queries),
+		// Operator-facing admin surface to mint/list/revoke the static
+		// bearer tokens the /scim/v2/* chain authenticates against.
+		SCIMTokenAdmin: handler.NewSCIMTokenAdminHandler(queries),
 		SupportBundle: func() *handler.SupportBundleHandler {
 			h := handler.NewSupportBundleHandler(queries, localK8s, localNamespace)
 			// Enable the asynq-queues + schema-

@@ -3995,6 +3995,53 @@ paths:
           description: Invalid request body or user id
         '404':
           description: User not found
+    patch:
+      tags:
+        - SCIM
+      summary: Partially update a user via SCIM 2.0 (RFC 7644 PatchOp)
+      description: |
+        Applies a SCIM PatchOp. Supports the `replace` operations real IdPs
+        (Okta, Azure AD) emit: `replace` of `active` (`active:false`
+        deactivates — blocks login — and `active:true` reactivates), and
+        `replace` of core attributes (`displayName`/`name`, `emails`,
+        `userName`), as both path-set ops and a path-less merge of a partial
+        User object. `op` is matched case-insensitively; `add`/`remove` ops
+        and unknown paths are ignored. The updated resource is returned.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/scim+json:
+            schema:
+              type: object
+              properties:
+                schemas:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    - urn:ietf:params:scim:api:messages:2.0:PatchOp
+                Operations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                      path:
+                        type: string
+                      value: {}
+      responses:
+        '200':
+          description: Updated SCIM User resource
+        '400':
+          description: Invalid request body, user id, or patch value
+        '404':
+          description: User not found
     delete:
       tags:
         - SCIM
@@ -4040,6 +4087,48 @@ paths:
           description: SCIM Group resource
         '404':
           description: Group not found
+  /scim/v2/ServiceProviderConfig:
+    get:
+      tags:
+        - SCIM
+      summary: SCIM 2.0 service provider configuration (RFC 7643 §5)
+      description: |
+        Static document advertising the SCIM features this provider
+        supports: `patch` true, `filter` true (the `userName eq "x"`
+        filter), `bulk`/`sort`/`etag`/`changePassword` false, and
+        `authenticationSchemes` = oauthbearertoken. IdPs probe this
+        before provisioning.
+      responses:
+        '200':
+          description: SCIM ServiceProviderConfig
+        '401':
+          description: Missing or invalid SCIM bearer token
+  /scim/v2/ResourceTypes:
+    get:
+      tags:
+        - SCIM
+      summary: SCIM 2.0 resource types (RFC 7643 §6)
+      description: |
+        Read-only ListResponse describing the User and Group resource
+        types this provider exposes.
+      responses:
+        '200':
+          description: SCIM ListResponse of resource types
+        '401':
+          description: Missing or invalid SCIM bearer token
+  /scim/v2/Schemas:
+    get:
+      tags:
+        - SCIM
+      summary: SCIM 2.0 schemas (RFC 7643 §7)
+      description: |
+        Read-only ListResponse of the core User and Group schema
+        definitions, limited to the attributes this provider maps.
+      responses:
+        '200':
+          description: SCIM ListResponse of schemas
+        '401':
+          description: Missing or invalid SCIM bearer token
   /api/v1/auth/login/:
     post:
       tags:
@@ -15559,6 +15648,136 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '404':
           description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/admin/scim-tokens/:
+    post:
+      summary: Mint a SCIM provisioning bearer token
+      tags:
+        - users-settings
+      description: |
+        Generates a new `astro_scim_<random>` bearer token for the
+        `/scim/v2/*` provisioning chain. The plaintext token is returned
+        exactly ONCE in this response under `token`; only its SHA-256 hash
+        is persisted. Superuser only (gated in-handler).
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Operator-facing label for the token.
+      responses:
+        '201':
+          description: Token created. The plaintext `token` is shown only here.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  prefix:
+                    type: string
+                  last_used_at:
+                    type: string
+                    nullable: true
+                  created_at:
+                    type: string
+                  token:
+                    type: string
+                    description: Plaintext bearer token, returned only on create.
+        '400':
+          description: Invalid body or missing name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Superuser privileges required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    get:
+      summary: List SCIM provisioning tokens (metadata only)
+      tags:
+        - users-settings
+      description: |
+        Returns metadata for every SCIM token. The secret is never
+        included — only id, name, display prefix, and timestamps.
+        Superuser only (gated in-handler).
+      security:
+        - bearerJWT: []
+      responses:
+        '200':
+          description: List of SCIM token metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        prefix:
+                          type: string
+                        last_used_at:
+                          type: string
+                          nullable: true
+                        created_at:
+                          type: string
+        '403':
+          description: Superuser privileges required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/admin/scim-tokens/{id}/:
+    delete:
+      summary: Revoke a SCIM provisioning token
+      tags:
+        - users-settings
+      description: Deletes the SCIM token by id. Superuser only (gated in-handler).
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Token revoked.
+        '400':
+          description: Invalid token id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Superuser privileges required.
           content:
             application/json:
               schema:

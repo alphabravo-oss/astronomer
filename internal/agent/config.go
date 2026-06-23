@@ -20,6 +20,16 @@ type AgentConfig struct {
 	MetricsInterval   int    `mapstructure:"metrics_interval"`   // Seconds (default 60)
 	HealthAddr        string `mapstructure:"health_addr"`        // Health server address (default :8081)
 	PrivilegeProfile  string `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
+
+	// kube-apiserver audit-log forwarding (opt-in; disabled by default).
+	// Requires a cluster-admin prerequisite: the apiserver must be started
+	// with --audit-policy-file + --audit-log-path, and that log path must be
+	// mounted into the agent pod via a hostPath volume. See docs.
+	AuditEnabled       bool   `mapstructure:"audit_enabled"`        // Enable the apiserver-audit tailer (default false)
+	AuditLogPath       string `mapstructure:"audit_log_path"`       // Path to the kube-apiserver audit log file
+	AuditCheckpointPath string `mapstructure:"audit_checkpoint_path"` // Path where the tail offset is persisted (default audit_log_path + ".checkpoint")
+	AuditBatchSize     int    `mapstructure:"audit_batch_size"`     // Max events per forwarded batch (default 100)
+	AuditPollInterval  int    `mapstructure:"audit_poll_interval"`  // Seconds between tail polls (default 10)
 }
 
 // LoadAgentConfig reads agent configuration from environment variables with
@@ -40,6 +50,11 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
 		envconfig.Default{Key: "privilege_profile", Value: "admin"},
+		envconfig.Default{Key: "audit_enabled", Value: false},
+		envconfig.Default{Key: "audit_log_path", Value: ""},
+		envconfig.Default{Key: "audit_checkpoint_path", Value: ""},
+		envconfig.Default{Key: "audit_batch_size", Value: 100},
+		envconfig.Default{Key: "audit_poll_interval", Value: 10},
 	)
 
 	cfg := &AgentConfig{}

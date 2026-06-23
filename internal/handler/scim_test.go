@@ -100,7 +100,9 @@ func (f *fakeSCIMQuerier) ListUsers(_ context.Context, _ sqlc.ListUsersParams) (
 	return out, nil
 }
 
-func (f *fakeSCIMQuerier) CountUsers(_ context.Context) (int64, error) { return int64(len(f.users)), nil }
+func (f *fakeSCIMQuerier) CountUsers(_ context.Context) (int64, error) {
+	return int64(len(f.users)), nil
+}
 
 func (f *fakeSCIMQuerier) DeleteUser(_ context.Context, id uuid.UUID) error {
 	for k, u := range f.users {
@@ -250,6 +252,162 @@ func TestSCIMListUsersFilterDBError(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("filter DB error: want 500, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSCIMPatchUser exercises PATCH /scim/v2/Users/{id} for the operations
+// real IdPs (Okta/Azure AD) emit: replace active:false (deactivate), replace
+// active:true (reactivate), replace displayName, and a path-less merge.
+func TestSCIMPatchUser(t *testing.T) {
+	token := "astro_scim_testtoken"
+	q := &fakeSCIMQuerier{
+		tokenHash: auth.HashSCIMToken(token),
+		users:     map[string]sqlc.User{},
+	}
+	h := NewSCIMHandler(q)
+
+	// Seed a user directly through CreateUser so we have a real id.
+	u, err := q.CreateUser(context.Background(), sqlc.CreateUserParams{
+		Email: "bob@example.com", Username: "bob@example.com",
+		FirstName: "Bob", LastName: "B", IsActive: true,
+	})
+	if err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	id := u.ID.String()
+
+	patch := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPatch, "/scim/v2/Users/"+id, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req = withChiID(req, id)
+		rec := httptest.NewRecorder()
+		h.Auth(http.HandlerFunc(h.PatchUser)).ServeHTTP(rec, req)
+		return rec
+	}
+
+	// --- replace active:false deactivates (path-set, the Okta form) ---
+	rec := patch(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"active","value":false}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deactivate: want 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	var got scimUser
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Active {
+		t.Fatalf("deactivate: response active=true, want false")
+	}
+	if q.users["bob@example.com"].IsActive {
+		t.Fatalf("deactivate: stored user still is_active=true")
+	}
+
+	// --- replace active:true reactivates (case-insensitive op) ---
+	rec = patch(`{"Operations":[{"op":"Replace","path":"active","value":true}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reactivate: want 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if !q.users["bob@example.com"].IsActive {
+		t.Fatalf("reactivate: stored user still is_active=false")
+	}
+
+	// --- replace displayName updates the name ---
+	rec = patch(`{"Operations":[{"op":"replace","path":"displayName","value":"Robert Builder"}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("displayName: want 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Name.GivenName != "Robert" || got.Name.FamilyName != "Builder" {
+		t.Fatalf("displayName: got name %+v, want Robert/Builder", got.Name)
+	}
+
+	// --- path-less replace merges a partial User object (Azure AD form) ---
+	rec = patch(`{"Operations":[{"op":"replace","value":{"active":false,"name":{"givenName":"Bobby","familyName":"X"}}}]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pathless: want 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	stored := q.users["bob@example.com"]
+	if stored.IsActive {
+		t.Fatalf("pathless: stored user still is_active=true")
+	}
+	if stored.FirstName != "Bobby" || stored.LastName != "X" {
+		t.Fatalf("pathless: got name %s/%s, want Bobby/X", stored.FirstName, stored.LastName)
+	}
+}
+
+// TestSCIMPatchUserRejectsBadSchema asserts an explicit non-PatchOp schema is
+// a 400, not a silent misapply.
+func TestSCIMPatchUserRejectsBadSchema(t *testing.T) {
+	token := "astro_scim_testtoken"
+	q := &fakeSCIMQuerier{tokenHash: auth.HashSCIMToken(token), users: map[string]sqlc.User{}}
+	h := NewSCIMHandler(q)
+	u, _ := q.CreateUser(context.Background(), sqlc.CreateUserParams{
+		Email: "c@example.com", Username: "c@example.com", IsActive: true,
+	})
+	id := u.ID.String()
+
+	req := httptest.NewRequest(http.MethodPatch, "/scim/v2/Users/"+id,
+		strings.NewReader(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"Operations":[]}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req = withChiID(req, id)
+	rec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.PatchUser)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad schema: want 400, got %d", rec.Code)
+	}
+}
+
+// TestSCIMServiceProviderConfig asserts the discovery document advertises
+// patch=true (the capability Azure AD/Okta gate provisioning on) and is
+// served under the static-bearer Auth chain.
+func TestSCIMServiceProviderConfig(t *testing.T) {
+	token := "astro_scim_testtoken"
+	q := &fakeSCIMQuerier{tokenHash: auth.HashSCIMToken(token), users: map[string]sqlc.User{}}
+	h := NewSCIMHandler(q)
+
+	req := httptest.NewRequest(http.MethodGet, "/scim/v2/ServiceProviderConfig", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.ServiceProviderConfig)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ServiceProviderConfig: want 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	var cfg struct {
+		Schemas               []string                 `json:"schemas"`
+		Patch                 struct{ Supported bool } `json:"patch"`
+		Filter                struct{ Supported bool } `json:"filter"`
+		Bulk                  struct{ Supported bool } `json:"bulk"`
+		AuthenticationSchemes []struct {
+			Type string `json:"type"`
+		} `json:"authenticationSchemes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &cfg); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !cfg.Patch.Supported {
+		t.Fatalf("ServiceProviderConfig: patch not advertised as supported")
+	}
+	if !cfg.Filter.Supported {
+		t.Fatalf("ServiceProviderConfig: filter not advertised as supported")
+	}
+	if cfg.Bulk.Supported {
+		t.Fatalf("ServiceProviderConfig: bulk should be unsupported")
+	}
+	if len(cfg.AuthenticationSchemes) != 1 || cfg.AuthenticationSchemes[0].Type != "oauthbearertoken" {
+		t.Fatalf("ServiceProviderConfig: want oauthbearertoken auth scheme, got %+v", cfg.AuthenticationSchemes)
+	}
+	if len(cfg.Schemas) != 1 || cfg.Schemas[0] != scimServiceProviderConfigSchema {
+		t.Fatalf("ServiceProviderConfig: missing/incorrect schema: %+v", cfg.Schemas)
+	}
+
+	// Discovery sits under the same Auth chain — no token => 401.
+	noTok := httptest.NewRequest(http.MethodGet, "/scim/v2/ServiceProviderConfig", nil)
+	noRec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.ServiceProviderConfig)).ServeHTTP(noRec, noTok)
+	if noRec.Code != http.StatusUnauthorized {
+		t.Fatalf("ServiceProviderConfig without token: want 401, got %d", noRec.Code)
 	}
 }
 
