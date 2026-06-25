@@ -496,10 +496,16 @@ export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const { data: featureFlags } = useFeatureFlags();
 
-  // Detect cluster context from URL
+  // Detect cluster context from URL. Static sub-routes (new, register) are NOT
+  // cluster ids — treating them as such fires cluster-detail queries with a
+  // bogus id (e.g. /clusters/register/resources/... -> 400/503).
   const clusterMatch = pathname.match(/^\/dashboard\/clusters\/([^/]+)/);
-  const clusterId = clusterMatch?.[1];
-  const isClusterContext = !!clusterId && clusterId !== 'new';
+  const clusterSegment = clusterMatch?.[1];
+  const clusterId =
+    clusterSegment && clusterSegment !== 'new' && clusterSegment !== 'register'
+      ? clusterSegment
+      : undefined;
+  const isClusterContext = !!clusterId;
 
   // Fetch cluster name for header
   const { data: cluster } = useCluster(clusterId || '');
