@@ -412,8 +412,9 @@ func enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName s
 	}
 	if gitopsDeps.TaskOutbox != nil {
 		if _, err := EnqueueTaskOutbox(ctx, gitopsDeps.TaskOutbox, task, TaskOutboxOptions{
-			DedupeKey:           fmt.Sprintf("cluster_decommission:%s", decom.ID.String()),
-			QueueName:           "default",
+			DedupeKey: fmt.Sprintf("cluster_decommission:%s", decom.ID.String()),
+			// "tunnel" queue: managed-side cleanup needs the server-pod hub.
+			QueueName:           ClusterTemplateApplyQueueName,
 			MaxRetry:            3,
 			MaxDeliveryAttempts: 20,
 		}); err == nil {

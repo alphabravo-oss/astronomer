@@ -1268,6 +1268,12 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusAccepted, renderDecommission(row, statusURL))
 }
 
+// tunnelQueueName is the asynq queue drained by the server pod's in-process
+// worker (which holds the WS tunnel hub). Decommission tasks go here so the
+// managed-side cleanup phase can reach a connected agent. Matches the literal
+// used by the registration apply path.
+const tunnelQueueName = "tunnel"
+
 func (h *ClusterHandler) createClusterDecommission(ctx context.Context, arg sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, bool, error) {
 	atomicQ, ok := any(h.queries).(clusterDecommissionTaskOutboxQuerier)
 	if ok && h.taskOutbox != nil {
@@ -1285,7 +1291,10 @@ func (h *ClusterHandler) createClusterDecommission(ctx context.Context, arg sqlc
 			DedupeKey:           pgtype.Text{String: fmt.Sprintf("cluster_decommission:%s", decommissionID.String()), Valid: true},
 			TaskType:            task.Type(),
 			Payload:             payload,
-			QueueName:           "default",
+			// "tunnel" queue, not "default": the decommission's managed-side
+			// cleanup phase needs the WS tunnel hub, which lives only in the
+			// server pod's in-process asynq worker (it drains "tunnel").
+			QueueName:           tunnelQueueName,
 			MaxRetry:            3,
 			MaxDeliveryAttempts: 20,
 			NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
@@ -1306,7 +1315,7 @@ func (h *ClusterHandler) enqueueClusterDecommission(ctx context.Context, decommi
 	if h.taskOutbox != nil {
 		if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
 			DedupeKey:           fmt.Sprintf("cluster_decommission:%s", decommissionID.String()),
-			QueueName:           "default",
+			QueueName:           tunnelQueueName, // needs the hub — see createClusterDecommission.
 			MaxRetry:            3,
 			MaxDeliveryAttempts: 20,
 		}); err == nil {
@@ -1314,7 +1323,7 @@ func (h *ClusterHandler) enqueueClusterDecommission(ctx context.Context, decommi
 		}
 	}
 	if h.decommissionQueue != nil {
-		_, _ = h.decommissionQueue.Enqueue(task, asynq.MaxRetry(3))
+		_, _ = h.decommissionQueue.Enqueue(task, asynq.Queue(tunnelQueueName), asynq.MaxRetry(3))
 	}
 }
 

@@ -216,6 +216,9 @@ func (w *Worker) RegisterTunnelHandlers() {
 	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
 	w.mux.HandleFunc(tasks.GatekeeperPolicyApplyType, instrumentTask(tasks.GatekeeperPolicyApplyType, tasks.HandleGatekeeperPolicyApply))
 	w.mux.HandleFunc(TypeToolDriftSweep, instrumentTask(TypeToolDriftSweep, tasks.HandleToolDriftSweep))
+	// Decommission runs here (not on the standalone worker) so the
+	// managed-side cleanup phase can reach a connected agent via the hub.
+	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
 	w.log.Info("registered tunnel-queue task handlers")
 }
 

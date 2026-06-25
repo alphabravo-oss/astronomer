@@ -387,8 +387,8 @@ func TestClusterDeleteWritesDecommissionToTaskOutbox(t *testing.T) {
 	if !got.DedupeKey.Valid || got.DedupeKey.String != "cluster_decommission:"+decommissionID.String() {
 		t.Fatalf("DedupeKey = %+v", got.DedupeKey)
 	}
-	if got.QueueName != "default" {
-		t.Fatalf("QueueName = %q, want default", got.QueueName)
+	if got.QueueName != tasks.ClusterTemplateApplyQueueName {
+		t.Fatalf("QueueName = %q, want tunnel", got.QueueName)
 	}
 	if got.MaxRetry != 3 {
 		t.Fatalf("MaxRetry = %d, want 3", got.MaxRetry)
@@ -451,7 +451,7 @@ func TestClusterDeleteCreatesDecommissionAndTaskOutboxAtomically(t *testing.T) {
 	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_decommission:"+arg.ID.String() {
 		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
 	}
-	if arg.TaskType != tasks.ClusterDecommissionType || arg.QueueName != "default" || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+	if arg.TaskType != tasks.ClusterDecommissionType || arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
 		t.Fatalf("task metadata = %s/%s/%d/%d", arg.TaskType, arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
 	}
 	var payload tasks.ClusterDecommissionPayload

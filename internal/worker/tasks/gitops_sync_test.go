@@ -690,7 +690,7 @@ func TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue(t *testing.T) {
 	if !arg.DedupeKey.Valid || arg.DedupeKey.String != wantDedupe {
 		t.Fatalf("dedupe key = %+v, want %s", arg.DedupeKey, wantDedupe)
 	}
-	if arg.QueueName != "default" || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
+	if arg.QueueName != ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
 		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
 	}
 	var payload ClusterDecommissionPayload
