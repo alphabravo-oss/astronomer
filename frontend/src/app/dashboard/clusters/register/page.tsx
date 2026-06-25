@@ -140,16 +140,16 @@ export default function RegisterClusterWizardPage() {
             onChange={(e) => setForm((f) => ({ ...f, privilegeProfile: e.target.value }))}
             className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
           >
-            <option value="viewer">Viewer — read-only (recommended)</option>
-            <option value="operator">Operator — read + workload actions</option>
-            <option value="admin">Admin — full management control</option>
-            <option value="namespace-viewer">Namespace viewer — read-only, single namespace</option>
-            <option value="namespace-operator">Namespace operator — read + actions, single namespace</option>
+            <option value="viewer">Viewer — Astronomer observes (read-only)</option>
+            <option value="admin">Admin — Astronomer operates (governed by user RBAC)</option>
           </select>
           <p className="mt-1 text-xs text-muted-foreground">
-            Scopes the in-cluster agent&apos;s RBAC. <span className="font-medium text-foreground">Viewer</span> grants
-            read-only access — the safest choice for a first adoption and trivially removable. Operator/Admin broaden
-            what the agent can change; choose them only when you need workload or cluster mutation from Astronomer.
+            Sets the ceiling for what Astronomer can do on this cluster.{' '}
+            <span className="font-medium text-foreground">Viewer</span> is read-only — Astronomer can observe the cluster,
+            and no user can change it regardless of their Astronomer role (safe first adoption, trivially removable).{' '}
+            <span className="font-medium text-foreground">Admin</span> lets Astronomer operate the cluster; what each user
+            can actually do is then governed by their Astronomer RBAC. (Finer-grained operator / namespace-scoped profiles
+            are available via the API.)
           </p>
         </Field>
 
