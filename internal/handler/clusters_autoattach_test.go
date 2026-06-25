@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,10 +38,11 @@ type fakeAutoAttachClusterQuerier struct {
 	templateErr  error
 	configErr    error
 	upserts      []sqlc.UpsertClusterTemplateApplicationParams
-	upsertErr    error
-	createCalled int
-	createErr    error
-	auditOps     []string
+	upsertErr     error
+	createCalled  int
+	createErr     error
+	lastCreateArg sqlc.CreateClusterParams
+	auditOps      []string
 
 	clusters         map[uuid.UUID]sqlc.Cluster
 	latestDecoms     map[uuid.UUID]sqlc.ClusterDecommission
@@ -102,6 +104,7 @@ func (q *fakeAutoAttachClusterQuerier) CreateCluster(_ context.Context, arg sqlc
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.createCalled++
+	q.lastCreateArg = arg
 	if q.createErr != nil {
 		return sqlc.Cluster{}, q.createErr
 	}
@@ -247,6 +250,26 @@ func createReq(t *testing.T, name string) *http.Request {
 	t.Helper()
 	body := []byte(`{"name":"` + name + `","environment":"production"}`)
 	return httptest.NewRequest(http.MethodPost, "/api/v1/clusters/", bytes.NewReader(body))
+}
+
+// TestClusterHandler_Create_PersistsAnnotations ensures the create handler
+// binds and forwards the annotations body (notably the agent-privilege-profile)
+// to CreateClusterParams — without this the Viewer/Admin picker is a no-op.
+func TestClusterHandler_Create_PersistsAnnotations(t *testing.T) {
+	q := newFakeAutoAttachClusterQuerier()
+	h := NewClusterHandler(q)
+
+	body := []byte(`{"name":"with-anno","environment":"testing","annotations":{"astronomer.io/agent-privilege-profile":"admin"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.Create(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Create status = %d, want 201; body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(string(q.lastCreateArg.Annotations), "admin") {
+		t.Fatalf("CreateCluster annotations = %q, want the admin profile annotation", string(q.lastCreateArg.Annotations))
+	}
 }
 
 // TestClusterHandler_Create_DuplicateNameReturns409 ensures a unique-name

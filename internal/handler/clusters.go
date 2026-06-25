@@ -681,13 +681,17 @@ func pluralSuffix(n int) string {
 
 // CreateClusterRequest represents the request body for creating a cluster.
 type CreateClusterRequest struct {
-	Name         string `json:"name" validate:"required,rfc1123"`
-	DisplayName  string `json:"display_name"`
-	Description  string `json:"description"`
-	Environment  string `json:"environment"`
-	Region       string `json:"region"`
-	Provider     string `json:"provider"`
-	Distribution string `json:"distribution"`
+	Name         string          `json:"name" validate:"required,rfc1123"`
+	DisplayName  string          `json:"display_name"`
+	Description  string          `json:"description"`
+	Environment  string          `json:"environment"`
+	Region       string          `json:"region"`
+	Provider     string          `json:"provider"`
+	Distribution string          `json:"distribution"`
+	Labels       json.RawMessage `json:"labels"`
+	// Annotations carry agent settings at adoption time, notably
+	// astronomer.io/agent-privilege-profile (viewer|admin) from the wizard.
+	Annotations json.RawMessage `json:"annotations"`
 }
 
 // UpdateClusterRequest represents the request body for updating a cluster.
@@ -759,6 +763,14 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	labels := req.Labels
+	if labels == nil {
+		labels = json.RawMessage(`{}`)
+	}
+	annotations := req.Annotations
+	if annotations == nil {
+		annotations = json.RawMessage(`{}`)
+	}
 	cluster, err := h.queries.CreateCluster(r.Context(), sqlc.CreateClusterParams{
 		Name:         req.Name,
 		DisplayName:  req.DisplayName,
@@ -767,6 +779,8 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Region:       req.Region,
 		Provider:     req.Provider,
 		Distribution: req.Distribution,
+		Labels:       labels,
+		Annotations:  annotations,
 		CreatedByID:  currentUserUUID(r),
 	})
 	if err != nil {
