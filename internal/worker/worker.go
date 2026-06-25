@@ -216,9 +216,11 @@ func (w *Worker) RegisterTunnelHandlers() {
 	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
 	w.mux.HandleFunc(tasks.GatekeeperPolicyApplyType, instrumentTask(tasks.GatekeeperPolicyApplyType, tasks.HandleGatekeeperPolicyApply))
 	w.mux.HandleFunc(TypeToolDriftSweep, instrumentTask(TypeToolDriftSweep, tasks.HandleToolDriftSweep))
-	// Decommission runs here (not on the standalone worker) so the
-	// managed-side cleanup phase can reach a connected agent via the hub.
+	// Decommission (individual + periodic sweep) runs here, not on the
+	// standalone worker, so the managed-side cleanup phase can reach a
+	// connected agent via the hub.
 	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
+	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
 	w.log.Info("registered tunnel-queue task handlers")
 }
 
@@ -245,8 +247,11 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeRunRestore, instrumentTask(TypeRunRestore, tasks.HandleRunRestore))
 	w.mux.HandleFunc(TypeProjectReconcile, instrumentTask(TypeProjectReconcile, tasks.HandleProjectReconcile))
 	w.mux.HandleFunc(TypeProjectReconcileAll, instrumentTask(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll))
-	w.mux.HandleFunc(TypeClusterDecommission, instrumentTask(TypeClusterDecommission, tasks.HandleClusterDecommission))
-	w.mux.HandleFunc(TypeClusterDecommissionAll, instrumentTask(TypeClusterDecommissionAll, tasks.HandleClusterDecommissionAll))
+	// NOTE: cluster:decommission and cluster:decommission_all are NOT registered
+	// on the standalone worker. They need the WS tunnel hub (managed-side agent
+	// uninstall), which lives only in the server pod — so both run on the
+	// server's tunnel-queue worker (see RegisterTunnelHandlers) and are
+	// enqueued/scheduled to the "tunnel" queue.
 	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
 	w.mux.HandleFunc(TypeArgoCDAutoRegisterCluster, instrumentTask(TypeArgoCDAutoRegisterCluster, tasks.HandleArgoCDAutoRegisterCluster))
 	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))

@@ -61,11 +61,10 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// per-namespace reconcile on AddNamespace; this sweep covers drift
 		// and missed-delivery cases.
 		{"@every 5m", TypeProjectReconcileAll, "project enforcement sweep"},
-		// Cluster decommission sweep. The DELETE handler enqueues a single
-		// reconciler invocation immediately; the periodic sweep here picks
-		// up rows whose worker process crashed mid-phase (status=running)
-		// and rows that failed and need a retry (status=failed→running).
-		{"@every 1m", TypeClusterDecommissionAll, "cluster decommission sweep"},
+		// NOTE: cluster:decommission_all is scheduled separately below, to the
+		// "tunnel" queue, because its managed-side cleanup phase needs the hub
+		// (server pod). Scheduling it here (default queue) would run it on the
+		// standalone worker, which has no hub.
 		// ArgoCD auto-adoption sweep. Agent connect enqueues the per-cluster
 		// task immediately; this sweep repairs missed enqueue, worker crash,
 		// or an ArgoCD cluster Secret deleted out-of-band.
@@ -203,6 +202,17 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 			return err
 		}
 		s.log.Info("registered periodic task", "task", "cluster template drift sweep (tunnel queue)", "schedule", "@every 1h", "entry_id", entryID)
+	}
+	{
+		// Decommission sweep — tunnel queue so it runs on the server pod and
+		// its managed-side cleanup phase can reach a connected agent.
+		task := asynq.NewTask(tasks.ClusterDecommissionAllType, nil)
+		entryID, err := s.scheduler.Register("@every 1m", task, asynq.Queue(tasks.ClusterTemplateApplyQueueName))
+		if err != nil {
+			s.log.Error("failed to register periodic task", "task", tasks.ClusterDecommissionAllType, "error", err)
+			return err
+		}
+		s.log.Info("registered periodic task", "task", "cluster decommission sweep (tunnel queue)", "schedule", "@every 1m", "entry_id", entryID)
 	}
 	{
 		task := asynq.NewTask(tasks.MeshDetectType, nil)
