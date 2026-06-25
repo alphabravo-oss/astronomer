@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -38,6 +39,7 @@ type fakeAutoAttachClusterQuerier struct {
 	upserts      []sqlc.UpsertClusterTemplateApplicationParams
 	upsertErr    error
 	createCalled int
+	createErr    error
 	auditOps     []string
 
 	clusters         map[uuid.UUID]sqlc.Cluster
@@ -100,6 +102,9 @@ func (q *fakeAutoAttachClusterQuerier) CreateCluster(_ context.Context, arg sqlc
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.createCalled++
+	if q.createErr != nil {
+		return sqlc.Cluster{}, q.createErr
+	}
 	return sqlc.Cluster{
 		ID:           uuid.New(),
 		Name:         arg.Name,
@@ -242,6 +247,42 @@ func createReq(t *testing.T, name string) *http.Request {
 	t.Helper()
 	body := []byte(`{"name":"` + name + `","environment":"production"}`)
 	return httptest.NewRequest(http.MethodPost, "/api/v1/clusters/", bytes.NewReader(body))
+}
+
+// TestClusterHandler_Create_DuplicateNameReturns409 ensures a unique-name
+// constraint violation is surfaced as a 409 Conflict with a clear message,
+// not an opaque 500 ("Failed to create cluster").
+func TestClusterHandler_Create_DuplicateNameReturns409(t *testing.T) {
+	// Cover both the typed *pgconn.PgError path AND the string-only path: the
+	// real pooled pgx error often does not unwrap to *pgconn.PgError via
+	// errors.As, so isUniqueViolation must also match the SQLSTATE text.
+	cases := map[string]error{
+		"typed":  &pgconn.PgError{Code: "23505"},
+		"wrapped string": errors.New(
+			`ERROR: duplicate key value violates unique constraint "clusters_name_key" (SQLSTATE 23505)`),
+	}
+	for name, createErr := range cases {
+		t.Run(name, func(t *testing.T) {
+			q := newFakeAutoAttachClusterQuerier()
+			q.createErr = createErr
+			h := NewClusterHandler(q)
+
+			w := httptest.NewRecorder()
+			h.Create(w, createReq(t, "dup-cluster"))
+
+			if w.Code != http.StatusConflict {
+				t.Fatalf("Create status = %d, want 409; body=%s", w.Code, w.Body.String())
+			}
+			var resp map[string]any
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			errMap, _ := resp["error"].(map[string]any)
+			if errMap["code"] != "conflict" {
+				t.Errorf("error code = %v, want conflict", errMap["code"])
+			}
+		})
+	}
 }
 
 // TestPlatformDefaultTemplate_ClusterCreateAutoAttachesDefault confirms

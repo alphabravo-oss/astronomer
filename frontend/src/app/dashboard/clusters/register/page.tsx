@@ -13,9 +13,10 @@
 import { useRouter } from '@/lib/navigation';
 import { useState } from 'react';
 import { toastError } from '@/lib/toast';
-import { Server, Loader2, Info } from 'lucide-react';
+import { Server, Loader2, Info, AlertTriangle } from 'lucide-react';
 import { createCluster } from '@/lib/api';
 import { setRegistrationOptions } from '@/lib/api';
+import { useClusters } from '@/lib/hooks';
 import type { ClusterEnvironment } from '@/types';
 
 export default function RegisterClusterWizardPage() {
@@ -31,9 +32,15 @@ export default function RegisterClusterWizardPage() {
     privilegeProfile: 'viewer',
   });
 
+  // Live name-availability check: cluster names are unique, so warn before
+  // submit rather than letting the create POST come back 409.
+  const { data: clustersData } = useClusters({ pageSize: 1000 });
+  const existingNames = new Set((clustersData?.data ?? []).map((c) => c.name.toLowerCase()));
+  const nameTaken = form.name.length > 0 && existingNames.has(form.name);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name) return;
+    if (!form.name || nameTaken) return;
     setSubmitting(true);
     try {
       const cluster = await createCluster({
@@ -81,9 +88,17 @@ export default function RegisterClusterWizardPage() {
               setForm((f) => ({ ...f, name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))
             }
             placeholder="my-cluster"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
+            className={`w-full h-10 px-3 rounded-lg border bg-background text-sm ${
+              nameTaken ? 'border-status-danger' : 'border-border'
+            }`}
             autoFocus
           />
+          {nameTaken && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-status-danger">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              A cluster named &quot;{form.name}&quot; already exists. Choose a different name.
+            </p>
+          )}
         </Field>
 
         <Field label="Display name">
@@ -183,7 +198,7 @@ export default function RegisterClusterWizardPage() {
           </button>
           <button
             type="submit"
-            disabled={!form.name || submitting}
+            disabled={!form.name || nameTaken || submitting}
             className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

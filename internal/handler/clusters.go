@@ -770,6 +770,10 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedByID:  currentUserUUID(r),
 	})
 	if err != nil {
+		if isUniqueViolation(err) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, fmt.Sprintf("A cluster named %q already exists", req.Name))
+			return
+		}
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster")
 		return
 	}

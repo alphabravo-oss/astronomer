@@ -765,7 +765,10 @@ func isUniqueViolation(err error) bool {
 	if errors.As(err, &pgErr) {
 		return pgErr.Code == "23505"
 	}
-	return false
+	// Fallback: some pooled/wrapped error paths don't preserve *pgconn.PgError
+	// for errors.As, so match the stable SQLSTATE text (cf. db.isUndefinedTable
+	// which matches 42P01 by string for the same reason).
+	return strings.Contains(err.Error(), "SQLSTATE 23505")
 }
 
 // isFKRestrictViolation returns true for the 23503 foreign_key_violation
