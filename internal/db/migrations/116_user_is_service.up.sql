@@ -1,0 +1,13 @@
+-- Service principals (PATH A — finish apiserver-audit HTTP delivery).
+--
+-- The per-cluster agent's HTTP audit-ingest path authenticates with a scoped
+-- API token (auth.AgentIngestToken*). api_tokens.user_id is NOT NULL and FKs to
+-- users, but no service-account concept exists. Rather than invent a new table,
+-- we mark a single reserved user (username "system:agent-ingest") as a service
+-- principal so it is excluded from human-user surfaces (login, enumeration,
+-- seat counting) while still satisfying the api_tokens FK and the RBAC binding
+-- model. The token's authority is granted narrowly via a cluster-scoped
+-- cluster_role_binding (cluster:update on exactly the connecting cluster).
+--
+-- DEFAULT false keeps the ADD COLUMN non-rewriting on the existing users table.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_service BOOLEAN NOT NULL DEFAULT false;

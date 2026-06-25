@@ -36,7 +36,7 @@ func TestHTTPAuditSenderPostsBatchWithBearer(t *testing.T) {
 	// srv.URL is http://...; feed the ws:// equivalent so we also exercise the
 	// scheme rewrite.
 	wsURL := "ws://" + srv.Listener.Addr().String()
-	s := newHTTPAuditSender(srv.Client(), wsURL, clusterID, token)
+	s := newHTTPAuditSender(srv.Client(), wsURL, clusterID, func() string { return token }, nil, nil)
 
 	events := []json.RawMessage{
 		json.RawMessage(`{"auditID":"a1","verb":"get"}`),
@@ -74,7 +74,7 @@ func TestHTTPAuditSenderNon2xxIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := newHTTPAuditSender(srv.Client(), srv.URL, "cid", "tok")
+	s := newHTTPAuditSender(srv.Client(), srv.URL, "cid", func() string { return "tok" }, nil, nil)
 	err := s.Send(context.Background(), []json.RawMessage{json.RawMessage(`{"auditID":"a1"}`)})
 	if err == nil {
 		t.Fatal("expected error on non-2xx so the tailer holds its checkpoint")
@@ -88,7 +88,7 @@ func TestHTTPAuditSenderEmptyBatchNoRequest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := newHTTPAuditSender(srv.Client(), srv.URL, "cid", "tok")
+	s := newHTTPAuditSender(srv.Client(), srv.URL, "cid", func() string { return "tok" }, nil, nil)
 	if err := s.Send(context.Background(), nil); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -102,26 +102,76 @@ func TestSelectAuditSenderByDelivery(t *testing.T) {
 		return &AgentConfig{ServerURL: "ws://host:8000", ClusterID: "cid", AuditDelivery: delivery}
 	}
 
+	tok := func() string { return "astro_agent_ingest_x" }
+	empty := func() string { return "" }
+
 	// Default (empty / "tunnel") and unknown values both pick the tunnel sender,
 	// so audit works out-of-the-box with no extra credential.
 	for _, d := range []string{"", "tunnel", "bogus"} {
-		if _, ok := SelectAuditSender(cfg(d), &captureSender{}, "astro_agent_ingest_x", nil).(tunnelAuditSender); !ok {
+		if _, ok := SelectAuditSender(cfg(d), &captureSender{}, tok, nil).(tunnelAuditSender); !ok {
 			t.Errorf("delivery %q: expected tunnelAuditSender", d)
 		}
 	}
 
-	// http with a delivered ingest token -> HTTP sender (PATH A).
-	if _, ok := SelectAuditSender(cfg("http"), &captureSender{}, "astro_agent_ingest_x", nil).(httpAuditSender); !ok {
-		t.Error("delivery http with token: expected httpAuditSender")
+	// http -> the HTTP sender (PATH A). It reads the token lazily on each Send,
+	// so selection no longer depends on whether a token is present yet; the
+	// tunnel fallback is carried INSIDE the sender for the not-yet-delivered case.
+	if _, ok := SelectAuditSender(cfg("http"), &captureSender{}, tok, nil).(*httpAuditSender); !ok {
+		t.Error("delivery http: expected *httpAuditSender")
 	}
-	// http without a token can't authenticate, so it falls back to the tunnel.
-	if _, ok := SelectAuditSender(cfg("http"), &captureSender{}, "", nil).(tunnelAuditSender); !ok {
-		t.Error("delivery http without token: expected tunnel fallback")
+	if _, ok := SelectAuditSender(cfg("http"), &captureSender{}, empty, nil).(*httpAuditSender); !ok {
+		t.Error("delivery http (no token yet): expected *httpAuditSender with tunnel fallback inside")
 	}
 
 	// stub -> the no-op logging sender.
-	if _, ok := SelectAuditSender(cfg("stub"), &captureSender{}, "astro_agent_ingest_x", nil).(stubAuditSender); !ok {
+	if _, ok := SelectAuditSender(cfg("stub"), &captureSender{}, tok, nil).(stubAuditSender); !ok {
 		t.Error("delivery stub: expected stubAuditSender")
+	}
+}
+
+// TestHTTPAuditSenderLazyTokenFallback: with no token yet (getter returns ""),
+// the http sender must NOT issue an HTTP request and must instead deliver the
+// batch over the tunnel fallback. Once the token arrives (the CONNECT_ACK case),
+// the next batch POSTs with the bearer token.
+func TestHTTPAuditSenderLazyTokenFallback(t *testing.T) {
+	var httpCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpCalls++
+		if got := r.Header.Get("Authorization"); got != "Bearer late-token" {
+			t.Errorf("auth header: got %q, want Bearer late-token", got)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	token := "" // empty until the "ACK" arrives below
+	fallback := &captureSender{}
+	s := newHTTPAuditSender(srv.Client(), "ws://"+srv.Listener.Addr().String(), "cid",
+		func() string { return token }, newTunnelAuditSender(fallback), nil)
+
+	events := []json.RawMessage{json.RawMessage(`{"auditID":"a1"}`)}
+
+	// Phase 1: no token yet -> tunnel fallback, no HTTP request.
+	if err := s.Send(context.Background(), events); err != nil {
+		t.Fatalf("Send (pre-token): %v", err)
+	}
+	if httpCalls != 0 {
+		t.Errorf("expected 0 HTTP calls before token arrives, got %d", httpCalls)
+	}
+	if len(fallback.payloads) != 1 {
+		t.Fatalf("expected 1 tunnel-fallback batch, got %d", len(fallback.payloads))
+	}
+
+	// Phase 2: token delivered (CONNECT_ACK) -> HTTP POST with bearer.
+	token = "late-token"
+	if err := s.Send(context.Background(), events); err != nil {
+		t.Fatalf("Send (post-token): %v", err)
+	}
+	if httpCalls != 1 {
+		t.Errorf("expected 1 HTTP call after token arrives, got %d", httpCalls)
+	}
+	if len(fallback.payloads) != 1 {
+		t.Errorf("tunnel fallback must not receive the post-token batch, got %d", len(fallback.payloads))
 	}
 }
 

@@ -41,6 +41,18 @@ type TunnelClient struct {
 	// fires once per connection — repeated congestion shouldn't
 	// hammer tc.conn.Close. Reset by dial() on each new connection.
 	failCloseOnce *sync.Once
+
+	// auditAcks holds the pending apiserver-audit ack waiters, keyed by
+	// BatchID. tunnelAuditSender registers a channel before sending a batch and
+	// blocks on it; readLoop routes the matching MsgApiserverAuditAck to it.
+	// Guarded by auditAcksMu. On disconnect, failAuditAckWaiters drains every
+	// pending waiter so the blocked sender returns an error and holds its
+	// checkpoint rather than waiting out its full timeout.
+	auditAcksMu sync.Mutex
+	auditAcks   map[string]chan protocol.ApiserverAuditAckPayload
+	// auditAckTimeout bounds the SendAuditBatch wait. Zero means use the
+	// package default (auditAckTimeout const); set by tests to a short value.
+	auditAckTimeout time.Duration
 }
 
 // NewTunnelClient creates a new tunnel client with the given configuration.
@@ -51,6 +63,7 @@ func NewTunnelClient(cfg *AgentConfig, log *slog.Logger) *TunnelClient {
 		handlers:      make(map[protocol.MessageType]MessageHandler),
 		sendCh:        make(chan *protocol.Message, 256),
 		failCloseOnce: &sync.Once{},
+		auditAcks:     make(map[string]chan protocol.ApiserverAuditAckPayload),
 	}
 }
 
@@ -211,6 +224,10 @@ func (tc *TunnelClient) run(ctx context.Context) {
 		wg.Wait()
 		loopCancel()
 		tc.setConnected(false)
+		// Wake any apiserver-audit sender blocked on an ack for this now-dead
+		// connection so it returns an error and holds its checkpoint instead of
+		// waiting out its full timeout.
+		tc.failAuditAckWaiters()
 
 		// Check if parent context is done.
 		if ctx.Err() != nil {
@@ -345,6 +362,11 @@ func (tc *TunnelClient) readLoop(ctx context.Context) {
 			continue
 		}
 
+		if msg.Type == protocol.MsgApiserverAuditAck {
+			tc.routeAuditAck(msg)
+			continue
+		}
+
 		handler, ok := tc.handlers[msg.Type]
 		if !ok {
 			tc.log.Warn("no handler for message type", "type", msg.Type)
@@ -409,6 +431,108 @@ func (tc *TunnelClient) Send(msg *protocol.Message) error {
 		// same connection; dial() resets it on the next attempt.
 		go tc.failClose("send buffer full")
 		return fmt.Errorf("send channel full, closing tunnel; type=%s", msg.Type)
+	}
+}
+
+// registerAuditAck creates and stores a pending ack channel for batchID. The
+// channel is buffered (size 1) so routeAuditAck never blocks delivering the ack
+// even if the waiter has already given up. Returns a cleanup func the caller
+// MUST defer to remove the entry on ack or timeout.
+func (tc *TunnelClient) registerAuditAck(batchID string) (<-chan protocol.ApiserverAuditAckPayload, func()) {
+	ch := make(chan protocol.ApiserverAuditAckPayload, 1)
+	tc.auditAcksMu.Lock()
+	tc.auditAcks[batchID] = ch
+	tc.auditAcksMu.Unlock()
+	return ch, func() {
+		tc.auditAcksMu.Lock()
+		delete(tc.auditAcks, batchID)
+		tc.auditAcksMu.Unlock()
+	}
+}
+
+// routeAuditAck delivers a MsgApiserverAuditAck to the sender waiting on its
+// BatchID. An ack for an unknown BatchID (already timed-out / cleaned up) is
+// dropped.
+func (tc *TunnelClient) routeAuditAck(msg *protocol.Message) {
+	var ack protocol.ApiserverAuditAckPayload
+	if err := json.Unmarshal(msg.Payload, &ack); err != nil {
+		tc.log.Warn("invalid APISERVER_AUDIT_ACK payload", "error", err)
+		return
+	}
+	tc.auditAcksMu.Lock()
+	ch, ok := tc.auditAcks[ack.BatchID]
+	tc.auditAcksMu.Unlock()
+	if !ok {
+		tc.log.Debug("APISERVER_AUDIT_ACK for unknown batch", "batch_id", ack.BatchID)
+		return
+	}
+	// Non-blocking: ch is buffered and the waiter consumes at most one ack.
+	select {
+	case ch <- ack:
+	default:
+	}
+}
+
+// failAuditAckWaiters delivers a synthetic OK=false ack to every pending
+// apiserver-audit waiter, used on disconnect so blocked senders return an error
+// and hold their checkpoint immediately. The map is reset so the same waiters
+// aren't signalled twice.
+func (tc *TunnelClient) failAuditAckWaiters() {
+	tc.auditAcksMu.Lock()
+	waiters := tc.auditAcks
+	tc.auditAcks = make(map[string]chan protocol.ApiserverAuditAckPayload)
+	tc.auditAcksMu.Unlock()
+	for batchID, ch := range waiters {
+		select {
+		case ch <- protocol.ApiserverAuditAckPayload{BatchID: batchID, OK: false, Error: "tunnel disconnected"}:
+		default:
+		}
+	}
+}
+
+// auditAckTimeout bounds how long a tunnelAuditSender blocks waiting for the
+// server's MsgApiserverAuditAck before giving up and reporting the batch
+// un-acked (so the tailer holds its checkpoint and re-forwards).
+const auditAckTimeout = 30 * time.Second
+
+// SendAuditBatch sends a MsgApiserverAudit frame tagged with batchID and BLOCKS
+// until the server acks it (OK=true → nil), the server reports a persist failure
+// (OK=false → error), the bounded auditAckTimeout elapses, or the tunnel
+// disconnects (failAuditAckWaiters wakes us). Returning a non-nil error keeps
+// the AuditTailer's checkpoint pinned so the idempotent ingest re-receives the
+// batch. Implements the ack-before-checkpoint contract used by tunnelAuditSender.
+func (tc *TunnelClient) SendAuditBatch(ctx context.Context, batchID string, payload []byte) error {
+	ackCh, cleanup := tc.registerAuditAck(batchID)
+	defer cleanup()
+
+	msg := &protocol.Message{
+		Type:      protocol.MsgApiserverAudit,
+		Timestamp: time.Now().UTC(),
+		Payload:   payload,
+	}
+	if err := tc.Send(msg); err != nil {
+		return err
+	}
+
+	wait := tc.auditAckTimeout
+	if wait <= 0 {
+		wait = auditAckTimeout
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return fmt.Errorf("apiserver-audit ack timeout for batch %s", batchID)
+	case ack := <-ackCh:
+		if !ack.OK {
+			if ack.Error != "" {
+				return fmt.Errorf("apiserver-audit batch %s rejected: %s", batchID, ack.Error)
+			}
+			return fmt.Errorf("apiserver-audit batch %s rejected", batchID)
+		}
+		return nil
 	}
 }
 

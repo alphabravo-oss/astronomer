@@ -250,7 +250,7 @@ func runConnect(logger *slog.Logger) error {
 		// (direct POST with the scoped ingest token from CONNECT_ACK), or stub
 		// (drops batches, logging only).
 		if cfg.AuditEnabled {
-			sender := agent.SelectAuditSender(cfg, tunnel, tunnel.AuditIngestToken(), logger)
+			sender := agent.SelectAuditSender(cfg, tunnel, tunnel.AuditIngestToken, logger)
 			if tailer, terr := agent.NewAuditTailer(cfg, sender, logger); terr != nil {
 				logger.Warn("apiserver-audit: tailer disabled", "error", terr)
 			} else {

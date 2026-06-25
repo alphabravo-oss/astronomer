@@ -570,6 +570,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	hub.SetMirrorIngester(mirrorRouter)
 	apiserverAuditHandler := handler.NewApiserverAuditHandler(queries)
 	hub.SetAuditPersister(apiserverAuditHandler)
+	// PATH A: mint the scoped apiserver-audit ingest token in CONNECT_ACK so an
+	// agent configured with AUDIT_DELIVERY=http can authenticate its direct POST
+	// to /clusters/{id}/apiserver-audit/ (clusters:write scope + cluster:update).
+	if issuer := auth.NewIngestIssuer(queries); issuer != nil {
+		hub.SetAuditIngestIssuer(issuer)
+	}
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, argocdHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
 
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)

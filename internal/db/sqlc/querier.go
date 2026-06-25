@@ -150,6 +150,10 @@ type Querier interface {
 	CountVulnerableImagesForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
 	CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error)
+	CountClusterRoleBindingForUserCluster(ctx context.Context, arg CountClusterRoleBindingForUserClusterParams) (int64, error)
+	CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error)
+	GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error)
+	RevokeAPITokensByName(ctx context.Context, arg RevokeAPITokensByNameParams) error
 	CreateAgentConnection(ctx context.Context, arg CreateAgentConnectionParams) (AgentConnection, error)
 	CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) (AlertEvent, error)
 	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error)

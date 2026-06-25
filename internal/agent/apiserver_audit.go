@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -48,37 +50,49 @@ func (s stubAuditSender) Send(_ context.Context, events []json.RawMessage) error
 	return nil
 }
 
+// AuditBatchSender is the ack-before-checkpoint contract tunnelAuditSender needs
+// from the tunnel: send a MsgApiserverAudit frame tagged with batchID and BLOCK
+// until the server acks it. It returns nil only when the server confirms durable
+// persistence (ack OK=true); a persist failure, ack timeout, or disconnect
+// returns an error so the tailer holds its checkpoint. Implemented by
+// *TunnelClient.SendAuditBatch.
+type AuditBatchSender interface {
+	SendAuditBatch(ctx context.Context, batchID string, payload []byte) error
+}
+
 // tunnelAuditSender forwards audit batches over the existing agent WS tunnel as
 // a protocol.MsgApiserverAudit frame, rather than over a separate outbound HTTP
 // call. This is the default path (PATH B): it reuses the authenticated tunnel,
 // so the server attributes events to the session's cluster ID and the agent
-// needs no second credential. The MessageSender contract is satisfied by
-// *TunnelClient.Send.
+// needs no second credential.
+//
+// Delivery is AT-LEAST-ONCE: each batch gets a fresh BatchID and Send blocks on
+// the server's matching MsgApiserverAuditAck, returning nil only on OK=true so
+// the AuditTailer advances its checkpoint solely after durable persistence.
 type tunnelAuditSender struct {
-	sender MessageSender
+	sender AuditBatchSender
 }
 
 // newTunnelAuditSender wires a tunnelAuditSender to the agent's tunnel client.
-func newTunnelAuditSender(sender MessageSender) tunnelAuditSender {
+func newTunnelAuditSender(sender AuditBatchSender) tunnelAuditSender {
 	return tunnelAuditSender{sender: sender}
 }
 
-// Send marshals the batch into a MsgApiserverAudit frame and queues it on the
-// tunnel. A queue-full / closed-tunnel error from the sender is returned so the
-// tailer holds its checkpoint and re-forwards the batch after reconnect.
-func (s tunnelAuditSender) Send(_ context.Context, events []json.RawMessage) error {
+// Send marshals the batch (tagged with a fresh BatchID) into a MsgApiserverAudit
+// frame and BLOCKS on the server's ack. An error — queue-full / closed tunnel,
+// ack timeout, or a server persist failure — is returned so the tailer holds its
+// checkpoint and re-forwards the batch (the ingest dedups on (cluster_id,
+// audit_id), so re-delivery is safe).
+func (s tunnelAuditSender) Send(ctx context.Context, events []json.RawMessage) error {
 	if len(events) == 0 {
 		return nil
 	}
-	body, err := json.Marshal(protocol.ApiserverAuditPayload{Events: events})
+	batchID := uuid.NewString()
+	body, err := json.Marshal(protocol.ApiserverAuditPayload{Events: events, BatchID: batchID})
 	if err != nil {
 		return fmt.Errorf("marshal apiserver-audit payload: %w", err)
 	}
-	return s.sender.Send(&protocol.Message{
-		Type:      protocol.MsgApiserverAudit,
-		Timestamp: time.Now().UTC(),
-		Payload:   body,
-	})
+	return s.sender.SendAuditBatch(ctx, batchID, body)
 }
 
 // httpAuditSender forwards audit batches over a direct outbound HTTPS POST to
@@ -91,30 +105,43 @@ func (s tunnelAuditSender) Send(_ context.Context, events []json.RawMessage) err
 // proxy tunnel and don't share its backpressure.
 //
 // baseURL is the management-plane HTTP base (https://host[:port], no trailing
-// slash); clusterID and token are fixed for the agent's lifetime. The token is
-// read on each Send so a rotated token (re-delivered into the same field) takes
-// effect on the next batch.
+// slash); clusterID is fixed for the agent's lifetime. getToken is called on
+// every Send so the ingest token delivered LATER in CONNECT_ACK (the agent
+// dials, gets the ACK, then starts forwarding) is picked up lazily — and a
+// rotated token (re-delivered on reconnect) takes effect on the next batch.
+//
+// fallback is the tunnel sender used while no token has arrived yet (or never
+// does): the HTTP path can't authenticate without one, so rather than drop or
+// stall audit events we deliver them over the authenticated tunnel and warn
+// once. warned dedupes that warning.
 type httpAuditSender struct {
 	client    *http.Client
 	baseURL   string
 	clusterID string
-	token     string
+	getToken  func() string
+	fallback  AuditEventSender
+	log       *slog.Logger
+	warned    bool
 }
 
 // newHTTPAuditSender builds an httpAuditSender. wsServerURL is the agent's
 // ServerURL (a ws:// / wss:// tunnel URL); it is rewritten to the matching
 // http:// / https:// scheme since the ingest endpoint is a plain HTTP route on
 // the same host. A nil client falls back to a default with a 30s timeout so a
-// hung server can't wedge the tailer's poll loop forever.
-func newHTTPAuditSender(client *http.Client, wsServerURL, clusterID, token string) httpAuditSender {
+// hung server can't wedge the tailer's poll loop forever. getToken is the lazy
+// accessor for the CONNECT_ACK-delivered token; fallback carries batches over
+// the tunnel until (or unless) a token arrives.
+func newHTTPAuditSender(client *http.Client, wsServerURL, clusterID string, getToken func() string, fallback AuditEventSender, log *slog.Logger) *httpAuditSender {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	return httpAuditSender{
+	return &httpAuditSender{
 		client:    client,
 		baseURL:   httpBaseFromWS(wsServerURL),
 		clusterID: clusterID,
-		token:     token,
+		getToken:  getToken,
+		fallback:  fallback,
+		log:       log,
 	}
 }
 
@@ -137,9 +164,26 @@ func httpBaseFromWS(u string) string {
 // A non-2xx response (or a transport error) returns an error so the tailer
 // holds its checkpoint and re-forwards the batch on the next poll. An empty
 // batch is a no-op.
-func (s httpAuditSender) Send(ctx context.Context, events []json.RawMessage) error {
+func (s *httpAuditSender) Send(ctx context.Context, events []json.RawMessage) error {
 	if len(events) == 0 {
 		return nil
+	}
+	// Lazily read the CONNECT_ACK-delivered token. Until it arrives, carry the
+	// batch over the authenticated tunnel so audit events aren't dropped or
+	// stalled while the handshake completes (or if the server never issues one).
+	token := ""
+	if s.getToken != nil {
+		token = s.getToken()
+	}
+	if token == "" {
+		if !s.warned && s.log != nil {
+			s.log.Warn("apiserver-audit: AUDIT_DELIVERY=http but no ingest token yet; delivering over tunnel until one arrives")
+			s.warned = true
+		}
+		if s.fallback != nil {
+			return s.fallback.Send(ctx, events)
+		}
+		return fmt.Errorf("apiserver-audit: no ingest token and no tunnel fallback")
 	}
 	body, err := json.Marshal(protocol.ApiserverAuditPayload{Events: events})
 	if err != nil {
@@ -151,7 +195,7 @@ func (s httpAuditSender) Send(ctx context.Context, events []json.RawMessage) err
 		return fmt.Errorf("build apiserver-audit request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -173,21 +217,18 @@ func (s httpAuditSender) Send(ctx context.Context, events []json.RawMessage) err
 //     authenticated WS tunnel (PATH B) — no second credential needed, so audit
 //     works out-of-the-box.
 //   - "http": direct outbound HTTPS POST with the scoped ingest token (PATH A).
-//     Falls back to the tunnel if no ingest token was delivered, since the HTTP
-//     path can't authenticate without one.
+//     tokenGetter is read lazily on each batch so the token delivered in
+//     CONNECT_ACK (which arrives AFTER the sender is selected) is picked up;
+//     until/unless one arrives, batches fall back to the authenticated tunnel
+//     (with a one-time warning), since the HTTP path can't authenticate
+//     without a token.
 //   - "stub": the no-op logging sender (batches+checkpoints but drops).
-func SelectAuditSender(cfg *AgentConfig, tunnel MessageSender, ingestToken string, log *slog.Logger) AuditEventSender {
+func SelectAuditSender(cfg *AgentConfig, tunnel AuditBatchSender, tokenGetter func() string, log *slog.Logger) AuditEventSender {
 	switch cfg.AuditDelivery {
 	case "stub":
 		return stubAuditSender{log: log}
 	case "http":
-		if ingestToken == "" {
-			if log != nil {
-				log.Warn("apiserver-audit: AUDIT_DELIVERY=http but no ingest token delivered; falling back to tunnel")
-			}
-			return newTunnelAuditSender(tunnel)
-		}
-		return newHTTPAuditSender(nil, cfg.ServerURL, cfg.ClusterID, ingestToken)
+		return newHTTPAuditSender(nil, cfg.ServerURL, cfg.ClusterID, tokenGetter, newTunnelAuditSender(tunnel), log)
 	default: // "tunnel" and any unrecognized value
 		return newTunnelAuditSender(tunnel)
 	}

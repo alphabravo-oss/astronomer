@@ -130,10 +130,20 @@ const (
 	// JSON documents the agent tailed from the apiserver audit log. The server
 	// persists the batch under the AUTHENTICATED tunnel session's cluster ID —
 	// the cluster_id is never taken from the payload, so a compromised agent
-	// cannot forge events for another cluster. There is no Ack today; the
-	// agent's checkpoint advances on a successful WS send (the tunnel send
-	// channel backpressures / fail-closes when the server can't keep up).
+	// cannot forge events for another cluster.
+	//
+	// Delivery is AT-LEAST-ONCE via ack-before-checkpoint: each batch carries a
+	// BatchID, and the server replies with a MsgApiserverAuditAck of the same
+	// BatchID after attempting to persist. The agent blocks on that ack and only
+	// advances its checkpoint on OK=true — on OK=false, timeout, or disconnect it
+	// holds and re-forwards (idempotent ingest dedups on (cluster_id, audit_id)).
 	MsgApiserverAudit MessageType = "APISERVER_AUDIT"
+	// MsgApiserverAuditAck is the server's per-batch acknowledgement of a
+	// MsgApiserverAudit frame. It carries the matching BatchID so the agent can
+	// route it to the blocked sender. OK=true means the batch was durably
+	// persisted (Accepted/Skipped report dedup counts); OK=false carries Error
+	// and tells the agent to hold its checkpoint and re-forward.
+	MsgApiserverAuditAck MessageType = "APISERVER_AUDIT_ACK"
 )
 
 // ApiserverAuditPayload is the body of a MsgApiserverAudit frame: a batch of
@@ -142,6 +152,23 @@ const (
 // payload — the server derives it from the authenticated tunnel session.
 type ApiserverAuditPayload struct {
 	Events []json.RawMessage `json:"events"`
+	// BatchID correlates this batch with its MsgApiserverAuditAck. Empty on
+	// the legacy HTTP path (httpAuditSender), which acks via the HTTP status
+	// code rather than a tunnel frame.
+	BatchID string `json:"batch_id,omitempty"`
+}
+
+// ApiserverAuditAckPayload is the body of a MsgApiserverAuditAck frame: the
+// server's per-batch acknowledgement of a MsgApiserverAudit. BatchID echoes the
+// originating batch so the agent routes it to the blocked sender. OK=true means
+// the batch was durably persisted; OK=false carries Error and tells the agent
+// to hold its checkpoint and re-forward.
+type ApiserverAuditAckPayload struct {
+	BatchID  string `json:"batch_id"`
+	OK       bool   `json:"ok"`
+	Error    string `json:"error,omitempty"`
+	Accepted int    `json:"accepted"`
+	Skipped  int    `json:"skipped"`
 }
 
 // DecommissionPayload tells the agent which managed-side resources to remove.

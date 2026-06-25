@@ -106,6 +106,28 @@ type Hub struct {
 	// to us. Optional: nil collapses to single-pod behavior (the proxy
 	// 503s when its local Hub doesn't hold the agent).
 	locator *Locator
+	// ingestIssuer mints the scoped apiserver-audit ingest token (PATH A)
+	// delivered in CONNECT_ACK. Optional; nil-safe so installs that don't
+	// wire it simply never issue a token (the agent falls back to tunnel
+	// delivery). The issuer get-or-creates the reserved service identity +
+	// cluster-scoped clusters:update grant and mints a fresh scoped token.
+	ingestIssuer AuditIngestIssuer
+}
+
+// AuditIngestIssuer mints the per-cluster scoped apiserver-audit ingest token
+// delivered in CONNECT_ACK (PATH A). Satisfied by *sqlc.Queries via
+// auth.IssueAgentIngestToken. Kept as an interface so the tunnel package
+// doesn't grow a hard dependency on the issuance internals.
+type AuditIngestIssuer interface {
+	IssueIngestToken(ctx context.Context, clusterID uuid.UUID) (string, error)
+}
+
+// SetAuditIngestIssuer attaches the PATH A ingest-token issuer (set once at
+// startup). Nil-safe.
+func (h *Hub) SetAuditIngestIssuer(i AuditIngestIssuer) {
+	h.mu.Lock()
+	h.ingestIssuer = i
+	h.mu.Unlock()
 }
 
 // SetLocator wires the cross-pod agent locator (set once at startup).
@@ -322,6 +344,24 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		if tokenKind == "registration" && durableToken != "" && durableToken != payload.Token {
 			ackPayload.AgentToken = durableToken
+		}
+
+		// PATH A: mint (or re-mint) the scoped apiserver-audit ingest token for
+		// this authenticated cluster and deliver its plaintext in CONNECT_ACK.
+		// Best-effort: a failure here must not block the agent from connecting
+		// (it can still use tunnel audit delivery), so we log and continue.
+		h.mu.RLock()
+		issuer := h.ingestIssuer
+		h.mu.RUnlock()
+		if issuer != nil {
+			if token, ierr := issuer.IssueIngestToken(ctx, clusterID); ierr != nil {
+				h.log.Warn("failed to mint apiserver-audit ingest token",
+					slog.String("cluster_id", payload.ClusterID),
+					slog.String("error", ierr.Error()),
+				)
+			} else {
+				ackPayload.AuditIngestToken = token
+			}
 		}
 	}
 
