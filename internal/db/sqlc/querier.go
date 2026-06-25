@@ -83,6 +83,9 @@ type Querier interface {
 	// uses this as a daily-cap circuit breaker so a permanently-broken
 	// cluster can't drive unbounded token reissuance / audit-log growth.
 	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
+	// Whether the service user already holds the reserved role on this cluster, so
+	// the connect path doesn't pile up duplicate bindings on every reconnect.
+	CountClusterRoleBindingForUserCluster(ctx context.Context, arg CountClusterRoleBindingForUserClusterParams) (int64, error)
 	CountClusterRoles(ctx context.Context) (int64, error)
 	CountClusterSecurityPolicies(ctx context.Context) (int64, error)
 	// Pre-flight check so the DELETE handler can return a friendly 409 body
@@ -150,10 +153,6 @@ type Querier interface {
 	CountVulnerableImagesForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
 	CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error)
-	CountClusterRoleBindingForUserCluster(ctx context.Context, arg CountClusterRoleBindingForUserClusterParams) (int64, error)
-	CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error)
-	GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error)
-	RevokeAPITokensByName(ctx context.Context, arg RevokeAPITokensByNameParams) error
 	CreateAgentConnection(ctx context.Context, arg CreateAgentConnectionParams) (AgentConnection, error)
 	CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) (AlertEvent, error)
 	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error)
@@ -294,6 +293,17 @@ type Querier interface {
 	CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForwarderParams) (SiemForwarder, error)
 	CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfigurationParams) (SsoConfiguration, error)
 	CreateSecurityScanResult(ctx context.Context, arg CreateSecurityScanResultParams) (SecurityScanResult, error)
+	// Agent apiserver-audit ingest service identity (PATH A).
+	//
+	// These power the get-or-create of the reserved service principal + its
+	// cluster-scoped cluster:update grant, plus the mint-fresh-revoke-old token
+	// lifecycle the tunnel CONNECT handshake drives. Kept in one file so the
+	// ingest auth path is reviewable in isolation.
+	// Inserts a service principal (is_service=true). Service users are excluded
+	// from human-user surfaces; they exist solely to satisfy the api_tokens FK and
+	// carry RBAC bindings. ON CONFLICT keeps get-or-create race-safe under
+	// concurrent agent connects.
+	CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error)
 	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
 	CreateToolOperationEvent(ctx context.Context, arg CreateToolOperationEventParams) (ToolOperationEvent, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -549,6 +559,7 @@ type Querier interface {
 	GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (ClusterRoleBinding, error)
 	// Cluster Roles
 	GetClusterRoleByID(ctx context.Context, id uuid.UUID) (ClusterRole, error)
+	GetClusterRoleByName(ctx context.Context, name string) (ClusterRole, error)
 	// Cluster Security Policies
 	GetClusterSecurityPolicyByID(ctx context.Context, id uuid.UUID) (ClusterSecurityPolicy, error)
 	GetClusterSnapshotByID(ctx context.Context, id uuid.UUID) (ClusterSnapshot, error)
@@ -1397,6 +1408,12 @@ type Querier interface {
 	// backoff schedule.
 	RetryWebhookDelivery(ctx context.Context, arg RetryWebhookDeliveryParams) error
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) error
+	// Revokes any prior non-revoked tokens for a service user with this name. The
+	// plaintext of a previously-minted ingest token is never stored (hash-only
+	// contract), so it cannot be re-delivered on reconnect; instead we revoke the
+	// old row and mint a fresh one, keeping at most one valid token per cluster and
+	// preventing token pileup.
+	RevokeAPITokensByName(ctx context.Context, arg RevokeAPITokensByNameParams) error
 	// JWT session revocation.
 	//
 	// Two layers:

@@ -13,7 +13,7 @@
 INSERT INTO users (email, username, is_active, is_service)
 VALUES ($1, $2, true, true)
 ON CONFLICT (username) DO UPDATE SET is_service = true
-RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides;
+RETURNING *;
 
 -- name: GetClusterRoleByName :one
 SELECT * FROM cluster_roles WHERE name = $1;

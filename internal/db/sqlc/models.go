@@ -1878,6 +1878,7 @@ type UiExtension struct {
 	InstalledBy         pgtype.UUID     `json:"installed_by"`
 	InstalledAt         time.Time       `json:"installed_at"`
 	UpdatedAt           time.Time       `json:"updated_at"`
+	BundleVerified      bool            `json:"bundle_verified"`
 }
 
 type User struct {
@@ -1902,6 +1903,7 @@ type User struct {
 	TokensInvalidatedAt pgtype.Timestamptz `json:"tokens_invalidated_at"`
 	QuotaPlan           string             `json:"quota_plan"`
 	QuotaOverrides      json.RawMessage    `json:"quota_overrides"`
+	IsService           bool               `json:"is_service"`
 }
 
 type UserIdpGroup struct {

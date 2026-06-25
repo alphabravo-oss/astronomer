@@ -55,8 +55,8 @@ SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC 
 SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateCluster :one
-INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateCluster :one

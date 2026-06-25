@@ -23,6 +23,8 @@ type CountClusterRoleBindingForUserClusterParams struct {
 	RoleID    uuid.UUID   `json:"role_id"`
 }
 
+// Whether the service user already holds the reserved role on this cluster, so
+// the connect path doesn't pile up duplicate bindings on every reconnect.
 func (q *Queries) CountClusterRoleBindingForUserCluster(ctx context.Context, arg CountClusterRoleBindingForUserClusterParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countClusterRoleBindingForUserCluster, arg.UserID, arg.ClusterID, arg.RoleID)
 	var count int64
@@ -31,10 +33,11 @@ func (q *Queries) CountClusterRoleBindingForUserCluster(ctx context.Context, arg
 }
 
 const createServiceUser = `-- name: CreateServiceUser :one
+
 INSERT INTO users (email, username, is_active, is_service)
 VALUES ($1, $2, true, true)
 ON CONFLICT (username) DO UPDATE SET is_service = true
-RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides
+RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service
 `
 
 type CreateServiceUserParams struct {
@@ -42,6 +45,16 @@ type CreateServiceUserParams struct {
 	Username string `json:"username"`
 }
 
+// Agent apiserver-audit ingest service identity (PATH A).
+//
+// These power the get-or-create of the reserved service principal + its
+// cluster-scoped cluster:update grant, plus the mint-fresh-revoke-old token
+// lifecycle the tunnel CONNECT handshake drives. Kept in one file so the
+// ingest auth path is reviewable in isolation.
+// Inserts a service principal (is_service=true). Service users are excluded
+// from human-user surfaces; they exist solely to satisfy the api_tokens FK and
+// carry RBAC bindings. ON CONFLICT keeps get-or-create race-safe under
+// concurrent agent connects.
 func (q *Queries) CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createServiceUser, arg.Email, arg.Username)
 	var i User
@@ -67,6 +80,7 @@ func (q *Queries) CreateServiceUser(ctx context.Context, arg CreateServiceUserPa
 		&i.TokensInvalidatedAt,
 		&i.QuotaPlan,
 		&i.QuotaOverrides,
+		&i.IsService,
 	)
 	return i, err
 }
@@ -102,6 +116,11 @@ type RevokeAPITokensByNameParams struct {
 	Name   string    `json:"name"`
 }
 
+// Revokes any prior non-revoked tokens for a service user with this name. The
+// plaintext of a previously-minted ingest token is never stored (hash-only
+// contract), so it cannot be re-delivered on reconnect; instead we revoke the
+// old row and mint a fresh one, keeping at most one valid token per cluster and
+// preventing token pileup.
 func (q *Queries) RevokeAPITokensByName(ctx context.Context, arg RevokeAPITokensByNameParams) error {
 	_, err := q.db.Exec(ctx, revokeAPITokensByName, arg.UserID, arg.Name)
 	return err

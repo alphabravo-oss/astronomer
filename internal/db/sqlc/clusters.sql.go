@@ -26,20 +26,22 @@ func (q *Queries) CountClusters(ctx context.Context) (int64, error) {
 }
 
 const createCluster = `-- name: CreateCluster :one
-INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
 `
 
 type CreateClusterParams struct {
-	Name         string      `json:"name"`
-	DisplayName  string      `json:"display_name"`
-	Description  string      `json:"description"`
-	Environment  string      `json:"environment"`
-	Region       string      `json:"region"`
-	Provider     string      `json:"provider"`
-	Distribution string      `json:"distribution"`
-	CreatedByID  pgtype.UUID `json:"created_by_id"`
+	Name         string          `json:"name"`
+	DisplayName  string          `json:"display_name"`
+	Description  string          `json:"description"`
+	Environment  string          `json:"environment"`
+	Region       string          `json:"region"`
+	Provider     string          `json:"provider"`
+	Distribution string          `json:"distribution"`
+	Labels       json.RawMessage `json:"labels"`
+	Annotations  json.RawMessage `json:"annotations"`
+	CreatedByID  pgtype.UUID     `json:"created_by_id"`
 }
 
 func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error) {
@@ -51,6 +53,8 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 		arg.Region,
 		arg.Provider,
 		arg.Distribution,
+		arg.Labels,
+		arg.Annotations,
 		arg.CreatedByID,
 	)
 	var i Cluster
