@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { WindowManager } from '@/components/window-manager/window-manager';
+import { ExtensionProvider } from '@/components/extensions/ExtensionProvider';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
@@ -52,28 +53,34 @@ export default function DashboardLayout({
   useLiveClusterMetricsMerger();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar />
-      <div
-        className={cn(
-          'flex flex-col flex-1 min-w-0 overflow-hidden',
-        )}
-      >
-        <Topbar />
-        <main className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
-            {disabledFeature ? <FeatureDisabledState /> : children}
-          </div>
-        </main>
+    // ExtensionProvider wraps the whole dashboard shell once: it fetches
+    // GET /extensions/mounts/ a single time and exposes the indexed registry to
+    // every <ExtensionSlot> (sidebar nav, dashboard widgets, cluster tabs,
+    // settings pages). Render-agnostic, so a broken extension can't reach here.
+    <ExtensionProvider>
+      <div className="flex h-screen overflow-hidden bg-background">
+        <Sidebar />
+        <div
+          className={cn(
+            'flex flex-col flex-1 min-w-0 overflow-hidden',
+          )}
+        >
+          <Topbar />
+          <main className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
+              {disabledFeature ? <FeatureDisabledState /> : children}
+            </div>
+          </main>
+        </div>
+        <CommandPalette />
+        {/*
+          Mounted once at the dashboard layout level so the bottom drawer
+          persists across navigation between cluster / workload / argo pages.
+          Renders nothing unless tabs are open.
+        */}
+        <WindowManager />
       </div>
-      <CommandPalette />
-      {/*
-        Mounted once at the dashboard layout level so the bottom drawer
-        persists across navigation between cluster / workload / argo pages.
-        Renders nothing unless tabs are open.
-      */}
-      <WindowManager />
-    </div>
+    </ExtensionProvider>
   );
 }
 

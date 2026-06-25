@@ -11,6 +11,7 @@
  * 403 placeholder on click.
  */
 import { Link } from '@/lib/link';
+import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import {
   Palette,
   Mail,
@@ -173,6 +174,13 @@ export default function SettingsHubPage() {
           );
         })}
       </div>
+
+      {/* §HostMounts mount point 4 — enabled `settingsPage` extensions append
+          here. Renders nothing when no extension declares a settings point. */}
+      <ExtensionSlot
+        point="settingsPage"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+      />
     </div>
   );
 }

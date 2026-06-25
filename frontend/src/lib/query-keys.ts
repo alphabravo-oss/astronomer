@@ -185,6 +185,12 @@ export const queryKeys = {
   },
   extensions: {
     list: ['extensions'] as const,
+    // §HostMounts — viewer-readable enabled-extension mounts. The host runtime
+    // (ExtensionProvider) caches the /mounts/ projection under this key.
+    mounts: ['extensions', 'mounts'] as const,
+    // §DataProxy — per (extension, dataSource, context) Tier-1 data fetch.
+    data: (name: string, dataSourceId: string, context?: Record<string, unknown>) =>
+      ['ext', name, dataSourceId, context] as const,
   },
   adminOperations: {
     queues: ['admin', 'queues'] as const,

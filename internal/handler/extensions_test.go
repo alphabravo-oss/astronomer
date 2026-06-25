@@ -78,6 +78,19 @@ func (f *fakeExtensionQuerier) SetUIExtensionEnabled(_ context.Context, arg sqlc
 	return row, nil
 }
 
+func (f *fakeExtensionQuerier) SetUIExtensionBundleVerified(_ context.Context, arg sqlc.SetUIExtensionBundleVerifiedParams) (sqlc.UIExtension, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	row, ok := f.rows[arg.Name]
+	if !ok {
+		return sqlc.UIExtension{}, pgx.ErrNoRows
+	}
+	row.BundleVerified = arg.BundleVerified
+	row.UpdatedAt = time.Now().UTC()
+	f.rows[arg.Name] = row
+	return row, nil
+}
+
 func (f *fakeExtensionQuerier) CreateAuditLogV1(context.Context, sqlc.CreateAuditLogV1Params) error {
 	f.audit++
 	return nil
@@ -225,5 +238,292 @@ func TestExtensionHandler_EnableBlocksIncompatibleExtension(t *testing.T) {
 	h.Enable(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/cost-insights/enable/", ""))
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func hasError(findings []ExtensionValidationFinding, substr string) bool {
+	for _, f := range findings {
+		if strings.Contains(f.Message, substr) || strings.Contains(f.Field, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// tier1Manifest returns a valid Tier-1 declarative widget manifest.
+func tier1Manifest() ExtensionManifest {
+	m := sampleExtensionManifest()
+	m.ExtensionPoints.Widgets = []ExtensionWidgetPoint{{
+		ID:    "cost-summary",
+		Title: "Cost summary",
+		DataSources: []DataSourceRef{{
+			ID:     "podCost",
+			Proxy:  "astronomer-api",
+			Method: "GET",
+			Path:   "/api/v1/clusters/{clusterId}/monitoring/cost",
+			Query:  map[string]string{"window": "30d"},
+			RBAC:   RBACRequirement{Resource: "monitoring", Verb: "read", Scope: "cluster"},
+			Shape:  "list",
+			Fields: []string{"namespace", "usd"},
+		}},
+		Render: &ExtensionRender{Declarative: &DeclarativeWidget{
+			Kind:       "table",
+			DataSource: "podCost",
+			Fields: []FieldBinding{
+				{Path: "namespace", Label: "Namespace", Format: "text"},
+				{Path: "usd", Label: "Cost (USD)", Format: "currency"},
+			},
+		}},
+	}}
+	return m
+}
+
+func TestValidateExtensionManifest_Tier1Valid(t *testing.T) {
+	resp := validateExtensionManifest(tier1Manifest(), "0.9.1")
+	if !resp.Valid {
+		t.Fatalf("expected valid Tier-1 manifest, errors=%+v", resp.Errors)
+	}
+}
+
+func TestValidateExtensionManifest_RBACCeiling(t *testing.T) {
+	m := tier1Manifest()
+	// dataSource needs monitoring:read but only clusters:read declared.
+	m.Permissions = []string{"clusters:read"}
+	resp := validateExtensionManifest(m, "0.9.1")
+	if resp.Valid {
+		t.Fatalf("expected invalid: rbac not in permissions[]")
+	}
+	if !hasError(resp.Errors, "not declared in permissions[]") {
+		t.Fatalf("missing ceiling error, got %+v", resp.Errors)
+	}
+}
+
+func TestValidateExtensionManifest_WildcardAndBadEnums(t *testing.T) {
+	m := tier1Manifest()
+	ds := &m.ExtensionPoints.Widgets[0].DataSources[0]
+	ds.RBAC.Verb = "*"
+	ds.Proxy = "evil"
+	ds.Method = "PUT"
+	ds.Shape = "blob"
+	ds.Fields = []string{"*"}
+	ds.Path = "/etc/../passwd"
+	resp := validateExtensionManifest(m, "0.9.1")
+	if resp.Valid {
+		t.Fatalf("expected invalid manifest")
+	}
+	for _, want := range []string{"rbac.verb", "proxy", "method", "shape", "fields", "path"} {
+		if !hasError(resp.Errors, want) {
+			t.Fatalf("missing %q error, got %+v", want, resp.Errors)
+		}
+	}
+}
+
+func TestValidateExtensionManifest_BadDataSourceRefAndFormat(t *testing.T) {
+	m := tier1Manifest()
+	m.ExtensionPoints.Widgets[0].Render.Declarative.DataSource = "nope"
+	m.ExtensionPoints.Widgets[0].Render.Declarative.Fields[0].Format = "html"
+	resp := validateExtensionManifest(m, "0.9.1")
+	if resp.Valid {
+		t.Fatalf("expected invalid manifest")
+	}
+	if !hasError(resp.Errors, "dataSource") || !hasError(resp.Errors, "format") {
+		t.Fatalf("missing dataSource/format error, got %+v", resp.Errors)
+	}
+}
+
+func TestValidateExtensionManifest_TierExclusivity(t *testing.T) {
+	m := tier1Manifest()
+	m.ExtensionPoints.Widgets[0].Render.Bundle = &BundleDescriptor{}
+	resp := validateExtensionManifest(m, "0.9.1")
+	if !hasError(resp.Errors, "either declarative or bundle, not both") {
+		t.Fatalf("missing exclusivity error, got %+v", resp.Errors)
+	}
+}
+
+// tier2Manifest returns a valid Tier-2 bundle cluster tab manifest.
+func tier2Manifest() ExtensionManifest {
+	m := sampleExtensionManifest()
+	m.ExtensionPoints.ClusterTabs = []ExtensionClusterTab{{
+		Label:     "Cost",
+		Component: "ClusterCostTab",
+		Render: &ExtensionRender{Bundle: &BundleDescriptor{
+			URL:           "https://cdn.vendor.example/cost/bundle.js",
+			SHA256:        "sha256:" + strings.Repeat("a", 64),
+			Integrity:     "sha384-abc",
+			Signature:     base64.StdEncoding.EncodeToString([]byte("signature-bytes-here")),
+			Entry:         "index.js",
+			SandboxOrigin: "https://ext-cost.sandbox.astronomer.local",
+			Component:     "ClusterCostTab",
+			CSP: ExtensionCSP{
+				ScriptSrc:  []string{"'self'"},
+				ConnectSrc: []string{"'self'"},
+				FrameSrc:   []string{"'none'"},
+				ImageSrc:   []string{"'self'", "data:"},
+			},
+			DataSources: []DataSourceRef{{
+				ID:     "podCost",
+				Proxy:  "astronomer-api",
+				Method: "GET",
+				Path:   "/api/v1/clusters/{clusterId}/monitoring/cost",
+				RBAC:   RBACRequirement{Resource: "monitoring", Verb: "read", Scope: "cluster"},
+				Shape:  "list",
+			}},
+		}},
+	}}
+	return m
+}
+
+func TestValidateExtensionManifest_Tier2Valid(t *testing.T) {
+	resp := validateExtensionManifest(tier2Manifest(), "0.9.1")
+	if !resp.Valid {
+		t.Fatalf("expected valid Tier-2 manifest, errors=%+v", resp.Errors)
+	}
+}
+
+func TestValidateExtensionManifest_Tier2BadBundle(t *testing.T) {
+	m := tier2Manifest()
+	b := m.ExtensionPoints.ClusterTabs[0].Render.Bundle
+	b.SHA256 = "sha256:nothex"
+	b.Integrity = "md5-xyz"
+	b.URL = "http://insecure.example/x.js"
+	b.SandboxOrigin = "ftp://nope"
+	b.CSP.FrameSrc = nil
+	b.CSP.ConnectSrc = []string{"*"}
+	resp := validateExtensionManifest(m, "0.9.1")
+	if resp.Valid {
+		t.Fatalf("expected invalid Tier-2 bundle")
+	}
+	for _, want := range []string{"sha256", "integrity", "url", "sandboxOrigin", "frameSrc", "connectSrc"} {
+		if !hasError(resp.Errors, want) {
+			t.Fatalf("missing %q error, got %+v", want, resp.Errors)
+		}
+	}
+}
+
+func TestExtensionHandler_BundleGatedWithoutTrustedKey(t *testing.T) {
+	q := newFakeExtensionQuerier()
+	h := NewExtensionHandler(q) // no trusted key
+	h.SetCurrentVersion("0.9.1")
+	raw, _ := json.Marshal(InstallExtensionRequest{Manifest: tier2Manifest(), Source: "unit-test", Enable: true})
+	rr := httptest.NewRecorder()
+	h.Install(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/", string(raw)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	resp := decodeExtensionResp[ExtensionRecordResponse](t, rr)
+	if resp.Enabled {
+		t.Fatalf("Tier-2 bundle must not be enabled without a trusted key")
+	}
+}
+
+// seedExtension stores a row directly so /mounts/ gates can be exercised
+// without driving the full install pipeline.
+func (f *fakeExtensionQuerier) seedExtension(t *testing.T, m ExtensionManifest, enabled bool, status string, bundleVerified bool) {
+	t.Helper()
+	raw, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rows[m.Name] = sqlc.UIExtension{
+		ID:                  uuid.New(),
+		Name:                m.Name,
+		DisplayName:         extensionDisplayName(m),
+		Version:             m.Version,
+		Enabled:             enabled,
+		CompatibilityStatus: status,
+		Manifest:            raw,
+		BundleVerified:      bundleVerified,
+		InstalledAt:         time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
+	}
+}
+
+func mountsResponse(t *testing.T, h *ExtensionHandler) ExtensionMountsResponse {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	h.Mounts(rr, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/mounts/", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("mounts status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	return decodeExtensionResp[ExtensionMountsResponse](t, rr)
+}
+
+func TestExtensionHandler_MountsTier1Projection(t *testing.T) {
+	q := newFakeExtensionQuerier()
+	q.seedExtension(t, tier1Manifest(), true, "compatible", false)
+	h := NewExtensionHandler(q)
+
+	resp := mountsResponse(t, h)
+	if len(resp.DashboardWidgets) != 1 {
+		t.Fatalf("want 1 dashboard widget, got %d (%+v)", len(resp.DashboardWidgets), resp)
+	}
+	w := resp.DashboardWidgets[0]
+	if w.Tier != 1 {
+		t.Fatalf("want tier 1, got %d", w.Tier)
+	}
+	if w.Point != "dashboardWidget" || w.PointID != "cost-summary" {
+		t.Fatalf("unexpected point projection: %+v", w)
+	}
+	if w.Render == nil || w.Render.Declarative == nil {
+		t.Fatalf("declarative render missing: %+v", w.Render)
+	}
+	if len(w.DataSources) != 1 || w.DataSources[0].ID != "podCost" || w.DataSources[0].Shape != "list" {
+		t.Fatalf("dataSource projection wrong: %+v", w.DataSources)
+	}
+	// Legacy (no-render) sidebar + clusterTab from the sample manifest must be
+	// skipped — they mount nothing.
+	if len(resp.Sidebar) != 0 || len(resp.ClusterTabs) != 0 {
+		t.Fatalf("legacy no-render points must not mount: sidebar=%d clusterTabs=%d", len(resp.Sidebar), len(resp.ClusterTabs))
+	}
+}
+
+func TestExtensionHandler_MountsGates(t *testing.T) {
+	disabled := tier1Manifest()
+	disabled.Name = "disabled-ext"
+	incompatible := tier1Manifest()
+	incompatible.Name = "incompatible-ext"
+
+	q := newFakeExtensionQuerier()
+	q.seedExtension(t, disabled, false, "compatible", false)      // disabled -> skipped
+	q.seedExtension(t, incompatible, true, "incompatible", false) // incompatible -> skipped
+	h := NewExtensionHandler(q)
+
+	resp := mountsResponse(t, h)
+	if len(resp.DashboardWidgets) != 0 {
+		t.Fatalf("disabled/incompatible extensions must not mount, got %+v", resp.DashboardWidgets)
+	}
+}
+
+func TestExtensionHandler_MountsTier2RequiresVerifiedBundle(t *testing.T) {
+	q := newFakeExtensionQuerier()
+	// Enabled + compatible but bundle_verified=false -> the Tier-2 tab is gated.
+	q.seedExtension(t, tier2Manifest(), true, "compatible", false)
+	h := NewExtensionHandler(q)
+
+	if got := mountsResponse(t, h); len(got.ClusterTabs) != 0 {
+		t.Fatalf("unverified Tier-2 bundle must not mount, got %+v", got.ClusterTabs)
+	}
+
+	// Flip bundle_verified -> the tab mounts, tier 2, paths stripped.
+	q.seedExtension(t, tier2Manifest(), true, "compatible", true)
+	resp := mountsResponse(t, h)
+	if len(resp.ClusterTabs) != 1 {
+		t.Fatalf("want 1 verified cluster tab, got %d", len(resp.ClusterTabs))
+	}
+	tab := resp.ClusterTabs[0]
+	if tab.Tier != 2 || tab.Render == nil || tab.Render.Bundle == nil {
+		t.Fatalf("expected verified Tier-2 bundle render: %+v", tab)
+	}
+	// dataSource ids surface, but the upstream descriptor paths must NOT leak.
+	if len(tab.DataSources) != 1 || tab.DataSources[0].ID != "podCost" {
+		t.Fatalf("bundle dataSource ids not projected: %+v", tab.DataSources)
+	}
+	if len(tab.Render.Bundle.DataSources) != 0 {
+		t.Fatalf("bundle descriptor dataSources (with upstream paths) must not be exposed: %+v", tab.Render.Bundle.DataSources)
+	}
+	if tab.Render.Bundle.SandboxOrigin == "" || tab.Render.Bundle.SHA256 == "" {
+		t.Fatalf("bundle render must keep loader-facing fields: %+v", tab.Render.Bundle)
 	}
 }

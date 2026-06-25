@@ -66,6 +66,7 @@ import {
 import type { ArgoBaselineComponentOwnership, ArgoClusterOwnershipResponse, Cluster, ClusterCondition } from '@/types';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
+import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import { renderForCluster } from '@/lib/api/dashboards';
 
 export default function ClusterDetailPage() {
@@ -344,6 +345,15 @@ export default function ClusterDetailPage() {
           hideWhenEmpty
         />
       ) : null}
+
+      {/* §HostMounts mount point 3 — enabled `clusterTab` extensions append
+          here with the current clusterId injected into their context /
+          Tier-2 handshake. Renders nothing when no extension declares one. */}
+      <ExtensionSlot
+        point="clusterTab"
+        context={{ clusterId }}
+        className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+      />
 
       {/* Metrics Cards. When neither the live summary nor the cached cluster
           row has a usage/percentage value, we render an em-dash so the card

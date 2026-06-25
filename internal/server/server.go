@@ -1130,6 +1130,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Extensions: func() *handler.ExtensionHandler {
 			h := handler.NewExtensionHandler(queries)
 			h.SetAuditWriter(queries)
+			// §DataProxy — wire the RBAC engine + the SAME bindings
+			// querier the route middleware uses, so the per-call
+			// permission re-check in ProxyData runs against the
+			// requesting user's own bindings (never the extension's).
+			h.SetRBAC(rbacEngine, rbacQuerier)
+			// §BridgeProtocol — the Tier-2 bridge ticket store. Opaque,
+			// sha256-hashed at rest, single-use, ≤60s, scoped to
+			// {user,extension,dataSource,cluster}. Backs both the
+			// ext/token.request issuer and the X-Extension-Ticket
+			// validator the data proxy consumes.
+			extTickets := auth.NewExtensionTicketStore(time.Minute)
+			h.SetExtensionTickets(extTickets)
+			h.SetExtensionTicketIssuer(extTickets)
 			// Ed25519 public key (base64) that signed extension
 			// bundles must verify against. Absent => bundle
 			// verification fails closed.

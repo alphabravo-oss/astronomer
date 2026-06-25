@@ -561,6 +561,25 @@ export interface OpenAPIComponents {
           "permissions": string[];
           "extensionPoints": Record<string, unknown>;
         };
+    ExtensionMount: {
+          "extension"?: string;
+          "displayName"?: string;
+          "point"?: "sidebar" | "dashboardWidget" | "clusterTab" | "settingsPage";
+          "pointId"?: string;
+          "title"?: string;
+          "tier"?: 1 | 2;
+          "render"?: Record<string, unknown>;
+          "dataSources"?: Array<{
+            "id"?: string;
+            "shape"?: string;
+          }>;
+        };
+    ExtensionMountsResponse: {
+          "sidebar"?: OpenAPIComponents['schemas']['ExtensionMount'][];
+          "dashboardWidgets"?: OpenAPIComponents['schemas']['ExtensionMount'][];
+          "clusterTabs"?: OpenAPIComponents['schemas']['ExtensionMount'][];
+          "settings"?: OpenAPIComponents['schemas']['ExtensionMount'][];
+        };
     ExtensionRecord: {
           "id"?: string;
           "name"?: string;
@@ -1521,6 +1540,8 @@ export type DexSettingsRequest = OpenAPIComponents['schemas']['DexSettingsReques
 export type Error = OpenAPIComponents['schemas']['Error'];
 export type ErrorEnvelope = OpenAPIComponents['schemas']['ErrorEnvelope'];
 export type ExtensionManifest = OpenAPIComponents['schemas']['ExtensionManifest'];
+export type ExtensionMount = OpenAPIComponents['schemas']['ExtensionMount'];
+export type ExtensionMountsResponse = OpenAPIComponents['schemas']['ExtensionMountsResponse'];
 export type ExtensionRecord = OpenAPIComponents['schemas']['ExtensionRecord'];
 export type ExtensionValidation = OpenAPIComponents['schemas']['ExtensionValidation'];
 export type FeatureFlags = OpenAPIComponents['schemas']['FeatureFlags'];

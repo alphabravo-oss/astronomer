@@ -20,6 +20,7 @@ type UIExtension struct {
 	Enabled             bool            `json:"enabled"`
 	CompatibilityStatus string          `json:"compatibility_status"`
 	Manifest            json.RawMessage `json:"manifest"`
+	BundleVerified      bool            `json:"bundle_verified"`
 	InstalledBy         pgtype.UUID     `json:"installed_by"`
 	InstalledAt         time.Time       `json:"installed_at"`
 	UpdatedAt           time.Time       `json:"updated_at"`
@@ -42,6 +43,11 @@ type SetUIExtensionEnabledParams struct {
 	Enabled bool   `json:"enabled"`
 }
 
+type SetUIExtensionBundleVerifiedParams struct {
+	Name           string `json:"name"`
+	BundleVerified bool   `json:"bundle_verified"`
+}
+
 func scanUIExtension(row pgx.Row) (UIExtension, error) {
 	var i UIExtension
 	err := row.Scan(
@@ -54,6 +60,7 @@ func scanUIExtension(row pgx.Row) (UIExtension, error) {
 		&i.Enabled,
 		&i.CompatibilityStatus,
 		&i.Manifest,
+		&i.BundleVerified,
 		&i.InstalledBy,
 		&i.InstalledAt,
 		&i.UpdatedAt,
@@ -71,6 +78,7 @@ const uiExtensionColumns = `
     enabled,
     compatibility_status,
     manifest,
+    bundle_verified,
     installed_by,
     installed_at,
     updated_at`
@@ -148,5 +156,21 @@ RETURNING ` + uiExtensionColumns
 
 func (q *Queries) SetUIExtensionEnabled(ctx context.Context, arg SetUIExtensionEnabledParams) (UIExtension, error) {
 	row := q.db.QueryRow(ctx, setUIExtensionEnabled, arg.Name, arg.Enabled)
+	return scanUIExtension(row)
+}
+
+const setUIExtensionBundleVerified = `-- name: SetUIExtensionBundleVerified :one
+UPDATE ui_extensions
+SET bundle_verified = $2,
+    updated_at = now()
+WHERE name = $1
+RETURNING ` + uiExtensionColumns
+
+// SetUIExtensionBundleVerified flips the Tier-2 mount gate. It is set true only
+// after verify-bundle succeeds for the row's bundle descriptor (signed +
+// checksummed against the trusted key); /mounts/ refuses to surface a Tier-2
+// extension until then, so an unsigned/tampered bundle never reaches the loader.
+func (q *Queries) SetUIExtensionBundleVerified(ctx context.Context, arg SetUIExtensionBundleVerifiedParams) (UIExtension, error) {
+	row := q.db.QueryRow(ctx, setUIExtensionBundleVerified, arg.Name, arg.BundleVerified)
 	return scanUIExtension(row)
 }

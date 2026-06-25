@@ -167,6 +167,11 @@ const (
 	// IncompatibleExtension indicates a incompatible extension condition.
 	IncompatibleExtension Code = "incompatible_extension"
 
+	// ExtensionRBACDenied indicates the requesting user's own RBAC bindings do
+	// not grant the data source the extension declared (§DataProxy step 4). The
+	// extension can never exceed the user — this is the load-bearing deny.
+	ExtensionRBACDenied Code = "extension_rbac_denied"
+
 	// InvalidAddr indicates a invalid addr condition.
 	InvalidAddr Code = "invalid_addr"
 

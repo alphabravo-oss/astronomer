@@ -679,6 +679,69 @@ components:
         updated_at:
           type: string
           format: date-time
+    ExtensionMount:
+      type: object
+      description: >-
+        Render-only projection of one enabled extension point for the host
+        loader. Upstream dataSource paths/methods/rbac are NOT exposed; only the
+        dataSource id + shape cross to the browser.
+      properties:
+        extension:
+          type: string
+        displayName:
+          type: string
+        point:
+          type: string
+          enum:
+            - sidebar
+            - dashboardWidget
+            - clusterTab
+            - settingsPage
+        pointId:
+          type: string
+        title:
+          type: string
+        tier:
+          type: integer
+          description: 1 = declarative (Tier 1), 2 = signed bundle (Tier 2).
+          enum:
+            - 1
+            - 2
+        render:
+          type: object
+          additionalProperties: true
+        dataSources:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              shape:
+                type: string
+    ExtensionMountsResponse:
+      type: object
+      description: >-
+        Enabled-extensions surface (§HostMounts), indexed by mount point. Only
+        enabled, compatible extensions appear; Tier-2 points additionally
+        require a verified bundle.
+      properties:
+        sidebar:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionMount'
+        dashboardWidgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionMount'
+        clusterTabs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionMount'
+        settings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionMount'
     ServiceMeshInventory:
       type: object
       properties:
@@ -4308,6 +4371,201 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/ExtensionManifest'
+  /api/v1/extensions/mounts/:
+    get:
+      tags:
+        - Extensions
+      summary: List enabled extensions for the host loader
+      description: >-
+        Returns the render-only projection (§HostMounts) the host UI loader
+        needs to mount enabled extensions: per-point manifests, mount points,
+        and the derived tier (1 = declarative, 2 = signed bundle). Viewer-
+        readable (settings:read, not admin). Only enabled, compatible
+        extensions appear; Tier-2 points additionally require a verified bundle.
+        Upstream dataSource paths are not exposed.
+      responses:
+        '200':
+          description: Enabled-extensions mount surface
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ExtensionMountsResponse'
+  /api/v1/extensions/{name}/data/{dataSourceId}/:
+    post:
+      tags:
+        - Extensions
+      summary: Proxy a manifest-declared data source under the caller's RBAC
+      description: >-
+        §DataProxy — fetches a manifest-DECLARED data source on behalf of a
+        declarative widget (Tier 1) or, with an X-Extension-Ticket header, the
+        sandboxed bridge (Tier 2). The call is enforced under two independent
+        gates the extension can only NARROW, never widen: (a) the requesting
+        user's own RBAC, re-checked via the same engine/bindings as the route
+        middleware, and (b) the manifest allowlist — the dataSource must be
+        declared in the stored, validated manifest of the enabled+compatible
+        extension, and the upstream URL is rebuilt server-side from that
+        manifest so no client field can redirect it. Effective access =
+        manifest.permissions[] ∩ the user's RBAC. An extension can never read or
+        write anything the logged-in user could not already do in the UI.
+        Viewer-gated (settings:read, NOT admin); the real per-call check is the
+        per-dataSource RBAC inside the handler.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dataSourceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Extension-Ticket
+          in: header
+          required: false
+          description: >-
+            Tier-2 single-use, ≤60s, scope-checked data ticket (§BridgeProtocol).
+            Present only for sandboxed-iframe bridge calls; browser sessions use
+            the normal session cookie instead.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                context:
+                  type: object
+                  description: Cluster/project/namespace ids bound per the dataSource scope.
+                  properties:
+                    clusterId:
+                      type: string
+                      format: uuid
+                    projectId:
+                      type: string
+                      format: uuid
+                    namespace:
+                      type: string
+                pathParams:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: >-
+                    Path-template placeholder values, validated against the
+                    template's allowed placeholders only.
+                query:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: >-
+                    Overrides for declared query keys only; undeclared keys are
+                    dropped.
+                body:
+                  type: object
+                  description: POST form-submit body only, against the declared input schema.
+      responses:
+        '200':
+          description: Proxied + projected data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      data:
+                        type: object
+                        description: rows (list), value (object/series).
+                      shape:
+                        type: string
+                        enum: [list, object, series]
+                      meta:
+                        type: object
+        '403':
+          description: The requesting user's own RBAC denies this data source (extension_rbac_denied).
+        '404':
+          description: Unknown or undeclared data source (the manifest allowlist).
+        '409':
+          description: Extension is not enabled or not compatible.
+  /api/v1/extensions/{name}/token/:
+    post:
+      tags:
+        - Extensions
+      summary: Mint a short-lived, scoped Tier-2 bridge ticket
+      description: >-
+        §BridgeProtocol — backs the sandboxed iframe's ext/token.request. The
+        host mints a single-use, ≤60s, scope-checked ticket bound to
+        {user, extension, dataSource, cluster} and returns it; the iframe sends
+        it as the X-Extension-Ticket header to the §DataProxy endpoint. The
+        session JWT never crosses the bridge. Issuance is gated by the SAME two
+        checks as the data path: the dataSource must be a Tier-2 bundle source
+        declared in the stored, validated manifest of the enabled+compatible
+        extension with a verified bundle, AND the requesting user's own RBAC
+        must permit it (engine.CheckPermission over the user's bindings). The
+        ticket conveys identity only — RBAC is re-derived on every data call —
+        so it grants nothing the user could not already do. Viewer-gated
+        (settings:read, NOT admin).
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataSource
+              properties:
+                dataSource:
+                  type: string
+                  description: A Tier-2 bundle dataSource id declared in the manifest.
+                context:
+                  type: object
+                  properties:
+                    clusterId:
+                      type: string
+                      format: uuid
+                    projectId:
+                      type: string
+                      format: uuid
+                    namespace:
+                      type: string
+      responses:
+        '201':
+          description: A scoped, single-use bridge ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      dataSource:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      scope:
+                        type: string
+        '403':
+          description: The requesting user's own RBAC denies this data source (extension_rbac_denied).
+        '404':
+          description: Unknown extension or undeclared Tier-2 data source.
+        '409':
+          description: Extension is not enabled, not compatible, or its bundle is not verified.
   /api/v1/extensions/verify-bundle/:
     post:
       tags:
@@ -4336,6 +4594,14 @@ paths:
                 checksum:
                   type: string
                   description: Optional expected "sha256:<hex>" digest of the bundle.
+                name:
+                  type: string
+                  description: >-
+                    Optional installed-extension name. When supplied and the
+                    verified checksum matches a bundle descriptor in that
+                    extension's stored manifest, the §HostMounts Tier-2 gate is
+                    lifted (bundle_verified set true) so the descriptor may
+                    mount. Omit to verify without touching any stored row.
       responses:
         '200':
           description: Bundle verified
@@ -4351,6 +4617,11 @@ paths:
                         type: boolean
                       checksum:
                         type: string
+                      gated:
+                        type: boolean
+                        description: >-
+                          Whether the named extension's Tier-2 mount gate was
+                          lifted (bundle_verified set true) by this verification.
   /api/v1/extensions/{name}/enable/:
     post:
       tags:

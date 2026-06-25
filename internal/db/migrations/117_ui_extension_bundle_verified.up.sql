@@ -1,0 +1,12 @@
+-- Tier-2 (signed-bundle iframe) gate for the extension runtime.
+--
+-- The enabled-extensions endpoint (§HostMounts) surfaces a Tier-2 extension to
+-- the host loader only after its bundle descriptor has passed Ed25519 +
+-- checksum verification (verifyExtensionBundle). bundle_verified records that
+-- per-row outcome durably so the loader never mounts an unverified bundle even
+-- across restarts. Tier-1 (declarative) extensions need no bundle and ignore
+-- this flag.
+--
+-- DEFAULT false keeps the ADD COLUMN non-rewriting on the existing table and
+-- fails closed: nothing is verified until verify-bundle flips it true.
+ALTER TABLE ui_extensions ADD COLUMN IF NOT EXISTS bundle_verified BOOLEAN NOT NULL DEFAULT false;

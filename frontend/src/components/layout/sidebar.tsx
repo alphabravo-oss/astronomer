@@ -49,6 +49,7 @@ import {
   TerminalSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ExtensionNavItems } from '@/components/extensions/ExtensionNavItems';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { can, isSuperuser, type PermissionVerb } from '@/lib/permissions';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
@@ -604,6 +605,14 @@ export function Sidebar() {
         ))}
         {isClusterContext && (
           <InstalledToolLinks clusterId={clusterId!} collapsed={sidebarCollapsed} />
+        )}
+        {/* §HostMounts mount point 1 — enabled `sidebar` extensions append
+            full-page nav links here (global context only; routes are
+            host-fixed under /dashboard/extensions/{name}). The component
+            renders nothing (header included) when no extension declares a
+            sidebar point, so the nav is unchanged on a fresh install. */}
+        {!isClusterContext && (
+          <ExtensionNavItems pathname={pathname} collapsed={sidebarCollapsed} />
         )}
       </nav>
 

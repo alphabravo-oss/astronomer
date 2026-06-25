@@ -7,6 +7,7 @@ import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
+import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
 import { renderGlobal } from '@/lib/api/dashboards';
 import {
   Server,
@@ -361,6 +362,13 @@ export default function DashboardPage() {
       <section className="space-y-3">
         <WidgetGrid fetcher={renderGlobal} hideWhenEmpty />
       </section>
+
+      {/* §HostMounts mount point 2 — enabled `dashboardWidget` extensions append
+          cards here. Renders nothing when no extension declares one. */}
+      <ExtensionSlot
+        point="dashboardWidget"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+      />
     </div>
   );
 }

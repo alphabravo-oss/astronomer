@@ -15,6 +15,22 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 
 	if deps.Extensions != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/", deps.Extensions.List)
+		// §HostMounts — viewer-readable, render-only projection of enabled
+		// extensions for the host loader. Not ScopeAdmin: any viewer may
+		// render the extension surface.
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/mounts/", deps.Extensions.Mounts)
+		// §DataProxy — tenant-user data path, NOT ScopeAdmin. ResourceSettings:read
+		// just gates "may use the extensions surface at all"; the real, per-call
+		// gate is the requesting user's own RBAC re-checked against the manifest's
+		// declared dataSource inside ProxyData. An extension can never exceed the
+		// user.
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Post("/extensions/{name}/data/{dataSourceId}/", deps.Extensions.ProxyData)
+		// §BridgeProtocol — Tier-2 scoped-token issuance backing the iframe's
+		// ext/token.request. Viewer-gated (settings:read, NOT admin); the host
+		// mints a short-lived, single-use, ≤60s ticket only after re-checking
+		// the requesting user's own RBAC for the manifest-declared dataSource —
+		// the same gate as §DataProxy. The iframe never receives the session JWT.
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Post("/extensions/{name}/token/", deps.Extensions.IssueTicket)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbRead)).Get("/extensions/sample-manifest/", deps.Extensions.SampleManifest)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/validate/", deps.Extensions.Validate)
 		r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).Post("/extensions/verify-bundle/", deps.Extensions.VerifyBundle)
