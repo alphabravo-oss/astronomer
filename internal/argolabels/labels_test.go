@@ -57,9 +57,9 @@ func TestManagedClusterLabelsWithSingleProject(t *testing.T) {
 		ClusterNameLabelKey: "prod-east",
 		EnvironmentLabelKey: "production",
 		IsLocalLabelKey:     "false",
-		// No explicit privilege-profile annotation -> full management control
-		// (default; matches Rancher's cluster-admin agent model).
-		AgentProfileLabelKey:                           "admin",
+		// No explicit privilege-profile annotation -> least-privilege viewer
+		// (default; broadening to operator/admin is an explicit opt-in).
+		AgentProfileLabelKey:                           "viewer",
 		AgentVersionLabelKey:                           "v0.4.1",
 		KubernetesVersionLabelKey:                      "v1.29.3-k3s1",
 		LabelPrefix + "team-name":                      "platform",
@@ -137,19 +137,19 @@ func (f *fakeProjectLister) ListProjectsByCluster(_ context.Context, arg sqlc.Li
 	return f.projects, nil
 }
 
-// TestClusterAgentPrivilegeProfileDefaultsToAdmin: at the annotation-read
+// TestClusterAgentPrivilegeProfileDefaultsToViewer: at the annotation-read
 // layer, an UNSPECIFIED profile (no annotations / unparseable / no profile key)
-// defaults to full management control (admin), matching Rancher's cluster-admin
-// agent model — the per-user gate is the management-plane RBAC.
-func TestClusterAgentPrivilegeProfileDefaultsToAdmin(t *testing.T) {
+// defaults to least-privilege viewer — broadening to operator/admin is an
+// explicit, auditable opt-in recorded on the cluster annotations.
+func TestClusterAgentPrivilegeProfileDefaultsToViewer(t *testing.T) {
 	cases := map[string]json.RawMessage{
 		"empty":                 nil,
 		"unparseable":           json.RawMessage(`not-json`),
 		"no profile annotation": json.RawMessage(`{"some/other":"value"}`),
 	}
 	for name, raw := range cases {
-		if got := ClusterAgentPrivilegeProfile(raw); got != agenttemplate.PrivilegeProfileAdmin {
-			t.Fatalf("ClusterAgentPrivilegeProfile(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileAdmin)
+		if got := ClusterAgentPrivilegeProfile(raw); got != agenttemplate.PrivilegeProfileViewer {
+			t.Fatalf("ClusterAgentPrivilegeProfile(%s) = %q, want %q", name, got, agenttemplate.PrivilegeProfileViewer)
 		}
 	}
 }

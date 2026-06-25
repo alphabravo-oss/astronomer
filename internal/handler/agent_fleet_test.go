@@ -1148,14 +1148,14 @@ func k8sTextResponse(status int, body string) *protocol.K8sResponsePayload {
 // finding C2 in the fleet handler: absent/unparseable/unknown annotations must
 // resolve to the read-only viewer profile, never cluster-admin.
 func TestAgentPrivilegeProfileFromAnnotationsDefaultsAndFailsClosed(t *testing.T) {
-	// Unspecified (empty / unparseable / absent key) -> admin default.
+	// Unspecified (empty / unparseable / absent key) -> least-privilege viewer default.
 	for name, raw := range map[string]json.RawMessage{
 		"empty":       nil,
 		"unparseable": json.RawMessage(`oops`),
 		"absent":      json.RawMessage(`{}`),
 	} {
-		if got := agentPrivilegeProfileFromAnnotations(raw); got != agenttemplate.PrivilegeProfileAdmin {
-			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) = %q, want %q (unspecified -> admin)", name, got, agenttemplate.PrivilegeProfileAdmin)
+		if got := agentPrivilegeProfileFromAnnotations(raw); got != agenttemplate.PrivilegeProfileViewer {
+			t.Fatalf("agentPrivilegeProfileFromAnnotations(%s) = %q, want %q (unspecified -> viewer)", name, got, agenttemplate.PrivilegeProfileViewer)
 		}
 	}
 	// Explicit but unknown (typo) -> fail closed to viewer.
@@ -1182,16 +1182,14 @@ func TestAgentPrivilegeProfileFromAnnotationsPreservesExplicit(t *testing.T) {
 }
 
 // TestAgentPrivilegeProfileSelfTestPasses verifies the fleet self-test treats
-// the supported profiles — including the default full-management (admin) — as
-// passing, and only flags genuinely uncertain postures (custom RBAC). Admin is
-// the default (Rancher-style); the per-user gate is the management-plane RBAC,
-// so it is not a finding.
+// the supported profiles — including the least-privilege viewer default — as
+// passing, and only flags genuinely uncertain postures (custom RBAC).
 func TestAgentPrivilegeProfileSelfTestPasses(t *testing.T) {
 	for _, profile := range []string{
 		agenttemplate.PrivilegeProfileAdmin,
 		agenttemplate.PrivilegeProfileViewer,
 		agenttemplate.PrivilegeProfileOperator,
-		"", // unspecified -> admin default
+		"", // unspecified -> viewer default
 	} {
 		c := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: profile})
 		if c.Status != "passed" {

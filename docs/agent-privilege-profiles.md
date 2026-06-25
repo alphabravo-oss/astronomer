@@ -15,11 +15,11 @@ Use the narrowest profile that supports the workflows the cluster needs.
 
 ## Selection Surfaces
 
-- UI/API-created clusters default to `admin` unless a narrower profile is recorded on the cluster annotations before the manifest is rendered.
+- UI/API-created clusters default to `viewer` (least privilege). The registration wizard exposes a profile selector (defaulting to viewer); broadening to `operator`/`admin` is an explicit, auditable choice recorded on the cluster annotations before the manifest is rendered.
 - `Cluster` CRDs can declare `spec.agent.privilegeProfile` directly.
 - `Cluster` CRDs can also declare `spec.agent.profileRef` pointing to a same-namespace `AgentProfile`. The Cluster reconciler resolves that profile, records `management.astronomer.io/agent-profile-ref`, and writes the resolved `astronomer.io/agent-privilege-profile` annotation used by manifest rendering.
 - Referenced `AgentProfile` resources can also project install metadata into the same registration manifest path: `install.image`, `install.serviceAccountName`, and `install.podLabels`.
-- The server normalizes an unspecified (missing or empty) value to `admin` for compatibility with existing clusters, but an explicit unrecognized value (such as a typo) fails closed to `viewer` to avoid silently granting unintended access.
+- The server normalizes an unspecified (missing or empty) value to `viewer` (least privilege), and an explicit unrecognized value (such as a typo) also fails closed to `viewer` — a no-annotation adoption never silently grants broad access.
 
 ## Install Metadata
 

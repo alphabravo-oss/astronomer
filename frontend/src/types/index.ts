@@ -500,6 +500,10 @@ export interface ClusterRegistration {
   region?: string;
   provider?: ClusterProvider;
   install_baseline?: boolean;
+  // Free-form cluster annotations passed to the backend at create time. The
+  // wizard uses this to set astronomer.io/agent-privilege-profile so the
+  // rendered agent manifest scopes the agent's RBAC (defaults to viewer).
+  annotations?: Record<string, string>;
 }
 
 // --- Workload Types ---

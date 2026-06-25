@@ -169,12 +169,12 @@ func TestSetCustomPrivilegeProfileReportsUnknownCapabilities(t *testing.T) {
 
 // TestNormalizeAgentPrivilegeProfileDefaultsAndFailsClosed: the duplicate
 // heartbeat normalizer matches canonical semantics — an unspecified profile
-// defaults to admin (Rancher-style full control); an explicit-but-unrecognized
-// (garbage/typo) value fails closed to viewer so it never self-advertises admin.
+// defaults to least-privilege viewer; an explicit-but-unrecognized
+// (garbage/typo) value also fails closed to viewer so it never self-advertises admin.
 func TestNormalizeAgentPrivilegeProfileDefaultsAndFailsClosed(t *testing.T) {
 	for _, in := range []string{"", "   "} {
-		if got := normalizeAgentPrivilegeProfile(in); got != "admin" {
-			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want admin (unspecified -> admin)", in, got)
+		if got := normalizeAgentPrivilegeProfile(in); got != "viewer" {
+			t.Fatalf("normalizeAgentPrivilegeProfile(%q) = %q, want viewer (unspecified -> viewer)", in, got)
 		}
 	}
 	for _, in := range []string{"garbage", "root", "ADMIN-ish", "cluster-admin", "superuser"} {

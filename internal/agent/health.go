@@ -440,8 +440,8 @@ func detectDistribution(nodes []corev1.Node) string {
 
 // normalizeAgentPrivilegeProfile delegates to the canonical normalizer so the
 // self-reported heartbeat capability advertisement uses the same semantics:
-// an unspecified profile defaults to full-management admin (Rancher-style),
-// while an explicit-but-unrecognized value fails closed to viewer.
+// an unspecified profile defaults to least-privilege viewer, while an
+// explicit-but-unrecognized value also fails closed to viewer.
 func normalizeAgentPrivilegeProfile(profile string) string {
 	return agenttemplate.NormalizePrivilegeProfile(profile)
 }

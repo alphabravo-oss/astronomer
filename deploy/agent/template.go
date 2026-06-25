@@ -59,12 +59,13 @@ func NormalizePrivilegeProfile(profile string) string {
 	normalized := strings.NewReplacer("_", "-", " ", "-").Replace(strings.ToLower(strings.TrimSpace(profile)))
 	switch normalized {
 	case "":
-		// Default to full management control, matching Rancher's
-		// cluster-admin agent model: the agent holds broad access and the
-		// per-user security boundary is the management-plane RBAC (user
-		// identity is stripped at the tunnel and re-authorized there).
-		// Scoping the agent down (viewer/operator/namespace-*) is opt-in.
-		return PrivilegeProfileAdmin
+		// Default to least-privilege read-only viewer. An adopted cluster
+		// should grant the agent the minimum to observe; broadening to
+		// operator/admin is an explicit, auditable opt-in chosen at
+		// registration. This keeps a no-annotation registration safe by
+		// default and trivially removable (read-only ClusterRole, no
+		// mutation surface).
+		return PrivilegeProfileViewer
 	case PrivilegeProfileAdmin:
 		return PrivilegeProfileAdmin
 	case PrivilegeProfileViewer:

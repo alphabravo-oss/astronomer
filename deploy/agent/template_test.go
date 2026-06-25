@@ -207,13 +207,14 @@ func TestNormalizePrivilegeProfileAcceptsNamespaceAliasesAndCustom(t *testing.T)
 	}
 }
 
-// TestNormalizePrivilegeProfileDefaultsToAdmin: an unspecified (empty/blank)
-// profile defaults to full management control (admin), matching Rancher's
-// cluster-admin agent model. The per-user gate is the management-plane RBAC.
-func TestNormalizePrivilegeProfileDefaultsToAdmin(t *testing.T) {
+// TestNormalizePrivilegeProfileDefaultsToViewer: an unspecified (empty/blank)
+// profile defaults to least-privilege read-only viewer. Broadening to
+// operator/admin is an explicit opt-in chosen at registration, so a
+// no-annotation adoption is safe by default.
+func TestNormalizePrivilegeProfileDefaultsToViewer(t *testing.T) {
 	for _, input := range []string{"", "   ", "\t"} {
-		if got := NormalizePrivilegeProfile(input); got != PrivilegeProfileAdmin {
-			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q (unspecified -> admin)", input, got, PrivilegeProfileAdmin)
+		if got := NormalizePrivilegeProfile(input); got != PrivilegeProfileViewer {
+			t.Fatalf("NormalizePrivilegeProfile(%q) = %q, want %q (unspecified -> viewer)", input, got, PrivilegeProfileViewer)
 		}
 	}
 }
@@ -249,11 +250,11 @@ func TestNormalizePrivilegeProfileExplicitProfilesStillResolve(t *testing.T) {
 	}
 }
 
-// TestRenderInstallYAMLDefaultProfileResolvesToAdmin: an agent manifest
-// rendered with no explicit profile defaults to full management control
-// (admin), matching Rancher's cluster-admin agent model. The per-user security
-// boundary is the management-plane RBAC.
-func TestRenderInstallYAMLDefaultProfileResolvesToAdmin(t *testing.T) {
+// TestRenderInstallYAMLDefaultProfileResolvesToViewer: an agent manifest
+// rendered with no explicit profile defaults to least-privilege read-only
+// viewer. Broadening to admin is an explicit opt-in, so a no-annotation
+// adoption is safe by default and must NOT carry full-access RBAC.
+func TestRenderInstallYAMLDefaultProfileResolvesToViewer(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "https://astro.example.com",
 		ClusterID:         "c1",
@@ -261,16 +262,19 @@ func TestRenderInstallYAMLDefaultProfileResolvesToAdmin(t *testing.T) {
 		AgentImage:        "example.com/agent:v1",
 		// PrivilegeProfile intentionally left empty.
 	})
-	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "admin"`) {
-		t.Fatalf("default manifest should resolve to admin profile:\n%s", manifest)
+	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "viewer"`) {
+		t.Fatalf("default manifest should resolve to viewer profile:\n%s", manifest)
 	}
-	for _, wanted := range []string{
+	if !strings.Contains(manifest, `verbs: ["get", "list", "watch"]`) {
+		t.Fatalf("default (viewer) manifest should contain read-only rules:\n%s", manifest)
+	}
+	for _, forbidden := range []string{
 		`resources: ["*"]`,
 		`verbs: ["*"]`,
 		`nonResourceURLs: ["*"]`,
 	} {
-		if !strings.Contains(manifest, wanted) {
-			t.Fatalf("default (admin) manifest should contain full-access rule %q:\n%s", wanted, manifest)
+		if strings.Contains(manifest, forbidden) {
+			t.Fatalf("default (viewer) manifest must NOT contain full-access rule %q:\n%s", forbidden, manifest)
 		}
 	}
 }
@@ -389,7 +393,7 @@ func TestRenderInstallYAMLIsValidYAMLForEveryProfile(t *testing.T) {
 		PrivilegeProfileNamespaceViewer,
 		PrivilegeProfileNamespaceOperator,
 		PrivilegeProfileCustom,
-		"", // unspecified -> admin default
+		"", // unspecified -> viewer default
 	}
 	for _, p := range profiles {
 		manifest := RenderInstallYAML(InstallTemplateData{
