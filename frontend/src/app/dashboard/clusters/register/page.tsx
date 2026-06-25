@@ -16,7 +16,7 @@ import { toastError } from '@/lib/toast';
 import { Server, Loader2, Info } from 'lucide-react';
 import { createCluster } from '@/lib/api';
 import { setRegistrationOptions } from '@/lib/api';
-import type { ClusterEnvironment, ClusterDistribution } from '@/types';
+import type { ClusterEnvironment } from '@/types';
 
 export default function RegisterClusterWizardPage() {
   const router = useRouter();
@@ -26,7 +26,6 @@ export default function RegisterClusterWizardPage() {
     displayName: '',
     description: '',
     environment: 'development' as ClusterEnvironment,
-    distribution: 'k8s' as ClusterDistribution,
     region: '',
     installBaseline: false,
     privilegeProfile: 'viewer',
@@ -42,7 +41,8 @@ export default function RegisterClusterWizardPage() {
         displayName: form.displayName || form.name,
         description: form.description || undefined,
         environment: form.environment,
-        distribution: form.distribution,
+        // distribution is auto-detected by the agent on connect (node labels /
+        // providerID) and persisted via heartbeat — no manual choice needed.
         region: form.region || undefined,
         annotations: { 'astronomer.io/agent-privilege-profile': form.privilegeProfile },
       });
@@ -106,7 +106,7 @@ export default function RegisterClusterWizardPage() {
           />
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Environment">
             <select
               value={form.environment}
@@ -119,21 +119,6 @@ export default function RegisterClusterWizardPage() {
               <option value="testing">Testing</option>
             </select>
           </Field>
-          <Field label="Distribution">
-            <select
-              value={form.distribution}
-              onChange={(e) => setForm((f) => ({ ...f, distribution: e.target.value as ClusterDistribution }))}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
-            >
-              <option value="k3s">k3s</option>
-              <option value="rke2">rke2</option>
-              <option value="eks">EKS</option>
-              <option value="aks">AKS</option>
-              <option value="gke">GKE</option>
-              <option value="openshift">OpenShift</option>
-              <option value="k8s">Other / vanilla k8s</option>
-            </select>
-          </Field>
           <Field label="Region">
             <input
               type="text"
@@ -144,6 +129,10 @@ export default function RegisterClusterWizardPage() {
             />
           </Field>
         </div>
+
+        <p className="text-xs text-muted-foreground -mt-2">
+          Kubernetes distribution (k3s, RKE2, EKS, AKS, GKE, OpenShift…) is detected automatically from the cluster once the agent connects.
+        </p>
 
         <Field label="Agent privilege profile">
           <select
