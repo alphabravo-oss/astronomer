@@ -73,6 +73,11 @@ const KNOWN_NIL_GATED = new Set([
   'GET /api/v1/extensions/sample-manifest',
   'POST /api/v1/extensions/validate',
   'POST /api/v1/extensions/verify-bundle',
+  // Extension runtime (Tier 1/2). Handler is nil in the route-dump router,
+  // so chi omits these real, served routes from the dump — same as SCIM.
+  'GET /api/v1/extensions/mounts',
+  'POST /api/v1/extensions/{}/data/{}',
+  'POST /api/v1/extensions/{}/token',
   'GET /api/v1/settings/features',
   'GET /api/v1/tools',
   // SCIM 2.0 provisioning (migration 114). The SCIM handler is nil in
