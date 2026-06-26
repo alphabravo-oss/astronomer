@@ -446,6 +446,20 @@ func normalizeAgentPrivilegeProfile(profile string) string {
 	return agenttemplate.NormalizePrivilegeProfile(profile)
 }
 
+// ProfileAllowsSecrets reports whether the given privilege profile grants secret
+// access. Single source of truth: a profile allows secrets iff "secrets" is not
+// in its denied-capability list. Used to gate the agent's Secret informer so
+// read-only profiles don't error-loop on a Forbidden watch.
+func ProfileAllowsSecrets(profile string) bool {
+	_, denied := capabilityFeaturesForProfile(profile)
+	for _, d := range denied {
+		if d == "secrets" {
+			return false
+		}
+	}
+	return true
+}
+
 func capabilityFeaturesForProfile(profile string) ([]string, []string) {
 	switch normalizeAgentPrivilegeProfile(profile) {
 	case "viewer":

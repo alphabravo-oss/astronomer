@@ -28,8 +28,14 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 			name:    "viewer",
 			profile: PrivilegeProfileViewer,
 			want: []string{
-				`resources: ["configmaps", "endpoints", "events", "namespaces", "nodes"`,
+				`resources: ["configmaps", "endpoints", "events", "limitranges", "namespaces", "nodes"`,
+				`"resourcequotas"`,
 				`resources: ["customresourcedefinitions"]`,
+				// Inventory mirrors the agent watches read-only.
+				`apiGroups: ["events.k8s.io"]`,
+				`resources: ["ingresses", "ingressclasses", "networkpolicies"]`,
+				`resources: ["gatewayclasses"]`,
+				`resources: ["vulnerabilityreports"]`,
 				`verbs: ["get", "list", "watch"]`,
 			},
 			notWant: []string{
@@ -37,6 +43,7 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				`verbs: ["*"]`,
 				`"create"`,
 				`pods/exec`,
+				// Viewer must never read secret data.
 				`"secrets"`,
 			},
 		},

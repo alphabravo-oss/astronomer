@@ -168,6 +168,12 @@ type StateSubscriber struct {
 	// startedAt is captured before the informer factory starts so the Events
 	// filter can drop pre-existing items (resyncs include them as Adds).
 	startedAt time.Time
+
+	// watchSecrets gates the Secret informer. The viewer/namespace-* profiles
+	// deliberately lack secret RBAC, so starting the informer there just
+	// error-loops on Forbidden. Defaults true (admin/operator); SetWatchSecrets
+	// turns it off for read-only profiles.
+	watchSecrets bool
 }
 
 // NewStateSubscriber constructs a StateSubscriber. The sender must be a live
@@ -178,12 +184,22 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		log = slog.Default()
 	}
 	return &StateSubscriber{
-		client:    client,
-		sender:    sender,
-		log:       log,
-		limiter:   newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
-		readyCh:   make(chan struct{}),
-		startedAt: time.Now(),
+		client:       client,
+		sender:       sender,
+		log:          log,
+		limiter:      newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
+		readyCh:      make(chan struct{}),
+		startedAt:    time.Now(),
+		watchSecrets: true,
+	}
+}
+
+// SetWatchSecrets enables/disables the Secret informer. Call before Run with
+// the result of ProfileAllowsSecrets so read-only profiles (viewer,
+// namespace-*) don't error-loop on a Forbidden secrets watch.
+func (s *StateSubscriber) SetWatchSecrets(enabled bool) {
+	if s != nil {
+		s.watchSecrets = enabled
 	}
 }
 
@@ -266,7 +282,11 @@ func (s *StateSubscriber) registerCore(factory informers.SharedInformerFactory) 
 	s.attach(core.Services().Informer(), "Service", "", "v1")
 	s.attach(core.Nodes().Informer(), "Node", "", "v1")
 	s.attach(core.ConfigMaps().Informer(), "ConfigMap", "", "v1")
-	s.attach(core.Secrets().Informer(), "Secret", "", "v1")
+	if s.watchSecrets {
+		s.attach(core.Secrets().Informer(), "Secret", "", "v1")
+	} else {
+		s.log.Debug("secret informer disabled for read-only profile")
+	}
 }
 
 // registerApps wires informers for apps/v1 resources.

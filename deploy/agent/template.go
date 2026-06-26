@@ -157,8 +157,10 @@ const adminRBACRulesYAML = `  # Full access is the compatibility profile for exi
     verbs: ["*"]`
 
 const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints.
+  # NOTE: secrets are intentionally absent — the viewer profile must not be able
+  # to read secret data (the agent skips its secret informer under viewer).
   - apiGroups: [""]
-    resources: ["configmaps", "endpoints", "events", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "replicationcontrollers", "services", "serviceaccounts"]
+    resources: ["configmaps", "endpoints", "events", "limitranges", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "replicationcontrollers", "resourcequotas", "services", "serviceaccounts"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
@@ -169,14 +171,26 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses", "networkpolicies"]
+    resources: ["ingresses", "ingressclasses", "networkpolicies"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # Optional inventory mirrors — harmless if the CRDs are absent (the rule simply
+  # grants nothing). Present so the agent's GatewayClass / Trivy informers don't
+  # log RBAC denials where those operators are installed.
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["aquasecurity.github.io"]
+    resources: ["vulnerabilityreports"]
     verbs: ["get", "list", "watch"]
   - nonResourceURLs: ["/healthz", "/livez", "/readyz", "/metrics", "/version"]
     verbs: ["get"]`

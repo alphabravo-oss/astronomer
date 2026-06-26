@@ -204,6 +204,7 @@ func runConnect(logger *slog.Logger) error {
 				}
 			}
 			subscriber := agent.NewStateSubscriber(client, tunnel, logger)
+			subscriber.SetWatchSecrets(agent.ProfileAllowsSecrets(cfg.PrivilegeProfile))
 			subscriber.Run(ctx)
 		}()
 
