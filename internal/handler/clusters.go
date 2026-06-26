@@ -188,7 +188,7 @@ func NewClusterHandler(queries ClusterQuerier) *ClusterHandler {
 	return &ClusterHandler{
 		queries:    queries,
 		metrics:    clustermetrics.NewProvider(),
-		agentImage: "ghcr.io/alphabravocompany/astronomer-go-agent:latest",
+		agentImage: "ghcr.io/alphabravo-oss/astronomer-go-agent:latest",
 	}
 }
 
@@ -322,7 +322,7 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 		return
 	}
 	if repository == "" {
-		repository = "ghcr.io/alphabravocompany/astronomer-go-agent"
+		repository = "ghcr.io/alphabravo-oss/astronomer-go-agent"
 	}
 	if tag == "" {
 		tag = "latest"
@@ -1917,7 +1917,7 @@ func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL string) map
 
 func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) string {
 	annotations := clusterAnnotations(cluster.Annotations)
-	agentImage := "ghcr.io/alphabravocompany/astronomer-go-agent:latest"
+	agentImage := "ghcr.io/alphabravo-oss/astronomer-go-agent:latest"
 	if h != nil && h.agentImage != "" {
 		agentImage = h.agentImage
 	}

@@ -1630,7 +1630,7 @@ func targetAgentImage(repository, tag string) string {
 	repository = strings.TrimSpace(repository)
 	tag = strings.TrimSpace(tag)
 	if repository == "" {
-		repository = "ghcr.io/alphabravocompany/astronomer-go-agent"
+		repository = "ghcr.io/alphabravo-oss/astronomer-go-agent"
 	}
 	if tag == "" {
 		return repository

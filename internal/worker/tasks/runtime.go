@@ -178,7 +178,7 @@ func ConfigureRuntime(deps RuntimeDependencies) {
 		runtimeDeps.Log = slog.Default()
 	}
 	if runtimeDeps.AgentImageRepo == "" {
-		runtimeDeps.AgentImageRepo = "ghcr.io/alphabravocompany/astronomer-go-agent"
+		runtimeDeps.AgentImageRepo = "ghcr.io/alphabravo-oss/astronomer-go-agent"
 	}
 	if runtimeDeps.AgentImageTag == "" {
 		runtimeDeps.AgentImageTag = "latest"
