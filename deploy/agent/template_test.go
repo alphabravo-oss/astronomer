@@ -353,9 +353,33 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 			t.Fatalf("manifest missing %q:\n%s", want, manifest)
 		}
 	}
-	for _, unwanted := range []string{`kind: ClusterRoleBinding`, `resources: ["*"]`, `verbs: ["*"]`} {
+	for _, unwanted := range []string{`resources: ["*"]`, `verbs: ["*"]`} {
 		if strings.Contains(manifest, unwanted) {
 			t.Fatalf("manifest unexpectedly contains %q:\n%s", unwanted, manifest)
+		}
+	}
+	// The AGENT's user-profile binding must be a namespaced RoleBinding, never a
+	// ClusterRoleBinding to the 'astronomer-agent' ClusterRole. (The bootstrap
+	// ksm read-only ClusterRoleBinding — bound to the kube-state-metrics SA — is a
+	// separate, legitimate object and is excluded from this check by roleRef name.)
+	type bindingDoc struct {
+		Kind    string `yaml:"kind"`
+		RoleRef struct {
+			Name string `yaml:"name"`
+		} `yaml:"roleRef"`
+	}
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	for {
+		var d bindingDoc
+		err := dec.Decode(&d)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatalf("decode manifest: %v", err)
+		}
+		if d.Kind == "ClusterRoleBinding" && d.RoleRef.Name == "astronomer-agent" {
+			t.Fatalf("namespace-operator must bind the agent via a namespaced RoleBinding, found a ClusterRoleBinding to %q", d.RoleRef.Name)
 		}
 	}
 	// The only secrets grant must be the resourceName-scoped token Role — the
@@ -587,6 +611,96 @@ func TestViewerSelfManagementDoesNotWidenUserProfile(t *testing.T) {
 		if d.Kind == "ClusterRoleBinding" && d.RoleRef.Name == "astronomer-agent-self-management" {
 			t.Fatalf("self-management must be namespaced, found a ClusterRoleBinding granting it cluster-wide")
 		}
+	}
+}
+
+// TestBootstrapRendersKubeStateMetricsReadOnlyClusterRole is the Phase 3 guard:
+// the bootstrap install manifest carries the cluster-scoped READ-ONLY ClusterRole
+// for kube-state-metrics (the one legitimate cluster-scoped component grant the
+// pull applier cannot deliver itself) and binds it to the kube-state-metrics
+// ServiceAccount in astronomer-monitoring (the SA the pull applier creates
+// namespaced). It must be strictly read-only: get/list/watch ONLY, zero write.
+func TestBootstrapRendersKubeStateMetricsReadOnlyClusterRole(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "tok",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileViewer,
+	})
+
+	type rbacRule struct {
+		APIGroups []string `yaml:"apiGroups"`
+		Resources []string `yaml:"resources"`
+		Verbs     []string `yaml:"verbs"`
+	}
+	type clusterRoleDoc struct {
+		Kind     string `yaml:"kind"`
+		Metadata struct {
+			Name string `yaml:"name"`
+		} `yaml:"metadata"`
+		Rules   []rbacRule `yaml:"rules"`
+		RoleRef struct {
+			Kind string `yaml:"kind"`
+			Name string `yaml:"name"`
+		} `yaml:"roleRef"`
+		Subjects []struct {
+			Kind      string `yaml:"kind"`
+			Name      string `yaml:"name"`
+			Namespace string `yaml:"namespace"`
+		} `yaml:"subjects"`
+	}
+
+	writeVerbs := map[string]bool{
+		"create": true, "update": true, "patch": true, "delete": true,
+		"deletecollection": true, "*": true,
+	}
+
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	var sawRole, sawBinding bool
+	for {
+		var d clusterRoleDoc
+		err := dec.Decode(&d)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatalf("decode manifest: %v", err)
+		}
+		if d.Kind == "ClusterRole" && d.Metadata.Name == "astronomer-kube-state-metrics" {
+			sawRole = true
+			if len(d.Rules) == 0 {
+				t.Fatal("ksm ClusterRole has no rules")
+			}
+			for _, r := range d.Rules {
+				for _, v := range r.Verbs {
+					if writeVerbs[v] {
+						t.Fatalf("ksm ClusterRole grants write verb %q on %v (must be read-only)", v, r.Resources)
+					}
+					if v != "get" && v != "list" && v != "watch" {
+						t.Fatalf("ksm ClusterRole grants unexpected verb %q on %v (only get/list/watch allowed)", v, r.Resources)
+					}
+				}
+			}
+		}
+		if d.Kind == "ClusterRoleBinding" && d.Metadata.Name == "astronomer-kube-state-metrics" {
+			sawBinding = true
+			if d.RoleRef.Kind != "ClusterRole" || d.RoleRef.Name != "astronomer-kube-state-metrics" {
+				t.Fatalf("ksm ClusterRoleBinding roleRef = %s/%s, want ClusterRole/astronomer-kube-state-metrics", d.RoleRef.Kind, d.RoleRef.Name)
+			}
+			if len(d.Subjects) != 1 ||
+				d.Subjects[0].Kind != "ServiceAccount" ||
+				d.Subjects[0].Name != "kube-state-metrics" ||
+				d.Subjects[0].Namespace != "astronomer-monitoring" {
+				t.Fatalf("ksm ClusterRoleBinding subjects = %+v, want the kube-state-metrics SA in astronomer-monitoring", d.Subjects)
+			}
+		}
+	}
+	if !sawRole {
+		t.Fatal("bootstrap manifest missing astronomer-kube-state-metrics ClusterRole")
+	}
+	if !sawBinding {
+		t.Fatal("bootstrap manifest missing astronomer-kube-state-metrics ClusterRoleBinding")
 	}
 }
 

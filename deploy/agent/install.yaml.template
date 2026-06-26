@@ -155,6 +155,11 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # node-exporter runs with hostNetwork/hostPID/hostPath, which the restricted
+    # and baseline Pod Security Admission levels reject. This is Astronomer's own
+    # metrics namespace, so enforce 'privileged' here (and only here) so the
+    # DaemonSet schedules on PSA-enforcing clusters.
+    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
 kind: Namespace
@@ -707,3 +712,87 @@ spec:
     matchLabels:
       app.kubernetes.io/name: astronomer-agent
       app.kubernetes.io/component: agent
+
+---
+# ============================================================================
+# Baseline component cluster-scoped RBAC (bootstrap-only, operator-applied once)
+#
+# The pull-reconcile applier is NAMESPACED-ONLY: it refuses cluster-scoped
+# resources and is granted no cluster RBAC. The DefaultEnabled baseline
+# component kube-state-metrics, however, must read cluster-wide inventory to
+# produce its metrics. That cluster-scoped READ-ONLY grant therefore lives HERE
+# in the bootstrap manifest (applied once by the operator's kubectl at
+# adoption), NOT in the pulled desired state.
+#
+# This ClusterRole binds the kube-state-metrics ServiceAccount that the PULL
+# applier creates namespaced in astronomer-monitoring. It is the ONLY
+# cluster-scoped component grant besides the agent's own privilege-profile
+# ClusterRole, and it is strictly least-privilege: get/list/watch ONLY, zero
+# write, no secret data (Secrets are read for metadata-only metrics; ksm never
+# exposes values). It is harmless when pull reconcile is disabled — just an
+# unused read-only ClusterRole bound to a ServiceAccount that may not yet exist.
+# ============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: astronomer-kube-state-metrics
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "nodes", "pods", "services", "serviceaccounts", "resourcequotas", "replicationcontrollers", "limitranges", "persistentvolumeclaims", "persistentvolumes", "namespaces", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "daemonsets", "deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["certificates.k8s.io"]
+    resources: ["certificatesigningrequests"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "volumeattachments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies", "ingressclasses", "ingresses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings", "clusterroles", "rolebindings", "roles"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: astronomer-kube-state-metrics
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: astronomer-kube-state-metrics
+subjects:
+  # The ServiceAccount itself is created by the PULL applier (namespaced) in
+  # astronomer-monitoring; this binding pre-exists it harmlessly.
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: astronomer-monitoring

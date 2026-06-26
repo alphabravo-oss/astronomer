@@ -58,6 +58,65 @@ func TestDesiredStateRendersAgentPlusDefaultBaseline(t *testing.T) {
 			}
 		}
 	}
+
+	// (c) The pull desired set must now carry REAL, NAMESPACED workloads — not a
+	// Namespace stub. ksm = ServiceAccount + Deployment + Service; node-exporter =
+	// ServiceAccount + DaemonSet + Service. And critically: NO cluster-scoped
+	// resources (ClusterRole/ClusterRoleBinding/Namespace) may leak into the pull
+	// set — the applier refuses them, and ksm's cluster RBAC is bootstrap-only.
+	content := map[string]string{}
+	for _, m := range resp.Manifests {
+		content[m.Name] = m.Content
+	}
+	assertContainsAll(t, "kube-state-metrics", content["baseline-kube-state-metrics"], []string{
+		"kind: ServiceAccount",
+		"kind: Deployment",
+		"kind: Service",
+		"name: kube-state-metrics",
+		"namespace: astronomer-monitoring",
+	})
+	assertContainsAll(t, "prometheus-node-exporter", content["baseline-prometheus-node-exporter"], []string{
+		"kind: ServiceAccount",
+		"kind: DaemonSet",
+		"kind: Service",
+		"name: prometheus-node-exporter",
+		"namespace: astronomer-monitoring",
+		// host access is pod-level (no cluster RBAC needed).
+		"hostNetwork: true",
+		"hostPID: true",
+	})
+	for name, c := range content {
+		if !strings.HasPrefix(name, "baseline-") {
+			continue
+		}
+		if name == "baseline-kube-state-metrics" || name == "baseline-prometheus-node-exporter" {
+			for _, forbidden := range []string{"kind: ClusterRole", "kind: ClusterRoleBinding", "kind: Namespace"} {
+				if strings.Contains(c, forbidden) {
+					t.Fatalf("default baseline %q leaked cluster-scoped resource %q into the pull set:\n%s", name, forbidden, c)
+				}
+			}
+		}
+		// Every doc in every baseline manifest must declare the owned namespace.
+		for _, doc := range strings.Split(c, "\n---") {
+			if strings.TrimSpace(doc) == "" {
+				continue
+			}
+			if name == "baseline-kube-state-metrics" || name == "baseline-prometheus-node-exporter" {
+				if !strings.Contains(doc, "namespace: astronomer-monitoring") {
+					t.Fatalf("default baseline %q has a doc without an owned namespace:\n%s", name, doc)
+				}
+			}
+		}
+	}
+}
+
+func assertContainsAll(t *testing.T, label, content string, wants []string) {
+	t.Helper()
+	for _, w := range wants {
+		if !strings.Contains(content, w) {
+			t.Fatalf("%s manifest missing %q:\n%s", label, w, content)
+		}
+	}
 }
 
 func TestDesiredStateRevisionIsDeterministic(t *testing.T) {

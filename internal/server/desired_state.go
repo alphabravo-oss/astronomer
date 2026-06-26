@@ -124,13 +124,43 @@ func DesiredState(ctx context.Context, clusterID string, agentManifest string, s
 	}, nil
 }
 
+// Pinned upstream images for the two DefaultEnabled baseline components. These
+// are the prometheus-community chart defaults, pinned by digest-less tag for
+// reproducibility. The pull applier only ships NAMESPACED workloads, so these
+// are the only image references the desired set introduces. Keep them in step
+// with the chart coordinates in internal/baseline.Registry on upgrade.
+const (
+	kubeStateMetricsImage = "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0"
+	nodeExporterImage     = "quay.io/prometheus/node-exporter:v1.8.2"
+)
+
 // renderBaselineComponentManifest renders one enabled baseline component into a
-// bounded, applyable manifest for the pull applier. The MVP emits the target
-// Namespace object (labeled managed-by so the agent's prune pass keeps it) plus
-// a HelmRelease-shaped descriptor comment carrying the chart coordinates the
-// agent's local applier resolves. The Namespace is always within
-// AstronomerOwnedNamespaces, so the manifest is safe to apply by definition.
+// bounded, applyable multi-document manifest for the pull applier. EVERY emitted
+// document is NAMESPACED to comp.Namespace (an AstronomerOwnedNamespaces entry),
+// so the manifest is safe to apply by definition — the applier refuses anything
+// cluster-scoped or out-of-namespace.
+//
+// The two DefaultEnabled components (kube-state-metrics, prometheus-node-exporter)
+// render REAL, minimal, pinned workloads (ServiceAccount + Deployment/DaemonSet +
+// Service). Their cluster-scoped read-only RBAC (ksm only) lives in the bootstrap
+// install manifest, NOT here — the applier cannot grant cluster RBAC. Opt-in
+// components keep the Namespace-stub behavior (an operator who turns one on gets
+// the labeled namespace; the workload is delivered via the Argo/tool path).
 func renderBaselineComponentManifest(comp baselineApplicationSetComponent) string {
+	switch comp.Slug {
+	case "kube-state-metrics":
+		return renderKubeStateMetricsManifest(comp.Namespace)
+	case "prometheus-node-exporter":
+		return renderNodeExporterManifest(comp.Namespace)
+	default:
+		return renderBaselineNamespaceStub(comp)
+	}
+}
+
+// renderBaselineNamespaceStub emits the labeled target Namespace for an opt-in
+// component (unchanged legacy behavior). Cluster-scoped, but only ever reached
+// for components NOT in the pull desired set in practice; kept for parity.
+func renderBaselineNamespaceStub(comp baselineApplicationSetComponent) string {
 	var b strings.Builder
 	b.WriteString("apiVersion: v1\n")
 	b.WriteString("kind: Namespace\n")
@@ -147,6 +177,256 @@ func renderBaselineComponentManifest(comp baselineApplicationSetComponent) strin
 		}
 	}
 	return b.String()
+}
+
+// managedLabelLine returns the managed-by label line at the given indent so the
+// agent's prune pass keeps every rendered object.
+func managedLabelLine(indent string) string {
+	return indent + argolabels.ManagedByLabelKey + ": " + argolabels.ManagedByLabelValue + "\n"
+}
+
+// renderKubeStateMetricsManifest renders the namespaced ksm workload set:
+// ServiceAccount + Deployment + Service, all in ns. The cluster-scoped read-only
+// ClusterRole/ClusterRoleBinding that grant ksm its metrics-collection reads live
+// in the BOOTSTRAP install manifest (deploy/agent/install.yaml.template) and bind
+// THIS ServiceAccount — the applier cannot apply cluster RBAC, so it must not
+// appear here.
+func renderKubeStateMetricsManifest(ns string) string {
+	const name = "kube-state-metrics"
+	ml := managedLabelLine("    ")
+	return "apiVersion: v1\n" +
+		"kind: ServiceAccount\n" +
+		"metadata:\n" +
+		"  name: " + name + "\n" +
+		"  namespace: " + ns + "\n" +
+		"  labels:\n" +
+		ml +
+		"    app.kubernetes.io/name: kube-state-metrics\n" +
+		"    app.kubernetes.io/part-of: astronomer\n" +
+		"automountServiceAccountToken: true\n" +
+		"---\n" +
+		"apiVersion: apps/v1\n" +
+		"kind: Deployment\n" +
+		"metadata:\n" +
+		"  name: " + name + "\n" +
+		"  namespace: " + ns + "\n" +
+		"  labels:\n" +
+		ml +
+		"    app.kubernetes.io/name: kube-state-metrics\n" +
+		"    app.kubernetes.io/part-of: astronomer\n" +
+		"spec:\n" +
+		"  replicas: 1\n" +
+		"  selector:\n" +
+		"    matchLabels:\n" +
+		"      app.kubernetes.io/name: kube-state-metrics\n" +
+		"  template:\n" +
+		"    metadata:\n" +
+		"      labels:\n" +
+		"        " + argolabels.ManagedByLabelKey + ": " + argolabels.ManagedByLabelValue + "\n" +
+		"        app.kubernetes.io/name: kube-state-metrics\n" +
+		"        app.kubernetes.io/part-of: astronomer\n" +
+		"    spec:\n" +
+		"      serviceAccountName: " + name + "\n" +
+		"      automountServiceAccountToken: true\n" +
+		"      securityContext:\n" +
+		"        runAsNonRoot: true\n" +
+		"        runAsUser: 65534\n" +
+		"        fsGroup: 65534\n" +
+		"        seccompProfile:\n" +
+		"          type: RuntimeDefault\n" +
+		"      containers:\n" +
+		"        - name: kube-state-metrics\n" +
+		"          image: \"" + kubeStateMetricsImage + "\"\n" +
+		"          imagePullPolicy: IfNotPresent\n" +
+		"          args:\n" +
+		"            - --port=8080\n" +
+		"            - --telemetry-port=8081\n" +
+		"          ports:\n" +
+		"            - name: http-metrics\n" +
+		"              containerPort: 8080\n" +
+		"            - name: telemetry\n" +
+		"              containerPort: 8081\n" +
+		"          livenessProbe:\n" +
+		"            httpGet:\n" +
+		"              path: /healthz\n" +
+		"              port: 8080\n" +
+		"            initialDelaySeconds: 5\n" +
+		"            timeoutSeconds: 5\n" +
+		"          readinessProbe:\n" +
+		"            httpGet:\n" +
+		"              path: /\n" +
+		"              port: 8081\n" +
+		"            initialDelaySeconds: 5\n" +
+		"            timeoutSeconds: 5\n" +
+		"          resources:\n" +
+		"            requests:\n" +
+		"              cpu: 10m\n" +
+		"              memory: 32Mi\n" +
+		"            limits:\n" +
+		"              cpu: 100m\n" +
+		"              memory: 128Mi\n" +
+		"          securityContext:\n" +
+		"            allowPrivilegeEscalation: false\n" +
+		"            readOnlyRootFilesystem: true\n" +
+		"            capabilities:\n" +
+		"              drop:\n" +
+		"                - ALL\n" +
+		"      nodeSelector:\n" +
+		"        kubernetes.io/os: linux\n" +
+		"---\n" +
+		"apiVersion: v1\n" +
+		"kind: Service\n" +
+		"metadata:\n" +
+		"  name: " + name + "\n" +
+		"  namespace: " + ns + "\n" +
+		"  labels:\n" +
+		ml +
+		"    app.kubernetes.io/name: kube-state-metrics\n" +
+		"    app.kubernetes.io/part-of: astronomer\n" +
+		"  annotations:\n" +
+		"    prometheus.io/scrape: \"true\"\n" +
+		"spec:\n" +
+		"  type: ClusterIP\n" +
+		"  clusterIP: None\n" +
+		"  ports:\n" +
+		"    - name: http-metrics\n" +
+		"      port: 8080\n" +
+		"      targetPort: http-metrics\n" +
+		"    - name: telemetry\n" +
+		"      port: 8081\n" +
+		"      targetPort: telemetry\n" +
+		"  selector:\n" +
+		"    app.kubernetes.io/name: kube-state-metrics\n"
+}
+
+// renderNodeExporterManifest renders the namespaced node-exporter workload set:
+// ServiceAccount + DaemonSet + Service, all in ns. node-exporter needs host
+// access (hostNetwork/hostPID + hostPath mounts of /proc, /sys, /) — all of
+// which are POD-LEVEL settings, NOT cluster RBAC, so the whole set is namespaced
+// and safe for the pull applier. No cluster-scoped resources are required.
+func renderNodeExporterManifest(ns string) string {
+	const name = "prometheus-node-exporter"
+	ml := managedLabelLine("    ")
+	return "apiVersion: v1\n" +
+		"kind: ServiceAccount\n" +
+		"metadata:\n" +
+		"  name: " + name + "\n" +
+		"  namespace: " + ns + "\n" +
+		"  labels:\n" +
+		ml +
+		"    app.kubernetes.io/name: prometheus-node-exporter\n" +
+		"    app.kubernetes.io/part-of: astronomer\n" +
+		"automountServiceAccountToken: false\n" +
+		"---\n" +
+		"apiVersion: apps/v1\n" +
+		"kind: DaemonSet\n" +
+		"metadata:\n" +
+		"  name: " + name + "\n" +
+		"  namespace: " + ns + "\n" +
+		"  labels:\n" +
+		ml +
+		"    app.kubernetes.io/name: prometheus-node-exporter\n" +
+		"    app.kubernetes.io/part-of: astronomer\n" +
+		"spec:\n" +
+		"  selector:\n" +
+		"    matchLabels:\n" +
+		"      app.kubernetes.io/name: prometheus-node-exporter\n" +
+		"  updateStrategy:\n" +
+		"    type: RollingUpdate\n" +
+		"  template:\n" +
+		"    metadata:\n" +
+		"      labels:\n" +
+		"        " + argolabels.ManagedByLabelKey + ": " + argolabels.ManagedByLabelValue + "\n" +
+		"        app.kubernetes.io/name: prometheus-node-exporter\n" +
+		"        app.kubernetes.io/part-of: astronomer\n" +
+		"    spec:\n" +
+		"      serviceAccountName: " + name + "\n" +
+		"      hostNetwork: true\n" +
+		"      hostPID: true\n" +
+		"      securityContext:\n" +
+		"        runAsNonRoot: true\n" +
+		"        runAsUser: 65534\n" +
+		"      containers:\n" +
+		"        - name: node-exporter\n" +
+		"          image: \"" + nodeExporterImage + "\"\n" +
+		"          imagePullPolicy: IfNotPresent\n" +
+		"          args:\n" +
+		"            - --path.procfs=/host/proc\n" +
+		"            - --path.sysfs=/host/sys\n" +
+		"            - --path.rootfs=/host/root\n" +
+		"            - --web.listen-address=0.0.0.0:9100\n" +
+		"          ports:\n" +
+		"            - name: metrics\n" +
+		"              containerPort: 9100\n" +
+		"              protocol: TCP\n" +
+		"          livenessProbe:\n" +
+		"            httpGet:\n" +
+		"              path: /\n" +
+		"              port: 9100\n" +
+		"          readinessProbe:\n" +
+		"            httpGet:\n" +
+		"              path: /\n" +
+		"              port: 9100\n" +
+		"          resources:\n" +
+		"            requests:\n" +
+		"              cpu: 10m\n" +
+		"              memory: 24Mi\n" +
+		"            limits:\n" +
+		"              cpu: 100m\n" +
+		"              memory: 64Mi\n" +
+		"          securityContext:\n" +
+		"            allowPrivilegeEscalation: false\n" +
+		"            readOnlyRootFilesystem: true\n" +
+		"            capabilities:\n" +
+		"              drop:\n" +
+		"                - ALL\n" +
+		"          volumeMounts:\n" +
+		"            - name: proc\n" +
+		"              mountPath: /host/proc\n" +
+		"              readOnly: true\n" +
+		"            - name: sys\n" +
+		"              mountPath: /host/sys\n" +
+		"              readOnly: true\n" +
+		"            - name: root\n" +
+		"              mountPath: /host/root\n" +
+		"              mountPropagation: HostToContainer\n" +
+		"              readOnly: true\n" +
+		"      tolerations:\n" +
+		"        - operator: Exists\n" +
+		"      nodeSelector:\n" +
+		"        kubernetes.io/os: linux\n" +
+		"      volumes:\n" +
+		"        - name: proc\n" +
+		"          hostPath:\n" +
+		"            path: /proc\n" +
+		"        - name: sys\n" +
+		"          hostPath:\n" +
+		"            path: /sys\n" +
+		"        - name: root\n" +
+		"          hostPath:\n" +
+		"            path: /\n" +
+		"---\n" +
+		"apiVersion: v1\n" +
+		"kind: Service\n" +
+		"metadata:\n" +
+		"  name: " + name + "\n" +
+		"  namespace: " + ns + "\n" +
+		"  labels:\n" +
+		ml +
+		"    app.kubernetes.io/name: prometheus-node-exporter\n" +
+		"    app.kubernetes.io/part-of: astronomer\n" +
+		"  annotations:\n" +
+		"    prometheus.io/scrape: \"true\"\n" +
+		"spec:\n" +
+		"  type: ClusterIP\n" +
+		"  clusterIP: None\n" +
+		"  ports:\n" +
+		"    - name: metrics\n" +
+		"      port: 9100\n" +
+		"      targetPort: metrics\n" +
+		"      protocol: TCP\n" +
+		"  selector:\n" +
+		"    app.kubernetes.io/name: prometheus-node-exporter\n"
 }
 
 // extractAgentDeployment pulls the single `kind: Deployment` document out of the
