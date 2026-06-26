@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -89,6 +90,20 @@ type ReconcileHandler struct {
 	// readLoop (via the registered handler). Buffered so an unsolicited push
 	// while no request is in flight doesn't block the readLoop.
 	respCh chan *protocol.Message
+
+	// paused, when set, halts reconciling. The decommission handler flips it so
+	// the loop's Phase-2 self-apply can't re-create the agent Deployment that
+	// decommission is tearing down (otherwise pull and decommission race).
+	paused *atomic.Bool
+}
+
+// SetPauseGuard wires a shared flag that, when true, stops the reconcile loop
+// from applying/pruning. Used by the decommission handler to halt self-apply
+// before it removes the agent.
+func (h *ReconcileHandler) SetPauseGuard(g *atomic.Bool) {
+	if h != nil {
+		h.paused = g
+	}
 }
 
 // NewReconcileHandler builds a reconcile handler from the agent's in-cluster
@@ -173,6 +188,9 @@ func (h *ReconcileHandler) Run(ctx context.Context, interval time.Duration, send
 // comes back within a bounded wait. Drains stale responses first so a request's
 // reply isn't shadowed by an earlier push.
 func (h *ReconcileHandler) reconcileOnce(ctx context.Context, sendFn func(*protocol.Message) error) {
+	if h.paused != nil && h.paused.Load() {
+		return // decommission in progress — do not re-create torn-down resources
+	}
 	req := protocol.DesiredStateRequestPayload{ClusterID: h.clusterID}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -207,6 +225,9 @@ func (h *ReconcileHandler) reconcileOnce(ctx context.Context, sendFn func(*proto
 // status. A server-side render error (Error set) is logged and skipped — the
 // agent leaves the cluster footprint untouched rather than acting on a bad set.
 func (h *ReconcileHandler) applyResponse(ctx context.Context, msg *protocol.Message, sendFn func(*protocol.Message) error) {
+	if h.paused != nil && h.paused.Load() {
+		return // decommission in progress
+	}
 	var resp protocol.DesiredStateResponsePayload
 	if err := json.Unmarshal(msg.Payload, &resp); err != nil {
 		h.log.Error("decode desired-state response", "error", err)

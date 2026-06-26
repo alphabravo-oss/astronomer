@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -69,6 +70,16 @@ type DecommissionHandler struct {
 	// deleting the agent's own Deployment. The delay gives the WS write
 	// loop time to flush the ACK frame to the server.
 	agentDeleteDelay time.Duration
+	// pause, when set, is flipped true at the start of decommission so the pull
+	// reconcile loop stops re-creating resources we're tearing down.
+	pause *atomic.Bool
+}
+
+// SetPauseGuard wires the shared reconcile-pause flag (see ReconcileHandler).
+func (h *DecommissionHandler) SetPauseGuard(g *atomic.Bool) {
+	if h != nil {
+		h.pause = g
+	}
 }
 
 // NewDecommissionHandler builds a handler from the shared K8sProxy client
@@ -100,6 +111,11 @@ func NewDecommissionHandler(client kubernetes.Interface, restCfg *rest.Config, l
 func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	if h == nil {
 		return nil, fmt.Errorf("decommission handler not configured")
+	}
+	// Halt the pull reconcile loop FIRST so its Phase-2 self-apply can't
+	// re-create the agent Deployment we're about to delete.
+	if h.pause != nil {
+		h.pause.Store(true)
 	}
 	var req protocol.DecommissionPayload
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {

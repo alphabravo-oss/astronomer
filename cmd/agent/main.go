@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -147,6 +148,10 @@ func runConnect(logger *slog.Logger) error {
 		svcProxy := agent.NewServiceProxy(logger)
 		tunnel.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
+		// Shared guard so decommission can halt the pull reconcile loop before
+		// tearing down the agent (otherwise Phase-2 self-apply re-creates it).
+		pauseGuard := &atomic.Bool{}
+
 		// Cluster decommission. Receives MsgDecommission from the server,
 		// uninstalls our managed-side resources (Fluent Bit / logging
 		// namespace, labeled Velero CRs) and finally schedules the agent's
@@ -157,6 +162,7 @@ func runConnect(logger *slog.Logger) error {
 		if decomm, err := agent.NewDecommissionHandler(client, restConfig, logger); err != nil {
 			logger.Warn("decommission handler unavailable", "error", err)
 		} else {
+			decomm.SetPauseGuard(pauseGuard)
 			tunnel.RegisterHandler(protocol.MsgDecommission, decomm.HandleDecommission)
 		}
 
@@ -285,6 +291,7 @@ func runConnect(logger *slog.Logger) error {
 			if reconciler, rErr := agent.NewReconcileHandler(restConfig, cfg.ClusterID, logger); rErr != nil {
 				logger.Warn("pull reconcile: handler init failed; loop disabled", "error", rErr)
 			} else {
+				reconciler.SetPauseGuard(pauseGuard)
 				// The response handler routes server replies (and unsolicited
 				// pushes) into the reconcile loop.
 				tunnel.RegisterHandler(protocol.MsgDesiredStateResponse, reconciler.HandleDesiredStateResponse)
