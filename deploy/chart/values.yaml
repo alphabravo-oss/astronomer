@@ -26,17 +26,24 @@ image:
   registry: ""           # Empty registry = use local images (k3d-imported).
   pullPolicy: IfNotPresent
   pullSecrets: []
+  # Per-image `registry` is the online default home (first-party = GHCR). The
+  # global `image.registry` above overrides ALL of these when set (air-gap:
+  # mirror everything into one private registry). Empty global => these defaults.
   server:
+    registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
     tag: dev
   worker:
+    registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
     tag: dev
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
+    registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
     tag: dev
   migrate:
+    registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
     tag: dev
 
@@ -378,8 +385,10 @@ config:
   # self-manage HTTPRoute. Leave empty to skip the seed and set later via
   # /dashboard/settings.
   serverURL: ""
-  agentImageRepository: astronomer-go-agent
-  agentImageTag: dev
+  # Empty => derive from image.agent (registry-aware). Set explicitly only to
+  # override the agent image independently of the management-plane image set.
+  agentImageRepository: ""
+  agentImageTag: ""
   # =============================================================================
   # Auth hardening (migration 039 / NIST 800-53 AC-7 / SOC 2 CC6.1)
   # =============================================================================
@@ -1043,8 +1052,9 @@ kubectlShell:
   # coreutils, curl, jq, and tini — enough for an interactive debug
   # session without dragging in a third-party image whose tag could
   # be retagged or disappear (see the Aug 2025 bitnami/kubectl 404).
-  # Operators on a private mirror should override.
-  image: "astronomer-shell:dev"
+  # Empty => derive from preflight.image (registry-aware: GHCR online, mirror in
+  # air-gap). Set explicitly only to pin a different shell image.
+  image: ""
   # Idle expiry — if no input bytes hit the WS for this long, the
   # reaper closes the session and deletes the pod.
   idleTimeoutMinutes: 30

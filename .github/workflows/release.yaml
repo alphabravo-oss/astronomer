@@ -133,3 +133,64 @@ jobs:
           name: sbom-${{ matrix.component.name }}-${{ steps.tag.outputs.tag }}
           path: sbom-${{ matrix.component.name }}.spdx.json
           retention-days: 90
+
+  publish-chart:
+    name: package · push helm chart (OCI)
+    needs: build-sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push OCI chart to GHCR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Derive versions
+        id: ver
+        run: |
+          # imageTag must match what build-sign pushed (ref name on a tag,
+          # the dispatch input, else the short SHA). chartVersion is the same
+          # value normalised to semver (helm chart versions can't carry a 'v').
+          if [ -n "${{ inputs.tag }}" ]; then
+            IMG="${{ inputs.tag }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            IMG="${{ github.ref_name }}"
+          else
+            IMG="$(echo ${{ github.sha }} | cut -c1-7)"
+          fi
+          CHART="${IMG#v}"
+          # A bare short-SHA isn't semver — wrap it as a 0.0.0 prerelease.
+          case "$CHART" in
+            [0-9]*.[0-9]*.[0-9]*) : ;;
+            *) CHART="0.0.0-${CHART}" ;;
+          esac
+          echo "imageTag=$IMG" >> $GITHUB_OUTPUT
+          echo "chartVersion=$CHART" >> $GITHUB_OUTPUT
+
+      - name: Pin chart + first-party image tags to the release
+        run: |
+          IMG="${{ steps.ver.outputs.imageTag }}"
+          CHART="${{ steps.ver.outputs.chartVersion }}"
+          # Chart version (semver) + appVersion (human/image tag).
+          sed -i "s/^version:.*/version: ${CHART}/" deploy/chart/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${IMG}\"/" deploy/chart/Chart.yaml
+          # Only first-party images use `tag: dev`; pin them to the image tag.
+          # Third-party tags (16-alpine, 1.36, …) are untouched.
+          sed -i "s/^\(\s*\)tag: dev$/\1tag: \"${IMG}\"/" deploy/chart/values.yaml
+          echo "Pinned chart ${CHART} / images ${IMG}:"
+          grep -nE "^version:|^appVersion:" deploy/chart/Chart.yaml
+
+      - name: Lint
+        run: helm lint deploy/chart
+
+      - name: Login · package · push (OCI)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm package deploy/chart --version "${{ steps.ver.outputs.chartVersion }}" --app-version "${{ steps.ver.outputs.imageTag }}"
+          helm push "astronomer-${{ steps.ver.outputs.chartVersion }}.tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
+          echo "Pushed oci://ghcr.io/${{ github.repository_owner }}/charts/astronomer:${{ steps.ver.outputs.chartVersion }}"

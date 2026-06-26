@@ -43,7 +43,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.frontend.image.repository "tag" .Values.frontend.image.tag "registry" .Values.frontend.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.frontend.image.repository "tag" .Values.frontend.image.tag "registry" .Values.frontend.image.registry "fallback" (.Values.image.registry | default "ghcr.io/alphabravo-oss")) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

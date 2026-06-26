@@ -23,19 +23,23 @@ OAPI_CODEGEN_VERSION ?= v2.5.0
 OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
 # Image naming — override IMG_TAG=... to push semantic versions.
-IMG_TAG     ?= $(VERSION)
-IMG_SERVER   = astronomer-go-server:$(IMG_TAG)
-IMG_AGENT    = astronomer-go-agent:$(IMG_TAG)
-IMG_WORKER   = astronomer-go-worker:$(IMG_TAG)
-IMG_MIGRATE  = astronomer-go-migrate:$(IMG_TAG)
+# IMG_REGISTRY carries the first-party GHCR prefix so locally-built images match
+# the chart's default image refs (image.<x>.registry = ghcr.io/alphabravo-oss),
+# so `make k3d-import-all` + a default `helm install` line up with no overrides.
+IMG_TAG      ?= $(VERSION)
+IMG_REGISTRY ?= ghcr.io/alphabravo-oss
+IMG_SERVER   = $(IMG_REGISTRY)/astronomer-go-server:$(IMG_TAG)
+IMG_AGENT    = $(IMG_REGISTRY)/astronomer-go-agent:$(IMG_TAG)
+IMG_WORKER   = $(IMG_REGISTRY)/astronomer-go-worker:$(IMG_TAG)
+IMG_MIGRATE  = $(IMG_REGISTRY)/astronomer-go-migrate:$(IMG_TAG)
 # Frontend image name stays `astronomer-frontend` to match the Helm chart's default
 # (deploy/chart/values.yaml -> frontend.image.repository). Build context is
 # astronomer-go's own frontend/ directory.
-IMG_FRONTEND = astronomer-frontend:$(IMG_TAG)
+IMG_FRONTEND = $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG)
 # astronomer-shell is the in-browser kubectl shell pod image.
 # Owned end-to-end (alpine + kubectl from dl.k8s.io) so we don't depend
 # on a third-party registry whose tag schedule we can't control.
-IMG_SHELL    = astronomer-shell:$(IMG_TAG)
+IMG_SHELL    = $(IMG_REGISTRY)/astronomer-shell:$(IMG_TAG)
 
 # k3d cluster name (override on the command line: `make k3d-bootstrap CLUSTER=foo`).
 CLUSTER     ?= astronomer-mgmt

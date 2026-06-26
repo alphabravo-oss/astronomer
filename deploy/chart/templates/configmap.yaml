@@ -24,8 +24,12 @@ data:
   # on first boot so the Argo self-management loop can render the right
   # hostname on the self-manage HTTPRoute.
   SERVER_URL: {{ .Values.config.serverURL | default "" | quote }}
-  AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | quote }}
-  AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | quote }}
+  # Agent image the server renders into install.yaml for adopted clusters.
+  # Derives from image.agent (registry-aware: GHCR online, mirror in air-gap) so
+  # adopted clusters pull from the same place as the management plane. An
+  # explicit config.agentImage* still overrides.
+  AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | default (printf "%s/%s" (.Values.image.registry | default .Values.image.agent.registry) .Values.image.agent.repository) | quote }}
+  AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | default .Values.image.agent.tag | quote }}
   # Auth hardening (migration 039). Empty / unset == binary defaults
   # (5 attempts / 15 minutes).
   {{- if .Values.config.loginFailureThreshold }}
@@ -65,9 +69,9 @@ data:
   # per-command rows. See docs/kubectl-shell.md.
   {{- with .Values.kubectlShell }}
   KUBECTL_SHELL_ENABLED: {{ .enabled | quote }}
-  {{- if .image }}
-  KUBECTL_SHELL_IMAGE: {{ .image | quote }}
-  {{- end }}
+  # Same astronomer-shell image as preflight, rendered registry-aware (GHCR
+  # online, mirror in air-gap). An explicit kubectlShell.image overrides.
+  KUBECTL_SHELL_IMAGE: {{ .image | default (include "astronomer.thirdPartyImage" (dict "repository" $.Values.preflight.image.repository "tag" $.Values.preflight.image.tag "registry" $.Values.preflight.image.registry "fallback" ($.Values.image.registry | default "ghcr.io/alphabravo-oss"))) | quote }}
   {{- if .idleTimeoutMinutes }}
   KUBECTL_SHELL_IDLE_TIMEOUT_MINUTES: {{ .idleTimeoutMinutes | quote }}
   {{- end }}

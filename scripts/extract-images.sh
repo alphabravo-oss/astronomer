@@ -43,12 +43,17 @@ images="$(
 # The agent image isn't in any Deployment — it's referenced when the
 # server renders the install.yaml that operators apply in a new member
 # cluster. Surface it explicitly so operators don't miss it. Grab the
-# 5 lines after `  agent:` and parse repository + tag out of them.
-agent_block="$(grep -A5 '^  agent:' "$CHART_DIR/values.yaml")"
+# 6 lines after `  agent:` and parse registry + repository + tag out of them.
+agent_block="$(grep -A6 '^  agent:' "$CHART_DIR/values.yaml")"
+agent_reg="$(printf '%s' "$agent_block" | awk -F': ' '/^    registry:/ {gsub(/"/,"",$2); print $2; exit}')"
 agent_repo="$(printf '%s' "$agent_block" | awk -F': ' '/^    repository:/ {gsub(/"/,"",$2); print $2; exit}')"
 agent_tag="$(printf '%s' "$agent_block" | awk -F': ' '/^    tag:/ {gsub(/"/,"",$2); print $2; exit}')"
 if [[ -n "$agent_repo" && -n "$agent_tag" ]]; then
-    images="$(printf '%s\n%s:%s' "$images" "$agent_repo" "$agent_tag" | sort -u)"
+    # Prepend the registry so the air-gap mirror list carries the full ref,
+    # matching what the configmap renders into adopted-cluster manifests.
+    agent_ref="$agent_repo:$agent_tag"
+    [[ -n "$agent_reg" ]] && agent_ref="$agent_reg/$agent_ref"
+    images="$(printf '%s\n%s' "$images" "$agent_ref" | sort -u)"
 fi
 
 # Emit a stable, comment-prefixed header so the file is self-describing

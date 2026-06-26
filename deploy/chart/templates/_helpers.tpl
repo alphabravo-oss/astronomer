@@ -82,8 +82,10 @@ Image reference helper for astronomer-built images. Pass dict
 Honours .Values.image.registry as an optional global prefix.
 */}}
 {{- define "astronomer.image" -}}
-{{- $reg := .context.Values.image.registry | default "" -}}
 {{- $img := index .context.Values.image .component -}}
+{{- /* Global image.registry (air-gap mirror) wins; else this image's own
+       registry default (GHCR for first-party); else bare (local dev). */ -}}
+{{- $reg := .context.Values.image.registry | default $img.registry | default "" -}}
 {{- if $reg -}}
 {{ printf "%s/%s:%s" $reg $img.repository $img.tag }}
 {{- else -}}

@@ -12,13 +12,14 @@
 #   3) helm install --set image.registry=internal.example.com/astronomer ...
 #
 # See docs/airgapped-install.md for the full operator procedure.
-astronomer-frontend:dev
-astronomer-go-agent:dev
-astronomer-go-migrate:dev
-astronomer-go-server:dev
-astronomer-go-worker:dev
-bitnami/kubectl:1.31.4
 busybox:1.36
-dexidp/dex:v2.41.1
+ecr-public.aws.com/docker/library/redis:8.2.3-alpine
+ghcr.io/alphabravo-oss/astronomer-frontend:dev
+ghcr.io/alphabravo-oss/astronomer-go-agent:dev
+ghcr.io/alphabravo-oss/astronomer-go-migrate:dev
+ghcr.io/alphabravo-oss/astronomer-go-server:dev
+ghcr.io/alphabravo-oss/astronomer-go-worker:dev
+ghcr.io/alphabravo-oss/astronomer-shell:dev
 postgres:16-alpine
+quay.io/argoproj/argocd:v3.4.3
 valkey/valkey:8-alpine
