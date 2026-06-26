@@ -1,0 +1,241 @@
+# Astronomer Cluster JOIN Process — Adversarial Review vs Rancher Robustness
+
+**Status:** Lead-reviewer synthesis of an exhaustive, adversarially-verified review.
+**Scope:** The full cluster JOIN lifecycle — registration tokens, bootstrap manifest, tunnel connect/auth, RBAC/privilege, ArgoCD provisioning, heartbeat/state/metrics, decommission/cleanup, failure/concurrency/HA — benchmarked against Rancher's cattle-cluster-agent / Fleet model.
+**Method:** Every finding was re-verified against the real code. Severities below reflect *post-verification* calibration (several originally-rated CRITICAL/HIGH findings were down-graded on evidence; none were inflated).
+
+---
+
+## 1. Executive Summary & Overall Rancher-Parity Verdict
+
+Astronomer's join process is **functionally complete and architecturally close to Rancher** for the happy path: short-TTL hashed registration tokens, a durable per-cluster agent credential exchanged at first connect, an outbound WebSocket tunnel with jittered reconnect, a redis-backed locator giving "any replica can reach any agent," a tiered least-privilege RBAC model, and graceful idempotent re-import. In several dimensions it *exceeds* a naive importer (two-axis privilege profiles, audited ownership decisions, signed manifests).
+
+**However, the review confirms a consistent cluster of real gaps that keep it short of Rancher parity**, concentrated in five themes:
+
+1. **No server-CA pinning anywhere** (no `CATTLE_CA_CHECKSUM` equivalent). This single root cause surfaces independently in *every* connection-bearing dimension (registration, bootstrap, tunnel, security, HA, parity). The CA plumbing is half-built — a Secret is rendered and mounted — but the value is always empty and no agent code ever reads it.
+2. **No durable-credential rotation.** The post-join agent token is mint-once, never expires, and the only "rotation" surfaces (`rotate_agent_token` fleet op, `token_rotation_days` policy) are dead code. Compromise response = full decommission.
+3. **Decommission is incomplete and HA-fragile.** Managed-side cleanup is silently skipped on the wrong replica, leaves 6/7 namespaces + cluster-scoped RBAC + a live token Secret orphaned, and a skipped phase can never recover.
+4. **Liveness is conflated with inventory.** A degraded apiserver makes a healthy cluster look disconnected; two server-side staleness writers with different thresholds fight over `clusters.status`.
+5. **Dual-management hazard with a false safety contract.** Push provisioning is *not* gated by `PullReconcileEnabled` despite doc-comments promising a "stand-down," and the audited ownership-decision table is never consulted by any provisioning path.
+
+**Overall verdict: PARTIAL parity — roughly 5/10 vs Rancher.** The system is production-viable for small/medium fleets in a public-CA, single-replica-ish posture, but it materially trails Rancher on (a) join-trust integrity (CA pinning + credential rotation), (b) HA decommission correctness, and (c) honest least-privilege/ownership guarantees where shipped doc-comments and operator-facing controls describe protections the code does not implement.
+
+### Severity counts (post-verification, deduped)
+
+| Severity | Count |
+|---|---|
+| CRITICAL | 0 |
+| HIGH | 9 |
+| MEDIUM | 14 |
+| LOW | 20 |
+| **Total distinct findings** | **43** (consolidated from 60 raw findings across 10 dimensions) |
+
+> The 60 raw findings collapse heavily: **9 distinct findings restate "no CA pinning,"** and **6 restate "no durable-token rotation."** Those are deduped into single canonical entries below with all corroborating file:line evidence merged.
+
+### Per-dimension robustness (vs Rancher, 0–10)
+
+| Dimension | Score |
+|---|---|
+| registration-tokens | 6 |
+| bootstrap-manifest | 5 |
+| tunnel-connect-auth | 4 |
+| rbac-privilege | 6 |
+| argocd-provisioning | 6 |
+| heartbeat-state-metrics | 5 |
+| decommission-cleanup | 4 |
+| failure-concurrency-ha | 6 |
+| security | 5 |
+| rancher-parity | 5 |
+| **Weighted overall** | **~5/10** |
+
+---
+
+## 2. Prioritized Findings (deduped)
+
+> No findings rose to CRITICAL after verification (the worst cases are conditional on multi-replica topology, opt-in flags, or an existing privileged compromise). The HIGH set is where Astronomer most clearly trails Rancher.
+
+### HIGH
+
+#### H1 — No server-CA pinning on the agent tunnel; mounted `ca.crt` Secret is dead code *(dedupes REG-01, BOOT-02, TCA-01, FCH-01, SEC-01, PARITY-01)*
+**Dimensions:** registration-tokens, bootstrap-manifest, tunnel-connect-auth, failure-concurrency-ha, security, rancher-parity.
+**Evidence:**
+- `internal/agent/tunnel.go:119-121` — `websocket.Dial` with bare `&websocket.DialOptions{HTTPHeader: headers}`; no `HTTPClient`/`TLSClientConfig`/`RootCAs`.
+- `internal/agent2/client.go:107-114` — remotedialer `websocket.Dialer` with no `TLSClientConfig` (the migration path has the same gap).
+- `internal/agent/config.go:10-43` — `AgentConfig` has no `CACert`/`CAChecksum` field; `LoadAgentConfig` defines no CA env.
+- `internal/handler/clusters.go:1940` **and** `internal/worker/tasks/agent_manifest.go:85` — both manifest renderers hardcode `CACert: ""`.
+- `deploy/agent/install.yaml.template:483` renders `ca.crt: "{{CA_CERT}}"`; `:609-619` mounts it `optional: true` at `/etc/astronomer/tls` — but no agent code ever reads that path (grep for `/etc/astronomer/tls|RootCAs|x509|AppendCertsFromPEM` across `internal/agent`+`cmd/agent`+`internal/agent2` returns nothing).
+
+**Why it matters:** TLS falls back entirely to the OS trust store with no pinning. Standard verification still holds (no `InsecureSkipVerify`), so this is a *defense-in-depth + private-CA-support* gap, not a default break — but: (a) there is **no secure option at all** for a private/self-signed management endpoint (the common on-prem case), because the mounted CA is inert; (b) no protection against a compromised/mis-issuing public CA or transparent-proxy interception during the highest-trust moment of the lifecycle. The dead, mounted-but-ignored Secret actively *misleads* operators into thinking pinning exists.
+
+**Recommendation:** Add `CACert`/`CAChecksum` to `AgentConfig`; populate `CACert` in `renderAgentInstallManifest`/`agent_manifest.go` from `platform_settings[registration.ca_bundle]` (the existing `GetCABundle` source, `internal/handler/clusters.go:1673`); load `/etc/astronomer/tls/ca.crt` into a `tls.Config{RootCAs:…}` (or verify a pinned SHA-256 in `VerifyConnection`) and pass it via `DialOptions.HTTPClient` in **both** `internal/agent/tunnel.go` and `internal/agent2/client.go`. Fail the dial closed on pin mismatch.
+
+#### H2 — Durable agent token is mint-once, never expires, no rotation; rotation knobs are no-ops *(dedupes REG-04, TCA-04, FCH-02, SEC-06, PARITY-02)*
+**Dimensions:** registration-tokens, tunnel-connect-auth, failure-concurrency-ha, security, rancher-parity.
+**Evidence:**
+- `internal/tunnel/server.go:867-894` — `ensureClusterAgentToken` is get-or-create; returns the existing token forever, mints only when absent.
+- `internal/db/queries/clusters.sql:133-158` — no `expires_at` on `cluster_agent_tokens`; `GetClusterAgentTokenByToken` filters only `revoked_at IS NULL`.
+- `internal/worker/tasks/fleet_orchestrate.go:585-595,697-701` — `FleetOpTypeRotateAgentToken` is reserved → `MarkFleetTargetSkipped "not yet implemented"` (also rejected at API `internal/handler/fleet_operations.go:230,248`).
+- `internal/worker/tasks/cluster_template_apply.go:586-598` — `token_rotation_days` is persisted but **no task reads it** to rotate (grep confirms only upsert/validation sites).
+- Only deletion path is decommission `phaseRevokeAgentToken` (`internal/worker/tasks/cluster_decommission.go:553-568`), a hard DELETE.
+
+**Why it matters:** A leaked durable token grants indefinite cluster-tunnel access until full decommission + re-import. There is no in-place "rotate this cluster's credential, keep the cluster" operation. Note: the agent-side rotation channel **already exists** (`internal/agent/token_persistence.go` + `tunnel.go:177-184` honor `ack.AgentToken`) — only the server trigger is missing.
+
+**Recommendation:** Implement rotation: mint a fresh durable token, deliver it via the existing `ackPayload.AgentToken` path (`internal/tunnel/server.go:374`), revoke the old after the agent reconnects with the new (grace window). Add `expires_at`/`last_rotated_at` columns and a leader-gated periodic re-issue keyed on `token_rotation_days`. Either implement `FleetOpTypeRotateAgentToken` or remove it from the advertised op set.
+
+#### H3 — Read-only operators can mint live join credentials (`clusters:read` mints a registration token)
+**Dimension:** security.
+**Evidence:** `internal/server/routes_clusters.go:37` gates `GET /{id}/manifest/` on `rbac.VerbRead`, and `internal/handler/clusters.go:1491-1544` mints a fresh 1h `CreateClusterRegistrationToken` as a side effect (returned in body **and** the `X-Astronomer-Registration-Token` header). Contrast `routes_clusters.go:33` — `POST /{id}/register/` correctly requires `writeClusters + VerbUpdate` for the identical mint.
+**Why it matters:** Privilege escalation from read → an active join credential. The registration token is exchanged on first CONNECT for the durable agent token + scoped ingest token. Bounded (1h TTL, single-use flag set, audited, fixed cluster_id, attacker must still run the agent against a target), so HIGH not CRITICAL. *(The `generate-kubeconfig` endpoint, `routes_clusters.go:39`, only emits a `REPLACE_WITH_API_TOKEN` placeholder — it leaks no secret; gating it as write is consistency-only.)*
+**Recommendation:** Require `writeClusters + VerbUpdate` on `/{id}/manifest/` to match `/{id}/register/`. For a true read-only preview, use the existing placeholder path (`RenderAgentManifestForCluster` renders `REPLACE_WITH_REGISTRATION_TOKEN`, `clusters.go:1973`) which does not persist a usable token.
+
+#### H4 — `operator` privilege profile is cluster-admin-equivalent despite "no cluster-admin / no RBAC escalation" framing
+**Dimension:** rbac-privilege.
+**Evidence:** `deploy/agent/template.go:285,288-289` — operator grants cluster-wide `get/list/watch/create/update/patch/delete` on **secrets** plus `pods/exec`, `pods/attach`, `pods/portforward`; `template.go:117-124` binds it cluster-wide (kube-system included). Comments at `template.go:283,308-313` claim "without cluster-admin or RBAC escalation." `docs/agent-privilege-profiles.md:10` reinforces the misleading "Cannot" list.
+**Why it matters:** Cluster-wide secret read exposes every ServiceAccount token (incl. cluster-admin-bound SAs); `exec` into a kube-system/control-plane pod yields that pod's identity — textbook *indirect* escalation. The negative-guard test `TestOperatorProfilesGrantNoRBACWriteVerbs` (`template_test.go:135-176`) only checks for `rbac.authorization.k8s.io` write verbs, so it gives false containment assurance. HIGH not CRITICAL because operator is an explicit, audited, non-default opt-in (default is viewer).
+**Recommendation:** Drop cluster-wide secrets-write + exec/attach/portforward from operator (or scope exec to specific namespaces), **or** relabel it honestly as a privileged/near-admin tier. Fix the comment at `template.go:283/308` and the docs Limitations column. Consider splitting into a true `operator` (no secrets/exec) and an explicit `privileged-operator`.
+
+#### H5 — Server-driven `RBACSyncer` applies arbitrary Cluster/Role bindings, bypassing the two-axis model
+**Dimension:** rbac-privilege.
+**Evidence:** `internal/agent/rbac.go:31-147` — `HandleSyncRequest` Creates/Updates `ClusterRole`/`ClusterRoleBinding`/`Role`/`RoleBinding` from the server payload verbatim (Create-then-Update, no namespace bound, no `astronomer-*` restriction, no roleRef/kind/verb validation); `rbac.go:174-247` garbage-collects by managed label cluster-wide. `cmd/agent/main.go:143-145` registers the handler for **every** profile with no gate. Contrast `internal/agent/reconcile.go:19-28` which carries an explicit SAFETY CONTRACT (bounded to `AstronomerOwnedNamespaces`, cluster-scoped refused) that `rbac.go` conspicuously lacks.
+**Why it matters:** Under viewer/operator the agent SA's API-server RBAC denies the writes (defense-in-depth holds). **Under the `admin` profile (`*/*/*`) it is an unbounded, control-plane-driven RBAC-write primitive over the whole cluster** with zero agent-side guardrail — widening the blast radius of any management-plane compromise into arbitrary cluster bindings. The side channel is ungated and undocumented relative to the advertised least-privilege tiering.
+**Recommendation:** Profile-gate `RBACSyncer` registration (skip for viewer/namespace-*/operator) and/or constrain `HandleSyncRequest` to refuse `ClusterRole`/`ClusterRoleBinding` and namespaces outside `AstronomerOwnedNamespaces`, mirroring `reconcile.go`. At minimum validate roleRef targets and reject bindings granting verbs the agent itself lacks.
+
+#### H6 — Push provisioning is NOT gated by `PullReconcileEnabled`; server double-manages the pull loop's footprint (false safety contract)
+**Dimension:** argocd-provisioning.
+**Evidence:** `internal/server/server.go:1575` calls `startLocalArgoSelfManagement` unconditionally; `internal/server/self_manage_argocd.go:138` gates `ensureBaselineApplicationSets` only on `argocd.manage_platform_baseline`, never on the pull flag; `internal/worker/scheduler.go:71` + `internal/worker/tasks/argocd_auto_register_cluster.go:314-324` always upsert with no pull gate. Yet `internal/config/config.go:130` and `internal/server/desired_state.go:58-61` **promise** the push path "stands down" when pull is on. `internal/server/desired_state.go:194-285` and `internal/server/baseline_appsets.go:294` both render `kube-state-metrics`/`node-exporter` into `astronomer-monitoring` — same name, same namespace, two writers.
+**Why it matters:** On a remote adopted cluster (`is-local=false`) running the pull agent with pull enabled, ArgoCD's selfHeal (`baseline_appsets.go:357-359`) and the agent's Get→Update full-replace (`internal/agent/reconcile.go:398-402`) revert each other — an apply/selfHeal flap. The shipped doc-comments assert a protection that does not exist. HIGH not CRITICAL because `PullReconcileEnabled` defaults false and the collision needs the conjunction (pull on) ∧ (remote is-local=false) ∧ (baseline appsets on).
+**Recommendation:** Gate `ensureBaselineApplicationSets` (and the baseline portion of auto-register) on `PullReconcileEnabled`, or consult the per-cluster ownership-decision row (see H7) before generating the appset. At minimum, make the doc-comments honest.
+
+#### H7 — ArgoCD baseline ownership decisions (adopt/leave_local/replace) are recorded + audited but never consulted by any provisioning path
+**Dimension:** argocd-provisioning.
+**Evidence:** `internal/handler/argocd_ownership.go:113` persists + audits the decision; the **only** read is `:188` inside `clusterOwnershipResponse` (pure reporting). `internal/server/baseline_appsets.go:264-265` gates solely on `baselineComponentEnabled` (a global per-component setting taking no `clusterID`); the appset cluster generator (`:318-327`) selects all managed non-local clusters by label with no per-cluster decision exclusion. `internal/server/desired_state.go:109` and `internal/worker/tasks/argocd_auto_register_cluster.go` likewise never consult it. Grep confirms no generator references `ListArgoCDBaselineOwnershipDecisions`/`leave_local`.
+**Why it matters:** `leave_local` does **not** stop ArgoCD from fanning a baseline App onto the cluster; `replace` is only an audit note. The operator is shown a safety control that has zero behavioral effect — a trust + correctness defect, and the natural single-owner arbiter for H6 left unwired.
+**Recommendation:** Have `ensureBaselineApplicationSets`/`DesiredState` filter components per cluster by the decision (skip `leave_local`; apply only on adopt/replace). This honors the documented control and resolves the dual-management hazard.
+
+#### H8 — Decommission is HA-broken: `SendDecommission` is node-local, managed-side cleanup permanently skipped on the wrong replica
+**Dimension:** decommission-cleanup.
+**Evidence:** `internal/tunnel/server.go:698-702` — `Hub.SendDecommission` does `agent := h.agents.Get(clusterID); if agent == nil { return nil, false, nil }` with **no locator forward** — unlike `forwardToOwnerPod`/`ForwardWSToOwnerPod` for k8s/exec/logs (`internal/tunnel/proxy.go:443`, `ws_owner_proxy.go:50`). `internal/worker/tasks/cluster_decommission.go:525-529` then marks the phase skipped; the reconciler advances to `phaseRevokeAgentToken` (deletes tokens + `Disconnect`). The task runs on the shared `tunnel` queue (`worker.go:222-223`) drained by every replica. `cluster_template_apply.go:341-350` already solved this exact problem by re-queuing on agent-not-connected; decommission did not adopt the pattern.
+**Why it matters:** In a multi-replica deployment the agent's WS terminates on one pod but the decommission task lands on any pod, so ~50% of the time managed-side uninstall never runs even though the agent is connected. Customer cluster workloads orphaned, no recovery path. HIGH not CRITICAL because it is conditional on multi-replica topology and degrades to an operator-visible skip (not corruption).
+**Recommendation:** Make `SendDecommission` locator-aware (forward `MsgDecommission`/await-ACK to the owning pod), **or** return a retryable `isAgentNotConnectedErr`-style error so asynq re-queues onto the owning pod instead of marking the phase skipped.
+
+#### H9 — Managed-side cleanup orphans most of the agent footprint: 6/7 namespaces, cluster-scoped RBAC, agent SA, live token Secret
+**Dimension:** decommission-cleanup.
+**Evidence:** `deploy/agent/install.yaml.template` creates 7 namespaces (`astronomer-system` L30, `-monitoring` L153, `-trivy-system` L167, `-logging` L176, `-ingress-nginx` L185, `-cert-manager` L194, `-gatekeeper-system` L203), the agent SA (L41), `ClusterRole astronomer-agent` (L52) + binding (L65), `ClusterRole/Binding astronomer-kube-state-metrics` (L742/L788, unconditional), Secret `astronomer-agent-token` (L460), ConfigMap/Service/NetworkPolicy/PDB. `internal/agent/decommission.go` only removes the `astronomer-logging` namespace (`removeLoggingStack` `:224-253`), label-matched Velero CRs (`:265-310`), and the agent Deployment (`:205`). `DecommissionPayload` (`pkg/protocol/types.go:201-215`) cannot even express deleting the rest. Grep confirms no `Namespaces().Delete`/`ClusterRoles().Delete` anywhere in the decommission path beyond the one logging namespace.
+**Why it matters:** After a "successful" decommission the cluster still holds a **live agent JWT Secret** + broad cluster-scoped RBAC + the agent SA — a standing security footprint — plus namespaces that collide on re-adoption. Matches the documented decommission-cleanup-gap.
+**Recommendation:** Extend `DecommissionPayload`/handler to delete (gated on the `astronomer.io/managed` / `managed-by=astronomer-server` labels already present): baseline-namespace contents → cluster-scoped ClusterRole/ClusterRoleBinding → the `astronomer-agent-token` Secret/ConfigMap/Service/NetworkPolicy/PDB/SA → finally the `astronomer-system` namespace. Report each as a `DecommissionStepResult`. Keep the existing "never delete namespaces we didn't create" contract by scoping to managed labels.
+
+#### H10 — gitops `on_delete='decommission'` can mass-decommission every registered cluster on an empty/bad-path walk (no runtime guard)
+**Dimension:** decommission-cleanup.
+**Evidence:** `internal/worker/tasks/gitops_sync.go:465-471` — `WalkDir` swallows `os.IsNotExist` on the walkRoot, returning nil, so a bad `path_prefix`/renamed dir/removed files yields zero docs and **no error**; `:301-310` then treats every previously-registered cluster as "missing"; `:359-371,397-431` enqueues `cluster:decommission` and clears the link per missing cluster. The only guard is a create-time WARN that fires only when `PathPrefix==""` (`internal/handler/gitops.go:522-526`) — a log line, not a runtime block, and it does not cover the typo'd-non-empty-prefix case at all.
+**Why it matters:** A single bad sync under `on_delete='decommission'` silently tears down every cluster owned by that source — no minimum-doc threshold, no previous-vs-current count check, no dampening. HIGH not CRITICAL because the trigger requires an operator/path error combined with the destructive policy specifically (`log`/`tombstone` policies are non-destructive).
+**Recommendation:** Before the missing-set loop: if `parsedDocs` is empty (or missing-count == total previous) **and** `on_delete='decommission'`, refuse to process, stamp a source error, emit a loud audit/alert, require manual override. Also make `WalkDir` treat a non-existent walkRoot as a hard error so a bad prefix *fails the sync* instead of looking like "everything deleted."
+
+#### H11 — Liveness is coupled to full inventory collection — a transient apiserver error marks a healthy cluster disconnected
+**Dimension:** heartbeat-state-metrics.
+**Evidence:** `internal/agent/health.go:295-315` — `collectHeartbeat` returns a hard error if `ServerVersion`/`ListNodes`/`ListPods` fail; `:256-261` `sendHeartbeat` sends **nothing** on collect error (not even a minimal liveness frame). `internal/tunnel/handler.go:104-132` is the only writer of `clusters.last_heartbeat` (`UpdateClusterHeartbeat`, `internal/db/sqlc/clusters.sql.go:994-1002`). `internal/tunnel/server.go:821-832` `persistPing` writes only `agent_connections.last_ping` — WS Pong never touches `clusters.last_heartbeat`. `internal/worker/tasks/health_check.go:98` flips to disconnected purely from `last_heartbeat` age, and `cluster_condition_reconcile.go:281-320` may mint a fresh registration token for a cluster whose tunnel never dropped.
+**Why it matters:** Sustained partial degradation (RBAC removal of list verbs, NetworkPolicy blip, apiserver/etcd overload) for >2 min produces a false disconnect + spurious token churn with no fallback liveness path. Rancher uses the tunnel session itself as liveness, decoupled from resource sync. *(Trigger is sustained, not a single blip — the 30s cadence absorbs one-offs.)*
+**Recommendation:** Emit a minimal liveness heartbeat with `DegradedReasons` on partial failure (the `HeartbeatPayload.DegradedReasons` field already exists, surfaced at `handler.go:144`), **or** treat a successful Pong/`persistPing` as a liveness touch on `clusters.last_heartbeat`.
+
+---
+
+### MEDIUM
+
+#### M1 — `wss://` not enforced; plaintext `ws://` accepted silently
+**Dimension:** tunnel-connect-auth. `internal/agent/config.go:78-86` validates ServerURL only for non-empty (no scheme check); `internal/agent/tunnel.go:110` dials as-is; `internal/server/localcluster.go:29` proves `ws://` is a live path. A misconfig/manifest-tamper/copy-paste silently yields an unencrypted tunnel carrying the durable token + audit ingest token + proxied kube-apiserver traffic. Partially mitigated: the server validates its own external `server_url` is https (`internal/server/server.go:141-142`), so the happy-path manifest is https-sourced. **Fix:** reject `ws://`/`http://` in `LoadAgentConfig` unless an explicit `ASTRONOMER_INSECURE=true` escape hatch with a loud warning; pair with H1. *(Also restated for agent2 as PARITY-05: `internal/agent2/client.go:118-131` `buildWSURL` downgrades silently.)*
+
+#### M2 — Registration token is a reusable bearer credential for its full window; `is_used` is cosmetic
+**Dimension:** registration-tokens. `internal/db/queries/clusters.sql:121-128` — `GetRegistrationTokenByToken` intentionally does **not** filter `is_used`; `MarkRegistrationTokenUsed` (`internal/tunnel/server.go:840`) sets a flag no read path consults. A leaked token replays for its TTL and yields the durable agent token **plus** a fresh audit-ingest token (`server.go:373-391`). Matches Rancher's reusable-token model, but Astronomer lacks the compensating CA pinning. **Fix:** add `AND is_used = false` once a durable token exists for the cluster, or shrink the 24h mint path (see M-TTL/L-group) and gate H1.
+
+#### M3 — Two server-side staleness writers with divergent thresholds flap `clusters.status`
+**Dimension:** heartbeat-state-metrics. `internal/metrics/publisher.go:49` (60s threshold, 15s sweep, writes only on transition + emits `cluster.status_changed`) vs `internal/worker/tasks/health_check.go:98-107` (2m threshold, **unconditional** `UpdateClusterStatus`, `@every 60s` per `scheduler.go:43`). For heartbeat age in the 60–120s band the two loops overwrite each other every sweep → UI flicker + repeated SSE/webhook emissions (`internal/webhook/tap.go:72`). Bounded to cosmetic/noise (the `Connected` *condition* has a single 2m-window writer, so remediation does not flap). **Fix:** make the worker write conditional (only on transition) or drop its status-write; align both to one threshold.
+
+#### M4 — Agent `/readyz` latches healthy forever — never reset on tunnel disconnect
+**Dimension:** heartbeat-state-metrics. `cmd/agent/main.go:268-282` calls `health.SetConnected(true)` exactly once after first connect; `internal/agent/health.go:524-530` `/readyz` reads only `hr.connected`; grep shows no production `SetConnected(false)`. The real live state is `TunnelClient.connected` (`tunnel.go:91-95`, set false at `:226/552/561`) which `/readyz` never consults. The shipped manifest wires a k8s readinessProbe to `/readyz` (`deploy/agent/install.yaml.template:588-595`), so an extended outage leaves the pod Ready, defeating the probe. **Fix:** back `/readyz` with `tunnel.IsConnected()`, or toggle `SetConnected` on (re)connect/disconnect.
+
+#### M5 — Tunnel WS upgrade is unauthenticated at the HTTP layer and token validation is unthrottled (DoS/probing surface)
+**Dimension:** security. `internal/server/routes.go:927` registers the tunnel route with no `requireAuth`/rate-limit; `internal/tunnel/server.go:296-300` upgrades first, validates token only in the post-upgrade CONNECT payload (`:337-364`); the `Authorization: Bearer` the agent sends (`tunnel.go:113-114`) is ignored; no throttle on `validateAndMaybeRotateToken`. Credential brute-force is infeasible (256-bit hashed tokens), so the real risk is unbounded socket/DB-lookup DoS with no lockout/alert. **Fix:** add an IP-keyed limiter (mirror `LoginRateLimit` on `/register/signed`), reject CONNECT after N failures/window, emit an audit/alert event.
+
+#### M6 — Join connect/auth-failure events are not written to the audit log
+**Dimension:** security. `internal/tunnel/server.go:363-372` (auth failure) and `:451-457` (success) only `log.Warn`/`publish` lifecycle events; `audit.Record` in the tunnel fires only for token rotation (`:905`) and proxied HTTP. No durable, attributable, queryable trail of join attempts/rejections in `audit_log` (the SIEM bus tap is opt-in and writes `siem_forward_queue`, not `audit_log`, and the auth-failure payload carries no source IP). **Fix:** `audit.Record` on CONNECT success (`agent.connected`) and on validation failure (`agent.auth_failed`) with cluster_id, source IP, agent_version, token-kind — the Hub already holds an `audit.Querier` (`server.go:897`).
+
+#### M7 — No standalone agent-token revocation; compromise response requires full decommission
+**Dimension:** security. `internal/db/queries/clusters.sql` has no `SET revoked_at = now()` query/endpoint; the only invalidation is the decommission hard-DELETE (`cluster_decommission.go:553-586`). The `revoked_at` column (migration 103) exists but is dead. *(Note: a registration re-exchange alone would NOT rotate — `ensureClusterAgentToken` returns the existing row; the fix must clear the row.)* **Fix:** add `RevokeClusterAgentToken (SET revoked_at = now())` + an admin endpoint that revokes and forces re-mint on next CONNECT, audited as `agent.token.revoked`.
+
+#### M8 — No agent-side profile enforcement: the rendered RBAC is the entire boundary
+**Dimension:** rbac-privilege. `cmd/agent/main.go:109-170` registers k8sproxy/exec/RBAC-sync handlers identically for every profile; `internal/agent/k8sproxy.go` forwards arbitrary API calls with the agent SA token; `health.SetPrivilegeProfile` is purely informational. The `PRIVILEGE_PROFILE` configmap value is advisory only — drift/tamper of the in-cluster ClusterRole has no agent-side second check. Architecturally **matches** Rancher (API-server RBAC is the ceiling), but Astronomer's multi-tier marketing raises an expectation of layered enforcement the code does not provide. **Fix:** document the configmap profile as advisory; optionally add a startup `SelfSubjectRulesReview` that refuses to start / alerts if live permissions exceed the declared profile (also catches H5 widening).
+
+#### M9 — cluster-cache-sync + baseline apply RBAC capped by the agent SA profile; viewer/namespace-* cannot sync or apply baseline, with no pre-flight signal
+**Dimension:** argocd-provisioning. The agent proxies ArgoCD's apply with its own SA token (`internal/agent/k8sproxy.go`, identity-stripped per `pkg/proxyhdr/proxyhdr.go:24-35`; `:8090` proxy is tokenless `internal/server/routes.go:1213-1238`), so any sub-operator profile 403s on cache-sync and on every baseline apply (CreateNamespace + SSA, `baseline_appsets.go:356-368`). The profile label exists on the cluster secret (`argoCDAgentProfileLabelKey`, `baseline_appsets.go:32`) but the appset generator ignores it — failures surface only as opaque Argo 403s. Sound least-privilege design, weak operability. **Fix:** filter the appset cluster generator on profile (`In [operator,admin]`) or warn at registration time; surface the requirement in the ownership view.
+
+#### M10 — Locator cross-pod entry clobbered on fast reconnect to a different replica (`Delete` is unconditional, not owner-checked)
+**Dimension:** failure-concurrency-ha. `internal/tunnel/locator.go:127-148` does an unconditional `Del` with no value-equals-this-pod check; `internal/tunnel/server.go:519-522` disconnect path calls it. When an agent moves pod A→B, A's old read loop DELetes B's freshly-written entry, leaving the cluster connected-but-undirectoried for up to 25s (`locatorRefreshInterval`), during which non-owning replicas 503 proxy/exec/apply. Contrast the in-memory map's owner-checked `DeleteIfSame` (`server.go:592-594`). **Fix:** CAS/Lua `DEL IF value==addr`, or a fencing token — mirror `DeleteIfSame`.
+
+#### M11 — Fleet-wide tunnel-bound work is throttled to `Concurrency:2` per server pod on one shared queue
+**Dimension:** failure-concurrency-ha. `internal/worker/worker.go:195-200` — `NewTunnelWorker` is `Concurrency:2`, `Queues:{tunnel:1}`, hardcoded (no env knob); `:212-224` puts apply/drift/decommission/gatekeeper/mesh-detect/etc. all on it. Long helm `--wait` installs occupy a slot up to 10 min (`internal_helm.go`), so with 3 replicas the fleet globally converges ~6 tunnel operations concurrently — far from Fleet's thousands-of-clusters design point; concurrent onboarding serializes. **Fix:** make concurrency configurable; split a higher-concurrency queue for short RPCs vs long installs; optionally shard by owning-pod via the locator.
+
+#### M12 — `shouldRunPhase` never re-attempts skipped phases, contradicting its own doc-comment — skipped managed-side cleanup can never recover
+**Dimension:** decommission-cleanup. `internal/worker/tasks/cluster_decommission.go:423-425` doc-comment promises "re-attempt skipped phases … in case the agent came back online," but `:431-433` returns false for `PhaseStatusSkipped`. Worse, by re-run time phase 2 has already revoked tokens + Disconnected, so even a retry would fail auth. **Fix:** make skipped `cleanup_managed_side` re-runnable AND defer `revoke_agent_token` until cleanup succeeds or a max-attempts/timeout; or decouple agent self-uninstall from token revocation. At minimum fix the comment/code contradiction. *(Down-graded from HIGH: control-plane decommission still completes; only in-cluster cruft is orphaned, recorded with a visible skip reason.)*
+
+#### M13 — `metrics_available=false` is indistinguishable from "metrics stopped flowing"; no metrics-specific staleness
+**Dimension:** heartbeat-state-metrics. `internal/tunnel/handler.go:478-493` records only a `metrics_available` bool; the staleness sweep keys only off `last_heartbeat`. There is a `last_check` timestamp on `cluster_health_statuses` (surfaced as `last_health_check`), but the lightweight heartbeat also refreshes it, so a frozen metrics stream while heartbeat succeeds is not flagged. *(Down-graded to LOW-ish MEDIUM — observability sub-state only; an existing `last_check` field partially mitigates.)* **Fix:** track `last_metrics_at`; surface a distinct "metrics stale" condition vs "no metrics-server."
+
+#### M14 — Decommission/pull pause-guard is process-memory only; agent restart mid-decommission can resume self-apply
+**Dimension:** decommission-cleanup / failure-concurrency-ha. `internal/agent/reconcile.go:97` `paused *atomic.Bool` set at `decommission.go:117-119`; `cmd/agent/main.go:152` constructs it fresh per process. If the pod restarts between phase-1 cleanup ACK and phase-2 token-revoke, the new process boots `paused=false` and (with pull enabled) re-applies the agent Deployment/RBAC it was tearing down. The server has no decommission tombstone in served desired state (`internal/tunnel/handler.go:294` answers unconditionally). Conditional: pull reconcile is **off by default** and token revocation force-disconnects within seconds, bounding the window. **Fix:** serve an empty/tombstone desired set for `decommissioning` clusters; revoke the token before/at decommission start so a restarted agent fails its reconnect.
+
+---
+
+### LOW
+
+> Real but minor: hygiene, hardening, consistency, conditional/misconfig-gated, or self-healing. Listed compactly.
+
+- **L1 — Inconsistent registration-token TTLs (24h vs 1h).** `internal/handler/clusters.go:1456` (24h) vs `:1518` (1h) vs `:1654-1657` (sig-capped). The 1h path is documented as a deliberate blast-radius cut, making the surviving 24h `POST /register/` path incoherent. **Fix:** converge all paths on one documented (ideally configurable) TTL. *(dimensions: registration-tokens, rancher-parity)*
+- **L2 — `GetRegistrationTokenByToken` is `:one` with a legacy plaintext OR-branch and no `ORDER BY`/`LIMIT`.** `internal/db/queries/clusters.sql:121-128`; no unique constraint on `token_hash` (migration 093 index is non-unique, vs 094's UNIQUE for agent tokens). **Fix:** `ORDER BY created_at DESC LIMIT 1`; drop the legacy `OR (token_hash='' AND token=$1)` branch post-backfill.
+- **L3 — Public `/register/{token}.yaml` manifest endpoint has no rate limit.** `internal/server/routes.go:790` (vs throttled `/register/signed` at `:799`). Read-only, 2 unbounded DB reads/hit; 256-bit token makes enumeration infeasible. **Fix:** wrap with an `APIRateLimit` for DoS hygiene.
+- **L4 — Re-apply of the install manifest overwrites the agent's rotated durable token.** `install.yaml.template:457-468` renders the token Secret; the agent persists its durable token to the same Secret (`token_persistence.go:34-46`). Mostly self-healing (token is an env `secretKeyRef`, not a live mount; the server resolves any valid registration token back to the existing durable token) and is a documented recovery flow. **Fix:** separate immutable bootstrap Secret / SSA owner guard, or document the re-apply caveat.
+- **L5 — CA Secret/volume + PDB `minAvailable:0` are dead/misleading config.** `install.yaml.template:705-720` (no-op PDB with "always available" comment); H1's empty CA Secret. **Fix:** fix/remove the comment; remove the dead CA Secret or wire it per H1.
+- **L6 — PSA enforce labels missing on Astronomer-owned component namespaces.** Only `astronomer-monitoring` carries `pod-security…/enforce: privileged` (`install.yaml.template:162`). Default-on components (ksm, node-exporter) are correctly covered; the real bite is opt-in fluent-bit (hostPath) landing in unlabeled `astronomer-logging` under a non-privileged cluster default. **Fix:** stamp an explicit enforce level per component namespace (the codebase already does this for project namespaces, `project_reconcile.go:83-85`).
+- **L7 — Naive literal string-replace manifest renderer with no YAML escaping for `SERVER_URL`/`AGENT_IMAGE`.** `deploy/agent/template.go:51-67`; only PodLabels are escaped. Operator/admin-controlled inputs, self-applied, so injection risk is low (self-inflicted broken deploy). **Fix:** reuse `escapeYAMLDoubleQuoted` for remaining scalars + parse-validate before serving.
+- **L8 — ksm ClusterRole grants cluster-wide secrets read.** `install.yaml.template:750-752,787-804`; standard upstream posture, but the in-repo comment ("no secret data") overstates the grant. **Fix:** drop `secrets` / use a metric allowlist if the ksm version supports it; soften the comment.
+- **L9 — Pull agent does not correlate desired-state responses by RequestID; "drains stale responses" comment is false.** `internal/agent/reconcile.go:147-154,188-221`. Bounded by idempotent revision-hashed renders; no unsolicited push path actually exists today. **Fix:** match ClusterID/RequestID before accepting, or remove the false comment.
+- **L10 — Disabling a baseline component deletes the ApplicationSet with no finalizer-backed cascade or downstream-removal verification.** `internal/server/baseline_appsets.go:265-271` (no finalizer on the appset, `:291-374`). Low blast radius (default components are metrics scrapers). **Fix:** add `resources-finalizer` / surface a pruning/orphaned state until removal is confirmed.
+- **L11 — Heartbeat blindly overwrites inventory columns; no monotonicity/keep-last-good guard.** `internal/tunnel/handler.go:124-132`. Latent only (HB-1 fail-closed suppresses partial beats today). **Fix:** skip overwriting with empty/zero/"unknown"; add a monotonic timestamp/schema-version guard.
+- **L12 — StateSubscriber has no reconnect replay (unlike MirrorSubscriber).** `internal/agent/state_subscriber.go:226-273`. Largely neutralized in practice: the dashboard refetches live data on `cluster.connected` reconnect, so the claimed "stale UI until 30m resync" mostly does not occur. **Fix (defense-in-depth):** wire a connection watcher to re-emit informer contents on reconnect.
+- **L13 — CONNECT handshake has no nonce/timestamp/replay protection.** `internal/agent/tunnel.go:130-147` (decorative Timestamp), `internal/tunnel/server.go:330-394`. Largely subsumed by bearer-token semantics + registration single-use; gated by H1. **Fix (low priority):** validate Timestamp clock-skew / add a challenge nonce — after H1.
+- **L14 — Durable agent token mint-once (rotation reserved/unimplemented).** Duplicate of H2 from the registration-tokens lens; see H2.
+- **L15 — Periodic sweep can run the same decommission row concurrently with the enqueued task (no `SKIP LOCKED`/CAS claim).** `internal/db/queries/cluster_decommission.sql:25-43`; `runtime.go:212` leader-gates sweep-vs-sweep only. Bounded by idempotent phases (DELETE WHERE, ON CONFLICT DO NOTHING, tombstone short-circuit). **Fix:** `SELECT … FOR UPDATE SKIP LOCKED` or a status/lease-TTL CAS on `MarkClusterDecommissionRunning`.
+- **L16 — Velero cleanup removes only labeled CRs, not BackupStorageLocations or the backup blobs.** `internal/agent/decommission.go:257-310`; astronomer *creates* BSLs (`internal/handler/backups_velero.go:188-238`) yet leaves them + bucket data with no orphan/audit signal. *(Also: label mismatch — astronomer labels Velero `managed-by=astronomer-go` but the decommission selector is `astronomer.io/managed=true`.)* **Fix:** emit a decommission orphan audit event listing residual BSLs/objects (mirror the `argocd_secret_orphan` pattern at `cluster_decommission.go:687-701`).
+- **L17 — Agent token Secret lacks last-applied-annotation suppression; client-side `kubectl apply` persists plaintext token in an annotation.** `install.yaml.template:455-468`; at-parity with Rancher, bounded by 1h TTL + namespace RBAC. **Fix:** require `kubectl apply --server-side`, or split the token into a separately-`create`d Secret; consider dropping the convenience header.
+- **L18 — `tunnel2` (remotedialer migration path) fails open on nil validator and accepts only registration tokens.** `internal/tunnel2/server.go:73-97`. Unreachable in production today (real validator always passed; route feeds only a prod-gated demo). **Fix:** fail closed on nil validator behind an explicit test flag; add `GetClusterAgentTokenByToken` acceptance before promoting tunnel2.
+- **L19 — Locator silently disables (cross-pod proxy off) when `ASTRONOMER_POD_IP` is unset → ~100% 503s on the non-owning replica.** `internal/server/server.go:343-351` (no fail-fast; not even a warn on empty POD_IP). Default Helm path is safe (injects POD_IP, replicas=2); only bites a misconfigured multi-replica deploy. **Fix:** fail-fast / readiness-affecting check when `replicas>1 && RedisURL set && POD_IP missing`; set POD_IP in raw `deploy/k8s` manifests.
+- **L20 — Failed INITIAL connect is fatal — agent exits instead of entering the reconnect loop.** `internal/agent/tunnel.go:99-106` (run/reconnectLoop only reached after first dial succeeds); `cmd/agent/main.go:52-54` → `os.Exit(1)`. The authors already know (the embedded local agent wraps Connect in a backoff loop, `localcluster.go:255-277`); the in-cluster `connect` path does not. Bounded by Deployment `restartPolicy: Always` (5-min kubelet backoff vs in-process jitter, plus alarming CrashLoopBackOff during the join window). **Fix:** on initial dial failure fall through into `reconnectLoop(ctx)`; exit only on ctx cancel. *(connect2/agent2 already does this — adopt it.)*
+
+> **Also confirmed-low and effectively no-op gaps** (not separately numbered): no first-class re-registration/CA-rotation flow for an already-ready cluster (PARTIAL — graceful re-import already works; only matters once H1/H2 land); no CONNECT-level replay defense beyond bearer semantics (gated by H1).
+
+---
+
+## 3. Rancher-Parity Matrix
+
+| Dimension | Verdict | The gap |
+|---|---|---|
+| **registration-tokens** | **PARTIAL** | Hashed + TTL'd + swept (good), but reusable-until-expiry with **no compensating CA pinning** (H1), inconsistent 24h/1h TTLs (L1), durable token never rotates (H2). Reusability itself matches Fleet; the *missing pin* is the gap. |
+| **bootstrap-manifest** | **PARTIAL/MISS** | CA Secret rendered + mounted but always empty and never consumed (H1) — no `CATTLE_CA_CHECKSUM` equivalent and no private-CA trust injection. Naive YAML renderer (L7), misleading dead config (L5). |
+| **tunnel-connect-auth** | **MISS** (weakest, 4/10) | No CA pinning (H1), `ws://` accepted silently (M1), durable token never rotates (H2), validation only at CONNECT with no mid-session revalidation, unauthenticated/unthrottled upgrade (M5). Rancher pins + wss-only + reconnect-revalidates. |
+| **rbac-privilege** | **PARTIAL** | Two-axis least-privilege model is *better than* a naive importer, but `operator` is admin-equivalent while labeled non-escalating (H4), `RBACSyncer` is an ungated control-plane RBAC-write side channel (H5), and the rendered RBAC is the *only* boundary (M8 — same single-boundary model as Rancher, but over-marketed). |
+| **argocd-provisioning** | **PARTIAL** | Functional Fleet-equivalent fan-out, but push path not gated by the pull flag despite a false safety contract (H6), audited ownership decisions are decorative (H7), sub-operator profiles silently 403 baseline applies with no pre-flight (M9). Fleet enforces single-owner; Astronomer does not. |
+| **heartbeat-state-metrics** | **PARTIAL/MISS** | Liveness conflated with inventory (H11), two staleness writers flap status (M3), `/readyz` latches healthy (M4). Rancher uses the tunnel session as liveness, derived from one authoritative controller. |
+| **decommission-cleanup** | **MISS** (4/10) | HA-broken managed-side cleanup (H8), most of the footprint orphaned incl. live token + cluster RBAC (H9), gitops mass-decommission footgun (H10), skipped phases never recover (M12). Rancher's cattle-cleanup removes cattle-system + cluster RBAC fully and re-runs cleanup on reconnect. |
+| **failure-concurrency-ha** | **PARTIAL** | Reconnect backoff is solid; any-replica reachability works via redis locator — but reverse-proxy-via-redis (vs Rancher's shared-state mesh), locator clobber on fast reconnect (M10), fixed `Concurrency:2` throughput ceiling (M11), fatal first-connect (L20), fail-open locator on misconfig (L19). |
+| **security** | **PARTIAL** | No CA pin (H1), read→credential escalation (H3), unthrottled/unaudited join attempts (M5, M6), no standalone revocation (M7). Token storage (hashed, scoped) and bootstrap (`curl --cacert`) are sound. |
+| **rancher-parity** | **PARTIAL** | Consolidates the above: graceful re-import MATCHES; CA pinning + durable-token rotation MISS; HA reachability and TTL consistency PARTIAL. |
+
+---
+
+## 4. Top Things to Fix to Reach Rancher Parity (ordered by impact)
+
+1. **Wire server-CA pinning end-to-end (H1).** Single highest-leverage fix — it closes the one root cause that recurs in 6 dimensions and unblocks private-CA on-prem deployments. Thread `CACert`/`CAChecksum` from `registration.ca_bundle` into the manifest and into a `tls.Config{RootCAs}`/`VerifyConnection` pin on **both** dial paths. Also reject `ws://`/`http://` (M1) as part of the same change.
+2. **Implement durable-token rotation + standalone revocation (H2 + M7).** The agent-side channel already exists; add the server trigger, an `expires_at`/`last_rotated_at` column, a `RevokeClusterAgentToken` query + admin endpoint, and implement (or remove) `rotate_agent_token`. Turns "leak = re-import the whole cluster" into a routine operation.
+3. **Make decommission HA-correct and complete (H8 + H9 + M12).** Locator-aware (or retry-requeued) `SendDecommission`; extend the payload/handler to tear down all managed namespaces + cluster-scoped RBAC + the token Secret; make skipped cleanup re-runnable before token revocation. Stops leaving live credentials + broad RBAC on "decommissioned" clusters.
+4. **Resolve the dual-management hazard honestly (H6 + H7).** Gate the Argo push path on `PullReconcileEnabled` (or on the per-cluster ownership decision), and actually consult the ownership-decision table so `leave_local`/`replace` change behavior. Either implement the promised stand-down or stop promising it in doc-comments.
+5. **Decouple liveness from inventory and unify staleness ownership (H11 + M3 + M4).** Emit a minimal liveness heartbeat (with `DegradedReasons`) or treat WS Pong as a liveness touch; pick one authoritative staleness writer/threshold; back `/readyz` with live tunnel state. Stops healthy clusters from flapping to "disconnected" and minting spurious tokens.
+
+**Honest-labeling follow-ups (low cost, high trust impact):** fix the `operator` profile / its comment + docs (H4); gate or constrain `RBACSyncer` (H5); add a gitops mass-decommission guard (H10); add join connect/auth-failure auditing (M6); require `clusters:update` on the manifest endpoint (H3).
