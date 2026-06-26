@@ -345,15 +345,23 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 		`kind: RoleBinding`,
 		`namespace: astronomer-system`,
 		`Namespace-scoped workload operations`,
+		// The agent's own token Role is always present, scoped to one secret name.
+		`name: astronomer-agent-token`,
+		`resourceNames: ["astronomer-agent-token"]`,
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Fatalf("manifest missing %q:\n%s", want, manifest)
 		}
 	}
-	for _, unwanted := range []string{`kind: ClusterRoleBinding`, `resources: ["*"]`, `verbs: ["*"]`, `"secrets"`} {
+	for _, unwanted := range []string{`kind: ClusterRoleBinding`, `resources: ["*"]`, `verbs: ["*"]`} {
 		if strings.Contains(manifest, unwanted) {
 			t.Fatalf("manifest unexpectedly contains %q:\n%s", unwanted, manifest)
 		}
+	}
+	// The only secrets grant must be the resourceName-scoped token Role — the
+	// namespace-operator's own ClusterRole rules must not include secrets.
+	if strings.Contains(RBACRulesYAML(PrivilegeProfileNamespaceOperator), `"secrets"`) {
+		t.Fatal("namespace-operator RBAC rules must not grant secrets")
 	}
 }
 

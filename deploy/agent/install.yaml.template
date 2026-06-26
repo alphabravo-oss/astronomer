@@ -77,6 +77,45 @@ subjects:
     namespace: astronomer-system
 
 ---
+# Namespaced Role: the agent persists its own rotated auth token into a single
+# Secret in its own namespace. This is the agent's operational need, not cluster
+# observation, so it is granted for EVERY profile — including read-only viewer,
+# whose ClusterRole intentionally has no secrets access. Scoped to exactly that
+# one Secret name, so it never widens into reading other secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-token
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["astronomer-agent-token"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-token
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-token
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
 # ConfigMap for non-sensitive configuration
 apiVersion: v1
 kind: ConfigMap
