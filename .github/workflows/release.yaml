@@ -185,6 +185,13 @@ jobs:
           echo "Pinned chart ${CHART} / images ${IMG}:"
           grep -nE "^version:|^appVersion:" deploy/chart/Chart.yaml
 
+      - name: Build chart dependencies
+        # The argo-cd subchart is vendored under charts/ locally but gitignored,
+        # so CI must fetch it before lint/package.
+        run: |
+          helm repo add argo https://argoproj.github.io/argo-helm
+          helm dependency build deploy/chart
+
       - name: Lint
         run: helm lint deploy/chart
 
