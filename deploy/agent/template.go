@@ -52,6 +52,8 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_RBAC_RULES}}", RBACRulesYAML(profile),
 		"{{AGENT_RBAC_BINDING_KIND}}", RBACBindingKind(profile),
 		"{{AGENT_RBAC_BINDING_NAMESPACE}}", RBACBindingNamespaceLine(profile),
+		"{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}", SelfManagementNamespacedRulesYAML(),
+		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
 	).Replace(installTemplate)
 }
 
@@ -119,6 +121,54 @@ func RBACBindingNamespaceLine(profile string) string {
 	default:
 		return ""
 	}
+}
+
+// AstronomerOwnedNamespaces is the exact set of namespaces Astronomer fully owns
+// and deploys its own footprint into (agent, logging stack, baseline platform
+// components). The self-management RBAC scope is bounded to precisely these
+// namespaces — write access is granted HERE and nowhere else.
+//
+// Two-axis RBAC model:
+//   - User-cluster scope (the privilege profile: viewer/operator/admin/
+//     namespace-*) governs the agent's reach into the CUSTOMER's resources
+//     (default, kube-system, app namespaces). A viewer stays strictly read-only
+//     there.
+//   - Astronomer self-management scope (this set + the agent's own Deployment)
+//     governs the agent's reach into ASTRONOMER's OWN footprint. It is granted
+//     for EVERY profile — including viewer — so ArgoCD (which applies through
+//     the tunnel as the agent ServiceAccount) can always manage Astronomer's
+//     components regardless of how little the user profile grants.
+//
+// Keeping these axes independent is what lets "viewer" mean "observe the
+// customer cluster read-only, but Astronomer still fully manages its own
+// components."
+var AstronomerOwnedNamespaces = []string{
+	"astronomer-system",
+	"astronomer-monitoring",
+	"astronomer-trivy-system",
+	"astronomer-logging",
+	"astronomer-ingress-nginx",
+	"astronomer-cert-manager",
+	"astronomer-gatekeeper-system",
+}
+
+// SelfManagementNamespacedRulesYAML returns the rules block granting full
+// management (create/get/list/watch/update/patch/delete) over the namespaced
+// resources Astronomer deploys into its OWN namespaces. This is emitted as a
+// Role in each AstronomerOwnedNamespaces entry for EVERY profile (it is NOT
+// profile-gated) — see AstronomerOwnedNamespaces for the two-axis rationale.
+func SelfManagementNamespacedRulesYAML() string {
+	return selfManagementNamespacedRulesYAML
+}
+
+// SelfManagementOwnDeploymentRulesYAML returns the rules block letting the agent
+// patch/update its OWN Deployment (resourceName-scoped to "astronomer-agent"),
+// so an Argo-driven version bump can roll the agent. Like the token Role, this
+// is operational self-management and is granted for EVERY profile. Mirrors the
+// astronomer-agent-token Role's resourceName-scoping so it never widens to
+// other Deployments in the namespace.
+func SelfManagementOwnDeploymentRulesYAML() string {
+	return selfManagementOwnDeploymentRulesYAML
 }
 
 func PodLabelsYAML(labels map[string]string) string {
@@ -288,3 +338,45 @@ const namespaceOperatorRBACRulesYAML = `  # Namespace-scoped workload operations
 
 const customRBACRulesYAML = `  # No default Kubernetes permissions. Bind explicit custom RBAC outside this manifest.
   []`
+
+// selfManagementNamespacedRulesYAML is the write surface for Astronomer's own
+// footprint, bounded to AstronomerOwnedNamespaces via a namespaced Role. It is
+// the SAME for every profile — viewer included — because it governs the
+// self-management axis, not the user-profile axis. It deliberately excludes
+// rbac.authorization.k8s.io write (no self-escalation) and is namespaced (never
+// a ClusterRole) so it can never reach the customer's namespaces.
+const selfManagementNamespacedRulesYAML = `  # Astronomer manages its own footprint (agent, logging, baseline components)
+  # inside these namespaces for EVERY profile. Granted via a namespaced Role so
+  # it can never touch customer namespaces (default/kube-system/app namespaces).
+  # NOTE: secrets are intentionally EXCLUDED. The agent's own rotated token
+  # Secret is covered by the resourceName-scoped astronomer-agent-token Role;
+  # any component that manages its own Secrets does so via the component's own
+  # RBAC, not this self-management scope. No rbac.authorization.k8s.io write
+  # either (no self-escalation).
+  - apiGroups: [""]
+    resources: ["configmaps", "endpoints", "persistentvolumeclaims", "pods", "services", "serviceaccounts"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]`
+
+// selfManagementOwnDeploymentRulesYAML lets the agent manage ONLY its own
+// Deployment (resourceName-scoped), mirroring the astronomer-agent-token Role.
+// This is what lets an Argo-driven version bump roll the agent without granting
+// write over other Deployments. Granted for every profile.
+const selfManagementOwnDeploymentRulesYAML = `  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["astronomer-agent"]
+    verbs: ["get", "list", "watch", "update", "patch"]`

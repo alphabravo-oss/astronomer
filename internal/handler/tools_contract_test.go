@@ -16,8 +16,8 @@ func TestCertManagerChartCoordinates(t *testing.T) {
 	if got.RepoURL != "https://charts.jetstack.io" {
 		t.Fatalf("RepoURL = %q, want Jetstack repo", got.RepoURL)
 	}
-	if got.Namespace != "cert-manager" {
-		t.Fatalf("Namespace = %q, want cert-manager", got.Namespace)
+	if got.Namespace != "astronomer-cert-manager" {
+		t.Fatalf("Namespace = %q, want astronomer-cert-manager", got.Namespace)
 	}
 }
 

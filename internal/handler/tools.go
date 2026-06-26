@@ -1759,7 +1759,7 @@ const (
 	CertManagerChartName        = "cert-manager"
 	CertManagerChartRepoURL     = "https://charts.jetstack.io"
 	CertManagerChartCategory    = "security"
-	CertManagerDefaultNamespace = "cert-manager"
+	CertManagerDefaultNamespace = "astronomer-cert-manager"
 )
 
 // CertManagerChartCoordinates returns the chart coordinates for cert-manager

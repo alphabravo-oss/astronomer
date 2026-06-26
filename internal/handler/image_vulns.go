@@ -29,7 +29,7 @@ import (
 // trivyOperatorNamespace is the recommended install namespace from the
 // Aqua chart. The handler PATCHes its operator service's annotations to
 // nudge a re-scan.
-const trivyOperatorNamespace = "trivy-system"
+const trivyOperatorNamespace = "astronomer-trivy-system"
 
 // trivyOperatorService is the Service name shipped by the chart.
 const trivyOperatorService = "trivy-operator"
@@ -257,7 +257,7 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 // underlying workloads (Deployments, StatefulSets, DaemonSets, Jobs)
 // and re-creates a VulnerabilityReport for each one within seconds —
 // you can see the resulting scan-vulnerabilityreport-* Jobs appear in
-// trivy-system immediately.
+// astronomer-trivy-system immediately.
 //
 // Why delete instead of an annotation patch on the operator Service:
 // trivy-operator doesn't watch its own Service for any annotation we

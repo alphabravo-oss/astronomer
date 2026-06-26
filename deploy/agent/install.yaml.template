@@ -18,6 +18,8 @@
 #   AGENT_RBAC_RULES             - ClusterRole rules selected by privilege profile
 #   AGENT_RBAC_BINDING_KIND      - ClusterRoleBinding or RoleBinding
 #   AGENT_RBAC_BINDING_NAMESPACE - Optional namespace line for RoleBinding
+#   AGENT_SELF_MANAGEMENT_NAMESPACED_RULES  - Self-management Role rules (all profiles)
+#   AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES  - Own-Deployment patch rules (all profiles)
 # ============================================================================
 
 ---
@@ -110,6 +112,317 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: astronomer-agent-token
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# ============================================================================
+# Astronomer SELF-MANAGEMENT RBAC (two-axis model).
+#
+# Axis 1 (above): the ClusterRole 'astronomer-agent' = the user-facing privilege
+# profile (viewer/operator/admin/namespace-*). It governs the agent's reach into
+# the CUSTOMER's resources (default/kube-system/app namespaces). A viewer is
+# strictly read-only there.
+#
+# Axis 2 (here): namespaced Roles giving the agent WRITE over Astronomer's OWN
+# footprint — agent, logging stack, and baseline platform components — bounded to
+# the astronomer-* namespaces ONLY. These are emitted for EVERY profile (viewer
+# included) so ArgoCD, which applies through the tunnel as the agent
+# ServiceAccount, can always manage Astronomer's components regardless of how
+# little the user profile grants. They are namespaced Roles (never a ClusterRole)
+# so this write surface can never reach the customer's namespaces.
+#
+# Plus a resourceName-scoped grant on the agent's OWN Deployment so an
+# Argo-driven version bump can roll the agent (mirrors the token Role pattern).
+# ============================================================================
+
+---
+# Astronomer-owned namespaces for the logging stack and the relocated baseline
+# platform components (monitoring, trivy, ingress-nginx, cert-manager,
+# gatekeeper). Pre-created here as static Namespace objects so the
+# self-management RoleBindings below have a namespace to land in even before the
+# baseline reconcilers / ArgoCD ApplicationSets run — which also removes any need
+# for a cluster-wide "namespaces" create verb (the appsets' CreateNamespace=true
+# becomes a harmless no-op). All are fully Astronomer-managed (the decommission
+# flow removes them).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-monitoring
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-trivy-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-logging
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-ingress-nginx
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-cert-manager
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: astronomer-gatekeeper-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/part-of: astronomer
+    app.kubernetes.io/managed-by: astronomer-server
+
+---
+# Self-management Role: astronomer-system (the agent's own namespace)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+  # The agent may manage ONLY its own Deployment (resourceName-scoped), so an
+  # Argo-driven version bump can roll it without touching other Deployments.
+{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# Self-management Role: astronomer-monitoring (kube-state-metrics, node-exporter)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-monitoring
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-monitoring
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# Self-management Role: astronomer-trivy-system (Trivy Operator)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-trivy-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-trivy-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# Self-management Role: astronomer-logging (Fluent Bit logging stack)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-logging
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-logging
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# Self-management Role: astronomer-ingress-nginx (ingress controller)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-ingress-nginx
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-ingress-nginx
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# Self-management Role: astronomer-cert-manager (TLS automation)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-cert-manager
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-cert-manager
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
+
+---
+# Self-management Role: astronomer-gatekeeper-system (policy engine)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-gatekeeper-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+rules:
+{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-self-management
+  namespace: astronomer-gatekeeper-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-self-management
 subjects:
   - kind: ServiceAccount
     name: {{AGENT_SERVICE_ACCOUNT_NAME}}

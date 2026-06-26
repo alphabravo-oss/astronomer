@@ -400,6 +400,196 @@ func TestRenderInstallYAMLUsesInstallMetadata(t *testing.T) {
 // profile's */*/* rules) was string-replaced INTO the header-comment block
 // that documented the placeholders, breaking the rendered YAML. Every profile
 // must render a manifest whose documents all parse as valid YAML.
+// TestSelfManagementRolePresentForEveryProfile is the core Phase 0 guard: the
+// Astronomer self-management Role+RoleBinding (write within astronomer-* owned
+// namespaces + patch the agent's own Deployment) is rendered for EVERY profile,
+// viewer included. This is the second axis of the two-axis RBAC model — it is
+// independent of the user-facing privilege profile.
+func TestSelfManagementRolePresentForEveryProfile(t *testing.T) {
+	profiles := []string{
+		PrivilegeProfileAdmin,
+		PrivilegeProfileViewer,
+		PrivilegeProfileOperator,
+		PrivilegeProfileNamespaceViewer,
+		PrivilegeProfileNamespaceOperator,
+		PrivilegeProfileCustom,
+		"", // unspecified -> viewer default
+	}
+	for _, p := range profiles {
+		manifest := RenderInstallYAML(InstallTemplateData{
+			ServerURL:         "https://astro.example.com",
+			ClusterID:         "c1",
+			RegistrationToken: "tok",
+			AgentImage:        "example.com/agent:v1",
+			PrivilegeProfile:  p,
+		})
+		for _, want := range []string{
+			// The self-management Role+RoleBinding exists for this profile.
+			"name: astronomer-agent-self-management",
+			// Bounded to EXACTLY the astronomer-owned namespaces (all 7).
+			"namespace: astronomer-system",
+			"namespace: astronomer-monitoring",
+			"namespace: astronomer-trivy-system",
+			"namespace: astronomer-logging",
+			"namespace: astronomer-ingress-nginx",
+			"namespace: astronomer-cert-manager",
+			"namespace: astronomer-gatekeeper-system",
+			// Write surface within those namespaces.
+			`resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]`,
+			`verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]`,
+			// Own-Deployment patch, resourceName-scoped.
+			`resourceNames: ["astronomer-agent"]`,
+			`verbs: ["get", "list", "watch", "update", "patch"]`,
+		} {
+			if !strings.Contains(manifest, want) {
+				t.Fatalf("profile %q self-management manifest missing %q:\n%s", p, want, manifest)
+			}
+		}
+		// The phantom astronomer-baseline namespace must be gone entirely.
+		if strings.Contains(manifest, "astronomer-baseline") {
+			t.Fatalf("profile %q manifest still references removed astronomer-baseline namespace:\n%s", p, manifest)
+		}
+		// The self-management namespaced rules must NOT grant secrets write nor
+		// any rbac.authorization.k8s.io write (no self-escalation). The only
+		// secrets grant in the manifest is the resourceName-scoped token Role.
+		// Parse the actual rules (not the comment text) to assert this.
+		type smRule struct {
+			APIGroups []string `yaml:"apiGroups"`
+			Resources []string `yaml:"resources"`
+		}
+		var smRules []smRule
+		if err := yaml.Unmarshal([]byte(SelfManagementNamespacedRulesYAML()), &smRules); err != nil {
+			t.Fatalf("parse self-management namespaced rules: %v", err)
+		}
+		for _, r := range smRules {
+			for _, g := range r.APIGroups {
+				if g == "rbac.authorization.k8s.io" || g == "*" {
+					t.Fatalf("self-management namespaced rules must not touch RBAC apiGroup %q (self-escalation)", g)
+				}
+			}
+			for _, res := range r.Resources {
+				if res == "secrets" || res == "*" {
+					t.Fatalf("self-management namespaced rules must not grant %q write (token Secret is resourceName-scoped only)", res)
+				}
+			}
+		}
+		// The placeholders must be fully substituted.
+		for _, unwanted := range []string{
+			"{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}",
+			"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}",
+		} {
+			if strings.Contains(manifest, unwanted) {
+				t.Fatalf("profile %q manifest still contains placeholder %q", p, unwanted)
+			}
+		}
+	}
+}
+
+// TestSelfManagementNamespacesAreExactlyAstronomerOwned asserts the
+// self-management Roles target precisely the astronomer-* owned namespace set
+// and nothing else (no customer namespaces like default/kube-system, and no
+// shared namespaces like velero/monitoring which are only selectively managed).
+func TestSelfManagementNamespacesAreExactlyAstronomerOwned(t *testing.T) {
+	type roleDoc struct {
+		Kind     string `yaml:"kind"`
+		Metadata struct {
+			Name      string `yaml:"name"`
+			Namespace string `yaml:"namespace"`
+		} `yaml:"metadata"`
+	}
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "tok",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileViewer,
+	})
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	got := map[string]bool{}
+	for {
+		var d roleDoc
+		err := dec.Decode(&d)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatalf("decode manifest: %v", err)
+		}
+		if d.Kind == "Role" && d.Metadata.Name == "astronomer-agent-self-management" {
+			got[d.Metadata.Namespace] = true
+		}
+	}
+	want := map[string]bool{}
+	for _, ns := range AstronomerOwnedNamespaces {
+		want[ns] = true
+	}
+	if len(got) != len(want) {
+		t.Fatalf("self-management Roles in namespaces %v, want exactly %v", got, want)
+	}
+	for ns := range want {
+		if !got[ns] {
+			t.Fatalf("missing self-management Role in astronomer-owned namespace %q (got %v)", ns, got)
+		}
+	}
+	// Negative: must NOT target customer or shared namespaces.
+	for _, forbidden := range []string{"default", "kube-system", "velero", "monitoring"} {
+		if got[forbidden] {
+			t.Fatalf("self-management Role unexpectedly targets non-owned namespace %q", forbidden)
+		}
+	}
+}
+
+// TestViewerSelfManagementDoesNotWidenUserProfile proves the two axes stay
+// independent: with viewer selected, the self-management Role grants write
+// within astronomer-* namespaces, but the user-facing ClusterRole (which reaches
+// the customer's namespaces cluster-wide) stays strictly read-only. The only
+// ClusterRoleBinding present is the read-only viewer one; all write lives in
+// namespaced self-management Roles bound by RoleBindings.
+func TestViewerSelfManagementDoesNotWidenUserProfile(t *testing.T) {
+	// The viewer ClusterRole rules themselves must carry no write verbs and no
+	// secrets — unchanged by the self-management addition.
+	clusterRules := RBACRulesYAML(PrivilegeProfileViewer)
+	for _, forbidden := range []string{`"create"`, `"update"`, `"patch"`, `"delete"`, `"secrets"`, `resources: ["*"]`, `verbs: ["*"]`} {
+		if strings.Contains(clusterRules, forbidden) {
+			t.Fatalf("viewer ClusterRole rules unexpectedly contain %q (user profile must stay read-only):\n%s", forbidden, clusterRules)
+		}
+	}
+
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "tok",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileViewer,
+	})
+
+	// The cluster-wide binding for viewer is a ClusterRoleBinding to the
+	// read-only 'astronomer-agent' ClusterRole. Self-management write is granted
+	// only via namespaced RoleBindings — never via a ClusterRole/ClusterRoleBinding.
+	type bindingDoc struct {
+		Kind    string `yaml:"kind"`
+		RoleRef struct {
+			Kind string `yaml:"kind"`
+			Name string `yaml:"name"`
+		} `yaml:"roleRef"`
+	}
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	for {
+		var d bindingDoc
+		err := dec.Decode(&d)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatalf("decode manifest: %v", err)
+		}
+		// No binding may grant the self-management surface cluster-wide.
+		if d.Kind == "ClusterRoleBinding" && d.RoleRef.Name == "astronomer-agent-self-management" {
+			t.Fatalf("self-management must be namespaced, found a ClusterRoleBinding granting it cluster-wide")
+		}
+	}
+}
+
 func TestRenderInstallYAMLIsValidYAMLForEveryProfile(t *testing.T) {
 	profiles := []string{
 		PrivilegeProfileAdmin,

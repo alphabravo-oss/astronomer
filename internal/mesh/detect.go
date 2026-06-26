@@ -501,7 +501,8 @@ func isSystemNamespace(name string) bool {
 	switch name {
 	case "kube-system", "kube-public", "kube-node-lease",
 		"istio-system", "linkerd", "linkerd-viz", "kuma-system",
-		"cattle-system", "cert-manager", "ingress-nginx":
+		"cattle-system", "astronomer-cert-manager", "astronomer-ingress-nginx",
+		"astronomer-gatekeeper-system":
 		return true
 	}
 	return strings.HasPrefix(name, "kube-")
