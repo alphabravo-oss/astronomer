@@ -183,6 +183,12 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch"]
+  # Resource-usage metrics (metrics-server). Read-only usage data is exactly
+  # what a viewer should see, and the agent needs it to report cluster CPU/memory
+  # health. metrics.k8s.io serves only get/list (no watch).
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
   # Optional inventory mirrors — harmless if the CRDs are absent (the rule simply
   # grants nothing). Present so the agent's GatewayClass / Trivy informers don't
   # log RBAC denials where those operators are installed.
@@ -237,6 +243,9 @@ const operatorRBACRulesYAML = `  # Common workload operations without cluster-ad
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
   # RBAC objects are read-only here: granting write would let the operator
   # profile self-escalate by binding broader roles. RBAC write belongs to the
   # explicit admin profile only.
