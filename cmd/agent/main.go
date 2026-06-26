@@ -275,6 +275,35 @@ func runConnect(logger *slog.Logger) error {
 			health.Start(ctx, tunnel.Send)
 		}()
 
+		// Fleet-style PULL reconcile loop (gated OFF by default). When the
+		// PullReconcileEnabled flag is set, the agent becomes the LOCAL applier
+		// of its own desired state: it pulls the rendered manifest set from the
+		// management plane over the existing tunnel and server-side-applies +
+		// prunes it, bounded strictly to the astronomer-* owned namespaces. When
+		// the flag is off, nothing here runs and v0.1.0 behavior is unchanged.
+		if cfg.PullReconcileEnabled {
+			if reconciler, rErr := agent.NewReconcileHandler(restConfig, cfg.ClusterID, logger); rErr != nil {
+				logger.Warn("pull reconcile: handler init failed; loop disabled", "error", rErr)
+			} else {
+				// The response handler routes server replies (and unsolicited
+				// pushes) into the reconcile loop.
+				tunnel.RegisterHandler(protocol.MsgDesiredStateResponse, reconciler.HandleDesiredStateResponse)
+				go func() {
+					pollTicker := time.NewTicker(250 * time.Millisecond)
+					defer pollTicker.Stop()
+					for !tunnel.IsConnected() {
+						select {
+						case <-ctx.Done():
+							return
+						case <-pollTicker.C:
+						}
+					}
+					interval := time.Duration(cfg.PullReconcileInterval) * time.Second
+					reconciler.Run(ctx, interval, tunnel.Send)
+				}()
+			}
+		}
+
 		return runHelmAndConnect(ctx, tunnel, logger, cfg)
 	}
 

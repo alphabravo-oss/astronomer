@@ -78,6 +78,12 @@ func (h *Hub) handleMessage(conn *AgentConnection, msg *protocol.Message) {
 	case protocol.MsgApiserverAudit:
 		h.handleApiserverAudit(conn, msg)
 
+	case protocol.MsgDesiredStateRequest:
+		h.handleDesiredStateRequest(conn, msg)
+
+	case protocol.MsgApplyStatus:
+		h.handleApplyStatus(conn, msg)
+
 	case protocol.MsgError:
 		h.handleError(conn, msg)
 
@@ -272,6 +278,126 @@ func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Mess
 		slog.String("cluster_id", conn.ClusterID),
 		slog.String("operation_id", payload.OperationID),
 		slog.String("error", lastError),
+	)
+}
+
+// handleDesiredStateRequest answers a Fleet-style PULL MsgDesiredStateRequest:
+// it renders the cluster's desired state via the wired DesiredStateProvider and
+// replies with a MsgDesiredStateResponse over the SAME stream (StreamID +
+// RequestID echoed) so the agent's request/response router matches the reply.
+//
+// The cluster is taken from the AUTHENTICATED tunnel session (conn.ClusterID),
+// never from the payload — a compromised agent cannot pull another cluster's
+// desired state. The responder is read-only rendering and always answers when a
+// provider is wired (independent of PullReconcileEnabled, which gates the
+// agent's loop and the server's push stand-down, not this rendering).
+func (h *Hub) handleDesiredStateRequest(conn *AgentConnection, msg *protocol.Message) {
+	provider := h.desiredStateProvider()
+	if provider == nil {
+		h.log.Warn("desired state requested but no provider wired",
+			slog.String("cluster_id", conn.ClusterID),
+		)
+		h.sendDesiredStateError(conn, msg, "desired state not available")
+		return
+	}
+
+	var req protocol.DesiredStateRequestPayload
+	if len(msg.Payload) > 0 {
+		if err := json.Unmarshal(msg.Payload, &req); err != nil {
+			h.log.Warn("invalid DESIRED_STATE_REQUEST payload",
+				slog.String("cluster_id", conn.ClusterID),
+				slog.String("error", err.Error()),
+			)
+			h.sendDesiredStateError(conn, msg, "invalid desired state request payload")
+			return
+		}
+	}
+
+	resp, err := provider.DesiredState(context.Background(), conn.ClusterID, req.CurrentRevision)
+	if err != nil {
+		h.log.Warn("desired state rendering failed",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		h.sendDesiredStateError(conn, msg, err.Error())
+		return
+	}
+	// Authoritative cluster ID is the session, not the payload.
+	resp.ClusterID = conn.ClusterID
+
+	body, err := json.Marshal(resp)
+	if err != nil {
+		h.log.Warn("marshal desired state response failed",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	if err := h.SendToAgent(conn.ClusterID, &protocol.Message{
+		Type:      protocol.MsgDesiredStateResponse,
+		StreamID:  msg.StreamID,
+		RequestID: msg.RequestID,
+		ClusterID: conn.ClusterID,
+		Timestamp: time.Now().UTC(),
+		Payload:   body,
+	}); err != nil {
+		h.log.Warn("send desired state response failed",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	h.log.Debug("desired state response sent",
+		slog.String("cluster_id", conn.ClusterID),
+		slog.String("revision", resp.Revision),
+		slog.Int("manifests", len(resp.Manifests)),
+	)
+}
+
+// sendDesiredStateError replies to a desired-state request with an ERROR frame
+// addressed to the same stream so the agent's blocked requester unblocks.
+func (h *Hub) sendDesiredStateError(conn *AgentConnection, msg *protocol.Message, errMsg string) {
+	_ = h.SendToAgent(conn.ClusterID, &protocol.Message{
+		Type:      protocol.MsgDesiredStateResponse,
+		StreamID:  msg.StreamID,
+		RequestID: msg.RequestID,
+		ClusterID: conn.ClusterID,
+		Timestamp: time.Now().UTC(),
+		Error:     errMsg,
+	})
+}
+
+// handleApplyStatus records a one-way MsgApplyStatus report from the agent: the
+// outcome of a pull-reconcile apply pass for a revision. MVP records it to the
+// log (durable persistence is a follow-up); the cluster is the authenticated
+// session, not the payload.
+func (h *Hub) handleApplyStatus(conn *AgentConnection, msg *protocol.Message) {
+	var payload protocol.ApplyStatusPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		h.log.Warn("invalid APPLY_STATUS payload",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	failed := 0
+	for _, r := range payload.Results {
+		if !r.Applied {
+			failed++
+		}
+	}
+	level := slog.LevelInfo
+	if !payload.Success {
+		level = slog.LevelWarn
+	}
+	h.log.Log(context.Background(), level, "pull reconcile apply status",
+		slog.String("cluster_id", conn.ClusterID),
+		slog.String("revision", payload.Revision),
+		slog.Bool("success", payload.Success),
+		slog.Int("applied", len(payload.Results)-failed),
+		slog.Int("failed", failed),
+		slog.Int("pruned", payload.Pruned),
+		slog.String("error", payload.Error),
 	)
 }
 

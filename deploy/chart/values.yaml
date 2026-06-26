@@ -389,6 +389,11 @@ config:
   # override the agent image independently of the management-plane image set.
   agentImageRepository: ""
   agentImageTag: ""
+  # Fleet-style PULL reconcile (sprint: pull-reconcile). OFF by default. When
+  # true the adopted-cluster agent becomes the local GitOps applier and owns the
+  # astronomer-* footprint via pull; the management plane must not double-manage
+  # the same footprint via Argo push. Leave false to keep v0.1.0 behavior.
+  pullReconcileEnabled: false
   # =============================================================================
   # Auth hardening (migration 039 / NIST 800-53 AC-7 / SOC 2 CC6.1)
   # =============================================================================

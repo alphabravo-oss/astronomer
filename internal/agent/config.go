@@ -31,6 +31,15 @@ type AgentConfig struct {
 	AuditBatchSize     int    `mapstructure:"audit_batch_size"`     // Max events per forwarded batch (default 100)
 	AuditPollInterval  int    `mapstructure:"audit_poll_interval"`  // Seconds between tail polls (default 10)
 	AuditDelivery      string `mapstructure:"audit_delivery"`       // How batches are delivered: tunnel (default) | http | stub
+
+	// Fleet-style PULL reconcile (sprint: pull-reconcile). When disabled (the
+	// default) the agent does NOT start its local reconcile loop and v0.1.0
+	// behavior is unchanged. When enabled the agent periodically (and on a
+	// tunnel push) pulls its desired state and server-side-applies it into the
+	// astronomer-* owned namespaces. Env: ASTRONOMER_PULL_RECONCILE_ENABLED,
+	// ASTRONOMER_PULL_RECONCILE_INTERVAL.
+	PullReconcileEnabled  bool `mapstructure:"pull_reconcile_enabled"`  // default false
+	PullReconcileInterval int  `mapstructure:"pull_reconcile_interval"` // seconds, default 300
 }
 
 // LoadAgentConfig reads agent configuration from environment variables with
@@ -57,6 +66,8 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "audit_batch_size", Value: 100},
 		envconfig.Default{Key: "audit_poll_interval", Value: 10},
 		envconfig.Default{Key: "audit_delivery", Value: "tunnel"},
+		envconfig.Default{Key: "pull_reconcile_enabled", Value: false},
+		envconfig.Default{Key: "pull_reconcile_interval", Value: 300},
 	)
 
 	cfg := &AgentConfig{}

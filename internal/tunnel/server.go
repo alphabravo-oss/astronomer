@@ -112,6 +112,34 @@ type Hub struct {
 	// delivery). The issuer get-or-creates the reserved service identity +
 	// cluster-scoped clusters:update grant and mints a fresh scoped token.
 	ingestIssuer AuditIngestIssuer
+	// desiredState renders the Fleet-style PULL desired state for a cluster in
+	// response to a MsgDesiredStateRequest. Optional; nil-safe so installs that
+	// don't wire the pull subsystem reply with an ERROR frame ("desired state
+	// not available") and the agent falls back to its existing paths.
+	desiredState DesiredStateProvider
+}
+
+// DesiredStateProvider renders the desired-state manifest set for a cluster.
+// Satisfied by the server-side adapter that reuses the agent manifest renderer
+// + baseline registry. Kept as an interface so the tunnel package does not
+// import internal/handler (which would create an import cycle).
+type DesiredStateProvider interface {
+	DesiredState(ctx context.Context, clusterID string, currentRevision string) (protocol.DesiredStateResponsePayload, error)
+}
+
+// SetDesiredStateProvider attaches the PULL desired-state renderer (set once at
+// startup). Nil-safe.
+func (h *Hub) SetDesiredStateProvider(p DesiredStateProvider) {
+	h.mu.Lock()
+	h.desiredState = p
+	h.mu.Unlock()
+}
+
+// desiredStateProvider returns the wired provider (or nil) under the read lock.
+func (h *Hub) desiredStateProvider() DesiredStateProvider {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.desiredState
 }
 
 // AuditIngestIssuer mints the per-cluster scoped apiserver-audit ingest token

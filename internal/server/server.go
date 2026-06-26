@@ -677,6 +677,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		manifestSecret = cfg.SecretKey
 	}
 	clusterHandler.SetManifestSigningSecret(manifestSecret)
+	// Fleet-style PULL reconcile: wire the desired-state responder onto the
+	// tunnel hub. Read-only rendering (agent manifest + enabled baseline
+	// components), so it is wired unconditionally — the PullReconcileEnabled
+	// flag gates whether the AGENT runs its loop, not whether the server can
+	// describe the desired state. nil-safe on the hub side.
+	hub.SetDesiredStateProvider(NewDesiredStateAdapter(clusterHandler, queries))
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})

@@ -122,6 +122,15 @@ type Config struct {
 	// helm_repositories + catalog_blessed_charts overlays. Empty = skip (keep
 	// whatever defaults are already seeded). Fetch failures are non-fatal.
 	CatalogURL string `mapstructure:"astronomer_catalog_url"`
+
+	// PullReconcileEnabled gates the Fleet-style PULL reconcile subsystem. When
+	// false (the default) NOTHING changes: the existing tunnel self-upgrade +
+	// Argo-baseline push paths keep owning the footprint. When true the agent
+	// runs its local reconcile loop and owns the astronomer-* footprint via
+	// pull; the server must not double-manage the same footprint via Argo push.
+	// The DesiredState responder is read-only rendering and is unaffected by
+	// this flag — only behavior that would mutate ownership is gated.
+	PullReconcileEnabled bool `mapstructure:"pull_reconcile_enabled"`
 }
 
 // CORSOrigins returns the allowed origins as a slice.
@@ -172,6 +181,7 @@ func Load() (*Config, error) {
 		"dex_bundled_enabled",
 		"auth_local_password_only",
 		"astronomer_catalog_url",
+		"pull_reconcile_enabled",
 	); err != nil {
 		return nil, err
 	}
@@ -204,6 +214,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "argocd_internal_proxy_addr", Value: ":8090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
 		envconfig.Default{Key: "auth_local_password_only", Value: false},
+		// Fleet-style PULL reconcile is OFF by default — opt-in per install.
+		envconfig.Default{Key: "pull_reconcile_enabled", Value: false},
 	)
 
 	cfg := &Config{}

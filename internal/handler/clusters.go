@@ -1936,6 +1936,33 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 	})
 }
 
+// RenderAgentManifestForCluster renders the agent's own install manifest
+// (Deployment + RBAC + config) for a cluster at the management plane's central
+// agent image — without an HTTP request. It is the (a) source of the Fleet-style
+// PULL desired state: the server-side DesiredState adapter (internal/server)
+// combines this with the enabled baseline components.
+//
+// The server URL is taken from platform configuration. The registration token
+// is intentionally left as the template placeholder: the pull path targets an
+// already-connected, already-credentialed agent (its durable token Secret is
+// mounted and self-managed), so re-rendering does NOT mint or rotate a token.
+// The manifest's purpose here is the Deployment/RBAC/config shape, which the
+// agent server-side-applies over its own footprint.
+func (h *ClusterHandler) RenderAgentManifestForCluster(ctx context.Context, clusterID uuid.UUID) (string, error) {
+	if h == nil {
+		return "", fmt.Errorf("nil cluster handler")
+	}
+	cluster, err := h.queries.GetClusterByID(ctx, clusterID)
+	if err != nil {
+		return "", fmt.Errorf("get cluster %s: %w", clusterID, err)
+	}
+	serverURL := ""
+	if cfg, cerr := h.queries.GetPlatformConfig(ctx); cerr == nil {
+		serverURL = strings.TrimRight(strings.TrimSpace(cfg.ServerUrl), "/")
+	}
+	return h.renderAgentInstallManifest(cluster, "REPLACE_WITH_REGISTRATION_TOKEN", serverURL), nil
+}
+
 func clusterAgentPrivilegeProfile(raw json.RawMessage) string {
 	return agenttemplate.NormalizePrivilegeProfile(clusterAnnotations(raw)[agenttemplate.PrivilegeProfileAnnotation])
 }

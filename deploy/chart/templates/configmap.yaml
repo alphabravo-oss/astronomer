@@ -30,6 +30,10 @@ data:
   # explicit config.agentImage* still overrides.
   AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | default (printf "%s/%s" (.Values.image.registry | default .Values.image.agent.registry) .Values.image.agent.repository) | quote }}
   AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | default .Values.image.agent.tag | quote }}
+  # Fleet-style PULL reconcile feature flag. OFF by default — when false the
+  # agent's local GitOps reconcile loop is not started and the existing
+  # self-upgrade + Argo-baseline push paths keep owning the footprint.
+  PULL_RECONCILE_ENABLED: {{ .Values.config.pullReconcileEnabled | default false | quote }}
   # Auth hardening (migration 039). Empty / unset == binary defaults
   # (5 attempts / 15 minutes).
   {{- if .Values.config.loginFailureThreshold }}
