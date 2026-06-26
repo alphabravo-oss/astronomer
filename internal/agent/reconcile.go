@@ -266,16 +266,27 @@ func (h *ReconcileHandler) Reconcile(ctx context.Context, desired protocol.Desir
 		status.Results = append(status.Results, entry)
 	}
 
-	pruned, err := h.prune(ctx, applied)
-	if err != nil {
-		// Prune failure does not fail the whole apply (objects were applied);
-		// surface it on the status Error field but keep Success per-apply.
-		h.log.Error("prune", "error", err)
-		if status.Error == "" {
-			status.Error = "prune: " + err.Error()
+	// SAFETY: only prune when EVERY manifest applied. If any apply failed, the
+	// `applied` set is an incomplete picture of the desired state, and pruning
+	// the complement would delete healthy managed objects that simply weren't
+	// (re-)applied this cycle (e.g. a transient API error during a tunnel
+	// reconnect). Skip prune and let the next reconcile converge — better a
+	// brief drift than deleting a running component.
+	if status.Success {
+		pruned, err := h.prune(ctx, applied)
+		if err != nil {
+			// Prune failure does not fail the whole apply (objects were applied);
+			// surface it on the status Error field but keep Success per-apply.
+			h.log.Error("prune", "error", err)
+			if status.Error == "" {
+				status.Error = "prune: " + err.Error()
+			}
 		}
+		status.Pruned = pruned
+	} else {
+		h.log.Warn("skipping prune: not all manifests applied this cycle (incomplete desired state); will converge next reconcile",
+			"manifests", len(desired.Manifests), "revision", desired.Revision)
 	}
-	status.Pruned = pruned
 
 	return status
 }
@@ -355,6 +366,9 @@ func (h *ReconcileHandler) serverSideApply(ctx context.Context, gvr schema.Group
 		existing, err := ri.Get(ctx, name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			_, cerr := ri.Create(ctx, obj, metav1.CreateOptions{FieldManager: pullFieldManager})
+			if cerr == nil {
+				h.log.Info("pull applied (created)", "gvr", gvr.Resource, "namespace", obj.GetNamespace(), "name", name)
+			}
 			return cerr
 		}
 		if err != nil {
@@ -365,6 +379,9 @@ func (h *ReconcileHandler) serverSideApply(ctx context.Context, gvr schema.Group
 		// Preserve cluster-assigned UID so the Update targets the same object.
 		next.SetUID(existing.GetUID())
 		_, uerr := ri.Update(ctx, next, metav1.UpdateOptions{FieldManager: pullFieldManager})
+		if uerr == nil {
+			h.log.Debug("pull applied (updated)", "gvr", gvr.Resource, "namespace", obj.GetNamespace(), "name", name)
+		}
 		return uerr
 	})
 }

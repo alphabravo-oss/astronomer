@@ -32,6 +32,10 @@ type InstallTemplateData struct {
 	PrivilegeProfile   string
 	ServiceAccountName string
 	PodLabels          map[string]string
+	// PullReconcileEnabled renders the agent's Fleet-pull flag into its own
+	// Deployment so a Phase-2 self-apply preserves it (otherwise self-applying
+	// the Deployment would wipe the flag and disable the reconcile loop).
+	PullReconcileEnabled bool
 }
 
 func RenderInstallYAML(data InstallTemplateData) string {
@@ -40,7 +44,12 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if serviceAccountName == "" {
 		serviceAccountName = "astronomer-agent"
 	}
+	pullReconcile := "false"
+	if data.PullReconcileEnabled {
+		pullReconcile = "true"
+	}
 	return strings.NewReplacer(
+		"{{AGENT_PULL_RECONCILE_ENABLED}}", pullReconcile,
 		"{{SERVER_URL}}", data.ServerURL,
 		"{{CLUSTER_ID}}", data.ClusterID,
 		"{{REGISTRATION_TOKEN}}", data.RegistrationToken,

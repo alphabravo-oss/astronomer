@@ -669,6 +669,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	clusterHandler := handler.NewClusterHandler(queries)
 	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
+	clusterHandler.SetPullReconcileEnabled(cfg.PullReconcileEnabled)
 	// HMAC key for short-TTL signed manifest-download URLs. Falls back to
 	// the JWT signing secret when a dedicated one isn't configured so a
 	// single-secret install still gets signed URLs.

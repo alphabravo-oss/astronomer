@@ -161,7 +161,8 @@ type ClusterHandler struct {
 	// `labels`. Same interface as decommissionQueue (Enqueue only), reused on
 	// purpose so wiring stays trivial. Optional and nil-safe.
 	argoCDRefreshQueue ClusterDecommissionEnqueuer
-	agentImage         string
+	agentImage           string
+	pullReconcileEnabled bool
 	// enforcer gates Create against the fleet-wide cluster cap
 	// configured by the 'global' quota plan (migration 051).
 	// Optional; nil disables the check (test fakes, pre-migration).
@@ -328,6 +329,14 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 		tag = "latest"
 	}
 	h.agentImage = repository + ":" + tag
+}
+
+// SetPullReconcileEnabled records whether rendered agent manifests should carry
+// the Fleet-pull flag, so the agent's Phase-2 self-apply preserves it.
+func (h *ClusterHandler) SetPullReconcileEnabled(enabled bool) {
+	if h != nil {
+		h.pullReconcileEnabled = enabled
+	}
 }
 
 // SetEventPublisher wires the SSE bus so cluster CRUD operations fan out
@@ -1931,8 +1940,9 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		CACert:             "",
 		AgentImage:         agentImage,
 		PrivilegeProfile:   agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation]),
-		ServiceAccountName: strings.TrimSpace(annotations[agenttemplate.AgentServiceAccountNameAnnotation]),
-		PodLabels:          clusterAgentPodLabels(annotations),
+		ServiceAccountName:   strings.TrimSpace(annotations[agenttemplate.AgentServiceAccountNameAnnotation]),
+		PodLabels:            clusterAgentPodLabels(annotations),
+		PullReconcileEnabled: h != nil && h.pullReconcileEnabled,
 	})
 }
 

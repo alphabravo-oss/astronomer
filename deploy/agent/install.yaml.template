@@ -567,6 +567,12 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: PRIVILEGE_PROFILE
+            # Fleet-pull reconcile flag. Rendered into the Deployment (not just
+            # set out-of-band) so the agent's own Phase-2 self-apply preserves it
+            # — otherwise self-applying the Deployment would wipe the flag and
+            # disable the reconcile loop on the next restart.
+            - name: ASTRONOMER_PULL_RECONCILE_ENABLED
+              value: "{{AGENT_PULL_RECONCILE_ENABLED}}"
           ports:
             - name: health
               containerPort: 8081
