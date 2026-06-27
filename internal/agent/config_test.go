@@ -156,3 +156,83 @@ func TestLoadAgentConfig_MissingRequired(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadAgentConfig_RejectsPlaintextScheme proves the agent fails closed on a
+// plaintext (ws:// / http://) ServerURL unless the ASTRONOMER_INSECURE escape
+// hatch is set. https:// and wss:// are always accepted. FAILS without the
+// scheme-validation change.
+func TestLoadAgentConfig_RejectsPlaintextScheme(t *testing.T) {
+	cases := []struct {
+		name      string
+		serverURL string
+		insecure  string
+		wantErr   bool
+	}{
+		{name: "ws rejected by default", serverURL: "ws://example.com", wantErr: true},
+		{name: "http rejected by default", serverURL: "http://example.com", wantErr: true},
+		{name: "wss always allowed", serverURL: "wss://example.com", wantErr: false},
+		{name: "https always allowed", serverURL: "https://example.com", wantErr: false},
+		{name: "ws allowed with ASTRONOMER_INSECURE", serverURL: "ws://example.com", insecure: "true", wantErr: false},
+		{name: "ws still rejected when INSECURE not exactly true", serverURL: "ws://example.com", insecure: "yes", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ASTRONOMER_SERVER_URL", tc.serverURL)
+			t.Setenv("ASTRONOMER_CLUSTER_ID", "c1")
+			t.Setenv("ASTRONOMER_AGENT_TOKEN", "tok")
+			if tc.insecure != "" {
+				t.Setenv("ASTRONOMER_INSECURE", tc.insecure)
+			} else {
+				_ = os.Unsetenv("ASTRONOMER_INSECURE")
+			}
+
+			_, err := LoadAgentConfig()
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error for %q (insecure=%q), got nil", tc.serverURL, tc.insecure)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error for %q (insecure=%q): %v", tc.serverURL, tc.insecure, err)
+			}
+		})
+	}
+}
+
+// TestLoadAgentConfig_CAFromEnv verifies ASTRONOMER_CA_CERT / _CHECKSUM are
+// loaded into the config, and that the default (unset) path leaves them empty.
+func TestLoadAgentConfig_CAFromEnv(t *testing.T) {
+	t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+	t.Setenv("ASTRONOMER_CLUSTER_ID", "c1")
+	t.Setenv("ASTRONOMER_AGENT_TOKEN", "tok")
+	t.Setenv("ASTRONOMER_CA_CERT", "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----")
+	t.Setenv("ASTRONOMER_CA_CHECKSUM", "DEADBEEF")
+
+	cfg, err := LoadAgentConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.CACert == "" {
+		t.Error("CACert should be populated from ASTRONOMER_CA_CERT")
+	}
+	if cfg.CAChecksum != "DEADBEEF" {
+		t.Errorf("CAChecksum = %q, want DEADBEEF", cfg.CAChecksum)
+	}
+}
+
+func TestLoadAgentConfig_CADefaultsEmpty(t *testing.T) {
+	for _, k := range []string{"ASTRONOMER_CA_CERT", "ASTRONOMER_CA_CHECKSUM"} {
+		_ = os.Unsetenv(k)
+	}
+	t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+	t.Setenv("ASTRONOMER_CLUSTER_ID", "c1")
+	t.Setenv("ASTRONOMER_AGENT_TOKEN", "tok")
+
+	cfg, err := LoadAgentConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The mounted file path does not exist in the test env, so both stay empty —
+	// the default OS-trust path.
+	if cfg.CACert != "" || cfg.CAChecksum != "" {
+		t.Fatalf("default CA config should be empty, got cert=%q checksum=%q", cfg.CACert, cfg.CAChecksum)
+	}
+}

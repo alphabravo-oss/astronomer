@@ -1,12 +1,14 @@
 package tasks
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
 
 func TestRenderAgentManifestUsesSharedTemplate(t *testing.T) {
 	manifest := renderAgentManifest(
+		context.Background(),
 		"550e8400-e29b-41d4-a716-446655440000",
 		"reg-token",
 		"https://astro.example.com",
@@ -44,6 +46,7 @@ func TestRenderAgentManifestUsesSharedTemplate(t *testing.T) {
 
 func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
 	manifest := renderAgentManifest(
+		context.Background(),
 		"550e8400-e29b-41d4-a716-446655440000",
 		"reg-token",
 		"https://astro.example.com",

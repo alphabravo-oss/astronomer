@@ -19,6 +19,9 @@ type clusterRegistryTestQuerier struct {
 	deletedRegistryConfigFor uuid.UUID
 	deleteRegistryConfigErr  error
 	auditRows                []sqlc.CreateAuditLogV1Params
+	// platformSettings is consulted by GetPlatformSetting when non-nil, so tests
+	// can stub registration.ca_bundle (and similar) without a real DB.
+	platformSettings map[string]sqlc.PlatformSetting
 }
 
 func (q *clusterRegistryTestQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {
@@ -122,7 +125,12 @@ func (q *clusterRegistryTestQuerier) GetClusterTemplateByID(context.Context, uui
 func (q *clusterRegistryTestQuerier) UpsertClusterTemplateApplication(context.Context, sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error) {
 	return sqlc.ClusterTemplateApplication{}, nil
 }
-func (q *clusterRegistryTestQuerier) GetPlatformSetting(context.Context, string) (sqlc.PlatformSetting, error) {
+func (q *clusterRegistryTestQuerier) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {
+	if q.platformSettings != nil {
+		if v, ok := q.platformSettings[key]; ok {
+			return v, nil
+		}
+	}
 	return sqlc.PlatformSetting{}, pgx.ErrNoRows
 }
 func (q *clusterRegistryTestQuerier) ListArgoCDManagedClustersByCluster(context.Context, uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {

@@ -468,7 +468,11 @@ stringData:
   token: "{{REGISTRATION_TOKEN}}"
 
 ---
-# Secret for the CA certificate (if provided)
+# Secret holding the management server's CA bundle for tunnel CA pinning.
+# Populated (base64 PEM) from platform_settings[registration.ca_bundle] when a
+# private/self-signed CA is in use; ca.crt is "" otherwise. The agent mounts it
+# at /etc/astronomer/tls/ca.crt (volume is optional) and, when present, pins the
+# tunnel against it together with ASTRONOMER_CA_CHECKSUM.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -573,6 +577,13 @@ spec:
             # disable the reconcile loop on the next restart.
             - name: ASTRONOMER_PULL_RECONCILE_ENABLED
               value: "{{AGENT_PULL_RECONCILE_ENABLED}}"
+            # Server-CA pin (Rancher CATTLE_CA_CHECKSUM semantics). Rendered into
+            # the Deployment — alongside the mounted CA Secret at
+            # /etc/astronomer/tls/ca.crt — so a Phase-2 self-apply preserves the
+            # pin. Empty when no private CA is configured: the agent then dials
+            # with the OS trust store and standard verification (no pinning).
+            - name: ASTRONOMER_CA_CHECKSUM
+              value: "{{CA_CHECKSUM}}"
           ports:
             - name: health
               containerPort: 8081

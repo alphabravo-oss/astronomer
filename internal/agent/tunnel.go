@@ -116,9 +116,24 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(dialCtx, url, &websocket.DialOptions{
+	dialOpts := &websocket.DialOptions{
 		HTTPHeader: headers,
-	})
+	}
+	// Server-CA pinning: when a CA bundle/checksum is configured, dial through
+	// an http.Client whose transport carries the pinned tls.Config. When none
+	// is configured BuildTLSConfig returns nil and we leave HTTPClient unset, so
+	// websocket.Dial uses its default OS-trust transport (no behavior change).
+	tlsCfg, err := BuildTLSConfig(tc.config.CACert, tc.config.CAChecksum)
+	if err != nil {
+		return fmt.Errorf("build tls config: %w", err)
+	}
+	if tlsCfg != nil {
+		dialOpts.HTTPClient = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		}
+	}
+
+	conn, _, err := websocket.Dial(dialCtx, url, dialOpts)
 	if err != nil {
 		return fmt.Errorf("websocket dial: %w", err)
 	}

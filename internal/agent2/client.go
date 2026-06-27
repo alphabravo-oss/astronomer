@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	"github.com/gorilla/websocket"
 	"github.com/rancher/remotedialer"
 )
@@ -43,7 +44,12 @@ const defaultBackoff = 5 * time.Second
 // proxies that strip query params or rewrite paths).
 //
 // The token is the registration token from cluster_registration_tokens.
-func ConnectAndServe(ctx context.Context, logger *slog.Logger, serverURL, clusterID, token string) error {
+//
+// caCert / caChecksum carry the server-CA pin (Rancher CATTLE_CA_CHECKSUM
+// semantics). When both are empty the tunnel dials with the OS trust store and
+// standard verification (no behavior change). When set, the dial FAILS CLOSED
+// on any CA/checksum mismatch.
+func ConnectAndServe(ctx context.Context, logger *slog.Logger, serverURL, clusterID, token, caCert, caChecksum string) error {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -60,6 +66,11 @@ func ConnectAndServe(ctx context.Context, logger *slog.Logger, serverURL, cluste
 	wsURL, err := buildWSURL(serverURL, clusterID)
 	if err != nil {
 		return fmt.Errorf("agent2: build ws url: %w", err)
+	}
+
+	wsDialer, err := dialer(caCert, caChecksum)
+	if err != nil {
+		return fmt.Errorf("agent2: build tls config: %w", err)
 	}
 
 	headers := http.Header{}
@@ -82,7 +93,7 @@ func ConnectAndServe(ctx context.Context, logger *slog.Logger, serverURL, cluste
 			slog.String("cluster_id", clusterID),
 		)
 
-		err := remotedialer.ConnectToProxy(ctx, wsURL, headers, allow, dialer(), nil)
+		err := remotedialer.ConnectToProxy(ctx, wsURL, headers, allow, wsDialer, nil)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			logger.Warn("agent2: tunnel disconnected", slog.String("error", err.Error()))
 		}
@@ -104,13 +115,24 @@ func ConnectAndServe(ctx context.Context, logger *slog.Logger, serverURL, cluste
 // the read buffer up — the in-cluster API server can return very large list
 // responses (e.g. all pods in a busy cluster) and a small read buffer turns
 // those into many tiny frames.
-func dialer() *websocket.Dialer {
-	return &websocket.Dialer{
+func dialer(caCert, caChecksum string) (*websocket.Dialer, error) {
+	d := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 10 * time.Second,
 		ReadBufferSize:   64 * 1024,
 		WriteBufferSize:  64 * 1024,
 	}
+	// Server-CA pinning (shared builder with the coder/websocket path). nil when
+	// no CA/checksum is configured → gorilla uses the OS trust store, identical
+	// to the previous behavior. Set → the dial FAILS CLOSED on pin mismatch.
+	tlsCfg, err := agent.BuildTLSConfig(caCert, caChecksum)
+	if err != nil {
+		return nil, err
+	}
+	if tlsCfg != nil {
+		d.TLSClientConfig = tlsCfg
+	}
+	return d, nil
 }
 
 // buildWSURL converts an http(s):// or ws(s):// origin into the full ws(s)://

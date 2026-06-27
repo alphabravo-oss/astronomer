@@ -2,9 +2,17 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
+
+// caCertMountPath is where the install manifest mounts the CA Secret
+// (deploy/agent/install.yaml.template volumeMount). LoadAgentConfig reads the
+// PEM bundle from here when ASTRONOMER_CA_CERT is not set in the environment.
+const caCertMountPath = "/etc/astronomer/tls/ca.crt"
 
 // AgentConfig holds configuration for the agent process.
 type AgentConfig struct {
@@ -40,6 +48,15 @@ type AgentConfig struct {
 	// ASTRONOMER_PULL_RECONCILE_INTERVAL.
 	PullReconcileEnabled  bool `mapstructure:"pull_reconcile_enabled"`  // default false
 	PullReconcileInterval int  `mapstructure:"pull_reconcile_interval"` // seconds, default 300
+
+	// Server-CA pinning on the agent tunnel (Rancher CATTLE_CA_CHECKSUM
+	// semantics). Both are empty by default, in which case the tunnel dialer
+	// uses the OS trust store with standard verification (no behavior change).
+	//   - CACert: PEM-encoded CA bundle. Loaded from env ASTRONOMER_CA_CERT or,
+	//     when that is unset, from the mounted file /etc/astronomer/tls/ca.crt.
+	//   - CAChecksum: hex SHA-256 of the server CA, pinned in VerifyConnection.
+	CACert     string `mapstructure:"ca_cert"`
+	CAChecksum string `mapstructure:"ca_checksum"`
 }
 
 // LoadAgentConfig reads agent configuration from environment variables with
@@ -68,6 +85,8 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "audit_delivery", Value: "tunnel"},
 		envconfig.Default{Key: "pull_reconcile_enabled", Value: false},
 		envconfig.Default{Key: "pull_reconcile_interval", Value: 300},
+		envconfig.Default{Key: "ca_cert", Value: ""},
+		envconfig.Default{Key: "ca_checksum", Value: ""},
 	)
 
 	cfg := &AgentConfig{}
@@ -84,6 +103,27 @@ func LoadAgentConfig() (*AgentConfig, error) {
 	if cfg.AgentToken == "" {
 		return nil, fmt.Errorf("ASTRONOMER_AGENT_TOKEN is required")
 	}
+
+	// Reject plaintext tunnels by default. Only https:// and wss:// are allowed
+	// transports; ws:// and http:// expose the agent token and proxied traffic
+	// in cleartext. The ASTRONOMER_INSECURE=true escape hatch is for local dev
+	// only and logs loudly so it can never be a silent production default.
+	if !strings.HasPrefix(cfg.ServerURL, "https://") && !strings.HasPrefix(cfg.ServerURL, "wss://") {
+		if os.Getenv("ASTRONOMER_INSECURE") != "true" {
+			return nil, fmt.Errorf("ASTRONOMER_SERVER_URL must use https:// or wss://; got %q (set ASTRONOMER_INSECURE=true to override)", cfg.ServerURL)
+		}
+		slog.Warn("INSECURE: plaintext ServerURL allowed only because ASTRONOMER_INSECURE=true; the agent token and tunnel traffic are unencrypted", "server_url", cfg.ServerURL)
+	}
+
+	// CA bundle priority: explicit env wins; otherwise fall back to the mounted
+	// Secret file. Empty when neither is present (default OS-trust path).
+	cfg.CACert = strings.TrimSpace(cfg.CACert)
+	if cfg.CACert == "" {
+		if b, err := os.ReadFile(caCertMountPath); err == nil {
+			cfg.CACert = strings.TrimSpace(string(b))
+		}
+	}
+	cfg.CAChecksum = strings.TrimSpace(cfg.CAChecksum)
 
 	return cfg, nil
 }

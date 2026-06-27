@@ -1681,15 +1681,7 @@ func (h *ClusterHandler) GetSignedManifest(w http.ResponseWriter, r *http.Reques
 // guards the variant on `registration.tls_mode == "private_ca"` so a
 // 404 from here is the consistent "nothing to download" signal.
 func (h *ClusterHandler) GetCABundle(w http.ResponseWriter, r *http.Request) {
-	row, err := h.queries.GetPlatformSetting(r.Context(), "registration.ca_bundle")
-	var pem string
-	if err == nil && len(row.Value) > 0 {
-		// platform_settings.value is JSONB. The registry types this as
-		// a plain string, so the row carries a JSON-encoded string —
-		// strip the quotes via json.Unmarshal so curl gets raw PEM.
-		_ = json.Unmarshal(row.Value, &pem)
-	}
-	pem = strings.TrimSpace(pem)
+	pem := registrationCABundle(r.Context(), h.queries)
 	if pem == "" {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No CA bundle configured for cluster registration")
 		return
@@ -1698,6 +1690,30 @@ func (h *ClusterHandler) GetCABundle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `inline; filename="astronomer-ca.crt"`)
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(pem + "\n"))
+}
+
+// registrationCABundle returns the operator-provided CA PEM bundle from
+// platform_settings[registration.ca_bundle], or "" when none is configured.
+// This is the single source of truth for the tunnel CA pin and is shared by the
+// HTTP GetCABundle endpoint and the agent install-manifest renderers.
+func registrationCABundle(ctx context.Context, q registrationCAQuerier) string {
+	if q == nil {
+		return ""
+	}
+	row, err := q.GetPlatformSetting(ctx, "registration.ca_bundle")
+	if err != nil || len(row.Value) == 0 {
+		return ""
+	}
+	// platform_settings.value is JSONB carrying a JSON-encoded string; unwrap it.
+	var pem string
+	_ = json.Unmarshal(row.Value, &pem)
+	return strings.TrimSpace(pem)
+}
+
+// registrationCAQuerier is the slice of the queries surface registrationCABundle
+// needs, so the helper is callable from any caller holding GetPlatformSetting.
+type registrationCAQuerier interface {
+	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 }
 
 // GetKubeconfig handles GET /api/v1/clusters/{id}/kubeconfig/.
@@ -1933,11 +1949,19 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 	if image := strings.TrimSpace(annotations[agenttemplate.AgentImageAnnotation]); image != "" {
 		agentImage = image
 	}
+	// Server-CA pin: populate the CA bundle + checksum from the operator-provided
+	// registration.ca_bundle. Empty when no private CA is configured, in which
+	// case the agent falls back to the OS trust store (no behavior change).
+	caPEM := ""
+	if h != nil {
+		caPEM = registrationCABundle(context.Background(), h.queries)
+	}
 	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
 		ServerURL:          serverURL,
 		ClusterID:          cluster.ID.String(),
 		RegistrationToken:  token,
-		CACert:             "",
+		CACert:             caPEM,
+		CAChecksum:         agenttemplate.CAChecksumFromPEM(caPEM),
 		AgentImage:         agentImage,
 		PrivilegeProfile:   agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation]),
 		ServiceAccountName:   strings.TrimSpace(annotations[agenttemplate.AgentServiceAccountNameAnnotation]),

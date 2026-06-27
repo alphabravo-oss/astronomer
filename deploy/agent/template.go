@@ -1,7 +1,12 @@
 package agenttemplate
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
 	_ "embed"
+	"encoding/base64"
+	"encoding/pem"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -28,6 +33,11 @@ type InstallTemplateData struct {
 	ClusterID          string
 	RegistrationToken  string
 	CACert             string
+	// CAChecksum is the hex SHA-256 of the server CA (Rancher CATTLE_CA_CHECKSUM
+	// semantics). Rendered into the agent's own Deployment env so a Phase-2
+	// self-apply preserves the pin (otherwise self-applying the Deployment would
+	// wipe it and silently drop CA pinning on the next restart).
+	CAChecksum         string
 	AgentImage         string
 	PrivilegeProfile   string
 	ServiceAccountName string
@@ -36,6 +46,28 @@ type InstallTemplateData struct {
 	// Deployment so a Phase-2 self-apply preserves it (otherwise self-applying
 	// the Deployment would wipe the flag and disable the reconcile loop).
 	PullReconcileEnabled bool
+}
+
+// CAChecksumFromPEM computes the Rancher CATTLE_CA_CHECKSUM-style pin for a CA
+// bundle: the hex SHA-256 of the DER bytes of the FIRST certificate in the PEM.
+// This must hash the same certificate the agent's VerifyConnection pins against
+// (the chain root / trust anchor presented by the server). Returns "" when the
+// bundle is empty or contains no parseable certificate, so a no-CA registration
+// yields an empty checksum and the agent stays on the default OS-trust path.
+func CAChecksumFromPEM(caPEM string) string {
+	caPEM = strings.TrimSpace(caPEM)
+	if caPEM == "" {
+		return ""
+	}
+	block, _ := pem.Decode([]byte(caPEM))
+	if block == nil {
+		return ""
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(cert.Raw))
 }
 
 func RenderInstallYAML(data InstallTemplateData) string {
@@ -48,12 +80,20 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if data.PullReconcileEnabled {
 		pullReconcile = "true"
 	}
+	// The CA Secret uses a `data:` field, which is base64-encoded. An empty CA
+	// stays empty (the Secret's ca.crt is "", the volume mount is optional, and
+	// the agent falls back to OS trust). A configured PEM bundle is base64'd.
+	caCert := ""
+	if trimmed := strings.TrimSpace(data.CACert); trimmed != "" {
+		caCert = base64.StdEncoding.EncodeToString([]byte(trimmed))
+	}
 	return strings.NewReplacer(
 		"{{AGENT_PULL_RECONCILE_ENABLED}}", pullReconcile,
 		"{{SERVER_URL}}", data.ServerURL,
 		"{{CLUSTER_ID}}", data.ClusterID,
 		"{{REGISTRATION_TOKEN}}", data.RegistrationToken,
-		"{{CA_CERT}}", data.CACert,
+		"{{CA_CERT}}", caCert,
+		"{{CA_CHECKSUM}}", strings.TrimSpace(data.CAChecksum),
 		"{{AGENT_IMAGE}}", data.AgentImage,
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),

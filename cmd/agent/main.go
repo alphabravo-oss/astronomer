@@ -79,7 +79,7 @@ func runConnect2(logger *slog.Logger) error {
 		"server_url", cfg.ServerURL,
 		"cluster_id", cfg.ClusterID,
 	)
-	if err := agent2.ConnectAndServe(ctx, logger, cfg.ServerURL, cfg.ClusterID, cfg.AgentToken); err != nil && err != context.Canceled {
+	if err := agent2.ConnectAndServe(ctx, logger, cfg.ServerURL, cfg.ClusterID, cfg.AgentToken, cfg.CACert, cfg.CAChecksum); err != nil && err != context.Canceled {
 		logger.Error("agent2 exited with error", "error", err)
 		return err
 	}
