@@ -673,6 +673,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 
 	clusterHandler := handler.NewClusterHandler(queries)
 	clusterHandler.SetEncryptor(encryptor)
+	clusterHandler.SetAgentDisconnector(hub)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
 	clusterHandler.SetPullReconcileEnabled(cfg.PullReconcileEnabled)
 	// HMAC key for short-TTL signed manifest-download URLs. Falls back to

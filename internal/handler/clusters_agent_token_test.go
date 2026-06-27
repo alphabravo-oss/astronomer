@@ -79,6 +79,33 @@ func TestRevokeAgentTokenSetsRevokedAndAudits(t *testing.T) {
 	}
 }
 
+// fakeDisconnector records the cluster IDs whose live session was severed.
+type fakeDisconnector struct{ called []string }
+
+func (f *fakeDisconnector) Disconnect(clusterID string) bool {
+	f.called = append(f.called, clusterID)
+	return true
+}
+
+// TestRevokeAgentTokenSeversLiveSession: revoke must force-close the live agent
+// tunnel immediately (not just deny the next CONNECT), so a rogue agent loses
+// access at once. FAILS WITHOUT THE FIX (revoke never called the disconnector).
+func TestRevokeAgentTokenSeversLiveSession(t *testing.T) {
+	id := uuid.New()
+	q := &clusterRegistryTestQuerier{agentTokenRevokeRows: 1}
+	d := &fakeDisconnector{}
+	h := NewClusterHandler(q)
+	h.SetAgentDisconnector(d)
+
+	rec := serveClusterAction(h.RevokeAgentToken, id.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("revoke code = %d, want 200", rec.Code)
+	}
+	if len(d.called) != 1 || d.called[0] != id.String() {
+		t.Fatalf("expected live session severed for %s, got %v", id, d.called)
+	}
+}
+
 // TestRevokeAgentTokenNoTokenIs404 mirrors the rotate 0-rows path.
 func TestRevokeAgentTokenNoTokenIs404(t *testing.T) {
 	id := uuid.New()

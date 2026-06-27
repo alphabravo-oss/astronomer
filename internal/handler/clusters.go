@@ -167,7 +167,7 @@ type ClusterHandler struct {
 	// argocd:refresh_managed_cluster_labels tasks after a cluster Update mutates
 	// `labels`. Same interface as decommissionQueue (Enqueue only), reused on
 	// purpose so wiring stays trivial. Optional and nil-safe.
-	argoCDRefreshQueue ClusterDecommissionEnqueuer
+	argoCDRefreshQueue   ClusterDecommissionEnqueuer
 	agentImage           string
 	pullReconcileEnabled bool
 	// enforcer gates Create against the fleet-wide cluster cap
@@ -189,6 +189,17 @@ type ClusterHandler struct {
 	// signed-URL endpoint refuses every request (503) — there is no
 	// unsigned fallback that path could degrade to.
 	manifestSigningSecret []byte
+	// agentDisconnector severs a live agent tunnel session immediately.
+	// Wired to the tunnel hub. Optional and nil-safe: revoke still records
+	// revoked_at (denying the next CONNECT) when this is nil, but the live
+	// session would then persist until it happens to reconnect.
+	agentDisconnector AgentDisconnector
+}
+
+// AgentDisconnector force-closes a cluster's live agent tunnel session.
+// Satisfied by *tunnel.Hub.Disconnect. Returns true if a session was closed.
+type AgentDisconnector interface {
+	Disconnect(clusterID string) bool
 }
 
 // NewClusterHandler creates a new cluster handler.
@@ -205,6 +216,15 @@ func (h *ClusterHandler) SetEncryptor(e *auth.Encryptor) {
 		return
 	}
 	h.encryptor = e
+}
+
+// SetAgentDisconnector wires the tunnel hub so revoke can sever a live agent
+// session immediately. Set once at startup; nil-safe.
+func (h *ClusterHandler) SetAgentDisconnector(d AgentDisconnector) {
+	if h == nil {
+		return
+	}
+	h.agentDisconnector = d
 }
 
 // SetManifestSigningSecret wires the HMAC key for the signed
@@ -1314,13 +1334,13 @@ func (h *ClusterHandler) createClusterDecommission(ctx context.Context, arg sqlc
 		}
 		payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
 		row, err := atomicQ.CreateClusterDecommissionWithTaskOutbox(ctx, sqlc.CreateClusterDecommissionWithTaskOutboxParams{
-			ID:                  decommissionID,
-			ClusterID:           arg.ClusterID,
-			RequestedByID:       arg.RequestedByID,
-			ClusterName:         arg.ClusterName,
-			DedupeKey:           pgtype.Text{String: fmt.Sprintf("cluster_decommission:%s", decommissionID.String()), Valid: true},
-			TaskType:            task.Type(),
-			Payload:             payload,
+			ID:            decommissionID,
+			ClusterID:     arg.ClusterID,
+			RequestedByID: arg.RequestedByID,
+			ClusterName:   arg.ClusterName,
+			DedupeKey:     pgtype.Text{String: fmt.Sprintf("cluster_decommission:%s", decommissionID.String()), Valid: true},
+			TaskType:      task.Type(),
+			Payload:       payload,
 			// "tunnel" queue, not "default": the decommission's managed-side
 			// cleanup phase needs the WS tunnel hub, which lives only in the
 			// server pod's in-process asynq worker (it drains "tunnel").
@@ -1512,9 +1532,9 @@ func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request
 		"trigger":    "admin_api",
 	})
 	RespondJSON(w, http.StatusAccepted, map[string]any{
-		"cluster_id":          id.String(),
-		"rotation_pending":    true,
-		"message":             "rotation will complete on the agent's next connect",
+		"cluster_id":       id.String(),
+		"rotation_pending": true,
+		"message":          "rotation will complete on the agent's next connect",
 	})
 }
 
@@ -1543,14 +1563,24 @@ func (h *ClusterHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster has no active agent token to revoke")
 		return
 	}
+	// Sever the live tunnel NOW so a compromised/rogue agent loses access
+	// immediately rather than persisting on its already-authenticated session
+	// until it happens to reconnect. The DB revoke above guarantees the
+	// subsequent CONNECT is denied; this just collapses the window to ~0.
+	disconnected := false
+	if h.agentDisconnector != nil {
+		disconnected = h.agentDisconnector.Disconnect(id.String())
+	}
 	recordAudit(r, h.queries, "agent.token.revoked", "cluster", id.String(), cluster.Name, map[string]any{
-		"cluster_id": id.String(),
-		"trigger":    "admin_api",
+		"cluster_id":      id.String(),
+		"trigger":         "admin_api",
+		"session_severed": disconnected,
 	})
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"cluster_id": id.String(),
-		"revoked":    true,
-		"message":    "agent token revoked; re-import the cluster to issue a new credential",
+		"cluster_id":      id.String(),
+		"revoked":         true,
+		"session_severed": disconnected,
+		"message":         "agent token revoked; re-import the cluster to issue a new credential",
 	})
 }
 
@@ -2042,13 +2072,13 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		caPEM = registrationCABundle(context.Background(), h.queries)
 	}
 	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
-		ServerURL:          serverURL,
-		ClusterID:          cluster.ID.String(),
-		RegistrationToken:  token,
-		CACert:             caPEM,
-		CAChecksum:         agenttemplate.CAChecksumFromPEM(caPEM),
-		AgentImage:         agentImage,
-		PrivilegeProfile:   agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation]),
+		ServerURL:            serverURL,
+		ClusterID:            cluster.ID.String(),
+		RegistrationToken:    token,
+		CACert:               caPEM,
+		CAChecksum:           agenttemplate.CAChecksumFromPEM(caPEM),
+		AgentImage:           agentImage,
+		PrivilegeProfile:     agenttemplate.NormalizePrivilegeProfile(annotations[agenttemplate.PrivilegeProfileAnnotation]),
 		ServiceAccountName:   strings.TrimSpace(annotations[agenttemplate.AgentServiceAccountNameAnnotation]),
 		PodLabels:            clusterAgentPodLabels(annotations),
 		PullReconcileEnabled: h != nil && h.pullReconcileEnabled,
