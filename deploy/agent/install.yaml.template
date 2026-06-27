@@ -499,11 +499,14 @@ metadata:
     app.kubernetes.io/part-of: astronomer
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: the agent is a singleton tunnel client and the
+  # server hub keys exactly one live connection per cluster_id. A surging second
+  # pod (maxSurge>=1) connects alongside the old one and the two fight over that
+  # single slot — each CONNECT cancels the other's session, flapping the tunnel
+  # on every rollout/image bump. Recreate terminates the old pod first so there
+  # is never more than one agent connected. (Mirrors Rancher cattle-cluster-agent.)
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: astronomer-agent
