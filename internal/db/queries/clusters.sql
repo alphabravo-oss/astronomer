@@ -134,9 +134,15 @@ UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
 SELECT * FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL;
 
 -- name: GetClusterAgentTokenByToken :one
+-- During a rotation grace window the agent may still be presenting the OLD
+-- token (it has not yet adopted the freshly-minted one), so we accept EITHER
+-- the live token_hash OR the previous_token_hash. revoked_at still hard-gates:
+-- a revoked row matches neither branch.
 SELECT * FROM cluster_agent_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
-   OR (token_hash = '' AND token = $1::text))
+   OR (token_hash = '' AND token = $1::text)
+   OR (previous_token_hash IS NOT NULL
+       AND previous_token_hash = encode(digest($1::text, 'sha256'), 'hex')))
   AND revoked_at IS NULL;
 
 -- name: UpsertClusterAgentToken :one
@@ -156,6 +162,81 @@ RETURNING *;
 
 -- name: TouchClusterAgentToken :exec
 UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1 AND revoked_at IS NULL;
+
+-- name: RotateClusterAgentToken :one
+-- Performs the grace rotation atomically: the current token_hash moves to
+-- previous_token_hash (so the old token keeps validating until the agent
+-- adopts the new one), token/token_hash become the freshly-minted values,
+-- last_rotated_at is stamped and rotation_pending_at is cleared.
+UPDATE cluster_agent_tokens
+SET previous_token_hash = token_hash,
+    token = sqlc.arg(token)::text,
+    token_hash = COALESCE(NULLIF(sqlc.arg(token_hash)::text, ''), encode(digest(sqlc.arg(token)::text, 'sha256'), 'hex')),
+    last_used_at = now(),
+    last_rotated_at = now(),
+    rotation_pending_at = NULL,
+    revoked_at = NULL
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: ClearPreviousClusterAgentTokenHash :exec
+-- Called on the first CONNECT that authenticates with the NEW current token:
+-- the old token is no longer needed, so retire it (revoke the previous hash).
+UPDATE cluster_agent_tokens
+SET previous_token_hash = NULL
+WHERE id = $1 AND previous_token_hash IS NOT NULL;
+
+-- name: SetClusterAgentTokenRotationPending :execrows
+-- Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
+-- the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
+-- when a rotation is already in flight: rotation_pending_at already set (trigger
+-- not yet consumed) or previous_token_hash still present (grace window — the
+-- agent hasn't adopted the last new token yet). Gating here prevents a
+-- double-rotation that would demote the still-in-use previous hash a second
+-- time and strand an agent still holding the old token.
+UPDATE cluster_agent_tokens
+SET rotation_pending_at = now()
+WHERE cluster_id = $1
+  AND revoked_at IS NULL
+  AND rotation_pending_at IS NULL
+  AND previous_token_hash IS NULL;
+
+-- name: RevokeClusterAgentToken :execrows
+-- Standalone revocation: the durable token (and any grace token) is denied
+-- from the next CONNECT onward. Clears previous_token_hash so the grace
+-- window can't keep an already-revoked credential alive.
+UPDATE cluster_agent_tokens
+SET revoked_at = now(),
+    previous_token_hash = NULL,
+    rotation_pending_at = NULL
+WHERE cluster_id = $1 AND revoked_at IS NULL;
+
+-- name: ClearExpiredAgentTokenRotationGrace :execrows
+-- Backstop sweep: clear previous_token_hash for rows whose rotation completed
+-- more than the supplied interval ago but whose old hash was never cleared by
+-- a new-token CONNECT (e.g. the agent crashed before reconnecting).
+UPDATE cluster_agent_tokens
+SET previous_token_hash = NULL
+WHERE previous_token_hash IS NOT NULL
+  AND last_rotated_at IS NOT NULL
+  AND last_rotated_at < now() - make_interval(mins => sqlc.arg(grace_minutes)::int);
+
+-- name: ListClustersDueForAgentTokenRotation :many
+-- Periodic policy: join each cluster's durable token to its registration
+-- policy and surface clusters whose token_rotation_days policy (>0) has
+-- elapsed since the last rotation (or token creation, if never rotated) and
+-- which don't already have a pending/active rotation. last_rotated_at NULL
+-- means the token has never been rotated, so created_at is the age reference.
+SELECT t.cluster_id, p.token_rotation_days
+FROM cluster_agent_tokens t
+JOIN cluster_registration_policies p ON p.cluster_id = t.cluster_id
+WHERE t.revoked_at IS NULL
+  AND t.rotation_pending_at IS NULL
+  AND t.previous_token_hash IS NULL
+  AND p.token_rotation_days > 0
+  AND COALESCE(t.last_rotated_at, t.created_at) < now() - make_interval(days => p.token_rotation_days)
+ORDER BY COALESCE(t.last_rotated_at, t.created_at) ASC
+LIMIT sqlc.arg(row_limit);
 
 -- name: DeleteExpiredRegistrationTokens :execrows
 DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = true AND updated_at < now() - INTERVAL '7 days');

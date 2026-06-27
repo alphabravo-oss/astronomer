@@ -76,6 +76,13 @@ type ClusterQuerier interface {
 	CreateClusterRegistrationToken(ctx context.Context, arg sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error)
 	GetRegistrationTokenByToken(ctx context.Context, token string) (sqlc.ClusterRegistrationToken, error)
 	MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error
+	// Durable agent-token rotation / revocation (task A2). Rotate sets
+	// rotation_pending_at so the agent's next CONNECT performs the grace
+	// rotation; Revoke immediately denies the token from the next CONNECT.
+	// Both return the rows affected so the handler can 404 a cluster that
+	// has no agent token yet.
+	SetClusterAgentTokenRotationPending(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	RevokeClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Registry config
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
 	UpsertClusterRegistryConfig(ctx context.Context, arg sqlc.UpsertClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
@@ -1467,6 +1474,84 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 	})
 
 	RespondJSON(w, http.StatusCreated, token)
+}
+
+// RotateAgentToken handles POST /api/v1/clusters/{id}/agent-token/rotate/.
+// It sets rotation_pending_at on the cluster's durable agent token so the
+// agent's NEXT CONNECT performs the grace rotation (mint fresh, demote old to
+// previous, deliver fresh in the ACK). It does NOT change the live token, so
+// there is no mid-rotation lockout: the agent keeps using its held token until
+// it adopts the freshly-minted one.
+func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		return
+	}
+	rows, err := h.queries.SetClusterAgentTokenRotationPending(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to request agent token rotation")
+		return
+	}
+	if rows == 0 {
+		// Gated by SetClusterAgentTokenRotationPending: 0 rows means either no
+		// active token exists, or a rotation is already in flight (pending, or
+		// the agent hasn't yet adopted the last new token). Conflict either way —
+		// re-triggering would risk demoting the in-use previous hash and locking
+		// the agent out.
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "No agent token eligible for rotation: none is active or a rotation is already in flight")
+		return
+	}
+	recordAudit(r, h.queries, "agent.token.rotate.requested", "cluster", id.String(), cluster.Name, map[string]any{
+		"cluster_id": id.String(),
+		"trigger":    "admin_api",
+	})
+	RespondJSON(w, http.StatusAccepted, map[string]any{
+		"cluster_id":          id.String(),
+		"rotation_pending":    true,
+		"message":             "rotation will complete on the agent's next connect",
+	})
+}
+
+// RevokeAgentToken handles POST /api/v1/clusters/{id}/agent-token/revoke/.
+// It hard-revokes the durable agent token (sets revoked_at, clears the grace
+// previous_token_hash). After revoke, the agent's token fails validation, so
+// its next CONNECT is denied (401/policy violation) and an operator must
+// re-import the cluster to issue a fresh credential.
+func (h *ClusterHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		return
+	}
+	rows, err := h.queries.RevokeClusterAgentToken(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to revoke agent token")
+		return
+	}
+	if rows == 0 {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster has no active agent token to revoke")
+		return
+	}
+	recordAudit(r, h.queries, "agent.token.revoked", "cluster", id.String(), cluster.Name, map[string]any{
+		"cluster_id": id.String(),
+		"trigger":    "admin_api",
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{
+		"cluster_id": id.String(),
+		"revoked":    true,
+		"message":    "agent token revoked; re-import the cluster to issue a new credential",
+	})
 }
 
 // GetRegistryConfig handles GET /api/v1/clusters/{id}/registry/.

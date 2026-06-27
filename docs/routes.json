@@ -932,6 +932,14 @@
     "pattern": "/api/v1/clusters/{id}"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/agent-token/revoke"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/agent-token/rotate"
+  },
+  {
     "method": "GET",
     "pattern": "/api/v1/clusters/{id}/condition-remediation"
   },

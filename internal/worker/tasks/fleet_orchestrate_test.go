@@ -30,6 +30,12 @@ type fakeFleetQuerier struct {
 
 	clusters []sqlc.ListClustersForSelectorEvaluationRow
 
+	// rotate_agent_token (task A2). rotationPendingFor records the
+	// clusters the rotate dispatch flagged; rotationPendingRows controls
+	// the rows-affected so a "no token" cluster can be simulated.
+	rotationPendingFor  []uuid.UUID
+	rotationPendingRows int64
+
 	// Sub-operation state. tool_ops keyed by id; template_apps keyed
 	// by cluster_id.
 	toolOps      map[uuid.UUID]sqlc.ToolOperation
@@ -323,6 +329,16 @@ func (f *fakeFleetQuerier) UpsertClusterTemplateApplication(_ context.Context, a
 	return app, nil
 }
 
+func (f *fakeFleetQuerier) SetClusterAgentTokenRotationPending(_ context.Context, clusterID uuid.UUID) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rotationPendingFor = append(f.rotationPendingFor, clusterID)
+	if f.rotationPendingRows == 0 {
+		return 1, nil
+	}
+	return f.rotationPendingRows, nil
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // fakeFleetDispatcher
 // ─────────────────────────────────────────────────────────────────────
@@ -506,6 +522,51 @@ func TestFleetOperation_LaunchEvaluatesSelector(t *testing.T) {
 	}
 	if q.ops[op.ID].Status != FleetOpStatusRunning {
 		t.Errorf("expected running, got %q", q.ops[op.ID].Status)
+	}
+}
+
+// TestFleetOperation_RotateAgentTokenDispatch drives a rotate_agent_token
+// fleet operation to completion and asserts each target cluster had
+// rotation_pending_at set, with every target transitioning to completed (no
+// sub-operation polling needed). FAILS WITHOUT THE FIX: the reserved-type
+// path returned "not yet implemented", failing/ skipping every target.
+func TestFleetOperation_RotateAgentTokenDispatch(t *testing.T) {
+	q := newFakeFleetQuerier()
+	c1 := addCluster(q, map[string]string{"tier": "staging"})
+	c2 := addCluster(q, map[string]string{"tier": "staging"})
+
+	op := mkFleetOp("rotate-staging", FleetOpTypeRotateAgentToken, FleetStrategyParallel, FleetOnErrorAbort, 5,
+		map[string]any{"matchLabels": map[string]string{"tier": "staging"}})
+	q.ops[op.ID] = op
+
+	d := newFakeFleetDispatcher(q)
+	deps := FleetOrchestrateDeps{Queries: q, Dispatcher: d, MaintenanceWindow: NoopMaintenanceWindowChecker{}}
+
+	// Drive a few ticks: launch -> dispatch (set rotation_pending) ->
+	// poll (mark completed) -> finalize.
+	for i := 0; i < 4; i++ {
+		if err := runFleetOrchestrateTick(context.Background(), deps); err != nil {
+			t.Fatalf("tick %d: %v", i, err)
+		}
+	}
+
+	// rotation_pending_at was set for both clusters.
+	got := map[uuid.UUID]bool{}
+	for _, id := range q.rotationPendingFor {
+		got[id] = true
+	}
+	if !got[c1] || !got[c2] {
+		t.Fatalf("rotation pending not set for both clusters: %v", q.rotationPendingFor)
+	}
+
+	// Every target reached completed.
+	for _, tg := range q.targets[op.ID] {
+		if tg.Status != FleetTargetStatusCompleted {
+			t.Fatalf("target %s status = %q, want completed", tg.ClusterID, tg.Status)
+		}
+	}
+	if st := q.ops[op.ID].Status; st != FleetOpStatusCompleted {
+		t.Fatalf("operation status = %q, want completed", st)
 	}
 }
 

@@ -516,6 +516,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Queries:    queries,
 		Dispatcher: fleetDispatcher,
 	})
+	// Task A2: durable agent-token rotation policy sweep. DB-only deps —
+	// flags clusters due for rotation per their token_rotation_days policy.
+	tasks.ConfigureAgentTokenRotate(tasks.AgentTokenRotateDeps{
+		Queries: queries,
+	})
 	handler.RegisterClusterSnapshotsMetrics()
 	handler.WireSnapshotWorkerMetrics()
 	tasks.ConfigureClusterSnapshotTasks(tasks.ClusterSnapshotDeps{

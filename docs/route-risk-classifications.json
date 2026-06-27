@@ -37,6 +37,18 @@
       ],
       "classification": "covered-superuser-gated",
       "reason": "Mint/revoke the static bearer tokens the /scim/v2 provisioning chain authenticates against; the routes sit inside the JWT auth chain and are superuser-gated inside the handler (RequireSuperuser), the same posture as /admin/settings. The plaintext token is returned once on create and only its SHA-256 hash is persisted, with create/revoke audited via RecordAuditFromRequest."
+    },
+    {
+      "id": "cluster-agent-token-lifecycle",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/clusters/{id}/agent-token/rotate",
+        "/api/v1/clusters/{id}/agent-token/revoke"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
     }
   ]
 }

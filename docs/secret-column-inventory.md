@@ -27,6 +27,7 @@ classification.
 | `argocd_cluster_proxy_tokens.token_encrypted` | encrypted | Fernet ciphertext for service token material. |
 | `cluster_registration_tokens.token_hash` | hashed | Lookup hash for short-lived cluster registration tokens. |
 | `cluster_agent_tokens.token_hash` | hashed | Lookup hash for durable cluster agent tokens. |
+| `cluster_agent_tokens.previous_token_hash` | hashed | Lookup hash for the previous durable agent token during a rotation grace window; cleared once the agent adopts the new token (or by the grace-TTL backstop). |
 | `cluster_registry_configs.registry_password_encrypted` | encrypted | Fernet ciphertext for registry passwords; new registry writes use this column when a Fernet key is configured. |
 | `scim_tokens.token_hash` | hashed | Lookup hash for SCIM provisioning bearer tokens; plaintext is shown once at creation and never stored. |
 

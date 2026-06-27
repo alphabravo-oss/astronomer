@@ -547,14 +547,17 @@ type Cluster struct {
 }
 
 type ClusterAgentToken struct {
-	ID         uuid.UUID          `json:"id"`
-	ClusterID  uuid.UUID          `json:"cluster_id"`
-	Token      string             `json:"token"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
-	CreatedAt  time.Time          `json:"created_at"`
-	UpdatedAt  time.Time          `json:"updated_at"`
-	TokenHash  string             `json:"token_hash"`
-	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	ID                uuid.UUID          `json:"id"`
+	ClusterID         uuid.UUID          `json:"cluster_id"`
+	Token             string             `json:"token"`
+	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	TokenHash         string             `json:"token_hash"`
+	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
+	PreviousTokenHash pgtype.Text        `json:"previous_token_hash"`
+	RotationPendingAt pgtype.Timestamptz `json:"rotation_pending_at"`
+	LastRotatedAt     pgtype.Timestamptz `json:"last_rotated_at"`
 }
 
 type ClusterCondition struct {

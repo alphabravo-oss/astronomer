@@ -33,7 +33,14 @@ type Querier interface {
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
+	// Backstop sweep: clear previous_token_hash for rows whose rotation completed
+	// more than the supplied interval ago but whose old hash was never cleared by
+	// a new-token CONNECT (e.g. the agent crashed before reconnecting).
+	ClearExpiredAgentTokenRotationGrace(ctx context.Context, graceMinutes int32) (int64, error)
 	ClearMustChangePassword(ctx context.Context, id uuid.UUID) error
+	// Called on the first CONNECT that authenticates with the NEW current token:
+	// the old token is no longer needed, so retire it (revoke the previous hash).
+	ClearPreviousClusterAgentTokenHash(ctx context.Context, id uuid.UUID) error
 	// Sprint 086 — closes orphan "running" step rows on a given
 	// (cluster_id, step_name). The orchestrator's auto-retry path was
 	// writing a fresh `template_applying` row on every retry without
@@ -534,6 +541,10 @@ type Querier interface {
 	GetCloudCredentialByID(ctx context.Context, id uuid.UUID) (CloudCredential, error)
 	GetCloudCredentialByProjectAndName(ctx context.Context, arg GetCloudCredentialByProjectAndNameParams) (CloudCredential, error)
 	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error)
+	// During a rotation grace window the agent may still be presenting the OLD
+	// token (it has not yet adopted the freshly-minted one), so we accept EITHER
+	// the live token_hash OR the previous_token_hash. revoked_at still hard-gates:
+	// a revoked row matches neither branch.
 	GetClusterAgentTokenByToken(ctx context.Context, dollar_1 string) (ClusterAgentToken, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error)
 	GetClusterByName(ctx context.Context, name string) (Cluster, error)
@@ -966,6 +977,12 @@ type Querier interface {
 	// their row in the DB for forensics but never appear in the UI list.
 	ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error)
 	ListClustersByStatus(ctx context.Context, arg ListClustersByStatusParams) ([]Cluster, error)
+	// Periodic policy: join each cluster's durable token to its registration
+	// policy and surface clusters whose token_rotation_days policy (>0) has
+	// elapsed since the last rotation (or token creation, if never rotated) and
+	// which don't already have a pending/active rotation. last_rotated_at NULL
+	// means the token has never been rotated, so created_at is the age reference.
+	ListClustersDueForAgentTokenRotation(ctx context.Context, rowLimit int32) ([]ListClustersDueForAgentTokenRotationRow, error)
 	// All non-decommissioned clusters. The orchestrator's selector
 	// evaluator walks this list in Go (matchLabels intersection is a
 	// string-map comparison that's easier to reason about than a JSONB
@@ -1414,6 +1431,10 @@ type Querier interface {
 	// old row and mint a fresh one, keeping at most one valid token per cluster and
 	// preventing token pileup.
 	RevokeAPITokensByName(ctx context.Context, arg RevokeAPITokensByNameParams) error
+	// Standalone revocation: the durable token (and any grace token) is denied
+	// from the next CONNECT onward. Clears previous_token_hash so the grace
+	// window can't keep an already-revoked credential alive.
+	RevokeClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// JWT session revocation.
 	//
 	// Two layers:
@@ -1424,6 +1445,19 @@ type Querier interface {
 	//      to enumerate them — the JWT validator rejects any token whose
 	//      iat predates the cutoff.
 	RevokeJWT(ctx context.Context, arg RevokeJWTParams) error
+	// Performs the grace rotation atomically: the current token_hash moves to
+	// previous_token_hash (so the old token keeps validating until the agent
+	// adopts the new one), token/token_hash become the freshly-minted values,
+	// last_rotated_at is stamped and rotation_pending_at is cleared.
+	RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error)
+	// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
+	// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
+	// when a rotation is already in flight: rotation_pending_at already set (trigger
+	// not yet consumed) or previous_token_hash still present (grace window — the
+	// agent hasn't adopted the last new token yet). Gating here prevents a
+	// double-rotation that would demote the still-in-use previous hash a second
+	// time and strand an agent still holding the old token.
+	SetClusterAgentTokenRotationPending(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	SetClusterInstallBaseline(ctx context.Context, arg SetClusterInstallBaselineParams) (SetClusterInstallBaselineRow, error)
 	SetClusterOwnership(ctx context.Context, arg SetClusterOwnershipParams) (SetClusterOwnershipRow, error)
 	// Unconditional status set. The pause/resume/abort handler endpoints

@@ -127,6 +127,12 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// one screen refresh. Per-tick budget is 30s — overflow rolls
 		// into the next tick (no lease held across ticks).
 		{"@every 10s", tasks.FleetOrchestrateType, "fleet operations orchestrator"},
+		// Task A2: durable agent-token rotation policy sweep. Hourly —
+		// reads each cluster's token_rotation_days policy and flags
+		// rotation_pending_at on tokens older than the policy. The grace
+		// rotation itself happens on the agent's next connect, so an hourly
+		// cadence is plenty (rotation_days is measured in days).
+		{"@every 1h", tasks.AgentTokenRotateSweepType, "durable agent-token rotation policy sweep"},
 		// Migration 057: maintenance-window deferred-op dispatcher.
 		// 60s cadence — the dispatcher pulls rows whose deferred_until
 		// has elapsed and re-fires the queued operation through the

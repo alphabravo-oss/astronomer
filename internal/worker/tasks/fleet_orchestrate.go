@@ -191,6 +191,11 @@ type FleetOrchestrateQuerier interface {
 	GetClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterTemplateApplication, error)
 	GetClusterTemplateByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterTemplate, error)
 	UpsertClusterTemplateApplication(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationParams) (sqlc.ClusterTemplateApplication, error)
+
+	// rotate_agent_token (task A2). Setting rotation_pending_at is the
+	// entire dispatch — the tunnel server drives the grace rotation on the
+	// agent's next CONNECT, so there is no sub-operation to poll.
+	SetClusterAgentTokenRotationPending(ctx context.Context, clusterID uuid.UUID) (int64, error)
 }
 
 // FleetSubOperationDispatcher is the bridge to whatever queue the
@@ -582,9 +587,17 @@ func pollFleetTarget(ctx context.Context, deps FleetOrchestrateDeps, op sqlc.Fle
 			return nil
 		}
 
+	case FleetOpTypeRotateAgentToken:
+		// rotation_pending_at was set at dispatch; the tunnel server drives
+		// the rotation asynchronously on the agent's next CONNECT. There's
+		// nothing to poll, so the target is considered done the moment the
+		// flag is set — mark it completed.
+		_, err := deps.Queries.MarkFleetTargetCompleted(ctx, target.ID)
+		return err
+
 	default:
-		// Reserved operation types (drain_namespaces, rotate_agent_token,
-		// custom_helm) — orchestrator can't drive them yet, so a target
+		// Reserved operation types (drain_namespaces, custom_helm) —
+		// orchestrator can't drive them yet, so a target
 		// whose dispatch produced no sub-operation just stays at
 		// 'running' forever otherwise. Skip with a clear last_error.
 		_, _ = deps.Queries.MarkFleetTargetSkipped(ctx, sqlc.MarkFleetTargetSkippedParams{
@@ -694,7 +707,22 @@ func dispatchOneFleetTarget(ctx context.Context, deps FleetOrchestrateDeps, op s
 		}
 		return deps.Dispatcher.DispatchApplyTemplate(ctx, target.ClusterID, tmplID)
 
-	case FleetOpTypeDrainNamespaces, FleetOpTypeRotateAgentToken, FleetOpTypeCustomHelm:
+	case FleetOpTypeRotateAgentToken:
+		// Rotation has no queued sub-operation: setting rotation_pending_at
+		// is the whole dispatch. The tunnel server completes the rotation on
+		// the agent's next CONNECT. We stamp the cluster_id as the
+		// sub_operation_id so the target row carries a non-nil id, and
+		// pollFleetTarget marks it completed immediately on the next tick.
+		rows, err := deps.Queries.SetClusterAgentTokenRotationPending(ctx, target.ClusterID)
+		if err != nil {
+			return uuid.Nil, "", fmt.Errorf("set rotation pending: %w", err)
+		}
+		if rows == 0 {
+			return uuid.Nil, "", fmt.Errorf("cluster %s has no active agent token", target.ClusterID)
+		}
+		return target.ClusterID, FleetOpTypeRotateAgentToken, nil
+
+	case FleetOpTypeDrainNamespaces, FleetOpTypeCustomHelm:
 		// TODO: implement in follow-up sprint. We deliberately return
 		// an error so the orchestrator marks the target failed with a
 		// clear message rather than stranding it pending forever.

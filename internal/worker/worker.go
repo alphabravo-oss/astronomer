@@ -273,6 +273,10 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeSIEMDispatch, instrumentTask(TypeSIEMDispatch, tasks.HandleSIEMDispatch))
 	w.mux.HandleFunc(TypeSIEMCleanupOld, instrumentTask(TypeSIEMCleanupOld, tasks.HandleSIEMCleanupOld))
 	w.mux.HandleFunc(TypeFleetOrchestrate, instrumentTask(TypeFleetOrchestrate, tasks.HandleFleetOrchestrate))
+	// Durable agent-token rotation policy sweep (task A2). DB-only —
+	// flags clusters whose token_rotation_days policy elapsed; the tunnel
+	// server drives the grace rotation on the agent's next connect.
+	w.mux.HandleFunc(tasks.AgentTokenRotateSweepType, instrumentTask(tasks.AgentTokenRotateSweepType, tasks.HandleAgentTokenRotateSweep))
 	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
 	w.mux.HandleFunc(TypeTaskOutboxDispatch, instrumentTask(TypeTaskOutboxDispatch, tasks.HandleTaskOutboxDispatch))
 	// Migration 060: GitOps cluster registration sync.

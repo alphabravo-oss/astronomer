@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -44,6 +45,8 @@ type recordingValidator struct {
 	updateConnArgs     []sqlc.UpdateAgentConnectionStatusParams
 	pingIDs            []uuid.UUID
 	upsertAgentArgs    []sqlc.UpsertClusterAgentTokenParams
+	rotateAgentArgs    []sqlc.RotateClusterAgentTokenParams
+	clearedPreviousIDs []uuid.UUID
 	touchedAgentIDs    []uuid.UUID
 	disconnectClusters []uuid.UUID
 	pendingOp          *sqlc.AgentLifecycleOperation
@@ -85,7 +88,19 @@ func (r *recordingValidator) GetClusterAgentTokenByToken(_ context.Context, toke
 	if r.clusterAgentErr != nil {
 		return sqlc.ClusterAgentToken{}, r.clusterAgentErr
 	}
-	if token != "" && (r.clusterAgentToken.Token == token || r.clusterAgentToken.TokenHash == auth.HashOpaqueToken(token)) {
+	if token == "" {
+		return sqlc.ClusterAgentToken{}, errors.New("not found")
+	}
+	hash := auth.HashOpaqueToken(token)
+	// revoked rows match nothing (mirrors the revoked_at IS NULL gate).
+	if r.clusterAgentToken.RevokedAt.Valid {
+		return sqlc.ClusterAgentToken{}, errors.New("not found")
+	}
+	// Accept the live token (plaintext or hash) OR the grace previous hash —
+	// mirrors GetClusterAgentTokenByToken's OR branch.
+	if r.clusterAgentToken.Token == token ||
+		r.clusterAgentToken.TokenHash == hash ||
+		(r.clusterAgentToken.PreviousTokenHash.Valid && r.clusterAgentToken.PreviousTokenHash.String == hash) {
 		return r.clusterAgentToken, nil
 	}
 	return sqlc.ClusterAgentToken{}, errors.New("not found")
@@ -103,6 +118,34 @@ func (r *recordingValidator) TouchClusterAgentToken(_ context.Context, id uuid.U
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.touchedAgentIDs = append(r.touchedAgentIDs, id)
+	return nil
+}
+
+func (r *recordingValidator) RotateClusterAgentToken(_ context.Context, arg sqlc.RotateClusterAgentTokenParams) (sqlc.ClusterAgentToken, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rotateAgentArgs = append(r.rotateAgentArgs, arg)
+	// Grace semantics: the current token_hash becomes previous_token_hash,
+	// the freshly-minted hash becomes the live one, rotation_pending clears.
+	prev := r.clusterAgentToken.TokenHash
+	r.clusterAgentToken = sqlc.ClusterAgentToken{
+		ID:                arg.ID,
+		ClusterID:         r.clusterAgentToken.ClusterID,
+		Token:             arg.Token,
+		TokenHash:         arg.TokenHash,
+		PreviousTokenHash: pgtype.Text{String: prev, Valid: prev != ""},
+		LastRotatedAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	return r.clusterAgentToken, nil
+}
+
+func (r *recordingValidator) ClearPreviousClusterAgentTokenHash(_ context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.clearedPreviousIDs = append(r.clearedPreviousIDs, id)
+	if r.clusterAgentToken.ID == id {
+		r.clusterAgentToken.PreviousTokenHash = pgtype.Text{}
+	}
 	return nil
 }
 
@@ -217,6 +260,22 @@ func (r *recordingValidator) SnapshotAgentTokenUpserts() []sqlc.UpsertClusterAge
 	defer r.mu.Unlock()
 	out := make([]sqlc.UpsertClusterAgentTokenParams, len(r.upsertAgentArgs))
 	copy(out, r.upsertAgentArgs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotAgentTokenRotations() []sqlc.RotateClusterAgentTokenParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.RotateClusterAgentTokenParams, len(r.rotateAgentArgs))
+	copy(out, r.rotateAgentArgs)
+	return out
+}
+
+func (r *recordingValidator) SnapshotClearedPreviousIDs() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]uuid.UUID, len(r.clearedPreviousIDs))
+	copy(out, r.clearedPreviousIDs)
 	return out
 }
 

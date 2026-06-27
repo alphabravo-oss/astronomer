@@ -22,6 +22,22 @@ type clusterRegistryTestQuerier struct {
 	// platformSettings is consulted by GetPlatformSetting when non-nil, so tests
 	// can stub registration.ca_bundle (and similar) without a real DB.
 	platformSettings map[string]sqlc.PlatformSetting
+	// Agent-token rotation/revocation (task A2). rowsAffected drives the
+	// 0-rows -> 404 path; the called* flags let tests assert wiring.
+	agentTokenRotationRows  int64
+	agentTokenRevokeRows    int64
+	rotationPendingCalledID uuid.UUID
+	revokeCalledID          uuid.UUID
+}
+
+func (q *clusterRegistryTestQuerier) SetClusterAgentTokenRotationPending(_ context.Context, clusterID uuid.UUID) (int64, error) {
+	q.rotationPendingCalledID = clusterID
+	return q.agentTokenRotationRows, nil
+}
+
+func (q *clusterRegistryTestQuerier) RevokeClusterAgentToken(_ context.Context, clusterID uuid.UUID) (int64, error) {
+	q.revokeCalledID = clusterID
+	return q.agentTokenRevokeRows, nil
 }
 
 func (q *clusterRegistryTestQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {

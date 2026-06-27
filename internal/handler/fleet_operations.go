@@ -211,10 +211,11 @@ type CreateFleetOperationRequest struct {
 // 400 at create time — better to fail fast than to enqueue a fanout
 // that's going to skip every target.
 var fleetOpTypesImplemented = map[string]struct{}{
-	tasks.FleetOpTypeToolUpgrade:   {},
-	tasks.FleetOpTypeToolInstall:   {},
-	tasks.FleetOpTypeToolUninstall: {},
-	tasks.FleetOpTypeApplyTemplate: {},
+	tasks.FleetOpTypeToolUpgrade:      {},
+	tasks.FleetOpTypeToolInstall:      {},
+	tasks.FleetOpTypeToolUninstall:    {},
+	tasks.FleetOpTypeApplyTemplate:    {},
+	tasks.FleetOpTypeRotateAgentToken: {},
 }
 
 // fleetOpTypesReserved are the operation types we'll accept the name
@@ -228,9 +229,8 @@ var fleetOpTypesImplemented = map[string]struct{}{
 // the implemented map. This map exists so a future code reader knows
 // the distinction.
 var fleetOpTypesReserved = map[string]struct{}{
-	tasks.FleetOpTypeDrainNamespaces:  {},
-	tasks.FleetOpTypeRotateAgentToken: {},
-	tasks.FleetOpTypeCustomHelm:       {},
+	tasks.FleetOpTypeDrainNamespaces: {},
+	tasks.FleetOpTypeCustomHelm:      {},
 }
 
 // validateFleetOperation validates a CreateFleetOperationRequest. The

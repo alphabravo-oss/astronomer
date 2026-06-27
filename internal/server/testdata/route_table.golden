@@ -318,6 +318,8 @@ POST /api/v1/clusters/{cluster_id}/snapshots/{id}/restore
 POST /api/v1/clusters/{cluster_id}/template
 POST /api/v1/clusters/{cluster_id}/template/reapply
 POST /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart
+POST /api/v1/clusters/{id}/agent-token/revoke
+POST /api/v1/clusters/{id}/agent-token/rotate
 POST /api/v1/clusters/{id}/generate-kubeconfig
 POST /api/v1/clusters/{id}/generate_kubeconfig
 POST /api/v1/clusters/{id}/ownership/takeover

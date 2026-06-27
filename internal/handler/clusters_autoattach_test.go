@@ -198,6 +198,12 @@ func (q *fakeAutoAttachClusterQuerier) GetRegistrationTokenByToken(context.Conte
 func (q *fakeAutoAttachClusterQuerier) MarkRegistrationTokenUsed(context.Context, uuid.UUID) error {
 	return nil
 }
+func (q *fakeAutoAttachClusterQuerier) SetClusterAgentTokenRotationPending(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (q *fakeAutoAttachClusterQuerier) RevokeClusterAgentToken(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
 func (q *fakeAutoAttachClusterQuerier) GetClusterRegistryConfig(context.Context, uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
 	return sqlc.ClusterRegistryConfig{}, pgx.ErrNoRows
 }

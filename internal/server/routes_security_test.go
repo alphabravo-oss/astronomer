@@ -270,6 +270,12 @@ func (routeSecurityClusterQuerier) GetRegistrationTokenByToken(context.Context, 
 func (routeSecurityClusterQuerier) MarkRegistrationTokenUsed(context.Context, uuid.UUID) error {
 	return nil
 }
+func (routeSecurityClusterQuerier) SetClusterAgentTokenRotationPending(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (routeSecurityClusterQuerier) RevokeClusterAgentToken(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
 func (routeSecurityClusterQuerier) GetClusterRegistryConfig(context.Context, uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
 	return sqlc.ClusterRegistryConfig{}, pgx.ErrNoRows
 }

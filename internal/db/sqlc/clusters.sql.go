@@ -14,6 +14,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearExpiredAgentTokenRotationGrace = `-- name: ClearExpiredAgentTokenRotationGrace :execrows
+UPDATE cluster_agent_tokens
+SET previous_token_hash = NULL
+WHERE previous_token_hash IS NOT NULL
+  AND last_rotated_at IS NOT NULL
+  AND last_rotated_at < now() - make_interval(mins => $1::int)
+`
+
+// Backstop sweep: clear previous_token_hash for rows whose rotation completed
+// more than the supplied interval ago but whose old hash was never cleared by
+// a new-token CONNECT (e.g. the agent crashed before reconnecting).
+func (q *Queries) ClearExpiredAgentTokenRotationGrace(ctx context.Context, graceMinutes int32) (int64, error) {
+	result, err := q.db.Exec(ctx, clearExpiredAgentTokenRotationGrace, graceMinutes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearPreviousClusterAgentTokenHash = `-- name: ClearPreviousClusterAgentTokenHash :exec
+UPDATE cluster_agent_tokens
+SET previous_token_hash = NULL
+WHERE id = $1 AND previous_token_hash IS NOT NULL
+`
+
+// Called on the first CONNECT that authenticates with the NEW current token:
+// the old token is no longer needed, so retire it (revoke the previous hash).
+func (q *Queries) ClearPreviousClusterAgentTokenHash(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearPreviousClusterAgentTokenHash, id)
+	return err
+}
+
 const countClusters = `-- name: CountClusters :one
 SELECT count(*) FROM clusters WHERE decommissioned_at IS NULL
 `
@@ -382,7 +414,7 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 }
 
 const getClusterAgentTokenByClusterID = `-- name: GetClusterAgentTokenByClusterID :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error) {
@@ -397,17 +429,26 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 		&i.UpdatedAt,
 		&i.TokenHash,
 		&i.RevokedAt,
+		&i.PreviousTokenHash,
+		&i.RotationPendingAt,
+		&i.LastRotatedAt,
 	)
 	return i, err
 }
 
 const getClusterAgentTokenByToken = `-- name: GetClusterAgentTokenByToken :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at FROM cluster_agent_tokens
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at FROM cluster_agent_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
-   OR (token_hash = '' AND token = $1::text))
+   OR (token_hash = '' AND token = $1::text)
+   OR (previous_token_hash IS NOT NULL
+       AND previous_token_hash = encode(digest($1::text, 'sha256'), 'hex')))
   AND revoked_at IS NULL
 `
 
+// During a rotation grace window the agent may still be presenting the OLD
+// token (it has not yet adopted the freshly-minted one), so we accept EITHER
+// the live token_hash OR the previous_token_hash. revoked_at still hard-gates:
+// a revoked row matches neither branch.
 func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, dollar_1 string) (ClusterAgentToken, error) {
 	row := q.db.QueryRow(ctx, getClusterAgentTokenByToken, dollar_1)
 	var i ClusterAgentToken
@@ -420,6 +461,9 @@ func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, dollar_1 stri
 		&i.UpdatedAt,
 		&i.TokenHash,
 		&i.RevokedAt,
+		&i.PreviousTokenHash,
+		&i.RotationPendingAt,
+		&i.LastRotatedAt,
 	)
 	return i, err
 }
@@ -873,6 +917,49 @@ func (q *Queries) ListClustersByStatus(ctx context.Context, arg ListClustersBySt
 	return items, nil
 }
 
+const listClustersDueForAgentTokenRotation = `-- name: ListClustersDueForAgentTokenRotation :many
+SELECT t.cluster_id, p.token_rotation_days
+FROM cluster_agent_tokens t
+JOIN cluster_registration_policies p ON p.cluster_id = t.cluster_id
+WHERE t.revoked_at IS NULL
+  AND t.rotation_pending_at IS NULL
+  AND t.previous_token_hash IS NULL
+  AND p.token_rotation_days > 0
+  AND COALESCE(t.last_rotated_at, t.created_at) < now() - make_interval(days => p.token_rotation_days)
+ORDER BY COALESCE(t.last_rotated_at, t.created_at) ASC
+LIMIT $1
+`
+
+type ListClustersDueForAgentTokenRotationRow struct {
+	ClusterID         uuid.UUID `json:"cluster_id"`
+	TokenRotationDays int32     `json:"token_rotation_days"`
+}
+
+// Periodic policy: join each cluster's durable token to its registration
+// policy and surface clusters whose token_rotation_days policy (>0) has
+// elapsed since the last rotation (or token creation, if never rotated) and
+// which don't already have a pending/active rotation. last_rotated_at NULL
+// means the token has never been rotated, so created_at is the age reference.
+func (q *Queries) ListClustersDueForAgentTokenRotation(ctx context.Context, rowLimit int32) ([]ListClustersDueForAgentTokenRotationRow, error) {
+	rows, err := q.db.Query(ctx, listClustersDueForAgentTokenRotation, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClustersDueForAgentTokenRotationRow{}
+	for rows.Next() {
+		var i ListClustersDueForAgentTokenRotationRow
+		if err := rows.Scan(&i.ClusterID, &i.TokenRotationDays); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markClusterRegistryApplied = `-- name: MarkClusterRegistryApplied :exec
 UPDATE cluster_registry_configs SET
     last_applied_at  = now(),
@@ -908,6 +995,91 @@ UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1
 func (q *Queries) MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markRegistrationTokenUsed, id)
 	return err
+}
+
+const revokeClusterAgentToken = `-- name: RevokeClusterAgentToken :execrows
+UPDATE cluster_agent_tokens
+SET revoked_at = now(),
+    previous_token_hash = NULL,
+    rotation_pending_at = NULL
+WHERE cluster_id = $1 AND revoked_at IS NULL
+`
+
+// Standalone revocation: the durable token (and any grace token) is denied
+// from the next CONNECT onward. Clears previous_token_hash so the grace
+// window can't keep an already-revoked credential alive.
+func (q *Queries) RevokeClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeClusterAgentToken, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const rotateClusterAgentToken = `-- name: RotateClusterAgentToken :one
+UPDATE cluster_agent_tokens
+SET previous_token_hash = token_hash,
+    token = $1::text,
+    token_hash = COALESCE(NULLIF($2::text, ''), encode(digest($1::text, 'sha256'), 'hex')),
+    last_used_at = now(),
+    last_rotated_at = now(),
+    rotation_pending_at = NULL,
+    revoked_at = NULL
+WHERE id = $3
+RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at
+`
+
+type RotateClusterAgentTokenParams struct {
+	Token     string    `json:"token"`
+	TokenHash string    `json:"token_hash"`
+	ID        uuid.UUID `json:"id"`
+}
+
+// Performs the grace rotation atomically: the current token_hash moves to
+// previous_token_hash (so the old token keeps validating until the agent
+// adopts the new one), token/token_hash become the freshly-minted values,
+// last_rotated_at is stamped and rotation_pending_at is cleared.
+func (q *Queries) RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error) {
+	row := q.db.QueryRow(ctx, rotateClusterAgentToken, arg.Token, arg.TokenHash, arg.ID)
+	var i ClusterAgentToken
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Token,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TokenHash,
+		&i.RevokedAt,
+		&i.PreviousTokenHash,
+		&i.RotationPendingAt,
+		&i.LastRotatedAt,
+	)
+	return i, err
+}
+
+const setClusterAgentTokenRotationPending = `-- name: SetClusterAgentTokenRotationPending :execrows
+UPDATE cluster_agent_tokens
+SET rotation_pending_at = now()
+WHERE cluster_id = $1
+  AND revoked_at IS NULL
+  AND rotation_pending_at IS NULL
+  AND previous_token_hash IS NULL
+`
+
+// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
+// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
+// when a rotation is already in flight: rotation_pending_at already set (trigger
+// not yet consumed) or previous_token_hash still present (grace window — the
+// agent hasn't adopted the last new token yet). Gating here prevents a
+// double-rotation that would demote the still-in-use previous hash a second
+// time and strand an agent still holding the old token.
+func (q *Queries) SetClusterAgentTokenRotationPending(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setClusterAgentTokenRotationPending, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const touchClusterAgentToken = `-- name: TouchClusterAgentToken :exec
@@ -1115,7 +1287,7 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     token_hash = EXCLUDED.token_hash,
     last_used_at = now(),
     revoked_at = NULL
-RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at
+RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at
 `
 
 type UpsertClusterAgentTokenParams struct {
@@ -1136,6 +1308,9 @@ func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertCluster
 		&i.UpdatedAt,
 		&i.TokenHash,
 		&i.RevokedAt,
+		&i.PreviousTokenHash,
+		&i.RotationPendingAt,
+		&i.LastRotatedAt,
 	)
 	return i, err
 }

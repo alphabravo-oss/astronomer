@@ -263,6 +263,12 @@ type AgentTokenValidator interface {
 	GetClusterAgentTokenByToken(ctx context.Context, token string) (sqlc.ClusterAgentToken, error)
 	UpsertClusterAgentToken(ctx context.Context, arg sqlc.UpsertClusterAgentTokenParams) (sqlc.ClusterAgentToken, error)
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
+	// Rotation grace (task A2). RotateClusterAgentToken performs the
+	// mint-fresh / move-old-to-previous step atomically when a rotation is
+	// pending; ClearPreviousClusterAgentTokenHash retires the old hash once
+	// the agent reconnects with the new token.
+	RotateClusterAgentToken(ctx context.Context, arg sqlc.RotateClusterAgentTokenParams) (sqlc.ClusterAgentToken, error)
+	ClearPreviousClusterAgentTokenHash(ctx context.Context, id uuid.UUID) error
 	UpdateClusterHeartbeat(ctx context.Context, arg sqlc.UpdateClusterHeartbeatParams) error
 	UpsertClusterHealthStatus(ctx context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error)
 	CreateAgentConnection(ctx context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error)
@@ -370,7 +376,13 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			_ = conn.Close(websocket.StatusPolicyViolation, err.Error())
 			return
 		}
-		if tokenKind == "registration" && durableToken != "" && durableToken != payload.Token {
+		// Deliver a fresh durable token in the ACK whenever the server
+		// minted one that differs from what the agent presented. This
+		// covers both the registration->durable exchange and the rotation
+		// grace path (agent presented its current token, a rotation was
+		// pending, server minted+rotated to a new token).
+		if durableToken != "" && durableToken != payload.Token &&
+			(tokenKind == "registration" || tokenKind == "agent") {
 			ackPayload.AgentToken = durableToken
 		}
 
@@ -852,6 +864,45 @@ func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UU
 		if agentToken.ClusterID != clusterID {
 			return "", "", fmt.Errorf("agent token does not match cluster")
 		}
+
+		// Rotation grace. When a rotation is pending, the very next CONNECT
+		// (presenting the still-valid current token) mints a fresh durable
+		// token, demotes the old hash to previous_token_hash so it keeps
+		// validating until the agent adopts the new one, and delivers the
+		// fresh token in the ACK. The agent never holds an invalid token.
+		if agentToken.RotationPendingAt.Valid {
+			presentedHash := auth.HashOpaqueToken(payload.Token)
+			// Only rotate when the agent presented the CURRENT token. If it
+			// presented the previous (already-rotated-out) token we must not
+			// rotate again — that would strand the in-flight new token.
+			if agentToken.TokenHash == presentedHash {
+				if fresh, err := h.rotateClusterAgentToken(ctx, clusterID, agentToken); err == nil {
+					return "agent", fresh, nil
+				} else {
+					h.log.Warn("failed to rotate cluster agent token; continuing with current token",
+						slog.String("cluster_id", payload.ClusterID),
+						slog.String("error", err.Error()),
+					)
+				}
+			}
+		}
+
+		// First CONNECT with the NEW current token retires the old hash
+		// (revoke the previous token now that the agent has adopted the new
+		// one). Skip when the agent presented the previous token — that's the
+		// grace path and clearing here would lock it out.
+		if agentToken.PreviousTokenHash.Valid && agentToken.PreviousTokenHash.String != "" {
+			presentedHash := auth.HashOpaqueToken(payload.Token)
+			if agentToken.TokenHash == presentedHash {
+				if err := h.validator.ClearPreviousClusterAgentTokenHash(ctx, agentToken.ID); err != nil {
+					h.log.Warn("failed to clear previous agent token hash",
+						slog.String("cluster_id", payload.ClusterID),
+						slog.String("error", err.Error()),
+					)
+				}
+			}
+		}
+
 		if err := h.validator.TouchClusterAgentToken(ctx, agentToken.ID); err != nil {
 			h.log.Warn("failed to touch cluster agent token",
 				slog.String("cluster_id", payload.ClusterID),
@@ -862,6 +913,28 @@ func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UU
 	}
 
 	return "", "", fmt.Errorf("invalid registration token")
+}
+
+// rotateClusterAgentToken mints a fresh durable token and performs the grace
+// rotation (old hash -> previous_token_hash, fresh -> token/token_hash,
+// stamp last_rotated_at, clear rotation_pending_at). Returns the plaintext
+// fresh token for delivery in the CONNECT_ACK.
+func (h *Hub) rotateClusterAgentToken(ctx context.Context, clusterID uuid.UUID, current sqlc.ClusterAgentToken) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := base64.URLEncoding.EncodeToString(b)
+	row, err := h.validator.RotateClusterAgentToken(ctx, sqlc.RotateClusterAgentTokenParams{
+		ID:        current.ID,
+		Token:     "",
+		TokenHash: auth.HashOpaqueToken(token),
+	})
+	if err != nil {
+		return "", err
+	}
+	h.recordAgentTokenRotationCompleted(ctx, clusterID, row)
+	return token, nil
 }
 
 func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (string, error) {
@@ -917,6 +990,35 @@ func (h *Hub) recordAgentTokenRotated(ctx context.Context, clusterID uuid.UUID, 
 			"hash_algorithm":           "sha256",
 			"plaintext_stored":         row.Token != "",
 			"source":                   "registration_token_exchange",
+		},
+	})
+}
+
+// recordAgentTokenRotationCompleted audits a grace rotation finishing on the
+// tunnel: a pending rotation was driven to completion on the agent's CONNECT
+// and a fresh durable token was delivered in the ACK.
+func (h *Hub) recordAgentTokenRotationCompleted(ctx context.Context, clusterID uuid.UUID, row sqlc.ClusterAgentToken) {
+	q, ok := h.validator.(audit.Querier)
+	if !ok {
+		return
+	}
+	hashPrefix := row.TokenHash
+	if len(hashPrefix) > 12 {
+		hashPrefix = hashPrefix[:12]
+	}
+	audit.Record(ctx, q, audit.Event{
+		Source:          "tunnel",
+		ActorAuthMethod: "agent_token",
+		Action:          "agent.token.rotation.confirmed",
+		ResourceType:    "cluster",
+		ResourceID:      clusterID.String(),
+		Detail: map[string]any{
+			"cluster_id":        clusterID.String(),
+			"cluster_token_id":  row.ID.String(),
+			"token_hash_prefix": hashPrefix,
+			"hash_algorithm":    "sha256",
+			"grace_active":      row.PreviousTokenHash.Valid && row.PreviousTokenHash.String != "",
+			"source":            "rotation_grace",
 		},
 	})
 }
