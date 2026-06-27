@@ -252,7 +252,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | ID | Title | Closes | Phase | Effort | Status |
 |---|---|---|---|---|---|
 | A1 | Server-CA pinning + reject ws:// | H1,M1,L5 | 1 | L | [x] RESOLVED a0672b1 (G1 soak: A/B/C/D pass) |
-| A2 | Durable-token rotation + revoke | H2,M7,L14 | 1 | L | [ ] |
+| A2 | Durable-token rotation + revoke | H2,M7,L14 | 1 | L | [x] RESOLVED fbeac02+03acd34 (G2 soak: adopt→rotate→grace→revoke pass; revoke force-disconnects live session) |
 | A3 | Registration-token single-use + TTL | M2,L1,L2 | 1 | M | [ ] |
 | A4 | Connect rate-limit + audit + replay | M5,M6,L13,L3 | 1 | M | [ ] |
 | B1 | HA + complete decommission | H8,H9,M12,M14,L15,L16 | 2 | XL | [ ] |
