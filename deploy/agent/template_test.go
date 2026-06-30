@@ -364,6 +364,43 @@ func TestRenderInstallYAMLEscapesScalars(t *testing.T) {
 	}
 }
 
+// TestEveryOwnedNamespaceHasExplicitPSA (L6) asserts every Astronomer-owned
+// namespace carries an explicit pod-security.kubernetes.io/enforce label, so its
+// PSA posture never silently inherits an unpredictable cluster default (the
+// "real bite" being fluent-bit's hostPath in astronomer-logging).
+func TestEveryOwnedNamespaceHasExplicitPSA(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL: "https://h", ClusterID: "c1", RegistrationToken: "t", AgentImage: "i:v1", PrivilegeProfile: "viewer",
+	})
+	type nsDoc struct {
+		Kind     string `yaml:"kind"`
+		Metadata struct {
+			Name   string            `yaml:"name"`
+			Labels map[string]string `yaml:"labels"`
+		} `yaml:"metadata"`
+	}
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	seen := map[string]bool{}
+	for {
+		var d nsDoc
+		if err := dec.Decode(&d); err != nil {
+			break
+		}
+		if d.Kind != "Namespace" {
+			continue
+		}
+		seen[d.Metadata.Name] = true
+		if d.Metadata.Labels["pod-security.kubernetes.io/enforce"] == "" {
+			t.Errorf("owned namespace %q has no explicit pod-security.kubernetes.io/enforce label (L6)", d.Metadata.Name)
+		}
+	}
+	for _, want := range AstronomerOwnedNamespaces {
+		if !seen[want] {
+			t.Errorf("expected owned namespace %q in the rendered manifest", want)
+		}
+	}
+}
+
 func TestRenderInstallYAMLDefaultProfileResolvesToViewer(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "https://astro.example.com",

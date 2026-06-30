@@ -32,6 +32,11 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # L6: the agent is a well-behaved non-privileged pod, so enforce 'baseline'
+    # explicitly rather than inheriting an unpredictable cluster default. (Every
+    # Astronomer-owned namespace carries an explicit PSA level; the third-party
+    # component namespaces are 'privileged' where their charts need it.)
+    pod-security.kubernetes.io/enforce: baseline
 
 ---
 # ServiceAccount
@@ -169,6 +174,10 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # L6: explicit PSA level (no reliance on the cluster default). 'privileged'
+    # because this hosts an opt-in third-party chart whose scan jobs may need
+    # securityContexts that baseline/restricted reject.
+    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
 kind: Namespace
@@ -178,6 +187,11 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # L6 (the documented "real bite"): opt-in fluent-bit mounts hostPath to read
+    # container logs, which baseline/restricted PSA reject. Enforce 'privileged'
+    # explicitly so it schedules on PSA-enforcing clusters instead of relying on
+    # an unlabeled-namespace default.
+    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
 kind: Namespace
@@ -187,6 +201,9 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # L6: explicit PSA level. 'privileged' — opt-in third-party ingress chart
+    # whose controller may need NET_BIND_SERVICE / hostPort configurations.
+    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
 kind: Namespace
@@ -196,6 +213,8 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # L6: explicit PSA level for this opt-in third-party chart.
+    pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
 kind: Namespace
@@ -205,6 +224,8 @@ metadata:
     app.kubernetes.io/name: astronomer-agent
     app.kubernetes.io/part-of: astronomer
     app.kubernetes.io/managed-by: astronomer-server
+    # L6: explicit PSA level for this opt-in third-party admission-controller chart.
+    pod-security.kubernetes.io/enforce: privileged
 
 ---
 # Self-management Role: astronomer-system (the agent's own namespace)
