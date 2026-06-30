@@ -33,6 +33,12 @@ const (
 	baselineApplicationSetTargetLabel    = "astronomer.io/baseline-target"
 	baselineApplicationSetSyncPhaseLabel = "astronomer.io/sync-phase"
 	baselineTargetAdoptedClusters        = "adopted-clusters"
+	// baselineOwnershipDecisionLeaveLocal is the per-(cluster, component)
+	// ownership decision that opts a cluster OUT of the server-pushed baseline:
+	// the operator has chosen to keep that component locally managed, so the
+	// push generator must not fan a baseline App onto it. adopt/replace (and the
+	// absent-row default) keep the component under Argo push.
+	baselineOwnershipDecisionLeaveLocal = "leave_local"
 )
 
 var argocdApplicationSetGVR = kubeutil.ArgoApplicationSetGVR
@@ -145,6 +151,10 @@ func baselineApplicationSetComponentsFromRegistry() []baselineApplicationSetComp
 
 type baselineToolQuerier interface {
 	GetToolBySlug(ctx context.Context, slug string) (sqlc.ClusterTool, error)
+	// ListArgoCDBaselineOwnershipDecisionsByDecision lets the generator fetch all
+	// "leave_local" rows across clusters so those clusters can be excluded from
+	// each component's fan-out (H7 — make the ownership decision behavioral).
+	ListArgoCDBaselineOwnershipDecisionsByDecision(ctx context.Context, decision string) ([]sqlc.ArgocdBaselineOwnershipDecision, error)
 }
 
 type platformSettingReader interface {
@@ -261,6 +271,12 @@ func ensureBaselineApplicationSets(ctx context.Context, dyn dynamic.Interface, q
 	// q is the real *sqlc.Queries (implements platformSettingReader); the
 	// tool-only fakes/nil fall back to DefaultEnabled gating.
 	settings, _ := q.(platformSettingReader)
+	// Per-component map of cluster-id strings to EXCLUDE from the fan-out because
+	// the operator recorded a "leave_local" ownership decision for that
+	// (cluster, component) — the cluster keeps the component locally managed
+	// (H7). Absent rows / adopt / replace are never excluded, preserving the
+	// default apply behavior.
+	excludeByComponentSlug := leaveLocalExclusionsByComponent(ctx, q)
 	for _, component := range baselineApplicationSetComponents(ctx, q) {
 		if !baselineComponentEnabled(ctx, settings, component) {
 			// Disabled/opt-in: remove the appset so its generated Apps prune.
@@ -269,7 +285,7 @@ func ensureBaselineApplicationSets(ctx context.Context, dyn dynamic.Interface, q
 			}
 			continue
 		}
-		obj := baselineApplicationSetObject(component)
+		obj := baselineApplicationSetObject(component, excludeByComponentSlug[component.Slug])
 		current, err := res.Get(ctx, component.ApplicationSetName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			if _, err := res.Create(ctx, obj, metav1.CreateOptions{}); err != nil {
@@ -288,7 +304,27 @@ func ensureBaselineApplicationSets(ctx context.Context, dyn dynamic.Interface, q
 	return nil
 }
 
-func baselineApplicationSetObject(component baselineApplicationSetComponent) *unstructured.Unstructured {
+// leaveLocalExclusionsByComponent fetches every "leave_local" ownership row in
+// one query and groups the excluded cluster-id strings by component slug. A
+// query error (or nil querier) fails OPEN to an empty map — the generator then
+// behaves exactly as before the ownership wiring (apply to all managed remote
+// clusters), never worse than today's behavior.
+func leaveLocalExclusionsByComponent(ctx context.Context, q baselineToolQuerier) map[string][]string {
+	out := map[string][]string{}
+	if q == nil {
+		return out
+	}
+	decisions, err := q.ListArgoCDBaselineOwnershipDecisionsByDecision(ctx, baselineOwnershipDecisionLeaveLocal)
+	if err != nil {
+		return out
+	}
+	for _, d := range decisions {
+		out[d.ComponentSlug] = append(out[d.ComponentSlug], d.ClusterID.String())
+	}
+	return out
+}
+
+func baselineApplicationSetObject(component baselineApplicationSetComponent, excludeClusterIDs []string) *unstructured.Unstructured {
 	values := strings.TrimSpace(component.ValuesYAML)
 	helm := map[string]any{
 		"releaseName": component.Slug,
@@ -297,6 +333,32 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 		helm["values"] = values + "\n"
 	}
 	syncPhase := baselineSyncPhaseOrDefault(component.SyncPhase)
+	// Base selector: every managed, non-local cluster Secret. Only when the
+	// operator recorded "leave_local" decisions for this component do we append a
+	// cluster-id NotIn matchExpression that filters those clusters OUT of the
+	// fan-out (H7). The cluster-id label is stamped on every cluster Secret by
+	// argolabels.ManagedClusterLabels (ClusterIDLabelKey). With no exclusions the
+	// selector is byte-for-byte identical to the pre-fix output (admin-push path
+	// unbroken).
+	selector := map[string]any{
+		"matchLabels": map[string]any{
+			argoCDManagedByLabelKey: argoCDManagedByLabelValue,
+			argoCDIsLocalLabelKey:   "false",
+		},
+	}
+	if len(excludeClusterIDs) > 0 {
+		excluded := make([]any, 0, len(excludeClusterIDs))
+		for _, id := range excludeClusterIDs {
+			excluded = append(excluded, id)
+		}
+		selector["matchExpressions"] = []any{
+			map[string]any{
+				"key":      argoCDClusterIDLabelKey,
+				"operator": "NotIn",
+				"values":   excluded,
+			},
+		}
+	}
 	return &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "argoproj.io/v1alpha1",
@@ -317,12 +379,7 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 				"generators": []any{
 					map[string]any{
 						"clusters": map[string]any{
-							"selector": map[string]any{
-								"matchLabels": map[string]any{
-									argoCDManagedByLabelKey: argoCDManagedByLabelValue,
-									argoCDIsLocalLabelKey:   "false",
-								},
-							},
+							"selector": selector,
 						},
 					},
 				},
@@ -371,4 +428,24 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent) *un
 			},
 		},
 	}
+}
+
+// removeBaselineApplicationSets deletes every baseline component's
+// ApplicationSet from the local ArgoCD namespace, ignoring NotFound. It is the
+// stand-down teardown reconcileLocalArgoSelfManagement runs when
+// PullReconcileEnabled is true: the agent's PULL loop owns the astronomer-*
+// footprint, so any previously-pushed baseline appset must be pruned to avoid
+// double-management (H6). On a green-field pull deploy no appset was ever
+// created, so this is a no-op.
+func removeBaselineApplicationSets(ctx context.Context, dyn dynamic.Interface) error {
+	if dyn == nil {
+		return fmt.Errorf("dynamic client not configured")
+	}
+	res := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace)
+	for _, component := range fallbackBaselineApplicationSetComponents {
+		if err := res.Delete(ctx, component.ApplicationSetName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete applicationset %s: %w", component.ApplicationSetName, err)
+		}
+	}
+	return nil
 }

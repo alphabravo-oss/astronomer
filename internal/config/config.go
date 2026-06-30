@@ -134,7 +134,10 @@ type Config struct {
 	// false (the default) NOTHING changes: the existing tunnel self-upgrade +
 	// Argo-baseline push paths keep owning the footprint. When true the agent
 	// runs its local reconcile loop and owns the astronomer-* footprint via
-	// pull; the server must not double-manage the same footprint via Argo push.
+	// pull, and the server's push path STANDS DOWN: reconcileLocalArgoSelfManagement
+	// skips ensureBaselineApplicationSets and instead calls
+	// removeBaselineApplicationSets to prune any previously-pushed baseline
+	// ApplicationSets, so the same footprint is never double-managed (H6).
 	// The DesiredState responder is read-only rendering and is unaffected by
 	// this flag — only behavior that would mutate ownership is gated.
 	PullReconcileEnabled bool `mapstructure:"pull_reconcile_enabled"`

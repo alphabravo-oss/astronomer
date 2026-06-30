@@ -343,6 +343,11 @@ func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterD
 			"instances": len(instances),
 		}, "")
 		if !cluster.IsLocal {
+			// Cosmetic step: the cluster Secret carries the baseline appset
+			// selector labels. It does NOT imply a baseline App will fan out — the
+			// push appset is only generated when PullReconcileEnabled is off
+			// (reconcileLocalArgoSelfManagement) and the cluster is not excluded by
+			// a "leave_local" ownership decision. No appset is created here.
 			writeArgoCDRegistrationStep(ctx, deps, cluster.ID, "baseline_appsets_matched", "success", map[string]any{
 				"selector": "astronomer.io/managed-by=astronomer, astronomer.io/is-local=false",
 			}, "")

@@ -135,10 +135,22 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	if err := ensureLocalArgoRepoSecret(ctx, k8s); err != nil {
 		return fmt.Errorf("ensure argocd repo secret: %w", err)
 	}
-	if argoCDManagePlatformBaselineEnabled(ctx, queries) {
-		if err := ensureBaselineApplicationSets(ctx, dyn, queries); err != nil {
-			return fmt.Errorf("ensure baseline applicationsets: %w", err)
+	// Single-owner stand-down (H6): the server-pushed baseline ApplicationSets
+	// and the agent's PULL reconcile loop both render the astronomer-* footprint
+	// (e.g. kube-state-metrics/node-exporter), so exactly one may own it. When
+	// PullReconcileEnabled is false (the default, soak-validated admin path) push
+	// generates the baseline exactly as before. When it is true the pull loop on
+	// every agent owns the footprint, so push stands down AND tears down any
+	// appset it previously created (a flip-to-pull prunes them; a green-field
+	// pull deploy never created them, so the teardown is a no-op).
+	if !cfg.PullReconcileEnabled {
+		if argoCDManagePlatformBaselineEnabled(ctx, queries) {
+			if err := ensureBaselineApplicationSets(ctx, dyn, queries); err != nil {
+				return fmt.Errorf("ensure baseline applicationsets: %w", err)
+			}
 		}
+	} else if err := removeBaselineApplicationSets(ctx, dyn); err != nil {
+		return fmt.Errorf("remove baseline applicationsets: %w", err)
 	}
 
 	platform, err := queries.GetPlatformConfig(ctx)

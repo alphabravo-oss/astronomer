@@ -70,6 +70,36 @@ func (q *Queries) ListArgoCDBaselineOwnershipDecisions(ctx context.Context, clus
 	return items, nil
 }
 
+const listArgoCDBaselineOwnershipDecisionsByDecision = `-- name: ListArgoCDBaselineOwnershipDecisionsByDecision :many
+SELECT ` + argoCDBaselineOwnershipDecisionColumns + `
+FROM argocd_baseline_ownership_decisions
+WHERE decision = $1
+ORDER BY cluster_id ASC, component_slug ASC`
+
+// ListArgoCDBaselineOwnershipDecisionsByDecision returns every (cluster,
+// component) ownership row with the given decision across ALL clusters. The
+// Argo push baseline generator uses it to fetch all "leave_local" rows in one
+// query and exclude those clusters from the per-component fan-out.
+func (q *Queries) ListArgoCDBaselineOwnershipDecisionsByDecision(ctx context.Context, decision string) ([]ArgocdBaselineOwnershipDecision, error) {
+	rows, err := q.db.Query(ctx, listArgoCDBaselineOwnershipDecisionsByDecision, decision)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArgocdBaselineOwnershipDecision{}
+	for rows.Next() {
+		item, err := scanArgoCDBaselineOwnershipDecision(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertArgoCDBaselineOwnershipDecision = `-- name: UpsertArgoCDBaselineOwnershipDecision :one
 INSERT INTO argocd_baseline_ownership_decisions (
     cluster_id,

@@ -8,11 +8,25 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/uuid"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/baseline"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+// ownershipDecisionReader is the optional per-cluster ownership-decision seam
+// DesiredState honors so the PULL desired set mirrors the push generator (H7):
+// a component the operator marked "leave_local" for this cluster is NOT
+// rendered into the pull desired state, leaving it locally managed. The real
+// *sqlc.Queries satisfies it; a nil/non-implementing settings reader (or a
+// non-UUID cluster id) means no decisions, so all enabled components render —
+// preserving the default apply behavior.
+type ownershipDecisionReader interface {
+	ListArgoCDBaselineOwnershipDecisions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdBaselineOwnershipDecision, error)
+}
 
 // ownedNamespaceSet is the apply/prune boundary for the pull reconcile
 // subsystem, derived from deploy/agent.AstronomerOwnedNamespaces. DesiredState
@@ -57,14 +71,37 @@ func isOwnedNamespace(ns string) bool {
 //
 // DesiredState is read-only rendering and is NOT gated by PullReconcileEnabled:
 // the responder may always answer. The feature flag gates whether the agent
-// runs the loop and whether the server's push path stands down — not whether
-// the server can describe the desired state.
+// runs the loop and whether the server's push path stands down (it now does —
+// see reconcileLocalArgoSelfManagement, which skips/prunes the baseline
+// ApplicationSets when pull is on) — not whether the server can describe the
+// desired state. DesiredState additionally honors the per-cluster ArgoCD
+// baseline ownership decision: a component marked "leave_local" for the cluster
+// is omitted from the rendered set so it stays locally managed.
 func DesiredState(ctx context.Context, clusterID string, agentManifest string, settings platformSettingReader) (protocol.DesiredStateResponsePayload, error) {
 	if strings.TrimSpace(agentManifest) == "" {
 		return protocol.DesiredStateResponsePayload{}, fmt.Errorf("desired state: empty agent manifest for cluster %q", clusterID)
 	}
 
 	manifests := make([]protocol.DesiredManifest, 0, len(baseline.Registry)+1)
+
+	// Per-cluster "leave_local" ownership decisions (H7): a component the
+	// operator opted out of for THIS cluster is skipped below, so the pull agent
+	// never renders it — mirroring the push generator's exclusion. Absent rows /
+	// adopt / replace leave the component in the desired set (default apply). A
+	// nil/non-implementing settings reader or a non-UUID cluster id yields no
+	// exclusions, preserving today's behavior.
+	leaveLocal := map[string]bool{}
+	if reader, ok := settings.(ownershipDecisionReader); ok {
+		if id, perr := uuid.Parse(clusterID); perr == nil {
+			if decisions, derr := reader.ListArgoCDBaselineOwnershipDecisions(ctx, id); derr == nil {
+				for _, d := range decisions {
+					if d.Decision == baselineOwnershipDecisionLeaveLocal {
+						leaveLocal[d.ComponentSlug] = true
+					}
+				}
+			}
+		}
+	}
 
 	// (a) The agent's own Deployment, in astronomer-system, at the central image.
 	// We deliberately ship ONLY the Deployment (not the full install manifest):
@@ -107,6 +144,11 @@ func DesiredState(ctx context.Context, clusterID string, agentManifest string, s
 			continue
 		}
 		if !baselineComponentEnabled(ctx, settings, comp) {
+			continue
+		}
+		if leaveLocal[comp.Slug] {
+			// Operator opted this cluster out (leave_local): keep it locally
+			// managed, do not render it into the pull desired state.
 			continue
 		}
 		manifests = append(manifests, protocol.DesiredManifest{

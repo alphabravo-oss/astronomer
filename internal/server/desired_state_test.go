@@ -6,7 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -202,6 +206,58 @@ func TestDesiredStateAgentManifestIsDeploymentOnly(t *testing.T) {
 	}
 	if strings.Contains(agent.Content, "ClusterRole") || strings.Contains(agent.Content, "kind: Namespace") {
 		t.Fatalf("agent manifest leaked cluster-scoped resources (must be Deployment-only):\n%s", agent.Content)
+	}
+}
+
+// ownershipSettingsStub is a platformSettingReader that also implements
+// ownershipDecisionReader, so DesiredState honors per-cluster leave_local
+// decisions. nil settings map => every component falls back to DefaultEnabled.
+type ownershipSettingsStub struct {
+	decisions []sqlc.ArgocdBaselineOwnershipDecision
+}
+
+func (ownershipSettingsStub) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {
+	return sqlc.PlatformSetting{}, pgx.ErrNoRows
+}
+
+func (s ownershipSettingsStub) ListArgoCDBaselineOwnershipDecisions(_ context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdBaselineOwnershipDecision, error) {
+	out := []sqlc.ArgocdBaselineOwnershipDecision{}
+	for _, d := range s.decisions {
+		if d.ClusterID == clusterID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+// TestDesiredStateHonorsLeaveLocalOwnership: a leave_local decision for
+// kube-state-metrics on this cluster drops it from the pull desired set, while
+// node-exporter (no decision) still renders. A different cluster's decision
+// must not affect this cluster.
+func TestDesiredStateHonorsLeaveLocalOwnership(t *testing.T) {
+	ctx := context.Background()
+	clusterID := "55555555-5555-5555-5555-555555555555"
+	settings := ownershipSettingsStub{
+		decisions: []sqlc.ArgocdBaselineOwnershipDecision{
+			{ClusterID: uuid.MustParse(clusterID), ComponentSlug: "kube-state-metrics", Decision: "leave_local"},
+			{ClusterID: uuid.MustParse("66666666-6666-6666-6666-666666666666"), ComponentSlug: "prometheus-node-exporter", Decision: "leave_local"},
+		},
+	}
+	resp, err := DesiredState(ctx, clusterID, fakeAgentManifest, settings)
+	if err != nil {
+		t.Fatalf("DesiredState returned error: %v", err)
+	}
+	byName := map[string]bool{}
+	for _, m := range resp.Manifests {
+		byName[m.Name] = true
+	}
+	if byName["baseline-kube-state-metrics"] {
+		t.Fatalf("leave_local kube-state-metrics must be excluded, got %v", names(resp.Manifests))
+	}
+	// node-exporter has no decision for THIS cluster (the other row is a
+	// different cluster) → still rendered.
+	if !byName["baseline-prometheus-node-exporter"] {
+		t.Fatalf("node-exporter must still render, got %v", names(resp.Manifests))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -16,8 +17,9 @@ import (
 )
 
 type baselineAppSetQuerierStub struct {
-	tools    map[string]sqlc.ClusterTool
-	settings map[string]json.RawMessage
+	tools     map[string]sqlc.ClusterTool
+	settings  map[string]json.RawMessage
+	decisions []sqlc.ArgocdBaselineOwnershipDecision
 }
 
 func (q baselineAppSetQuerierStub) GetToolBySlug(_ context.Context, slug string) (sqlc.ClusterTool, error) {
@@ -26,6 +28,16 @@ func (q baselineAppSetQuerierStub) GetToolBySlug(_ context.Context, slug string)
 		return sqlc.ClusterTool{}, pgx.ErrNoRows
 	}
 	return tool, nil
+}
+
+func (q baselineAppSetQuerierStub) ListArgoCDBaselineOwnershipDecisionsByDecision(_ context.Context, decision string) ([]sqlc.ArgocdBaselineOwnershipDecision, error) {
+	out := []sqlc.ArgocdBaselineOwnershipDecision{}
+	for _, d := range q.decisions {
+		if d.Decision == decision {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }
 
 func (q baselineAppSetQuerierStub) GetPlatformSetting(_ context.Context, key string) (sqlc.PlatformSetting, error) {
@@ -231,6 +243,164 @@ func TestBaselineDefaultsExcludeOpinionatedInfra(t *testing.T) {
 	}
 	if names(dyn)["astronomer-baseline-kube-state-metrics"] {
 		t.Error("kube-state-metrics disabled via setting should not be created")
+	}
+}
+
+// selectorMatchExpressions returns the cluster generator's selector
+// matchExpressions for an appset (nil if none).
+func selectorMatchExpressions(t *testing.T, appSet *unstructured.Unstructured) []any {
+	t.Helper()
+	generators, found, err := unstructured.NestedSlice(appSet.Object, "spec", "generators")
+	if err != nil || !found || len(generators) != 1 {
+		t.Fatalf("generators found=%v len=%d err=%v", found, len(generators), err)
+	}
+	selector := generators[0].(map[string]any)["clusters"].(map[string]any)["selector"].(map[string]any)
+	exprs, ok := selector["matchExpressions"].([]any)
+	if !ok {
+		return nil
+	}
+	return exprs
+}
+
+// TestEnsureBaselineApplicationSetsAdminPushUnbroken is constraint #1: with pull
+// OFF (the default — ensureBaselineApplicationSets is only ever called when
+// !cfg.PullReconcileEnabled) and NO ownership decisions, the baseline appset is
+// generated exactly as today — the managed-by/is-local matchLabels and NO
+// cluster-id matchExpressions clause. Covers matrix (a) and the no-decision/
+// adopt default (d).
+func TestEnsureBaselineApplicationSetsAdminPushUnbroken(t *testing.T) {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list applicationsets: %v", err)
+	}
+	if len(items.Items) != 2 {
+		t.Fatalf("applicationset count = %d, want 2", len(items.Items))
+	}
+	for _, name := range []string{"astronomer-baseline-kube-state-metrics", "astronomer-baseline-node-exporter"} {
+		appSet := findUnstructuredByName(items.Items, name)
+		if appSet == nil {
+			t.Fatalf("%s not created", name)
+		}
+		selector := appSet.Object["spec"].(map[string]any)["generators"].([]any)[0].(map[string]any)["clusters"].(map[string]any)["selector"].(map[string]any)
+		labels := selector["matchLabels"].(map[string]any)
+		if labels[argoCDManagedByLabelKey] != argoCDManagedByLabelValue || labels[argoCDIsLocalLabelKey] != "false" {
+			t.Fatalf("%s matchLabels = %v", name, labels)
+		}
+		if exprs := selectorMatchExpressions(t, appSet); exprs != nil {
+			t.Fatalf("%s must have NO matchExpressions when no leave_local decisions exist, got %v", name, exprs)
+		}
+	}
+}
+
+// TestEnsureBaselineApplicationSetsExcludesLeaveLocal is matrix (c): a
+// leave_local decision for (cluster, kube-state-metrics) appends a cluster-id
+// NotIn matchExpression to ONLY that component's selector, excluding the cluster
+// from the fan-out; node-exporter (no decision) is untouched.
+func TestEnsureBaselineApplicationSetsExcludesLeaveLocal(t *testing.T) {
+	clusterID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	q := baselineAppSetQuerierStub{
+		decisions: []sqlc.ArgocdBaselineOwnershipDecision{
+			{ClusterID: clusterID, ComponentSlug: "kube-state-metrics", Decision: "leave_local"},
+		},
+	}
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list applicationsets: %v", err)
+	}
+	ksm := findUnstructuredByName(items.Items, "astronomer-baseline-kube-state-metrics")
+	if ksm == nil {
+		t.Fatal("kube-state-metrics appset missing")
+	}
+	exprs := selectorMatchExpressions(t, ksm)
+	if len(exprs) != 1 {
+		t.Fatalf("ksm matchExpressions = %v, want 1 (NotIn cluster-id)", exprs)
+	}
+	expr := exprs[0].(map[string]any)
+	if expr["key"] != argoCDClusterIDLabelKey || expr["operator"] != "NotIn" {
+		t.Fatalf("ksm matchExpression = %v", expr)
+	}
+	values := expr["values"].([]any)
+	if len(values) != 1 || values[0] != clusterID.String() {
+		t.Fatalf("ksm NotIn values = %v, want [%s]", values, clusterID)
+	}
+	// node-exporter has no decision → no exclusion.
+	ne := findUnstructuredByName(items.Items, "astronomer-baseline-node-exporter")
+	if ne == nil {
+		t.Fatal("node-exporter appset missing")
+	}
+	if exprs := selectorMatchExpressions(t, ne); exprs != nil {
+		t.Fatalf("node-exporter must have NO matchExpressions, got %v", exprs)
+	}
+}
+
+// TestEnsureBaselineApplicationSetsIncludesAdoptAndReplace is matrix (d)+(e):
+// adopt and replace decisions are NOT leave_local, so they never exclude the
+// cluster — no matchExpressions are added.
+func TestEnsureBaselineApplicationSetsIncludesAdoptAndReplace(t *testing.T) {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	q := baselineAppSetQuerierStub{
+		decisions: []sqlc.ArgocdBaselineOwnershipDecision{
+			{ClusterID: uuid.MustParse("33333333-3333-3333-3333-333333333333"), ComponentSlug: "kube-state-metrics", Decision: "adopt"},
+			{ClusterID: uuid.MustParse("44444444-4444-4444-4444-444444444444"), ComponentSlug: "prometheus-node-exporter", Decision: "replace"},
+		},
+	}
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, q); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list applicationsets: %v", err)
+	}
+	for _, name := range []string{"astronomer-baseline-kube-state-metrics", "astronomer-baseline-node-exporter"} {
+		appSet := findUnstructuredByName(items.Items, name)
+		if appSet == nil {
+			t.Fatalf("%s not created", name)
+		}
+		if exprs := selectorMatchExpressions(t, appSet); exprs != nil {
+			t.Fatalf("%s adopt/replace must NOT add matchExpressions, got %v", name, exprs)
+		}
+	}
+}
+
+// TestRemoveBaselineApplicationSetsPrunesPushedAppsets is matrix (b): the
+// pull-ON stand-down. After push previously created the baseline appsets, the
+// teardown reconcileLocalArgoSelfManagement runs when PullReconcileEnabled is
+// true prunes them all, so no server-pushed baseline App fans onto the pull
+// cluster.
+func TestRemoveBaselineApplicationSetsPrunesPushedAppsets(t *testing.T) {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	// Teardown is idempotent: a second call (green-field pull, nothing to prune)
+	// must also succeed.
+	for i := 0; i < 2; i++ {
+		if err := removeBaselineApplicationSets(context.Background(), dyn); err != nil {
+			t.Fatalf("removeBaselineApplicationSets: %v", err)
+		}
+	}
+	items, err := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list applicationsets: %v", err)
+	}
+	if len(items.Items) != 0 {
+		t.Fatalf("baseline appsets remain after teardown: %d", len(items.Items))
 	}
 }
 
