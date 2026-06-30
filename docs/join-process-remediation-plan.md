@@ -268,7 +268,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | D4 | Agent-side profile guard | M8 | 4 | M | [ ] |
 | E1 | Gate push on pull + ownership | H6,H7 | 3 | L | [ ] |
 | E2 | Appset profile pre-flight | M9 | 3 | M | [ ] |
-| E3 | gitops mass-decommission guard | H10 | 1 | M | [ ] |
+| E3 | gitops mass-decommission guard | H10 | 1 | M | [x] RESOLVED 4778199 (WalkDir hard-error + threshold guard + one-shot override; real-git integration suite + deploy smoke) |
 | E4 | Appset disable cascade | L10 | 4 | S | [ ] |
 | F1 | Per-component PSA labels | L6 | 4 | S | [ ] |
 | F2 | YAML-escape scalars | L7 | 4 | S | [ ] |
