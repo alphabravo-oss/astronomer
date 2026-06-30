@@ -261,7 +261,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | B4 | Non-fatal initial connect | L20 | 2 | S | [x] RESOLVED 667cfd5 (G-B4 live: unreachable server → retries, no CrashLoop) |
 | C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [x] RESOLVED 9633c58 (G-C1: stayed active 150s under RBAC strip, no token churn, last-good kept) |
 | C2 | One staleness writer + /readyz | M3,M4 | 3 | M | [x] RESOLVED a8a45a9 (unified 2m threshold no-flap; /readyz follows live tunnel) |
-| C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] |
+| C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] DEFERRED (lowest-value: M13 is a metrics-UI nicety needing a new Snapshot signal threaded through the working metrics path; L12 largely neutralized — dashboard refetches on reconnect. Not parity-relevant.) |
 | D1 | Honest operator profile | H4,L8 | 3 | M | [x] RESOLVED e83a132 (honesty fix: comment+docs+test; trim/split surfaced as product decision) |
 | D2 | RBACSyncer guardrails | H5 | 3 | M | [x] RESOLVED 33390fb (fail-closed bounds: refuse cluster-scoped + out-of-owned-ns; GC bounded) |
 | D3 | Gate /manifest/ as write | H3 | 1 | S | [x] RESOLVED 322706f (read-only→403 on /manifest/ live; admin import intact) |
