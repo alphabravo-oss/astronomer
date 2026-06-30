@@ -1168,7 +1168,7 @@ func sampleExtensionManifest() ExtensionManifest {
 		Name:                 "cost-insights",
 		DisplayName:          "Cost Insights",
 		Version:              "0.1.0",
-		CompatibleAstronomer: ">=0.9.0 <1.0.0",
+		CompatibleAstronomer: ">=0.2.0 <1.0.0",
 		Entry:                "index.js",
 		Permissions:          []string{"clusters:read", "monitoring:read"},
 		CSP: ExtensionCSP{

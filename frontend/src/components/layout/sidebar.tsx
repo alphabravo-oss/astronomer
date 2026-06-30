@@ -72,9 +72,10 @@ import {
   useFeatureFlags,
 } from '@/lib/hooks';
 
-// Baked at build time by the Dockerfile (ARG VERSION → NEXT_PUBLIC_APP_VERSION).
-// Falls back to 'dev' for local/un-stamped builds.
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || 'dev';
+// Baked at build time by the Dockerfile (ARG VERSION → NEXT_PUBLIC_APP_VERSION),
+// which the release workflow stamps from the git tag. Falls back to the current
+// dev version for local/un-stamped builds — keep in sync with pkg/version.
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.2.0-dev';
 
 type NavItem = {
   label: string;
@@ -651,8 +652,19 @@ export function Sidebar() {
           {!sidebarCollapsed && <span className="text-xs">Documentation</span>}
         </a>
         {!sidebarCollapsed && (
-          <div className="px-3 py-1">
-            <span className="text-[10px] text-muted-foreground">Astronomer {APP_VERSION}</span>
+          <div className="px-3 py-1 space-y-0.5">
+            <p className="text-[10px] text-muted-foreground">Astronomer {APP_VERSION}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Built by{' '}
+              <a
+                href="https://alphabravo.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground underline-offset-2 hover:underline"
+              >
+                AlphaBravo
+              </a>
+            </p>
           </div>
         )}
       </div>
