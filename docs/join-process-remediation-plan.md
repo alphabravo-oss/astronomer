@@ -257,8 +257,8 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | A4 | Connect rate-limit + audit + replay | M5,M6,L13,L3 | 1 | M | [x] RESOLVED f1a4d37 (failure-keyed limiter; G4 soak: healthy un-throttled, bad-token 429+audit, /register 429) |
 | B1 | HA + complete decommission | H8,H9,M12,M14,L15,L16 | 2 | XL | [x] RESOLVED 42b718f+451226b (G-B1 soak: full footprint deleted, no over-deletion, token revoked) |
 | B2 | Locator CAS + POD_IP fail-fast | M10,L19 | 2 | M | [x] RESOLVED 75dabe7 (CAS no-clobber via miniredis; /readyz fails on HA-misconfig) |
-| B3 | Configurable tunnel concurrency | M11 | 2 | M | [ ] |
-| B4 | Non-fatal initial connect | L20 | 2 | S | [ ] |
+| B3 | Configurable tunnel concurrency | M11 | 2 | M | [x] RESOLVED 667cfd5 (tunnel_worker_concurrency, default 8) |
+| B4 | Non-fatal initial connect | L20 | 2 | S | [x] RESOLVED 667cfd5 (G-B4 live: unreachable server → retries, no CrashLoop) |
 | C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [ ] |
 | C2 | One staleness writer + /readyz | M3,M4 | 3 | M | [ ] |
 | C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] |
