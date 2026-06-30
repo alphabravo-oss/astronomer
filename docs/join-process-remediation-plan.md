@@ -254,7 +254,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | A1 | Server-CA pinning + reject ws:// | H1,M1,L5 | 1 | L | [x] RESOLVED a0672b1 (G1 soak: A/B/C/D pass) |
 | A2 | Durable-token rotation + revoke | H2,M7,L14 | 1 | L | [x] RESOLVED fbeac02+03acd34 (G2 soak: adopt→rotate→grace→revoke pass; revoke force-disconnects live session) |
 | A3 | Registration-token single-use + TTL | M2,L1,L2 | 1 | M | [x] RESOLVED 1599ba4 (temporal adoption gate; G3 soak: TTL=1h, replay denied, re-import OK) |
-| A4 | Connect rate-limit + audit + replay | M5,M6,L13,L3 | 1 | M | [ ] |
+| A4 | Connect rate-limit + audit + replay | M5,M6,L13,L3 | 1 | M | [x] RESOLVED f1a4d37 (failure-keyed limiter; G4 soak: healthy un-throttled, bad-token 429+audit, /register 429) |
 | B1 | HA + complete decommission | H8,H9,M12,M14,L15,L16 | 2 | XL | [ ] |
 | B2 | Locator CAS + POD_IP fail-fast | M10,L19 | 2 | M | [ ] |
 | B3 | Configurable tunnel concurrency | M11 | 2 | M | [ ] |
