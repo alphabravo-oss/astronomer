@@ -260,7 +260,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | B3 | Configurable tunnel concurrency | M11 | 2 | M | [x] RESOLVED 667cfd5 (tunnel_worker_concurrency, default 8) |
 | B4 | Non-fatal initial connect | L20 | 2 | S | [x] RESOLVED 667cfd5 (G-B4 live: unreachable server → retries, no CrashLoop) |
 | C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [x] RESOLVED 9633c58 (G-C1: stayed active 150s under RBAC strip, no token churn, last-good kept) |
-| C2 | One staleness writer + /readyz | M3,M4 | 3 | M | [ ] |
+| C2 | One staleness writer + /readyz | M3,M4 | 3 | M | [x] RESOLVED a8a45a9 (unified 2m threshold no-flap; /readyz follows live tunnel) |
 | C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] |
 | D1 | Honest operator profile | H4,L8 | 3 | M | [x] RESOLVED e83a132 (honesty fix: comment+docs+test; trim/split surfaced as product decision) |
 | D2 | RBACSyncer guardrails | H5 | 3 | M | [x] RESOLVED 33390fb (fail-closed bounds: refuse cluster-scoped + out-of-owned-ns; GC bounded) |
