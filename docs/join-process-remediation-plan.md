@@ -267,7 +267,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | D3 | Gate /manifest/ as write | H3 | 1 | S | [x] RESOLVED 322706f (read-only→403 on /manifest/ live; admin import intact) |
 | D4 | Agent-side profile guard | M8 | 4 | M | [ ] |
 | E1 | Gate push on pull + ownership | H6,H7 | 3 | L | [x] RESOLVED 4b3c5b5 (3 PASS verdicts incl no-regression; unit proves admin-push appset byte-identical when pull off) |
-| E2 | Appset profile pre-flight | M9 | 3 | M | [ ] |
+| E2 | Appset profile pre-flight | M9 | 3 | M | [x] RESOLVED 4f35c9d (generator filters In [operator,admin]; viewer/namespace-* excluded) |
 | E3 | gitops mass-decommission guard | H10 | 1 | M | [x] RESOLVED 4778199 (WalkDir hard-error + threshold guard + one-shot override; real-git integration suite + deploy smoke) |
 | E4 | Appset disable cascade | L10 | 4 | S | [ ] |
 | F1 | Per-component PSA labels | L6 | 4 | S | [ ] |
