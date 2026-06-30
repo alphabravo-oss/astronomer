@@ -38,6 +38,15 @@ func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
 	allowedHooks := map[string]string{
 		"Job/astronomer-migrate":   "post-install,post-upgrade",
 		"Job/astronomer-preflight": "pre-install,pre-upgrade",
+		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
+		// hook-weight) so a fresh install doesn't deadlock on the main SA not
+		// existing yet — see templates/preflight-rbac.yaml. These are the only
+		// non-Job hook resources the chart is allowed to ship.
+		"ServiceAccount/astronomer-preflight":     "pre-install,pre-upgrade",
+		"ClusterRole/astronomer-preflight":        "pre-install,pre-upgrade",
+		"ClusterRoleBinding/astronomer-preflight": "pre-install,pre-upgrade",
+		"Role/astronomer-preflight":               "pre-install,pre-upgrade",
+		"RoleBinding/astronomer-preflight":        "pre-install,pre-upgrade",
 	}
 	seen := map[string]bool{}
 
