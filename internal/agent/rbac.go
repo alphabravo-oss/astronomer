@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -43,6 +44,21 @@ func (s *RBACSyncer) HandleSyncRequest(ctx context.Context, msg *protocol.Messag
 		"roles", len(payload.Roles),
 		"role_bindings", len(payload.RoleBindings),
 	)
+
+	// SAFETY GUARDRAIL (H5): the RBAC-sync side channel must NOT be an unbounded,
+	// control-plane-driven cluster-RBAC-write primitive (it was applying arbitrary
+	// Cluster/Role bindings verbatim for every profile — under admin, an
+	// unrestricted RBAC-write over the whole cluster). Mirroring reconcile.go's
+	// safety contract, REFUSE — fail-closed, apply nothing — any request that
+	// carries cluster-scoped RBAC or namespaced RBAC outside the astronomer-owned
+	// namespaces. There is currently no server feature that drives RBAC sync; this
+	// is defense-in-depth against a compromised/rogue management plane.
+	if reason := rbacSyncOutOfBounds(payload); reason != "" {
+		s.log.Warn("REFUSED RBAC sync request (out of bounds)", "reason", reason)
+		return s.sendSyncResult(sendFn, msg.RequestID, protocol.RBACSyncResultPayload{
+			Errors: []string{"refused: " + reason},
+		})
+	}
 
 	result := protocol.RBACSyncResultPayload{}
 	var syncErrors []string
@@ -158,16 +174,61 @@ func (s *RBACSyncer) HandleSyncRequest(ctx context.Context, msg *protocol.Messag
 		result.Errors = syncErrors
 	}
 
+	return s.sendSyncResult(sendFn, msg.RequestID, result)
+}
+
+// sendSyncResult marshals and sends an RBAC_SYNC_RESULT reply.
+func (s *RBACSyncer) sendSyncResult(sendFn func(*protocol.Message) error, requestID string, result protocol.RBACSyncResultPayload) error {
 	resultPayload, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("marshal RBAC sync result: %w", err)
 	}
-
 	return sendFn(&protocol.Message{
 		Type:      protocol.MsgRBACSyncResult,
-		RequestID: msg.RequestID,
+		RequestID: requestID,
 		Payload:   resultPayload,
 	})
+}
+
+// rbacSyncOutOfBounds returns a non-empty reason if the payload contains any
+// resource the RBAC syncer is NOT allowed to touch: any cluster-scoped RBAC
+// (ClusterRole/ClusterRoleBinding) or any namespaced Role/RoleBinding outside
+// the astronomer-owned namespaces. Mirrors reconcile.go's owned-namespace bound.
+func rbacSyncOutOfBounds(payload protocol.RBACSyncRequestPayload) string {
+	if len(payload.ClusterRoles) > 0 || len(payload.ClusterRoleBindings) > 0 {
+		return fmt.Sprintf("RBAC sync may not manage cluster-scoped RBAC (%d ClusterRoles, %d ClusterRoleBindings)",
+			len(payload.ClusterRoles), len(payload.ClusterRoleBindings))
+	}
+	for _, raw := range payload.Roles {
+		var r rbacv1.Role
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return fmt.Sprintf("unparseable Role in payload: %v", err)
+		}
+		if !isAstronomerOwnedNamespace(r.Namespace) {
+			return fmt.Sprintf("Role %s/%s targets a non-astronomer namespace", r.Namespace, r.Name)
+		}
+	}
+	for _, raw := range payload.RoleBindings {
+		var rb rbacv1.RoleBinding
+		if err := json.Unmarshal(raw, &rb); err != nil {
+			return fmt.Sprintf("unparseable RoleBinding in payload: %v", err)
+		}
+		if !isAstronomerOwnedNamespace(rb.Namespace) {
+			return fmt.Sprintf("RoleBinding %s/%s targets a non-astronomer namespace", rb.Namespace, rb.Name)
+		}
+	}
+	return ""
+}
+
+// isAstronomerOwnedNamespace reports whether ns is one of the astronomer-owned
+// namespaces the agent is permitted to manage RBAC within.
+func isAstronomerOwnedNamespace(ns string) bool {
+	for _, owned := range agenttemplate.AstronomerOwnedNamespaces {
+		if ns == owned {
+			return true
+		}
+	}
+	return false
 }
 
 // garbageCollect removes managed RBAC resources that are no longer in the desired state.
@@ -181,40 +242,22 @@ func (s *RBACSyncer) garbageCollect(
 	var errors []string
 	labelSelector := managedLabel + "=true"
 
-	// ClusterRoles.
-	crs, err := s.client.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	if err == nil {
-		for _, cr := range crs.Items {
-			if !appliedCR[cr.Name] {
-				if err := s.client.RbacV1().ClusterRoles().Delete(ctx, cr.Name, kubeutil.DeleteOptions()); err != nil {
-					errors = append(errors, fmt.Sprintf("delete ClusterRole %s: %v", cr.Name, err))
-				} else {
-					removed++
-					s.log.Info("garbage collected ClusterRole", "name", cr.Name)
-				}
-			}
-		}
-	}
+	// SAFETY (H5): GC is bounded to match the apply guardrail — it NEVER touches
+	// cluster-scoped RBAC (the syncer no longer manages ClusterRoles/Bindings, so
+	// GCing them by label would otherwise delete EVERY managed cluster RBAC the
+	// moment a valid namespaced-only sync runs with an empty applied-set), and it
+	// only deletes namespaced Roles/RoleBindings WITHIN the astronomer-owned
+	// namespaces. appliedCR/appliedCRB are intentionally unused.
+	_ = appliedCR
+	_ = appliedCRB
 
-	// ClusterRoleBindings.
-	crbs, err := s.client.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-	if err == nil {
-		for _, crb := range crbs.Items {
-			if !appliedCRB[crb.Name] {
-				if err := s.client.RbacV1().ClusterRoleBindings().Delete(ctx, crb.Name, kubeutil.DeleteOptions()); err != nil {
-					errors = append(errors, fmt.Sprintf("delete ClusterRoleBinding %s: %v", crb.Name, err))
-				} else {
-					removed++
-					s.log.Info("garbage collected ClusterRoleBinding", "name", crb.Name)
-				}
-			}
-		}
-	}
-
-	// Roles (all namespaces).
+	// Roles (owned namespaces only).
 	roles, err := s.client.RbacV1().Roles("").List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err == nil {
 		for _, r := range roles.Items {
+			if !isAstronomerOwnedNamespace(r.Namespace) {
+				continue
+			}
 			key := r.Namespace + "/" + r.Name
 			if !appliedR[key] {
 				if err := s.client.RbacV1().Roles(r.Namespace).Delete(ctx, r.Name, kubeutil.DeleteOptions()); err != nil {
@@ -227,10 +270,13 @@ func (s *RBACSyncer) garbageCollect(
 		}
 	}
 
-	// RoleBindings (all namespaces).
+	// RoleBindings (owned namespaces only).
 	rbs, err := s.client.RbacV1().RoleBindings("").List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err == nil {
 		for _, rb := range rbs.Items {
+			if !isAstronomerOwnedNamespace(rb.Namespace) {
+				continue
+			}
 			key := rb.Namespace + "/" + rb.Name
 			if !appliedRB[key] {
 				if err := s.client.RbacV1().RoleBindings(rb.Namespace).Delete(ctx, rb.Name, kubeutil.DeleteOptions()); err != nil {
