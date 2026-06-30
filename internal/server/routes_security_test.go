@@ -624,6 +624,37 @@ func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
 	}
 }
 
+// TestManifestEndpointRequiresWriteScope (D3 / H3): GET /clusters/{id}/manifest/
+// mints a live registration token, so it must require the write-clusters scope
+// just like POST /register/ — a read-only API token must be denied (scope_denied)
+// before any token is minted. FAILS WITHOUT THE FIX (route was VerbRead/no scope).
+func TestManifestEndpointRequiresWriteScope(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	rawToken := "astro_user_manifest_scope_test"
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT: jwtMgr,
+		AuthQueries: routeSecurityAPITokenQuerier(
+			rawToken,
+			userID,
+			json.RawMessage(`["read"]`),
+		),
+		RBACEngine:  rbac.NewEngine(),
+		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbUpdate)},
+		Clusters:    handler.NewClusterHandler(nil),
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+uuid.New().String()+"/manifest/", nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("read-only token on /manifest/ status = %d, want %d (write scope required); body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "scope_denied") {
+		t.Fatalf("/manifest/ deny body = %s, want scope_denied", rec.Body.String())
+	}
+}
+
 func TestLegacySettingsMutatorsRequireRBACAndAdminScope(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
