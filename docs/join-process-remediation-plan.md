@@ -256,7 +256,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | A3 | Registration-token single-use + TTL | M2,L1,L2 | 1 | M | [x] RESOLVED 1599ba4 (temporal adoption gate; G3 soak: TTL=1h, replay denied, re-import OK) |
 | A4 | Connect rate-limit + audit + replay | M5,M6,L13,L3 | 1 | M | [x] RESOLVED f1a4d37 (failure-keyed limiter; G4 soak: healthy un-throttled, bad-token 429+audit, /register 429) |
 | B1 | HA + complete decommission | H8,H9,M12,M14,L15,L16 | 2 | XL | [x] RESOLVED 42b718f+451226b (G-B1 soak: full footprint deleted, no over-deletion, token revoked) |
-| B2 | Locator CAS + POD_IP fail-fast | M10,L19 | 2 | M | [ ] |
+| B2 | Locator CAS + POD_IP fail-fast | M10,L19 | 2 | M | [x] RESOLVED 75dabe7 (CAS no-clobber via miniredis; /readyz fails on HA-misconfig) |
 | B3 | Configurable tunnel concurrency | M11 | 2 | M | [ ] |
 | B4 | Non-fatal initial connect | L20 | 2 | S | [ ] |
 | C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [ ] |
