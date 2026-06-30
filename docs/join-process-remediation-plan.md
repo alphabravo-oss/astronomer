@@ -262,7 +262,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [x] RESOLVED 9633c58 (G-C1: stayed active 150s under RBAC strip, no token churn, last-good kept) |
 | C2 | One staleness writer + /readyz | M3,M4 | 3 | M | [ ] |
 | C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] |
-| D1 | Honest operator profile | H4,L8 | 3 | M | [ ] |
+| D1 | Honest operator profile | H4,L8 | 3 | M | [x] RESOLVED e83a132 (honesty fix: comment+docs+test; trim/split surfaced as product decision) |
 | D2 | RBACSyncer guardrails | H5 | 3 | M | [ ] |
 | D3 | Gate /manifest/ as write | H3 | 1 | S | [x] RESOLVED 322706f (read-only→403 on /manifest/ live; admin import intact) |
 | D4 | Agent-side profile guard | M8 | 4 | M | [ ] |
