@@ -22,6 +22,7 @@ type legacyClusterWithMetrics struct {
 	MemoryPercentage     float64 `json:"memory_percentage"`
 	PodCount             int     `json:"pod_count"`
 	MetricsServerPresent bool    `json:"metrics_server_present"`
+	Decommissioning      bool    `json:"decommissioning"`
 }
 
 // fixtureCluster returns a sqlc.Cluster populated across every column type

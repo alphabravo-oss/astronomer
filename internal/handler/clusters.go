@@ -69,6 +69,10 @@ type ClusterQuerier interface {
 	// reconciler. GetLatest backs the GET /decommission status endpoint.
 	CreateClusterDecommission(ctx context.Context, arg sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error)
 	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterDecommission, error)
+	// ListPendingClusterDecommissions returns in-flight ('pending'/'running')
+	// decommissions; the list/get handlers use it to mark clusters
+	// Decommissioning so the UI shows a stable "Decommissioning" state.
+	ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]sqlc.ClusterDecommission, error)
 	// Health
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterHealthStatus, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
@@ -791,11 +795,32 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// One query for all in-flight decommissions → mark the matching rows
+	// Decommissioning (avoids an N+1 per cluster). Best-effort: on error we
+	// just don't flag anything.
+	decommissioning := h.inFlightDecommissionSet(r.Context())
+
 	enriched := make([]ClusterResponse, 0, len(clusters))
 	for _, c := range clusters {
-		enriched = append(enriched, h.enrichClusterFromCache(r.Context(), c))
+		resp := h.enrichClusterFromCache(r.Context(), c)
+		resp.Decommissioning = decommissioning[c.ID]
+		enriched = append(enriched, resp)
 	}
 	RespondPaginated(w, r, enriched, total)
+}
+
+// inFlightDecommissionSet returns the set of cluster IDs with a pending/running
+// decommission. Best-effort — returns an empty set on any error.
+func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context) map[uuid.UUID]bool {
+	set := map[uuid.UUID]bool{}
+	rows, err := h.queries.ListPendingClusterDecommissions(ctx, 500)
+	if err != nil {
+		return set
+	}
+	for _, row := range rows {
+		set[row.ClusterID] = true
+	}
+	return set
 }
 
 // Create handles POST /api/v1/clusters/.
@@ -986,7 +1011,11 @@ func (h *ClusterHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, h.enrichClusterFresh(r.Context(), cluster))
+	out := h.enrichClusterFresh(r.Context(), cluster)
+	if latest, derr := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id); derr == nil {
+		out.Decommissioning = latest.Status == "pending" || latest.Status == "running"
+	}
+	RespondJSON(w, http.StatusOK, out)
 }
 
 // Update handles PUT /api/v1/clusters/{id}/.

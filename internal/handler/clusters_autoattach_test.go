@@ -183,6 +183,9 @@ func (q *fakeAutoAttachClusterQuerier) GetLatestClusterDecommissionByCluster(_ c
 	}
 	return row, nil
 }
+func (q *fakeAutoAttachClusterQuerier) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
+	return nil, nil
+}
 func (q *fakeAutoAttachClusterQuerier) GetClusterHealthStatus(context.Context, uuid.UUID) (sqlc.ClusterHealthStatus, error) {
 	return sqlc.ClusterHealthStatus{}, nil
 }

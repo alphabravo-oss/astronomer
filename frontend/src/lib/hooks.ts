@@ -202,26 +202,22 @@ export function useDeleteCluster() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiClient.deleteCluster(id),
-    onSuccess: (_data, id) => {
-      // Decommission is async: DELETE returns 202 but the row isn't tombstoned
-      // until the worker finishes. For a disconnected cluster that's near-
-      // instant; for a CONNECTED one the managed-side cleanup (agent uninstall)
-      // takes several seconds. Drop it from the list immediately, then re-hide
-      // after each refetch for a bounded window so a not-yet-tombstoned row
-      // never flickers back in. Once tombstoned, the normal list filter keeps
-      // it gone.
-      const dropFromLists = () =>
-        queryClient.setQueriesData<{ data?: { id: string }[] }>(
-          { queryKey: ['clusters', 'list'] },
-          (old) => (old?.data ? { ...old, data: old.data.filter((c) => c.id !== id) } : old),
-        );
-      dropFromLists();
-      toastSuccess('Cluster deleted');
+    onSuccess: () => {
+      // Decommission is async: DELETE returns 202 and the worker tombstones the
+      // row when cleanup finishes (instant for a disconnected agent's record;
+      // up to the grace window if it waits for an agent to reconnect). The row
+      // STAYS in the list, flagged `decommissioning`, so the dashboard shows a
+      // stable "Decommissioning" badge — no optimistic hide/re-show flicker. It
+      // drops out on its own once tombstoned. Just refresh so the badge appears,
+      // with a few spaced refreshes to catch the tombstone transition.
+      toastSuccess('Cluster decommissioning started');
+      const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      refresh();
       let ticks = 0;
       const timer = setInterval(() => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all }).finally(dropFromLists);
-        if (++ticks >= 12) clearInterval(timer); // ~30s reconcile window
-      }, 2500);
+        refresh();
+        if (++ticks >= 6) clearInterval(timer); // ~30s of follow-up polls
+      }, 5000);
     },
     onError: (error: Error) => {
       toastApiError('Failed to delete cluster', error);

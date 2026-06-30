@@ -255,6 +255,9 @@ func (routeSecurityClusterQuerier) CreateClusterDecommission(context.Context, sq
 func (routeSecurityClusterQuerier) GetLatestClusterDecommissionByCluster(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
 	return sqlc.ClusterDecommission{}, pgx.ErrNoRows
 }
+func (routeSecurityClusterQuerier) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
+	return nil, nil
+}
 func (routeSecurityClusterQuerier) GetClusterHealthStatus(context.Context, uuid.UUID) (sqlc.ClusterHealthStatus, error) {
 	return sqlc.ClusterHealthStatus{}, nil
 }

@@ -151,6 +151,7 @@ export function statusBgColor(status: string): string {
     stale: 'bg-status-warning/10 text-status-warning',
     readonly: 'bg-status-warning/10 text-status-warning',
     migrationrequired: 'bg-status-warning/10 text-status-warning',
+    decommissioning: 'bg-status-warning/10 text-status-warning',
 
     error: 'bg-status-error/10 text-status-error',
     critical: 'bg-status-error/10 text-status-error',
@@ -205,6 +206,7 @@ export function statusDotColor(status: string): string {
     stale: 'bg-status-warning',
     readonly: 'bg-status-warning',
     migrationrequired: 'bg-status-warning',
+    decommissioning: 'bg-status-warning',
 
     error: 'bg-status-error',
     critical: 'bg-status-error',

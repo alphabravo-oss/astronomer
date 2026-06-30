@@ -73,6 +73,14 @@ type ClusterResponse struct {
 	// cluster condition.
 	MetricsServerPresent bool `json:"metrics_server_present"`
 
+	// Decommissioning is true while an async decommission is in flight
+	// (a cluster_decommissions row in 'pending'/'running') but the cluster
+	// hasn't been tombstoned yet. The row stays in the list with this flag so
+	// the dashboard can show a stable "Decommissioning" state instead of the
+	// delete optimistically hiding the row and flickering until the worker
+	// finishes. Once tombstoned (decommissioned_at set) the row leaves the list.
+	Decommissioning bool `json:"decommissioning"`
+
 	AgentPrivilegeProfile string               `json:"agent_privilege_profile"`
 	ArgoCD                ClusterArgoCDSummary `json:"argocd"`
 }

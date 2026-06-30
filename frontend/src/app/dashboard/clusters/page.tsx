@@ -99,8 +99,13 @@ export default function ClustersPage() {
     {
       key: 'status',
       header: 'Status',
-      accessor: (row) => <StatusBadge status={row.status} />,
-      sortAccessor: (row) => row.status,
+      accessor: (row) =>
+        row.decommissioning ? (
+          <StatusBadge status="decommissioning" label="Decommissioning" pulse />
+        ) : (
+          <StatusBadge status={row.status} />
+        ),
+      sortAccessor: (row) => (row.decommissioning ? 'decommissioning' : row.status),
     },
     {
       key: 'provider',

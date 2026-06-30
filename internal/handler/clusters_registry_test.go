@@ -125,6 +125,10 @@ func (q *clusterRegistryTestQuerier) GetLatestClusterDecommissionByCluster(conte
 	return sqlc.ClusterDecommission{}, nil
 }
 
+func (q *clusterRegistryTestQuerier) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
+	return nil, nil
+}
+
 // Sprint 074 — auto-attach surface. These three methods are no-ops in
 // this test (the registry tests don't exercise Create), but the
 // ClusterQuerier interface requires them, so we satisfy them with

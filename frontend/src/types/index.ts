@@ -84,6 +84,9 @@ export interface Cluster {
   // shell, image-scan rescan, etc. — are hidden / disabled for is_local
   // clusters because the in-cluster local-agent path is best-effort.
   isLocal?: boolean;
+  // True while an async decommission is in flight (the row stays listed with a
+  // "Decommissioning" badge until the worker tombstones it).
+  decommissioning?: boolean;
   agentPrivilegeProfile?: 'viewer' | 'operator' | 'namespace-viewer' | 'namespace-operator' | 'custom' | 'admin' | string;
   argocd?: ClusterArgoCDSummary;
 }
