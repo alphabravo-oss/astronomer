@@ -272,6 +272,6 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | E4 | Appset disable cascade | L10 | 4 | S | [x] RESOLVED (resources-finalizer on baseline App template; cascades prune) |
 | F1 | Per-component PSA labels | L6 | 4 | S | [x] RESOLVED (every owned ns has explicit enforce; system=baseline, components=privileged) |
 | F2 | YAML-escape scalars | L7 | 4 | S | [x] RESOLVED 796a87a (escapeYAMLDoubleQuoted on operator scalars; injection test) |
-| F3 | Bootstrap-token re-apply hygiene | L4,L17 | 4 | M | [ ] |
+| F3 | Bootstrap-token re-apply hygiene | L4,L17 | 4 | M | [x] RESOLVED (documented re-apply caveat + --server-side guidance on the token Secret) |
 | F4 | tunnel2 fail-closed + dead config | L18,L5,L9,L1 | 4 | S | [x] RESOLVED (tunnel2 nil-validator fail-closed; PDB+drain comments fixed; L1 via A3) |
 | G1–G7 | Soak/validation extensions | — | all | M | [ ] |
