@@ -72,6 +72,10 @@ import {
   useFeatureFlags,
 } from '@/lib/hooks';
 
+// Baked at build time by the Dockerfile (ARG VERSION → NEXT_PUBLIC_APP_VERSION).
+// Falls back to 'dev' for local/un-stamped builds.
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || 'dev';
+
 type NavItem = {
   label: string;
   href: string;
@@ -544,13 +548,13 @@ export function Sidebar() {
         sidebarCollapsed ? 'w-16' : 'w-60'
       )}
     >
-      {/* Logo */}
+      {/* Logo + collapse toggle */}
       <div className="flex items-center h-14 px-4 border-b border-sidebar-border">
-        <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
-          <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-            <Orbit className="h-4 w-4 text-white" />
-          </div>
-          {!sidebarCollapsed && (
+        {!sidebarCollapsed && (
+          <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
+            <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+              <Orbit className="h-4 w-4 text-white" />
+            </div>
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-semibold text-foreground tracking-tight truncate leading-tight">
                 Astronomer
@@ -559,8 +563,20 @@ export function Sidebar() {
                 by AlphaBravo
               </span>
             </div>
+          </Link>
+        )}
+        <button
+          onClick={toggleSidebarCollapsed}
+          className={cn('nav-item', sidebarCollapsed ? 'w-full justify-center px-0' : 'ml-auto')}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
           )}
-        </Link>
+        </button>
       </div>
 
       {/* Cluster context header */}
@@ -636,23 +652,9 @@ export function Sidebar() {
         </a>
         {!sidebarCollapsed && (
           <div className="px-3 py-1">
-            <span className="text-[10px] text-muted-foreground">Astronomer v0.1.0</span>
+            <span className="text-[10px] text-muted-foreground">Astronomer {APP_VERSION}</span>
           </div>
         )}
-        <button
-          onClick={toggleSidebarCollapsed}
-          className="nav-item w-full justify-center"
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <>
-              <ChevronLeft className="h-4 w-4" />
-              <span className="text-xs">Collapse</span>
-            </>
-          )}
-        </button>
       </div>
 
     </aside>

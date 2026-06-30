@@ -22,6 +22,12 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# Bake the release version so the dashboard can display it (the release
+# workflow passes VERSION to every component build). NEXT_PUBLIC_* is inlined
+# at build time, so it must be set before `next build`.
+ARG VERSION=dev
+ENV NEXT_PUBLIC_APP_VERSION=$VERSION
+
 RUN npm run build
 
 # Production image, copy all the files and run next
