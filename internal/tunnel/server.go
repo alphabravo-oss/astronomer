@@ -354,6 +354,10 @@ type AgentTokenValidator interface {
 	ClearPreviousClusterAgentTokenHash(ctx context.Context, id uuid.UUID) error
 	UpdateClusterHeartbeat(ctx context.Context, arg sqlc.UpdateClusterHeartbeatParams) error
 	UpsertClusterHealthStatus(ctx context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error)
+	// TouchClusterMetricsSample (C3 / M13) stamps last_metrics_at when a
+	// non-empty metrics SAMPLE arrives. Called only from handleMetrics, so
+	// last_metrics_at tracks real metrics frames separately from last_check.
+	TouchClusterMetricsSample(ctx context.Context, clusterID uuid.UUID) error
 	CreateAgentConnection(ctx context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error)
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg sqlc.UpdateAgentConnectionStatusParams) error

@@ -19,7 +19,23 @@ import (
 // internal/server/cluster_probes.go.
 const (
 	ConditionConnected = "Connected"
+	// ConditionMetricsAvailable (C3 / M13) is an OBSERVABILITY-only condition
+	// that distinguishes three metrics states via its reason:
+	//   - MetricsFlowing (True):   a fresh sample arrived within the window.
+	//   - MetricsStale  (False):   metrics-server is/was present but the sample
+	//                              is older than metricsStaleThreshold.
+	//   - NoMetricsServer (False): no metrics sample has EVER been received.
+	// It is deliberately decoupled from liveness: it is computed from
+	// last_metrics_at (a separate column with a separate threshold) and never
+	// touches clusters.status, so a metrics-stale cluster stays 'active'.
+	ConditionMetricsAvailable = "MetricsAvailable"
 )
+
+// metricsStaleThreshold is the age past which a present metrics stream is
+// flagged MetricsStale (~5 missed 60s metrics ticks). It is intentionally
+// larger than and orthogonal to the 2m heartbeat-liveness window so the two
+// can never fight/flap: they write different rows/columns.
+const metricsStaleThreshold = 5 * time.Minute
 
 // Tri-state matching metav1.ConditionStatus.
 const (
@@ -172,5 +188,32 @@ func updateClusterConditions(ctx context.Context, cluster sqlc.Cluster, heartbea
 		upsert(ConditionConnected, conditionFalse, "AgentHeartbeatStale",
 			fmt.Sprintf("Last heartbeat %s ago (threshold 2m).",
 				time.Since(cluster.LastHeartbeat.Time).Round(time.Second)))
+	}
+
+	// MetricsAvailable: distinguish a frozen metrics stream from a cluster
+	// that has no metrics-server, driven by last_metrics_at. A FROZEN stream
+	// sends no frame, so only this periodic sweep — never handleMetrics — can
+	// notice the timestamp aging. This is observability only and NEVER affects
+	// clusters.status (set above by liveness); the MetricsAvailable=False
+	// reasons are also ignored by cluster_condition_reconcile's dispatch
+	// (default no-op) and by the agent self-test.
+	health, err := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+	if err != nil {
+		// No health row yet (no frames at all) — nothing to classify. Don't
+		// write a spurious condition; the next sweep retries once a row exists.
+		return
+	}
+	switch {
+	case !health.LastMetricsAt.Valid:
+		upsert(ConditionMetricsAvailable, conditionFalse, "NoMetricsServer",
+			"No metrics sample has ever been received (metrics-server not installed).")
+	case time.Since(health.LastMetricsAt.Time) > metricsStaleThreshold:
+		upsert(ConditionMetricsAvailable, conditionFalse, "MetricsStale",
+			fmt.Sprintf("Last metrics sample %s ago (threshold 5m).",
+				time.Since(health.LastMetricsAt.Time).Round(time.Second)))
+	default:
+		upsert(ConditionMetricsAvailable, conditionTrue, "MetricsFlowing",
+			fmt.Sprintf("Metrics sample received at %s.",
+				health.LastMetricsAt.Time.UTC().Format(time.RFC3339)))
 	}
 }

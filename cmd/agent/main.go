@@ -211,6 +211,10 @@ func runConnect(logger *slog.Logger) error {
 			}
 			subscriber := agent.NewStateSubscriber(client, tunnel, logger)
 			subscriber.SetWatchSecrets(agent.ProfileAllowsSecrets(cfg.PrivilegeProfile))
+			// Wire the tunnel as the connection watcher so the subscriber's
+			// replay loop re-emits cached informer state on every WS reconnect
+			// (L12 defense-in-depth — mirrors the MirrorSubscriber wiring below).
+			subscriber.SetConnectionWatcher(tunnel)
 			subscriber.Run(ctx)
 		}()
 

@@ -1529,6 +1529,13 @@ type Querier interface {
 	TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
+	// C3 / M13: stamp last_metrics_at to now() when a NON-EMPTY metrics SAMPLE
+	// arrives (driven by the agent's MetricsAvailable=true). Called ONLY by the
+	// tunnel metrics handler — never by the heartbeat handler or the worker health
+	// sweep — so last_metrics_at uniquely tracks "last real metrics sample" while
+	// last_check stays refreshed by all three writers. The health row is upserted
+	// by the metrics handler immediately before this call, so it always exists.
+	TouchClusterMetricsSample(ctx context.Context, clusterID uuid.UUID) error
 	TouchKubectlSessionInput(ctx context.Context, id uuid.UUID) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
 	TouchSCIMToken(ctx context.Context, id uuid.UUID) error

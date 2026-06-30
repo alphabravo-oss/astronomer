@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -367,6 +368,111 @@ func TestStateSubscriberDispatchSendFailedMetric(t *testing.T) {
 	}
 	if got := counterValue(t, agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("send_failed", "Pod")...)); got != 1 {
 		t.Fatalf("expected handled_total{outcome=send_failed,kind=Pod}=1, got %v", got)
+	}
+}
+
+// fakeStateWatcher is a toggleable StateConnectionWatcher for the L12 replay
+// tests. Starts disconnected; flip with setConnected.
+type fakeStateWatcher struct{ connected atomic.Bool }
+
+func (f *fakeStateWatcher) IsConnected() bool   { return f.connected.Load() }
+func (f *fakeStateWatcher) setConnected(v bool) { f.connected.Store(v) }
+
+// countModifiedPods scans the captured frames for replayed (Modified) Pod
+// updates — only replayAll emits Modified for an otherwise-static cache.
+func countModifiedPods(t *testing.T, msgs []*protocol.Message, name string) int {
+	t.Helper()
+	n := 0
+	for _, m := range msgs {
+		if m.Type != protocol.MsgStateUpdate {
+			continue
+		}
+		var p protocol.StateUpdatePayload
+		if err := json.Unmarshal(m.Payload, &p); err != nil {
+			continue
+		}
+		if p.Kind == "Pod" && p.Name == name && p.Op == protocol.StateUpdateOpModified {
+			n++
+		}
+	}
+	return n
+}
+
+// TestStateSubscriberReplaysOnReconnect (matrix d): with a connection watcher
+// wired, a false→true transition re-emits the cached informer contents as
+// Modified updates — the L12 defense-in-depth resync.
+func TestStateSubscriberReplaysOnReconnect(t *testing.T) {
+	defer setStateSubscriberTunables(1*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
+
+	client := fake.NewClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "cached", Namespace: "default", ResourceVersion: "1"},
+	})
+	sender := &recordingSender{}
+	watcher := &fakeStateWatcher{} // starts disconnected
+
+	subscriber := NewStateSubscriber(client, sender, slog.New(slog.NewTextHandler(testWriter{t}, nil)))
+	subscriber.SetConnectionWatcher(watcher)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go subscriber.Run(ctx)
+
+	readyCtx, readyCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer readyCancel()
+	if !subscriber.WaitReady(readyCtx) {
+		t.Fatal("state subscriber did not become ready")
+	}
+
+	// The initial-list Add for the cached Pod is bootstrap-suppressed, so no
+	// Modified replay should exist yet.
+	if got := countModifiedPods(t, sender.Snapshot(), "cached"); got != 0 {
+		t.Fatalf("expected 0 replayed Modified before reconnect, got %d", got)
+	}
+
+	// Simulate a reconnect: false→true. The 2s replay ticker then fires once.
+	watcher.setConnected(true)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if countModifiedPods(t, sender.Snapshot(), "cached") >= 1 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if got := countModifiedPods(t, sender.Snapshot(), "cached"); got < 1 {
+		t.Fatalf("expected the cached Pod to be replayed (Modified) after reconnect, got %d", got)
+	}
+}
+
+// TestStateSubscriberReplayNoOpWhenUnwired (matrix d): with NO connection
+// watcher wired, the replay goroutine never starts, so no Modified resync is
+// ever emitted — legacy behavior is preserved exactly.
+func TestStateSubscriberReplayNoOpWhenUnwired(t *testing.T) {
+	defer setStateSubscriberTunables(1*time.Millisecond, 1*time.Second, 200*time.Millisecond, 24*time.Hour)()
+
+	client := fake.NewClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "cached", Namespace: "default", ResourceVersion: "1"},
+	})
+	sender := &recordingSender{}
+
+	// Deliberately do NOT call SetConnectionWatcher.
+	subscriber := NewStateSubscriber(client, sender, slog.New(slog.NewTextHandler(testWriter{t}, nil)))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go subscriber.Run(ctx)
+
+	readyCtx, readyCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer readyCancel()
+	if !subscriber.WaitReady(readyCtx) {
+		t.Fatal("state subscriber did not become ready")
+	}
+
+	// Wait out the same window the wired case used to fire its replay; with no
+	// watcher, no Modified resync must ever appear.
+	time.Sleep(3 * time.Second)
+	if got := countModifiedPods(t, sender.Snapshot(), "cached"); got != 0 {
+		t.Fatalf("expected 0 replayed Modified when unwired, got %d", got)
 	}
 }
 

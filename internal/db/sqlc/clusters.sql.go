@@ -563,7 +563,7 @@ func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, e
 }
 
 const getClusterHealthStatus = `-- name: GetClusterHealthStatus :one
-SELECT id, cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions, last_check, created_at, updated_at FROM cluster_health_statuses WHERE cluster_id = $1
+SELECT id, cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions, last_check, created_at, updated_at, last_metrics_at FROM cluster_health_statuses WHERE cluster_id = $1
 `
 
 func (q *Queries) GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error) {
@@ -580,6 +580,7 @@ func (q *Queries) GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUI
 		&i.LastCheck,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastMetricsAt,
 	)
 	return i, err
 }
@@ -1114,6 +1115,21 @@ func (q *Queries) TouchClusterAgentToken(ctx context.Context, id uuid.UUID) erro
 	return err
 }
 
+const touchClusterMetricsSample = `-- name: TouchClusterMetricsSample :exec
+UPDATE cluster_health_statuses SET last_metrics_at = now() WHERE cluster_id = $1
+`
+
+// C3 / M13: stamp last_metrics_at to now() when a NON-EMPTY metrics SAMPLE
+// arrives (driven by the agent's MetricsAvailable=true). Called ONLY by the
+// tunnel metrics handler — never by the heartbeat handler or the worker health
+// sweep — so last_metrics_at uniquely tracks "last real metrics sample" while
+// last_check stays refreshed by all three writers. The health row is upserted
+// by the metrics handler immediately before this call, so it always exists.
+func (q *Queries) TouchClusterMetricsSample(ctx context.Context, clusterID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchClusterMetricsSample, clusterID)
+	return err
+}
+
 const updateCluster = `-- name: UpdateCluster :one
 UPDATE clusters SET
     display_name = $2,
@@ -1410,7 +1426,7 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     node_count = EXCLUDED.node_count,
     conditions = EXCLUDED.conditions,
     last_check = now()
-RETURNING id, cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions, last_check, created_at, updated_at
+RETURNING id, cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions, last_check, created_at, updated_at, last_metrics_at
 `
 
 type UpsertClusterHealthStatusParams struct {
@@ -1443,6 +1459,7 @@ func (q *Queries) UpsertClusterHealthStatus(ctx context.Context, arg UpsertClust
 		&i.LastCheck,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastMetricsAt,
 	)
 	return i, err
 }

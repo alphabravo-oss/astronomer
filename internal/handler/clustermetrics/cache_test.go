@@ -265,6 +265,34 @@ func TestProvider_MetricsServerMissing(t *testing.T) {
 	if snap.PodCount != 1 {
 		t.Errorf("pod_count should still populate when metrics-server is missing, got %d", snap.PodCount)
 	}
+	// M13 pull-path twin: a 404/absent metrics-server must carry the distinct
+	// MetricsServerPresent=false signal so the card can tell it apart from a
+	// present-but-empty sample.
+	if snap.MetricsServerPresent {
+		t.Errorf("expected MetricsServerPresent=false when metrics-server missing, got true")
+	}
+}
+
+// TestProvider_MetricsServerPresentWhenFlowing is the M13 no-regression twin:
+// a cluster WITH metrics-server flowing reports CPU/mem populated AND
+// MetricsServerPresent=true (additive — distinct from the zeros-but-present
+// case the card needs to disambiguate).
+func TestProvider_MetricsServerPresentWhenFlowing(t *testing.T) {
+	f := &fakeRequester{
+		nodes:   corev1.NodeList{Items: []corev1.Node{makeNode("n1", "1", "1Gi")}},
+		pods:    corev1.PodList{Items: []corev1.Pod{{}}},
+		metrics: metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{makeNodeMetrics("n1", "100m", "100Mi")}},
+	}
+	p := NewProviderWithTTL(time.Hour)
+	p.SetRemoteRequester(f)
+
+	snap := p.Get(context.Background(), "cluster-flowing", false)
+	if !snap.MetricsServerPresent {
+		t.Errorf("expected MetricsServerPresent=true when metrics-server is flowing, got false")
+	}
+	if snap.CPUPercentage == 0 {
+		t.Errorf("expected non-zero cpu when metrics-server is flowing, got %+v", snap)
+	}
 }
 
 func TestProvider_Invalidate(t *testing.T) {

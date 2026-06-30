@@ -67,6 +67,12 @@ type Snapshot struct {
 	CPUPercentage    float64
 	MemoryPercentage float64
 	PodCount         int
+	// MetricsServerPresent (C3 / M13) reports whether the metrics-server
+	// node-metrics list actually succeeded on this collection. It lets the
+	// dashboard card path tell a 404/absent metrics-server (false) from a
+	// present-but-empty sample (true + zeros) WITHOUT reshaping the CPU/mem/pod
+	// fields, which still collapse to zeros when metrics-server is missing.
+	MetricsServerPresent bool
 	// Nodes is keyed by node name; values may be partially populated (capacity
 	// only) when metrics-server is missing.
 	Nodes map[string]NodeMetrics
@@ -325,6 +331,7 @@ func collectLocal(ctx context.Context, cs *kubernetes.Clientset, mc metricsv.Int
 	}
 	nodeMetrics, err := mc.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
 	if err == nil {
+		snap.MetricsServerPresent = true
 		snap.CPUPercentage, snap.MemoryPercentage = computePercentages(nodes.Items, nodeMetrics.Items)
 		layerNodeUsage(snap.Nodes, nodeMetrics.Items)
 	}
@@ -371,6 +378,7 @@ func collectRemote(ctx context.Context, req K8sRequester, clusterID string) Snap
 	// here; capacity-only data is meaningless without usage.
 	nodeMetrics, err := fetchNodeMetrics(ctx, req, clusterID, headers)
 	if err == nil {
+		snap.MetricsServerPresent = true
 		snap.CPUPercentage, snap.MemoryPercentage = computePercentages(nodes, nodeMetrics)
 		layerNodeUsage(snap.Nodes, nodeMetrics)
 	}

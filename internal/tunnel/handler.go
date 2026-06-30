@@ -493,6 +493,18 @@ func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
 		h.log.Warn("failed to upsert cluster health from metrics", slog.String("error", err.Error()))
 	}
 
+	// C3 / M13: stamp last_metrics_at ONLY when the agent actually returned a
+	// metrics sample (MetricsAvailable=true). A frozen stream sends no frame, so
+	// last_metrics_at simply ages; a cluster with no metrics-server sends
+	// MetricsAvailable=false forever, so it never gets stamped (stays NULL). The
+	// periodic worker sweep reads this column to tell "MetricsStale" apart from
+	// "NoMetricsServer". The heartbeat handler and worker sweep never touch it.
+	if payload.MetricsAvailable {
+		if err := h.validator.TouchClusterMetricsSample(context.Background(), clusterID); err != nil {
+			h.log.Warn("failed to touch cluster metrics sample", slog.String("error", err.Error()))
+		}
+	}
+
 	h.mu.RLock()
 	p := h.publisher
 	h.mu.RUnlock()

@@ -615,16 +615,17 @@ type ClusterGroup struct {
 }
 
 type ClusterHealthStatus struct {
-	ID                 uuid.UUID       `json:"id"`
-	ClusterID          uuid.UUID       `json:"cluster_id"`
-	CpuUsagePercent    float64         `json:"cpu_usage_percent"`
-	MemoryUsagePercent float64         `json:"memory_usage_percent"`
-	PodCount           int32           `json:"pod_count"`
-	NodeCount          int32           `json:"node_count"`
-	Conditions         json.RawMessage `json:"conditions"`
-	LastCheck          time.Time       `json:"last_check"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	ID                 uuid.UUID          `json:"id"`
+	ClusterID          uuid.UUID          `json:"cluster_id"`
+	CpuUsagePercent    float64            `json:"cpu_usage_percent"`
+	MemoryUsagePercent float64            `json:"memory_usage_percent"`
+	PodCount           int32              `json:"pod_count"`
+	NodeCount          int32              `json:"node_count"`
+	Conditions         json.RawMessage    `json:"conditions"`
+	LastCheck          time.Time          `json:"last_check"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	LastMetricsAt      pgtype.Timestamptz `json:"last_metrics_at"`
 }
 
 type ClusterMonitoringConfig struct {

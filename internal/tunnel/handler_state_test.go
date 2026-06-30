@@ -33,24 +33,25 @@ type recordedEvent struct {
 }
 
 type recordingValidator struct {
-	mu                 sync.Mutex
-	tokenClusterID     string
-	tokenErr           error
-	clusterAgentToken  sqlc.ClusterAgentToken
-	clusterAgentErr    error
+	mu                  sync.Mutex
+	tokenClusterID      string
+	tokenErr            error
+	clusterAgentToken   sqlc.ClusterAgentToken
+	clusterAgentErr     error
 	upsertArgs          []sqlc.UpsertClusterHealthStatusParams
 	upsertErr           error
 	updateHeartbeatArgs []sqlc.UpdateClusterHeartbeatParams
 	updateHeartbeatErr  error
-	createConnArgs     []sqlc.CreateAgentConnectionParams
-	updateConnArgs     []sqlc.UpdateAgentConnectionStatusParams
-	pingIDs            []uuid.UUID
-	upsertAgentArgs    []sqlc.UpsertClusterAgentTokenParams
-	rotateAgentArgs    []sqlc.RotateClusterAgentTokenParams
-	clearedPreviousIDs []uuid.UUID
-	touchedAgentIDs    []uuid.UUID
-	adoptedAgentIDs    []uuid.UUID
-	markedRegIDs       []uuid.UUID
+	createConnArgs      []sqlc.CreateAgentConnectionParams
+	updateConnArgs      []sqlc.UpdateAgentConnectionStatusParams
+	pingIDs             []uuid.UUID
+	upsertAgentArgs     []sqlc.UpsertClusterAgentTokenParams
+	rotateAgentArgs     []sqlc.RotateClusterAgentTokenParams
+	clearedPreviousIDs  []uuid.UUID
+	touchedAgentIDs     []uuid.UUID
+	touchedMetricsIDs   []uuid.UUID
+	adoptedAgentIDs     []uuid.UUID
+	markedRegIDs        []uuid.UUID
 	// A3 gate-test knobs.
 	regTokenCreatedAt   time.Time
 	byClusterIDForce    *sqlc.ClusterAgentToken
@@ -199,6 +200,21 @@ func (r *recordingValidator) UpsertClusterHealthStatus(_ context.Context, arg sq
 	defer r.mu.Unlock()
 	r.upsertArgs = append(r.upsertArgs, arg)
 	return sqlc.ClusterHealthStatus{}, r.upsertErr
+}
+
+func (r *recordingValidator) TouchClusterMetricsSample(_ context.Context, clusterID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.touchedMetricsIDs = append(r.touchedMetricsIDs, clusterID)
+	return nil
+}
+
+func (r *recordingValidator) SnapshotTouchedMetricsIDs() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]uuid.UUID, len(r.touchedMetricsIDs))
+	copy(out, r.touchedMetricsIDs)
+	return out
 }
 
 func (r *recordingValidator) CreateAgentConnection(_ context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error) {
@@ -776,6 +792,52 @@ func TestHandleMetricsPublishesClusterMetricsAndPersistsHealth(t *testing.T) {
 	}
 	if data["pod_count"] != 17 {
 		t.Fatalf("expected pod_count=17, got %v", data["pod_count"])
+	}
+}
+
+// TestHandleMetricsTouchesSampleOnlyWhenAvailable proves the M13 write point:
+// a metrics frame with MetricsAvailable=true stamps last_metrics_at (the
+// distinct "real sample arrived" signal), while MetricsAvailable=false (no
+// metrics-server) leaves it untouched so the timestamp stays NULL.
+func TestHandleMetricsTouchesSampleOnlyWhenAvailable(t *testing.T) {
+	clusterID := uuid.New()
+
+	newConn := func() *AgentConnection {
+		return &AgentConnection{
+			ClusterID: clusterID.String(),
+			Streams:   NewStreamManager(10),
+			sendCh:    make(chan *protocol.Message, 10),
+		}
+	}
+
+	// metrics-server present + flowing → touch fires.
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	h.SetPublisher(&recordingPublisher{})
+	body, _ := json.Marshal(protocol.MetricsPayload{
+		Timestamp: "2026-05-10T00:05:00Z", MetricsAvailable: true,
+		ClusterCPUUsage: 42.5, ClusterPodCount: 17, ClusterNodeCount: 3,
+	})
+	h.handleMessage(newConn(), &protocol.Message{Type: protocol.MsgMetrics, Payload: body})
+	if touched := validator.SnapshotTouchedMetricsIDs(); len(touched) != 1 || touched[0] != clusterID {
+		t.Fatalf("metrics-available frame: want one touch for %s, got %v", clusterID, touched)
+	}
+
+	// no metrics-server → MetricsAvailable=false → no touch (last_metrics_at
+	// stays NULL, which the sweep reads as NoMetricsServer).
+	validator2 := &recordingValidator{}
+	h2 := NewHubWithValidator(slog.Default(), validator2)
+	h2.SetPublisher(&recordingPublisher{})
+	body2, _ := json.Marshal(protocol.MetricsPayload{
+		Timestamp: "2026-05-10T00:05:00Z", MetricsAvailable: false, ClusterPodCount: 9,
+	})
+	h2.handleMessage(newConn(), &protocol.Message{Type: protocol.MsgMetrics, Payload: body2})
+	if touched := validator2.SnapshotTouchedMetricsIDs(); len(touched) != 0 {
+		t.Fatalf("metrics-unavailable frame: want no touch, got %v", touched)
+	}
+	// The health upsert still happens (graceful zeros) — no regression.
+	if got := len(validator2.SnapshotUpserts()); got != 1 {
+		t.Fatalf("metrics-unavailable frame: want 1 health upsert, got %d", got)
 	}
 }
 

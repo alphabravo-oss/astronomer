@@ -91,6 +91,24 @@ type stateSender interface {
 	Send(msg *protocol.Message) error
 }
 
+// StateConnectionWatcher is the narrow tunnel-state surface the reconnect-
+// replay goroutine polls. The agent's TunnelClient satisfies it via
+// IsConnected. Mirrors MirrorConnectionWatcher so the two subscribers share the
+// same proven replay shape. (L12 / C3.)
+type StateConnectionWatcher interface {
+	IsConnected() bool
+}
+
+// stateStoreEntry pairs an informer's cache.Store with the GVK labels the
+// dispatch path needs so replayAll can re-emit every cached object without
+// re-deriving them per item.
+type stateStoreEntry struct {
+	kind       string
+	apiGroup   string
+	apiVersion string
+	store      cache.Store
+}
+
 // stateRateLimiter collapses bursty informer events to at most one emit per
 // stateSubscriberMinInterval per key.
 //
@@ -174,6 +192,19 @@ type StateSubscriber struct {
 	// error-loops on Forbidden. Defaults true (admin/operator); SetWatchSecrets
 	// turns it off for read-only profiles.
 	watchSecrets bool
+
+	// stores holds the durable-kind informer caches so the reconnect-replay
+	// goroutine can re-emit them on a tunnel false→true transition (L12 / C3).
+	// Keyed by kind; populated by attach() as each informer is registered. The
+	// Events informer is deliberately EXCLUDED (replaying historical Events
+	// would flood — exactly what eventIsRecent guards against).
+	storeMu sync.RWMutex
+	stores  map[string]stateStoreEntry
+
+	// conn is the connection watcher whose IsConnected reading the replay loop
+	// polls. nil-safe: when unwired (tests / older callers) the replay goroutine
+	// is never started, so behavior is exactly as before.
+	conn StateConnectionWatcher
 }
 
 // NewStateSubscriber constructs a StateSubscriber. The sender must be a live
@@ -191,6 +222,17 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		readyCh:      make(chan struct{}),
 		startedAt:    time.Now(),
 		watchSecrets: true,
+		stores:       make(map[string]stateStoreEntry),
+	}
+}
+
+// SetConnectionWatcher wires the tunnel connection watcher so the reconnect-
+// replay loop can detect false→true transitions and re-emit every cached
+// informer object to the (newly-reconnected) management plane. Optional; nil =
+// no replay goroutine (the legacy behavior). (L12 / C3.)
+func (s *StateSubscriber) SetConnectionWatcher(c StateConnectionWatcher) {
+	if s != nil {
+		s.conn = c
 	}
 }
 
@@ -255,6 +297,15 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 	s.ready.Store(true)
 	s.once.Do(func() { close(s.readyCh) })
 	s.log.Info("state subscriber started", "resync_period", getStateSubscriberResyncPeriod().String())
+
+	// Reconnect replay (L12 / C3): on every tunnel false→true transition,
+	// re-emit the durable informer caches so a UI relying on pushed state isn't
+	// stale until the next 30m resync. Started only when a connection watcher is
+	// wired AND after caches have synced (ready=true), so the stores are
+	// populated. No-op when unwired.
+	if s.conn != nil {
+		go s.runReconnectReplay(ctx)
+	}
 
 	// Eviction goroutine.
 	evictTicker := time.NewTicker(getStateSubscriberEvictEvery())
@@ -347,6 +398,8 @@ func (s *StateSubscriber) registerEvents(factory informers.SharedInformerFactory
 // All three handlers share a dispatch helper so the rate-limiter and serialize
 // logic only lives in one place.
 func (s *StateSubscriber) attach(inf cache.SharedIndexInformer, kind, apiGroup, apiVersion string) {
+	// Record the store so reconnect-replay can re-emit this kind's cache.
+	s.recordStore(kind, apiGroup, apiVersion, inf.GetStore())
 	_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if meta, ok := metaFromObj(obj); ok {
@@ -391,6 +444,14 @@ func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, ap
 		s.log.Debug("state subscriber rate-limited", "key", key)
 		return
 	}
+	s.emit(op, kind, apiGroup, apiVersion, meta, key)
+}
+
+// emit marshals + sends one StateUpdate. Split out of dispatch so the
+// reconnect-replay path can re-emit cached objects WITHOUT going through the
+// per-key rate limiter (a one-shot bounded resync should never be collapsed by
+// the limiter that's there to absorb live event storms).
+func (s *StateSubscriber) emit(op protocol.StateUpdateOp, kind, apiGroup, apiVersion string, meta metav1.Object, key string) {
 	payload := protocol.StateUpdatePayload{
 		Op:              op,
 		Kind:            kind,
@@ -421,6 +482,71 @@ func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, ap
 	}
 	agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("queued", kind)...).Inc()
 	s.log.Debug("state subscriber sent", "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
+}
+
+// recordStore captures an informer's cache.Store so reconnect-replay can
+// iterate it later. Idempotent; replaces any prior entry for the same kind.
+func (s *StateSubscriber) recordStore(kind, apiGroup, apiVersion string, store cache.Store) {
+	if store == nil {
+		return
+	}
+	s.storeMu.Lock()
+	defer s.storeMu.Unlock()
+	s.stores[kind] = stateStoreEntry{kind: kind, apiGroup: apiGroup, apiVersion: apiVersion, store: store}
+}
+
+// runReconnectReplay polls the tunnel state every 2s. On every false→true
+// transition (including the initial connect, since prev starts false) it
+// re-emits every cached informer object as a Modified update. This makes the
+// pushed-state stream resilient to mid-stream WS drops without waiting for the
+// next 30m informer resync. Mirrors MirrorSubscriber.runReconnectReplay.
+func (s *StateSubscriber) runReconnectReplay(ctx context.Context) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	prev := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		now := s.conn.IsConnected()
+		if now && !prev {
+			s.replayAll()
+		}
+		prev = now
+	}
+}
+
+// replayAll re-emits every cached object across every recorded store as a
+// StateUpdateOpModified (the "object currently exists / resync" op, matching
+// the informer's own 30m resync which redelivers cached objects as updates).
+// Bounded: it lists only the in-memory informer caches (no apiserver hit) and
+// bypasses the rate limiter, so a reconnect emits at most one snapshot per
+// up-edge over the same bounded send channel.
+func (s *StateSubscriber) replayAll() {
+	s.storeMu.RLock()
+	entries := make([]stateStoreEntry, 0, len(s.stores))
+	for _, e := range s.stores {
+		entries = append(entries, e)
+	}
+	s.storeMu.RUnlock()
+
+	total := 0
+	for _, e := range entries {
+		for _, obj := range e.store.List() {
+			meta, ok := metaFromObj(obj)
+			if !ok {
+				continue
+			}
+			key := fmt.Sprintf("%s|%s|%s", e.kind, meta.GetNamespace(), meta.GetName())
+			s.emit(protocol.StateUpdateOpModified, e.kind, e.apiGroup, e.apiVersion, meta, key)
+			total++
+		}
+	}
+	if total > 0 {
+		s.log.Info("state subscriber: replayed cached objects after reconnect", "objects", total)
+	}
 }
 
 // eventIsRecent decides whether a corev1/eventsv1 Event is fresh enough to

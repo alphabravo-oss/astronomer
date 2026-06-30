@@ -80,6 +80,10 @@ func (s *stubValidator) UpsertClusterHealthStatus(_ context.Context, _ sqlc.Upse
 	return sqlc.ClusterHealthStatus{}, nil
 }
 
+func (s *stubValidator) TouchClusterMetricsSample(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
 func (s *stubValidator) CreateAgentConnection(_ context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error) {
 	return sqlc.AgentConnection{
 		ID:        uuid.New(),

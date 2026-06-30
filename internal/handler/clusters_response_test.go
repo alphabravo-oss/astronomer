@@ -18,9 +18,10 @@ import (
 // to pin the wire contract for TestClusterResponse_WireCompat.
 type legacyClusterWithMetrics struct {
 	sqlc.Cluster
-	CPUPercentage    float64 `json:"cpu_percentage"`
-	MemoryPercentage float64 `json:"memory_percentage"`
-	PodCount         int     `json:"pod_count"`
+	CPUPercentage        float64 `json:"cpu_percentage"`
+	MemoryPercentage     float64 `json:"memory_percentage"`
+	PodCount             int     `json:"pod_count"`
+	MetricsServerPresent bool    `json:"metrics_server_present"`
 }
 
 // fixtureCluster returns a sqlc.Cluster populated across every column type

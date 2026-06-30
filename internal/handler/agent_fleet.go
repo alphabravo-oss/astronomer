@@ -678,6 +678,13 @@ func agentClusterConditionsSelfTestCheck(conditions []clusterConditionDiagnostic
 	falseConditions := make([]string, 0)
 	unknownConditions := make([]string, 0)
 	for _, condition := range conditions {
+		// MetricsAvailable (C3 / M13) is observability only — a cluster with no
+		// metrics-server legitimately reports it False (NoMetricsServer) and that
+		// must NOT flip the agent self-test to failed. Skip it here; the distinct
+		// reason is still surfaced in the raw conditions list for the UI pill.
+		if condition.Type == "MetricsAvailable" {
+			continue
+		}
 		switch condition.Status {
 		case "True":
 			continue

@@ -112,6 +112,15 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     last_check = now()
 RETURNING *;
 
+-- name: TouchClusterMetricsSample :exec
+-- C3 / M13: stamp last_metrics_at to now() when a NON-EMPTY metrics SAMPLE
+-- arrives (driven by the agent's MetricsAvailable=true). Called ONLY by the
+-- tunnel metrics handler — never by the heartbeat handler or the worker health
+-- sweep — so last_metrics_at uniquely tracks "last real metrics sample" while
+-- last_check stays refreshed by all three writers. The health row is upserted
+-- by the metrics handler immediately before this call, so it always exists.
+UPDATE cluster_health_statuses SET last_metrics_at = now() WHERE cluster_id = $1;
+
 -- name: CreateClusterRegistrationToken :one
 INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
 VALUES (

@@ -565,6 +565,7 @@ func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Clus
 	out.CPUPercentage = snap.CPUPercentage
 	out.MemoryPercentage = snap.MemoryPercentage
 	out.PodCount = snap.PodCount
+	out.MetricsServerPresent = snap.MetricsServerPresent
 	return out
 }
 
@@ -584,6 +585,7 @@ func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster)
 	out.CPUPercentage = snap.CPUPercentage
 	out.MemoryPercentage = snap.MemoryPercentage
 	out.PodCount = snap.PodCount
+	out.MetricsServerPresent = snap.MetricsServerPresent
 	return out
 }
 

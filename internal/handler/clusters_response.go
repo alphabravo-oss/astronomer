@@ -65,6 +65,13 @@ type ClusterResponse struct {
 	CPUPercentage    float64 `json:"cpu_percentage"`
 	MemoryPercentage float64 `json:"memory_percentage"`
 	PodCount         int     `json:"pod_count"`
+	// MetricsServerPresent (C3 / M13) distinguishes the metrics-card states the
+	// scalar zeros could not: false = the cluster has no metrics-server (CPU/mem
+	// are zero because no metrics source exists), true = metrics-server is
+	// present (zeros, if any, mean "no recent sample"). The richer
+	// flowing/stale/no-server tri-state is also surfaced via the MetricsAvailable
+	// cluster condition.
+	MetricsServerPresent bool `json:"metrics_server_present"`
 
 	AgentPrivilegeProfile string               `json:"agent_privilege_profile"`
 	ArgoCD                ClusterArgoCDSummary `json:"argocd"`

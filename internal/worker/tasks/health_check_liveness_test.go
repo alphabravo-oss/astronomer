@@ -17,6 +17,9 @@ type hcLivenessQuerier struct {
 	RuntimeQuerier
 	statuses   []string
 	conditions []sqlc.UpsertClusterConditionParams
+	// health is what GetClusterHealthStatus returns; updateClusterConditions
+	// reads LastMetricsAt off it to classify the MetricsAvailable condition.
+	health sqlc.ClusterHealthStatus
 }
 
 func (q *hcLivenessQuerier) UpdateClusterStatus(_ context.Context, arg sqlc.UpdateClusterStatusParams) error {
@@ -28,9 +31,27 @@ func (q *hcLivenessQuerier) UpsertClusterHealthStatus(_ context.Context, _ sqlc.
 	return sqlc.ClusterHealthStatus{}, nil
 }
 
+func (q *hcLivenessQuerier) GetClusterHealthStatus(_ context.Context, _ uuid.UUID) (sqlc.ClusterHealthStatus, error) {
+	return q.health, nil
+}
+
 func (q *hcLivenessQuerier) UpsertClusterCondition(_ context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error) {
 	q.conditions = append(q.conditions, arg)
 	return sqlc.ClusterCondition{}, nil
+}
+
+// connectedCondition returns the recorded Connected condition (the metrics
+// sweep now also records a MetricsAvailable row, so callers can't assume the
+// Connected one is the only / first entry).
+func (q *hcLivenessQuerier) connectedCondition(t *testing.T) sqlc.UpsertClusterConditionParams {
+	t.Helper()
+	for _, c := range q.conditions {
+		if c.Type == ConditionConnected {
+			return c
+		}
+	}
+	t.Fatalf("no Connected condition recorded, got %+v", q.conditions)
+	return sqlc.UpsertClusterConditionParams{}
 }
 
 // TestHealthCheckKeepsClusterActiveOnRecentBeat proves the H11 outcome: because
@@ -55,8 +76,8 @@ func TestHealthCheckKeepsClusterActiveOnRecentBeat(t *testing.T) {
 	if len(q.statuses) != 1 || q.statuses[0] != "active" {
 		t.Fatalf("status writes = %v, want one 'active' (recent beat must stay active)", q.statuses)
 	}
-	if len(q.conditions) != 1 || q.conditions[0].Type != ConditionConnected || q.conditions[0].Status != conditionTrue {
-		t.Fatalf("Connected condition = %+v, want True", q.conditions)
+	if c := q.connectedCondition(t); c.Status != conditionTrue {
+		t.Fatalf("Connected condition = %+v, want True", c)
 	}
 }
 
@@ -81,7 +102,86 @@ func TestHealthCheckFlipsGenuinelyStaleCluster(t *testing.T) {
 	if len(q.statuses) != 1 || q.statuses[0] != "disconnected" {
 		t.Fatalf("status writes = %v, want one 'disconnected' (stale cluster must flip)", q.statuses)
 	}
-	if len(q.conditions) != 1 || q.conditions[0].Status != conditionFalse {
-		t.Fatalf("Connected condition = %+v, want False", q.conditions)
+	if c := q.connectedCondition(t); c.Status != conditionFalse {
+		t.Fatalf("Connected condition = %+v, want False", c)
+	}
+}
+
+// metricsCondition returns the recorded MetricsAvailable condition (or fails).
+func (q *hcLivenessQuerier) metricsCondition(t *testing.T) sqlc.UpsertClusterConditionParams {
+	t.Helper()
+	for _, c := range q.conditions {
+		if c.Type == ConditionMetricsAvailable {
+			return c
+		}
+	}
+	t.Fatalf("no MetricsAvailable condition recorded, got %+v", q.conditions)
+	return sqlc.UpsertClusterConditionParams{}
+}
+
+// runMetricsConditionCase drives updateClusterHealth for a cluster whose
+// heartbeat is fresh (so it stays 'active') with the given last_metrics_at, and
+// returns the recorded querier for assertions.
+func runMetricsConditionCase(t *testing.T, lastMetricsAt pgtype.Timestamptz) *hcLivenessQuerier {
+	t.Helper()
+	saved := runtimeDeps
+	t.Cleanup(func() { runtimeDeps = saved })
+
+	q := &hcLivenessQuerier{health: sqlc.ClusterHealthStatus{LastMetricsAt: lastMetricsAt}}
+	runtimeDeps = RuntimeDependencies{Queries: q}
+
+	cluster := sqlc.Cluster{
+		ID:            uuid.New(),
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true},
+	}
+	if err := updateClusterHealth(context.Background(), cluster); err != nil {
+		t.Fatalf("updateClusterHealth returned error: %v", err)
+	}
+	return q
+}
+
+// TestMetricsConditionFlowing (matrix a): metrics-server present + flowing →
+// MetricsFlowing(True), and the cluster stays 'active' (metrics never touch
+// liveness).
+func TestMetricsConditionFlowing(t *testing.T) {
+	q := runMetricsConditionCase(t, pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true})
+	if q.statuses[0] != "active" {
+		t.Fatalf("status = %v, want active (metrics-flowing must not affect liveness)", q.statuses)
+	}
+	c := q.metricsCondition(t)
+	if c.Status != conditionTrue || c.Reason != "MetricsFlowing" {
+		t.Fatalf("MetricsAvailable = %+v, want True/MetricsFlowing", c)
+	}
+}
+
+// TestMetricsConditionStale (matrix b): metrics-server present but sample old →
+// MetricsStale(False), distinct reason, cluster STILL active. A metrics-stale
+// cluster must never flip clusters.status.
+func TestMetricsConditionStale(t *testing.T) {
+	q := runMetricsConditionCase(t, pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Minute), Valid: true})
+	if q.statuses[0] != "active" {
+		t.Fatalf("status = %v, want active (metrics-stale must NOT flip liveness)", q.statuses)
+	}
+	c := q.metricsCondition(t)
+	if c.Status != conditionFalse || c.Reason != "MetricsStale" {
+		t.Fatalf("MetricsAvailable = %+v, want False/MetricsStale", c)
+	}
+}
+
+// TestMetricsConditionNoMetricsServer (matrix c): no sample ever (NULL
+// last_metrics_at) → NoMetricsServer(False), DISTINCT from MetricsStale, and
+// the cluster stays active with no error.
+func TestMetricsConditionNoMetricsServer(t *testing.T) {
+	q := runMetricsConditionCase(t, pgtype.Timestamptz{Valid: false})
+	if q.statuses[0] != "active" {
+		t.Fatalf("status = %v, want active (no-metrics-server must not affect liveness)", q.statuses)
+	}
+	c := q.metricsCondition(t)
+	if c.Status != conditionFalse || c.Reason != "NoMetricsServer" {
+		t.Fatalf("MetricsAvailable = %+v, want False/NoMetricsServer", c)
+	}
+	// Distinct from the stale reason — the whole point of M13.
+	if c.Reason == "MetricsStale" {
+		t.Fatalf("NoMetricsServer must be distinguishable from MetricsStale")
 	}
 }
