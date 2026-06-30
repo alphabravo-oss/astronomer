@@ -322,6 +322,48 @@ func TestNormalizePrivilegeProfileExplicitProfilesStillResolve(t *testing.T) {
 // rendered with no explicit profile defaults to least-privilege read-only
 // viewer. Broadening to admin is an explicit opt-in, so a no-annotation
 // adoption is safe by default and must NOT carry full-access RBAC.
+// TestRenderInstallYAMLEscapesScalars (L7) proves a malicious operator-controlled
+// scalar (e.g. the management.astronomer.io/agent-image annotation) cannot break
+// out of its double-quoted YAML scalar and inject arbitrary manifest content:
+// the rendered manifest still parses as valid multi-doc YAML and the injection
+// payload does not appear as a structural element.
+func TestRenderInstallYAMLEscapesScalars(t *testing.T) {
+	// A payload that, unescaped, would close the image scalar and inject a key.
+	evil := `x:v1"
+  evilInjected: "pwned`
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         `https://h" injected: "1`,
+		ClusterID:         "c1",
+		RegistrationToken: "token",
+		AgentImage:        evil,
+		PrivilegeProfile:  "viewer",
+	})
+	// Every document must still parse — an injection would yield a YAML error or
+	// an unexpected top-level/structural key.
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	docs := 0
+	for {
+		var doc map[string]any
+		err := dec.Decode(&doc)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatalf("rendered manifest is not valid YAML (injection broke it): %v", err)
+		}
+		docs++
+		if _, leaked := doc["evilInjected"]; leaked {
+			t.Fatalf("injection payload leaked as a top-level key:\n%s", manifest)
+		}
+	}
+	if docs == 0 {
+		t.Fatal("no documents parsed")
+	}
+	if strings.Contains(manifest, "evilInjected: \"pwned") && !strings.Contains(manifest, `\"`) {
+		t.Fatalf("payload was not escaped:\n%s", manifest)
+	}
+}
+
 func TestRenderInstallYAMLDefaultProfileResolvesToViewer(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "https://astro.example.com",

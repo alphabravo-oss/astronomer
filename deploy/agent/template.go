@@ -29,10 +29,10 @@ const (
 )
 
 type InstallTemplateData struct {
-	ServerURL          string
-	ClusterID          string
-	RegistrationToken  string
-	CACert             string
+	ServerURL         string
+	ClusterID         string
+	RegistrationToken string
+	CACert            string
 	// CAChecksum is the hex SHA-256 of the server CA (Rancher CATTLE_CA_CHECKSUM
 	// semantics). Rendered into the agent's own Deployment env so a Phase-2
 	// self-apply preserves the pin (otherwise self-applying the Deployment would
@@ -89,12 +89,20 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	}
 	return strings.NewReplacer(
 		"{{AGENT_PULL_RECONCILE_ENABLED}}", pullReconcile,
-		"{{SERVER_URL}}", data.ServerURL,
-		"{{CLUSTER_ID}}", data.ClusterID,
-		"{{REGISTRATION_TOKEN}}", data.RegistrationToken,
+		// L7: every scalar below renders into a double-quoted YAML scalar in
+		// install.yaml.template (SERVER_URL/CLUSTER_ID/REGISTRATION_TOKEN/
+		// CA_CHECKSUM/AGENT_IMAGE). SERVER_URL and AGENT_IMAGE are
+		// operator-influenced (config + the management.astronomer.io/agent-image
+		// cluster annotation), so an embedded `"` or `\` would break out of the
+		// scalar and inject arbitrary YAML. escapeYAMLDoubleQuoted neutralizes
+		// both. (caCert is base64; the RBAC/label blocks are already escaped or
+		// generated.)
+		"{{SERVER_URL}}", escapeYAMLDoubleQuoted(data.ServerURL),
+		"{{CLUSTER_ID}}", escapeYAMLDoubleQuoted(data.ClusterID),
+		"{{REGISTRATION_TOKEN}}", escapeYAMLDoubleQuoted(data.RegistrationToken),
 		"{{CA_CERT}}", caCert,
-		"{{CA_CHECKSUM}}", strings.TrimSpace(data.CAChecksum),
-		"{{AGENT_IMAGE}}", data.AgentImage,
+		"{{CA_CHECKSUM}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.CAChecksum)),
+		"{{AGENT_IMAGE}}", escapeYAMLDoubleQuoted(data.AgentImage),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),
 		"{{PRIVILEGE_PROFILE}}", profile,
