@@ -107,7 +107,15 @@ RETURNING *;
 SELECT * FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2;
 
 -- name: ListArgoCDManagedClusters :many
-SELECT * FROM argocd_managed_clusters WHERE argocd_instance_id = $1 ORDER BY created_at ASC;
+-- Only registrations whose backing cluster still exists and is NOT
+-- decommissioned. Decommission deletes these rows, but this INNER JOIN keeps a
+-- tombstoned/deleted-cluster registration from ever surfacing (in the clusters
+-- tab, the orphan-app report's valid-target set, or the registration refresh)
+-- if a row is ever left behind.
+SELECT amc.* FROM argocd_managed_clusters amc
+JOIN clusters cl ON cl.id = amc.cluster_id
+WHERE amc.argocd_instance_id = $1 AND cl.decommissioned_at IS NULL
+ORDER BY amc.created_at ASC;
 
 -- name: ListArgoCDManagedClustersByCluster :many
 -- Reverse index of the above: every ArgoCD instance into which a given

@@ -839,12 +839,9 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
               accessor: (row) => {
                 const c = all.find((c) => c.id === row.clusterId);
                 return (
-                  <div>
-                    <p className="font-medium text-foreground">{c?.displayName ?? row.clusterSecretName ?? row.clusterId}</p>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {row.labels?.['astronomer.io/cluster-id'] ?? row.clusterId}
-                    </p>
-                  </div>
+                  <p className="font-medium text-foreground">
+                    {c?.displayName || c?.name || row.clusterSecretName || row.clusterId}
+                  </p>
                 );
               },
             },

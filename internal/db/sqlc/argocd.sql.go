@@ -599,9 +599,17 @@ func (q *Queries) ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstanc
 }
 
 const listArgoCDManagedClusters = `-- name: ListArgoCDManagedClusters :many
-SELECT id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at FROM argocd_managed_clusters WHERE argocd_instance_id = $1 ORDER BY created_at ASC
+SELECT amc.id, amc.argocd_instance_id, amc.cluster_id, amc.cluster_secret_name, amc.server_url, amc.labels, amc.created_at, amc.updated_at FROM argocd_managed_clusters amc
+JOIN clusters cl ON cl.id = amc.cluster_id
+WHERE amc.argocd_instance_id = $1 AND cl.decommissioned_at IS NULL
+ORDER BY amc.created_at ASC
 `
 
+// Only registrations whose backing cluster still exists and is NOT
+// decommissioned. Decommission deletes these rows, but this INNER JOIN keeps a
+// tombstoned/deleted-cluster registration from ever surfacing (in the clusters
+// tab, the orphan-app report's valid-target set, or the registration refresh)
+// if a row is ever left behind.
 func (q *Queries) ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error) {
 	rows, err := q.db.Query(ctx, listArgoCDManagedClusters, argocdInstanceID)
 	if err != nil {
