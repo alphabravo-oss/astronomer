@@ -609,14 +609,11 @@ func (h *DecommissionHandler) removeClusterRBAC(ctx context.Context, key, val st
 func (h *DecommissionHandler) removeAgentClusterRBAC(ctx context.Context, key, val string) {
 	rbac := h.clientset.RbacV1()
 	o := &guardOutcome{}
-	cr, err := rbac.ClusterRoles().Get(ctx, "astronomer-agent", metav1.GetOptions{})
-	var crLabels map[string]string
-	if cr != nil {
-		crLabels = cr.Labels
-	}
-	o.guardedDelete("clusterrole", "astronomer-agent", crLabels, err, key, val, false, func() error {
-		return rbac.ClusterRoles().Delete(ctx, "astronomer-agent", kubeutil.DeleteOptions())
-	})
+	// ClusterRoleBinding (the actual GRANT) FIRST: this runs in the dying pod's
+	// grace window racing process exit, and the binding is the security-relevant
+	// half — a lone ClusterRole with no binding (and the SA already gone with the
+	// namespace) grants nothing. If exit cuts us off after this, the residual is
+	// inert and the server orphan audit surfaces it.
 	crb, gerr := rbac.ClusterRoleBindings().Get(ctx, "astronomer-agent", metav1.GetOptions{})
 	var crbLabels map[string]string
 	if crb != nil {
@@ -624,6 +621,14 @@ func (h *DecommissionHandler) removeAgentClusterRBAC(ctx context.Context, key, v
 	}
 	o.guardedDelete("clusterrolebinding", "astronomer-agent", crbLabels, gerr, key, val, false, func() error {
 		return rbac.ClusterRoleBindings().Delete(ctx, "astronomer-agent", kubeutil.DeleteOptions())
+	})
+	cr, err := rbac.ClusterRoles().Get(ctx, "astronomer-agent", metav1.GetOptions{})
+	var crLabels map[string]string
+	if cr != nil {
+		crLabels = cr.Labels
+	}
+	o.guardedDelete("clusterrole", "astronomer-agent", crLabels, err, key, val, false, func() error {
+		return rbac.ClusterRoles().Delete(ctx, "astronomer-agent", kubeutil.DeleteOptions())
 	})
 	if len(o.guarded)+len(o.errs)+len(o.forbidden) > 0 {
 		h.log.Info("decommission: agent cluster RBAC teardown (deferred)",
@@ -701,16 +706,13 @@ func (h *DecommissionHandler) removeAgentSingletons(ctx context.Context, ns, key
 		})
 	}
 
-	// ServiceAccount astronomer-agent
-	if sa, err := core.ServiceAccounts(ns).Get(ctx, "astronomer-agent", metav1.GetOptions{}); true {
-		var labels map[string]string
-		if sa != nil {
-			labels = sa.Labels
-		}
-		o.guardedDelete("serviceaccount", "astronomer-agent", labels, err, key, val, dryRun, func() error {
-			return core.ServiceAccounts(ns).Delete(ctx, "astronomer-agent", kubeutil.DeleteOptions())
-		})
-	}
+	// ServiceAccount astronomer-agent is deliberately NOT deleted here. It is the
+	// agent pod's OWN local-API identity (its projected SA token) — deleting it
+	// synchronously revokes the agent's k8s API access mid-decommission, so the
+	// deferred Deployment + namespace + cluster-RBAC teardown then fails
+	// Unauthorized and orphans everything. The SA cascades with the
+	// astronomer-system namespace delete (the final, self-terminating op), by
+	// which point the agent no longer needs API access.
 
 	return o.toStep("remove_agent_singletons")
 }

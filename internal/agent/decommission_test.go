@@ -207,8 +207,15 @@ func TestFullCleanup_DeletesExactlyManagedSet(t *testing.T) {
 		"secrets/astronomer-agent-token", "secrets/astronomer-agent-ca",
 		"configmaps/astronomer-agent-config", "services/astronomer-agent",
 		"networkpolicies/astronomer-agent", "poddisruptionbudgets/astronomer-agent",
-		"serviceaccounts/astronomer-agent", "deployments/astronomer-agent",
+		"deployments/astronomer-agent",
 		"namespaces/astronomer-system",
+		// NOTE: serviceaccounts/astronomer-agent is intentionally NOT in this set
+		// — it is the agent's own local-API identity, so it is left to cascade
+		// with the astronomer-system namespace delete (deleting it synchronously
+		// would revoke the agent mid-teardown). See removeAgentSingletons.
+	}
+	if contains(dels, "serviceaccounts/astronomer-agent") {
+		t.Errorf("agent ServiceAccount must NOT be deleted synchronously (it cascades with the namespace); got %v", dels)
 	}
 	for _, w := range want {
 		if !contains(dels, w) {
