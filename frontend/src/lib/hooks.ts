@@ -201,7 +201,10 @@ export function useTakeoverClusterOwnership() {
 export function useDeleteCluster() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.deleteCluster(id),
+    mutationFn: (arg: string | { id: string; force?: boolean }) => {
+      const { id, force } = typeof arg === 'string' ? { id: arg, force: false } : arg;
+      return apiClient.deleteCluster(id, { force });
+    },
     onSuccess: () => {
       // Decommission is async: DELETE returns 202 and the worker tombstones the
       // row when cleanup finishes (instant for a disconnected agent's record;

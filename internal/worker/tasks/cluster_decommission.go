@@ -126,6 +126,14 @@ func claimNotAcquired(err error) bool {
 // elapsed (too many attempts, or the decommission has been running too long),
 // at which point the reconciler advances past a still-skipped cleanup phase.
 func graceExhausted(row sqlc.ClusterDecommission) bool {
+	// Force-delete: the operator asserts the target cluster/agent is gone, so we
+	// don't wait out the grace window for a reconnect — advance immediately once
+	// the single cleanup attempt has been made (and skipped because the agent is
+	// unreachable). Managed-side workloads may be orphaned; that's the explicit
+	// trade the operator accepted by forcing.
+	if row.Force {
+		return true
+	}
 	if row.Attempts >= maxCleanupAttempts {
 		return true
 	}

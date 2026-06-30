@@ -434,6 +434,27 @@ func TestAgentUnreachable_GraceExhaustedAdvances(t *testing.T) {
 	}
 }
 
+// TestForce_SkipsGraceAdvancesImmediately verifies a force decommission with a
+// disconnected agent advances to tombstone right away — no waiting out the
+// grace window (attempts low, just started) the way a normal delete would.
+func TestForce_SkipsGraceAdvancesImmediately(t *testing.T) {
+	q := newFakeDecommQuerier()
+	q.row.Force = true
+	q.row.Attempts = 0 // nowhere near the cap; only Force should trip the grace
+	tun := &fakeTunnel{connected: false, disconnected: true}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("runClusterDecommission: %v", err)
+	}
+	if q.row.Status != "succeeded" {
+		t.Errorf("force should advance to succeeded immediately, got %s", q.row.Status)
+	}
+	if q.calls["TombstoneCluster"] != 1 {
+		t.Errorf("force must tombstone immediately; calls=%d", q.calls["TombstoneCluster"])
+	}
+}
+
 // TestHARequeue_SiblingPodReturnsError verifies the H8 HA re-queue: when
 // SendDecommission reports the agent is connected on a SIBLING pod, the
 // reconciler resets the cleanup phase, releases its claim, and returns the

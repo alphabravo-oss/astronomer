@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -89,6 +90,17 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 		return defaultVal
 	}
 	return v
+}
+
+// queryBool parses a boolean query param; accepts true/1/yes (case-insensitive).
+// Anything else (including absent) is false.
+func queryBool(r *http.Request, key string) bool {
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key))) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 // queryLimitOffset parses the "limit"/"offset" pagination query params, clamping

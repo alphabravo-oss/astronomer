@@ -58,15 +58,16 @@ func (q *Queries) ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAud
 
 const createClusterDecommission = `-- name: CreateClusterDecommission :one
 
-INSERT INTO cluster_decommissions (cluster_id, status, requested_by_id, cluster_name)
-VALUES ($1, 'pending', $2, $3)
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
+INSERT INTO cluster_decommissions (cluster_id, status, requested_by_id, cluster_name, force)
+VALUES ($1, 'pending', $2, $3, $4)
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
 `
 
 type CreateClusterDecommissionParams struct {
 	ClusterID     uuid.UUID   `json:"cluster_id"`
 	RequestedByID pgtype.UUID `json:"requested_by_id"`
 	ClusterName   string      `json:"cluster_name"`
+	Force         bool        `json:"force"`
 }
 
 // Phase: cluster decommission reconciler.
@@ -79,7 +80,12 @@ type CreateClusterDecommissionParams struct {
 // time the reconciler advances — it's small and JSONB merge primitives in
 // pgx are a footgun; one-shot replace is the simpler contract.
 func (q *Queries) CreateClusterDecommission(ctx context.Context, arg CreateClusterDecommissionParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, createClusterDecommission, arg.ClusterID, arg.RequestedByID, arg.ClusterName)
+	row := q.db.QueryRow(ctx, createClusterDecommission,
+		arg.ClusterID,
+		arg.RequestedByID,
+		arg.ClusterName,
+		arg.Force,
+	)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -94,6 +100,7 @@ func (q *Queries) CreateClusterDecommission(ctx context.Context, arg CreateClust
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }
@@ -272,7 +279,7 @@ func (q *Queries) DeleteProjectNamespacesByCluster(ctx context.Context, clusterI
 }
 
 const getClusterDecommissionByID = `-- name: GetClusterDecommissionByID :one
-SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at FROM cluster_decommissions WHERE id = $1
+SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force FROM cluster_decommissions WHERE id = $1
 `
 
 func (q *Queries) GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (ClusterDecommission, error) {
@@ -291,12 +298,13 @@ func (q *Queries) GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) 
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }
 
 const getLatestClusterDecommissionByCluster = `-- name: GetLatestClusterDecommissionByCluster :one
-SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at FROM cluster_decommissions
+SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force FROM cluster_decommissions
 WHERE cluster_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -318,12 +326,13 @@ func (q *Queries) GetLatestClusterDecommissionByCluster(ctx context.Context, clu
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }
 
 const listPendingClusterDecommissions = `-- name: ListPendingClusterDecommissions :many
-SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at FROM cluster_decommissions
+SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force FROM cluster_decommissions
 WHERE status IN ('pending', 'running')
 ORDER BY created_at ASC
 LIMIT $1
@@ -354,6 +363,7 @@ func (q *Queries) ListPendingClusterDecommissions(ctx context.Context, limit int
 			&i.ClusterName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Force,
 		); err != nil {
 			return nil, err
 		}
@@ -374,7 +384,7 @@ SET
     phases = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
 `
 
 type MarkClusterDecommissionFailedParams struct {
@@ -399,6 +409,7 @@ func (q *Queries) MarkClusterDecommissionFailed(ctx context.Context, arg MarkClu
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }
@@ -416,7 +427,7 @@ WHERE id = $1
       status IN ('pending', 'failed')
       OR (status = 'running' AND updated_at < now() - make_interval(secs => $2::double precision))
   )
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
 `
 
 type MarkClusterDecommissionRunningParams struct {
@@ -448,6 +459,7 @@ func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, arg MarkCl
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }
@@ -461,7 +473,7 @@ SET
     updated_at = now(),
     phases = $2
 WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
 `
 
 type MarkClusterDecommissionSucceededParams struct {
@@ -485,6 +497,7 @@ func (q *Queries) MarkClusterDecommissionSucceeded(ctx context.Context, arg Mark
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }
@@ -502,6 +515,35 @@ WHERE id = $1
 func (q *Queries) ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, releaseClusterDecommissionClaim, id)
 	return err
+}
+
+const setClusterDecommissionForce = `-- name: SetClusterDecommissionForce :one
+UPDATE cluster_decommissions SET force = true, updated_at = now()
+WHERE id = $1
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+`
+
+// Escalate an already in-flight decommission to force so the reconciler stops
+// waiting out the cleanup grace window and tombstones on its next pass.
+func (q *Queries) SetClusterDecommissionForce(ctx context.Context, id uuid.UUID) (ClusterDecommission, error) {
+	row := q.db.QueryRow(ctx, setClusterDecommissionForce, id)
+	var i ClusterDecommission
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.Status,
+		&i.Phases,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.LastError,
+		&i.Attempts,
+		&i.RequestedByID,
+		&i.ClusterName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Force,
+	)
+	return i, err
 }
 
 const tombstoneCluster = `-- name: TombstoneCluster :exec
@@ -528,7 +570,7 @@ SET
     phases = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
 `
 
 type UpdateClusterDecommissionPhasesParams struct {
@@ -552,6 +594,7 @@ func (q *Queries) UpdateClusterDecommissionPhases(ctx context.Context, arg Updat
 		&i.ClusterName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Force,
 	)
 	return i, err
 }

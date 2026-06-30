@@ -46,6 +46,7 @@ export default function ClustersPage() {
   // navigation handler does the heavy lift.
   const [editCluster, setEditCluster] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
+  const [forceDelete, setForceDelete] = useState(false);
   const deleteMutation = useDeleteCluster();
 
   const { data: clustersData, isLoading } = useClusters({
@@ -77,7 +78,7 @@ export default function ClustersPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteMutation.mutateAsync(deleteTarget.id);
+      await deleteMutation.mutateAsync({ id: deleteTarget.id, force: forceDelete });
       setDeleteTarget(null);
     } catch {
       // Error handled by mutation
@@ -323,7 +324,10 @@ export default function ClustersPage() {
       {/* Delete Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => {
+          setDeleteTarget(null);
+          setForceDelete(false);
+        }}
         onConfirm={handleDelete}
         title="Delete Cluster"
         description={`This will remove the cluster "${deleteTarget?.displayName}" from Astronomer. The underlying Kubernetes cluster will not be destroyed.`}
@@ -331,7 +335,21 @@ export default function ClustersPage() {
         confirmValue={deleteTarget?.name}
         variant="destructive"
         loading={deleteMutation.isPending}
-      />
+      >
+        <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={forceDelete}
+            onChange={(e) => setForceDelete(e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 rounded border-border"
+          />
+          <span>
+            <span className="font-medium text-foreground">Force delete</span> — remove immediately
+            instead of waiting for the agent to clean up. Use when the cluster is already gone;
+            in-cluster Astronomer resources won&apos;t be uninstalled if the agent is unreachable.
+          </span>
+        </label>
+      </ConfirmDialog>
     </div>
   );
 }

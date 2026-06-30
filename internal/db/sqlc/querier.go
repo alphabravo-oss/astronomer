@@ -1485,6 +1485,9 @@ type Querier interface {
 	// double-rotation that would demote the still-in-use previous hash a second
 	// time and strand an agent still holding the old token.
 	SetClusterAgentTokenRotationPending(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Escalate an already in-flight decommission to force so the reconciler stops
+	// waiting out the cleanup grace window and tombstones on its next pass.
+	SetClusterDecommissionForce(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
 	SetClusterInstallBaseline(ctx context.Context, arg SetClusterInstallBaselineParams) (SetClusterInstallBaselineRow, error)
 	SetClusterOwnership(ctx context.Context, arg SetClusterOwnershipParams) (SetClusterOwnershipRow, error)
 	// Unconditional status set. The pause/resume/abort handler endpoints

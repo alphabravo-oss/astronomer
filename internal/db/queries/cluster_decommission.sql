@@ -9,8 +9,15 @@
 -- pgx are a footgun; one-shot replace is the simpler contract.
 
 -- name: CreateClusterDecommission :one
-INSERT INTO cluster_decommissions (cluster_id, status, requested_by_id, cluster_name)
-VALUES ($1, 'pending', $2, $3)
+INSERT INTO cluster_decommissions (cluster_id, status, requested_by_id, cluster_name, force)
+VALUES ($1, 'pending', $2, $3, $4)
+RETURNING *;
+
+-- name: SetClusterDecommissionForce :one
+-- Escalate an already in-flight decommission to force so the reconciler stops
+-- waiting out the cleanup grace window and tombstones on its next pass.
+UPDATE cluster_decommissions SET force = true, updated_at = now()
+WHERE id = $1
 RETURNING *;
 
 -- name: GetClusterDecommissionByID :one

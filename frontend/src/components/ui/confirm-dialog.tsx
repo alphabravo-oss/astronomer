@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { ActionButton } from '@/components/ui/action-button';
 import { OverlayShell } from '@/components/ui/overlay-shell';
@@ -16,6 +16,8 @@ interface ConfirmDialogProps {
   confirmDisabledReason?: string;
   variant?: 'destructive';
   loading?: boolean;
+  // Extra content rendered below the description (e.g. a "force" checkbox).
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -29,6 +31,7 @@ export function ConfirmDialog({
   confirmDisabledReason,
   variant,
   loading,
+  children,
 }: ConfirmDialogProps) {
   const [inputValue, setInputValue] = useState('');
 
@@ -71,6 +74,8 @@ export function ConfirmDialog({
                   />
                 </div>
               )}
+
+              {children && <div className="mt-4">{children}</div>}
             </div>
           </div>
         </div>

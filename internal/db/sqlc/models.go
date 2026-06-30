@@ -598,6 +598,7 @@ type ClusterDecommission struct {
 	ClusterName   string             `json:"cluster_name"`
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     time.Time          `json:"updated_at"`
+	Force         bool               `json:"force"`
 }
 
 type ClusterGroup struct {

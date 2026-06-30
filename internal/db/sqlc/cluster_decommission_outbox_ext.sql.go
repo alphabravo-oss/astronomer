@@ -9,8 +9,10 @@ import (
 
 const createClusterDecommissionWithTaskOutbox = `
 WITH decom AS (
-    INSERT INTO cluster_decommissions (id, cluster_id, status, requested_by_id, cluster_name)
-    VALUES ($1, $2, 'pending', $3, $4)
+    -- force is parameter $14 (appended after the outbox params $5-$13) so the
+    -- existing positional bindings don't have to renumber.
+    INSERT INTO cluster_decommissions (id, cluster_id, status, requested_by_id, cluster_name, force)
+    VALUES ($1, $2, 'pending', $3, $4, $14)
     RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error,
               attempts, requested_by_id, cluster_name, created_at, updated_at
 ),
@@ -56,6 +58,7 @@ type CreateClusterDecommissionWithTaskOutboxParams struct {
 	UniqueSeconds       int32              `json:"unique_seconds"`
 	MaxDeliveryAttempts int32              `json:"max_delivery_attempts"`
 	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	Force               bool               `json:"force"`
 }
 
 func (q *Queries) CreateClusterDecommissionWithTaskOutbox(ctx context.Context, arg CreateClusterDecommissionWithTaskOutboxParams) (ClusterDecommission, error) {
@@ -73,6 +76,7 @@ func (q *Queries) CreateClusterDecommissionWithTaskOutbox(ctx context.Context, a
 		arg.UniqueSeconds,
 		arg.MaxDeliveryAttempts,
 		arg.NextAttemptAt,
+		arg.Force,
 	)
 	var i ClusterDecommission
 	err := row.Scan(

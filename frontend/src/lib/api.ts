@@ -424,8 +424,8 @@ export async function takeoverClusterOwnership(id: string) {
   return res.data.data;
 }
 
-export async function deleteCluster(id: string) {
-  await api.delete(`/clusters/${id}`);
+export async function deleteCluster(id: string, opts?: { force?: boolean }) {
+  await api.delete(`/clusters/${id}`, opts?.force ? { params: { force: true } } : undefined);
 }
 
 export async function getClusterConditions(clusterId: string) {

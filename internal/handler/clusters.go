@@ -73,6 +73,9 @@ type ClusterQuerier interface {
 	// decommissions; the list/get handlers use it to mark clusters
 	// Decommissioning so the UI shows a stable "Decommissioning" state.
 	ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]sqlc.ClusterDecommission, error)
+	// SetClusterDecommissionForce escalates an in-flight decommission to force
+	// (skip the cleanup grace window) when the operator re-deletes with ?force.
+	SetClusterDecommissionForce(ctx context.Context, id uuid.UUID) (sqlc.ClusterDecommission, error)
 	// Health
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterHealthStatus, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
@@ -1323,10 +1326,27 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// force=true (query param) tells the reconciler to skip the managed-side
+	// cleanup grace window and tombstone immediately — used when the operator
+	// knows the agent is gone and wants the row removed now.
+	force := queryBool(r, "force")
+
 	// Idempotency: if there's already an in-flight or succeeded decommission
 	// for this cluster, return its status rather than creating a duplicate.
 	if existing, lookupErr := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id); lookupErr == nil {
 		if existing.Status == tasks.PhaseStatusPending || existing.Status == tasks.PhaseStatusRunning || existing.Status == tasks.PhaseStatusSucceeded {
+			// A force re-delete of an already in-flight decommission escalates it
+			// (so a normal delete that's stuck waiting out the grace can be
+			// forced through) and nudges the worker to re-run now.
+			if force && !existing.Force && existing.Status != tasks.PhaseStatusSucceeded {
+				if escalated, ferr := h.queries.SetClusterDecommissionForce(r.Context(), existing.ID); ferr == nil {
+					existing = escalated
+					h.enqueueClusterDecommission(r.Context(), existing.ID)
+					recordAudit(r, h.queries, "cluster.decommission.forced", "cluster", id.String(), cluster.Name, map[string]any{
+						"decommission_id": existing.ID.String(),
+					})
+				}
+			}
 			statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())
 			RespondJSON(w, http.StatusAccepted, renderDecommission(existing, statusURL))
 			return
@@ -1344,6 +1364,7 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		ClusterID:     id,
 		RequestedByID: requestedBy,
 		ClusterName:   cluster.Name,
+		Force:         force,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateDecommissionFailed, "Failed to enqueue cluster decommission")
@@ -1387,6 +1408,7 @@ func (h *ClusterHandler) createClusterDecommission(ctx context.Context, arg sqlc
 			ClusterID:     arg.ClusterID,
 			RequestedByID: arg.RequestedByID,
 			ClusterName:   arg.ClusterName,
+			Force:         arg.Force,
 			DedupeKey:     pgtype.Text{String: fmt.Sprintf("cluster_decommission:%s", decommissionID.String()), Valid: true},
 			TaskType:      task.Type(),
 			Payload:       payload,
