@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -31,6 +32,30 @@ func testConfig() *AgentConfig {
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+// TestConnect_InitialFailureEntersReconnectLoop locks the L20 fix: a failed
+// INITIAL dial must NOT be fatal (which lands the pod in CrashLoopBackOff during
+// the join window). Connect must fall into the reconnect loop and only return on
+// ctx cancellation — i.e. a context error, after retrying, not the dial error.
+func TestConnect_InitialFailureEntersReconnectLoop(t *testing.T) {
+	cfg := testConfig()
+	cfg.ServerURL = "wss://127.0.0.1:1" // connection refused
+	cfg.ReconnectBackoff = 1
+	cfg.MaxReconnect = 1
+	tc := NewTunnelClient(cfg, testLogger())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	err := tc.Connect(ctx)
+
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Connect should return a context error after retrying the initial dial, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 500*time.Millisecond {
+		t.Fatalf("Connect returned after %v — it exited on the first dial instead of entering the reconnect loop", elapsed)
+	}
 }
 
 func TestNewTunnelClient(t *testing.T) {

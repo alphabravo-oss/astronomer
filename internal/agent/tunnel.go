@@ -98,7 +98,15 @@ func (tc *TunnelClient) setConnected(v bool) {
 // It blocks until ctx is cancelled or a fatal error occurs.
 func (tc *TunnelClient) Connect(ctx context.Context) error {
 	if err := tc.dial(ctx); err != nil {
-		return fmt.Errorf("initial connection failed: %w", err)
+		// L20: an initial-connect failure must NOT be fatal — exiting here lands
+		// the agent in CrashLoopBackOff (5-min kubelet backoff + an alarming pod
+		// status) during the join window, when the server may simply not be
+		// reachable yet. Fall into the SAME jittered reconnect loop a mid-session
+		// drop uses; only ctx cancellation ends it. Mirrors connect2/localcluster.
+		tc.log.Warn("initial connection failed; entering reconnect loop", "error", err)
+		if rerr := tc.reconnectLoop(ctx); rerr != nil {
+			return rerr // only returns on ctx cancel
+		}
 	}
 
 	tc.run(ctx)

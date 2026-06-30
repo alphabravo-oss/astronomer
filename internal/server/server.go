@@ -1536,7 +1536,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// runtime deps; without this Server nothing actually drains tasks
 	// from the "tunnel" queue and apply rows would sit at pending.
 	if cfg.RedisURL != "" {
-		tw, twErr := worker.NewTunnelWorker(cfg.RedisURL, logger)
+		tw, twErr := worker.NewTunnelWorker(cfg.RedisURL, cfg.TunnelWorkerConcurrency, logger)
 		if twErr != nil {
 			logger.Error("failed to create tunnel-queue asynq server", "error", twErr)
 		} else {

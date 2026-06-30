@@ -54,12 +54,30 @@ func TestRegisterHandlers(t *testing.T) {
 }
 
 func TestRegisterTunnelHandlers(t *testing.T) {
-	w, err := NewTunnelWorker("redis://localhost:6379/0", testLogger())
+	w, err := NewTunnelWorker("redis://localhost:6379/0", 0, testLogger())
 	if err != nil {
 		t.Fatalf("NewTunnelWorker: %v", err)
 	}
 	// Should not panic.
 	w.RegisterTunnelHandlers()
+}
+
+// TestTunnelWorkerConcurrencyConfigurable (M11): NewTunnelWorker accepts an
+// explicit concurrency and a non-positive value falls back to the default
+// (which is higher than the old hardcoded 2 so long installs don't starve RPCs).
+func TestTunnelWorkerConcurrencyConfigurable(t *testing.T) {
+	if defaultTunnelWorkerConcurrency <= 2 {
+		t.Fatalf("default tunnel concurrency = %d, must exceed the old hardcoded 2", defaultTunnelWorkerConcurrency)
+	}
+	for _, c := range []int{0, -1, 16} {
+		w, err := NewTunnelWorker("redis://localhost:6379/0", c, testLogger())
+		if err != nil {
+			t.Fatalf("NewTunnelWorker(concurrency=%d): %v", c, err)
+		}
+		if w == nil || w.server == nil {
+			t.Fatalf("NewTunnelWorker(concurrency=%d) returned nil server", c)
+		}
+	}
 }
 
 func TestNewScheduler(t *testing.T) {

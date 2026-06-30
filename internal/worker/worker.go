@@ -179,21 +179,30 @@ func NewWorker(redisURL string, log *slog.Logger) (*Worker, error) {
 // astronomer-worker pod does NOT subscribe to this queue.
 const TunnelQueueName = tasks.ClusterTemplateApplyQueueName
 
+// defaultTunnelWorkerConcurrency is the fallback when no positive value is
+// configured (M11). Higher than the old hardcoded 2 so a couple of long helm
+// installs no longer starve short tunnel RPCs.
+const defaultTunnelWorkerConcurrency = 8
+
 // NewTunnelWorker creates an Asynq server that exclusively drains the
 // "tunnel" queue. It is started inside the server pod's process because
 // the cluster_template:apply task (and its drift sweep) call into the
 // tunnel-bound ToolHandler.EnsureInstalled — that path is unreachable
 // from the standalone worker pod, which has no WebSocket terminations.
-// Concurrency is small because individual apply runs can be long-lived
-// (helm install of multiple operators) and we don't want one chatty
-// cluster starving the rest of the platform.
-func NewTunnelWorker(redisURL string, log *slog.Logger) (*Worker, error) {
+// Concurrency is configurable (M11): it was hardcoded to 2, so two long-lived
+// apply runs (helm install of multiple operators, up to ~10m each) starved every
+// short tunnel RPC across the platform. A non-positive value falls back to
+// defaultTunnelWorkerConcurrency.
+func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger) (*Worker, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
 	}
+	if concurrency <= 0 {
+		concurrency = defaultTunnelWorkerConcurrency
+	}
 	srv := asynq.NewServer(redisOpt, asynq.Config{
-		Concurrency: 2,
+		Concurrency: concurrency,
 		Queues: map[string]int{
 			TunnelQueueName: 1,
 		},

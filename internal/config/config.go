@@ -156,6 +156,11 @@ type Config struct {
 	// TunnelRegisterRateLimitPerMinute caps requests to the public
 	// GET /register/{token} bootstrap-manifest endpoint per source IP (L3).
 	TunnelRegisterRateLimitPerMinute int `mapstructure:"tunnel_register_rate_limit_per_minute"`
+	// TunnelWorkerConcurrency is the number of tunnel-bound worker tasks (cluster
+	// apply/drift/decommission/gatekeeper/etc.) a server pod runs at once (M11).
+	// Was hardcoded to 2, so two long helm --wait installs (up to ~10m each)
+	// starved every short tunnel RPC. Default 8. Per-pod; scales with replicas.
+	TunnelWorkerConcurrency int `mapstructure:"tunnel_worker_concurrency"`
 	// ServerReplicas is the configured server replica count (Helm injects it from
 	// .Values.server.replicaCount). Used for the L19 HA self-check: with >1
 	// replica and a RedisURL set but no ASTRONOMER_POD_IP, the cross-pod tunnel
@@ -218,6 +223,7 @@ func Load() (*Config, error) {
 		"tunnel_connect_clock_skew_minutes",
 		"tunnel_register_rate_limit_per_minute",
 		"server_replicas",
+		"tunnel_worker_concurrency",
 	); err != nil {
 		return nil, err
 	}
@@ -259,6 +265,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "tunnel_connect_clock_skew_minutes", Value: 5},
 		envconfig.Default{Key: "tunnel_register_rate_limit_per_minute", Value: 30},
 		envconfig.Default{Key: "server_replicas", Value: 1},
+		envconfig.Default{Key: "tunnel_worker_concurrency", Value: 8},
 	)
 
 	cfg := &Config{}
