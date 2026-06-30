@@ -265,6 +265,9 @@ func runConnect(logger *slog.Logger) error {
 			}
 		}
 
+		// M4: drive readiness from EVERY tunnel transition (not a one-shot latch),
+		// so /readyz flips to NotReady when the tunnel drops and back on reconnect.
+		tunnel.SetConnectionListener(health.SetConnected)
 		// Heartbeat + metrics tickers. Wait until the tunnel is connected so
 		// frames don't immediately get dropped.
 		go func() {

@@ -31,6 +31,9 @@ type TunnelClient struct {
 
 	mu        sync.RWMutex
 	connected bool
+	// onConnChange (M4) is fired on every connect/disconnect transition so the
+	// readiness reporter reflects live tunnel state. Guarded by mu.
+	onConnChange func(bool)
 
 	// auditIngestToken is the scoped clusters:write API token the server
 	// delivers in CONNECT_ACK for PATH A HTTP audit delivery. Empty until/
@@ -91,6 +94,21 @@ func (tc *TunnelClient) AuditIngestToken() string {
 func (tc *TunnelClient) setConnected(v bool) {
 	tc.mu.Lock()
 	tc.connected = v
+	listener := tc.onConnChange
+	tc.mu.Unlock()
+	// M4: notify the readiness reporter on EVERY transition (connect AND
+	// disconnect) so /readyz reflects the live tunnel state instead of a flag
+	// that was latched true on first connect and never reset on drop.
+	if listener != nil {
+		listener(v)
+	}
+}
+
+// SetConnectionListener registers a callback invoked on every tunnel
+// connect/disconnect transition. Set once at startup; nil-safe.
+func (tc *TunnelClient) SetConnectionListener(fn func(bool)) {
+	tc.mu.Lock()
+	tc.onConnChange = fn
 	tc.mu.Unlock()
 }
 

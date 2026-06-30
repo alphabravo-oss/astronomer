@@ -44,9 +44,15 @@ const (
 	defaultStatusSweepInterval = 15 * time.Second
 
 	// staleHeartbeatThreshold is the age past which an "active" cluster gets
-	// flipped to "disconnected". 60s is generous enough that a single
-	// dropped heartbeat (30s cadence) doesn't false-alarm.
-	staleHeartbeatThreshold = 60 * time.Second
+	// flipped to "disconnected". This MUST match the worker health-check window
+	// (internal/worker/tasks/health_check.go, 2m) — the two are independent
+	// staleness writers of clusters.status, and a DIFFERENT threshold makes them
+	// fight in the gap between the two values, flapping a cluster
+	// active<->disconnected (M3). 2m is also C1's disconnect window: a degraded
+	// agent still beats every ~30s, so a tunnel-healthy cluster never crosses it.
+	// This sweep is the AUTHORITATIVE writer (transition-only, event-emitting,
+	// status-preserving, local-exempt); the worker check is a coarser backstop.
+	staleHeartbeatThreshold = 2 * time.Minute
 )
 
 // ClusterQuerier is the minimal subset of sqlc.Queries the publisher needs.

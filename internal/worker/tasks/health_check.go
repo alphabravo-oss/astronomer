@@ -93,6 +93,11 @@ func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, 
 }
 
 func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
+	// 2m MUST match the metrics publisher's staleHeartbeatThreshold
+	// (internal/metrics/publisher.go): both write clusters.status from
+	// last_heartbeat age, and a DIFFERENT threshold makes the two fight and flap
+	// the status active<->disconnected (M3). The publisher is the authoritative
+	// transition-only writer; this check is a coarser backstop on the same window.
 	status := "disconnected"
 	connected := false
 	if cluster.LastHeartbeat.Valid && time.Since(cluster.LastHeartbeat.Time) <= 2*time.Minute {

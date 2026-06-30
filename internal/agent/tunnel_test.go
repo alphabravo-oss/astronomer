@@ -58,6 +58,22 @@ func TestConnect_InitialFailureEntersReconnectLoop(t *testing.T) {
 	}
 }
 
+// TestSetConnectionListenerFiresOnTransitions locks the M4 fix: readiness must
+// follow EVERY tunnel transition, not latch true on first connect. The listener
+// receives both the connect (true) and the disconnect (false).
+func TestSetConnectionListenerFiresOnTransitions(t *testing.T) {
+	tc := NewTunnelClient(testConfig(), testLogger())
+	var got []bool
+	tc.SetConnectionListener(func(b bool) { got = append(got, b) })
+
+	tc.setConnected(true)
+	tc.setConnected(false) // the disconnect that the old latched flag never saw
+
+	if len(got) != 2 || got[0] != true || got[1] != false {
+		t.Fatalf("listener transitions = %v, want [true false]", got)
+	}
+}
+
 func TestNewTunnelClient(t *testing.T) {
 	cfg := testConfig()
 	log := testLogger()
