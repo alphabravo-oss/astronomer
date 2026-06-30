@@ -72,3 +72,25 @@ For least privilege, start with `operator` for clusters where baseline component
 - Use `custom` only when you manage the Role/ClusterRole bindings outside the generated manifest.
 - Re-render and re-apply the agent manifest after changing the profile.
 - Validate important workflows after profile changes: resource browsing, logs, shell/exec, tool install, ArgoCD sync, backup, scan, and decommission.
+
+## Enforcement model (M8 — important)
+
+The privilege boundary is the **in-cluster RBAC** the manifest renders (the
+agent ServiceAccount's ClusterRole/RoleBinding) — enforced by the target
+cluster's API server. This matches Rancher's model: the API-server RBAC is the
+ceiling, and the agent proxies calls with its own SA token (identity-stripped),
+so it can never exceed what that SA is granted.
+
+The `PRIVILEGE_PROFILE` value in the agent ConfigMap is **advisory/informational
+only** — it records which profile was selected and drives the rendered RBAC at
+install time, but the running agent does **not** perform a second, independent
+profile check on each request. Consequences:
+
+- If the in-cluster ClusterRole is tampered with or drifts (widened out of band),
+  the agent has no second gate that would catch it — the API server's RBAC is
+  the single source of truth. Review the rendered ClusterRole, not just the
+  ConfigMap label, when auditing a cluster's actual privilege.
+- Re-rendering and re-applying the manifest re-asserts the intended RBAC; do that
+  after any suspected drift.
+- (Optional hardening, not implemented: a startup `SelfSubjectRulesReview` that
+  alerts/refuses if the agent's live permissions exceed its declared profile.)
