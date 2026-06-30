@@ -206,6 +206,18 @@ func (h *ReconcileHandler) reconcileOnce(ctx context.Context, sendFn func(*proto
 		Timestamp: time.Now().UTC(),
 		Payload:   body,
 	}
+	// L9: actually drain any stale buffered response (a late reply to a prior
+	// request, or an unsolicited push) BEFORE issuing this request, so the select
+	// below receives THIS request's reply rather than being shadowed by an older
+	// one. Non-blocking; desired-state responses are revision-hashed and
+	// idempotent, so discarding a stale frame is safe.
+	for drained := false; !drained; {
+		select {
+		case <-h.respCh:
+		default:
+			drained = true
+		}
+	}
 	if err := sendFn(msg); err != nil {
 		h.log.Error("send desired-state request", "error", err)
 		return

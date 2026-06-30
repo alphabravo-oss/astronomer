@@ -737,7 +737,12 @@ spec:
           protocol: TCP
 
 ---
-# PodDisruptionBudget - ensure the agent is always available
+# PodDisruptionBudget (L5: honest intent). minAvailable: 0 is DELIBERATE and is
+# the opposite of "always available": the agent is a single-replica, stateless
+# tunnel client that reconnects on its own, so it must NEVER block a voluntary
+# node drain / cluster maintenance. This PDB explicitly permits its eviction.
+# (It is effectively a no-op guard; it exists so the object is present and the
+# intent is documented rather than relying on the absence of a PDB.)
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

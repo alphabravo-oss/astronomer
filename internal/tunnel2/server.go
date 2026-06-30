@@ -53,7 +53,18 @@ type RemoteServer struct {
 	// validator is retained so the authorize audit can type-assert it to an
 	// audit.Querier for the fail-open connect/auth-failure records.
 	validator tunnel.AgentTokenValidator
+	// allowInsecureNilValidator (L18) gates the legacy "nil validator accepts any
+	// connection unauthenticated" behavior. It defaults FALSE — a nil validator
+	// now FAILS CLOSED (rejects) so a mis-wired production server can never accept
+	// unauthenticated tunnels. Only test/demo code that deliberately runs without
+	// a DB validator sets it true.
+	allowInsecureNilValidator bool
 }
+
+// SetAllowInsecureNilValidator opts into accepting connections when no validator
+// is wired (test/demo only). Production never calls this, so a nil validator
+// fails closed. Set once at startup.
+func (s *RemoteServer) SetAllowInsecureNilValidator(v bool) { s.allowInsecureNilValidator = v }
 
 // SetConnectLimiter wires the shared A4 connect failure-limiter (set once at
 // startup). Nil-safe.
@@ -125,11 +136,17 @@ func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedia
 			return "", false, fmt.Errorf("authorization bearer token missing")
 		}
 
-		// validator may be nil in test mode (NewApp without DB). When nil the
-		// tunnel accepts any cluster_id presented with any non-empty token.
-		// Production wiring always passes a real validator.
+		// L18: a nil validator FAILS CLOSED by default — a mis-wired production
+		// server (no DB validator) must never accept unauthenticated tunnels.
+		// Only test/demo code that opts in via SetAllowInsecureNilValidator gets
+		// the legacy accept-any behavior.
 		if validator == nil {
-			log.Warn("tunnel2: validator is nil, accepting connection unauthenticated",
+			if !s.allowInsecureNilValidator {
+				log.Error("tunnel2: validator is nil and insecure nil-validator is NOT enabled — refusing connection (fail closed)",
+					slog.String("cluster_id", clusterID))
+				return "", false, fmt.Errorf("server misconfigured: no agent-token validator")
+			}
+			log.Warn("tunnel2: validator is nil, accepting connection unauthenticated (insecure test/demo mode)",
 				slog.String("cluster_id", clusterID),
 			)
 			return clusterID, true, nil

@@ -46,3 +46,24 @@ func TestRateLimitMiddlewarePassesThroughWhenNoLimiter(t *testing.T) {
 		t.Fatal("nil limiter must pass through to the next handler")
 	}
 }
+
+// TestNilValidatorFailsClosed (L18): a RemoteServer with no validator must
+// REJECT connections by default (a mis-wired prod server can't accept
+// unauthenticated tunnels); only an explicit insecure opt-in accepts.
+func TestNilValidatorFailsClosed(t *testing.T) {
+	rs := NewRemoteServer(nil, nil) // nil validator
+	authz := rs.authorize(nil)
+	req := httptest.NewRequest("GET", "/api/v1/connect/c1/", nil)
+	req.Header.Set(HeaderClusterID, "c1")
+	req.Header.Set("Authorization", "Bearer some-token")
+
+	if _, ok, err := authz(req); ok || err == nil {
+		t.Fatalf("nil validator must fail closed (reject), got ok=%v err=%v", ok, err)
+	}
+
+	rs.SetAllowInsecureNilValidator(true)
+	authz2 := rs.authorize(nil)
+	if _, ok, err := authz2(req); !ok || err != nil {
+		t.Fatalf("with insecure opt-in, nil validator should accept, got ok=%v err=%v", ok, err)
+	}
+}
