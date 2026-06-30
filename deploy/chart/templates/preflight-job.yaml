@@ -18,7 +18,9 @@ spec:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 8 }}
     spec:
       restartPolicy: Never
-      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+      # Dedicated hook SA (templates/preflight-rbac.yaml, hook-weight -10) so a
+      # fresh install doesn't deadlock on the main SA not existing yet.
+      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}-preflight
       {{- with .Values.preflight.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
