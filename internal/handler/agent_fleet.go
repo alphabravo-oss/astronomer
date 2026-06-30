@@ -675,7 +675,15 @@ func agentClusterConditionsSelfTestCheck(conditions []clusterConditionDiagnostic
 	if len(conditions) == 0 {
 		return agentSelfTestCheck{Name: "cluster_conditions", Status: "warning", Message: "No cluster conditions have been recorded yet."}
 	}
+	// optionalCapabilityConditions are cluster features that are legitimately
+	// absent on many clusters (e.g. no Gateway API CRDs installed). A False here
+	// means "this optional capability isn't present", not "the cluster is
+	// unhealthy", so it must NOT fail the self-test — surface it as a warning.
+	optionalCapabilityConditions := map[string]bool{
+		"GatewayAPISupported": true,
+	}
 	falseConditions := make([]string, 0)
+	optionalFalse := make([]string, 0)
 	unknownConditions := make([]string, 0)
 	for _, condition := range conditions {
 		// MetricsAvailable (C3 / M13) is observability only — a cluster with no
@@ -689,7 +697,11 @@ func agentClusterConditionsSelfTestCheck(conditions []clusterConditionDiagnostic
 		case "True":
 			continue
 		case "False":
-			falseConditions = append(falseConditions, condition.Type)
+			if optionalCapabilityConditions[condition.Type] {
+				optionalFalse = append(optionalFalse, condition.Type)
+			} else {
+				falseConditions = append(falseConditions, condition.Type)
+			}
 		default:
 			unknownConditions = append(unknownConditions, condition.Type)
 		}
@@ -697,8 +709,9 @@ func agentClusterConditionsSelfTestCheck(conditions []clusterConditionDiagnostic
 	if len(falseConditions) > 0 {
 		return agentSelfTestCheck{Name: "cluster_conditions", Status: "failed", Message: "False cluster conditions: " + strings.Join(falseConditions, ", ")}
 	}
-	if len(unknownConditions) > 0 {
-		return agentSelfTestCheck{Name: "cluster_conditions", Status: "warning", Message: "Unknown cluster conditions: " + strings.Join(unknownConditions, ", ")}
+	if len(optionalFalse) > 0 || len(unknownConditions) > 0 {
+		notes := append(append([]string{}, optionalFalse...), unknownConditions...)
+		return agentSelfTestCheck{Name: "cluster_conditions", Status: "warning", Message: "Optional or unknown cluster conditions not satisfied: " + strings.Join(notes, ", ")}
 	}
 	return agentSelfTestCheck{Name: "cluster_conditions", Status: "passed", Message: "Recorded cluster conditions are healthy."}
 }
