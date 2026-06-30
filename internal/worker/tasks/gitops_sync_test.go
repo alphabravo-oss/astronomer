@@ -126,6 +126,13 @@ func (f *fakeGitOpsQuerier) StampGitOpsSourceError(ctx context.Context, arg sqlc
 	return nil
 }
 
+func (f *fakeGitOpsQuerier) ConsumeGitOpsMassDecommissionOverride(ctx context.Context, id uuid.UUID) error {
+	s := f.sources[id]
+	s.AllowMassDecommission = false
+	f.sources[id] = s
+	return nil
+}
+
 func (f *fakeGitOpsQuerier) ListExpiredTombstones(ctx context.Context, cutoff pgtype.Timestamptz) ([]sqlc.GitopsRegisteredCluster, error) {
 	out := []sqlc.GitopsRegisteredCluster{}
 	for _, link := range f.links {
@@ -301,6 +308,15 @@ func makeBareRepo(t *testing.T) (string, string) {
 	// commit on whatever branch and let the test use that branch.
 	if err := writeCommit(t, work, "README.md", "# test repo\n", "initial"); err != nil {
 		t.Fatalf("initial commit: %v", err)
+	}
+	// Keep the clusters/ prefix dir alive with a non-registration file so a
+	// test that removes the genuinely-last cluster YAML does not vanish the
+	// walk root (which is now correctly a hard sync error — H10). git does
+	// not track empty dirs, so without this a single-cluster removal would
+	// delete the dir and trip the WalkDir hard-error instead of the
+	// missing-set path the test means to exercise.
+	if err := writeCommit(t, work, "clusters/.gitkeep", "", "keep clusters dir"); err != nil {
+		t.Fatalf("keep commit: %v", err)
 	}
 	// Push the current branch to origin/main.
 	if err := pushBranchAsMain(t, work); err != nil {
@@ -639,6 +655,16 @@ func TestSync_DecommissionsImmediatelyUnderDecommissionPolicy(t *testing.T) {
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push1: %v", err)
 	}
+	// A surviving sibling cluster keeps this a legitimate single-cluster
+	// removal (1 of 2 missing) so the mass-decommission guard (H10) does
+	// not trip — the test exercises the immediate-decommission path, not
+	// the mass-deletion footgun.
+	if err := writeCommit(t, work, "clusters/prod-west.yaml", clusterRegistrationYAML("prod-west", nil), "add west"); err != nil {
+		t.Fatalf("commit2: %v", err)
+	}
+	if err := pushBranchAsMain(t, work); err != nil {
+		t.Fatalf("push1b: %v", err)
+	}
 	src := setupSource(t, q, bare, "decommission", "interval")
 	enq := &fakeEnqueuer{}
 	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
@@ -842,4 +868,274 @@ func contains(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+// ===== E3 / H10 mass-decommission guard ==============================
+
+// seedDecommissionFleet writes n ClusterRegistration YAMLs plus a
+// non-YAML keep file (so the clusters/ dir survives even when every
+// registration is later removed), runs one successful sync to establish
+// the per-cluster links, and returns the source + working clone path.
+func seedDecommissionFleet(t *testing.T, q *fakeGitOpsQuerier, onDelete string, n int) (sqlc.GitopsRegistrationSource, string) {
+	t.Helper()
+	bare, work := makeBareRepo(t)
+	for i := 0; i < n; i++ {
+		name := "cluster-" + string(rune('a'+i))
+		if err := writeCommit(t, work, "clusters/"+name+".yaml", clusterRegistrationYAML(name, nil), "add "+name); err != nil {
+			t.Fatalf("commit %s: %v", name, err)
+		}
+	}
+	if err := pushBranchAsMain(t, work); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	src := setupSource(t, q, bare, onDelete, "interval")
+	if err := SyncSource(context.Background(), src.ID); err != nil {
+		t.Fatalf("seed sync: %v", err)
+	}
+	if got := len(q.links); got != n {
+		t.Fatalf("seed established %d links, want %d", got, n)
+	}
+	return src, work
+}
+
+// (a) Bad path_prefix / missing walkRoot fails the sync hard and enqueues
+// ZERO decommissions — the swallow-os.IsNotExist footgun is closed.
+func TestSync_BadPathPrefix_FailsSyncZeroDecom(t *testing.T) {
+	ResetGitOps()
+	defer ResetGitOps()
+	q := newFakeQuerier()
+	enq := &fakeEnqueuer{}
+	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+
+	src, _ := seedDecommissionFleet(t, q, "decommission", 1)
+	// Re-point at a non-existent subpath: a typo'd prefix.
+	src.PathPrefix = "does-not-exist"
+	q.sources[src.ID] = src
+
+	err := SyncSource(context.Background(), src.ID)
+	if err == nil {
+		t.Fatalf("expected hard sync error for bad path_prefix")
+	}
+	if !contains(err.Error(), "unreadable") || !contains(err.Error(), "path_prefix") {
+		t.Fatalf("error %q must mention unreadable walk root + path_prefix", err)
+	}
+	if len(q.createdDecoms) != 0 {
+		t.Fatalf("created decommissions = %d, want 0", len(q.createdDecoms))
+	}
+	if len(enq.tasks) != 0 {
+		t.Fatalf("enqueued tasks = %d, want 0", len(enq.tasks))
+	}
+	if q.stampedErrors[src.ID] == "" {
+		t.Fatalf("source last_error not stamped")
+	}
+	if !containsAction(q.auditRows, "gitops.sync.failed") {
+		t.Fatalf("expected gitops.sync.failed audit")
+	}
+	if containsAction(q.auditRows, "gitops.mass_decommission_blocked") {
+		t.Fatalf("walk should fail before the guard is ever reached")
+	}
+}
+
+// (b) Empty parsedDocs under decommission is blocked: zero enqueued, loud
+// audit, source error stamped, last_synced NOT advanced.
+func TestSync_EmptyParsedDocs_Blocked(t *testing.T) {
+	ResetGitOps()
+	defer ResetGitOps()
+	q := newFakeQuerier()
+	enq := &fakeEnqueuer{}
+	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+
+	src, work := seedDecommissionFleet(t, q, "decommission", 1)
+	syncedBefore := q.stampedSyncedAt[src.ID]
+
+	// Remove the only registration; the .gitkeep keeps clusters/ alive so the
+	// walk succeeds with zero parsed docs (a clean-but-wrong sync).
+	if err := removeAndCommit(t, work, "clusters/cluster-a.yaml"); err != nil {
+		t.Fatalf("rm: %v", err)
+	}
+	if err := pushBranchAsMain(t, work); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	err := SyncSource(context.Background(), src.ID)
+	if err == nil || !contains(err.Error(), "mass-decommission blocked") {
+		t.Fatalf("expected mass-decommission blocked error, got %v", err)
+	}
+	if len(q.createdDecoms) != 0 {
+		t.Fatalf("created decommissions = %d, want 0", len(q.createdDecoms))
+	}
+	if len(enq.tasks) != 0 {
+		t.Fatalf("enqueued tasks = %d, want 0", len(enq.tasks))
+	}
+	if !containsAction(q.auditRows, "gitops.mass_decommission_blocked") {
+		t.Fatalf("expected gitops.mass_decommission_blocked audit")
+	}
+	if q.stampedErrors[src.ID] == "" {
+		t.Fatalf("source last_error not stamped")
+	}
+	if !q.stampedSyncedAt[src.ID].Equal(syncedBefore) {
+		t.Fatalf("last_synced advanced on a blocked sync (was %v, now %v)", syncedBefore, q.stampedSyncedAt[src.ID])
+	}
+}
+
+// (c) A legitimate single-cluster removal among many does NOT trip the
+// guard — exactly that one cluster is decommissioned.
+func TestSync_SingleRemovalAmongMany_NotBlocked(t *testing.T) {
+	ResetGitOps()
+	defer ResetGitOps()
+	q := newFakeQuerier()
+	enq := &fakeEnqueuer{}
+	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+
+	src, work := seedDecommissionFleet(t, q, "decommission", 4)
+
+	// Drop exactly one of four — missing=1, threshold=max(ceil(0.5*4),3)=3.
+	if err := removeAndCommit(t, work, "clusters/cluster-a.yaml"); err != nil {
+		t.Fatalf("rm: %v", err)
+	}
+	if err := pushBranchAsMain(t, work); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	if err := SyncSource(context.Background(), src.ID); err != nil {
+		t.Fatalf("SyncSource: %v", err)
+	}
+	if len(q.createdDecoms) != 1 {
+		t.Fatalf("created decommissions = %d, want 1", len(q.createdDecoms))
+	}
+	if q.createdDecoms[0].ClusterName != "cluster-a" {
+		t.Fatalf("decommissioned %q, want cluster-a", q.createdDecoms[0].ClusterName)
+	}
+	if containsAction(q.auditRows, "gitops.mass_decommission_blocked") {
+		t.Fatalf("guard must not trip on a single removal")
+	}
+	if q.stampedSyncedSHA[src.ID] == "" {
+		t.Fatalf("last_synced not advanced on a successful sync")
+	}
+}
+
+// (d) The explicit override lets an operator proceed with a genuine mass
+// removal — and the override self-disarms after one honored sync.
+func TestSync_MassRemoval_OverrideHonoredAndDisarmed(t *testing.T) {
+	ResetGitOps()
+	defer ResetGitOps()
+	q := newFakeQuerier()
+	enq := &fakeEnqueuer{}
+	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+
+	src, work := seedDecommissionFleet(t, q, "decommission", 4)
+
+	// Operator arms the one-shot override.
+	src.AllowMassDecommission = true
+	q.sources[src.ID] = src
+
+	// Remove every registration (.gitkeep keeps the dir → parsedDocs==0).
+	for _, c := range []string{"a", "b", "c", "d"} {
+		if err := removeAndCommit(t, work, "clusters/cluster-"+c+".yaml"); err != nil {
+			t.Fatalf("rm %s: %v", c, err)
+		}
+	}
+	if err := pushBranchAsMain(t, work); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	if err := SyncSource(context.Background(), src.ID); err != nil {
+		t.Fatalf("SyncSource with override armed: %v", err)
+	}
+	if len(q.createdDecoms) != 4 {
+		t.Fatalf("created decommissions = %d, want 4 (full mass removal)", len(q.createdDecoms))
+	}
+	if !containsAction(q.auditRows, "gitops.mass_decommission_override") {
+		t.Fatalf("expected gitops.mass_decommission_override audit")
+	}
+	if containsAction(q.auditRows, "gitops.mass_decommission_blocked") {
+		t.Fatalf("override armed must not also block")
+	}
+	if q.sources[src.ID].AllowMassDecommission {
+		t.Fatalf("override was not consumed/disarmed after the run")
+	}
+}
+
+// (f) Stale-arm safety: an armed override that is NOT needed (a benign sync
+// lands first) is still consumed/disarmed, so it can never silently bypass a
+// FUTURE bad sync. The benign sync proceeds normally (one removal), no override
+// audit (it wasn't honored), but the arm is gone afterward.
+func TestSync_StaleOverride_DisarmedOnBenignSync(t *testing.T) {
+	ResetGitOps()
+	defer ResetGitOps()
+	q := newFakeQuerier()
+	enq := &fakeEnqueuer{}
+	ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+
+	src, work := seedDecommissionFleet(t, q, "decommission", 4)
+	src.AllowMassDecommission = true // operator armed it, but the next sync is benign
+	q.sources[src.ID] = src
+
+	// Remove exactly one of four — guard does NOT trip (missing=1 < threshold=3).
+	if err := removeAndCommit(t, work, "clusters/cluster-a.yaml"); err != nil {
+		t.Fatalf("rm: %v", err)
+	}
+	if err := pushBranchAsMain(t, work); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if err := SyncSource(context.Background(), src.ID); err != nil {
+		t.Fatalf("SyncSource: %v", err)
+	}
+	if len(q.createdDecoms) != 1 {
+		t.Fatalf("created decommissions = %d, want 1 (benign single removal)", len(q.createdDecoms))
+	}
+	if containsAction(q.auditRows, "gitops.mass_decommission_override") {
+		t.Fatalf("override must NOT be audited as honored on a benign sync")
+	}
+	if q.sources[src.ID].AllowMassDecommission {
+		t.Fatalf("stale override must be disarmed even when the guard did not trip")
+	}
+}
+
+// (e) Non-destructive policies are untouched by the guard: an empty/mass
+// deletion runs the existing missing-set loop with ZERO decommissions and
+// no blocked audit.
+func TestSync_MassDeletion_NonDestructivePoliciesUnaffected(t *testing.T) {
+	for _, policy := range []string{"log", "tombstone"} {
+		t.Run(policy, func(t *testing.T) {
+			ResetGitOps()
+			defer ResetGitOps()
+			q := newFakeQuerier()
+			enq := &fakeEnqueuer{}
+			ConfigureGitOps(GitOpsDeps{Queries: q, Enqueuer: enq, CloneRoot: t.TempDir(), Now: time.Now})
+
+			src, work := seedDecommissionFleet(t, q, policy, 4)
+			for _, c := range []string{"a", "b", "c", "d"} {
+				if err := removeAndCommit(t, work, "clusters/cluster-"+c+".yaml"); err != nil {
+					t.Fatalf("rm %s: %v", c, err)
+				}
+			}
+			if err := pushBranchAsMain(t, work); err != nil {
+				t.Fatalf("push: %v", err)
+			}
+
+			if err := SyncSource(context.Background(), src.ID); err != nil {
+				t.Fatalf("SyncSource (%s): %v", policy, err)
+			}
+			if len(q.createdDecoms) != 0 {
+				t.Fatalf("%s policy enqueued %d decommissions, want 0", policy, len(q.createdDecoms))
+			}
+			if containsAction(q.auditRows, "gitops.mass_decommission_blocked") {
+				t.Fatalf("guard must never be consulted for non-destructive policy %s", policy)
+			}
+			if q.stampedSyncedSHA[src.ID] == "" {
+				t.Fatalf("last_synced not advanced for %s policy", policy)
+			}
+			switch policy {
+			case "log":
+				if !containsAction(q.auditRows, "gitops.cluster.missing") {
+					t.Fatalf("log policy must emit gitops.cluster.missing")
+				}
+			case "tombstone":
+				if !containsAction(q.auditRows, "gitops.cluster.tombstoned") {
+					t.Fatalf("tombstone policy must emit gitops.cluster.tombstoned")
+				}
+			}
+		})
+	}
 }

@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +68,28 @@ var GitOpsTombstoneGrace = 24 * time.Hour
 // source's clone lives at GitOpsCloneRoot/<source_id>. Tests override
 // this to t.TempDir().
 var GitOpsCloneRoot = "/tmp/gitops"
+
+// GitOpsMassDecommissionRatio is the fraction of a source's
+// previously-known clusters that, if removed in a single sync under
+// on_delete=decommission, trips the mass-decommission guard (H10).
+// Package var so tests can drive the boundary.
+var GitOpsMassDecommissionRatio = 0.5
+
+// GitOpsMassDecommissionMinMissing is an absolute floor so the ratio can
+// never trip on a tiny fleet — a 1- or 2-cluster removal is always
+// allowed regardless of fleet size.
+var GitOpsMassDecommissionMinMissing = 3
+
+// massDecommissionThreshold returns the missing-count at or above which
+// the mass-decommission guard trips for a source with prevCount
+// previously-known clusters. It is max(ceil(ratio*prev), floor).
+func massDecommissionThreshold(prevCount int) int {
+	t := int(math.Ceil(GitOpsMassDecommissionRatio * float64(prevCount)))
+	if t < GitOpsMassDecommissionMinMissing {
+		t = GitOpsMassDecommissionMinMissing
+	}
+	return t
+}
 
 // Metrics --------------------------------------------------------------
 
@@ -115,6 +138,7 @@ type GitOpsQuerier interface {
 	DeleteGitOpsRegisteredCluster(ctx context.Context, clusterID uuid.UUID) error
 	StampGitOpsSourceSync(ctx context.Context, arg sqlc.StampGitOpsSourceSyncParams) error
 	StampGitOpsSourceError(ctx context.Context, arg sqlc.StampGitOpsSourceErrorParams) error
+	ConsumeGitOpsMassDecommissionOverride(ctx context.Context, id uuid.UUID) error
 	ListExpiredTombstones(ctx context.Context, cutoff pgtype.Timestamptz) ([]sqlc.GitopsRegisteredCluster, error)
 	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	CountGitOpsTombstonedBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
@@ -298,6 +322,65 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 		}
 	}
 
+	// Mass-decommission guard (H10). Only the destructive on_delete
+	// policy is gated; log/tombstone skip this block byte-for-byte. A
+	// single bad-but-clean walk (empty parsedDocs) or a sync that wipes
+	// out half-or-more of a source's known fleet is treated as a footgun
+	// and REFUSED before any decommission is enqueued, unless the
+	// operator has explicitly armed allow_mass_decommission.
+	if src.OnDelete == "decommission" {
+		prevCount := len(previousByPath)
+		missingCount := 0
+		for path := range previousByPath {
+			if _, ok := seenPaths[path]; !ok {
+				missingCount++
+			}
+		}
+		threshold := massDecommissionThreshold(prevCount)
+		guardWouldTrip := prevCount > 0 && (len(parsedDocs) == 0 || missingCount >= threshold)
+		if guardWouldTrip && !src.AllowMassDecommission {
+			msg := fmt.Sprintf("mass-decommission blocked: %d of %d clusters missing (parsed_docs=%d, threshold=%d); set allow_mass_decommission to override",
+				missingCount, prevCount, len(parsedDocs), threshold)
+			_ = gitopsDeps.Queries.StampGitOpsSourceError(ctx, sqlc.StampGitOpsSourceErrorParams{ID: src.ID, LastError: msg})
+			gitopsSyncsTotal.WithLabelValues(observability.MetricValues(src.Name, "blocked")...).Inc()
+			gitopsDeps.Log.ErrorContext(ctx, "gitops mass-decommission blocked",
+				"source", src.Name, "source_id", src.ID.String(),
+				"prev_count", prevCount, "missing_count", missingCount,
+				"parsed_docs", len(parsedDocs), "threshold", threshold)
+			emitAudit(ctx, "gitops.mass_decommission_blocked", src.ID.String(), src.Name, map[string]any{
+				"source":        src.Name,
+				"prev_count":    prevCount,
+				"missing_count": missingCount,
+				"parsed_docs":   len(parsedDocs),
+				"threshold":     threshold,
+				"ratio":         GitOpsMassDecommissionRatio,
+				"on_delete":     "decommission",
+				"head_sha":      headSHA,
+			})
+			return fmt.Errorf("%s", msg)
+		}
+		// Disarm an armed override on EVERY decommission-policy sync — whether it
+		// was needed (guard tripped, mass removal honored) or not (a benign sync
+		// happened to land first). The override is one-shot and covers exactly the
+		// NEXT sync; consuming it unconditionally here means a stale arm can never
+		// silently bypass a FUTURE bad sync. Only the honored case is audited.
+		if src.AllowMassDecommission {
+			if guardWouldTrip {
+				emitAudit(ctx, "gitops.mass_decommission_override", src.ID.String(), src.Name, map[string]any{
+					"source":        src.Name,
+					"prev_count":    prevCount,
+					"missing_count": missingCount,
+					"parsed_docs":   len(parsedDocs),
+					"threshold":     threshold,
+					"head_sha":      headSHA,
+				})
+			}
+			if err := gitopsDeps.Queries.ConsumeGitOpsMassDecommissionOverride(ctx, src.ID); err != nil {
+				return fmt.Errorf("consume mass-decommission override: %w", err)
+			}
+		}
+	}
+
 	// Missing-set processing.
 	for path, prev := range previousByPath {
 		if _, ok := seenPaths[path]; ok {
@@ -461,13 +544,19 @@ func walkSource(ctx context.Context, src sqlc.GitopsRegistrationSource) (string,
 	if prefix != "" {
 		walkRoot = filepath.Join(dir, prefix)
 	}
+	// A non-existent / unreadable / non-directory walkRoot must be a hard
+	// sync error — NOT silently interpreted as "all docs deleted" (H10).
+	// A typo'd path_prefix or renamed dir would otherwise yield zero docs
+	// and mass-decommission every cluster owned by this source.
+	if fi, statErr := os.Stat(walkRoot); statErr != nil {
+		return "", nil, fmt.Errorf("walk root %q unreadable (check path_prefix %q): %w", walkRoot, src.PathPrefix, statErr)
+	} else if !fi.IsDir() {
+		return "", nil, fmt.Errorf("walk root %q is not a directory (check path_prefix %q)", walkRoot, src.PathPrefix)
+	}
 	var docs []ParsedDoc
 	walkErr := filepath.WalkDir(walkRoot, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
+			return fmt.Errorf("walk %s: %w", p, err)
 		}
 		if d.IsDir() {
 			// Skip .git always

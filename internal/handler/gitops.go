@@ -117,43 +117,45 @@ func (h *GitOpsHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
 // gitopsSourceResponse is the wire shape returned by every handler. The
 // auth_encrypted column is replaced with a sentinel.
 type gitopsSourceResponse struct {
-	ID                  string `json:"id"`
-	Name                string `json:"name"`
-	RepoURL             string `json:"repo_url"`
-	Branch              string `json:"branch"`
-	PathPrefix          string `json:"path_prefix"`
-	AuthMode            string `json:"auth_mode"`
-	Auth                string `json:"auth"` // sentinel
-	AuthConfigured      bool   `json:"auth_configured"`
-	SyncMode            string `json:"sync_mode"`
-	SyncIntervalSeconds int32  `json:"sync_interval_seconds"`
-	OnDelete            string `json:"on_delete"`
-	LastSyncedAt        string `json:"last_synced_at,omitempty"`
-	LastSyncedSHA       string `json:"last_synced_sha,omitempty"`
-	LastError           string `json:"last_error,omitempty"`
-	Enabled             bool   `json:"enabled"`
-	CreatedAt           string `json:"created_at"`
-	UpdatedAt           string `json:"updated_at"`
+	ID                    string `json:"id"`
+	Name                  string `json:"name"`
+	RepoURL               string `json:"repo_url"`
+	Branch                string `json:"branch"`
+	PathPrefix            string `json:"path_prefix"`
+	AuthMode              string `json:"auth_mode"`
+	Auth                  string `json:"auth"` // sentinel
+	AuthConfigured        bool   `json:"auth_configured"`
+	SyncMode              string `json:"sync_mode"`
+	SyncIntervalSeconds   int32  `json:"sync_interval_seconds"`
+	OnDelete              string `json:"on_delete"`
+	LastSyncedAt          string `json:"last_synced_at,omitempty"`
+	LastSyncedSHA         string `json:"last_synced_sha,omitempty"`
+	LastError             string `json:"last_error,omitempty"`
+	Enabled               bool   `json:"enabled"`
+	AllowMassDecommission bool   `json:"allow_mass_decommission"`
+	CreatedAt             string `json:"created_at"`
+	UpdatedAt             string `json:"updated_at"`
 }
 
 func toGitOpsSourceResponse(row sqlc.GitopsRegistrationSource) gitopsSourceResponse {
 	resp := gitopsSourceResponse{
-		ID:                  row.ID.String(),
-		Name:                row.Name,
-		RepoURL:             row.RepoUrl,
-		Branch:              row.Branch,
-		PathPrefix:          row.PathPrefix,
-		AuthMode:            row.AuthMode,
-		Auth:                "",
-		AuthConfigured:      row.AuthEncrypted != "",
-		SyncMode:            row.SyncMode,
-		SyncIntervalSeconds: row.SyncIntervalSeconds,
-		OnDelete:            row.OnDelete,
-		LastSyncedSHA:       row.LastSyncedSha,
-		LastError:           row.LastError,
-		Enabled:             row.Enabled,
-		CreatedAt:           row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:           row.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:                    row.ID.String(),
+		Name:                  row.Name,
+		RepoURL:               row.RepoUrl,
+		Branch:                row.Branch,
+		PathPrefix:            row.PathPrefix,
+		AuthMode:              row.AuthMode,
+		Auth:                  "",
+		AuthConfigured:        row.AuthEncrypted != "",
+		SyncMode:              row.SyncMode,
+		SyncIntervalSeconds:   row.SyncIntervalSeconds,
+		OnDelete:              row.OnDelete,
+		LastSyncedSHA:         row.LastSyncedSha,
+		LastError:             row.LastError,
+		Enabled:               row.Enabled,
+		AllowMassDecommission: row.AllowMassDecommission,
+		CreatedAt:             row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	if resp.AuthConfigured {
 		resp.Auth = GitOpsAuthSentinel
@@ -177,6 +179,10 @@ type gitopsSourceRequest struct {
 	SyncIntervalSeconds int32  `json:"sync_interval_seconds"`
 	OnDelete            string `json:"on_delete"`
 	Enabled             *bool  `json:"enabled,omitempty"`
+	// AllowMassDecommission arms the one-shot mass-decommission override
+	// (E3/H10). *bool (mirroring Enabled) so an unrelated PUT preserves
+	// the armed state. The worker consumes/disarms it on the next sync.
+	AllowMassDecommission *bool `json:"allow_mass_decommission,omitempty"`
 }
 
 // gate enforces superuser. Same shape as the SIEM / admin handlers.
@@ -321,18 +327,23 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	allowMass := existing.AllowMassDecommission
+	if req.AllowMassDecommission != nil {
+		allowMass = *req.AllowMassDecommission
+	}
 	row, err := h.queries.UpdateGitOpsSource(r.Context(), sqlc.UpdateGitOpsSourceParams{
-		ID:                  id,
-		Name:                gitopsDefaultString(req.Name, existing.Name),
-		RepoUrl:             gitopsDefaultString(req.RepoURL, existing.RepoUrl),
-		Branch:              gitopsDefaultString(req.Branch, existing.Branch),
-		PathPrefix:          req.PathPrefix,
-		AuthMode:            gitopsDefaultString(req.AuthMode, existing.AuthMode),
-		AuthEncrypted:       auth,
-		SyncMode:            gitopsDefaultString(req.SyncMode, existing.SyncMode),
-		SyncIntervalSeconds: defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
-		OnDelete:            gitopsDefaultString(req.OnDelete, existing.OnDelete),
-		Enabled:             enabled,
+		ID:                    id,
+		Name:                  gitopsDefaultString(req.Name, existing.Name),
+		RepoUrl:               gitopsDefaultString(req.RepoURL, existing.RepoUrl),
+		Branch:                gitopsDefaultString(req.Branch, existing.Branch),
+		PathPrefix:            req.PathPrefix,
+		AuthMode:              gitopsDefaultString(req.AuthMode, existing.AuthMode),
+		AuthEncrypted:         auth,
+		SyncMode:              gitopsDefaultString(req.SyncMode, existing.SyncMode),
+		SyncIntervalSeconds:   defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
+		OnDelete:              gitopsDefaultString(req.OnDelete, existing.OnDelete),
+		Enabled:               enabled,
+		AllowMassDecommission: allowMass,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update gitops source")
@@ -343,6 +354,12 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"repo_url":  row.RepoUrl,
 		"branch":    row.Branch,
 		"on_delete": row.OnDelete,
+		// Surface arming/disarming the one-shot mass-decommission override (a
+		// dangerous kill-switch on the H10 guard) so it is visible in the audit
+		// trail rather than buried in a generic source edit.
+		"allow_mass_decommission": row.AllowMassDecommission,
+		"mass_decommission_override_armed": req.AllowMassDecommission != nil &&
+			*req.AllowMassDecommission && !existing.AllowMassDecommission,
 	})
 	RespondJSON(w, http.StatusOK, toGitOpsSourceResponse(row))
 }

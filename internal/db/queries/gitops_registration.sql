@@ -11,7 +11,7 @@
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 ORDER BY name ASC;
 
@@ -19,7 +19,7 @@ ORDER BY name ASC;
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 WHERE enabled = true
 ORDER BY name ASC;
@@ -28,7 +28,7 @@ ORDER BY name ASC;
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 WHERE id = $1;
 
@@ -36,7 +36,7 @@ WHERE id = $1;
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 WHERE name = $1;
 
@@ -48,7 +48,7 @@ INSERT INTO gitops_registration_sources (
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at;
+          created_by, created_at, updated_at, allow_mass_decommission;
 
 -- name: UpdateGitOpsSource :one
 UPDATE gitops_registration_sources
@@ -62,12 +62,13 @@ SET name                  = $2,
     sync_interval_seconds = $9,
     on_delete             = $10,
     enabled               = $11,
+    allow_mass_decommission = $12,
     updated_at            = now()
 WHERE id = $1
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at;
+          created_by, created_at, updated_at, allow_mass_decommission;
 
 -- name: DeleteGitOpsSource :exec
 DELETE FROM gitops_registration_sources WHERE id = $1;
@@ -87,6 +88,15 @@ WHERE id = $1;
 -- Stamped on a hard sync failure (clone error, walk error, etc).
 UPDATE gitops_registration_sources
 SET last_error = $2,
+    updated_at = now()
+WHERE id = $1;
+
+-- name: ConsumeGitOpsMassDecommissionOverride :exec
+-- One-shot disarm of the mass-decommission override (E3/H10). The worker
+-- calls this immediately after honoring an armed mass removal so a
+-- leftover arm cannot permit a SECOND accidental bad sync.
+UPDATE gitops_registration_sources
+SET allow_mass_decommission = false,
     updated_at = now()
 WHERE id = $1;
 

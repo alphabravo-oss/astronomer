@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeGitOpsMassDecommissionOverride = `-- name: ConsumeGitOpsMassDecommissionOverride :exec
+UPDATE gitops_registration_sources
+SET allow_mass_decommission = false,
+    updated_at = now()
+WHERE id = $1
+`
+
+// One-shot disarm of the mass-decommission override (E3/H10). The worker
+// calls this immediately after honoring an armed mass removal so a
+// leftover arm cannot permit a SECOND accidental bad sync.
+func (q *Queries) ConsumeGitOpsMassDecommissionOverride(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, consumeGitOpsMassDecommissionOverride, id)
+	return err
+}
+
 const countGitOpsRegisteredClustersBySource = `-- name: CountGitOpsRegisteredClustersBySource :one
 SELECT COUNT(*) FROM gitops_registered_clusters WHERE source_id = $1
 `
@@ -43,7 +58,7 @@ INSERT INTO gitops_registration_sources (
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at
+          created_by, created_at, updated_at, allow_mass_decommission
 `
 
 type CreateGitOpsSourceParams struct {
@@ -93,6 +108,7 @@ func (q *Queries) CreateGitOpsSource(ctx context.Context, arg CreateGitOpsSource
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowMassDecommission,
 	)
 	return i, err
 }
@@ -119,7 +135,7 @@ const getGitOpsSource = `-- name: GetGitOpsSource :one
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 WHERE id = $1
 `
@@ -145,6 +161,7 @@ func (q *Queries) GetGitOpsSource(ctx context.Context, id uuid.UUID) (GitopsRegi
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowMassDecommission,
 	)
 	return i, err
 }
@@ -153,7 +170,7 @@ const getGitOpsSourceByName = `-- name: GetGitOpsSourceByName :one
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 WHERE name = $1
 `
@@ -179,6 +196,7 @@ func (q *Queries) GetGitOpsSourceByName(ctx context.Context, name string) (Gitop
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowMassDecommission,
 	)
 	return i, err
 }
@@ -187,7 +205,7 @@ const listEnabledGitOpsSources = `-- name: ListEnabledGitOpsSources :many
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 WHERE enabled = true
 ORDER BY name ASC
@@ -220,6 +238,7 @@ func (q *Queries) ListEnabledGitOpsSources(ctx context.Context) ([]GitopsRegistr
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AllowMassDecommission,
 		); err != nil {
 			return nil, err
 		}
@@ -320,7 +339,7 @@ const listGitOpsSources = `-- name: ListGitOpsSources :many
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at
+       created_by, created_at, updated_at, allow_mass_decommission
 FROM gitops_registration_sources
 ORDER BY name ASC
 `
@@ -360,6 +379,7 @@ func (q *Queries) ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSo
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AllowMassDecommission,
 		); err != nil {
 			return nil, err
 		}
@@ -444,26 +464,28 @@ SET name                  = $2,
     sync_interval_seconds = $9,
     on_delete             = $10,
     enabled               = $11,
+    allow_mass_decommission = $12,
     updated_at            = now()
 WHERE id = $1
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at
+          created_by, created_at, updated_at, allow_mass_decommission
 `
 
 type UpdateGitOpsSourceParams struct {
-	ID                  uuid.UUID `json:"id"`
-	Name                string    `json:"name"`
-	RepoUrl             string    `json:"repo_url"`
-	Branch              string    `json:"branch"`
-	PathPrefix          string    `json:"path_prefix"`
-	AuthMode            string    `json:"auth_mode"`
-	AuthEncrypted       string    `json:"auth_encrypted"`
-	SyncMode            string    `json:"sync_mode"`
-	SyncIntervalSeconds int32     `json:"sync_interval_seconds"`
-	OnDelete            string    `json:"on_delete"`
-	Enabled             bool      `json:"enabled"`
+	ID                    uuid.UUID `json:"id"`
+	Name                  string    `json:"name"`
+	RepoUrl               string    `json:"repo_url"`
+	Branch                string    `json:"branch"`
+	PathPrefix            string    `json:"path_prefix"`
+	AuthMode              string    `json:"auth_mode"`
+	AuthEncrypted         string    `json:"auth_encrypted"`
+	SyncMode              string    `json:"sync_mode"`
+	SyncIntervalSeconds   int32     `json:"sync_interval_seconds"`
+	OnDelete              string    `json:"on_delete"`
+	Enabled               bool      `json:"enabled"`
+	AllowMassDecommission bool      `json:"allow_mass_decommission"`
 }
 
 func (q *Queries) UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSourceParams) (GitopsRegistrationSource, error) {
@@ -479,6 +501,7 @@ func (q *Queries) UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSource
 		arg.SyncIntervalSeconds,
 		arg.OnDelete,
 		arg.Enabled,
+		arg.AllowMassDecommission,
 	)
 	var i GitopsRegistrationSource
 	err := row.Scan(
@@ -499,6 +522,7 @@ func (q *Queries) UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSource
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AllowMassDecommission,
 	)
 	return i, err
 }

@@ -49,6 +49,10 @@ type Querier interface {
 	// OnTemplateApplyStart before the new row is written.
 	CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg CompleteArgoCDOperationWithResultParams) (ArgocdOperation, error)
+	// One-shot disarm of the mass-decommission override (E3/H10). The worker
+	// calls this immediately after honoring an armed mass removal so a
+	// leftover arm cannot permit a SECOND accidental bad sync.
+	ConsumeGitOpsMassDecommissionOverride(ctx context.Context, id uuid.UUID) error
 	// Atomically marks a reset token as used. Returns row-count so the
 	// caller can distinguish "first use" (1) from "already used" (0)
 	// without a separate SELECT. The handler also verifies expires_at +

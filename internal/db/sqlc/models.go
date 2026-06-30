@@ -1055,23 +1055,24 @@ type GitopsRegisteredCluster struct {
 }
 
 type GitopsRegistrationSource struct {
-	ID                  uuid.UUID          `json:"id"`
-	Name                string             `json:"name"`
-	RepoUrl             string             `json:"repo_url"`
-	Branch              string             `json:"branch"`
-	PathPrefix          string             `json:"path_prefix"`
-	AuthMode            string             `json:"auth_mode"`
-	AuthEncrypted       string             `json:"auth_encrypted"`
-	SyncMode            string             `json:"sync_mode"`
-	SyncIntervalSeconds int32              `json:"sync_interval_seconds"`
-	OnDelete            string             `json:"on_delete"`
-	LastSyncedAt        pgtype.Timestamptz `json:"last_synced_at"`
-	LastSyncedSha       string             `json:"last_synced_sha"`
-	LastError           string             `json:"last_error"`
-	Enabled             bool               `json:"enabled"`
-	CreatedBy           pgtype.UUID        `json:"created_by"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           time.Time          `json:"updated_at"`
+	ID                    uuid.UUID          `json:"id"`
+	Name                  string             `json:"name"`
+	RepoUrl               string             `json:"repo_url"`
+	Branch                string             `json:"branch"`
+	PathPrefix            string             `json:"path_prefix"`
+	AuthMode              string             `json:"auth_mode"`
+	AuthEncrypted         string             `json:"auth_encrypted"`
+	SyncMode              string             `json:"sync_mode"`
+	SyncIntervalSeconds   int32              `json:"sync_interval_seconds"`
+	OnDelete              string             `json:"on_delete"`
+	LastSyncedAt          pgtype.Timestamptz `json:"last_synced_at"`
+	LastSyncedSha         string             `json:"last_synced_sha"`
+	LastError             string             `json:"last_error"`
+	Enabled               bool               `json:"enabled"`
+	CreatedBy             pgtype.UUID        `json:"created_by"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	AllowMassDecommission bool               `json:"allow_mass_decommission"`
 }
 
 type GlobalRole struct {

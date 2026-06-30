@@ -1,0 +1,1 @@
+ALTER TABLE gitops_registration_sources DROP COLUMN allow_mass_decommission;
