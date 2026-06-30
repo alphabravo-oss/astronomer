@@ -259,7 +259,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | B2 | Locator CAS + POD_IP fail-fast | M10,L19 | 2 | M | [x] RESOLVED 75dabe7 (CAS no-clobber via miniredis; /readyz fails on HA-misconfig) |
 | B3 | Configurable tunnel concurrency | M11 | 2 | M | [x] RESOLVED 667cfd5 (tunnel_worker_concurrency, default 8) |
 | B4 | Non-fatal initial connect | L20 | 2 | S | [x] RESOLVED 667cfd5 (G-B4 live: unreachable server → retries, no CrashLoop) |
-| C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [ ] |
+| C1 | Decouple liveness from inventory | H11,L11 | 3 | M | [x] RESOLVED 9633c58 (G-C1: stayed active 150s under RBAC strip, no token churn, last-good kept) |
 | C2 | One staleness writer + /readyz | M3,M4 | 3 | M | [ ] |
 | C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] |
 | D1 | Honest operator profile | H4,L8 | 3 | M | [ ] |
