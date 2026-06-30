@@ -132,6 +132,7 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 	}
 	conditions, _ := json.Marshal(map[string]any{
 		"connected":                 true,
+		"degraded":                  len(payload.DegradedReasons) > 0,
 		"source":                    "agent-heartbeat",
 		"heartbeat_schema_version":  payload.SchemaVersion,
 		"agent_build_sha":           payload.AgentBuildSHA,

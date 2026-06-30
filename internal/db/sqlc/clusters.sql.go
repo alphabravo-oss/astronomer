@@ -1189,28 +1189,32 @@ func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (C
 const updateClusterHeartbeat = `-- name: UpdateClusterHeartbeat :exec
 UPDATE clusters SET
     last_heartbeat = now(),
-    agent_version = $2,
-    kubernetes_version = $3,
-    node_count = $4,
-    distribution = $5
-WHERE id = $1
+    agent_version = COALESCE(NULLIF($1::text, ''), agent_version),
+    kubernetes_version = COALESCE(NULLIF($2::text, ''), kubernetes_version),
+    node_count = CASE WHEN $3::int > 0 THEN $3::int ELSE node_count END,
+    distribution = COALESCE(NULLIF($4::text, ''), distribution)
+WHERE id = $5
 `
 
 type UpdateClusterHeartbeatParams struct {
-	ID                uuid.UUID `json:"id"`
 	AgentVersion      string    `json:"agent_version"`
 	KubernetesVersion string    `json:"kubernetes_version"`
 	NodeCount         int32     `json:"node_count"`
 	Distribution      string    `json:"distribution"`
+	ID                uuid.UUID `json:"id"`
 }
 
+// last_heartbeat ALWAYS advances (liveness, decoupled from inventory per H11),
+// but inventory columns are keep-last-good (L11): a degraded/minimal beat sends
+// empty/zero inventory and must NOT clobber prior values. A full beat carries
+// real values and updates normally.
 func (q *Queries) UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error {
 	_, err := q.db.Exec(ctx, updateClusterHeartbeat,
-		arg.ID,
 		arg.AgentVersion,
 		arg.KubernetesVersion,
 		arg.NodeCount,
 		arg.Distribution,
+		arg.ID,
 	)
 	return err
 }

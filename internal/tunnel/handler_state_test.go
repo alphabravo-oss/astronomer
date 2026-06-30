@@ -38,9 +38,10 @@ type recordingValidator struct {
 	tokenErr           error
 	clusterAgentToken  sqlc.ClusterAgentToken
 	clusterAgentErr    error
-	upsertArgs         []sqlc.UpsertClusterHealthStatusParams
-	upsertErr          error
-	updateHeartbeatErr error
+	upsertArgs          []sqlc.UpsertClusterHealthStatusParams
+	upsertErr           error
+	updateHeartbeatArgs []sqlc.UpdateClusterHeartbeatParams
+	updateHeartbeatErr  error
 	createConnArgs     []sqlc.CreateAgentConnectionParams
 	updateConnArgs     []sqlc.UpdateAgentConnectionStatusParams
 	pingIDs            []uuid.UUID
@@ -178,8 +179,19 @@ func (r *recordingValidator) ClearPreviousClusterAgentTokenHash(_ context.Contex
 	return nil
 }
 
-func (r *recordingValidator) UpdateClusterHeartbeat(context.Context, sqlc.UpdateClusterHeartbeatParams) error {
+func (r *recordingValidator) UpdateClusterHeartbeat(_ context.Context, arg sqlc.UpdateClusterHeartbeatParams) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updateHeartbeatArgs = append(r.updateHeartbeatArgs, arg)
 	return r.updateHeartbeatErr
+}
+
+func (r *recordingValidator) SnapshotHeartbeatArgs() []sqlc.UpdateClusterHeartbeatParams {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sqlc.UpdateClusterHeartbeatParams, len(r.updateHeartbeatArgs))
+	copy(out, r.updateHeartbeatArgs)
+	return out
 }
 
 func (r *recordingValidator) UpsertClusterHealthStatus(_ context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error) {
@@ -786,6 +798,87 @@ func TestHandleMetricsInvalidPayloadDoesNotPersistOrPublish(t *testing.T) {
 	}
 	if got := len(pub.Snapshot()); got != 0 {
 		t.Fatalf("expected 0 publishes, got %d", got)
+	}
+}
+
+// TestHandleHeartbeatDegradedAdvancesLivenessAndSurfacesCondition proves the
+// H11/L11 fix at the handler boundary: a degraded/minimal beat (empty inventory
+// + DegradedReasons) still calls UpdateClusterHeartbeat (liveness advances) and
+// surfaces connected=true + degraded=true, while passing the empty inventory
+// values straight through so the keep-last-good SQL preserves prior columns.
+func TestHandleHeartbeatDegradedAdvancesLivenessAndSurfacesCondition(t *testing.T) {
+	clusterID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String(), sendCh: make(chan *protocol.Message, 1)}
+
+	// Degraded beat: inventory collection failed, so version/node_count are zero.
+	body, _ := json.Marshal(protocol.HeartbeatPayload{
+		SchemaVersion:   protocol.HeartbeatSchemaVersion,
+		AgentVersion:    "v1.2.3",
+		DegradedReasons: []string{"list_nodes_failed: forbidden"},
+	})
+	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: body})
+
+	hbArgs := validator.SnapshotHeartbeatArgs()
+	if len(hbArgs) != 1 {
+		t.Fatalf("UpdateClusterHeartbeat calls = %d, want 1 (liveness must advance on degraded beat)", len(hbArgs))
+	}
+	if hbArgs[0].KubernetesVersion != "" || hbArgs[0].NodeCount != 0 {
+		t.Fatalf("degraded beat should carry empty inventory for keep-last-good, got %+v", hbArgs[0])
+	}
+
+	upserts := validator.SnapshotUpserts()
+	if len(upserts) != 1 {
+		t.Fatalf("health upserts = %d, want 1", len(upserts))
+	}
+	var conditions map[string]any
+	if err := json.Unmarshal(upserts[0].Conditions, &conditions); err != nil {
+		t.Fatalf("decode conditions: %v", err)
+	}
+	if conditions["connected"] != true {
+		t.Fatalf("connected condition = %#v, want true (cluster stays active)", conditions["connected"])
+	}
+	if conditions["degraded"] != true {
+		t.Fatalf("degraded condition = %#v, want true", conditions["degraded"])
+	}
+}
+
+// TestHandleHeartbeatFullBeatUpdatesInventory proves a successful full beat
+// carries real inventory and is NOT flagged degraded (constraint 3).
+func TestHandleHeartbeatFullBeatUpdatesInventory(t *testing.T) {
+	clusterID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String(), sendCh: make(chan *protocol.Message, 1)}
+
+	body, _ := json.Marshal(protocol.HeartbeatPayload{
+		SchemaVersion:     protocol.HeartbeatSchemaVersion,
+		AgentVersion:      "v1.2.3",
+		KubernetesVersion: "v1.30.2",
+		NodeCount:         3,
+		Distribution:      "k3s",
+	})
+	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: body})
+
+	hbArgs := validator.SnapshotHeartbeatArgs()
+	if len(hbArgs) != 1 {
+		t.Fatalf("UpdateClusterHeartbeat calls = %d, want 1", len(hbArgs))
+	}
+	if hbArgs[0].KubernetesVersion != "v1.30.2" || hbArgs[0].NodeCount != 3 || hbArgs[0].Distribution != "k3s" {
+		t.Fatalf("full beat should carry real inventory, got %+v", hbArgs[0])
+	}
+
+	upserts := validator.SnapshotUpserts()
+	if len(upserts) != 1 {
+		t.Fatalf("health upserts = %d, want 1", len(upserts))
+	}
+	var conditions map[string]any
+	if err := json.Unmarshal(upserts[0].Conditions, &conditions); err != nil {
+		t.Fatalf("decode conditions: %v", err)
+	}
+	if conditions["degraded"] != false {
+		t.Fatalf("degraded condition = %#v, want false on full beat", conditions["degraded"])
 	}
 }
 

@@ -1567,6 +1567,10 @@ type Querier interface {
 	UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error)
 	UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error)
 	UpdateClusterGroup(ctx context.Context, arg UpdateClusterGroupParams) (ClusterGroup, error)
+	// last_heartbeat ALWAYS advances (liveness, decoupled from inventory per H11),
+	// but inventory columns are keep-last-good (L11): a degraded/minimal beat sends
+	// empty/zero inventory and must NOT clobber prior values. A full beat carries
+	// real values and updates normally.
 	UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error
 	UpdateClusterRegistrationPhase(ctx context.Context, arg UpdateClusterRegistrationPhaseParams) (UpdateClusterRegistrationPhaseRow, error)
 	UpdateClusterRegistrationStep(ctx context.Context, arg UpdateClusterRegistrationStepParams) (ClusterRegistrationStep, error)

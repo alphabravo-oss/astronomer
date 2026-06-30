@@ -79,13 +79,17 @@ RETURNING *;
 UPDATE clusters SET status = $2 WHERE id = $1 AND decommissioned_at IS NULL;
 
 -- name: UpdateClusterHeartbeat :exec
+-- last_heartbeat ALWAYS advances (liveness, decoupled from inventory per H11),
+-- but inventory columns are keep-last-good (L11): a degraded/minimal beat sends
+-- empty/zero inventory and must NOT clobber prior values. A full beat carries
+-- real values and updates normally.
 UPDATE clusters SET
     last_heartbeat = now(),
-    agent_version = $2,
-    kubernetes_version = $3,
-    node_count = $4,
-    distribution = $5
-WHERE id = $1;
+    agent_version = COALESCE(NULLIF(sqlc.arg(agent_version)::text, ''), agent_version),
+    kubernetes_version = COALESCE(NULLIF(sqlc.arg(kubernetes_version)::text, ''), kubernetes_version),
+    node_count = CASE WHEN sqlc.arg(node_count)::int > 0 THEN sqlc.arg(node_count)::int ELSE node_count END,
+    distribution = COALESCE(NULLIF(sqlc.arg(distribution)::text, ''), distribution)
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteCluster :exec
 DELETE FROM clusters WHERE id = $1;

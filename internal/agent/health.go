@@ -24,7 +24,7 @@ import (
 
 // HealthReporter sends periodic health data to the server.
 type HealthReporter struct {
-	client            *kubernetes.Clientset
+	client            kubernetes.Interface
 	metricsClient     metricsv.Interface
 	log               *slog.Logger
 	heartbeatInterval time.Duration
@@ -42,7 +42,7 @@ type HealthReporter struct {
 }
 
 // NewHealthReporter creates a new HealthReporter.
-func NewHealthReporter(client *kubernetes.Clientset, log *slog.Logger, heartbeatSec, metricsSec int) *HealthReporter {
+func NewHealthReporter(client kubernetes.Interface, log *slog.Logger, heartbeatSec, metricsSec int) *HealthReporter {
 	if heartbeatSec <= 0 {
 		heartbeatSec = 30
 	}
@@ -259,6 +259,11 @@ func (hr *HealthReporter) sendHeartbeat(ctx context.Context, sendFn func(*protoc
 		hr.log.Error("failed to collect heartbeat", "error", err)
 		return
 	}
+	// A partial inventory failure no longer suppresses the beat (H11): we emit
+	// a minimal liveness frame carrying DegradedReasons instead of nothing.
+	if len(hb.DegradedReasons) > 0 {
+		hr.log.Warn("emitting degraded heartbeat", "reasons", hb.DegradedReasons)
+	}
 
 	payload, err := json.Marshal(hb)
 	if err != nil {
@@ -291,28 +296,35 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 		hb.EnabledFeatures, hb.DeniedFeatures = capabilityFeaturesForProfile(hb.PrivilegeProfile)
 	}
 
+	// Inventory collection is best-effort and DECOUPLED from liveness (H11):
+	// a failed apiserver List must not suppress the heartbeat. On a partial
+	// failure we record a DegradedReasons entry, leave the corresponding
+	// inventory field at its zero value (the server keeps the last-good value,
+	// L11), and still emit the (minimal) frame so last_heartbeat stays fresh
+	// and the cluster is not falsely flipped to disconnected.
+
 	// K8s version.
-	serverVersion, err := hr.client.Discovery().ServerVersion()
-	if err != nil {
-		return nil, fmt.Errorf("get server version: %w", err)
+	if serverVersion, err := hr.client.Discovery().ServerVersion(); err != nil {
+		hb.DegradedReasons = append(hb.DegradedReasons, fmt.Sprintf("server_version_unavailable: %v", err))
+	} else {
+		hb.KubernetesVersion = serverVersion.GitVersion
 	}
-	hb.KubernetesVersion = serverVersion.GitVersion
 
 	// Node count and distribution detection.
-	nodes, err := hr.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list nodes: %w", err)
+	if nodes, err := hr.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err != nil {
+		hb.DegradedReasons = append(hb.DegradedReasons, fmt.Sprintf("list_nodes_failed: %v", err))
+	} else {
+		hb.NodeCount = len(nodes.Items)
+		hb.Distribution = detectDistribution(nodes.Items)
 	}
-	hb.NodeCount = len(nodes.Items)
-	hb.Distribution = detectDistribution(nodes.Items)
 	hb.AvailableAPIs = hr.collectAvailableAPIs(ctx)
 
 	// Pod count (all namespaces).
-	pods, err := hr.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("list pods: %w", err)
+	if pods, err := hr.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{}); err != nil {
+		hb.DegradedReasons = append(hb.DegradedReasons, fmt.Sprintf("list_pods_failed: %v", err))
+	} else {
+		hb.PodCount = len(pods.Items)
 	}
-	hb.PodCount = len(pods.Items)
 
 	// CPU/Memory from metrics API (best-effort).
 	hr.collectMetrics(ctx, hb)
