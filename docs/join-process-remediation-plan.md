@@ -273,5 +273,5 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | F1 | Per-component PSA labels | L6 | 4 | S | [x] RESOLVED (every owned ns has explicit enforce; system=baseline, components=privileged) |
 | F2 | YAML-escape scalars | L7 | 4 | S | [x] RESOLVED 796a87a (escapeYAMLDoubleQuoted on operator scalars; injection test) |
 | F3 | Bootstrap-token re-apply hygiene | L4,L17 | 4 | M | [ ] |
-| F4 | tunnel2 fail-closed + dead config | L18,L5,L9,L1 | 4 | S | [ ] |
+| F4 | tunnel2 fail-closed + dead config | L18,L5,L9,L1 | 4 | S | [x] RESOLVED (tunnel2 nil-validator fail-closed; PDB+drain comments fixed; L1 via A3) |
 | G1–G7 | Soak/validation extensions | — | all | M | [ ] |
