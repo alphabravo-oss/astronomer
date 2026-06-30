@@ -264,7 +264,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | C3 | Metrics-stale + state replay | M13,L12 | 4 | M | [ ] |
 | D1 | Honest operator profile | H4,L8 | 3 | M | [ ] |
 | D2 | RBACSyncer guardrails | H5 | 3 | M | [ ] |
-| D3 | Gate /manifest/ as write | H3 | 1 | S | [ ] |
+| D3 | Gate /manifest/ as write | H3 | 1 | S | [x] RESOLVED 322706f (read-only→403 on /manifest/ live; admin import intact) |
 | D4 | Agent-side profile guard | M8 | 4 | M | [ ] |
 | E1 | Gate push on pull + ownership | H6,H7 | 3 | L | [ ] |
 | E2 | Appset profile pre-flight | M9 | 3 | M | [ ] |
