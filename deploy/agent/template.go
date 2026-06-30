@@ -320,7 +320,16 @@ const namespaceViewerRBACRulesYAML = `  # Namespace-scoped read-only inventory a
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]`
 
-const operatorRBACRulesYAML = `  # Common workload operations without cluster-admin or RBAC escalation.
+const operatorRBACRulesYAML = `  # HONEST SCOPE (H4): "operator" is a PRIVILEGED, near-cluster-admin tier — not a
+  # safely-contained one. It grants cluster-wide secrets READ+WRITE and pod
+  # exec/attach/portforward, which are textbook INDIRECT cluster-admin primitives:
+  # reading every namespace's secrets exposes every ServiceAccount token (incl.
+  # cluster-admin-bound SAs), and exec into a kube-system / control-plane pod
+  # yields that pod's identity. It does NOT grant rbac.authorization.k8s.io WRITE
+  # (no DIRECT self-escalation) and does not create CRDs/webhooks/storage classes,
+  # but do not mistake that for containment. It is a deliberate, audited,
+  # non-default opt-in (default is viewer). Trimming it to a truly-contained tier
+  # vs splitting a "privileged-operator" is an open product decision (see D1).
   - apiGroups: [""]
     resources: ["configmaps", "endpoints", "events", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "replicationcontrollers", "secrets", "services", "serviceaccounts"]
     verbs: ["get", "list", "watch"]

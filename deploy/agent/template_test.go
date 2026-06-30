@@ -175,6 +175,67 @@ func TestOperatorProfilesGrantNoRBACWriteVerbs(t *testing.T) {
 	}
 }
 
+// TestOperatorProfileIsPrivilegedNearAdmin (H4) is the HONEST counter-assertion
+// to the test above. The "no RBAC-write" check only rules out DIRECT
+// self-escalation; it must NOT be read as containment, because operator grants
+// cluster-wide secrets read+write and pod exec/attach/portforward — textbook
+// INDIRECT cluster-admin primitives. This test pins that reality so any future
+// change that genuinely contains `operator` (trims these grants) is forced to
+// consciously update it, rather than silently re-introducing the false contract.
+func TestOperatorProfileIsPrivilegedNearAdmin(t *testing.T) {
+	type rbacRule struct {
+		APIGroups []string `yaml:"apiGroups"`
+		Resources []string `yaml:"resources"`
+		Verbs     []string `yaml:"verbs"`
+	}
+	var rules []rbacRule
+	if err := yaml.Unmarshal([]byte(RBACRulesYAML(PrivilegeProfileOperator)), &rules); err != nil {
+		t.Fatalf("parse operator rules: %v", err)
+	}
+	has := func(res, verb string) bool {
+		for _, r := range rules {
+			coreGroup := false
+			for _, g := range r.APIGroups {
+				if g == "" || g == "*" {
+					coreGroup = true
+				}
+			}
+			if !coreGroup {
+				continue
+			}
+			resOK, verbOK := false, false
+			for _, x := range r.Resources {
+				if x == res || x == "*" {
+					resOK = true
+				}
+			}
+			for _, v := range r.Verbs {
+				if v == verb || v == "*" {
+					verbOK = true
+				}
+			}
+			if resOK && verbOK {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Indirect cluster-admin primitives that make `operator` near-admin. If a
+	// future change removes any of these (containing operator), update this test
+	// AND the honest-scope comment/docs together — do not silently drop the
+	// assertion and let the "no direct escalation" test imply containment again.
+	if !has("secrets", "get") {
+		t.Error("operator no longer grants cluster-wide secret READ — if intentional (containment), update the H4 honest-scope comment + docs")
+	}
+	if !has("secrets", "create") && !has("secrets", "update") && !has("secrets", "patch") {
+		t.Error("operator no longer grants cluster-wide secret WRITE — if intentional, update the H4 honest-scope comment + docs")
+	}
+	if !has("pods/exec", "create") {
+		t.Error("operator no longer grants pods/exec — if intentional (containment), update the H4 honest-scope comment + docs")
+	}
+}
+
 func TestRBACBindingKindProfiles(t *testing.T) {
 	tests := []struct {
 		profile       string

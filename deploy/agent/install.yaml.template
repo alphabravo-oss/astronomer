@@ -747,10 +747,16 @@ spec:
 # This ClusterRole binds the kube-state-metrics ServiceAccount that the PULL
 # applier creates namespaced in astronomer-monitoring. It is the ONLY
 # cluster-scoped component grant besides the agent's own privilege-profile
-# ClusterRole, and it is strictly least-privilege: get/list/watch ONLY, zero
-# write, no secret data (Secrets are read for metadata-only metrics; ksm never
-# exposes values). It is harmless when pull reconcile is disabled — just an
-# unused read-only ClusterRole bound to a ServiceAccount that may not yet exist.
+# ClusterRole. It is get/list/watch ONLY (zero write). HONEST SCOPE (L8): this
+# DOES grant cluster-wide secret READ — ksm only renders metadata-derived metrics
+# (kube_secret_info/type/labels: names, namespaces, types, labels/annotations) and
+# never exposes secret VALUES, but "no secret data" understates it: an
+# attacker-controlled ksm pod could list every Secret object cluster-wide. This is
+# the standard upstream kube-state-metrics posture; to remove it entirely, drop
+# `secrets` from the rule below AND set the ksm `--resources` allowlist to exclude
+# secrets (else ksm logs RBAC-forbidden noise on its secret collector). It is
+# harmless when pull reconcile is disabled — just an unused read-only ClusterRole
+# bound to a ServiceAccount that may not yet exist.
 # ============================================================================
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
