@@ -265,7 +265,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | D1 | Honest operator profile | H4,L8 | 3 | M | [x] RESOLVED e83a132 (honesty fix: comment+docs+test; trim/split surfaced as product decision) |
 | D2 | RBACSyncer guardrails | H5 | 3 | M | [x] RESOLVED 33390fb (fail-closed bounds: refuse cluster-scoped + out-of-owned-ns; GC bounded) |
 | D3 | Gate /manifest/ as write | H3 | 1 | S | [x] RESOLVED 322706f (read-only→403 on /manifest/ live; admin import intact) |
-| D4 | Agent-side profile guard | M8 | 4 | M | [ ] |
+| D4 | Agent-side profile guard | M8 | 4 | M | [x] RESOLVED (documented enforcement model: RBAC is the ceiling, ConfigMap advisory; SelfSubjectRulesReview noted optional) |
 | E1 | Gate push on pull + ownership | H6,H7 | 3 | L | [x] RESOLVED 4b3c5b5 (3 PASS verdicts incl no-regression; unit proves admin-push appset byte-identical when pull off) |
 | E2 | Appset profile pre-flight | M9 | 3 | M | [x] RESOLVED 4f35c9d (generator filters In [operator,admin]; viewer/namespace-* excluded) |
 | E3 | gitops mass-decommission guard | H10 | 1 | M | [x] RESOLVED 4778199 (WalkDir hard-error + threshold guard + one-shot override; real-git integration suite + deploy smoke) |
