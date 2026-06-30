@@ -410,6 +410,35 @@ func TestEnsureBaselineApplicationSetsIncludesAdoptAndReplace(t *testing.T) {
 	}
 }
 
+// TestBaselineAppHasResourcesFinalizer (L10): the generated Application template
+// must carry the ArgoCD resources-finalizer so disabling a component (or
+// excluding a cluster) cascades the prune to the actual workloads instead of
+// orphaning them.
+func TestBaselineAppHasResourcesFinalizer(t *testing.T) {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	items, _ := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	appSet := findUnstructuredByName(items.Items, "astronomer-baseline-kube-state-metrics")
+	if appSet == nil {
+		t.Fatal("ksm appset missing")
+	}
+	tmplMeta := appSet.Object["spec"].(map[string]any)["template"].(map[string]any)["metadata"].(map[string]any)
+	fins, _ := tmplMeta["finalizers"].([]any)
+	found := false
+	for _, f := range fins {
+		if f == "resources-finalizer.argocd.argoproj.io" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("App template missing resources-finalizer (L10), got finalizers=%v", fins)
+	}
+}
+
 // TestEnsureBaselineApplicationSetsProfilePreflight is the M9 assertion: the
 // generator always filters on In [operator, admin] so viewer / namespace-*
 // clusters (which 403 on baseline apply) never get a baseline App.

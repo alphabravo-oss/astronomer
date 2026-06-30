@@ -401,6 +401,15 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent, exc
 				"template": map[string]any{
 					"metadata": map[string]any{
 						"name": component.ApplicationPrefix + "-{{nameNormalized}}",
+						// L10: the resources-finalizer makes Application deletion CASCADE
+						// to the actual workloads. Without it, disabling a baseline
+						// component (which deletes this ApplicationSet -> deletes its
+						// generated Apps) or excluding a cluster (leave_local / E1) would
+						// ORPHAN the deployed resources instead of pruning them. With the
+						// finalizer ArgoCD prunes the downstream resources before the App
+						// is removed, so "disable" / "hand off to local" actually removes
+						// the footprint.
+						"finalizers": []any{"resources-finalizer.argocd.argoproj.io"},
 						"annotations": map[string]any{
 							"argocd.argoproj.io/sync-wave": fmt.Sprintf("%d", baselineSyncWaveForPhase(syncPhase)),
 						},
