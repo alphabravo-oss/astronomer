@@ -262,6 +262,31 @@ func selectorMatchExpressions(t *testing.T, appSet *unstructured.Unstructured) [
 	return exprs
 }
 
+// findMatchExpr returns the matchExpression with the given key, or nil.
+func findMatchExpr(exprs []any, key string) map[string]any {
+	for _, e := range exprs {
+		m, ok := e.(map[string]any)
+		if ok && m["key"] == key {
+			return m
+		}
+	}
+	return nil
+}
+
+// assertProfilePreflight asserts the M9 profile filter is always present:
+// In [operator, admin] on the agent-profile label.
+func assertProfilePreflight(t *testing.T, exprs []any) {
+	t.Helper()
+	prof := findMatchExpr(exprs, argoCDAgentProfileLabelKey)
+	if prof == nil || prof["operator"] != "In" {
+		t.Fatalf("expected an In matchExpression on %s (M9 profile pre-flight), got %v", argoCDAgentProfileLabelKey, exprs)
+	}
+	vals := prof["values"].([]any)
+	if len(vals) != 2 || vals[0] != "operator" || vals[1] != "admin" {
+		t.Fatalf("profile In values = %v, want [operator admin]", vals)
+	}
+}
+
 // TestEnsureBaselineApplicationSetsAdminPushUnbroken is constraint #1: with pull
 // OFF (the default — ensureBaselineApplicationSets is only ever called when
 // !cfg.PullReconcileEnabled) and NO ownership decisions, the baseline appset is
@@ -292,8 +317,13 @@ func TestEnsureBaselineApplicationSetsAdminPushUnbroken(t *testing.T) {
 		if labels[argoCDManagedByLabelKey] != argoCDManagedByLabelValue || labels[argoCDIsLocalLabelKey] != "false" {
 			t.Fatalf("%s matchLabels = %v", name, labels)
 		}
-		if exprs := selectorMatchExpressions(t, appSet); exprs != nil {
-			t.Fatalf("%s must have NO matchExpressions when no leave_local decisions exist, got %v", name, exprs)
+		// M9: the profile pre-flight In [operator,admin] is always present (admin
+		// clusters still match → admin-push unbroken). With no leave_local
+		// decisions there is NO additional cluster-id NotIn expression.
+		exprs := selectorMatchExpressions(t, appSet)
+		assertProfilePreflight(t, exprs)
+		if findMatchExpr(exprs, argoCDClusterIDLabelKey) != nil {
+			t.Fatalf("%s must have NO cluster-id NotIn when no leave_local decisions exist, got %v", name, exprs)
 		}
 	}
 }
@@ -324,24 +354,25 @@ func TestEnsureBaselineApplicationSetsExcludesLeaveLocal(t *testing.T) {
 		t.Fatal("kube-state-metrics appset missing")
 	}
 	exprs := selectorMatchExpressions(t, ksm)
-	if len(exprs) != 1 {
-		t.Fatalf("ksm matchExpressions = %v, want 1 (NotIn cluster-id)", exprs)
-	}
-	expr := exprs[0].(map[string]any)
-	if expr["key"] != argoCDClusterIDLabelKey || expr["operator"] != "NotIn" {
-		t.Fatalf("ksm matchExpression = %v", expr)
+	// ksm: profile pre-flight (M9) + the leave_local cluster-id NotIn (H7).
+	assertProfilePreflight(t, exprs)
+	expr := findMatchExpr(exprs, argoCDClusterIDLabelKey)
+	if expr == nil || expr["operator"] != "NotIn" {
+		t.Fatalf("ksm missing cluster-id NotIn matchExpression, got %v", exprs)
 	}
 	values := expr["values"].([]any)
 	if len(values) != 1 || values[0] != clusterID.String() {
 		t.Fatalf("ksm NotIn values = %v, want [%s]", values, clusterID)
 	}
-	// node-exporter has no decision → no exclusion.
+	// node-exporter has no decision → profile pre-flight only, no cluster-id NotIn.
 	ne := findUnstructuredByName(items.Items, "astronomer-baseline-node-exporter")
 	if ne == nil {
 		t.Fatal("node-exporter appset missing")
 	}
-	if exprs := selectorMatchExpressions(t, ne); exprs != nil {
-		t.Fatalf("node-exporter must have NO matchExpressions, got %v", exprs)
+	neExprs := selectorMatchExpressions(t, ne)
+	assertProfilePreflight(t, neExprs)
+	if findMatchExpr(neExprs, argoCDClusterIDLabelKey) != nil {
+		t.Fatalf("node-exporter must have NO cluster-id NotIn, got %v", neExprs)
 	}
 }
 
@@ -370,9 +401,32 @@ func TestEnsureBaselineApplicationSetsIncludesAdoptAndReplace(t *testing.T) {
 		if appSet == nil {
 			t.Fatalf("%s not created", name)
 		}
-		if exprs := selectorMatchExpressions(t, appSet); exprs != nil {
-			t.Fatalf("%s adopt/replace must NOT add matchExpressions, got %v", name, exprs)
+		// adopt/replace are not leave_local → profile pre-flight only, no NotIn.
+		exprs := selectorMatchExpressions(t, appSet)
+		assertProfilePreflight(t, exprs)
+		if findMatchExpr(exprs, argoCDClusterIDLabelKey) != nil {
+			t.Fatalf("%s adopt/replace must NOT add a cluster-id NotIn, got %v", name, exprs)
 		}
+	}
+}
+
+// TestEnsureBaselineApplicationSetsProfilePreflight is the M9 assertion: the
+// generator always filters on In [operator, admin] so viewer / namespace-*
+// clusters (which 403 on baseline apply) never get a baseline App.
+func TestEnsureBaselineApplicationSetsProfilePreflight(t *testing.T) {
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		argocdApplicationSetGVR: "ApplicationSetList",
+	})
+	if err := ensureBaselineApplicationSets(context.Background(), dyn, baselineAppSetQuerierStub{}); err != nil {
+		t.Fatalf("ensureBaselineApplicationSets: %v", err)
+	}
+	items, _ := dyn.Resource(argocdApplicationSetGVR).Namespace(localArgoNamespace).List(context.Background(), metav1.ListOptions{})
+	for _, name := range []string{"astronomer-baseline-kube-state-metrics", "astronomer-baseline-node-exporter"} {
+		appSet := findUnstructuredByName(items.Items, name)
+		if appSet == nil {
+			t.Fatalf("%s not created", name)
+		}
+		assertProfilePreflight(t, selectorMatchExpressions(t, appSet))
 	}
 }
 

@@ -340,24 +340,39 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent, exc
 	// argolabels.ManagedClusterLabels (ClusterIDLabelKey). With no exclusions the
 	// selector is byte-for-byte identical to the pre-fix output (admin-push path
 	// unbroken).
-	selector := map[string]any{
-		"matchLabels": map[string]any{
-			argoCDManagedByLabelKey: argoCDManagedByLabelValue,
-			argoCDIsLocalLabelKey:   "false",
+	// M9 profile pre-flight: the agent proxies ArgoCD's baseline apply with its
+	// OWN SA token, so only the full-cluster profiles (operator/admin) can do the
+	// cluster cache-sync + CreateNamespace + SSA. viewer / namespace-* profiles
+	// 403 on every apply. Filter them OUT of the generator (In [operator,admin])
+	// so they never get a baseline App that would just sit failing — instead of
+	// opaque Argo 403s. The profile label is always stamped on the cluster Secret
+	// by argolabels.ManagedClusterLabels.
+	matchExpressions := []any{
+		map[string]any{
+			"key":      argoCDAgentProfileLabelKey,
+			"operator": "In",
+			"values":   []any{"operator", "admin"},
 		},
 	}
+	// H7 leave_local: append a cluster-id NotIn only when the operator recorded
+	// "leave_local" decisions for this component, filtering those clusters out.
 	if len(excludeClusterIDs) > 0 {
 		excluded := make([]any, 0, len(excludeClusterIDs))
 		for _, id := range excludeClusterIDs {
 			excluded = append(excluded, id)
 		}
-		selector["matchExpressions"] = []any{
-			map[string]any{
-				"key":      argoCDClusterIDLabelKey,
-				"operator": "NotIn",
-				"values":   excluded,
-			},
-		}
+		matchExpressions = append(matchExpressions, map[string]any{
+			"key":      argoCDClusterIDLabelKey,
+			"operator": "NotIn",
+			"values":   excluded,
+		})
+	}
+	selector := map[string]any{
+		"matchLabels": map[string]any{
+			argoCDManagedByLabelKey: argoCDManagedByLabelValue,
+			argoCDIsLocalLabelKey:   "false",
+		},
+		"matchExpressions": matchExpressions,
 	}
 	return &unstructured.Unstructured{
 		Object: map[string]any{
