@@ -270,7 +270,7 @@ gitops source with a bad `path_prefix` → assert the sync errors and enqueues *
 | E2 | Appset profile pre-flight | M9 | 3 | M | [x] RESOLVED 4f35c9d (generator filters In [operator,admin]; viewer/namespace-* excluded) |
 | E3 | gitops mass-decommission guard | H10 | 1 | M | [x] RESOLVED 4778199 (WalkDir hard-error + threshold guard + one-shot override; real-git integration suite + deploy smoke) |
 | E4 | Appset disable cascade | L10 | 4 | S | [ ] |
-| F1 | Per-component PSA labels | L6 | 4 | S | [ ] |
+| F1 | Per-component PSA labels | L6 | 4 | S | [x] RESOLVED (every owned ns has explicit enforce; system=baseline, components=privileged) |
 | F2 | YAML-escape scalars | L7 | 4 | S | [x] RESOLVED 796a87a (escapeYAMLDoubleQuoted on operator scalars; injection test) |
 | F3 | Bootstrap-token re-apply hygiene | L4,L17 | 4 | M | [ ] |
 | F4 | tunnel2 fail-closed + dead config | L18,L5,L9,L1 | 4 | S | [ ] |
