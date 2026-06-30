@@ -6,11 +6,16 @@ import (
 )
 
 const (
-	MinimumCompatibleVersion = "v0.9.0"
-	MinimumSupportedVersion  = "v1.0.0"
+	// 0.x release line: agents at v0.1.0+ are fully supported; anything older
+	// than v0.1.0 is blocked from connecting. The "deprecated" middle tier is
+	// dormant during 0.x (minimumSupportedMajor=0 → the major<major check never
+	// fires, so nothing is flagged deprecated) and reactivates at the 1.0
+	// cutover by bumping minimumSupportedMajor to 1.
+	MinimumCompatibleVersion = "v0.1.0"
+	MinimumSupportedVersion  = "v0.1.0"
 	minimumCompatibleMajor   = 0
-	minimumCompatibleMinor   = 9
-	minimumSupportedMajor    = 1
+	minimumCompatibleMinor   = 1
+	minimumSupportedMajor    = 0
 )
 
 type Status struct {

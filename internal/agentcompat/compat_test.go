@@ -9,8 +9,10 @@ func TestEvaluate(t *testing.T) {
 	}{
 		"v1.2.3": {"supported", false},
 		"1.2.3":  {"supported", false},
-		"v0.9.0": {"deprecated", false},
-		"v0.8.9": {"blocked", true},
+		"v0.2.0": {"supported", false}, // the current release line
+		"v0.9.0": {"supported", false}, // 0.x is all supported now
+		"v0.1.0": {"supported", false}, // exactly the floor
+		"v0.0.9": {"blocked", true},    // below the v0.1.0 floor
 		"":       {"unknown", false},
 		"latest": {"unknown", false},
 		"dev":    {"unknown", false},
