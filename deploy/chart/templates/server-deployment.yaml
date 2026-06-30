@@ -115,6 +115,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            # L19: lets the server self-check that a multi-replica deployment has
+            # ASTRONOMER_POD_IP set (else the cross-pod tunnel locator silently
+            # disables and non-owning replicas 503). Readiness fails loudly if not.
+            - name: ASTRONOMER_SERVER_REPLICAS
+              value: {{ .Values.server.replicaCount | quote }}
             - name: ASTRONOMER_BOOTSTRAP_PASSWORD
               valueFrom:
                 secretKeyRef:

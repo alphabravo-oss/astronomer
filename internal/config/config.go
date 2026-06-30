@@ -156,6 +156,12 @@ type Config struct {
 	// TunnelRegisterRateLimitPerMinute caps requests to the public
 	// GET /register/{token} bootstrap-manifest endpoint per source IP (L3).
 	TunnelRegisterRateLimitPerMinute int `mapstructure:"tunnel_register_rate_limit_per_minute"`
+	// ServerReplicas is the configured server replica count (Helm injects it from
+	// .Values.server.replicaCount). Used for the L19 HA self-check: with >1
+	// replica and a RedisURL set but no ASTRONOMER_POD_IP, the cross-pod tunnel
+	// locator silently disables and non-owning replicas 503 — so readiness fails
+	// loudly instead. Defaults to 1 (single-replica; locator not required).
+	ServerReplicas int `mapstructure:"server_replicas"`
 }
 
 // CORSOrigins returns the allowed origins as a slice.
@@ -211,6 +217,7 @@ func Load() (*Config, error) {
 		"tunnel_connect_auth_failure_window_minutes",
 		"tunnel_connect_clock_skew_minutes",
 		"tunnel_register_rate_limit_per_minute",
+		"server_replicas",
 	); err != nil {
 		return nil, err
 	}
@@ -251,6 +258,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "tunnel_connect_auth_failure_window_minutes", Value: 5},
 		envconfig.Default{Key: "tunnel_connect_clock_skew_minutes", Value: 5},
 		envconfig.Default{Key: "tunnel_register_rate_limit_per_minute", Value: 30},
+		envconfig.Default{Key: "server_replicas", Value: 1},
 	)
 
 	cfg := &Config{}

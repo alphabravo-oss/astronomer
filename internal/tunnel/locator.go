@@ -138,14 +138,32 @@ func (l *Locator) Delete(ctx context.Context, clusterID string) {
 	if l.rdb == nil {
 		return
 	}
-	// Best-effort delete; the TTL is the safety net if the redis op fails.
+	// CAS delete (M10): only remove the entry if it still points at THIS pod.
+	// On a fast agent move A→B, B overwrites the entry with B's address; pod A's
+	// stale disconnect/refresh-stop must NOT clobber B's fresh entry (which would
+	// leave the cluster connected-but-undirectoried, 503-ing on non-owning
+	// replicas until the TTL refresh). Mirrors the in-memory owner-checked
+	// DeleteIfSame. Empty address (no own identity) can't own anything → skip.
+	if l.address == "" {
+		return
+	}
 	delCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	if err := l.rdb.Del(delCtx, locatorKeyPrefix+clusterID).Err(); err != nil && l.log != nil {
-		l.log.Warn("tunnel locator: delete failed",
+	if err := locatorCASDelete.Run(delCtx, l.rdb, []string{locatorKeyPrefix + clusterID}, l.address).Err(); err != nil && err != redis.Nil && l.log != nil {
+		l.log.Warn("tunnel locator: CAS delete failed",
 			slog.String("cluster_id", clusterID), slog.String("error", err.Error()))
 	}
 }
+
+// locatorCASDelete removes the key ONLY when its value still equals this pod's
+// address (ARGV[1]) — a compare-and-delete so a moved agent's stale owner can't
+// clobber the new owner's entry. Returns 1 if deleted, 0 if the value differed.
+var locatorCASDelete = redis.NewScript(`
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+	return redis.call('DEL', KEYS[1])
+end
+return 0
+`)
 
 // Lookup returns the address (e.g. "10.42.0.7:8000") of the pod
 // currently owning the cluster_id's WebSocket. Empty string + nil err

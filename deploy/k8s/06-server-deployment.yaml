@@ -25,6 +25,14 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+          env:
+            # L19: needed for the cross-pod tunnel locator if this is ever scaled
+            # past replicas:1 — without it a multi-replica deployment silently
+            # disables cross-pod proxy and non-owning replicas 503.
+            - name: ASTRONOMER_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           envFrom:
             - configMapRef:
                 name: astronomer-config

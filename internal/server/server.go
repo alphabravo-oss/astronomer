@@ -42,8 +42,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -340,7 +340,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// keep-alive pins user-facing requests to one upstream pod, so
 	// without the locator every cluster-shell/image-scan/k8s-proxy
 	// request that lands on the non-owning pod 503s.
-	if podIP := strings.TrimSpace(os.Getenv("ASTRONOMER_POD_IP")); podIP != "" && cfg.RedisURL != "" {
+	var locatorReadinessErr string
+	podIP := strings.TrimSpace(os.Getenv("ASTRONOMER_POD_IP"))
+	if podIP != "" && cfg.RedisURL != "" {
 		addr := podIP + ":8000"
 		if loc, lerr := tunnel.NewLocatorFromAsynqRedisURL(cfg.RedisURL, addr, logger); lerr != nil {
 			logger.Warn("tunnel locator init failed; cross-pod proxy disabled", "error", lerr)
@@ -348,6 +350,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			hub.SetLocator(loc)
 			logger.Info("tunnel locator wired", "address", addr)
 		}
+	} else if cfg.ServerReplicas > 1 && cfg.RedisURL != "" && podIP == "" {
+		// L19: a multi-replica deployment with redis but no POD_IP leaves the
+		// cross-pod tunnel locator disabled, so every cluster-shell / k8s-proxy /
+		// exec request landing on a non-owning replica 503s. Fail readiness loudly
+		// (the rollout stalls) rather than silently degrade.
+		locatorReadinessErr = "ASTRONOMER_POD_IP is unset on a multi-replica deployment (server_replicas>1) with redis configured; the cross-pod tunnel locator is disabled and non-owning replicas will 503 — set ASTRONOMER_POD_IP (Helm injects it from status.podIP; add it to raw k8s manifests)"
+		logger.Error("tunnel locator MISCONFIGURED (L19): /readyz will fail until ASTRONOMER_POD_IP is set",
+			"server_replicas", cfg.ServerReplicas)
 	}
 	// A4 / M5+L13: one shared per-IP connect FAILURE limiter feeds both the hub
 	// WS path and the tunnel2 /connect path (cross-path IP view). The limiter
@@ -1019,7 +1029,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetK8sRequester(requester)
 			return h
 		}(),
-		Readyz:    newReadinessHandler(database, queue, hub),
+		Readyz:    newReadinessHandler(database, queue, hub).withLocatorError(locatorReadinessErr),
 		DexConfig: dexHandler,
 		RBAC: func() *handler.RBACHandler {
 			h := handler.NewRBACHandler(queries)
@@ -1128,7 +1138,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// SCIM 2.0 provisioning (migration 114). Bearer-token-authed
 		// /scim/v2/* User CRUD + read-only Group list, mapped onto the
 		// existing users + identity_group_mappings tables.
-		SCIM:          handler.NewSCIMHandler(queries),
+		SCIM: handler.NewSCIMHandler(queries),
 		// Operator-facing admin surface to mint/list/revoke the static
 		// bearer tokens the /scim/v2/* chain authenticates against.
 		SCIMTokenAdmin: handler.NewSCIMTokenAdminHandler(queries),

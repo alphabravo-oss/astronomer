@@ -109,3 +109,34 @@ func TestReadinessHandlerNilHubFailsClosed(t *testing.T) {
 		t.Fatalf("tunnel_hub.error = %v, want 'tunnel hub not initialized'", tunnelHub["error"])
 	}
 }
+
+// TestReadinessHandlerLocatorMisconfig (L19): a multi-replica deployment with a
+// missing ASTRONOMER_POD_IP fails readiness loudly via the tunnel_locator check.
+func TestReadinessHandlerLocatorMisconfig(t *testing.T) {
+	h := newReadinessHandler(fakeDBHealth{}, fakeQueuePing{}, fakeHubStatus{}).
+		withLocatorError("ASTRONOMER_POD_IP is unset on a multi-replica deployment")
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 for HA-misconfigured locator, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	loc, ok := body["checks"].(map[string]any)["tunnel_locator"].(map[string]any)
+	if !ok || loc["ok"] != false {
+		t.Fatalf("expected failing tunnel_locator check, got %v", body["checks"])
+	}
+
+	// And the healthy single-replica path (no locator error) stays ready.
+	ok2 := newReadinessHandler(fakeDBHealth{}, fakeQueuePing{}, fakeHubStatus{}).withLocatorError("")
+	rec2 := httptest.NewRecorder()
+	ok2.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("healthy locator (no error) should be ready, got %d", rec2.Code)
+	}
+}

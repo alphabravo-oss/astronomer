@@ -41,6 +41,11 @@ type readinessHandler struct {
 	hub     hubStatusProvider
 	timeout time.Duration
 	now     func() time.Time
+	// locatorError, when non-empty, fails readiness with a tunnel_locator check.
+	// Set once at startup for the L19 HA self-check (replicas>1 + RedisURL set but
+	// ASTRONOMER_POD_IP missing → cross-pod proxy silently off → 503s). Static, so
+	// no lock needed.
+	locatorError string
 }
 
 func newReadinessHandler(db dbHealthChecker, queue queuePinger, hub hubStatusProvider) *readinessHandler {
@@ -51,6 +56,15 @@ func newReadinessHandler(db dbHealthChecker, queue queuePinger, hub hubStatusPro
 		timeout: 2 * time.Second,
 		now:     time.Now,
 	}
+}
+
+// withLocatorError sets the L19 HA self-check error (empty = healthy) and returns
+// the handler for fluent wiring. nil-safe.
+func (h *readinessHandler) withLocatorError(msg string) *readinessHandler {
+	if h != nil {
+		h.locatorError = msg
+	}
+	return h
 }
 
 func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +121,14 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			OK:                true,
 			ConnectedClusters: len(h.hub.ConnectedClusters()),
 		}
+	}
+
+	// L19: a misconfigured HA deployment (cross-pod locator off) is reported as a
+	// hard readiness failure so the rollout stalls loudly instead of silently
+	// 503-ing cross-pod requests.
+	if h.locatorError != "" {
+		checks["tunnel_locator"] = readinessCheck{OK: false, Error: h.locatorError}
+		statusCode = http.StatusServiceUnavailable
 	}
 
 	body := map[string]any{
