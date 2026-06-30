@@ -212,6 +212,25 @@ type DecommissionPayload struct {
 	// to the agent's defaults ("astronomer-system" + "astronomer-agent").
 	AgentNamespace  string `json:"agent_namespace,omitempty"`
 	AgentDeployment string `json:"agent_deployment,omitempty"`
+
+	// RemoveFullFootprint, when true, asks the agent to tear down the COMPLETE
+	// managed footprint (all baseline namespaces, cluster-scoped RBAC, the
+	// namespaced singletons + token Secret, and finally astronomer-system),
+	// each strictly label-gated. Additive + default-false so an older agent
+	// that doesn't understand it degrades to the legacy three-step behavior
+	// (remove_logging_stack + remove_velero_managed + remove_agent_deployment).
+	RemoveFullFootprint bool `json:"remove_full_footprint,omitempty"`
+	// VeleroLabel is the label selector for managed Velero CRs + BSLs. Defaults
+	// in-agent to "app.kubernetes.io/managed-by=astronomer-go" when empty.
+	VeleroLabel string `json:"velero_label,omitempty"`
+	// ManagedByLabel gates namespace deletion. Defaults in-agent to
+	// "app.kubernetes.io/managed-by=astronomer-server" — only namespaces the
+	// server created carry it, so an operator-precreated namespace is never
+	// deleted.
+	ManagedByLabel string `json:"managed_by_label,omitempty"`
+	// RBACLabel gates cluster-scoped RBAC + the namespaced singletons. Defaults
+	// in-agent to "app.kubernetes.io/part-of=astronomer".
+	RBACLabel string `json:"rbac_label,omitempty"`
 }
 
 // DecommissionAckPayload is the agent's response to a Decommission message.
@@ -234,6 +253,11 @@ type DecommissionStepResult struct {
 	Removed int    `json:"removed"`
 	Error   string `json:"error,omitempty"`
 	Skipped bool   `json:"skipped,omitempty"`
+	// Orphans lists managed resources the agent LISTED but did NOT delete
+	// (e.g. Velero BackupStorageLocations whose backing cloud blobs must be
+	// cleaned up out-of-band). The server emits an orphan-audit event for
+	// these so an operator has a clear manual-cleanup signal.
+	Orphans []string `json:"orphans,omitempty"`
 }
 
 // AgentUpgradePayload asks the agent to update its own Deployment image.

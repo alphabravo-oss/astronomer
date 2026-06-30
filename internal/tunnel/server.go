@@ -863,6 +863,24 @@ func (h *Hub) disconnectImpl(clusterID string) bool {
 func (h *Hub) SendDecommission(ctx context.Context, clusterID string, payload protocol.DecommissionPayload, wait time.Duration) (*protocol.DecommissionAckPayload, bool, error) {
 	agent := h.agents.Get(clusterID)
 	if agent == nil {
+		// Multi-replica HA: the decommission task is drained off the shared
+		// 'tunnel' asynq queue by ANY pod, but the agent's WS is live on
+		// exactly one pod. If the locator says a SIBLING pod owns the WS,
+		// return a retryable "cluster agent not connected" error so the
+		// existing isAgentNotConnectedErr (cluster_template_apply.go) matches
+		// and asynq re-queues the WHOLE phase onto the owning pod, where the
+		// local Get succeeds and the ACK is in-process. We deliberately do
+		// NOT proxy the stateful MsgDecommission stream+ACK across pods: the
+		// only cross-pod forwarders handle plain HTTP / WS-upgrade, not a
+		// per-step ACK round-trip. SINGLE-REPLICA is unaffected — the locator
+		// is nil (or points at self) so we fall through to skip-with-audit.
+		if loc := h.Locator(); loc != nil {
+			if addr, lerr := loc.Lookup(ctx, clusterID); lerr == nil && addr != "" && addr != loc.Address() {
+				return nil, false, fmt.Errorf("cluster agent not connected to this pod (owner=%s)", addr)
+			}
+		}
+		// Locator nil / no entry / entry points at us but the local map lost
+		// it → agent genuinely gone → keep skip-with-audit (legacy behavior).
 		return nil, false, nil
 	}
 	streamID := uuid.NewString()

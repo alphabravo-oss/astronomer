@@ -412,11 +412,28 @@ SET
     last_error = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status IN ('pending', 'failed')
+      OR (status = 'running' AND updated_at < now() - make_interval(secs => $2::double precision))
+  )
 RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at
 `
 
-func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, markClusterDecommissionRunning, id)
+type MarkClusterDecommissionRunningParams struct {
+	ID              uuid.UUID `json:"id"`
+	LeaseTtlSeconds float64   `json:"lease_ttl_seconds"`
+}
+
+// Lease-CAS claim. Claims the row only when it is pending/failed OR when a
+// prior runner's lease has expired (status='running' but updated_at older than
+// the lease TTL `$2` seconds). The active runner renews its lease implicitly on
+// every UpdateClusterDecommissionPhases (which bumps updated_at), so a healthy
+// in-flight runner is never preempted mid-RPC. When no row matches (a sibling
+// holds a live lease), the query returns no rows and the caller backs off — this
+// is the serialization point that stops the 1-minute periodic sweep from
+// double-running a row concurrently with the enqueued task.
+func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, arg MarkClusterDecommissionRunningParams) (ClusterDecommission, error) {
+	row := q.db.QueryRow(ctx, markClusterDecommissionRunning, arg.ID, arg.LeaseTtlSeconds)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -470,6 +487,21 @@ func (q *Queries) MarkClusterDecommissionSucceeded(ctx context.Context, arg Mark
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const releaseClusterDecommissionClaim = `-- name: ReleaseClusterDecommissionClaim :exec
+UPDATE cluster_decommissions
+SET status = 'pending', updated_at = now()
+WHERE id = $1
+`
+
+// Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
+// path: when the agent's WS is live on a SIBLING pod, the owning pod must be
+// able to claim the row, so the current (wrong) pod sets status back to
+// 'pending' before returning the task to asynq.
+func (q *Queries) ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, releaseClusterDecommissionClaim, id)
+	return err
 }
 
 const tombstoneCluster = `-- name: TombstoneCluster :exec

@@ -702,7 +702,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// components), so it is wired unconditionally — the PullReconcileEnabled
 	// flag gates whether the AGENT runs its loop, not whether the server can
 	// describe the desired state. nil-safe on the hub side.
-	hub.SetDesiredStateProvider(NewDesiredStateAdapter(clusterHandler, queries))
+	hub.SetDesiredStateProvider(NewDesiredStateAdapter(clusterHandler, queries, queries))
 	// Fan cluster.* lifecycle events out to SSE subscribers on Create / Update
 	// / Delete. The bus implements the EventPublisher interface naturally.
 	clusterHandler.SetEventPublisher(busPublisherAdapter{bus: bus})

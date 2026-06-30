@@ -32,6 +32,14 @@ ORDER BY created_at ASC
 LIMIT $1;
 
 -- name: MarkClusterDecommissionRunning :one
+-- Lease-CAS claim. Claims the row only when it is pending/failed OR when a
+-- prior runner's lease has expired (status='running' but updated_at older than
+-- the lease TTL `$2` seconds). The active runner renews its lease implicitly on
+-- every UpdateClusterDecommissionPhases (which bumps updated_at), so a healthy
+-- in-flight runner is never preempted mid-RPC. When no row matches (a sibling
+-- holds a live lease), the query returns no rows and the caller backs off — this
+-- is the serialization point that stops the 1-minute periodic sweep from
+-- double-running a row concurrently with the enqueued task.
 UPDATE cluster_decommissions
 SET
     status = 'running',
@@ -40,7 +48,20 @@ SET
     last_error = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status IN ('pending', 'failed')
+      OR (status = 'running' AND updated_at < now() - make_interval(secs => sqlc.arg(lease_ttl_seconds)::double precision))
+  )
 RETURNING *;
+
+-- name: ReleaseClusterDecommissionClaim :exec
+-- Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
+-- path: when the agent's WS is live on a SIBLING pod, the owning pod must be
+-- able to claim the row, so the current (wrong) pod sets status back to
+-- 'pending' before returning the task to asynq.
+UPDATE cluster_decommissions
+SET status = 'pending', updated_at = now()
+WHERE id = $1;
 
 -- name: UpdateClusterDecommissionPhases :one
 UPDATE cluster_decommissions

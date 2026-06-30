@@ -47,6 +47,7 @@ type fakeDecommQuerier struct {
 	roleBindingsErr error
 	tombstoneErr    error
 	updatePhasesErr error
+	claimErr        error
 	argocdManaged   []sqlc.ArgocdManagedCluster
 
 	// Per-method call counters (so tests can assert what was invoked).
@@ -93,16 +94,34 @@ func (f *fakeDecommQuerier) GetClusterDecommissionByID(_ context.Context, _ uuid
 	return f.row, nil
 }
 
-func (f *fakeDecommQuerier) MarkClusterDecommissionRunning(_ context.Context, _ uuid.UUID) (sqlc.ClusterDecommission, error) {
+func (f *fakeDecommQuerier) GetLatestClusterDecommissionByCluster(_ context.Context, _ uuid.UUID) (sqlc.ClusterDecommission, error) {
+	f.bump("GetLatestClusterDecommissionByCluster")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.row, nil
+}
+
+func (f *fakeDecommQuerier) MarkClusterDecommissionRunning(_ context.Context, _ sqlc.MarkClusterDecommissionRunningParams) (sqlc.ClusterDecommission, error) {
 	f.bump("MarkClusterDecommissionRunning")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.claimErr != nil {
+		return sqlc.ClusterDecommission{}, f.claimErr
+	}
 	f.row.Status = "running"
 	f.row.Attempts++
 	if !f.row.StartedAt.Valid {
 		f.row.StartedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	}
 	return f.row, nil
+}
+
+func (f *fakeDecommQuerier) ReleaseClusterDecommissionClaim(_ context.Context, _ uuid.UUID) error {
+	f.bump("ReleaseClusterDecommissionClaim")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.row.Status = "pending"
+	return nil
 }
 
 func (f *fakeDecommQuerier) UpdateClusterDecommissionPhases(_ context.Context, arg sqlc.UpdateClusterDecommissionPhasesParams) (sqlc.ClusterDecommission, error) {
@@ -353,11 +372,12 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 	}
 }
 
-// TestAgentUnreachable_PhaseSkippedNotFailed verifies the documented
-// fallback path: when the agent isn't connected, the cleanup_managed_side
-// phase is marked "skipped" (not "failed") and the reconciler advances to
-// the next phase. The decommission still completes successfully.
-func TestAgentUnreachable_PhaseSkippedNotFailed(t *testing.T) {
+// TestAgentUnreachable_RevokeDeferredWithinGrace verifies the M12 deferral:
+// when the agent isn't connected, cleanup_managed_side is Skipped and — while
+// still inside the grace window — the reconciler does NOT advance to
+// token-revoke. The row is left for the periodic sweep to retry so a
+// reconnecting agent can still authenticate and run cleanup.
+func TestAgentUnreachable_RevokeDeferredWithinGrace(t *testing.T) {
 	q := newFakeDecommQuerier()
 	tun := &fakeTunnel{connected: false}
 	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
@@ -365,10 +385,16 @@ func TestAgentUnreachable_PhaseSkippedNotFailed(t *testing.T) {
 	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
 		t.Fatalf("runClusterDecommission: %v", err)
 	}
-	if q.row.Status != "succeeded" {
-		t.Errorf("expected status=succeeded even with agent down, got %s", q.row.Status)
+	// Within grace (attempts==1, fresh started_at): NOT advanced to revoke.
+	if q.row.Status == "succeeded" {
+		t.Errorf("expected decommission to be deferred, not succeeded")
 	}
-	// Decode phases and verify cleanup_managed_side was marked skipped.
+	if q.calls["DeleteClusterRegistrationTokensByCluster"] != 0 {
+		t.Errorf("token-revoke must NOT run within grace; calls=%d", q.calls["DeleteClusterRegistrationTokensByCluster"])
+	}
+	if q.calls["TombstoneCluster"] != 0 {
+		t.Errorf("tombstone must NOT run within grace; calls=%d", q.calls["TombstoneCluster"])
+	}
 	phases := loadPhases(q.row.Phases)
 	rec, ok := phases[PhaseCleanupManagedSide]
 	if !ok {
@@ -379,6 +405,160 @@ func TestAgentUnreachable_PhaseSkippedNotFailed(t *testing.T) {
 	}
 	if reason, ok := rec.Detail["reason"].(string); !ok || !strings.Contains(reason, "not connected") {
 		t.Errorf("expected reason='agent not connected', got detail=%+v", rec.Detail)
+	}
+}
+
+// TestAgentUnreachable_GraceExhaustedAdvances verifies the no-deadlock cap:
+// once attempts exhaust the grace window, a still-skipped cleanup no longer
+// blocks — the reconciler revokes the token and tombstones so no live
+// credential lingers on a permanently-dead agent.
+func TestAgentUnreachable_GraceExhaustedAdvances(t *testing.T) {
+	q := newFakeDecommQuerier()
+	// Seed attempts just below the cap; MarkClusterDecommissionRunning bumps
+	// it to the cap so graceExhausted trips.
+	q.row.Attempts = maxCleanupAttempts - 1
+	tun := &fakeTunnel{connected: false, disconnected: true}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("runClusterDecommission: %v", err)
+	}
+	if q.row.Status != "succeeded" {
+		t.Errorf("expected status=succeeded after grace exhausted, got %s", q.row.Status)
+	}
+	if q.calls["DeleteClusterRegistrationTokensByCluster"] != 1 {
+		t.Errorf("token-revoke must run once grace exhausted; calls=%d", q.calls["DeleteClusterRegistrationTokensByCluster"])
+	}
+	if q.calls["TombstoneCluster"] != 1 {
+		t.Errorf("tombstone must run once grace exhausted; calls=%d", q.calls["TombstoneCluster"])
+	}
+}
+
+// TestHARequeue_SiblingPodReturnsError verifies the H8 HA re-queue: when
+// SendDecommission reports the agent is connected on a SIBLING pod, the
+// reconciler resets the cleanup phase, releases its claim, and returns the
+// error so asynq re-enqueues onto the owning pod. It must NOT mark the row
+// failed and must NOT revoke the token.
+func TestHARequeue_SiblingPodReturnsError(t *testing.T) {
+	q := newFakeDecommQuerier()
+	tun := &fakeTunnel{
+		connected: false,
+		sendErr:   errors.New("cluster agent not connected to this pod (owner=10.0.0.9:8080)"),
+	}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	err := runClusterDecommission(context.Background(), deps, q.row.ID)
+	if err == nil {
+		t.Fatalf("expected re-queue error to propagate, got nil")
+	}
+	if !isAgentNotConnectedErr(err) {
+		t.Fatalf("expected agent-not-connected error, got %v", err)
+	}
+	if q.row.Status == "failed" {
+		t.Errorf("row must NOT be marked failed on sibling-pod re-queue")
+	}
+	if q.calls["ReleaseClusterDecommissionClaim"] != 1 {
+		t.Errorf("expected claim release once, got %d", q.calls["ReleaseClusterDecommissionClaim"])
+	}
+	if q.calls["DeleteClusterRegistrationTokensByCluster"] != 0 {
+		t.Errorf("token-revoke must NOT run on re-queue; calls=%d", q.calls["DeleteClusterRegistrationTokensByCluster"])
+	}
+	// The cleanup phase must be reset (not present / not skipped) so the
+	// owning pod re-runs it cleanly.
+	phases := loadPhases(q.row.Phases)
+	if rec, ok := phases[PhaseCleanupManagedSide]; ok && rec.Status == PhaseStatusSkipped {
+		t.Errorf("cleanup phase should be reset for re-run, got %s", rec.Status)
+	}
+}
+
+// TestClaimNotAcquired_SiblingHoldsLease verifies the L15 lease-CAS: when
+// MarkClusterDecommissionRunning returns "no rows" (a sibling holds a live
+// lease), the reconciler backs off without doing any phase work.
+func TestClaimNotAcquired_SiblingHoldsLease(t *testing.T) {
+	q := newFakeDecommQuerier()
+	q.claimErr = errNoRows // "no rows in result set"
+	tun := &fakeTunnel{connected: true, ack: &protocol.DecommissionAckPayload{}}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("expected nil (backoff) when sibling holds lease, got %v", err)
+	}
+	if tun.sendCalls != 0 {
+		t.Errorf("no cleanup work expected when claim not acquired; sendCalls=%d", tun.sendCalls)
+	}
+	if q.calls["DeleteClusterRegistrationTokensByCluster"] != 0 {
+		t.Errorf("no revoke expected when claim not acquired")
+	}
+}
+
+// TestShouldRunPhase_SkippedReRuns asserts the M12 fix: a Skipped phase
+// re-runs (returns true) while a Succeeded phase does not.
+func TestShouldRunPhase_SkippedReRuns(t *testing.T) {
+	phases := phasesMap{
+		PhaseCleanupManagedSide: phaseRecord{Status: PhaseStatusSkipped},
+		PhaseRevokeAgentToken:   phaseRecord{Status: PhaseStatusSucceeded},
+	}
+	if !shouldRunPhase(phases, PhaseCleanupManagedSide) {
+		t.Errorf("skipped phase should re-run")
+	}
+	if shouldRunPhase(phases, PhaseRevokeAgentToken) {
+		t.Errorf("succeeded phase should not re-run")
+	}
+}
+
+// TestPhaseCleanupSetsFullFootprintPayload asserts the worker drives the agent
+// with the complete-footprint flag + the verified label gates.
+func TestPhaseCleanupSetsFullFootprintPayload(t *testing.T) {
+	q := newFakeDecommQuerier()
+	tun := &fakeTunnel{connected: true, ack: &protocol.DecommissionAckPayload{}}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if _, err := phaseCleanupManagedSide(context.Background(), deps, q.row); err != nil {
+		t.Fatalf("phaseCleanupManagedSide: %v", err)
+	}
+	p := tun.lastPayload
+	if !p.RemoveFullFootprint {
+		t.Errorf("expected RemoveFullFootprint=true")
+	}
+	if p.VeleroLabel != "app.kubernetes.io/managed-by=astronomer-go" {
+		t.Errorf("velero label = %q", p.VeleroLabel)
+	}
+	if p.ManagedByLabel != "app.kubernetes.io/managed-by=astronomer-server" {
+		t.Errorf("managed-by label = %q", p.ManagedByLabel)
+	}
+	if p.RBACLabel != "app.kubernetes.io/part-of=astronomer" {
+		t.Errorf("rbac label = %q", p.RBACLabel)
+	}
+}
+
+// TestVeleroOrphanAuditEmitted asserts L16: when the agent reports orphan BSLs,
+// the worker emits a cluster.decommission.velero_orphan audit row listing them.
+func TestVeleroOrphanAuditEmitted(t *testing.T) {
+	q := newFakeDecommQuerier()
+	tun := &fakeTunnel{
+		connected: true,
+		ack: &protocol.DecommissionAckPayload{
+			Steps: []protocol.DecommissionStepResult{
+				{Name: "remove_velero_managed", Success: true, Removed: 2, Orphans: []string{"default-bsl", "dr-bsl"}},
+			},
+		},
+	}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if _, err := phaseCleanupManagedSide(context.Background(), deps, q.row); err != nil {
+		t.Fatalf("phaseCleanupManagedSide: %v", err)
+	}
+	var found *sqlc.CreateAuditLogV1Params
+	for i := range q.audit {
+		if q.audit[i].Action == "cluster.decommission.velero_orphan" {
+			found = &q.audit[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected velero_orphan audit row, got %d rows", len(q.audit))
+	}
+	if !strings.Contains(string(found.Detail), "default-bsl") || !strings.Contains(string(found.Detail), "dr-bsl") {
+		t.Errorf("orphan audit detail missing BSL names: %s", found.Detail)
 	}
 }
 

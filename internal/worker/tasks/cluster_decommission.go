@@ -46,6 +46,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -98,13 +99,65 @@ const (
 // blocked by a stuck agent.
 const decommissionTunnelWaitDefault = 30 * time.Second
 
+// decommissionLeaseTTLSeconds is the lease TTL passed to the
+// MarkClusterDecommissionRunning CAS. It must exceed the cleanup-ACK wait
+// (decommissionTunnelWaitDefault, 30s) so the active runner — which renews the
+// lease on every UpdateClusterDecommissionPhases — is never preempted mid-RPC.
+const decommissionLeaseTTLSeconds = 120
+
+// maxCleanupAttempts / cleanupGraceTimeout bound how long the reconciler waits
+// for a disconnected/sibling-pod agent to come back and run managed-side
+// cleanup before it gives up and ADVANCES to token-revoke (so a decommission
+// can never deadlock on a dead agent). Either bound trips the grace window.
+const (
+	maxCleanupAttempts  = 10
+	cleanupGraceTimeout = 15 * time.Minute
+)
+
+// claimNotAcquired reports whether a MarkClusterDecommissionRunning lease-CAS
+// returned "no rows" — i.e. a sibling pod or the periodic sweep holds a live
+// lease on this row. Detected by message so it works for both the production
+// pgx.ErrNoRows and the test fakes' sentinel.
+func claimNotAcquired(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no rows in result set")
+}
+
+// graceExhausted reports whether the managed-side cleanup grace window has
+// elapsed (too many attempts, or the decommission has been running too long),
+// at which point the reconciler advances past a still-skipped cleanup phase.
+func graceExhausted(row sqlc.ClusterDecommission) bool {
+	if row.Attempts >= maxCleanupAttempts {
+		return true
+	}
+	return row.StartedAt.Valid && time.Since(row.StartedAt.Time) > cleanupGraceTimeout
+}
+
+// cleanupSatisfied reports whether the reconciler may advance past the
+// cleanup_managed_side phase to token-revoke: either cleanup actually
+// succeeded, or it's skipped (agent gone) AND the grace window is exhausted.
+func cleanupSatisfied(phases phasesMap, row sqlc.ClusterDecommission) bool {
+	rec := phases[PhaseCleanupManagedSide]
+	if rec.Status == PhaseStatusSucceeded {
+		return true
+	}
+	return rec.Status == PhaseStatusSkipped && graceExhausted(row)
+}
+
 // ClusterDecommissionQuerier is the slice of *sqlc.Queries the reconciler
 // needs. Defined locally so the unit tests can stand up a fake without
 // dragging the full Queries surface in.
 type ClusterDecommissionQuerier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterDecommission, error)
-	MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (sqlc.ClusterDecommission, error)
+	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterDecommission, error)
+	// MarkClusterDecommissionRunning is a lease-CAS claim: it returns
+	// pgx.ErrNoRows ("no rows in result set") when a sibling pod (or the
+	// periodic sweep) already holds a live lease, so this runner backs off
+	// instead of double-running the row.
+	MarkClusterDecommissionRunning(ctx context.Context, arg sqlc.MarkClusterDecommissionRunningParams) (sqlc.ClusterDecommission, error)
+	// ReleaseClusterDecommissionClaim flips status back to 'pending' so the
+	// owning pod can re-claim during the HA re-queue path.
+	ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error
 	UpdateClusterDecommissionPhases(ctx context.Context, arg sqlc.UpdateClusterDecommissionPhasesParams) (sqlc.ClusterDecommission, error)
 	MarkClusterDecommissionSucceeded(ctx context.Context, arg sqlc.MarkClusterDecommissionSucceededParams) (sqlc.ClusterDecommission, error)
 	MarkClusterDecommissionFailed(ctx context.Context, arg sqlc.MarkClusterDecommissionFailedParams) (sqlc.ClusterDecommission, error)
@@ -315,10 +368,18 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		return nil
 	}
 
-	// Bump attempts + flip to "running". This also clears last_error so a
-	// re-run after failure has a clean slate.
-	row, err = q.MarkClusterDecommissionRunning(ctx, id)
+	// Bump attempts + flip to "running" via the lease-CAS. A "no rows"
+	// result means a sibling pod (or the periodic sweep) already holds a
+	// live lease on this row — back off so we never double-run the same
+	// decommission concurrently (L15).
+	row, err = q.MarkClusterDecommissionRunning(ctx, sqlc.MarkClusterDecommissionRunningParams{
+		ID:              id,
+		LeaseTtlSeconds: decommissionLeaseTTLSeconds,
+	})
 	if err != nil {
+		if claimNotAcquired(err) {
+			return nil
+		}
 		return fmt.Errorf("mark running: %w", err)
 	}
 
@@ -331,15 +392,32 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 
 		detail, phaseErr := phaseCleanupManagedSide(ctx, deps, row)
 		if phaseErr != nil {
+			// HA re-queue: the agent's WS is live on a SIBLING pod. Don't
+			// fail the phase — reset it to pending, release our lease so the
+			// owning pod can re-claim, and return the error so asynq
+			// re-enqueues the WHOLE task onto the shared 'tunnel' queue (the
+			// owning pod's local Get then succeeds and the ACK is in-process).
+			// The 1-minute sweep is the backstop. Mirrors
+			// cluster_template_apply.go's agent-not-connected re-queue.
+			if isAgentNotConnectedErr(phaseErr) {
+				runtimeLogger().WarnContext(ctx, "cluster decommission cleanup deferred: agent on a sibling pod, returning task to queue",
+					"decommission_id", id.String(), "cluster_id", row.ClusterID.String(), "error", phaseErr)
+				delete(phases, PhaseCleanupManagedSide)
+				_, _ = q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)})
+				_ = q.ReleaseClusterDecommissionClaim(ctx, id)
+				return phaseErr
+			}
 			finishPhase(phases, PhaseCleanupManagedSide, PhaseStatusFailed, phaseErr.Error(), detail)
 			recordPhaseAudit(ctx, q, row, PhaseCleanupManagedSide, PhaseStatusFailed, phaseErr.Error(), detail)
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseCleanupManagedSide, phaseErr))
 		}
 		status := PhaseStatusSucceeded
-		// If the agent was unreachable, the phase did its best — we mark
-		// the phase succeeded (with detail.skipped=true) so the reconciler
-		// can advance to the token-revoke phase. Operator can read the
-		// detail blob to see that manual cleanup may be required.
+		// If the agent was unreachable, the phase did its best — we mark the
+		// phase skipped (with detail.skipped=true). Unlike before, the
+		// reconciler does NOT immediately advance: it waits within the grace
+		// window for the agent to reconnect (see the cleanupSatisfied gate
+		// below) so token-revoke is deferred until cleanup succeeds or the
+		// grace window is exhausted.
 		if skipped, ok := detail["skipped"].(bool); ok && skipped {
 			status = PhaseStatusSkipped
 		}
@@ -348,6 +426,19 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
 			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseCleanupManagedSide, err))
 		}
+	}
+
+	// GATE: defer token-revoke (and every later phase) until managed-side
+	// cleanup actually succeeded — OR it's skipped (agent gone) and the grace
+	// window is exhausted. Within grace we return nil and leave the row for
+	// the 1-minute sweep to retry; we do NOT revoke the token yet, so a
+	// reconnecting agent can still authenticate to run cleanup. The grace cap
+	// guarantees we eventually advance (no deadlock on a dead agent).
+	if !cleanupSatisfied(phases, row) {
+		runtimeLogger().InfoContext(ctx, "cluster decommission waiting for managed-side cleanup before token revoke",
+			"decommission_id", id.String(), "cluster_id", row.ClusterID.String(),
+			"attempts", row.Attempts)
+		return nil
 	}
 
 	// 2. revoke_agent_token --------------------------------------------------
@@ -421,16 +512,18 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 }
 
 // shouldRunPhase returns true when the phase has not yet completed
-// successfully (pending or failed or skipped — we re-attempt skipped phases
-// on subsequent runs in case the agent came back online).
+// successfully. A Skipped phase IS re-attempted on subsequent runs: the only
+// phase that ever reaches Skipped is cleanup_managed_side (agent not
+// connected), and we want a reconnecting agent to get cleaned up. Termination
+// is still guaranteed — the cleanupSatisfied grace gate advances the
+// reconciler past a perpetually-skipped cleanup, and the top-of-reconciler
+// `status == succeeded` short-circuit stops a finished row from re-running.
 func shouldRunPhase(phases phasesMap, name string) bool {
 	rec, ok := phases[name]
 	if !ok {
 		return true
 	}
-	// Skipped is a deliberate "succeeded-with-warning" — don't retry, but
-	// also don't re-record. The reconciler progresses past it.
-	return rec.Status != PhaseStatusSucceeded && rec.Status != PhaseStatusSkipped
+	return rec.Status != PhaseStatusSucceeded
 }
 
 func startPhase(phases phasesMap, name string) {
@@ -520,8 +613,22 @@ func phaseCleanupManagedSide(ctx context.Context, deps ClusterDecommissionDeps, 
 		RemoveLoggingStack:    true,
 		RemoveVeleroManaged:   true,
 		RemoveAgentDeployment: true,
-		ManagedLabel:          "astronomer.io/managed=true",
+		RemoveFullFootprint:   true,
+		// Label gates — verified against deploy/agent/install.yaml.template.
+		VeleroLabel:    "app.kubernetes.io/managed-by=astronomer-go",
+		ManagedByLabel: "app.kubernetes.io/managed-by=astronomer-server",
+		RBACLabel:      "app.kubernetes.io/part-of=astronomer",
+		// ManagedLabel kept for an OLD agent that only understands the legacy
+		// field (it gates the legacy Velero delete); harmless to a new agent.
+		ManagedLabel: "astronomer.io/managed=true",
 	}, wait)
+	// Propagate the sibling-pod re-queue signal FIRST: with the locator-aware
+	// SendDecommission, a "cluster agent not connected to this pod" error
+	// comes back with connected=false, so we must surface it BEFORE the
+	// generic !connected skip below (the caller re-queues onto the owning pod).
+	if err != nil && isAgentNotConnectedErr(err) {
+		return detail, err
+	}
 	if !connected {
 		detail["skipped"] = true
 		detail["reason"] = "agent not connected"
@@ -538,16 +645,51 @@ func phaseCleanupManagedSide(ctx context.Context, deps ClusterDecommissionDeps, 
 		// (the operator can fix those manually) — we only fail when the
 		// agent itself returns an envelope-level error above.
 		errStrs := []string{}
+		orphanBSLs := []string{}
 		for _, s := range ack.Steps {
 			if !s.Success && s.Error != "" {
 				errStrs = append(errStrs, s.Name+": "+s.Error)
 			}
+			orphanBSLs = append(orphanBSLs, s.Orphans...)
 		}
 		if len(errStrs) > 0 {
 			detail["per_step_errors"] = errStrs
 		}
+		// Orphan audit (L16): residual Velero BackupStorageLocations whose
+		// backing cloud blobs need manual cleanup. Mirrors the
+		// argocd_secret_orphan worker-side audit action.
+		if len(orphanBSLs) > 0 {
+			detail["velero_orphans"] = orphanBSLs
+			emitVeleroOrphanAudit(ctx, deps.Queries, row, orphanBSLs)
+		}
 	}
 	return detail, nil
+}
+
+// emitVeleroOrphanAudit records a cluster.decommission.velero_orphan worker
+// audit row listing residual BackupStorageLocations the agent could not fully
+// clean up (deleting a BSL does not remove its backing cloud blobs). Worker-side
+// action — no central registration; matches the canonical action regex.
+func emitVeleroOrphanAudit(ctx context.Context, q ClusterDecommissionQuerier, row sqlc.ClusterDecommission, orphans []string) {
+	if q == nil {
+		return
+	}
+	payload, err := json.Marshal(map[string]any{
+		"cluster_id":               row.ClusterID.String(),
+		"backup_storage_locations": orphans,
+		"reason":                   "velero BSLs left in place; backing cloud blobs require manual cleanup",
+	})
+	if err != nil {
+		return
+	}
+	_ = q.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+		Source:       "worker",
+		Action:       "cluster.decommission.velero_orphan",
+		ResourceType: "cluster",
+		ResourceID:   row.ClusterID.String(),
+		ResourceName: row.ClusterName,
+		Detail:       payload,
+	})
 }
 
 func phaseRevokeAgentToken(ctx context.Context, deps ClusterDecommissionDeps, row sqlc.ClusterDecommission) (map[string]any, error) {

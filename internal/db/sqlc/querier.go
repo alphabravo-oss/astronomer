@@ -1328,7 +1328,15 @@ type Querier interface {
 	// adopted_at is set, a registration token created at/before it is denied.
 	MarkClusterAgentTokenAdopted(ctx context.Context, id uuid.UUID) error
 	MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error)
-	MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
+	// Lease-CAS claim. Claims the row only when it is pending/failed OR when a
+	// prior runner's lease has expired (status='running' but updated_at older than
+	// the lease TTL `$2` seconds). The active runner renews its lease implicitly on
+	// every UpdateClusterDecommissionPhases (which bumps updated_at), so a healthy
+	// in-flight runner is never preempted mid-RPC. When no row matches (a sibling
+	// holds a live lease), the query returns no rows and the caller backs off — this
+	// is the serialization point that stops the 1-minute periodic sweep from
+	// double-running a row concurrently with the enqueued task.
+	MarkClusterDecommissionRunning(ctx context.Context, arg MarkClusterDecommissionRunningParams) (ClusterDecommission, error)
 	MarkClusterDecommissionSucceeded(ctx context.Context, arg MarkClusterDecommissionSucceededParams) (ClusterDecommission, error)
 	MarkClusterRegistryApplied(ctx context.Context, id uuid.UUID) error
 	MarkClusterRegistryApplyError(ctx context.Context, arg MarkClusterRegistryApplyErrorParams) error
@@ -1418,6 +1426,11 @@ type Querier interface {
 	// Bounded by the JWT's natural expiry — once the JWT is unusable, the
 	// row's id_token_hint is moot too.
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
+	// Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
+	// path: when the agent's WS is live on a SIBLING pod, the owning pod must be
+	// able to claim the row, so the current (wrong) pod sets status back to
+	// 'pending' before returning the task to asynq.
+	ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
 	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	RequeueCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
