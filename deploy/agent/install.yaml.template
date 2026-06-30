@@ -474,7 +474,20 @@ data:
   PRIVILEGE_PROFILE: "{{PRIVILEGE_PROFILE}}"
 
 ---
-# Secret for the registration token
+# Secret for the registration token.
+#
+# RE-APPLY CAVEAT (L4/L17):
+#   - The agent persists its rotated DURABLE token back into THIS Secret
+#     (token_persistence.go). Re-running `kubectl apply` of this manifest
+#     overwrites it with the (short-TTL) registration token again. This is
+#     self-healing — on the next CONNECT the server resolves a still-valid
+#     registration token back to the existing durable token — but a re-apply
+#     after the registration token has expired requires a fresh manifest. For a
+#     true bootstrap-vs-rotated split, manage this Secret out-of-band.
+#   - Prefer `kubectl apply --server-side`: client-side apply persists the
+#     plaintext token in the kubectl.kubernetes.io/last-applied-configuration
+#     annotation. Bounded by the 1h registration-token TTL + namespace RBAC, but
+#     server-side apply avoids it entirely.
 apiVersion: v1
 kind: Secret
 metadata:
