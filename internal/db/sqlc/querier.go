@@ -864,6 +864,11 @@ type Querier interface {
 	ListArgoCDApplications(ctx context.Context, arg ListArgoCDApplicationsParams) ([]ArgocdApplication, error)
 	ListArgoCDApplicationsByManagedClusterTargets(ctx context.Context, arg ListArgoCDApplicationsByManagedClusterTargetsParams) ([]ArgocdApplication, error)
 	ListArgoCDInstances(ctx context.Context, arg ListArgoCDInstancesParams) ([]ArgocdInstance, error)
+	// Only registrations whose backing cluster still exists and is NOT
+	// decommissioned. Decommission deletes these rows, but this INNER JOIN keeps a
+	// tombstoned/deleted-cluster registration from ever surfacing (in the clusters
+	// tab, the orphan-app report's valid-target set, or the registration refresh)
+	// if a row is ever left behind.
 	ListArgoCDManagedClusters(ctx context.Context, argocdInstanceID uuid.UUID) ([]ArgocdManagedCluster, error)
 	// Reverse index of the above: every ArgoCD instance into which a given
 	// Astronomer cluster is registered. Used by the
