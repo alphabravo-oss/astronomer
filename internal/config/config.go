@@ -28,6 +28,13 @@ type Config struct {
 	CORSAllowedOrigins    string `mapstructure:"cors_allowed_origins"`
 	SessionTimeoutMinutes int    `mapstructure:"session_timeout_minutes"`
 	AgentTokenExpiryHours int    `mapstructure:"agent_token_expiry_hours"`
+	// RegistrationTokenTTLHours (task A3) is the single, documented TTL applied
+	// to every operator-facing registration-token mint path (POST /register/,
+	// GetManifest, the signed-manifest mint, and the worker reissue). Default 1h
+	// keeps the join blast-radius tight. Note: the in-process localcluster token
+	// (internal/server/localcluster.go, 30d) is a deliberate exception — it
+	// never leaves the pod and is not operator-facing.
+	RegistrationTokenTTLHours int `mapstructure:"registration_token_ttl_hours"`
 
 	// ManifestSigningSecret keys the HMAC over (cluster_id, expiry) that
 	// gates the short-TTL signed manifest-download URL
@@ -195,6 +202,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
 		envconfig.Default{Key: "session_timeout_minutes", Value: 60},
 		envconfig.Default{Key: "agent_token_expiry_hours", Value: 24},
+		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
 		envconfig.Default{Key: "login_failure_threshold", Value: 5},

@@ -414,7 +414,7 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 }
 
 const getClusterAgentTokenByClusterID = `-- name: GetClusterAgentTokenByClusterID :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error) {
@@ -432,12 +432,13 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 		&i.PreviousTokenHash,
 		&i.RotationPendingAt,
 		&i.LastRotatedAt,
+		&i.AdoptedAt,
 	)
 	return i, err
 }
 
 const getClusterAgentTokenByToken = `-- name: GetClusterAgentTokenByToken :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at FROM cluster_agent_tokens
+SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at FROM cluster_agent_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
    OR (token_hash = '' AND token = $1::text)
    OR (previous_token_hash IS NOT NULL
@@ -464,6 +465,7 @@ func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, dollar_1 stri
 		&i.PreviousTokenHash,
 		&i.RotationPendingAt,
 		&i.LastRotatedAt,
+		&i.AdoptedAt,
 	)
 	return i, err
 }
@@ -640,12 +642,19 @@ const getRegistrationTokenByToken = `-- name: GetRegistrationTokenByToken :one
 SELECT id, cluster_id, token, expires_at, is_used, created_at, updated_at, token_hash FROM cluster_registration_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex') OR (token_hash = '' AND token = $1::text))
   AND expires_at > now()
+ORDER BY created_at DESC
+LIMIT 1
 `
 
-// The is_used filter is intentionally NOT applied: until the server issues a
-// long-lived agent token in CONNECT_ACK, the same registration token is the
-// only credential the agent has, and reconnect attempts must succeed up to
-// expires_at. is_used remains a tracking column for the future flow.
+// is_used is intentionally NOT filtered: during the initial join window the
+// registration token is the agent's only credential and reconnects must succeed
+// up to expires_at. Single-use is enforced at CONNECT (task A3): once the
+// cluster has ADOPTED its durable agent token (cluster_agent_tokens.adopted_at),
+// the registration branch of validateAndMaybeRotateToken denies any token
+// created at/before that adoption. ORDER BY created_at DESC LIMIT 1 keeps this
+// :one deterministic when several un-expired tokens coexist (re-import mints a
+// new one before the old expires). The legacy `OR (token_hash=” AND token=$1)`
+// branch matches pre-093 plaintext rows; backfill removal is out of A3 scope.
 func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error) {
 	row := q.db.QueryRow(ctx, getRegistrationTokenByToken, dollar_1)
 	var i ClusterRegistrationToken
@@ -960,6 +969,19 @@ func (q *Queries) ListClustersDueForAgentTokenRotation(ctx context.Context, rowL
 	return items, nil
 }
 
+const markClusterAgentTokenAdopted = `-- name: MarkClusterAgentTokenAdopted :exec
+UPDATE cluster_agent_tokens SET adopted_at = now() WHERE id = $1 AND adopted_at IS NULL
+`
+
+// Stamp the first CONNECT that authenticates with the DURABLE agent token
+// (proof the agent persisted+adopted it). First-write-wins; later CONNECTs and
+// rotation/grace CONNECTs no-op. Anchors the A3 registration-replay gate: once
+// adopted_at is set, a registration token created at/before it is denied.
+func (q *Queries) MarkClusterAgentTokenAdopted(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markClusterAgentTokenAdopted, id)
+	return err
+}
+
 const markClusterRegistryApplied = `-- name: MarkClusterRegistryApplied :exec
 UPDATE cluster_registry_configs SET
     last_applied_at  = now(),
@@ -1026,7 +1048,7 @@ SET previous_token_hash = token_hash,
     rotation_pending_at = NULL,
     revoked_at = NULL
 WHERE id = $3
-RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at
+RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at
 `
 
 type RotateClusterAgentTokenParams struct {
@@ -1054,6 +1076,7 @@ func (q *Queries) RotateClusterAgentToken(ctx context.Context, arg RotateCluster
 		&i.PreviousTokenHash,
 		&i.RotationPendingAt,
 		&i.LastRotatedAt,
+		&i.AdoptedAt,
 	)
 	return i, err
 }
@@ -1286,8 +1309,9 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     token = EXCLUDED.token,
     token_hash = EXCLUDED.token_hash,
     last_used_at = now(),
-    revoked_at = NULL
-RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at
+    revoked_at = NULL,
+    adopted_at = NULL
+RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at
 `
 
 type UpsertClusterAgentTokenParams struct {
@@ -1311,6 +1335,7 @@ func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertCluster
 		&i.PreviousTokenHash,
 		&i.RotationPendingAt,
 		&i.LastRotatedAt,
+		&i.AdoptedAt,
 	)
 	return i, err
 }

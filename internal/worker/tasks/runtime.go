@@ -135,7 +135,11 @@ type RuntimeDependencies struct {
 	PlatformName            string
 	ServerURL               string
 	AuditLogRetentionMonths int
-	Leader                  LeaderElector
+	// RegistrationTokenTTLHours (task A3) is the TTL the Connected=False
+	// remediation reissue stamps on the registration token it mints. Mirrors
+	// cfg.RegistrationTokenTTLHours; defaults to 1 when unset.
+	RegistrationTokenTTLHours int
+	Leader                    LeaderElector
 	// K8s is the tunnel-backed Kubernetes API requester used by B2 (Velero)
 	// and B5 (cis-operator) for CR round-trips. Optional — when nil, those
 	// tasks degrade gracefully (e.g. mark the row failed with a clear
@@ -188,6 +192,9 @@ func ConfigureRuntime(deps RuntimeDependencies) {
 	}
 	if runtimeDeps.AuditLogRetentionMonths <= 0 {
 		runtimeDeps.AuditLogRetentionMonths = 13
+	}
+	if runtimeDeps.RegistrationTokenTTLHours <= 0 {
+		runtimeDeps.RegistrationTokenTTLHours = 1
 	}
 }
 

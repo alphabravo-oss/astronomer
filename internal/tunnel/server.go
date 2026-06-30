@@ -26,6 +26,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -36,6 +37,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
@@ -263,6 +265,10 @@ type AgentTokenValidator interface {
 	GetClusterAgentTokenByToken(ctx context.Context, token string) (sqlc.ClusterAgentToken, error)
 	UpsertClusterAgentToken(ctx context.Context, arg sqlc.UpsertClusterAgentTokenParams) (sqlc.ClusterAgentToken, error)
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
+	// MarkClusterAgentTokenAdopted (task A3) stamps adopted_at on the first
+	// CONNECT that authenticates with the durable token. Anchors the
+	// registration-token replay gate in validateAndMaybeRotateToken.
+	MarkClusterAgentTokenAdopted(ctx context.Context, id uuid.UUID) error
 	// Rotation grace (task A2). RotateClusterAgentToken performs the
 	// mint-fresh / move-old-to-previous step atomically when a rotation is
 	// pending; ClearPreviousClusterAgentTokenHash retires the old hash once
@@ -849,6 +855,20 @@ func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UU
 		if registrationToken.ClusterID != clusterID {
 			return "", "", fmt.Errorf("registration token does not match cluster")
 		}
+		// M2: a registration token created at/before the cluster's durable-token
+		// adoption is spent — replaying it post-join must NOT re-mint/return a
+		// durable. A token created AFTER adoption is a deliberately re-minted
+		// (re-import) token and is allowed. adopted_at NULL = pre-adoption join
+		// window -> allowed. A revoked durable returns ErrNoRows (the query
+		// filters revoked_at IS NULL) -> the AdoptedAt check is skipped, also
+		// allowed. Fail closed on any non-ErrNoRows error.
+		existing, exErr := h.validator.GetClusterAgentTokenByClusterID(ctx, clusterID)
+		if exErr == nil && existing.AdoptedAt.Valid && !registrationToken.CreatedAt.After(existing.AdoptedAt.Time) {
+			return "", "", fmt.Errorf("registration token already redeemed; cluster has adopted its durable agent token")
+		}
+		if exErr != nil && !errors.Is(exErr, pgx.ErrNoRows) {
+			return "", "", fmt.Errorf("failed to verify adoption state: %w", exErr)
+		}
 		if err := h.validator.MarkRegistrationTokenUsed(ctx, registrationToken.ID); err != nil {
 			return "", "", fmt.Errorf("failed to mark token used")
 		}
@@ -863,6 +883,16 @@ func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UU
 	if agentErr == nil {
 		if agentToken.ClusterID != clusterID {
 			return "", "", fmt.Errorf("agent token does not match cluster")
+		}
+
+		// A3: stamp adoption on the first CONNECT that presents a valid durable
+		// token (proof the agent persisted it). Best-effort/non-fatal like the
+		// adjacent Touch; the query's WHERE adopted_at IS NULL makes it
+		// idempotent across reconnects and rotation/grace sub-paths. agentToken.ID
+		// is row-stable across A2 rotation, so stamping pre-rotation is correct.
+		if err := h.validator.MarkClusterAgentTokenAdopted(ctx, agentToken.ID); err != nil {
+			h.log.Warn("failed to mark cluster agent token adopted",
+				slog.String("cluster_id", payload.ClusterID), slog.String("error", err.Error()))
 		}
 
 		// Rotation grace. When a rotation is pending, the very next CONNECT
@@ -938,6 +968,13 @@ func (h *Hub) rotateClusterAgentToken(ctx context.Context, clusterID uuid.UUID, 
 }
 
 func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (string, error) {
+	// NOTE (A3 residual): this early-return returns an EXISTING plaintext durable
+	// (token != "") without re-minting, so it does NOT reset adopted_at — for a
+	// legacy plaintext durable a re-import token stays replayable within its TTL
+	// (the gate anchor never advances). Modern durables are hash-only (token ==
+	// ""), so they fall through to the upsert below, which resets adopted_at = NULL
+	// and re-closes the temporal gate. There are 0 plaintext durables in current
+	// deployments; if legacy ones reappear, reset adopted_at on this path too.
 	if tok, err := h.validator.GetClusterAgentTokenByClusterID(ctx, clusterID); err == nil && tok.Token != "" {
 		if err := h.validator.TouchClusterAgentToken(ctx, tok.ID); err != nil {
 			h.log.Warn("failed to touch existing cluster agent token",

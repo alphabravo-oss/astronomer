@@ -48,12 +48,18 @@ type recordingValidator struct {
 	rotateAgentArgs    []sqlc.RotateClusterAgentTokenParams
 	clearedPreviousIDs []uuid.UUID
 	touchedAgentIDs    []uuid.UUID
-	disconnectClusters []uuid.UUID
-	pendingOp          *sqlc.AgentLifecycleOperation
-	claimErr           error
-	completedOps       []sqlc.CompleteAgentLifecycleOperationParams
-	markSucceededArgs  []sqlc.MarkRunningAgentUpgradeSucceededByVersionParams
-	auditRows          []sqlc.CreateAuditLogV1Params
+	adoptedAgentIDs    []uuid.UUID
+	markedRegIDs       []uuid.UUID
+	// A3 gate-test knobs.
+	regTokenCreatedAt   time.Time
+	byClusterIDForce    *sqlc.ClusterAgentToken
+	byClusterIDErrForce error
+	disconnectClusters  []uuid.UUID
+	pendingOp           *sqlc.AgentLifecycleOperation
+	claimErr            error
+	completedOps        []sqlc.CompleteAgentLifecycleOperationParams
+	markSucceededArgs   []sqlc.MarkRunningAgentUpgradeSucceededByVersionParams
+	auditRows           []sqlc.CreateAuditLogV1Params
 }
 
 func (r *recordingValidator) GetRegistrationTokenByToken(context.Context, string) (sqlc.ClusterRegistrationToken, error) {
@@ -67,21 +73,37 @@ func (r *recordingValidator) GetRegistrationTokenByToken(context.Context, string
 	if err != nil {
 		return sqlc.ClusterRegistrationToken{}, err
 	}
-	return sqlc.ClusterRegistrationToken{ID: uuid.New(), ClusterID: clusterID}, nil
+	// regTokenCreatedAt (task A3) lets tests place the registration token's
+	// creation before/after the durable's adoption to drive the replay gate.
+	return sqlc.ClusterRegistrationToken{ID: uuid.New(), ClusterID: clusterID, CreatedAt: r.regTokenCreatedAt}, nil
 }
 
-func (r *recordingValidator) MarkRegistrationTokenUsed(context.Context, uuid.UUID) error {
+func (r *recordingValidator) MarkRegistrationTokenUsed(_ context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.markedRegIDs = append(r.markedRegIDs, id)
 	return nil
 }
 
 func (r *recordingValidator) GetClusterAgentTokenByClusterID(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterAgentToken, error) {
+	// byClusterIDForce (task A3) injects an exact durable row (e.g. a hash-only
+	// adopted durable, Token=="") independent of the Token!="" gate below, and
+	// can simulate a non-ErrNoRows DB failure for the fail-closed test.
+	if r.byClusterIDErrForce != nil {
+		return sqlc.ClusterAgentToken{}, r.byClusterIDErrForce
+	}
+	if r.byClusterIDForce != nil {
+		return *r.byClusterIDForce, nil
+	}
 	if r.clusterAgentErr != nil {
 		return sqlc.ClusterAgentToken{}, r.clusterAgentErr
 	}
 	if r.clusterAgentToken.ClusterID == clusterID && r.clusterAgentToken.Token != "" {
 		return r.clusterAgentToken, nil
 	}
-	return sqlc.ClusterAgentToken{}, errors.New("not found")
+	// pgx.ErrNoRows mirrors production so the A3 registration gate treats
+	// "no durable yet" as the join window (allow), not a fail-closed error.
+	return sqlc.ClusterAgentToken{}, pgx.ErrNoRows
 }
 
 func (r *recordingValidator) GetClusterAgentTokenByToken(_ context.Context, token string) (sqlc.ClusterAgentToken, error) {
@@ -118,6 +140,13 @@ func (r *recordingValidator) TouchClusterAgentToken(_ context.Context, id uuid.U
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.touchedAgentIDs = append(r.touchedAgentIDs, id)
+	return nil
+}
+
+func (r *recordingValidator) MarkClusterAgentTokenAdopted(_ context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.adoptedAgentIDs = append(r.adoptedAgentIDs, id)
 	return nil
 }
 

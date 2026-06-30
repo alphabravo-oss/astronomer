@@ -105,14 +105,15 @@ func main() {
 	runtimeEnqueuer := asynq.NewClient(runtimeRedisOpt)
 	defer runtimeEnqueuer.Close()
 	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
-		Queries:                 sqlc.New(database.Pool()),
-		Log:                     log,
-		AgentImageRepo:          cfg.AgentImageRepository,
-		AgentImageTag:           cfg.AgentImageTag,
-		PlatformName:            "Astronomer",
-		AuditLogRetentionMonths: cfg.AuditLogRetentionMonths,
-		Leader:                  leader.New(database.Pool(), log),
-		Enqueuer:                runtimeEnqueuer,
+		Queries:                   sqlc.New(database.Pool()),
+		Log:                       log,
+		AgentImageRepo:            cfg.AgentImageRepository,
+		AgentImageTag:             cfg.AgentImageTag,
+		PlatformName:              "Astronomer",
+		AuditLogRetentionMonths:   cfg.AuditLogRetentionMonths,
+		RegistrationTokenTTLHours: cfg.RegistrationTokenTTLHours,
+		Leader:                    leader.New(database.Pool(), log),
+		Enqueuer:                  runtimeEnqueuer,
 	})
 	var controlPlaneK8s kubernetes.Interface
 	var controlPlaneDyn dynamic.Interface

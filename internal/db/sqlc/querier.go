@@ -683,10 +683,15 @@ type Querier interface {
 	GetPrometheusDatasourceByID(ctx context.Context, id uuid.UUID) (PrometheusDatasource, error)
 	GetPrometheusDatasourceByName(ctx context.Context, name string) (PrometheusDatasource, error)
 	GetQuotaPlan(ctx context.Context, name string) (QuotaPlan, error)
-	// The is_used filter is intentionally NOT applied: until the server issues a
-	// long-lived agent token in CONNECT_ACK, the same registration token is the
-	// only credential the agent has, and reconnect attempts must succeed up to
-	// expires_at. is_used remains a tracking column for the future flow.
+	// is_used is intentionally NOT filtered: during the initial join window the
+	// registration token is the agent's only credential and reconnects must succeed
+	// up to expires_at. Single-use is enforced at CONNECT (task A3): once the
+	// cluster has ADOPTED its durable agent token (cluster_agent_tokens.adopted_at),
+	// the registration branch of validateAndMaybeRotateToken denies any token
+	// created at/before that adoption. ORDER BY created_at DESC LIMIT 1 keeps this
+	// :one deterministic when several un-expired tokens coexist (re-import mints a
+	// new one before the old expires). The legacy `OR (token_hash='' AND token=$1)`
+	// branch matches pre-093 plaintext rows; backfill removal is out of A3 scope.
 	GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error)
 	// Restore Operations
 	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (RestoreOperation, error)
@@ -1313,6 +1318,11 @@ type Querier interface {
 	MarkCatalogOperationSuperseded(ctx context.Context, arg MarkCatalogOperationSupersededParams) (CatalogOperation, error)
 	MarkCloudCredentialMaterializationApplied(ctx context.Context, id uuid.UUID) error
 	MarkCloudCredentialMaterializationFailed(ctx context.Context, arg MarkCloudCredentialMaterializationFailedParams) error
+	// Stamp the first CONNECT that authenticates with the DURABLE agent token
+	// (proof the agent persisted+adopted it). First-write-wins; later CONNECTs and
+	// rotation/grace CONNECTs no-op. Anchors the A3 registration-replay gate: once
+	// adopted_at is set, a registration token created at/before it is denied.
+	MarkClusterAgentTokenAdopted(ctx context.Context, id uuid.UUID) error
 	MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error)
 	MarkClusterDecommissionRunning(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
 	MarkClusterDecommissionSucceeded(ctx context.Context, arg MarkClusterDecommissionSucceededParams) (ClusterDecommission, error)

@@ -60,6 +60,10 @@ func (s *stubValidator) TouchClusterAgentToken(_ context.Context, _ uuid.UUID) e
 	return nil
 }
 
+func (s *stubValidator) MarkClusterAgentTokenAdopted(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+
 func (s *stubValidator) RotateClusterAgentToken(_ context.Context, arg sqlc.RotateClusterAgentTokenParams) (sqlc.ClusterAgentToken, error) {
 	return sqlc.ClusterAgentToken{ID: arg.ID, Token: arg.Token, TokenHash: arg.TokenHash}, nil
 }

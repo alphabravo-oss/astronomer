@@ -313,7 +313,7 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 	token, err := runtimeDeps.Queries.CreateClusterRegistrationToken(ctx, sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: row.ClusterID,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
-		ExpiresAt: time.Now().UTC().Add(24 * time.Hour),
+		ExpiresAt: time.Now().UTC().Add(time.Duration(runtimeDeps.RegistrationTokenTTLHours) * time.Hour),
 	})
 	if err != nil {
 		return insertAttempt(ctx, row, ccrActionTokenReissued, ccrOutcomeFail, "create_token: "+err.Error(), nil)

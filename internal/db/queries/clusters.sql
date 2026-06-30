@@ -119,13 +119,20 @@ VALUES (
 RETURNING *;
 
 -- name: GetRegistrationTokenByToken :one
--- The is_used filter is intentionally NOT applied: until the server issues a
--- long-lived agent token in CONNECT_ACK, the same registration token is the
--- only credential the agent has, and reconnect attempts must succeed up to
--- expires_at. is_used remains a tracking column for the future flow.
+-- is_used is intentionally NOT filtered: during the initial join window the
+-- registration token is the agent's only credential and reconnects must succeed
+-- up to expires_at. Single-use is enforced at CONNECT (task A3): once the
+-- cluster has ADOPTED its durable agent token (cluster_agent_tokens.adopted_at),
+-- the registration branch of validateAndMaybeRotateToken denies any token
+-- created at/before that adoption. ORDER BY created_at DESC LIMIT 1 keeps this
+-- :one deterministic when several un-expired tokens coexist (re-import mints a
+-- new one before the old expires). The legacy `OR (token_hash='' AND token=$1)`
+-- branch matches pre-093 plaintext rows; backfill removal is out of A3 scope.
 SELECT * FROM cluster_registration_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex') OR (token_hash = '' AND token = $1::text))
-  AND expires_at > now();
+  AND expires_at > now()
+ORDER BY created_at DESC
+LIMIT 1;
 
 -- name: MarkRegistrationTokenUsed :exec
 UPDATE cluster_registration_tokens SET is_used = true WHERE id = $1;
@@ -157,11 +164,19 @@ ON CONFLICT (cluster_id) DO UPDATE SET
     token = EXCLUDED.token,
     token_hash = EXCLUDED.token_hash,
     last_used_at = now(),
-    revoked_at = NULL
+    revoked_at = NULL,
+    adopted_at = NULL
 RETURNING *;
 
 -- name: TouchClusterAgentToken :exec
 UPDATE cluster_agent_tokens SET last_used_at = now() WHERE id = $1 AND revoked_at IS NULL;
+
+-- name: MarkClusterAgentTokenAdopted :exec
+-- Stamp the first CONNECT that authenticates with the DURABLE agent token
+-- (proof the agent persisted+adopted it). First-write-wins; later CONNECTs and
+-- rotation/grace CONNECTs no-op. Anchors the A3 registration-replay gate: once
+-- adopted_at is set, a registration token created at/before it is denied.
+UPDATE cluster_agent_tokens SET adopted_at = now() WHERE id = $1 AND adopted_at IS NULL;
 
 -- name: RotateClusterAgentToken :one
 -- Performs the grace rotation atomically: the current token_hash moves to

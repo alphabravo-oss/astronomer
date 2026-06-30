@@ -194,6 +194,10 @@ type ClusterHandler struct {
 	// revoked_at (denying the next CONNECT) when this is nil, but the live
 	// session would then persist until it happens to reconnect.
 	agentDisconnector AgentDisconnector
+	// registrationTokenTTL (task A3) is the single TTL every operator-facing
+	// registration-token mint path applies. Defaults to time.Hour; wired from
+	// cfg.RegistrationTokenTTLHours via SetRegistrationTokenTTL.
+	registrationTokenTTL time.Duration
 }
 
 // AgentDisconnector force-closes a cluster's live agent tunnel session.
@@ -205,10 +209,24 @@ type AgentDisconnector interface {
 // NewClusterHandler creates a new cluster handler.
 func NewClusterHandler(queries ClusterQuerier) *ClusterHandler {
 	return &ClusterHandler{
-		queries:    queries,
-		metrics:    clustermetrics.NewProvider(),
-		agentImage: "ghcr.io/alphabravo-oss/astronomer-go-agent:latest",
+		queries:              queries,
+		metrics:              clustermetrics.NewProvider(),
+		agentImage:           "ghcr.io/alphabravo-oss/astronomer-go-agent:latest",
+		registrationTokenTTL: time.Hour,
 	}
+}
+
+// SetRegistrationTokenTTL overrides the registration-token TTL (task A3).
+// Non-positive values clamp to the 1h default so a missing/zero config never
+// mints a zero-lifetime token.
+func (h *ClusterHandler) SetRegistrationTokenTTL(d time.Duration) {
+	if h == nil {
+		return
+	}
+	if d <= 0 {
+		d = time.Hour
+	}
+	h.registrationTokenTTL = d
 }
 
 func (h *ClusterHandler) SetEncryptor(e *auth.Encryptor) {
@@ -1480,7 +1498,7 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 	token, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: id,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+		ExpiresAt: time.Now().Add(h.registrationTokenTTL),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
@@ -1630,7 +1648,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	token, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: id,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
-		ExpiresAt: time.Now().Add(1 * time.Hour),
+		ExpiresAt: time.Now().Add(h.registrationTokenTTL),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
@@ -1767,7 +1785,7 @@ func (h *ClusterHandler) GetSignedManifest(w http.ResponseWriter, r *http.Reques
 	// rather than a flat hour, so a replayed signed URL can't mint a
 	// token that outlives the URL that authorized it.
 	tokenExpiry := time.Unix(expiry, 0)
-	if max := time.Now().Add(1 * time.Hour); tokenExpiry.After(max) {
+	if max := time.Now().Add(h.registrationTokenTTL); tokenExpiry.After(max) {
 		tokenExpiry = max
 	}
 	if _, err := h.queries.CreateClusterRegistrationToken(r.Context(), sqlc.CreateClusterRegistrationTokenParams{

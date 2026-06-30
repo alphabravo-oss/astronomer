@@ -558,6 +558,7 @@ type ClusterAgentToken struct {
 	PreviousTokenHash pgtype.Text        `json:"previous_token_hash"`
 	RotationPendingAt pgtype.Timestamptz `json:"rotation_pending_at"`
 	LastRotatedAt     pgtype.Timestamptz `json:"last_rotated_at"`
+	AdoptedAt         pgtype.Timestamptz `json:"adopted_at"`
 }
 
 type ClusterCondition struct {
