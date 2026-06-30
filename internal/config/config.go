@@ -138,6 +138,24 @@ type Config struct {
 	// The DesiredState responder is read-only rendering and is unaffected by
 	// this flag — only behavior that would mutate ownership is gated.
 	PullReconcileEnabled bool `mapstructure:"pull_reconcile_enabled"`
+
+	// A4 — tunnel connect rate-limit + replay defense. The connect limiter is a
+	// FAILURE-keyed fixed-window counter (per source IP): an IP is throttled only
+	// after it accumulates AuthFailureLimit failed CONNECT validations inside
+	// AuthFailureWindowMinutes, and any SUCCESSFUL connect resets that IP's
+	// counter to zero. Defaults are deliberately generous so a healthy fleet
+	// behind one egress IP (which emits ~0 auth failures) is never throttled;
+	// only credential-probing traffic trips it.
+	TunnelConnectAuthFailureLimit         int `mapstructure:"tunnel_connect_auth_failure_limit"`
+	TunnelConnectAuthFailureWindowMinutes int `mapstructure:"tunnel_connect_auth_failure_window_minutes"`
+	// TunnelConnectClockSkewMinutes bounds how far the CONNECT envelope timestamp
+	// may drift from the server clock before the handshake is rejected as a
+	// possible replay (L13). Lenient symmetric window; <=0 disables the check.
+	// An older agent that does not stamp a timestamp is never hard-rejected.
+	TunnelConnectClockSkewMinutes int `mapstructure:"tunnel_connect_clock_skew_minutes"`
+	// TunnelRegisterRateLimitPerMinute caps requests to the public
+	// GET /register/{token} bootstrap-manifest endpoint per source IP (L3).
+	TunnelRegisterRateLimitPerMinute int `mapstructure:"tunnel_register_rate_limit_per_minute"`
 }
 
 // CORSOrigins returns the allowed origins as a slice.
@@ -189,6 +207,10 @@ func Load() (*Config, error) {
 		"auth_local_password_only",
 		"astronomer_catalog_url",
 		"pull_reconcile_enabled",
+		"tunnel_connect_auth_failure_limit",
+		"tunnel_connect_auth_failure_window_minutes",
+		"tunnel_connect_clock_skew_minutes",
+		"tunnel_register_rate_limit_per_minute",
 	); err != nil {
 		return nil, err
 	}
@@ -224,6 +246,11 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "auth_local_password_only", Value: false},
 		// Fleet-style PULL reconcile is OFF by default — opt-in per install.
 		envconfig.Default{Key: "pull_reconcile_enabled", Value: false},
+		// A4 — generous tunnel-connect failure limiter + lenient replay window.
+		envconfig.Default{Key: "tunnel_connect_auth_failure_limit", Value: 50},
+		envconfig.Default{Key: "tunnel_connect_auth_failure_window_minutes", Value: 5},
+		envconfig.Default{Key: "tunnel_connect_clock_skew_minutes", Value: 5},
+		envconfig.Default{Key: "tunnel_register_rate_limit_per_minute", Value: 30},
 	)
 
 	cfg := &Config{}

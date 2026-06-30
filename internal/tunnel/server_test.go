@@ -17,6 +17,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -359,17 +360,24 @@ func TestConnectAckRotatesToDurableAgentToken(t *testing.T) {
 	if upserts[0].TokenHash != auth.HashOpaqueToken(ack.AgentToken) {
 		t.Fatalf("expected persisted token hash to match ack token")
 	}
+	// A successful CONNECT also records an agent.connected audit (A4), but that
+	// is emitted AFTER the ACK (post-registration) so it races this read — the
+	// connect audit is asserted by the dedicated A4 tests. Here we filter to the
+	// token-rotation row, which is recorded synchronously before the ACK.
 	auditRows := validator.SnapshotAuditRows()
-	if len(auditRows) != 1 {
-		t.Fatalf("expected 1 token audit row, got %d", len(auditRows))
+	var rotated *sqlc.CreateAuditLogV1Params
+	for i := range auditRows {
+		if auditRows[i].Action == "agent.token.rotated" {
+			rotated = &auditRows[i]
+		}
 	}
-	if auditRows[0].Action != "agent.token.rotated" {
-		t.Fatalf("audit action = %q, want agent.token.rotated", auditRows[0].Action)
+	if rotated == nil {
+		t.Fatalf("expected an agent.token.rotated audit row, got %d rows", len(auditRows))
 	}
-	if auditRows[0].ResourceType != "cluster" || auditRows[0].ResourceID != clusterID {
-		t.Fatalf("audit resource = %s/%s, want cluster/%s", auditRows[0].ResourceType, auditRows[0].ResourceID, clusterID)
+	if rotated.ResourceType != "cluster" || rotated.ResourceID != clusterID {
+		t.Fatalf("audit resource = %s/%s, want cluster/%s", rotated.ResourceType, rotated.ResourceID, clusterID)
 	}
-	if strings.Contains(string(auditRows[0].Detail), ack.AgentToken) {
+	if strings.Contains(string(rotated.Detail), ack.AgentToken) {
 		t.Fatal("audit detail leaked durable agent token plaintext")
 	}
 

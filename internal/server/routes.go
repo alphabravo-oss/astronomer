@@ -787,7 +787,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// `curl -sfL <server>/api/v1/register/<token>.yaml | kubectl
 		// apply -f -` works without redirect dance.
 		if deps.Clusters != nil {
-			r.Get("/register/{token}", deps.Clusters.GetManifestByToken)
+			// L3: the bootstrap manifest carries the registration token in
+			// plaintext; a per-IP request-rate cap is correct here (stateless,
+			// no reconnect, bad token is a 404). Middleware on an existing route
+			// does NOT change the route pattern, so routes.json/openapi are
+			// unaffected.
+			r.With(appmiddleware.LoginRateLimit(cfg.TunnelRegisterRateLimitPerMinute, time.Minute)).
+				Get("/register/{token}", deps.Clusters.GetManifestByToken)
 			// Short-TTL HMAC-signed manifest URL — no token in the URL,
 			// the signature over (cluster_id, expiry) is the credential.
 			// Registered before /register/{token} would otherwise match
@@ -959,7 +965,12 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// be registered outside the /api/v1 group that applies a Timeout
 		// middleware (the same reason the legacy ws/agent/tunnel route lives
 		// out here).
-		r.HandleFunc("/api/v1/connect/{cluster_id}/", deps.RemoteServer.ServeHTTP)
+		// A4 / M5: pre-upgrade per-IP failure-limiter gate (shared with the hub
+		// connect path) so an over-threshold IP gets a clean 429 before
+		// remotedialer hijacks the connection. Middleware on an existing route
+		// does NOT change the route pattern.
+		r.With(deps.RemoteServer.RateLimitMiddleware()).
+			HandleFunc("/api/v1/connect/{cluster_id}/", deps.RemoteServer.ServeHTTP)
 		// Demonstration endpoint — proves the new tunnel works end-to-end by
 		// listing pods through a stock client-go clientset whose transport is
 		// dialed through remotedialer. Real handlers will follow once the

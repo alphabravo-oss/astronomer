@@ -11,15 +11,27 @@
 package tunnel2
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"net/netip"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rancher/remotedialer"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+)
+
+// A4 audit actions, shared verbatim with the hub connect path so both connect
+// surfaces emit the same forensic action strings.
+const (
+	actionAgentConnected  = "agent.connected"
+	actionAgentAuthFailed = "agent.auth_failed"
 )
 
 // HeaderClusterID is the canonical header the agent sets on the WS upgrade
@@ -33,6 +45,47 @@ const HeaderClusterID = "X-Cluster-ID"
 type RemoteServer struct {
 	server *remotedialer.Server
 	log    *slog.Logger
+	// limiter is the SAME *tunnel.ConnectFailureLimiter shared with the hub
+	// connect path, so an attacker hammering both /connect and the legacy
+	// /ws/agent/tunnel route accumulates failures against one per-IP view.
+	// Optional; nil-safe (no throttling when unset).
+	limiter *tunnel.ConnectFailureLimiter
+	// validator is retained so the authorize audit can type-assert it to an
+	// audit.Querier for the fail-open connect/auth-failure records.
+	validator tunnel.AgentTokenValidator
+}
+
+// SetConnectLimiter wires the shared A4 connect failure-limiter (set once at
+// startup). Nil-safe.
+func (s *RemoteServer) SetConnectLimiter(lim *tunnel.ConnectFailureLimiter) {
+	s.limiter = lim
+}
+
+// RateLimitMiddleware returns a pre-upgrade gate that rejects (HTTP 429) a
+// source IP already over the shared failure threshold BEFORE remotedialer
+// hijacks the connection. Per-IP only; nil-safe (pass-through when no limiter
+// is wired). Mirrors the hub path's 429 body so both connect surfaces behave
+// identically.
+func (s *RemoteServer) RateLimitMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if s.limiter != nil {
+				ipKey, _ := tunnel.ConnectClientIP(r)
+				if blocked, retryAfter := s.limiter.Blocked(ipKey); blocked {
+					secs := int(math.Ceil(retryAfter.Seconds()))
+					if secs < 1 {
+						secs = 1
+					}
+					w.Header().Set("Retry-After", strconv.Itoa(secs))
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusTooManyRequests)
+					_, _ = w.Write([]byte(`{"code":"rate_limited"}`))
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // NewRemoteServer constructs the tunnel server. The validator is the same
@@ -42,7 +95,7 @@ func NewRemoteServer(logger *slog.Logger, validator tunnel.AgentTokenValidator) 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	rs := &RemoteServer{log: logger}
+	rs := &RemoteServer{log: logger, validator: validator}
 	rs.server = remotedialer.New(rs.authorize(validator), rs.errorWriter)
 	return rs
 }
@@ -60,8 +113,10 @@ func NewRemoteServer(logger *slog.Logger, validator tunnel.AgentTokenValidator) 
 func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedialer.Authorizer {
 	log := s.log
 	return func(req *http.Request) (string, bool, error) {
+		ipKey, ipAddr := tunnel.ConnectClientIP(req)
 		clusterID := extractClusterID(req)
 		if clusterID == "" {
+			// Pre-DB, cheap — not a credential probe; do not count it.
 			return "", false, fmt.Errorf("cluster_id missing from request")
 		}
 
@@ -82,6 +137,12 @@ func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedia
 
 		tokenRecord, err := validator.GetRegistrationTokenByToken(req.Context(), token)
 		if err != nil {
+			// A4 / M5+M6: a failed DB-backed token lookup is the probe surface —
+			// count it (shared per-IP view) and audit it (fail-open).
+			if s.limiter != nil {
+				s.limiter.Fail(ipKey)
+			}
+			s.recordAuthFailed(req.Context(), clusterID, ipAddr, req, "invalid registration token")
 			log.Warn("tunnel2: invalid registration token",
 				slog.String("cluster_id", clusterID),
 				slog.String("error", err.Error()),
@@ -89,6 +150,10 @@ func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedia
 			return "", false, fmt.Errorf("invalid registration token")
 		}
 		if tokenRecord.ClusterID.String() != clusterID {
+			if s.limiter != nil {
+				s.limiter.Fail(ipKey)
+			}
+			s.recordAuthFailed(req.Context(), clusterID, ipAddr, req, "registration token does not match cluster")
 			log.Warn("tunnel2: registration token cluster mismatch",
 				slog.String("expected_cluster_id", tokenRecord.ClusterID.String()),
 				slog.String("provided_cluster_id", clusterID),
@@ -96,11 +161,76 @@ func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedia
 			return "", false, fmt.Errorf("registration token does not match cluster")
 		}
 
+		// Success: clear this IP's failure history and audit the connect.
+		if s.limiter != nil {
+			s.limiter.Reset(ipKey)
+		}
+		s.recordConnected(req.Context(), clusterID, ipAddr, req)
 		log.Info("tunnel2: agent authorized",
 			slog.String("cluster_id", clusterID),
 		)
 		return clusterID, true, nil
 	}
+}
+
+// recordConnected / recordAuthFailed mirror the hub's fail-open connect audit
+// (A4 / M6) on the remotedialer path. NOTE: the remotedialer authorize layer
+// only sees the HTTP upgrade request, which carries no agent_version (that
+// arrives in post-upgrade frames remotedialer abstracts away), so the version
+// is omitted here — the hub path records it for the deployed agent.
+func (s *RemoteServer) recordConnected(ctx context.Context, clusterID string, ipAddr *netip.Addr, r *http.Request) {
+	q, ok := s.validator.(audit.Querier)
+	if !ok {
+		return
+	}
+	audit.Record(ctx, q, audit.Event{
+		Source:          "tunnel",
+		ActorAuthMethod: "agent_token",
+		Action:          actionAgentConnected,
+		ResourceType:    "cluster",
+		ResourceID:      clusterID,
+		ResourceName:    clusterID,
+		StatusCode:      200,
+		IPAddress:       ipAddr,
+		UserAgent:       r.UserAgent(),
+		Detail: map[string]any{
+			"cluster_id": clusterID,
+			"source_ip":  ipString(ipAddr),
+			"token_kind": "registration",
+			"transport":  "remotedialer",
+		},
+	})
+}
+
+func (s *RemoteServer) recordAuthFailed(ctx context.Context, clusterID string, ipAddr *netip.Addr, r *http.Request, reason string) {
+	q, ok := s.validator.(audit.Querier)
+	if !ok {
+		return
+	}
+	audit.Record(ctx, q, audit.Event{
+		Source:          "tunnel",
+		ActorAuthMethod: "agent_token",
+		Action:          actionAgentAuthFailed,
+		ResourceType:    "cluster",
+		ResourceID:      clusterID,
+		StatusCode:      403,
+		IPAddress:       ipAddr,
+		UserAgent:       r.UserAgent(),
+		Detail: map[string]any{
+			"cluster_id": clusterID,
+			"source_ip":  ipString(ipAddr),
+			"token_kind": "invalid",
+			"reason":     reason,
+			"transport":  "remotedialer",
+		},
+	})
+}
+
+func ipString(addr *netip.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return addr.String()
 }
 
 // errorWriter logs and forwards remotedialer error responses.

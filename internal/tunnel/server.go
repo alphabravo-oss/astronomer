@@ -29,7 +29,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
+	"net/netip"
+	"strconv"
 	"sync"
 	"time"
 
@@ -45,6 +49,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -57,6 +62,13 @@ const (
 
 	// sendChannelSize is the buffer size for the per-agent send channel.
 	sendChannelSize = 256
+
+	// A4 audit actions. Both satisfy the audit-action contract regex
+	// (^[a-z]+(\.[a-z0-9_]+)+$); the contract test scans internal/handler/*.go
+	// only, so — like the existing agent.token.* tunnel actions — there is
+	// nothing to register in a central catalog.
+	actionAgentConnected  = "agent.connected"
+	actionAgentAuthFailed = "agent.auth_failed"
 )
 
 // AgentConnection represents a connected agent.
@@ -119,6 +131,71 @@ type Hub struct {
 	// don't wire the pull subsystem reply with an ERROR frame ("desired state
 	// not available") and the agent falls back to its existing paths.
 	desiredState DesiredStateProvider
+	// connLimiter throttles tunnel CONNECT attempts by SOURCE IP after repeated
+	// auth FAILURES (A4 / M5). Optional; nil-safe so test hubs stay unthrottled.
+	// Shared with the tunnel2 /connect path so both connect surfaces present one
+	// cross-path per-IP view.
+	connLimiter *ConnectFailureLimiter
+	// clockSkew bounds the allowed drift between the CONNECT envelope timestamp
+	// and the server clock (A4 / L13). <=0 disables the replay check.
+	clockSkew time.Duration
+}
+
+// SetConnectLimiter wires the A4 connect failure-limiter and the timestamp
+// replay skew window (set once at startup). Nil-safe: a nil limiter leaves the
+// connect path unthrottled, and skew<=0 disables the replay check.
+func (h *Hub) SetConnectLimiter(lim *ConnectFailureLimiter, skew time.Duration) {
+	h.mu.Lock()
+	h.connLimiter = lim
+	h.clockSkew = skew
+	h.mu.Unlock()
+}
+
+// connectLimiter returns the wired limiter (or nil) under the read lock.
+func (h *Hub) connectLimiter() *ConnectFailureLimiter {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.connLimiter
+}
+
+// connectClockSkew returns the configured replay window under the read lock.
+func (h *Hub) connectClockSkew() time.Duration {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.clockSkew
+}
+
+// connectTimestampOutsideSkew is the L13 replay predicate. It returns true only
+// when the CONNECT envelope timestamp is wildly out of range and must be
+// rejected. Two leniency guards keep honest agents safe: skew<=0 disables the
+// check, and a zero timestamp (older agent that never stamps the envelope) is
+// never rejected. The window is symmetric — stale replays (now-ts > skew) and
+// far-future clocks (now-ts < -skew) are both caught.
+func connectTimestampOutsideSkew(now, ts time.Time, skew time.Duration) bool {
+	if skew <= 0 || ts.IsZero() {
+		return false
+	}
+	d := now.Sub(ts)
+	return d > skew || d < -skew
+}
+
+// ConnectClientIP derives the canonical client IP for the tunnel upgrade. It
+// reuses middleware.RemoteIPAddr (XFF-first / X-Real-IP / host-of-RemoteAddr —
+// the same trust policy every audited HTTP request uses) so the limiter key and
+// the audited Event.IPAddress agree. Returns a non-empty key always ("unknown"
+// when nothing parses) so the limiter never collapses distinct clients.
+func ConnectClientIP(r *http.Request) (string, *netip.Addr) {
+	addr := middleware.RemoteIPAddr(r)
+	if addr != nil {
+		return addr.String(), addr
+	}
+	if r != nil && r.RemoteAddr != "" {
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "" {
+			return host, nil
+		}
+		return r.RemoteAddr, nil
+	}
+	return "unknown", nil
 }
 
 // DesiredStateProvider renders the desired-state manifest set for a cluster.
@@ -306,6 +383,26 @@ func NewHubWithValidator(log *slog.Logger, validator AgentTokenValidator) *Hub {
 // HandleWebSocket is the HTTP handler for WebSocket upgrade.
 // Route: /api/v1/ws/agent/tunnel/{cluster_id}/
 func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// A4 / M5: throttle by SOURCE IP BEFORE the WS upgrade so an IP that has
+	// blown past the auth-failure threshold gets a clean 429 — no upgrade, no
+	// DB token lookup, no goroutines. Per-IP only: other IPs are unaffected,
+	// and a healthy agent (which never accumulates failures, and whose every
+	// success Resets its bucket) is never blocked here.
+	ipKey, ipAddr := ConnectClientIP(r)
+	if lim := h.connectLimiter(); lim != nil {
+		if blocked, retryAfter := lim.Blocked(ipKey); blocked {
+			secs := int(math.Ceil(retryAfter.Seconds()))
+			if secs < 1 {
+				secs = 1
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(secs))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"code":"rate_limited"}`))
+			return
+		}
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// Allow any origin for agent connections; agents authenticate via token.
 		InsecureSkipVerify: true,
@@ -352,6 +449,32 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusProtocolError, "cluster_id and token are required")
 		return
 	}
+
+	// A4 / L13: lenient timestamp-skew replay defense. The agent stamps the
+	// CONNECT envelope with time.Now().UTC(); we reject a handshake whose
+	// timestamp is wildly out of range (stale replay when d>window, far-future
+	// clock when d<-window). Two leniency guards keep honest agents safe:
+	//   (1) Timestamp.IsZero() — an older agent that never stamps the envelope
+	//       is NEVER hard-rejected (back-compat skip), and
+	//   (2) clockSkew<=0 — the knob disables the check entirely.
+	// This runs pre-DB so a stale frame costs no token lookup; we do NOT call
+	// connLimiter.Fail on a skew rejection — a fleet on a bad NTP source behind
+	// one NAT is told to fix its clock, not throttled (the frame is already
+	// rejected before any DB probe, so there is no DoS exposure to limit).
+	// FUTURE WORK (out of scope for A4): a full challenge-response nonce. A3
+	// single-use registration + A2 rotation + bearer-token semantics already
+	// gut replay value; timestamp-skew is the A4 deliverable.
+	if connectTimestampOutsideSkew(time.Now().UTC(), firstMsg.Timestamp, h.connectClockSkew()) {
+		h.log.Warn("connect timestamp outside allowed clock skew",
+			slog.String("cluster_id", payload.ClusterID),
+			slog.Time("connect_timestamp", firstMsg.Timestamp),
+		)
+		h.recordAgentAuthFailed(ctx, payload, ipAddr, r, "invalid", "timestamp_skew")
+		h.publish("agent.failed", payload.ClusterID, "", payload.AgentVersion)
+		_ = conn.Close(websocket.StatusPolicyViolation, "connect timestamp outside allowed clock skew")
+		return
+	}
+
 	compatibility := agentcompat.Evaluate(payload.AgentVersion)
 	if compatibility.Blocked {
 		h.log.Warn("agent compatibility check failed",
@@ -365,15 +488,28 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ackPayload := protocol.ConnectAckPayload{Accepted: true}
+	// tokenKind ("registration"/"agent") is threaded out of the validator block
+	// so the success-audit site below can record which credential authenticated.
+	var connectTokenKind string
 	if h.validator != nil {
 		clusterID, err := uuid.Parse(payload.ClusterID)
 		if err != nil {
+			// Malformed cluster UUID is a cheap PRE-DB rejection, not a
+			// credential probe, so it does NOT count against the limiter.
 			h.log.Warn("invalid cluster id in connect payload", slog.String("cluster_id", payload.ClusterID))
 			_ = conn.Close(websocket.StatusProtocolError, "invalid cluster_id")
 			return
 		}
 		tokenKind, durableToken, err := h.validateAndMaybeRotateToken(ctx, clusterID, payload)
 		if err != nil {
+			// A4 / M5: a failed DB-backed token validation is the credential-probe
+			// surface — count it (per IP) and audit it (fail-open). M6: the
+			// agent.auth_failed record carries cluster_id, IP, agent_version, and
+			// token-kind for the forensic trail.
+			if lim := h.connectLimiter(); lim != nil {
+				lim.Fail(ipKey)
+			}
+			h.recordAgentAuthFailed(ctx, payload, ipAddr, r, "invalid", err.Error())
 			h.log.Warn("agent authentication failed",
 				slog.String("cluster_id", payload.ClusterID),
 				slog.String("error", err.Error()),
@@ -382,6 +518,12 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			_ = conn.Close(websocket.StatusPolicyViolation, err.Error())
 			return
 		}
+		// A successful validation clears this IP's failure history — the airtight
+		// guarantee that a healthy fleet behind one egress IP is never throttled.
+		if lim := h.connectLimiter(); lim != nil {
+			lim.Reset(ipKey)
+		}
+		connectTokenKind = tokenKind
 		// Deliver a fresh durable token in the ACK whenever the server
 		// minted one that differs from what the agent presented. This
 		// covers both the registration->durable exchange and the rotation
@@ -472,6 +614,11 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		slog.String("agent_version", payload.AgentVersion),
 		slog.String("session_id", sessionID),
 	)
+	// A4 / M6: durable forensic record of the successful join (cluster_id, IP,
+	// agent_version, token-kind). Fail-open — a write error cannot block the
+	// connection (audit.Record logs+swallows). Skipped in the validator==nil
+	// dev path (no DB identity), same as the rotation helpers.
+	h.recordAgentConnected(ctx, payload, ipAddr, r, connectTokenKind, sessionID, wasReconnect)
 	h.publish("cluster.connected", payload.ClusterID, sessionID, payload.AgentVersion)
 
 	// Cross-pod proxy fallback: publish "we own this cluster's WS" so
@@ -1001,6 +1148,90 @@ func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) 
 		return row.Token, nil
 	}
 	return token, nil
+}
+
+// recordAgentConnected audits a successful tunnel CONNECT (A4 / M6). Fail-open:
+// audit.Record logs+swallows write errors and never blocks, and a Querier
+// type-assert miss simply skips the record — a legitimate connection is never
+// dropped or delayed by auditing. tokenKind is the validator verdict
+// ("registration" or "agent") mapped to the durable/registration wire label.
+func (h *Hub) recordAgentConnected(ctx context.Context, payload protocol.ConnectPayload, ipAddr *netip.Addr, r *http.Request, tokenKind, sessionID string, reconnect bool) {
+	q, ok := h.validator.(audit.Querier)
+	if !ok {
+		return
+	}
+	audit.Record(ctx, q, audit.Event{
+		Source:          "tunnel",
+		ActorAuthMethod: "agent_token",
+		Action:          actionAgentConnected,
+		ResourceType:    "cluster",
+		ResourceID:      payload.ClusterID,
+		ResourceName:    payload.ClusterID,
+		StatusCode:      200,
+		IPAddress:       ipAddr,
+		UserAgent:       userAgentOf(r),
+		Detail: map[string]any{
+			"cluster_id":    payload.ClusterID,
+			"source_ip":     ipKeyOf(ipAddr),
+			"agent_id":      payload.AgentID,
+			"agent_version": payload.AgentVersion,
+			"token_kind":    connectTokenKindLabel(tokenKind),
+			"session_id":    sessionID,
+			"reconnect":     reconnect,
+		},
+	})
+}
+
+// recordAgentAuthFailed audits a rejected tunnel CONNECT (A4 / M6). Same
+// fail-open contract as recordAgentConnected. reason is the validation error
+// string (for a token failure) or "timestamp_skew" (for the L13 replay path).
+// Token plaintext is NEVER placed in Detail.
+func (h *Hub) recordAgentAuthFailed(ctx context.Context, payload protocol.ConnectPayload, ipAddr *netip.Addr, r *http.Request, tokenKind, reason string) {
+	q, ok := h.validator.(audit.Querier)
+	if !ok {
+		return
+	}
+	audit.Record(ctx, q, audit.Event{
+		Source:          "tunnel",
+		ActorAuthMethod: "agent_token",
+		Action:          actionAgentAuthFailed,
+		ResourceType:    "cluster",
+		ResourceID:      payload.ClusterID,
+		StatusCode:      403,
+		IPAddress:       ipAddr,
+		UserAgent:       userAgentOf(r),
+		Detail: map[string]any{
+			"cluster_id":    payload.ClusterID,
+			"source_ip":     ipKeyOf(ipAddr),
+			"agent_version": payload.AgentVersion,
+			"token_kind":    tokenKind,
+			"reason":        reason,
+		},
+	})
+}
+
+// connectTokenKindLabel maps the validator's internal verdict to the audited
+// wire label: "registration" (registration-token exchange) -> "registration",
+// "agent" (durable agent token) -> "durable".
+func connectTokenKindLabel(kind string) string {
+	if kind == "registration" {
+		return "registration"
+	}
+	return "durable"
+}
+
+func ipKeyOf(addr *netip.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return addr.String()
+}
+
+func userAgentOf(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return r.UserAgent()
 }
 
 func (h *Hub) recordAgentTokenRotated(ctx context.Context, clusterID uuid.UUID, row sqlc.ClusterAgentToken) {

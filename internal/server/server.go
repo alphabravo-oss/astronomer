@@ -349,7 +349,19 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			logger.Info("tunnel locator wired", "address", addr)
 		}
 	}
+	// A4 / M5+L13: one shared per-IP connect FAILURE limiter feeds both the hub
+	// WS path and the tunnel2 /connect path (cross-path IP view). The limiter
+	// counts failed CONNECT validations and resets to zero on every success, so
+	// a healthy fleet behind one egress IP is never throttled. The janitor is
+	// started later on reconcileCtx (alongside the other background loops).
+	connLimiter := tunnel.NewConnectFailureLimiter(
+		cfg.TunnelConnectAuthFailureLimit,
+		time.Duration(cfg.TunnelConnectAuthFailureWindowMinutes)*time.Minute,
+		nil,
+	)
+	hub.SetConnectLimiter(connLimiter, time.Duration(cfg.TunnelConnectClockSkewMinutes)*time.Minute)
 	remoteServer := tunnel2.NewRemoteServer(logger, queries)
+	remoteServer.SetConnectLimiter(connLimiter)
 	requester := handler.NewTunnelK8sRequester(hub)
 	// Cross-pod fallback for server-internal tunnel calls (shell open,
 	// project reconciler, etc.). Same PSK both sides — derived from the
@@ -1434,6 +1446,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	loggingHandler.StartReconciler(reconcileCtx)
 	controlPlaneHandler.StartEvaluator(reconcileCtx)
 	workloadHandler.StartReconciler(reconcileCtx)
+	// A4: reap expired connect-failure buckets so the limiter map stays bounded.
+	connLimiter.StartJanitor(reconcileCtx, 0)
 	// Migration 048: kick off the webhook bus tap if wired. Subscribes
 	// to the in-memory events.Bus and turns matching events into
 	// queued webhook_deliveries rows.
