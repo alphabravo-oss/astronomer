@@ -196,7 +196,7 @@ func TestAgentFleetListSummarizesConnectedDegradedDisconnectedAgents(t *testing.
 				Status:       "connected",
 				ConnectedAt:  now.Add(-15 * time.Minute),
 				LastPing:     ts(now.Add(-4 * time.Minute)),
-				AgentVersion: "v0.9.0",
+				AgentVersion: "v0.1.0", // deprecated tier (below the v0.2.0 supported floor)
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -209,7 +209,7 @@ func TestAgentFleetListSummarizesConnectedDegradedDisconnectedAgents(t *testing.
 					Status:         "disconnected",
 					ConnectedAt:    now.Add(-2 * time.Hour),
 					DisconnectedAt: ts(now.Add(-30 * time.Minute)),
-					AgentVersion:   "v0.8.0",
+					AgentVersion:   "v0.0.5", // below the v0.1.0 compatible floor → blocked
 				},
 			},
 		},
@@ -744,7 +744,7 @@ func TestAgentFleetSelfTestFailsForDisconnectedBlockedAgent(t *testing.T) {
 				DisplayName:  "Legacy",
 				Status:       "disconnected",
 				Annotations:  profileAnnotation(agenttemplate.PrivilegeProfileViewer),
-				AgentVersion: "v0.8.0",
+				AgentVersion: "v0.0.5", // below the v0.1.0 compatible floor → blocked
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -757,7 +757,7 @@ func TestAgentFleetSelfTestFailsForDisconnectedBlockedAgent(t *testing.T) {
 					Status:         "disconnected",
 					ConnectedAt:    now.Add(-2 * time.Hour),
 					DisconnectedAt: ts(now.Add(-30 * time.Minute)),
-					AgentVersion:   "v0.8.0",
+					AgentVersion:   "v0.0.5", // below the v0.1.0 compatible floor → blocked
 				},
 			},
 		},

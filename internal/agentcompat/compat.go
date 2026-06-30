@@ -6,16 +6,18 @@ import (
 )
 
 const (
-	// 0.x release line: agents at v0.1.0+ are fully supported; anything older
-	// than v0.1.0 is blocked from connecting. The "deprecated" middle tier is
-	// dormant during 0.x (minimumSupportedMajor=0 → the major<major check never
-	// fires, so nothing is flagged deprecated) and reactivates at the 1.0
-	// cutover by bumping minimumSupportedMajor to 1.
+	// 0.x release line: v0.2.0 (the current release) and newer are fully
+	// supported; v0.1.x is deprecated (still connects, but warns to upgrade);
+	// anything older than v0.1.0 is blocked from connecting. Bump the supported
+	// floor as the release line advances; at the 1.0 cutover set it to v1.0.0.
+	// Keep MinimumSupportedVersion's numeric value in step with the current
+	// release in pkg/version / deploy/chart.
 	MinimumCompatibleVersion = "v0.1.0"
-	MinimumSupportedVersion  = "v0.1.0"
+	MinimumSupportedVersion  = "v0.2.0"
 	minimumCompatibleMajor   = 0
 	minimumCompatibleMinor   = 1
 	minimumSupportedMajor    = 0
+	minimumSupportedMinor    = 2
 )
 
 type Status struct {
@@ -41,7 +43,7 @@ func Evaluate(version string) Status {
 			Blocked:        true,
 		}
 	}
-	if major < minimumSupportedMajor {
+	if major < minimumSupportedMajor || (major == minimumSupportedMajor && minor < minimumSupportedMinor) {
 		return Status{
 			Status:         "deprecated",
 			Message:        "Agent is below the minimum supported version " + MinimumSupportedVersion + ".",

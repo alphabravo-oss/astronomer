@@ -316,7 +316,7 @@ func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID:    clusterID,
 		AgentID:      "agent-old",
-		AgentVersion: "v0.8.9",
+		AgentVersion: "v0.0.9", // below the v0.1.0 compatible floor → blocked
 		Token:        "test-token",
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Payload: connectPayload}); err != nil {
