@@ -609,6 +609,33 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Target cluster has no Velero BackupStorageLocation; install Velero before cross-cluster restore")
 			return
 		}
+
+		// Same-store validation: it isn't enough for the target to have
+		// SOME BSL — it must have one pointing at the SAME object store
+		// (provider + bucket) the snapshot was written to, or Velero on
+		// the target would have nothing to read and the restore would only
+		// fail later in the poller. Resolve the source snapshot's backing
+		// store from the source cluster's BSLs and require a target match.
+		srcNamespace := strings.TrimSpace(snapshot.VeleroNamespace)
+		if srcNamespace == "" {
+			srcNamespace = defaultVeleroNamespace
+		}
+		srcBSLs, sErr := listVeleroBSLs(r.Context(), h.requester, clusterID.String(), srcNamespace)
+		if sErr != nil {
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.VeleroUnreachable, fmt.Sprintf("could not check Velero on source cluster: %v", sErr))
+			return
+		}
+		// Only enforce when we can positively identify the source store —
+		// if the source BSL can't be resolved (bucket unknown) we fall back
+		// to the "any BSL exists" check above rather than block on missing
+		// data.
+		if src, ok := resolveBSLStore(srcBSLs, decodeSpec(snapshot.Spec).StorageLocation); ok && strings.TrimSpace(src.Bucket) != "" {
+			if !targetHasMatchingStore(bsls, src) {
+				RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget,
+					fmt.Sprintf("Target cluster has no BackupStorageLocation for the snapshot's object store (bucket %q); cross-cluster restore requires a BSL pointing at the same store", src.Bucket))
+				return
+			}
+		}
 	}
 
 	namespace := strings.TrimSpace(req.Namespace)
@@ -931,6 +958,56 @@ func summarizeBSL(item map[string]any) VeleroBSLSummary {
 		}
 	}
 	return out
+}
+
+// resolveBSLStore finds the object store a snapshot reads from among a
+// cluster's BackupStorageLocations. `name` is the snapshot spec's
+// storageLocation; an empty name means Velero's default BSL (the one flagged
+// spec.default, or — matching Velero's own fallback — the sole BSL, or one
+// literally named "default"). Returns the resolved summary and true only when
+// a store could be identified.
+func resolveBSLStore(bsls []map[string]any, name string) (VeleroBSLSummary, bool) {
+	name = strings.TrimSpace(name)
+	if name != "" {
+		for _, item := range bsls {
+			if s := summarizeBSL(item); s.Name == name {
+				return s, true
+			}
+		}
+		return VeleroBSLSummary{}, false
+	}
+	for _, item := range bsls {
+		if s := summarizeBSL(item); s.Default {
+			return s, true
+		}
+	}
+	if len(bsls) == 1 {
+		return summarizeBSL(bsls[0]), true
+	}
+	for _, item := range bsls {
+		if s := summarizeBSL(item); s.Name == "default" {
+			return s, true
+		}
+	}
+	return VeleroBSLSummary{}, false
+}
+
+// targetHasMatchingStore reports whether any of the target cluster's BSLs
+// points at the same object store as `src` (same bucket; provider must agree
+// when both sides report one). Matching is case-insensitive.
+func targetHasMatchingStore(targetBSLs []map[string]any, src VeleroBSLSummary) bool {
+	srcBucket := strings.TrimSpace(src.Bucket)
+	for _, item := range targetBSLs {
+		t := summarizeBSL(item)
+		if !strings.EqualFold(strings.TrimSpace(t.Bucket), srcBucket) {
+			continue
+		}
+		if src.Provider != "" && t.Provider != "" && !strings.EqualFold(t.Provider, src.Provider) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // ----------------------------------------------------------------------

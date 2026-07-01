@@ -84,7 +84,7 @@ export default function ConnectStepPage() {
   useEffect(() => {
     if (!autoDetect || advancedRef.current) return;
     const off1 = live.subscribe('cluster.connected', (payload) => {
-      const data = payload as { cluster_id?: string };
+      const data = (payload as { data?: { cluster_id?: string } }).data;
       if (data?.cluster_id === clusterId && !advancedRef.current) {
         advancedRef.current = true;
         router.push(`/dashboard/clusters/register/${clusterId}/progress`);

@@ -548,15 +548,37 @@ func (h *Hub) routeToStream(conn *AgentConnection, msg *protocol.Message) {
 		return
 	}
 
-	// Non-blocking send to avoid blocking the read loop.
+	// If the stream was already closed due to an earlier overflow (but not yet
+	// removed from the map by the consumer's deferred CloseStream), drop this
+	// frame WITHOUT delivering it. Delivering a post-overflow frame — most
+	// importantly a trailing End frame — would let the unary reassembler
+	// concatenate a gap-riddled body and return it as HTTP 200. Refusing to
+	// deliver anything after the gap guarantees the reassembler only ever sees
+	// a gap-free prefix followed by the closed DoneCh, which it surfaces as an
+	// error (-> 502) instead of a silently truncated success.
+	if stream.IsClosed() {
+		observability.RecordDroppedEvent("tunnel_stream_route", "stream_closed")
+		return
+	}
+
+	// Non-blocking send to avoid blocking the read loop. A full channel means
+	// the consumer fell behind a burst; we must NOT silently drop the frame.
+	// For a chunked unary response a dropped middle chunk yields a truncated
+	// body returned as 200 with no error; for a watch it silently loses a
+	// MODIFIED/DELETED event (stale UI, wrong ArgoCD sync state). Instead we
+	// close the stream so loss is surfaced: the unary reassembler turns the
+	// closed DoneCh into a 502, and watch/exec/log consumers return so the
+	// client reconnects and re-lists rather than missing events.
 	select {
 	case stream.DataCh <- msg.Payload:
 	default:
 		observability.RecordDroppedEvent("tunnel_stream_route", "channel_full")
-		h.log.Warn("stream data channel full, dropping message",
+		h.log.Warn("stream data channel full, closing stream to surface loss",
+			slog.String("type", string(msg.Type)),
 			slog.String("stream_id", streamID),
 			slog.String("cluster_id", conn.ClusterID),
 		)
+		stream.Close()
 	}
 }
 

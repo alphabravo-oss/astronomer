@@ -59,6 +59,14 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			return err
 		}
+		// The active-silence set is identical for the whole tick, so list it
+		// once here and filter in-memory per (rule, cluster) rather than
+		// re-querying ListAlertSilences for every evaluation (R*C queries/tick
+		// on a global-rule fan-out).
+		silences, err := listActiveSilences(ctx)
+		if err != nil {
+			return err
+		}
 		for _, rule := range rules {
 			// A global (rule.ClusterID invalid) rule produces one evaluation
 			// PER cluster; a cluster-scoped or anomaly rule produces exactly
@@ -79,7 +87,7 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 				return err
 			}
 			for _, eval := range evaluations {
-				if err := processRuleEvaluation(ctx, rule, eval, existingEvents); err != nil {
+				if err := processRuleEvaluation(ctx, rule, eval, existingEvents, silences); err != nil {
 					return err
 				}
 			}
@@ -162,13 +170,61 @@ func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event 
 	}
 }
 
+// alertEvalSweepPageSize bounds each ListClusters/ListAlertRules/ListAlertSilences
+// batch when the evaluator pages a full fleet. Mirrors
+// argoCDAutoRegisterSweepPageSize so a fleet/rule set larger than one page is
+// fully evaluated instead of silently truncated at the first 500 rows.
+const alertEvalSweepPageSize int32 = 500
+
+// listAllAlertRules pages through every alert rule. A single Limit:500 query
+// silently dropped the 501st rule from evaluation; page until a short batch so
+// every rule is evaluated each tick.
+func listAllAlertRules(ctx context.Context) ([]sqlc.AlertRule, error) {
+	var all []sqlc.AlertRule
+	for offset := int32(0); ; offset += alertEvalSweepPageSize {
+		page, err := runtimeDeps.Queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			break
+		}
+		all = append(all, page...)
+		if int32(len(page)) < alertEvalSweepPageSize {
+			break
+		}
+	}
+	return all, nil
+}
+
+// listActiveSilences pages through every alert silence once per tick so the
+// evaluator can filter in-memory instead of re-issuing a ListAlertSilences
+// query for every (rule, cluster) pair.
+func listActiveSilences(ctx context.Context) ([]sqlc.AlertSilence, error) {
+	var all []sqlc.AlertSilence
+	for offset := int32(0); ; offset += alertEvalSweepPageSize {
+		page, err := runtimeDeps.Queries.ListAlertSilences(ctx, sqlc.ListAlertSilencesParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			break
+		}
+		all = append(all, page...)
+		if int32(len(page)) < alertEvalSweepPageSize {
+			break
+		}
+	}
+	return all, nil
+}
+
 func alertRulesForEvaluation(ctx context.Context, ruleID string) ([]sqlc.AlertRule, error) {
 	if ruleID != "" {
 		id, err := uuid.Parse(ruleID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid rule_id: %w", err)
 		}
-		rules, err := runtimeDeps.Queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: 500, Offset: 0})
+		rules, err := listAllAlertRules(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +235,7 @@ func alertRulesForEvaluation(ctx context.Context, ruleID string) ([]sqlc.AlertRu
 		}
 		return nil, fmt.Errorf("alert rule %s not found", ruleID)
 	}
-	return runtimeDeps.Queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: 500, Offset: 0})
+	return listAllAlertRules(ctx)
 }
 
 // ruleClusterEval is one (rule, cluster) evaluation outcome. Cluster-scoped
@@ -199,15 +255,12 @@ type ruleClusterEval struct {
 // otherwise fires a fresh event (subject to cooldown). Events are keyed by
 // (rule, cluster) via filterActiveEventsForCluster / cooldownElapsed, so a
 // global rule's clusters never clobber one another.
-func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleClusterEval, existingEvents []sqlc.AlertEvent) error {
+func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleClusterEval, existingEvents []sqlc.AlertEvent, silences []sqlc.AlertSilence) error {
 	targetClusterID := eval.clusterID
 	message := eval.message
 	details := eval.details
 
-	silence, err := activeSilenceForRule(ctx, rule, targetClusterID)
-	if err != nil {
-		return err
-	}
+	silence := matchActiveSilence(silences, rule, targetClusterID)
 	activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
 	if !eval.triggered {
 		for _, event := range activeEvents {
@@ -294,11 +347,7 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) ([]ruleClusterEval, 
 	// to no-fire when no baseline row exists yet (identical to
 	// "not enough samples").
 	if stringFromWorkerMap(config, "rule_kind") == "anomaly" {
-		triggered, message, details, clusterID, err := evaluateAnomalyRule(ctx, rule, config)
-		if err != nil {
-			return nil, err
-		}
-		return []ruleClusterEval{{triggered: triggered, message: message, details: details, clusterID: clusterID}}, nil
+		return evaluateAnomalyRule(ctx, rule, config)
 	}
 	if rule.ClusterID.Valid {
 		details := baseRuleDetails(rule, config)
@@ -330,44 +379,55 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) ([]ruleClusterEval, 
 		}
 		return []ruleClusterEval{{triggered: triggered, message: message, details: payload, clusterID: clusterID}}, nil
 	}
-	clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
-	if err != nil {
-		return nil, err
+	// Page through the whole fleet rather than capping the fan-out at a single
+	// 500-row batch: clusters beyond the first page must still fire and, more
+	// importantly, resolve their already-firing events each tick.
+	evaluations := make([]ruleClusterEval, 0)
+	for offset := int32(0); ; offset += alertEvalSweepPageSize {
+		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(clusters) == 0 {
+			break
+		}
+		for _, cluster := range clusters {
+			details := baseRuleDetails(rule, config)
+			details["scope"] = "global"
+			health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+			healthKnown := healthErr == nil
+			if healthErr != nil {
+				health = sqlc.ClusterHealthStatus{}
+			}
+			details["cluster_id"] = cluster.ID.String()
+			details["cluster_name"] = cluster.Name
+			details["cluster_status"] = cluster.Status
+			details["last_heartbeat"] = nullableWorkerTime(cluster.LastHeartbeat)
+			details["node_count"] = health.NodeCount
+			details["pod_count"] = health.PodCount
+			details["cpu_usage_percent"] = health.CpuUsagePercent
+			details["memory_usage_percent"] = health.MemoryUsagePercent
+			if triggered, message, payload, clusterID, ok, evalErr := evaluatePromQLRule(ctx, rule, config, cluster, details); evalErr != nil {
+				return nil, evalErr
+			} else if ok {
+				evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
+				continue
+			}
+			triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
+			if evalErr != nil {
+				return nil, evalErr
+			}
+			evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
+		}
+		if int32(len(clusters)) < alertEvalSweepPageSize {
+			break
+		}
 	}
 	// No clusters: emit a single non-triggering, cluster-less evaluation so
 	// any stale active events for this rule still resolve (preserves the old
 	// "resolve everything when nothing triggers" behavior).
-	if len(clusters) == 0 {
+	if len(evaluations) == 0 {
 		return []ruleClusterEval{{}}, nil
-	}
-	evaluations := make([]ruleClusterEval, 0, len(clusters))
-	for _, cluster := range clusters {
-		details := baseRuleDetails(rule, config)
-		details["scope"] = "global"
-		health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
-		healthKnown := healthErr == nil
-		if healthErr != nil {
-			health = sqlc.ClusterHealthStatus{}
-		}
-		details["cluster_id"] = cluster.ID.String()
-		details["cluster_name"] = cluster.Name
-		details["cluster_status"] = cluster.Status
-		details["last_heartbeat"] = nullableWorkerTime(cluster.LastHeartbeat)
-		details["node_count"] = health.NodeCount
-		details["pod_count"] = health.PodCount
-		details["cpu_usage_percent"] = health.CpuUsagePercent
-		details["memory_usage_percent"] = health.MemoryUsagePercent
-		if triggered, message, payload, clusterID, ok, evalErr := evaluatePromQLRule(ctx, rule, config, cluster, details); evalErr != nil {
-			return nil, evalErr
-		} else if ok {
-			evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
-			continue
-		}
-		triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
-		if evalErr != nil {
-			return nil, evalErr
-		}
-		evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
 	}
 	return evaluations, nil
 }
@@ -396,33 +456,30 @@ func filterActiveEventsForCluster(events []sqlc.AlertEvent, clusterID pgtype.UUI
 	return out
 }
 
-func activeSilenceForRule(ctx context.Context, rule sqlc.AlertRule, clusterID pgtype.UUID) (*sqlc.AlertSilence, error) {
-	silences, err := runtimeDeps.Queries.ListAlertSilences(ctx, sqlc.ListAlertSilencesParams{
-		Limit:  500,
-		Offset: 0,
-	})
-	if err != nil {
-		return nil, err
-	}
+// matchActiveSilence selects the silence covering (rule, cluster) from a
+// pre-fetched silence list. The list is gathered once per tick by
+// listActiveSilences so this is a pure in-memory filter — no per-call DB query.
+func matchActiveSilence(silences []sqlc.AlertSilence, rule sqlc.AlertRule, clusterID pgtype.UUID) *sqlc.AlertSilence {
 	now := time.Now().UTC()
-	for _, silence := range silences {
+	for i := range silences {
+		silence := silences[i]
 		if now.Before(silence.StartsAt.UTC()) || now.After(silence.EndsAt.UTC()) {
 			continue
 		}
 		if !silence.RuleID.Valid && !silence.ClusterID.Valid {
-			return &silence, nil
+			return &silences[i]
 		}
 		if silence.RuleID.Valid && uuid.UUID(silence.RuleID.Bytes) == rule.ID {
 			if silence.ClusterID.Valid && (!clusterID.Valid || uuid.UUID(silence.ClusterID.Bytes) != uuid.UUID(clusterID.Bytes)) {
 				continue
 			}
-			return &silence, nil
+			return &silences[i]
 		}
 		if clusterID.Valid && silence.ClusterID.Valid && uuid.UUID(silence.ClusterID.Bytes) == uuid.UUID(clusterID.Bytes) {
-			return &silence, nil
+			return &silences[i]
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, healthKnown bool, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
@@ -741,8 +798,12 @@ func evaluatePromQLRule(ctx context.Context, rule sqlc.AlertRule, config map[str
 	if comparison == "" {
 		comparison = defaultComparisonForRule(rule.RuleType, config)
 	}
+	// Distinguish an unset threshold from an explicit 0. A rule meaning
+	// "fire when the query value > 0" sets threshold=0; substituting the
+	// hardcoded default (1) here silently broke that rule. Only fall back to
+	// the default when the operator never supplied a threshold at all.
 	threshold := floatFromAny(config["threshold"])
-	if threshold == 0 {
+	if _, ok := config["threshold"]; !ok {
 		threshold = defaultThresholdForPromRule(rule.RuleType)
 	}
 

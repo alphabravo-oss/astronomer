@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -493,6 +494,9 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
+	if rejectGroupBinding(w, r, req) {
+		return
+	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
 	if !ok {
 		return
@@ -577,6 +581,9 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
 	if !decodeAndValidate(w, r, &req) {
+		return
+	}
+	if rejectGroupBinding(w, r, req) {
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -665,6 +672,9 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Request) {
 	var req roleBindingRequest
 	if !decodeAndValidate(w, r, &req) {
+		return
+	}
+	if rejectGroupBinding(w, r, req) {
 		return
 	}
 	roleID, userID, ok := parseBindingRefs(w, r, req)
@@ -972,6 +982,25 @@ func defaultJSON(raw json.RawMessage) json.RawMessage {
 		return json.RawMessage("[]")
 	}
 	return raw
+}
+
+// rejectGroupBinding blocks the manual role-binding API from creating
+// group-scoped (or user-less) bindings. Group-scoped bindings are stored
+// and indexed but never expanded at authorization time — GetUserBindings /
+// ListUserBindingsWithRoles resolve strictly by user_id, so a binding with
+// no user_id (or a "group" set) silently grants nothing. Group membership
+// is driven by identity group mappings, not this endpoint. We fail closed
+// with a 400 so operators notice instead of trusting a no-op grant.
+//
+// Returns true (and writes the 400) when the request must be rejected;
+// false means the binding carries a concrete user_id and may proceed.
+func rejectGroupBinding(w http.ResponseWriter, r *http.Request, req roleBindingRequest) bool {
+	if strings.TrimSpace(req.UserID) == "" || strings.TrimSpace(req.Group) != "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+			"group bindings are managed via identity group mappings, not the manual binding API")
+		return true
+	}
+	return false
 }
 
 func parseBindingRefs(w http.ResponseWriter, r *http.Request, req roleBindingRequest) (uuid.UUID, pgtype.UUID, bool) {

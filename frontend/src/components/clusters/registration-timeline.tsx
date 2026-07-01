@@ -61,11 +61,11 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
   const live = useLiveEvents();
   useEffect(() => {
     const off1 = live.subscribe('cluster.registration.step', (payload) => {
-      const data = payload as { cluster_id?: string };
+      const data = (payload as { data?: { cluster_id?: string } }).data;
       if (data?.cluster_id === clusterId) refresh();
     });
     const off2 = live.subscribe('cluster.registration.phase', (payload) => {
-      const data = payload as { cluster_id?: string };
+      const data = (payload as { data?: { cluster_id?: string } }).data;
       if (data?.cluster_id === clusterId) refresh();
     });
     return () => {
@@ -73,6 +73,15 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
       off2();
     };
   }, [live, clusterId, refresh]);
+
+  // Low-frequency polling fallback: SSE is the primary channel, but if the
+  // event stream is dropped (proxy timeout, tab throttling) we still want the
+  // timeline to advance. Stop polling once we reach a terminal phase.
+  useEffect(() => {
+    if (notFound || status?.phase === 'ready' || status?.phase === 'failed') return;
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, [refresh, notFound, status?.phase]);
 
   // Fire onReady once when we transition into ready phase.
   useEffect(() => {

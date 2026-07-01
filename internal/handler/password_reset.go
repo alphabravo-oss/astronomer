@@ -227,6 +227,15 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 			TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		})
 	}
+	// Flush the JWT validation cache so the freshly-bumped cutoff takes
+	// effect on the very next request. checkRevocations short-circuits on
+	// its positive-result cache for up to JWTValidationCacheTTL (30s), so
+	// without this an attacker session validated within the last window
+	// keeps passing for up to 30s after the reset. Mirrors the force-logout
+	// and SCIM revocation paths.
+	if h.jwt != nil {
+		h.jwt.InvalidateCache()
+	}
 
 	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
 		"auth.password_reset_complete", "user", user.ID.String(), user.Username, nil)

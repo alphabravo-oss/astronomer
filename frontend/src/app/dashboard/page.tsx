@@ -51,7 +51,7 @@ export default function DashboardPage() {
 
   const clusters = clustersData?.data || [];
   const activity = activityData || [];
-  const alertEvents = (alertEventsData as { data?: Array<{ severity?: string }> } | undefined)?.data || [];
+  const alertEvents = alertEventsData ?? [];
   const tools = toolsData || [];
 
   const activeClusters = clusters.filter((c) => c.status === 'active').length;
@@ -59,7 +59,7 @@ export default function DashboardPage() {
   const errorClusters = clusters.filter((c) => c.status === 'error' || c.status === 'disconnected').length;
   const totalNodes = clusters.reduce((acc, c) => acc + c.nodeCount, 0);
   const totalPods = clusters.reduce((acc, c) => acc + c.podCount, 0);
-  const criticalAlerts = alertEvents.filter((e) => e.severity === 'critical' || e.severity === 'error').length;
+  const criticalAlerts = alertEvents.filter((e) => e.severity === 'critical').length;
   const warningAlerts = alertEvents.filter((e) => e.severity === 'warning').length;
   const totalTools = Array.isArray(tools) ? tools.length : 0;
 

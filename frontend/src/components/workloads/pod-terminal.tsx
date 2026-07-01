@@ -61,6 +61,9 @@ export function PodTerminal({
 
   const [selectedContainer, setSelectedContainer] = useState(initialContainer);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
+  // Flipped once the wterm WASM core is up. Gates the connect effect so we
+  // don't open a socket before the terminal can render its output.
+  const [ready, setReady] = useState(false);
   const [showContainerDropdown, setShowContainerDropdown] = useState(false);
   const containerDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -134,7 +137,9 @@ export function PodTerminal({
     return wsRef.current;
   }, [clusterId, namespace, pod, selectedContainer, write]);
 
-  // Fires once the wterm WASM core is up.
+  // Fires once the wterm WASM core is up. The actual WS connect is driven by
+  // the effect below (gated on `ready`) so that switching containers can
+  // re-run it; here we just wire the imperative actions and mark ready.
   const handleReady = useCallback(() => {
     write(`Connecting to \x1b[36m${pod}\x1b[0m / \x1b[33m${selectedContainer}\x1b[0m ...\r\n`);
     if (actionsRef) {
@@ -145,8 +150,24 @@ export function PodTerminal({
       };
     }
     if (embedded) focus();
+    setReady(true);
+  }, [pod, selectedContainer, write, focus, embedded, actionsRef]);
+
+  // (Re)connect whenever the selected container changes, once the core is
+  // ready. connectWebSocket's identity tracks selectedContainer, so picking a
+  // new container from the dropdown tears the old socket down (cleanup) and
+  // opens a fresh session for the new container instead of leaving the
+  // terminal stuck on 'disconnected'.
+  useEffect(() => {
+    if (!ready) return;
     connectWebSocket();
-  }, [pod, selectedContainer, write, focus, embedded, actionsRef, connectWebSocket]);
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [ready, connectWebSocket]);
 
   // Operator keystrokes → ws stdin.
   const handleData = useCallback((data: string) => {
@@ -165,16 +186,13 @@ export function PodTerminal({
     }
   }, [resize]);
 
-  // Tear down WS on container change / unmount.
+  // Clear the imperative actions handle on unmount. (WS teardown is handled
+  // by the connect effect above.)
   useEffect(() => {
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
       if (actionsRef) actionsRef.current = null;
     };
-  }, [selectedContainer, actionsRef]);
+  }, [actionsRef]);
 
   // Close container dropdown on outside click
   useEffect(() => {

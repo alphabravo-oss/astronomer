@@ -867,11 +867,27 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 					auditDetail["jti"] = claims.ID
 					auditDetail["revoked"] = true
 					jtiForSLO = claims.ID
-					// Drop the cached "this JTI is valid" entry so an in-flight
-					// validator running in another worker doesn't accept the
-					// same token before TTL expiry.
-					h.jwt.InvalidateCache()
 				}
+				// Terminate the entire session, not just this access token.
+				// The refresh token (7-day lifetime) carries a JTI we don't
+				// possess here, so denylisting the access JTI alone leaves the
+				// refresh token live — an attacker who kept it could re-mint a
+				// session via /auth/refresh after the victim logs out. Bump the
+				// per-user cutoff (same mechanism force-logout / password-reset
+				// use) so every token issued before now, access AND refresh, is
+				// rejected by checkRevocations.
+				if err := h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
+					ID:                  claims.UserID,
+					TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+				}); err != nil {
+					if h.log != nil {
+						h.log.Warn("failed to invalidate user tokens on logout", "user_id", claims.UserID.String(), "error", err)
+					}
+				}
+				// Drop the cached "this JTI is valid" entries so an in-flight
+				// validator running in another worker doesn't accept the
+				// just-revoked token (or a pre-cutoff refresh) before TTL expiry.
+				h.jwt.InvalidateCache()
 			}
 		}
 	}

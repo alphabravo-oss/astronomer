@@ -36,49 +36,98 @@ type anomalyEvalQuerier interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
 }
 
+// anomalyEvalSweepPageSize bounds each ListClusters batch for a global anomaly
+// rule's fan-out; mirrors alertEvalSweepPageSize so a fleet larger than one
+// page is fully evaluated.
+const anomalyEvalSweepPageSize int32 = 500
+
 // evaluateAnomalyRule is the dispatcher for rule_kind='anomaly'
 // rules. Cluster-scoped rules evaluate against the single baseline
-// row keyed by (cluster, metric, window). Global rules fan out
-// across clusters and fire if ANY cluster's baseline reports an
-// anomaly; the fire details carry the offending cluster.
-func evaluateAnomalyRule(ctx context.Context, rule sqlc.AlertRule, config map[string]any) (bool, string, []byte, pgtype.UUID, error) {
+// row keyed by (cluster, metric, window). Global rules fan out one
+// evaluation PER cluster so every cluster's anomaly/recovery is tracked
+// independently — matching the threshold fan-out in evaluateRule — instead of
+// collapsing to the first triggering cluster and stranding recovered clusters'
+// events as perpetually firing.
+func evaluateAnomalyRule(ctx context.Context, rule sqlc.AlertRule, config map[string]any) ([]ruleClusterEval, error) {
 	q, ok := runtimeDeps.Queries.(anomalyEvalQuerier)
 	if !ok {
 		// Runtime querier doesn't expose anomaly methods — this
 		// can happen in unit tests using a narrow fake. Treat
-		// it identically to "no baseline row yet": no-fire.
-		return false, "", nil, pgtype.UUID{}, nil
+		// it identically to "no baseline row yet": a single
+		// non-triggering eval so stale events still resolve.
+		return []ruleClusterEval{{}}, nil
 	}
-	return EvaluateAnomalyRuleWith(ctx, q, rule, config)
+	return EvaluateAnomalyRuleEvals(ctx, q, rule, config)
 }
 
-// EvaluateAnomalyRuleWith is the testable core of evaluateAnomalyRule.
-// Exported so tests can drive it with a narrow fake querier without
-// having to satisfy the full RuntimeQuerier interface.
-func EvaluateAnomalyRuleWith(ctx context.Context, q anomalyEvalQuerier, rule sqlc.AlertRule, config map[string]any) (bool, string, []byte, pgtype.UUID, error) {
+// EvaluateAnomalyRuleEvals is the testable core of evaluateAnomalyRule. It
+// returns one ruleClusterEval per cluster the rule covers (exactly one for a
+// cluster-scoped rule; one per fleet cluster for a global rule) so
+// processRuleEvaluation can fire and resolve each cluster independently.
+// Exported so tests can drive it with a narrow fake querier without having to
+// satisfy the full RuntimeQuerier interface.
+func EvaluateAnomalyRuleEvals(ctx context.Context, q anomalyEvalQuerier, rule sqlc.AlertRule, config map[string]any) ([]ruleClusterEval, error) {
 	cfg := decodeAnomalyRuleConfig(rule.Configuration)
 	if cfg.Metric == "" {
 		// Misconfigured rule — operator forgot to pick a metric.
 		// Don't fire; the UI surfaces the validation gap when the
 		// rule was created.
-		return false, "", nil, pgtype.UUID{}, nil
+		return []ruleClusterEval{{}}, nil
 	}
 
 	if rule.ClusterID.Valid {
-		return evaluateAnomalyForCluster(ctx, q, rule, config, cfg, uuid.UUID(rule.ClusterID.Bytes))
+		triggered, msg, blob, clusterID, err := evaluateAnomalyForCluster(ctx, q, rule, config, cfg, uuid.UUID(rule.ClusterID.Bytes))
+		if err != nil {
+			return nil, err
+		}
+		return []ruleClusterEval{{triggered: triggered, message: msg, details: blob, clusterID: clusterID}}, nil
 	}
-	clusters, err := q.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
+	// Global rule: page the whole fleet and emit one eval per cluster.
+	evals := make([]ruleClusterEval, 0)
+	for offset := int32(0); ; offset += anomalyEvalSweepPageSize {
+		page, err := q.ListClusters(ctx, sqlc.ListClustersParams{Limit: anomalyEvalSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, c := range page {
+			triggered, msg, blob, clusterID, err := evaluateAnomalyForCluster(ctx, q, rule, config, cfg, c.ID)
+			if err != nil {
+				return nil, err
+			}
+			evals = append(evals, ruleClusterEval{triggered: triggered, message: msg, details: blob, clusterID: clusterID})
+		}
+		if int32(len(page)) < anomalyEvalSweepPageSize {
+			break
+		}
+	}
+	// No clusters: a single non-triggering, cluster-less eval so any stale
+	// active events for this rule still resolve.
+	if len(evals) == 0 {
+		return []ruleClusterEval{{}}, nil
+	}
+	return evals, nil
+}
+
+// EvaluateAnomalyRuleWith preserves the pre-fan-out single-result contract for
+// callers (and tests) that only need the first triggering cluster. It collapses
+// the per-cluster evals: the first triggering cluster wins, otherwise the last
+// non-triggering eval (carrying its details) is returned.
+func EvaluateAnomalyRuleWith(ctx context.Context, q anomalyEvalQuerier, rule sqlc.AlertRule, config map[string]any) (bool, string, []byte, pgtype.UUID, error) {
+	evals, err := EvaluateAnomalyRuleEvals(ctx, q, rule, config)
 	if err != nil {
 		return false, "", nil, pgtype.UUID{}, err
 	}
-	for _, c := range clusters {
-		triggered, msg, blob, clusterID, err := evaluateAnomalyForCluster(ctx, q, rule, config, cfg, c.ID)
-		if err != nil {
-			return false, "", nil, pgtype.UUID{}, err
+	for _, e := range evals {
+		if e.triggered {
+			return true, e.message, e.details, e.clusterID, nil
 		}
-		if triggered {
-			return true, msg, blob, clusterID, nil
-		}
+	}
+	if len(evals) > 0 {
+		last := evals[len(evals)-1]
+		return false, last.message, last.details, last.clusterID, nil
 	}
 	return false, "", nil, pgtype.UUID{}, nil
 }
