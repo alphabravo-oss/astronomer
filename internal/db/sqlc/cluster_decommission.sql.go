@@ -117,6 +117,18 @@ func (q *Queries) DeleteAgentConnectionsByCluster(ctx context.Context, clusterID
 	return result.RowsAffected(), nil
 }
 
+const deleteAgentLifecycleOperationsByCluster = `-- name: DeleteAgentLifecycleOperationsByCluster :execrows
+DELETE FROM agent_lifecycle_operations WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteAgentLifecycleOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAgentLifecycleOperationsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteAlertRulesByCluster = `-- name: DeleteAlertRulesByCluster :execrows
 DELETE FROM alert_rules WHERE cluster_id = $1::uuid
 `
@@ -249,12 +261,64 @@ func (q *Queries) DeleteClusterSecurityPoliciesByCluster(ctx context.Context, cl
 	return result.RowsAffected(), nil
 }
 
+const deleteClusterSnapshotSchedulesByCluster = `-- name: DeleteClusterSnapshotSchedulesByCluster :execrows
+DELETE FROM cluster_snapshot_schedules WHERE cluster_id = $1
+`
+
+// Snapshot schedules are the actively-harmful orphan: the dispatcher
+// (ListEnabledSnapshotSchedules) keeps firing Velero backup jobs for a dead
+// cluster until these rows are gone. Tombstone semantics mean CASCADE never
+// fires, so remove them explicitly.
+func (q *Queries) DeleteClusterSnapshotSchedulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteClusterSnapshotSchedulesByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteDeferredOperationsByCluster = `-- name: DeleteDeferredOperationsByCluster :execrows
+DELETE FROM deferred_operations WHERE target_cluster_id = $1::uuid
+`
+
+func (q *Queries) DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDeferredOperationsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteGitOpsRegisteredClustersByCluster = `-- name: DeleteGitOpsRegisteredClustersByCluster :execrows
+DELETE FROM gitops_registered_clusters WHERE cluster_id = $1
+`
+
+func (q *Queries) DeleteGitOpsRegisteredClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteGitOpsRegisteredClustersByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteInstalledChartsByCluster = `-- name: DeleteInstalledChartsByCluster :execrows
 DELETE FROM installed_charts WHERE cluster_id = $1
 `
 
 func (q *Queries) DeleteInstalledChartsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteInstalledChartsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteNativeRBACRulesByCluster = `-- name: DeleteNativeRBACRulesByCluster :execrows
+DELETE FROM native_rbac_rules WHERE cluster_id = $1::uuid
+`
+
+func (q *Queries) DeleteNativeRBACRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNativeRBACRulesByCluster, clusterID)
 	if err != nil {
 		return 0, err
 	}

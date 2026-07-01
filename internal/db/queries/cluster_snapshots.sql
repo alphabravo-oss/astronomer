@@ -141,11 +141,19 @@ FROM cluster_snapshot_schedules
 WHERE id = $1;
 
 -- name: ListEnabledSnapshotSchedules :many
-SELECT id, cluster_id, name, cron_schedule, spec, enabled,
-       last_run_at, last_run_status, created_by, created_at, updated_at
-FROM cluster_snapshot_schedules
-WHERE enabled = true
-ORDER BY id ASC;
+-- The snapshot dispatcher iterates this set every tick and creates Velero
+-- backup jobs for each due schedule. It MUST skip decommissioned clusters:
+-- the decommission reconciler tombstones (not hard-deletes) the cluster row,
+-- so ON DELETE CASCADE never fires and orphaned schedules would otherwise
+-- keep firing snapshots against a dead cluster forever. JOIN clusters and
+-- require decommissioned_at IS NULL so tombstoned clusters drop out.
+SELECT s.id, s.cluster_id, s.name, s.cron_schedule, s.spec, s.enabled,
+       s.last_run_at, s.last_run_status, s.created_by, s.created_at, s.updated_at
+FROM cluster_snapshot_schedules s
+JOIN clusters c ON c.id = s.cluster_id
+WHERE s.enabled = true
+  AND c.decommissioned_at IS NULL
+ORDER BY s.id ASC;
 
 -- name: CreateClusterSnapshotSchedule :one
 INSERT INTO cluster_snapshot_schedules (

@@ -160,6 +160,25 @@ DELETE FROM project_namespaces WHERE cluster_id = $1;
 -- name: DeleteClusterRoleBindingsByCluster :execrows
 DELETE FROM cluster_role_bindings WHERE cluster_id = $1;
 
+-- name: DeleteClusterSnapshotSchedulesByCluster :execrows
+-- Snapshot schedules are the actively-harmful orphan: the dispatcher
+-- (ListEnabledSnapshotSchedules) keeps firing Velero backup jobs for a dead
+-- cluster until these rows are gone. Tombstone semantics mean CASCADE never
+-- fires, so remove them explicitly.
+DELETE FROM cluster_snapshot_schedules WHERE cluster_id = $1;
+
+-- name: DeleteGitOpsRegisteredClustersByCluster :execrows
+DELETE FROM gitops_registered_clusters WHERE cluster_id = $1;
+
+-- name: DeleteNativeRBACRulesByCluster :execrows
+DELETE FROM native_rbac_rules WHERE cluster_id = sqlc.arg(cluster_id)::uuid;
+
+-- name: DeleteDeferredOperationsByCluster :execrows
+DELETE FROM deferred_operations WHERE target_cluster_id = sqlc.arg(cluster_id)::uuid;
+
+-- name: DeleteAgentLifecycleOperationsByCluster :execrows
+DELETE FROM agent_lifecycle_operations WHERE cluster_id = $1;
+
 -- Audit archive operations.
 --
 -- ArchiveAuditLogsForCluster is the bulk INSERT … SELECT used during the

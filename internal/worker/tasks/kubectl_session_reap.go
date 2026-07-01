@@ -60,10 +60,12 @@ func ResetKubectlSessionReap() {
 // HandleKubectlSessionReap is the asynq handler. The leader-election
 // wrapper around it ensures only one replica fires per tick.
 func HandleKubectlSessionReap(ctx context.Context, _ *asynq.Task) error {
-	if kubectlReapDeps.Deps.Queries == nil {
-		// Feature disabled or not yet wired — exit quietly so the
-		// scheduler's idempotent re-enqueue doesn't generate alerts.
-		return nil
-	}
-	return kubectl.Reap(ctx, kubectlReapDeps.Deps)
+	return runPeriodicTaskWithLeader(ctx, KubectlSessionReapType, func() error {
+		if kubectlReapDeps.Deps.Queries == nil {
+			// Feature disabled or not yet wired — exit quietly so the
+			// scheduler's idempotent re-enqueue doesn't generate alerts.
+			return nil
+		}
+		return kubectl.Reap(ctx, kubectlReapDeps.Deps)
+	})
 }

@@ -167,6 +167,52 @@ func TestKubectlReaper_ExpiresAndDeletesPods(t *testing.T) {
 	}
 }
 
+// TestKubectlReaper_GatedByLeader is the F32 regression: the handler's doc
+// promises leader-election gating, but before the fix it called kubectl.Reap
+// directly, so every replica reaped concurrently. We install a non-leader
+// elector and assert the reaper never touches the cluster (no tunnel calls,
+// session left active). Removing the runPeriodicTaskWithLeader wrapper makes
+// this fail.
+func TestKubectlReaper_GatedByLeader(t *testing.T) {
+	defer resetRuntime()
+	ConfigureRuntime(RuntimeDependencies{Leader: &fakeLeader{held: false}})
+
+	q := newFakeReapQuerier()
+	r := &fakeReapRequester{}
+
+	sid := uuid.New()
+	q.sessions[sid] = &sqlc.KubectlSession{
+		ID: sid, ClusterID: uuid.New(), Status: "active",
+		LastInputAt:  time.Now().Add(-1 * time.Hour), // idle expired
+		ExpiresAt:    time.Now().Add(1 * time.Hour),
+		SaName:       "astro-shell-gated",
+		SaNamespace:  "kube-system",
+		PodName:      "astro-shell-gated",
+		PodNamespace: "kube-system",
+	}
+	ConfigureKubectlSessionReap(KubectlSessionReapDeps{
+		Deps: kubectl.Deps{Queries: q, Requester: r},
+	})
+	defer ResetKubectlSessionReap()
+
+	if err := HandleKubectlSessionReap(context.Background(), NewKubectlSessionReapTask()); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+
+	r.mu.Lock()
+	nCalls := len(r.calls)
+	r.mu.Unlock()
+	if nCalls != 0 {
+		t.Fatalf("reaper made %d tunnel calls on a non-leader replica, want 0", nCalls)
+	}
+	q.mu.Lock()
+	got := q.sessions[sid].Status
+	q.mu.Unlock()
+	if got != "active" {
+		t.Fatalf("reaper ran on non-leader replica: session status=%q, want unchanged active", got)
+	}
+}
+
 func TestKubectlReaper_OrphanPodSweep(t *testing.T) {
 	q := newFakeReapQuerier()
 	r := &fakeReapRequester{}

@@ -452,6 +452,75 @@ func TestPoller_NilDepsIsNoOp(t *testing.T) {
 	}
 }
 
+// TestClusterSnapshotHandlers_GatedByLeader is the F04 regression: all three
+// periodic handlers must run their bodies through runPeriodicTaskWithLeader so
+// that on an N-replica deploy only the leader fires (otherwise N replicas each
+// POST a duplicate Velero backup and race on last_run_at). We install a
+// non-leader elector and assert none of the three handlers touch the DB/driver.
+// If the leader wrapper is removed from any handler, the corresponding
+// assertion fails.
+func TestClusterSnapshotHandlers_GatedByLeader(t *testing.T) {
+	defer resetRuntime()
+	ConfigureRuntime(RuntimeDependencies{Leader: &fakeLeader{held: false}})
+
+	q := newFakePollQuerier()
+	d := newFakeDriver()
+
+	// Pending snapshot whose Velero CR reports Completed: if poll runs, the
+	// row flips to Completed.
+	snap, _ := q.CreateClusterSnapshot(context.Background(), sqlc.CreateClusterSnapshotParams{
+		ClusterID:  uuid.New(),
+		VeleroName: "gated-snap",
+		Phase:      "InProgress",
+	})
+	d.backupStatus["gated-snap"] = VeleroBackupStatusSnapshot{Phase: "Completed"}
+
+	// Due schedule: if dispatch runs, it POSTs a backup.
+	now := time.Now().UTC()
+	sched := sqlc.ClusterSnapshotSchedule{
+		ID:           uuid.New(),
+		ClusterID:    uuid.New(),
+		Name:         "gated-sched",
+		CronSchedule: "* * * * *",
+		Enabled:      true,
+		LastRunAt:    pgtype.Timestamptz{Time: now.Add(-2 * time.Minute), Valid: true},
+		CreatedAt:    now.Add(-2 * time.Minute),
+	}
+	q.schedules[sched.ID] = sched
+
+	// Expired terminal snapshot: if cleanup runs, it is deleted.
+	expired := sqlc.ClusterSnapshot{
+		ID:        uuid.New(),
+		Phase:     "Completed",
+		ExpiresAt: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+	}
+	q.snapshots[expired.ID] = expired
+
+	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})
+	defer ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{})
+	SetSnapshotOutcomeRecorder(func(_, _ string) {})
+
+	if err := HandleClusterSnapshotPoll(context.Background(), nil); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if err := HandleClusterSnapshotDispatchScheduled(context.Background(), nil); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if err := HandleClusterSnapshotCleanupExpired(context.Background(), nil); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+
+	if got, _ := q.GetClusterSnapshotByID(context.Background(), snap.ID); got.Phase != "InProgress" {
+		t.Fatalf("poll ran on non-leader replica: phase=%q, want unchanged InProgress", got.Phase)
+	}
+	if len(d.posted) != 0 {
+		t.Fatalf("dispatch ran on non-leader replica: %d Velero POSTs, want 0", len(d.posted))
+	}
+	if _, ok := q.snapshots[expired.ID]; !ok {
+		t.Fatalf("cleanup ran on non-leader replica: expired row was deleted")
+	}
+}
+
 func TestScheduleSnapshotName_Sanitized(t *testing.T) {
 	if got := scheduleSnapshotName("Daily Argo", "20260512t010203"); got != "daily-argo-20260512t010203" {
 		t.Errorf("unexpected name: %q", got)

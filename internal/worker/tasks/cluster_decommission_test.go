@@ -31,24 +31,25 @@ type fakeDecommQuerier struct {
 	// Per-phase error injection. The reconciler calls into these methods in
 	// order; set the corresponding `*Err` to a non-nil error to simulate
 	// that phase failing.
-	regTokenErr     error
-	agentTokenErr   error
-	archiveErr      error
-	delAuditErr     error
-	registryErr     error
-	healthErr       error
-	conditionsErr   error
-	connsErr        error
-	silencesErr     error
-	rulesErr        error
-	chartsErr       error
-	policiesErr     error
-	projNsErr       error
-	roleBindingsErr error
-	tombstoneErr    error
-	updatePhasesErr error
-	claimErr        error
-	argocdManaged   []sqlc.ArgocdManagedCluster
+	regTokenErr      error
+	agentTokenErr    error
+	archiveErr       error
+	delAuditErr      error
+	registryErr      error
+	healthErr        error
+	conditionsErr    error
+	connsErr         error
+	silencesErr      error
+	rulesErr         error
+	chartsErr        error
+	policiesErr      error
+	projNsErr        error
+	roleBindingsErr  error
+	snapSchedulesErr error
+	tombstoneErr     error
+	updatePhasesErr  error
+	claimErr         error
+	argocdManaged    []sqlc.ArgocdManagedCluster
 
 	// Per-method call counters (so tests can assert what was invoked).
 	calls map[string]int
@@ -225,6 +226,26 @@ func (f *fakeDecommQuerier) DeleteProjectNamespacesByCluster(_ context.Context, 
 func (f *fakeDecommQuerier) DeleteClusterRoleBindingsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
 	f.bump("DeleteClusterRoleBindingsByCluster")
 	return 9, f.roleBindingsErr
+}
+func (f *fakeDecommQuerier) DeleteClusterSnapshotSchedulesByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteClusterSnapshotSchedulesByCluster")
+	return 2, f.snapSchedulesErr
+}
+func (f *fakeDecommQuerier) DeleteGitOpsRegisteredClustersByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteGitOpsRegisteredClustersByCluster")
+	return 1, nil
+}
+func (f *fakeDecommQuerier) DeleteNativeRBACRulesByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteNativeRBACRulesByCluster")
+	return 3, nil
+}
+func (f *fakeDecommQuerier) DeleteDeferredOperationsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteDeferredOperationsByCluster")
+	return 1, nil
+}
+func (f *fakeDecommQuerier) DeleteAgentLifecycleOperationsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteAgentLifecycleOperationsByCluster")
+	return 4, nil
 }
 func (f *fakeDecommQuerier) ListArgoCDManagedClustersByCluster(_ context.Context, _ uuid.UUID) ([]sqlc.ArgocdManagedCluster, error) {
 	f.bump("ListArgoCDManagedClustersByCluster")
@@ -810,5 +831,40 @@ func TestPersistFailure_WrapsAuditDeleteCleanly(t *testing.T) {
 	}
 	if q.row.Status != "failed" {
 		t.Errorf("expected status=failed after persistFailure, got %s", q.row.Status)
+	}
+}
+
+// TestDeleteDependents_CleansSnapshotSchedulesAndOrphanTables is the F03
+// regression guard. Before the fix, phaseDeleteDependents cleaned ~10 tables
+// but left cluster_snapshot_schedules (and gitops/native-rbac/deferred/
+// agent-lifecycle rows) behind — and because the reconciler tombstones rather
+// than hard-deletes the cluster row, ON DELETE CASCADE never fired, so the
+// snapshot dispatcher kept creating Velero backup jobs for a dead cluster.
+// This asserts every newly-added dependent delete is invoked exactly once.
+func TestDeleteDependents_CleansSnapshotSchedulesAndOrphanTables(t *testing.T) {
+	q := newFakeDecommQuerier()
+	tun := &fakeTunnel{
+		connected:    true,
+		ack:          &protocol.DecommissionAckPayload{ClusterID: q.row.ClusterID.String()},
+		disconnected: true,
+	}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 100 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("runClusterDecommission: %v", err)
+	}
+	if q.row.Status != "succeeded" {
+		t.Fatalf("expected status=succeeded, got %s (last_error=%q)", q.row.Status, q.row.LastError)
+	}
+	for _, name := range []string{
+		"DeleteClusterSnapshotSchedulesByCluster",
+		"DeleteGitOpsRegisteredClustersByCluster",
+		"DeleteNativeRBACRulesByCluster",
+		"DeleteDeferredOperationsByCluster",
+		"DeleteAgentLifecycleOperationsByCluster",
+	} {
+		if q.calls[name] != 1 {
+			t.Errorf("expected %s called once during delete_dependents, got %d", name, q.calls[name])
+		}
 	}
 }

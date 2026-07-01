@@ -46,6 +46,42 @@ func TestStreamTicketStore_ValidateOKConsumes(t *testing.T) {
 	}
 }
 
+// TestStreamTicketStore_SharedBackendCrossInstance models the default
+// 2-replica deployment (F01): a ticket minted on one pod's store must
+// validate on a DIFFERENT pod's store that shares the same backend, and
+// stay single-use cluster-wide. A shared in-memory backend stands in for
+// Redis. Before the shared-backend refactor each store had a private map,
+// so cross-instance validation was impossible.
+func TestStreamTicketStore_SharedBackendCrossInstance(t *testing.T) {
+	backend := newMemTicketBackend() // stand-in for a shared Redis
+	minter := NewStreamTicketStoreWithBackend(time.Minute, backend)
+	validator := NewStreamTicketStoreWithBackend(time.Minute, backend)
+
+	userID := uuid.New()
+	clusterID := uuid.New()
+	token, _, err := minter.Issue(userID, StreamKindExec, clusterID)
+	if err != nil {
+		t.Fatalf("Issue on minter: %v", err)
+	}
+
+	// Validated on the OTHER instance — the WS pod is not the mint pod.
+	got, err := validator.Validate(token, StreamKindExec, clusterID)
+	if err != nil {
+		t.Fatalf("Validate on separate instance: %v", err)
+	}
+	if got != userID {
+		t.Fatalf("user id = %s, want %s", got, userID)
+	}
+
+	// Single-use cluster-wide: a second redeem on EITHER instance fails.
+	if _, err := minter.Validate(token, StreamKindExec, clusterID); err != ErrStreamTicketInvalid {
+		t.Fatalf("re-redeem on minter err = %v, want %v", err, ErrStreamTicketInvalid)
+	}
+	if _, err := validator.Validate(token, StreamKindExec, clusterID); err != ErrStreamTicketInvalid {
+		t.Fatalf("re-redeem on validator err = %v, want %v", err, ErrStreamTicketInvalid)
+	}
+}
+
 func TestStreamTicketStore_Expired(t *testing.T) {
 	now := time.Now()
 	store := NewStreamTicketStore(time.Minute)

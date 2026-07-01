@@ -55,6 +55,12 @@ const (
 	controlPlaneSnapshotInterval  = 24 * time.Hour
 	controlPlaneSnapshotRetention = 7
 	controlPlaneSnapshotPageSize  = 200
+	// controlPlaneSnapshotReconcilePageSize bounds the single page of
+	// in-flight rows the reconcile walks per tick. It deliberately does NOT
+	// offset-paginate (the reconcile mutates the "running" set it lists), so
+	// this cap must comfortably exceed the realistic number of concurrently
+	// in-flight snapshots; the remainder is handled on the next 1m tick.
+	controlPlaneSnapshotReconcilePageSize = 500
 )
 
 // ControlPlaneSnapshotSweepQuerier is the narrow DB surface the sweep
@@ -154,56 +160,54 @@ func reconcileControlPlaneSnapshots(ctx context.Context, deps ControlPlaneSnapsh
 	}
 	log := controlPlaneSnapshotLogger(deps)
 
-	var offset int32
-	for {
-		rows, err := deps.Queries.ListRunningControlPlaneSnapshots(ctx, sqlc.ListRunningControlPlaneSnapshotsParams{
-			Limit:  controlPlaneSnapshotPageSize,
-			Offset: offset,
-		})
+	// Fetch a SINGLE bounded page (OFFSET 0) per tick and process it, then
+	// return. We must NOT offset-paginate here: reconcile mutates the very
+	// set it lists (terminal transitions drop rows out of the "running"
+	// filter), so a growing OFFSET would skip the still-running rows that
+	// shifted into the slots we already walked past. The task fires every
+	// minute, so any rows beyond this page (rows that stayed "running", plus
+	// freshly-shrunk-in rows) are picked up on the next tick — the reconcile
+	// is idempotent, so re-listing an already-terminal row is harmless.
+	rows, err := deps.Queries.ListRunningControlPlaneSnapshots(ctx, sqlc.ListRunningControlPlaneSnapshotsParams{
+		Limit:  controlPlaneSnapshotReconcilePageSize,
+		Offset: 0,
+	})
+	if err != nil {
+		log.Warn("control-plane snapshot reconcile: list running", "error", err.Error())
+		return
+	}
+	for _, row := range rows {
+		if ctx.Err() != nil {
+			return
+		}
+		phase, detail, err := reader(ctx, row.ClusterID.String(), row.ID.String())
 		if err != nil {
-			log.Warn("control-plane snapshot reconcile: list running", "error", err.Error())
-			return
+			// Agent unreachable / transient — retry next tick.
+			continue
 		}
-		if len(rows) == 0 {
-			return
+		switch phase {
+		case "succeeded":
+			// ponytail: size unknown (no log scrape) → NULL; UI renders "—".
+			_ = deps.Queries.MarkControlPlaneSnapshotSucceeded(ctx, sqlc.MarkControlPlaneSnapshotSucceededParams{
+				ID:        row.ID,
+				SizeBytes: pgtype.Int8{},
+			})
+		case "failed":
+			_ = deps.Queries.MarkControlPlaneSnapshotFailed(ctx, sqlc.MarkControlPlaneSnapshotFailedParams{
+				ID:    row.ID,
+				Error: detail,
+			})
+		case "gone":
+			// Job object expired (ttlSecondsAfterFinished) before we
+			// observed a terminal condition. We can't prove the outcome,
+			// so fail closed with a clear, non-alarming message.
+			_ = deps.Queries.MarkControlPlaneSnapshotFailed(ctx, sqlc.MarkControlPlaneSnapshotFailedParams{
+				ID:    row.ID,
+				Error: "snapshot Job completed and was garbage-collected before its result could be read; check the cluster's on-disk snapshots",
+			})
+		default:
+			// "running" — leave it.
 		}
-		for _, row := range rows {
-			if ctx.Err() != nil {
-				return
-			}
-			phase, detail, err := reader(ctx, row.ClusterID.String(), row.ID.String())
-			if err != nil {
-				// Agent unreachable / transient — retry next tick.
-				continue
-			}
-			switch phase {
-			case "succeeded":
-				// ponytail: size unknown (no log scrape) → NULL; UI renders "—".
-				_ = deps.Queries.MarkControlPlaneSnapshotSucceeded(ctx, sqlc.MarkControlPlaneSnapshotSucceededParams{
-					ID:        row.ID,
-					SizeBytes: pgtype.Int8{},
-				})
-			case "failed":
-				_ = deps.Queries.MarkControlPlaneSnapshotFailed(ctx, sqlc.MarkControlPlaneSnapshotFailedParams{
-					ID:    row.ID,
-					Error: detail,
-				})
-			case "gone":
-				// Job object expired (ttlSecondsAfterFinished) before we
-				// observed a terminal condition. We can't prove the outcome,
-				// so fail closed with a clear, non-alarming message.
-				_ = deps.Queries.MarkControlPlaneSnapshotFailed(ctx, sqlc.MarkControlPlaneSnapshotFailedParams{
-					ID:    row.ID,
-					Error: "snapshot Job completed and was garbage-collected before its result could be read; check the cluster's on-disk snapshots",
-				})
-			default:
-				// "running" — leave it.
-			}
-		}
-		if len(rows) < controlPlaneSnapshotPageSize {
-			return
-		}
-		offset += controlPlaneSnapshotPageSize
 	}
 }
 

@@ -497,6 +497,11 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	// Privilege-escalation guard: the caller may only grant a role whose every
+	// rule the caller already holds at this (global) scope. Superusers bypass.
+	if !h.guardGlobalBinding(w, r, roleID) {
+		return
+	}
 	binding, err := h.queries.CreateGlobalRoleBinding(r.Context(), sqlc.CreateGlobalRoleBindingParams{
 		UserID: userID,
 		Group:  req.Group,
@@ -583,6 +588,11 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Cluster ID is required")
 		return
 	}
+	// Privilege-escalation guard: the caller may only grant a role whose every
+	// rule the caller already holds at this cluster (and namespace) scope.
+	if !h.guardClusterBinding(w, r, roleID, clusterID, req.Namespace) {
+		return
+	}
 	binding, err := h.queries.CreateClusterRoleBinding(r.Context(), sqlc.CreateClusterRoleBindingParams{
 		UserID:    userID,
 		Group:     req.Group,
@@ -664,6 +674,12 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	projectID, err := uuid.Parse(req.ProjectID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Project ID is required")
+		return
+	}
+
+	// Privilege-escalation guard: the caller may only grant a role whose every
+	// rule the caller already holds at this project scope. Superusers bypass.
+	if !h.guardProjectBinding(w, r, roleID, projectID) {
 		return
 	}
 
@@ -840,6 +856,106 @@ func (h *RBACHandler) getGlobalRole(w http.ResponseWriter, r *http.Request) (sql
 		return sqlc.GlobalRole{}, false
 	}
 	return role, true
+}
+
+// guardGlobalBinding enforces the privilege-escalation check for a global role
+// binding: it loads the target role and rejects unless the caller already holds
+// every rule at global scope (or is a superuser). See enforceNoEscalation.
+func (h *RBACHandler) guardGlobalBinding(w http.ResponseWriter, r *http.Request, roleID uuid.UUID) bool {
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	role, err := h.queries.GetGlobalRoleByID(r.Context(), roleID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		return false
+	}
+	return h.enforceNoEscalation(w, r, role.Rules, uuid.UUID{}, uuid.UUID{}, "")
+}
+
+// guardClusterBinding is the cluster-scoped counterpart of guardGlobalBinding.
+// The caller must hold each target rule at the given cluster (and namespace, if
+// the binding is namespace-narrowed) scope.
+func (h *RBACHandler) guardClusterBinding(w http.ResponseWriter, r *http.Request, roleID, clusterID uuid.UUID, namespace string) bool {
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	role, err := h.queries.GetClusterRoleByID(r.Context(), roleID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		return false
+	}
+	return h.enforceNoEscalation(w, r, role.Rules, clusterID, uuid.UUID{}, namespace)
+}
+
+// guardProjectBinding is the project-scoped counterpart of guardGlobalBinding.
+func (h *RBACHandler) guardProjectBinding(w http.ResponseWriter, r *http.Request, roleID, projectID uuid.UUID) bool {
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	role, err := h.queries.GetProjectRoleByID(r.Context(), roleID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		return false
+	}
+	return h.enforceNoEscalation(w, r, role.Rules, uuid.UUID{}, projectID, "")
+}
+
+// enforceNoEscalation implements Kubernetes' "you cannot grant permissions you
+// do not hold" escalate/bind guard. For every (resource, verb) in the target
+// role's rules, the CALLER must already hold that permission at the binding's
+// scope (clusterID/projectID/namespace identify the scope; all zero means
+// global). Superusers bypass via the engine's IsSuperuser short-circuit. It
+// writes a 403 and returns false on denial; true means the binding may proceed.
+//
+// Wildcard semantics come straight from the engine: a caller holding only
+// rbac:* is NOT allowed to grant a role carrying resource "*" — the engine only
+// matches a request for resource "*" against a caller rule whose resource is
+// itself "*". So self-escalation to full admin requires the caller to already
+// be full admin.
+//
+// Callers gate this behind an engine/bindings nil-check (see the guard*Binding
+// wrappers), preserving the handler's optional-authorization contract used by
+// unit tests and pre-authorization deployments.
+func (h *RBACHandler) enforceNoEscalation(w http.ResponseWriter, r *http.Request, rawRules json.RawMessage, clusterID, projectID uuid.UUID, namespace string) bool {
+	targetRules, err := decodeRoleRules(rawRules)
+	if err != nil {
+		// A role whose rules we cannot parse cannot be safely granted; fail closed.
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to decode target role rules")
+		return false
+	}
+	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !ok || user == nil {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to grant this role")
+		return false
+	}
+	callerBindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load caller bindings")
+		return false
+	}
+	for _, rule := range targetRules {
+		for _, verb := range rule.Verbs {
+			if !h.engine.CheckPermission(callerBindings, rbac.Resource(rule.Resource), rbac.Verb(verb), clusterID, projectID, namespace) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot grant a role that includes permissions you do not hold")
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// decodeRoleRules parses a role's rules JSONB into the RBAC rule slice. Empty
+// input yields no rules (a role that grants nothing).
+func decodeRoleRules(raw json.RawMessage) ([]rbac.Rule, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var rules []rbac.Rule
+	if err := json.Unmarshal(raw, &rules); err != nil {
+		return nil, err
+	}
+	return rules, nil
 }
 
 func parseUUIDURLParam(w http.ResponseWriter, r *http.Request, param, label string) (uuid.UUID, bool) {

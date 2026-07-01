@@ -1000,37 +1000,49 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// choice, but it MUST be intentional.
 	maintenanceStartupWarn(ctx, queries, logger)
 
+	// Stream tickets must be validatable on ANY replica (the pod that mints the
+	// ?ticket= and the pod nginx pins the WebSocket to are independently
+	// load-balanced). Back them with Redis — already hard-required infra (asynq
+	// + the tunnel locator use the same URL) — so a ticket is single-use
+	// cluster-wide. Fall back to per-pod in-memory only if the URL won't parse
+	// (single-replica dev), which correctly limits browser exec/logs/shell to
+	// one replica there.
 	streamTickets := auth.NewStreamTicketStore(time.Minute)
+	if backend, terr := auth.NewRedisStreamTicketBackendFromURL(cfg.RedisURL); terr != nil {
+		logger.Warn("stream tickets: redis backend unavailable, using per-pod in-memory store (multi-replica browser exec/logs/shell auth will fail ~50%)", "error", terr)
+	} else {
+		streamTickets = auth.NewStreamTicketStoreWithBackend(time.Minute, backend)
+	}
 	streamTicketHandler := handler.NewStreamTicketHandler(streamTickets)
 	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
 
 	deps := RouterDependencies{
-		JWT:                 jwtManager,
-		Encryptor:           encryptor,
-		AuthQueries:         queries,
-		AuditWriter:         queries,
-		ArgoCDProxyTokens:   queries,
-		StreamTickets:       streamTicketHandler,
-		StreamTicketStore:   streamTickets,
-		Auth:                authHandler,
-		TOTP:                totpHandler,
-		SSO:                 ssoHandler,
-		Clusters:            clusterHandler,
-		ClusterTemplates:    clusterTemplateHandler,
-		ClusterRegistration: clusterRegistrationHandler,
-		ClusterRegistries:   clusterRegistriesHandler,
-		NetworkPolicies:     networkPoliciesHandler,
+		JWT:                   jwtManager,
+		Encryptor:             encryptor,
+		AuthQueries:           queries,
+		AuditWriter:           queries,
+		ArgoCDProxyTokens:     queries,
+		StreamTickets:         streamTicketHandler,
+		StreamTicketStore:     streamTickets,
+		Auth:                  authHandler,
+		TOTP:                  totpHandler,
+		SSO:                   ssoHandler,
+		Clusters:              clusterHandler,
+		ClusterTemplates:      clusterTemplateHandler,
+		ClusterRegistration:   clusterRegistrationHandler,
+		ClusterRegistries:     clusterRegistriesHandler,
+		NetworkPolicies:       networkPoliciesHandler,
 		ClusterSnapshots:      clusterSnapshotsHandler,
 		ControlPlaneSnapshots: controlPlaneSnapshotHandler,
-		FleetOperations:     fleetOperationsHandler,
-		Projects:            projectHandler,
-		Tools:               toolHandler,
-		Audit:               handler.NewAuditHandler(queries),
-		Alerting:            handler.NewAlertingHandlerWithDeps(queries, requester),
-		Anomaly:             handler.NewAnomalyHandler(queries),
-		ArgoCD:              argocdHandler,
-		Backups:             backupHandler,
-		Catalog:             catalogHandler,
+		FleetOperations:       fleetOperationsHandler,
+		Projects:              projectHandler,
+		Tools:                 toolHandler,
+		Audit:                 handler.NewAuditHandler(queries),
+		Alerting:              handler.NewAlertingHandlerWithDeps(queries, requester),
+		Anomaly:               handler.NewAnomalyHandler(queries),
+		ArgoCD:                argocdHandler,
+		Backups:               backupHandler,
+		Catalog:               catalogHandler,
 		// Migration 055: chart-rating + recommendation surface. Bound
 		// to the same *sqlc.Queries used for the rest of the catalog
 		// so audit / superuser checks see the same row.
@@ -1062,6 +1074,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		DexConfig: dexHandler,
 		RBAC: func() *handler.RBACHandler {
 			h := handler.NewRBACHandler(queries)
+			// Wire authorization so the privilege-escalation guard on
+			// role-binding creation (and MyRoles/CheckMyRole) evaluates real
+			// caller bindings. Without this, guard*Binding no-ops (fails open).
+			h.SetAuthorization(rbacEngine, rbacQuerier)
 			// T1.1 — load the embedded role-templates catalog. We fail
 			// hard here because a busted template file means a buyer-
 			// facing endpoint silently returns no data; the loader's

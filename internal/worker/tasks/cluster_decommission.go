@@ -193,6 +193,16 @@ type ClusterDecommissionQuerier interface {
 	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Additional dependent tables that hold a cluster_id FK but were never
+	// cleaned on decommission — most importantly cluster_snapshot_schedules,
+	// whose orphaned rows keep the snapshot dispatcher firing Velero jobs at a
+	// dead cluster (the ListEnabledSnapshotSchedules due-query also grew a
+	// decommissioned_at IS NULL guard as belt-and-suspenders).
+	DeleteClusterSnapshotSchedulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteGitOpsRegisteredClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteNativeRBACRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteAgentLifecycleOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Argo CD managed-cluster mappings + an enumerator so we can audit
 	// the orphans (upstream Argo Secrets that need manual unregister).
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
@@ -776,6 +786,14 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		{"cluster_security_policies", q.DeleteClusterSecurityPoliciesByCluster},
 		{"project_namespaces", q.DeleteProjectNamespacesByCluster},
 		{"cluster_role_bindings", q.DeleteClusterRoleBindingsByCluster},
+		// cluster_snapshot_schedules first — the actively-harmful orphan whose
+		// rows keep the snapshot dispatcher creating Velero backup jobs for a
+		// tombstoned cluster.
+		{"cluster_snapshot_schedules", q.DeleteClusterSnapshotSchedulesByCluster},
+		{"gitops_registered_clusters", q.DeleteGitOpsRegisteredClustersByCluster},
+		{"native_rbac_rules", q.DeleteNativeRBACRulesByCluster},
+		{"deferred_operations", q.DeleteDeferredOperationsByCluster},
+		{"agent_lifecycle_operations", q.DeleteAgentLifecycleOperationsByCluster},
 	}
 	var firstErr error
 	for _, o := range ops {

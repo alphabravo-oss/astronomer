@@ -191,14 +191,16 @@ func outcomeForPhase(phase string) string {
 // last_poll_error on the row — they never fail the whole task (asynq
 // would otherwise retry the whole batch).
 func HandleClusterSnapshotPoll(ctx context.Context, _ *asynq.Task) error {
-	deps := getClusterSnapshotDeps()
-	if deps.Queries == nil || deps.Driver == nil {
-		// Pre-wiring no-op (test fakes, startup race).
+	return runPeriodicTaskWithLeader(ctx, ClusterSnapshotPollType, func() error {
+		deps := getClusterSnapshotDeps()
+		if deps.Queries == nil || deps.Driver == nil {
+			// Pre-wiring no-op (test fakes, startup race).
+			return nil
+		}
+		pollSnapshots(ctx, deps)
+		pollRestores(ctx, deps)
 		return nil
-	}
-	pollSnapshots(ctx, deps)
-	pollRestores(ctx, deps)
-	return nil
+	})
 }
 
 func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) {
@@ -354,39 +356,41 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 // require restarting the scheduler on every PUT and doesn't compose
 // across replicas.
 func HandleClusterSnapshotDispatchScheduled(ctx context.Context, _ *asynq.Task) error {
-	deps := getClusterSnapshotDeps()
-	if deps.Queries == nil || deps.Driver == nil {
-		return nil
-	}
-	schedules, err := deps.Queries.ListEnabledSnapshotSchedules(ctx)
-	if err != nil {
-		logSnapshotErr(deps.Log, "list enabled schedules", err)
-		return nil
-	}
-	now := time.Now().UTC()
-	for _, sched := range schedules {
-		due, err := scheduleIsDue(sched, now)
+	return runPeriodicTaskWithLeader(ctx, ClusterSnapshotDispatchScheduledType, func() error {
+		deps := getClusterSnapshotDeps()
+		if deps.Queries == nil || deps.Driver == nil {
+			return nil
+		}
+		schedules, err := deps.Queries.ListEnabledSnapshotSchedules(ctx)
 		if err != nil {
-			logSnapshotErr(deps.Log, "evaluate cron "+sched.ID.String(), err)
-			continue
+			logSnapshotErr(deps.Log, "list enabled schedules", err)
+			return nil
 		}
-		if !due {
-			continue
-		}
-		if err := fireScheduledSnapshot(ctx, deps, sched); err != nil {
-			logSnapshotErr(deps.Log, "fire scheduled "+sched.ID.String(), err)
+		now := time.Now().UTC()
+		for _, sched := range schedules {
+			due, err := scheduleIsDue(sched, now)
+			if err != nil {
+				logSnapshotErr(deps.Log, "evaluate cron "+sched.ID.String(), err)
+				continue
+			}
+			if !due {
+				continue
+			}
+			if err := fireScheduledSnapshot(ctx, deps, sched); err != nil {
+				logSnapshotErr(deps.Log, "fire scheduled "+sched.ID.String(), err)
+				_ = deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
+					ID:            sched.ID,
+					LastRunStatus: "error: " + err.Error(),
+				})
+				continue
+			}
 			_ = deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
 				ID:            sched.ID,
-				LastRunStatus: "error: " + err.Error(),
+				LastRunStatus: "fired",
 			})
-			continue
 		}
-		_ = deps.Queries.MarkSnapshotScheduleRan(ctx, sqlc.MarkSnapshotScheduleRanParams{
-			ID:            sched.ID,
-			LastRunStatus: "fired",
-		})
-	}
-	return nil
+		return nil
+	})
 }
 
 // scheduleIsDue evaluates whether sched's cron expression has elapsed
@@ -570,21 +574,23 @@ func parseScheduleLabelSelector(s string) map[string]string {
 // actual object-store cleanup via its own TTL; this task is purely DB
 // hygiene so the snapshot list doesn't grow forever.
 func HandleClusterSnapshotCleanupExpired(ctx context.Context, _ *asynq.Task) error {
-	deps := getClusterSnapshotDeps()
-	if deps.Queries == nil {
-		return nil
-	}
-	rows, err := deps.Queries.ListExpiredTerminalSnapshots(ctx, expiredCleanupBatchSize)
-	if err != nil {
-		logSnapshotErr(deps.Log, "list expired snapshots", err)
-		return nil
-	}
-	for _, row := range rows {
-		if err := deps.Queries.DeleteClusterSnapshot(ctx, row.ID); err != nil {
-			logSnapshotErr(deps.Log, "delete expired snapshot "+row.ID.String(), err)
+	return runPeriodicTaskWithLeader(ctx, ClusterSnapshotCleanupExpiredType, func() error {
+		deps := getClusterSnapshotDeps()
+		if deps.Queries == nil {
+			return nil
 		}
-	}
-	return nil
+		rows, err := deps.Queries.ListExpiredTerminalSnapshots(ctx, expiredCleanupBatchSize)
+		if err != nil {
+			logSnapshotErr(deps.Log, "list expired snapshots", err)
+			return nil
+		}
+		for _, row := range rows {
+			if err := deps.Queries.DeleteClusterSnapshot(ctx, row.ID); err != nil {
+				logSnapshotErr(deps.Log, "delete expired snapshot "+row.ID.String(), err)
+			}
+		}
+		return nil
+	})
 }
 
 // ----------------------------------------------------------------------

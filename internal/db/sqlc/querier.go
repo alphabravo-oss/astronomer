@@ -357,6 +357,7 @@ type Querier interface {
 	CreateWorkloadOperation(ctx context.Context, arg CreateWorkloadOperationParams) (WorkloadOperation, error)
 	CreateWorkloadOperationEvent(ctx context.Context, arg CreateWorkloadOperationEventParams) (WorkloadOperationEvent, error)
 	DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	DeleteAgentLifecycleOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Deletes alert events older than the supplied cutoff. Used by the scheduled
 	// cleanup_old_alert_events worker.
 	DeleteAlertEventsOlderThan(ctx context.Context, firedAt time.Time) (int64, error)
@@ -406,6 +407,11 @@ type Querier interface {
 	DeleteClusterSecurityPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteClusterSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteClusterSnapshotSchedule(ctx context.Context, id uuid.UUID) error
+	// Snapshot schedules are the actively-harmful orphan: the dispatcher
+	// (ListEnabledSnapshotSchedules) keeps firing Velero backup jobs for a dead
+	// cluster until these rows are gone. Tombstone semantics mean CASCADE never
+	// fires, so remove them explicitly.
+	DeleteClusterSnapshotSchedulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// The FK on cluster_template_applications.template_id is ON DELETE RESTRICT,
 	// so this raises a foreign_key_violation when at least one cluster still
 	// references the template. The handler translates that into a 409 Conflict.
@@ -417,6 +423,7 @@ type Querier interface {
 	DeleteClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) error
 	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error
 	DeleteDashboardWidget(ctx context.Context, id uuid.UUID) error
+	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
 	// Retention sweep, runs daily. Returns the row count so the task can
 	// emit a "rows deleted" log line for the operator.
@@ -433,6 +440,7 @@ type Querier interface {
 	// can include it in the response.
 	DeleteFailedInstallationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteGitOpsRegisteredCluster(ctx context.Context, clusterID uuid.UUID) error
+	DeleteGitOpsRegisteredClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteGitOpsSource(ctx context.Context, id uuid.UUID) error
 	DeleteGlobalRole(ctx context.Context, id uuid.UUID) error
 	DeleteGlobalRoleBinding(ctx context.Context, id uuid.UUID) error
@@ -460,6 +468,7 @@ type Querier interface {
 	DeleteMirroredNetworkPolicy(ctx context.Context, arg DeleteMirroredNetworkPolicyParams) error
 	DeleteMirroredResourceQuota(ctx context.Context, arg DeleteMirroredResourceQuotaParams) error
 	DeleteNativeRBACRule(ctx context.Context, id uuid.UUID) error
+	DeleteNativeRBACRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteNetworkPolicyApplication(ctx context.Context, id uuid.UUID) error
 	DeleteNetworkPolicyTemplate(ctx context.Context, id uuid.UUID) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
@@ -1106,6 +1115,12 @@ type Querier interface {
 	// filters by glob. Enabled-only because a disabled forwarder should NOT
 	// accumulate queue rows the dispatcher will never drain.
 	ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
+	// The snapshot dispatcher iterates this set every tick and creates Velero
+	// backup jobs for each due schedule. It MUST skip decommissioned clusters:
+	// the decommission reconciler tombstones (not hard-deletes) the cluster row,
+	// so ON DELETE CASCADE never fires and orphaned schedules would otherwise
+	// keep firing snapshots against a dead cluster forever. JOIN clusters and
+	// require decommissioned_at IS NULL so tombstoned clusters drop out.
 	ListEnabledSnapshotSchedules(ctx context.Context) ([]ClusterSnapshotSchedule, error)
 	ListEnabledTools(ctx context.Context) ([]ClusterTool, error)
 	// Used by the event-bus tap: every published event scans this list and
