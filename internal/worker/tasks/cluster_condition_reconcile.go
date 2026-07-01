@@ -153,34 +153,32 @@ func reconcileOneCondition(ctx context.Context, row sqlc.ClusterCondition) error
 		})
 	}
 
-	// Backoff: skip if we attempted too recently.
-	latest, err := runtimeDeps.Queries.GetLatestClusterConditionRemediation(ctx,
-		sqlc.GetLatestClusterConditionRemediationParams{
+	// Backoff: skip if the last REAL (non-skip) attempt was too recent. The
+	// required gap grows with the number of prior non-skip attempts (`count`,
+	// already loaded above for the daily cap). We measure from the last
+	// non-skip attempt — NOT the latest row — because the reconciler writes an
+	// in-backoff skip row on every sweep; measuring from those would reset the
+	// interval to ~0 and defeat the exponential backoff entirely.
+	lastReal, err := runtimeDeps.Queries.GetLatestNonSkipClusterConditionRemediation(ctx,
+		sqlc.GetLatestNonSkipClusterConditionRemediationParams{
 			ClusterID:     row.ClusterID,
 			ConditionType: row.Type,
 		})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("get latest attempt: %w", err)
+		return fmt.Errorf("get latest non-skip attempt: %w", err)
 	}
 	if err == nil {
-		// Ignore prior skip rows for backoff — they don't represent
-		// actual remediation traffic. Look back through history
-		// briefly for the most recent non-skip if needed; the cheap
-		// approximation is "if latest is skip, no backoff" which
-		// matches the conservative behavior we want (drop in, try
-		// again).
-		if latest.Outcome != ccrOutcomeSkip {
-			elapsed := time.Since(latest.AttemptedAt)
-			required := ccrBackoffFor(elapsed)
-			if elapsed < required {
-				return insertAttempt(ctx, row, ccrActionNoopBO, ccrOutcomeSkip, "", map[string]any{
-					"reason":        "in_backoff",
-					"required_secs": int(required.Seconds()),
-					"elapsed_secs":  int(elapsed.Seconds()),
-					"last_action":   latest.Action,
-					"last_outcome":  latest.Outcome,
-				})
-			}
+		elapsed := time.Since(lastReal.AttemptedAt)
+		required := ccrBackoffForAttempt(int(count))
+		if elapsed < required {
+			return insertAttempt(ctx, row, ccrActionNoopBO, ccrOutcomeSkip, "", map[string]any{
+				"reason":        "in_backoff",
+				"required_secs": int(required.Seconds()),
+				"elapsed_secs":  int(elapsed.Seconds()),
+				"attempt_count": count,
+				"last_action":   lastReal.Action,
+				"last_outcome":  lastReal.Outcome,
+			})
 		}
 	}
 
@@ -357,21 +355,21 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 	return nil
 }
 
-// ccrBackoffFor returns the minimum required interval between
-// remediation attempts given the time since the previous attempt. It
-// picks the largest scheduled interval that's still ≤ the elapsed
-// time; semantics: "we want at least this much gap before trying
-// again, growing as failures pile up."
-func ccrBackoffFor(elapsed time.Duration) time.Duration {
-	for i, d := range ccrBackoff {
-		if elapsed < d {
-			if i == 0 {
-				return d
-			}
-			return ccrBackoff[i]
-		}
+// ccrBackoffForAttempt returns the minimum required gap before the NEXT
+// remediation attempt, given how many non-skip attempts have already been made
+// for this (cluster, condition_type). The interval grows with the attempt
+// count (60s, 2m, 4m, 8m, 16m, 32m, capped at 64m) so a permanently-stuck
+// cluster backs off exponentially instead of retrying every sweep. Zero prior
+// attempts => no backoff (first try goes through).
+func ccrBackoffForAttempt(priorNonSkipAttempts int) time.Duration {
+	if priorNonSkipAttempts < 1 {
+		return 0
 	}
-	return ccrBackoff[len(ccrBackoff)-1]
+	idx := priorNonSkipAttempts - 1
+	if idx >= len(ccrBackoff) {
+		idx = len(ccrBackoff) - 1
+	}
+	return ccrBackoff[idx]
 }
 
 // insertAttempt is the unconditional writer — works for skip rows too.

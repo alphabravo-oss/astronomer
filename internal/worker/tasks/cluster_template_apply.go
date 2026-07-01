@@ -753,6 +753,37 @@ func HandleClusterTemplateDriftCheck(ctx context.Context, _ *asynq.Task) error {
 			}
 		}
 
+		// Stranded-pending recovery. A row reset to `pending` on
+		// agent-not-connected is retried by asynq, but once asynq's MaxRetry is
+		// exhausted the row sits `pending` forever — the failed/applying sweeps
+		// above don't cover it, so it needs a manual reapply today. Re-enqueue
+		// pending rows stale past the backoff so the pod holding the agent's WS
+		// eventually picks them up; newer pendings are left for asynq's own
+		// delivery. The apply task is idempotent + task-outbox deduped.
+		if enqueuer := failedApplyEnqueuer; enqueuer != nil {
+			pending, perr := clusterTemplateApplyDeps.Queries.ListClusterTemplateApplicationsByStatus(ctx, sqlc.ListClusterTemplateApplicationsByStatusParams{
+				Status: "pending",
+				Limit:  int32(clusterTemplateDriftCheckLimit),
+			})
+			if perr == nil {
+				requeued := 0
+				for _, app := range pending {
+					if time.Since(app.UpdatedAt) < failedApplyMinBackoff {
+						continue
+					}
+					task, terr := NewClusterTemplateApplyTask(app.ClusterID)
+					if terr != nil {
+						continue
+					}
+					_, _ = enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName))
+					requeued++
+				}
+				if requeued > 0 {
+					runtimeLogger().InfoContext(ctx, "cluster template stranded-pending recovery", "re_enqueued", requeued)
+				}
+			}
+		}
+
 		// T8.4 — stuck-applying detection. Walk 'applying' rows; any
 		// that have sat past stuckApplyingThreshold get a
 		// TemplateApplyStuck=True condition so the cluster-condition

@@ -26,6 +26,17 @@ WHERE cluster_id = $1 AND condition_type = $2
 ORDER BY attempted_at DESC
 LIMIT 1;
 
+-- name: GetLatestNonSkipClusterConditionRemediation :one
+-- The most recent NON-skip attempt for the (cluster, condition_type). Backoff
+-- must be measured from real remediation traffic, not from the in-backoff skip
+-- rows the reconciler itself writes every sweep (those are always the newest
+-- row and would otherwise defeat the growing interval).
+SELECT *
+FROM cluster_condition_remediation_attempts
+WHERE cluster_id = $1 AND condition_type = $2 AND outcome <> 'skipped'
+ORDER BY attempted_at DESC
+LIMIT 1;
+
 -- name: ListClusterConditionRemediationByCluster :many
 -- Backs the per-cluster UI panel — shows the 50 most recent attempts so
 -- operators can see the trail. 50 is enough to span ~24h at the default

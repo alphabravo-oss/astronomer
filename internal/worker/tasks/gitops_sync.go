@@ -502,12 +502,21 @@ func enqueueDecommission(ctx context.Context, clusterID uuid.UUID, clusterName s
 			MaxDeliveryAttempts: 20,
 		}); err == nil {
 			return nil
+		} else {
+			// Don't silently fall through: the outbox error was being swallowed
+			// and the fallback enqueued onto the DEFAULT queue, which has no
+			// cluster-decommission handler — so the task dead-lettered while the
+			// tracking row already existed, orphaning managed-side resources.
+			runtimeLogger().WarnContext(ctx, "gitops decommission outbox enqueue failed; falling back to direct enqueue on the tunnel queue",
+				"cluster_id", clusterID.String(), "decommission_id", decom.ID.String(), "error", err)
 		}
 	}
 	if gitopsDeps.Enqueuer == nil {
 		return nil
 	}
-	if _, err := gitopsDeps.Enqueuer.Enqueue(task); err != nil {
+	// Stamp the SAME (tunnel) queue the outbox would have used — the default
+	// queue has no TypeClusterDecommission handler.
+	if _, err := gitopsDeps.Enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName)); err != nil {
 		return fmt.Errorf("enqueue decommission: %w", err)
 	}
 	return nil

@@ -647,6 +647,11 @@ type Querier interface {
 	GetLatestClusterConditionRemediation(ctx context.Context, arg GetLatestClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
 	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterDecommission, error)
 	GetLatestMonitoringOperationForTarget(ctx context.Context, arg GetLatestMonitoringOperationForTargetParams) (MonitoringOperation, error)
+	// The most recent NON-skip attempt for the (cluster, condition_type). Backoff
+	// must be measured from real remediation traffic, not from the in-backoff skip
+	// rows the reconciler itself writes every sweep (those are always the newest
+	// row and would otherwise defeat the growing interval).
+	GetLatestNonSkipClusterConditionRemediation(ctx context.Context, arg GetLatestNonSkipClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
 	// Surfaces "when did we last *prove* the backups work?". Distinct from
 	// the latest row because the most recent drill may have failed; the
 	// staleness alert fires on the gap from the latest *success*, not the

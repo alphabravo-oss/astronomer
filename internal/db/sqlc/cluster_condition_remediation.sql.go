@@ -70,6 +70,39 @@ func (q *Queries) GetLatestClusterConditionRemediation(ctx context.Context, arg 
 	return i, err
 }
 
+const getLatestNonSkipClusterConditionRemediation = `-- name: GetLatestNonSkipClusterConditionRemediation :one
+SELECT id, cluster_id, condition_type, action, outcome, error, detail, attempted_at
+FROM cluster_condition_remediation_attempts
+WHERE cluster_id = $1 AND condition_type = $2 AND outcome <> 'skipped'
+ORDER BY attempted_at DESC
+LIMIT 1
+`
+
+type GetLatestNonSkipClusterConditionRemediationParams struct {
+	ClusterID     uuid.UUID `json:"cluster_id"`
+	ConditionType string    `json:"condition_type"`
+}
+
+// The most recent NON-skip attempt for the (cluster, condition_type). Backoff
+// must be measured from real remediation traffic, not from the in-backoff skip
+// rows the reconciler itself writes every sweep (those are always the newest
+// row and would otherwise defeat the growing interval).
+func (q *Queries) GetLatestNonSkipClusterConditionRemediation(ctx context.Context, arg GetLatestNonSkipClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error) {
+	row := q.db.QueryRow(ctx, getLatestNonSkipClusterConditionRemediation, arg.ClusterID, arg.ConditionType)
+	var i ClusterConditionRemediationAttempt
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ConditionType,
+		&i.Action,
+		&i.Outcome,
+		&i.Error,
+		&i.Detail,
+		&i.AttemptedAt,
+	)
+	return i, err
+}
+
 const insertClusterConditionRemediation = `-- name: InsertClusterConditionRemediation :one
 INSERT INTO cluster_condition_remediation_attempts
     (cluster_id, condition_type, action, outcome, error, detail)

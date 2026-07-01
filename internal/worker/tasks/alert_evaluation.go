@@ -262,8 +262,9 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 		if err != nil {
 			return false, "", nil, pgtype.UUID{}, err
 		}
-		health, err := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
-		if err != nil {
+		health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+		healthKnown := healthErr == nil
+		if healthErr != nil {
 			health = sqlc.ClusterHealthStatus{}
 		}
 		details["cluster_id"] = cluster.ID.String()
@@ -279,7 +280,7 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 		} else if ok {
 			return triggered, message, payload, clusterID, nil
 		}
-		return evaluateClusterRule(rule, config, cluster, health, details)
+		return evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
 	}
 	clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
 	if err != nil {
@@ -288,8 +289,9 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 	for _, cluster := range clusters {
 		details := baseRuleDetails(rule, config)
 		details["scope"] = "global"
-		health, err := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
-		if err != nil {
+		health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+		healthKnown := healthErr == nil
+		if healthErr != nil {
 			health = sqlc.ClusterHealthStatus{}
 		}
 		details["cluster_id"] = cluster.ID.String()
@@ -308,7 +310,7 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 			}
 			continue
 		}
-		triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, details)
+		triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
 		if evalErr != nil {
 			return false, "", nil, pgtype.UUID{}, evalErr
 		}
@@ -378,7 +380,7 @@ func activeSilenceForRule(ctx context.Context, rule sqlc.AlertRule, clusterID pg
 	return nil, nil
 }
 
-func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
+func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, healthKnown bool, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
 	displayName := strutil.FirstNonBlank(cluster.DisplayName, cluster.Name)
 	clusterID := pgtype.UUID{Bytes: cluster.ID, Valid: true}
 	comparison := stringFromWorkerMap(config, "comparison")
@@ -438,7 +440,12 @@ func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sql
 			blob, _ := json.Marshal(details)
 			return true, fmt.Sprintf("Cluster %s %s %.1f matched %s %.1f", displayName, metricName, metricValue, comparison, threshold), blob, clusterID, nil
 		}
-		if health.NodeCount == 0 {
+		// Only fire "zero nodes" when we actually HAVE a health row saying so.
+		// A missing health row (no metrics yet — onboarding / metrics lag / a
+		// transient DB read error) collapses to a zero-value struct whose
+		// NodeCount is 0; firing on that produced spurious "reports zero nodes"
+		// pages for freshly-adopted clusters.
+		if healthKnown && health.NodeCount == 0 {
 			blob, _ := json.Marshal(details)
 			return true, fmt.Sprintf("Cluster %s reports zero nodes", displayName), blob, clusterID, nil
 		}
@@ -458,9 +465,12 @@ func cooldownElapsed(rule sqlc.AlertRule, events []sqlc.AlertEvent, clusterID pg
 		if event.FiredAt.UTC().Before(cutoff) {
 			continue
 		}
-		if event.Status == "firing" || event.Status == "acknowledged" || event.Status == "silenced" {
-			return false
-		}
+		// ANY alert that fired within the cooldown window suppresses a re-fire —
+		// including one that already RESOLVED. The flap case (fire -> resolve ->
+		// fire) is exactly what the cooldown exists to damp; previously only
+		// still-active events blocked, so by the time this ran the firing event
+		// was usually already resolved and every flap re-paged.
+		return false
 	}
 	return true
 }

@@ -328,12 +328,24 @@ func removeProjectEnforcement(ctx context.Context, requester ProjectK8sRequester
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/limitranges/%s", namespace, managedLimitRangeName))
 	_ = deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/apis/networking.k8s.io/v1/namespaces/%s/networkpolicies/%s", namespace, managedNetworkPolicyName))
 	_ = removeProjectRegistryAccess(ctx, requester, clusterID, namespace)
-	// Strip the label by writing an empty value via a JSON-merge-patch on
-	// the namespace metadata. (Server-side apply with an empty label set
-	// would clear all labels we own; merge-patch with null is the surgical
-	// alternative.)
-	patch := fmt.Sprintf(`{"metadata":{"labels":{%q:null}}}`, projectNamespaceLabelKey)
-	_, _ = requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s", namespace), []byte(patch), map[string]string{
+	// Strip the project-id label AND the six PodSecurity labels we stamped, by
+	// writing null values via a JSON-merge-patch on the namespace metadata. (SSA
+	// with an empty label set would clear all labels we own; merge-patch with
+	// null is the surgical alternative.) Clearing the PSS labels is essential:
+	// otherwise a namespace removed from a project keeps enforcing the project's
+	// Pod Security Standard and rejects pods after astronomer stops governing
+	// it. Nulling a label that isn't present is a harmless no-op.
+	clearLabels := map[string]any{
+		projectNamespaceLabelKey:                     nil,
+		"pod-security.kubernetes.io/enforce":         nil,
+		"pod-security.kubernetes.io/enforce-version": nil,
+		"pod-security.kubernetes.io/audit":           nil,
+		"pod-security.kubernetes.io/audit-version":   nil,
+		"pod-security.kubernetes.io/warn":            nil,
+		"pod-security.kubernetes.io/warn-version":    nil,
+	}
+	patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"labels": clearLabels}})
+	_, _ = requester.Do(ctx, clusterID, http.MethodPatch, fmt.Sprintf("/api/v1/namespaces/%s", namespace), patch, map[string]string{
 		"Content-Type": "application/merge-patch+json",
 		"Accept":       "application/json",
 	})

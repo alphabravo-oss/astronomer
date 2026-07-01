@@ -872,7 +872,12 @@ func phaseTombstoneCluster(ctx context.Context, deps ClusterDecommissionDeps, ro
 	// succeed.
 	cluster, err := deps.Queries.GetClusterByID(ctx, row.ClusterID)
 	if err != nil {
-		if errors.Is(err, pgxErrNoRows()) {
+		// Match "no rows" by message, not errors.Is against a local sentinel:
+		// the real error here is pgx.ErrNoRows (a DIFFERENT value from our
+		// errNoRows), so errors.Is never matched and an out-of-band row delete
+		// failed the decommission terminally instead of succeeding as
+		// already-gone. Mirrors claimNotAcquired's string match.
+		if strings.Contains(err.Error(), "no rows in result set") {
 			return map[string]any{"already_gone": true}, nil
 		}
 		return nil, fmt.Errorf("load cluster: %w", err)

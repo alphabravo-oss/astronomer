@@ -87,3 +87,18 @@ func TestRemediateConnectedFalse_SkipsWhenAgentReconnected(t *testing.T) {
 		t.Fatalf("expected one successful %q attempt, got %+v", ccrActionTokenReissued, staleQ.attempts)
 	}
 }
+
+func TestCcrBackoffForAttempt(t *testing.T) {
+	cases := map[int]time.Duration{
+		0: 0,                // first attempt: no backoff
+		1: 60 * time.Second, // before the 2nd attempt
+		2: 2 * time.Minute,  // before the 3rd
+		7: 64 * time.Minute, // last scheduled entry
+		9: 64 * time.Minute, // past the schedule -> capped
+	}
+	for prior, want := range cases {
+		if got := ccrBackoffForAttempt(prior); got != want {
+			t.Errorf("ccrBackoffForAttempt(%d) = %v, want %v", prior, got, want)
+		}
+	}
+}

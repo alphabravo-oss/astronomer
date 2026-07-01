@@ -66,6 +66,7 @@ type RuntimeQuerier interface {
 	// tokens for the Connected=False remedy path.
 	ListClusterConditionsByStatus(ctx context.Context, status string) ([]sqlc.ClusterCondition, error)
 	GetLatestClusterConditionRemediation(ctx context.Context, arg sqlc.GetLatestClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
+	GetLatestNonSkipClusterConditionRemediation(ctx context.Context, arg sqlc.GetLatestNonSkipClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
 	InsertClusterConditionRemediation(ctx context.Context, arg sqlc.InsertClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
 	CountClusterConditionRemediationSinceForType(ctx context.Context, arg sqlc.CountClusterConditionRemediationSinceForTypeParams) (int64, error)
 	CreateClusterRegistrationToken(ctx context.Context, arg sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error)

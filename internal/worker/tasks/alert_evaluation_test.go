@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -68,5 +69,25 @@ func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T)
 	}
 	if p.ClusterID != firingCluster.String() {
 		t.Fatalf("notification reported cluster %q, want firing cluster %q", p.ClusterID, firingCluster.String())
+	}
+}
+
+func TestCooldownElapsed_ResolvedEventWithinWindowBlocks(t *testing.T) {
+	rule := sqlc.AlertRule{CooldownMinutes: 10}
+	now := time.Now().UTC()
+	// A resolved event that fired 2m ago (inside the 10m window) must still
+	// block a re-fire — the fire->resolve->fire flap the cooldown exists to damp.
+	events := []sqlc.AlertEvent{{Status: "resolved", FiredAt: now.Add(-2 * time.Minute)}}
+	if cooldownElapsed(rule, events, pgtype.UUID{}) {
+		t.Fatal("resolved event within cooldown window should block re-fire")
+	}
+	// Older than the window -> allowed.
+	old := []sqlc.AlertEvent{{Status: "resolved", FiredAt: now.Add(-20 * time.Minute)}}
+	if !cooldownElapsed(rule, old, pgtype.UUID{}) {
+		t.Fatal("event older than cooldown window should not block")
+	}
+	// No prior events -> allowed.
+	if !cooldownElapsed(rule, nil, pgtype.UUID{}) {
+		t.Fatal("no prior events should not block")
 	}
 }
