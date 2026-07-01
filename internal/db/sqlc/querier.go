@@ -311,6 +311,8 @@ type Querier interface {
 	CreateMaintenanceWindow(ctx context.Context, arg CreateMaintenanceWindowParams) (MaintenanceWindow, error)
 	CreateMonitoringOperation(ctx context.Context, arg CreateMonitoringOperationParams) (MonitoringOperation, error)
 	CreateMonitoringOperationEvent(ctx context.Context, arg CreateMonitoringOperationEventParams) (MonitoringOperationEvent, error)
+	// Native per-CRD RBAC rules (migration 126). Reference as q.<Name>.
+	CreateNativeRBACRule(ctx context.Context, arg CreateNativeRBACRuleParams) (NativeRbacRule, error)
 	CreateNetworkPolicyApplication(ctx context.Context, arg CreateNetworkPolicyApplicationParams) (NetworkPolicyApplication, error)
 	CreateNetworkPolicyTemplate(ctx context.Context, arg CreateNetworkPolicyTemplateParams) (NetworkPolicyTemplate, error)
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
@@ -457,6 +459,7 @@ type Querier interface {
 	DeleteMirroredLimitRange(ctx context.Context, arg DeleteMirroredLimitRangeParams) error
 	DeleteMirroredNetworkPolicy(ctx context.Context, arg DeleteMirroredNetworkPolicyParams) error
 	DeleteMirroredResourceQuota(ctx context.Context, arg DeleteMirroredResourceQuotaParams) error
+	DeleteNativeRBACRule(ctx context.Context, id uuid.UUID) error
 	DeleteNetworkPolicyApplication(ctx context.Context, id uuid.UUID) error
 	DeleteNetworkPolicyTemplate(ctx context.Context, id uuid.UUID) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) error
@@ -705,6 +708,7 @@ type Querier interface {
 	GetMaintenanceWindow(ctx context.Context, id uuid.UUID) (MaintenanceWindow, error)
 	GetMaintenanceWindowByName(ctx context.Context, name string) (MaintenanceWindow, error)
 	GetMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
+	GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (NativeRbacRule, error)
 	GetNetworkPolicyApplicationByID(ctx context.Context, id uuid.UUID) (NetworkPolicyApplication, error)
 	GetNetworkPolicyApplicationByUnique(ctx context.Context, arg GetNetworkPolicyApplicationByUniqueParams) (NetworkPolicyApplication, error)
 	GetNetworkPolicyTemplateByID(ctx context.Context, id uuid.UUID) (NetworkPolicyTemplate, error)
@@ -1217,6 +1221,11 @@ type Querier interface {
 	ListMirroredResourceQuotasByNamespace(ctx context.Context, arg ListMirroredResourceQuotasByNamespaceParams) ([]MirroredResourceQuota, error)
 	ListMonitoringOperationEvents(ctx context.Context, operationID uuid.UUID) ([]MonitoringOperationEvent, error)
 	ListMonitoringOperations(ctx context.Context, arg ListMonitoringOperationsParams) ([]MonitoringOperation, error)
+	// Admin overview across all users, paged.
+	ListNativeRBACRules(ctx context.Context, arg ListNativeRBACRulesParams) ([]NativeRbacRule, error)
+	// Both the CRUD/authoring view AND the authz-hook evaluation load use this:
+	// a user's full rule set, newest first. The hot-path caller caches the result.
+	ListNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) ([]NativeRbacRule, error)
 	// Network policy templates + applications (migration 068).
 	// Backs:
 	//   * /api/v1/admin/network-policy-templates/*  — superuser CRUD on templates

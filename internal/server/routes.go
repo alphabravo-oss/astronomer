@@ -101,6 +101,13 @@ type RouterDependencies struct {
 	// control_plane_snapshots_enabled is set, so the privileged-Job path is
 	// unreachable by default.
 	ControlPlaneSnapshots *handler.ControlPlaneSnapshotHandler
+	// NativeAuthz consults native per-CRD RBAC rules on the k8s-proxy authz
+	// hook (additive allow after a coarse deny). Nil unless native_rbac_enabled
+	// is set, so the proxy authz path is byte-for-byte unchanged by default.
+	NativeAuthz nativeAuthorizer
+	// NativeRBAC serves the native-rule CRUD API (author/list/delete). Nil
+	// unless native_rbac_enabled.
+	NativeRBAC *handler.NativeRBACHandler
 	// FleetOperations owns /api/v1/fleet-operations/* — coordinated
 	// multi-cluster actions (drain, tool upgrade, apply-template fanout)
 	// with label-selector targeting and bounded blast radius
@@ -1001,7 +1008,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			rateLimit(appmiddleware.ClassK8sProxy),
 			requireAuth(deps.JWT, deps.AuthQueries),
 			requireK8sProxyScope(),
-			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries),
+			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries, deps.NativeAuthz),
 			auditK8sProxySecretReads(deps.AuditWriter),
 			auditK8sProxyMutations(deps.AuditWriter),
 		).
@@ -1181,7 +1188,7 @@ func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
 	return clusterID, projectID
 }
 
-func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, native nativeAuthorizer) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
 		return func(next http.Handler) http.Handler {
 			return next
@@ -1225,17 +1232,27 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 			// namespace) for cluster-scoped / discovery paths, which fails closed
 			// against namespace-scoped bindings — matching the forwarded request.
 			k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
-			namespace := parseK8sProxyObjectRef(k8sPath)["namespace"]
+			ref := parseK8sProxyObjectRef(k8sPath)
+			namespace := ref["namespace"]
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]string{
-						"code":    "permission_denied",
-						"message": "You do not have permission to perform this action",
-					},
-				})
-				return
+				// Coarse RBAC denied. Consult the native per-CRD allow layer as
+				// an ADDITIVE override: a native rule can grant this exact
+				// (api_group, resource, verb) at this scope even when the coarse
+				// custom_resources bucket doesn't. native is nil when the
+				// feature is off, so default behavior is unchanged. The
+				// evaluator itself refuses escalation groups + exec/logs, so a
+				// native rule can never widen past those guards.
+				if native == nil || !native.Allow(r.Context(), user.ID, clusterID.String(), namespace, ref["api_group"], ref["resource"], string(verb)) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"error": map[string]string{
+							"code":    "permission_denied",
+							"message": "You do not have permission to perform this action",
+						},
+					})
+					return
+				}
 			}
 			next.ServeHTTP(w, r)
 		})

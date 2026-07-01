@@ -140,6 +140,12 @@ export const queryKeys = {
     current: ['users', 'current'] as const,
     list: (params?: Record<string, unknown>) => ['users', 'list', params] as const,
   },
+  nativeRbac: {
+    all: ['native-rbac'] as const,
+    // userId is part of the key so the per-user filtered list and the unfiltered
+    // list never collide on one cache entry.
+    list: (userId?: string) => ['native-rbac', 'list', userId] as const,
+  },
   settings: {
     general: ['settings', 'general'] as const,
     sso: ['settings', 'sso'] as const,

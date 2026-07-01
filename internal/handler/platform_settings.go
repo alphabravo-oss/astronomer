@@ -112,20 +112,20 @@ const (
 // platform_settings means adding it here too — otherwise PUT will
 // reject it as `unknown_key` and reads will skip it.
 var settingsRegistry = map[string]settingSpec{
-	"branding.product_name":           {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
-	"branding.logo_url":               {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
-	"branding.primary_color":          {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
-	"branding.support_url":            {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
-	"branding.copyright":              {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
-	"banner.login_text":               {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
-	"banner.global_text":              {Type: typeString, Default: "", Description: "Persistent in-app banner text; markdown supported. Empty = no banner"},
-	"banner.global_color":             {Type: typeEnum, Default: "info", Description: "Banner severity: info | warning | critical", Enum: []string{"info", "warning", "critical"}},
-	"feature.catalog":                 {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
-	"feature.projects":                {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
-	"feature.monitoring":              {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
-	"feature.argocd":                  {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
-	"feature.security":                {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
-	"feature.backups":                 {Type: typeBool, Default: true, Description: "Backup and restore tab"},
+	"branding.product_name":  {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
+	"branding.logo_url":      {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
+	"branding.primary_color": {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
+	"branding.support_url":   {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
+	"branding.copyright":     {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
+	"banner.login_text":      {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
+	"banner.global_text":     {Type: typeString, Default: "", Description: "Persistent in-app banner text; markdown supported. Empty = no banner"},
+	"banner.global_color":    {Type: typeEnum, Default: "info", Description: "Banner severity: info | warning | critical", Enum: []string{"info", "warning", "critical"}},
+	"feature.catalog":        {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
+	"feature.projects":       {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
+	"feature.monitoring":     {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
+	"feature.argocd":         {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
+	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
+	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
 	// New opt-in features — Default FALSE (disabled until an operator enables).
 	// NOTE: the FeatureGate middleware hard-codes a true fallback, so these are
 	// additionally gated server-side (config flag for control-plane snapshots;

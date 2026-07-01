@@ -544,6 +544,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		tasks.SetControlPlaneSnapshotApplier(controlPlaneSnapshotHandler.ApplySnapshotJob)
 		tasks.SetControlPlaneSnapshotStatusReader(controlPlaneSnapshotHandler.ReadSnapshotJobStatus)
 	}
+
+	// Native per-CRD RBAC — an additive allow layer on the k8s-proxy authz
+	// hook, OFF unless native_rbac_enabled. Left nil, deps.NativeAuthz is nil
+	// (proxy authz unchanged) and the CRUD routes never register.
+	var nativeRBACAuthz *nativeRBACAuthorizer
+	var nativeRBACHandler *handler.NativeRBACHandler
+	if cfg.NativeRBACEnabled {
+		nativeRBACAuthz = newNativeRBACAuthorizer(queries)
+		nativeRBACHandler = handler.NewNativeRBACHandler(queries)
+		nativeRBACHandler.SetInvalidator(nativeRBACAuthz.Invalidate)
+	}
 	// Fleet operations (migration 056). Coordinated multi-cluster actions
 	// (drain N clusters, upgrade a tool across the fleet, apply-template
 	// fanout) with label-selector targeting + bounded blast radius.
@@ -1420,6 +1431,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		deps.KubectlShell.SetCrossPodWSForwarder(func(w http.ResponseWriter, r *http.Request, clusterID string) bool {
 			return tunnel.ForwardWSToOwnerPod(hub, logger, w, r, clusterID)
 		})
+	}
+
+	// Native RBAC — set the interface fields only when the feature is on, so
+	// deps.NativeAuthz stays a genuine nil interface (not a typed-nil) and the
+	// proxy authz hook's `native == nil` fast path holds.
+	if nativeRBACAuthz != nil {
+		deps.NativeAuthz = nativeRBACAuthz
+		deps.NativeRBAC = nativeRBACHandler
 	}
 
 	// ArgoCD UI reverse proxy. Defaults to the in-cluster service URL but

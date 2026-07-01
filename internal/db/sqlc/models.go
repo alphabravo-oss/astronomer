@@ -1474,6 +1474,18 @@ type MonitoringOperationEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
+type NativeRbacRule struct {
+	ID          uuid.UUID   `json:"id"`
+	UserID      uuid.UUID   `json:"user_id"`
+	ClusterID   pgtype.UUID `json:"cluster_id"`
+	Namespace   string      `json:"namespace"`
+	ApiGroup    string      `json:"api_group"`
+	Resource    string      `json:"resource"`
+	Verbs       []string    `json:"verbs"`
+	CreatedAt   time.Time   `json:"created_at"`
+	CreatedByID pgtype.UUID `json:"created_by_id"`
+}
+
 type NetworkPolicyApplication struct {
 	ID            uuid.UUID          `json:"id"`
 	TemplateID    uuid.UUID          `json:"template_id"`

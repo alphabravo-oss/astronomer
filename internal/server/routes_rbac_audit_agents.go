@@ -66,6 +66,17 @@ func registerRBACAuditAgentRoutes(r chi.Router, deps RouterDependencies) {
 		})
 	}
 
+	// Native per-CRD RBAC rules (migration 126). Nil unless native_rbac_enabled.
+	// Authoring is an RBAC-management action, so it's gated on the same
+	// ResourceRBAC permission + write-RBAC scope as roles/bindings above.
+	if deps.NativeRBAC != nil {
+		r.Route("/native-rbac-rules", func(r chi.Router) {
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbRead)).Get("/", deps.NativeRBAC.List)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbCreate)).Post("/", deps.NativeRBAC.Create)
+			r.With(writeRBAC, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceRBAC, rbac.VerbDelete)).Delete("/{id}/", deps.NativeRBAC.Delete)
+		})
+	}
+
 	if deps.AgentFleet != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAgents, rbac.VerbRead)).
 			Get("/agents/fleet/", deps.AgentFleet.List)

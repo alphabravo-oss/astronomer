@@ -145,6 +145,7 @@ const globalNavGroups: NavGroup[] = [
     items: [
       { label: 'Projects', href: '/dashboard/projects', icon: FolderKanban, permission: { resource: 'projects', verb: 'list' }, featureFlag: 'feature.projects' },
       { label: 'RBAC', href: '/dashboard/rbac', icon: Shield, permission: { resource: 'rbac', verb: 'read' } },
+      { label: 'Native RBAC', href: '/dashboard/settings/native-rbac', icon: KeyRound, permission: { resource: 'rbac', verb: 'read' } },
       { label: 'Audit Log', href: '/dashboard/audit', icon: FileText, permission: { resource: 'audit_logs', verb: 'read' } },
       { label: 'Catalog', href: '/dashboard/catalog', icon: Package, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
       { label: 'Backups', href: '/dashboard/backups', icon: Archive, permission: { resource: 'backups', verb: 'read' }, featureFlag: 'feature.backups' },

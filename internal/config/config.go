@@ -94,12 +94,18 @@ type Config struct {
 	// false — operators flip this on per-install once their audit-log
 	// retention is sized for the kubectl_session_commands rows. When
 	// disabled the handler is not wired and the routes return 404.
-	KubectlShellEnabled             bool   `mapstructure:"kubectl_shell_enabled"`
+	KubectlShellEnabled bool `mapstructure:"kubectl_shell_enabled"`
 	// ControlPlaneSnapshotsEnabled gates the control-plane (etcd) DR snapshot
 	// subsystem. Default false: the feature triggers PRIVILEGED node Jobs on
 	// self-managed clusters, so it stays fully off (routes unregistered, worker
 	// sweep inert) until an operator opts in.
 	ControlPlaneSnapshotsEnabled bool `mapstructure:"control_plane_snapshots_enabled"`
+	// NativeRBACEnabled gates the native per-CRD RBAC allow layer. Default
+	// false: when off the k8s-proxy authz hook is byte-for-byte unchanged
+	// (no native authorizer injected) and the rule-authoring API is
+	// unregistered. It only ever GRANTS explicitly-authored access, so
+	// enabling it with zero rules is a no-op.
+	NativeRBACEnabled               bool   `mapstructure:"native_rbac_enabled"`
 	KubectlShellImage               string `mapstructure:"kubectl_shell_image"`
 	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
 	KubectlShellSessionHardCapHours int    `mapstructure:"kubectl_shell_session_hard_cap_hours"`
