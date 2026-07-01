@@ -60,7 +60,7 @@ export default function RegisterClusterWizardPage() {
       router.push(`/dashboard/clusters/register/${cluster.id}/connect`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      toastError(`Failed to create cluster: ${msg}`);
+      toastError(`Failed to register cluster: ${msg}`);
       setSubmitting(false);
     }
   };
@@ -73,10 +73,15 @@ export default function RegisterClusterWizardPage() {
             <Server className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Register cluster</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Register an existing cluster</h1>
             <p className="text-sm text-muted-foreground">Step 1 of 3 — Cluster details</p>
           </div>
         </div>
+        <p className="text-sm text-muted-foreground">
+          Connect a Kubernetes cluster you already run so Astronomer can observe and manage it.
+          Astronomer does not create clusters, provision infrastructure, or add nodes — you install
+          a lightweight agent and it adopts the cluster as-is.
+        </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-5">

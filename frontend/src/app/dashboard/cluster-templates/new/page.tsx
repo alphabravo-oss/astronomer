@@ -36,18 +36,19 @@ export default function NewClusterTemplatePage() {
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Back to templates
+        Back to bundles
       </Link>
 
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Cluster Templates · New
+          Onboarding Bundles · New
         </p>
         <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
-          Create a template
+          Create an onboarding bundle
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Capture environment, labels, tools, project defaults, and registration policy.
+          Capture the environment, labels, tools, project defaults, and registration policy to apply
+          to a cluster once it&apos;s registered.
         </p>
       </div>
 

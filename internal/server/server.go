@@ -527,6 +527,23 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Metric registration is idempotent — see RegisterClusterSnapshotsMetrics.
 	clusterSnapshotsHandler := handler.NewClusterSnapshotsHandler(queries)
 	clusterSnapshotsHandler.SetRequester(requester)
+	// Control-plane (etcd) DR snapshots — OFF unless an operator opts in via
+	// config (control_plane_snapshots_enabled). Left nil, the etcd routes below
+	// never register, so the privileged snapshot Job path is unreachable.
+	// ponytail: manual snapshots only; scheduled sweep wired separately if asked.
+	var controlPlaneSnapshotHandler *handler.ControlPlaneSnapshotHandler
+	if cfg.ControlPlaneSnapshotsEnabled {
+		controlPlaneSnapshotHandler = handler.NewControlPlaneSnapshotHandler(queries)
+		controlPlaneSnapshotHandler.SetRequester(requester)
+		// Wire the sweep worker: it reconciles in-flight snapshot Jobs to a
+		// terminal DB state (and auto-schedules rolling snapshots only when
+		// feature.control_plane_snapshots is additionally enabled). Left
+		// unwired when the feature is off, so HandleControlPlaneSnapshotSweep
+		// stays a no-op even though its scheduler entry ticks.
+		tasks.ConfigureControlPlaneSnapshotSweep(tasks.ControlPlaneSnapshotSweepDeps{Queries: queries, Log: logger})
+		tasks.SetControlPlaneSnapshotApplier(controlPlaneSnapshotHandler.ApplySnapshotJob)
+		tasks.SetControlPlaneSnapshotStatusReader(controlPlaneSnapshotHandler.ReadSnapshotJobStatus)
+	}
 	// Fleet operations (migration 056). Coordinated multi-cluster actions
 	// (drain N clusters, upgrade a tool across the fleet, apply-template
 	// fanout) with label-selector targeting + bounded blast radius.
@@ -992,7 +1009,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		ClusterRegistration: clusterRegistrationHandler,
 		ClusterRegistries:   clusterRegistriesHandler,
 		NetworkPolicies:     networkPoliciesHandler,
-		ClusterSnapshots:    clusterSnapshotsHandler,
+		ClusterSnapshots:      clusterSnapshotsHandler,
+		ControlPlaneSnapshots: controlPlaneSnapshotHandler,
 		FleetOperations:     fleetOperationsHandler,
 		Projects:            projectHandler,
 		Tools:               toolHandler,
@@ -1379,6 +1397,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if deps.KubectlShell != nil {
 		deps.KubectlShell.SetStreamAuth(jwtManager, queries)
 		deps.KubectlShell.SetStreamTickets(deps.StreamTicketStore)
+		// Opt-in caller-RBAC scoping. Reads feature.shell_scope_to_caller
+		// (default false via BoolValue's false fallback), so this only
+		// changes behaviour once an operator flips the flag on.
+		if deps.SettingsCache != nil {
+			deps.KubectlShell.SetFeatureFlags(deps.SettingsCache)
+		}
 		// v2 (Firefox-portable): bridge the inbound WS onto the cluster
 		// agent via the existing exec relay instead of 307-redirecting
 		// to /api/v1/ws/exec/. The shell handler validates the session

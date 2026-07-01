@@ -42,7 +42,7 @@ export default function ClusterTemplatesPage() {
   if (!canRead) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Cluster Templates</h1>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Onboarding Bundles</h1>
         <PermissionState
           permission="cluster_templates:read"
           description={
@@ -143,11 +143,11 @@ export default function ClusterTemplatesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-            Cluster Templates
+            Onboarding Bundles
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Reusable specs for bootstrapping managed clusters with the right tools, policy, and
-            project defaults.
+            Reusable bundles of tools, policy, and project defaults applied to a cluster after you
+            register it — they shape an adopted cluster, they don&apos;t create one.
           </p>
         </div>
         {canWrite && (
@@ -156,7 +156,7 @@ export default function ClusterTemplatesPage() {
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
           >
             <Plus className="h-4 w-4" />
-            New template
+            New bundle
           </Link>
         )}
       </div>
@@ -170,7 +170,7 @@ export default function ClusterTemplatesPage() {
           keyExtractor={(row) => row.id}
           searchPlaceholder="Search templates..."
           loading={isLoading}
-          emptyMessage="No cluster templates yet."
+          emptyMessage="No onboarding bundles yet."
           onRowClick={(row) => router.push(`/dashboard/cluster-templates/${row.id}`)}
         />
       )}

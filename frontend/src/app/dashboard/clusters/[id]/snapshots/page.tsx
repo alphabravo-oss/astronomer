@@ -2,11 +2,18 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 /**
- * Cluster Snapshots tab — Velero-backed snapshots and scheduled snapshots.
+ * Cluster Snapshots tab.
  *
- * Read paths poll while the tab is foregrounded (refetchInterval 30s, off
- * in background). Write paths fan through TanStack mutations that invalidate
- * the relevant query keys.
+ * Default surface: Velero-backed workload snapshots and scheduled snapshots.
+ * Behind the `feature.controlPlaneSnapshots` flag this route instead renders
+ * the control-plane (etcd) snapshots surface (be-etcd counterpart). The flag
+ * defaults off, so existing behavior is unchanged until an operator enables it
+ * (see the control-plane section at the bottom of this file + the PR wiring
+ * notes about giving control-plane snapshots their own route/sidebar entry).
+ *
+ * Read paths poll while the tab is foregrounded (refetchInterval, off in
+ * background). Write paths fan through TanStack mutations that invalidate the
+ * relevant query keys.
  *
  * RBAC: `clusters:update` gates all create/update/delete buttons through the
  * shared permission decision helper so disabled tooltips name the missing
@@ -21,10 +28,13 @@ import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   AlertTriangle,
   Archive,
+  BookOpen,
   CalendarClock,
   CheckCircle2,
   Clock,
+  Cloud,
   Loader2,
+  Lock,
   Pencil,
   Plus,
   RefreshCw,
@@ -37,6 +47,15 @@ import {
 
 import { queryKeys, useCluster, useClusterNamespaces, useClusters } from '@/lib/hooks';
 import { useClustersUpdate } from '@/lib/permission-hooks';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-state';
+import {
+  createControlPlaneSnapshot,
+  getControlPlaneSnapshotRestoreGuidance,
+  listControlPlaneSnapshots,
+  type ControlPlaneSnapshot,
+  type ControlPlaneSnapshotStatus,
+} from '@/lib/api/cluster-snapshots';
 import {
   createSnapshot,
   createSnapshotSchedule,
@@ -115,8 +134,17 @@ function fmt(iso?: string) {
   }
 }
 
-// ─── Page ───────────────────────────────────────────────────────────────────
+// This route renders the Velero workload-snapshots tab. Control-plane (etcd)
+// snapshots live on their own route (../control-plane-snapshots) which
+// re-exports ClusterControlPlaneSnapshotsPage below — they're distinct
+// capabilities (application/PV backups vs control-plane DR), so they don't
+// share a tab.
 export default function ClusterSnapshotsPage() {
+  return <ClusterVeleroSnapshotsPage />;
+}
+
+// ─── Velero snapshots page (unchanged existing behavior) ─────────────────────
+function ClusterVeleroSnapshotsPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const queryClient = useQueryClient();
@@ -1067,4 +1095,360 @@ function parseCsv(s: string): string[] | undefined {
     .map((x) => x.trim())
     .filter(Boolean);
   return parts.length ? parts : undefined;
+}
+
+// ============================================================
+// Control-plane (etcd) snapshots — flag-gated surface.
+//
+// Distinct from the Velero workload snapshots above: these capture the
+// cluster's control-plane/etcd state and pair with the be-etcd handler under
+// /api/v1/clusters/{id}/control-plane-snapshots/*. Restore is NOT automated —
+// the "Restore guidance" action opens a read-only runbook from the API.
+// ============================================================
+
+// Managed distributions expose no operator-accessible etcd, so control-plane
+// snapshots aren't available there. Everything else (k3s / rke2 / k8s /
+// openshift / self-managed) is treated as snapshot-capable.
+const MANAGED_DISTRIBUTIONS = new Set(['eks', 'aks', 'gke']);
+function isManagedControlPlane(distribution?: string): boolean {
+  return !!distribution && MANAGED_DISTRIBUTIONS.has(distribution);
+}
+
+// Local query key — control-plane snapshots are distinct from the Velero
+// workload snapshots keyed under queryKeys.clusterPages.snapshots.
+const cpSnapshotsKey = (clusterId: string) =>
+  ['clusters', clusterId, 'control-plane-snapshots'] as const;
+const cpGuidanceKey = (clusterId: string, snapshotId: string) =>
+  ['clusters', clusterId, 'control-plane-snapshots', snapshotId, 'restore-guidance'] as const;
+
+function fmtBytes(bytes?: number): string {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let val = bytes / 1024;
+  let i = 0;
+  while (val >= 1024 && i < units.length - 1) {
+    val /= 1024;
+    i += 1;
+  }
+  return `${val.toFixed(1)} ${units[i]}`;
+}
+
+function CPStatusPill({ status }: { status: ControlPlaneSnapshotStatus }) {
+  const palette: Record<string, string> = {
+    pending: 'bg-muted text-muted-foreground border-border',
+    in_progress: 'bg-status-info/10 text-status-info border-status-info/20',
+    completed: 'bg-status-success/10 text-status-success border-status-success/20',
+    failed: 'bg-status-error/10 text-status-error border-status-error/20',
+  };
+  const cls = palette[status] ?? 'bg-muted text-muted-foreground border-border';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium capitalize',
+        cls,
+      )}
+    >
+      {String(status).replace(/_/g, ' ')}
+    </span>
+  );
+}
+
+export function ClusterControlPlaneSnapshotsPage() {
+  const params = useParams();
+  const clusterId = params.id as string;
+  const queryClient = useQueryClient();
+  const { canWrite, reason } = useClustersUpdate(clusterId);
+
+  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+  const managed = isManagedControlPlane(cluster?.distribution);
+
+  // Only fetch for self-managed control planes, and once the cluster is known —
+  // the managed/loading branches never hit the backend.
+  const snapshotsQuery = useQuery({
+    queryKey: cpSnapshotsKey(clusterId),
+    queryFn: () => listControlPlaneSnapshots(clusterId),
+    enabled: !!clusterId && !!cluster && !managed,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
+  });
+
+  const [guidanceTarget, setGuidanceTarget] = useState<ControlPlaneSnapshot | null>(null);
+
+  const takeSnapshot = useMutation({
+    mutationFn: () => createControlPlaneSnapshot(clusterId, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: cpSnapshotsKey(clusterId) });
+      toastSuccess('Snapshot requested');
+    },
+    onError: (e: Error) => toastApiError('Snapshot failed', e),
+  });
+
+  if (clusterLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (!cluster) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+        <Server className="h-8 w-8 mb-3" />
+        <p>Cluster not found</p>
+      </div>
+    );
+  }
+
+  const header = (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+          Control-plane snapshots
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+          Point-in-time etcd/control-plane snapshots for {cluster.displayName}. Restore is a
+          guided, out-of-band procedure — this page surfaces the runbook, it does not perform an
+          automated restore.
+        </p>
+      </div>
+      {!managed && (
+        <button
+          onClick={() => canWrite && takeSnapshot.mutate()}
+          disabled={!canWrite || takeSnapshot.isPending}
+          title={canWrite ? undefined : reason}
+          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium
+            bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
+            disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+        >
+          {takeSnapshot.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
+          Take snapshot
+        </button>
+      )}
+    </div>
+  );
+
+  // Managed control planes (eks / aks / gke) have no operator-accessible etcd.
+  if (managed) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <EmptyState
+          icon={Cloud}
+          title="Not available for managed control planes"
+          description={
+            <>
+              {cluster.displayName} runs a managed control plane
+              {cluster.distribution ? ` (${cluster.distribution})` : ''}, so its etcd is operated
+              by the cloud provider and can&apos;t be snapshotted from here. Use the provider&apos;s
+              managed backup/restore for control-plane recovery; workload state can still be
+              protected with Velero snapshots.
+            </>
+          }
+        />
+      </div>
+    );
+  }
+
+  const columns: Column<ControlPlaneSnapshot>[] = [
+    {
+      key: 'name',
+      header: 'Snapshot',
+      accessor: (s) => (
+        <div className="min-w-0">
+          <div className="font-mono text-xs text-foreground break-all">{s.name || s.id}</div>
+          {s.error ? <div className="text-xs text-status-error mt-1">{s.error}</div> : null}
+        </div>
+      ),
+      sortAccessor: (s) => s.name || s.id,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (s) => <CPStatusPill status={s.status} />,
+      sortAccessor: (s) => s.status,
+      filter: { label: 'Status' },
+    },
+    {
+      key: 'etcdRevision',
+      header: 'etcd revision',
+      accessor: (s) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {s.etcdRevision != null ? s.etcdRevision.toLocaleString() : '—'}
+        </span>
+      ),
+      sortAccessor: (s) => s.etcdRevision ?? 0,
+      align: 'right',
+    },
+    {
+      key: 'size',
+      header: 'Size',
+      accessor: (s) => <span className="text-xs text-muted-foreground">{fmtBytes(s.sizeBytes)}</span>,
+      sortAccessor: (s) => s.sizeBytes ?? 0,
+      align: 'right',
+    },
+    {
+      key: 'createdBy',
+      header: 'Taken by',
+      accessor: (s) => <span className="text-xs text-muted-foreground">{s.createdBy || '—'}</span>,
+      sortAccessor: (s) => s.createdBy ?? '',
+    },
+    {
+      key: 'createdAt',
+      header: 'Created',
+      accessor: (s) => <span className="text-xs text-muted-foreground">{fmt(s.createdAt)}</span>,
+      sortAccessor: (s) => s.createdAt ?? '',
+    },
+    {
+      key: 'completedAt',
+      header: 'Completed',
+      accessor: (s) => <span className="text-xs text-muted-foreground">{fmt(s.completedAt)}</span>,
+      sortAccessor: (s) => s.completedAt ?? '',
+    },
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      align: 'right',
+      accessor: (s) => (
+        <button
+          onClick={() => setGuidanceTarget(s)}
+          className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs text-muted-foreground
+            hover:text-foreground hover:bg-accent transition-colors"
+          title="View restore runbook"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          Restore guidance
+        </button>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {header}
+
+      <DataTable
+        data={snapshotsQuery.data ?? []}
+        columns={columns}
+        keyExtractor={(s) => s.id}
+        loading={snapshotsQuery.isLoading}
+        isError={snapshotsQuery.isError}
+        errorMessage="Failed to load control-plane snapshots"
+        onRetry={() => void snapshotsQuery.refetch()}
+        emptyMessage="No control-plane snapshots yet. Take one to capture the current etcd state."
+        searchPlaceholder="Search snapshots…"
+      />
+
+      {guidanceTarget && (
+        <RestoreGuidanceModal
+          clusterId={clusterId}
+          snapshot={guidanceTarget}
+          onClose={() => setGuidanceTarget(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Restore guidance (read-only runbook) ───────────────────────────────────
+function RestoreGuidanceModal({
+  clusterId,
+  snapshot,
+  onClose,
+}: {
+  clusterId: string;
+  snapshot: ControlPlaneSnapshot;
+  onClose: () => void;
+}) {
+  const guidanceQuery = useQuery({
+    queryKey: cpGuidanceKey(clusterId, snapshot.id),
+    queryFn: () => getControlPlaneSnapshotRestoreGuidance(clusterId, snapshot.id),
+    refetchOnWindowFocus: false,
+  });
+
+  return (
+    <OverlayShell onClose={onClose}>
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl border border-border bg-popover shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
+              <BookOpen className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-foreground truncate">Restore runbook</h3>
+              <p className="text-xs text-muted-foreground font-mono truncate">
+                {snapshot.name || snapshot.id}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+            aria-label="Close"
+          >
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto">
+          <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning flex items-start gap-2">
+            <Lock className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+            <span>
+              This is guidance only. Restoring a control plane is a manual, out-of-band procedure —
+              nothing on this page performs an automated restore.
+            </span>
+          </div>
+
+          {guidanceQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading runbook…
+            </div>
+          ) : guidanceQuery.isError ? (
+            <div className="text-sm text-status-error py-8 text-center">
+              Failed to load restore guidance.{' '}
+              <button
+                onClick={() => void guidanceQuery.refetch()}
+                className="underline hover:text-foreground"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {guidanceQuery.data?.steps && guidanceQuery.data.steps.length > 0 && (
+                <ol className="list-decimal pl-5 space-y-1 text-sm text-foreground">
+                  {guidanceQuery.data.steps.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+              )}
+              <pre className="whitespace-pre-wrap break-words rounded-lg border border-border bg-muted/30 p-3 text-xs font-mono text-foreground">
+                {guidanceQuery.data?.guidance || 'No runbook text was provided for this snapshot.'}
+              </pre>
+              {guidanceQuery.data?.generatedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Generated {fmt(guidanceQuery.data.generatedAt)}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-border flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground
+              hover:text-foreground hover:bg-accent transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </OverlayShell>
+  );
 }

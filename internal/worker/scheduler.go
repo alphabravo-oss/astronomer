@@ -107,6 +107,12 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"@every 30s", tasks.ClusterSnapshotPollType, "cluster snapshot poll"},
 		{"@every 1m", tasks.ClusterSnapshotDispatchScheduledType, "cluster snapshot scheduled dispatcher"},
 		{"15 4 * * *", tasks.ClusterSnapshotCleanupExpiredType, "cluster snapshot expired cleanup (daily 04:15)"},
+		// Control-plane (etcd) DR snapshot sweep (migration 125). Reconciles
+		// in-flight snapshot Jobs to a terminal state and, when the operator
+		// opts in, auto-schedules rolling snapshots. No-op until the handler
+		// wires it (control_plane_snapshots_enabled), so this entry is inert
+		// by default.
+		{"@every 1m", tasks.ControlPlaneSnapshotSweepType, "control-plane (etcd) snapshot sweep"},
 		// Migration 053: drift sweep for cloud-credential materializations.
 		// Walks every row whose status != 'applied' and retries — the
 		// Secret SSA is idempotent so converged rows fast-fail through

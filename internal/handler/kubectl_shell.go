@@ -109,6 +109,12 @@ type KubectlShellHandler struct {
 	// internal/tunnel/proxy.go. nil-safe: when unset the handler stays
 	// on the local-only path (single-pod deployments).
 	crossPodWSForwarder CrossPodWSForwarder
+	// Features reads the platform-settings feature flags. Only used to
+	// evaluate feature.shell_scope_to_caller (default FALSE). nil-safe:
+	// when unset the caller-scoping feature is OFF and the shell keeps
+	// its existing blanket-verb behaviour. Wired via SetFeatureFlags.
+	// See kubectl_shell_scope.go.
+	Features ShellFeatureReader
 }
 
 // CrossPodWSForwarder is the surface the shell handler uses to
@@ -256,6 +262,30 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	// malformed body keeps the default least-privilege posture.
 	elevate := parseShellElevation(r)
 	verbs := h.effectiveVerbsFor(r, userID.String(), clusterID, elevate)
+
+	// OPT-IN caller-scoping (feature.shell_scope_to_caller, default
+	// FALSE). When off, this whole block is a no-op and `verbs` /
+	// `scopeDetail` below carry the pre-existing behaviour. When on, we
+	// narrow the coarse verb envelope to what the caller's own RBAC
+	// bindings grant against THIS cluster and FAIL CLOSED when the scope
+	// can't be determined. See kubectl_shell_scope.go.
+	var scopeDetail map[string]any
+	if h.shellScopeEnabled(r.Context()) {
+		scope, ok := h.deriveScopeForCaller(r.Context(), userID, clusterID, verbs)
+		if !ok {
+			// Fail closed: never fall back to the blanket agent-SA grant.
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Kubectl shell scope could not be determined for the caller")
+			return
+		}
+		verbs = scope.Verbs
+		scopeDetail = map[string]any{
+			"scope_enabled":     true,
+			"scope_all_ns":      scope.AllNamespaces,
+			"scope_namespaces":  scope.SortedNamespaces(),
+			"scope_impersonate": scope.Caller.String(),
+		}
+	}
+
 	// A caller can ask to elevate without holding the RBAC; in that case
 	// effectiveVerbsFor returns read-only. Record what was actually
 	// granted, not what was requested.
@@ -272,13 +302,17 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ShellOpenFailed, err.Error())
 		return
 	}
-	recordAudit(r, h.Queries, "kubectl.session.opened", "cluster", clusterID.String(), "", map[string]any{
+	auditDetail := map[string]any{
 		"session_id":        info.ID.String(),
 		"superuser":         verbs.Superuser,
 		"verbs":             verbs.Verbs(),
 		"elevation_request": elevate,
 		"elevated":          elevated,
-	})
+	}
+	for k, v := range scopeDetail {
+		auditDetail[k] = v
+	}
+	recordAudit(r, h.Queries, "kubectl.session.opened", "cluster", clusterID.String(), "", auditDetail)
 	w.Header().Set("Location", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/"+info.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, info)
 }
@@ -501,6 +535,23 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OPT-IN caller-scoping (feature.shell_scope_to_caller, default
+	// FALSE). When off this is a no-op. When on we re-derive the
+	// session owner's scope and FAIL CLOSED before the upgrade if it
+	// can't be determined — defence-in-depth over the Open-time check,
+	// since a session row could outlive a binding change. The derived
+	// scope also feeds the out-of-scope namespace audit tag below.
+	var wsScope CallerScope
+	scopeActive := h.shellScopeEnabled(r.Context())
+	if scopeActive {
+		var ok bool
+		wsScope, ok = h.deriveScopeForCaller(r.Context(), row.UserID, row.ClusterID, kubectl.EffectiveVerbs{Read: true, Update: true, Delete: true})
+		if !ok {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Kubectl shell scope could not be determined for the caller")
+			return
+		}
+	}
+
 	// Cross-pod WS upgrade hand-off (multi-replica fix).
 	//
 	// Up until this point we've done session lookup + auth in the
@@ -578,6 +629,39 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 			// Cap to 1KB per docs/kubectl-shell.md.
 			if len(line) > 1024 {
 				line = line[:1024] + "...<truncated>"
+			}
+			// OPT-IN caller-scoping: DETECTIVE control. When the flag is
+			// on and the command targets a namespace outside the caller's
+			// scope, emit a security audit + structured log. We cannot
+			// hard-block here: onInput runs inside the exec read loop but
+			// has no signal back to suppress the forward (the frame is
+			// relayed by ExecConsumer). Real per-namespace ENFORCEMENT
+			// requires either namespaced Role manifests (internal/kubectl)
+			// or K8s impersonation on the proxy — see
+			// CallerScope.ImpersonationHeaders + integration notes. The
+			// Open-time verb constraint (read-only for namespace-scoped
+			// callers) already blunts the blast radius.
+			if scopeActive && !wsScope.AllNamespaces {
+				for _, target := range namespaceTargetsFromCommand(line) {
+					if wsScope.Allows(target) {
+						continue
+					}
+					shown := target
+					if shown == namespaceAllSentinel {
+						shown = "-A/--all-namespaces"
+					}
+					h.logger().Warn("kubectl shell: out-of-scope namespace target",
+						slog.String("session_id", row.ID.String()),
+						slog.String("user_id", row.UserID.String()),
+						slog.String("cluster_id", row.ClusterID.String()),
+						slog.String("target_namespace", shown),
+					)
+					recordAudit(r, h.Queries, "kubectl.session.out_of_scope", "cluster", row.ClusterID.String(), "", map[string]any{
+						"session_id":       row.ID.String(),
+						"target_namespace": shown,
+						"allowed_scope":    wsScope.SortedNamespaces(),
+					})
+				}
 			}
 			// SECURITY (L3): recording must be reliable for an audited
 			// break-glass feature. Rather than silently dropping the row

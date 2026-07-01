@@ -423,9 +423,15 @@ export default function BackupsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Backups</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+            Application Backups (Velero)
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Velero-backed cluster snapshots, schedules, and restore operations
+            Velero backups of application state — namespaces and persistent volumes — with storage
+            locations, schedules, runs, and restores.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            These are application-level backups, not control-plane or etcd disaster recovery.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -481,7 +487,7 @@ export default function BackupsPage() {
             <EmptyState
               icon={HardDrive}
               title="No storage locations yet"
-              description="Add a Velero BackupStorageLocation pointing at S3, GCS, Azure, or any S3-compatible bucket to capture cluster state."
+              description="Add a Velero BackupStorageLocation pointing at S3, GCS, Azure, or any S3-compatible bucket to store application backups (namespaces and persistent volumes)."
               actionLabel="Add Storage"
               actionIcon={Plus}
               onAction={() => router.push('/dashboard/backups/storage/new')}

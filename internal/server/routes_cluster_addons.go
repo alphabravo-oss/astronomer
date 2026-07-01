@@ -117,6 +117,18 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/velero-status/", deps.ClusterSnapshots.VeleroStatus)
 	}
 
+	// Control-plane (etcd) DR snapshots (migration 125). Nil unless
+	// control_plane_snapshots_enabled — trigger applies a PRIVILEGED node Job,
+	// so it's gated behind clusters:update like the Velero surface above.
+	if deps.ControlPlaneSnapshots != nil {
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/control-plane-snapshots/", deps.ControlPlaneSnapshots.ListSnapshots)
+		r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/control-plane-snapshots/", deps.ControlPlaneSnapshots.TriggerSnapshot)
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/control-plane-snapshots/{id}/", deps.ControlPlaneSnapshots.GetSnapshot)
+		// Restore is read-only guidance (an offline runbook — restore is never
+		// performed through this API), so it's a GET gated on clusters:read.
+		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/control-plane-snapshots/{id}/restore-guidance/", deps.ControlPlaneSnapshots.Restore)
+	}
+
 	// Apiserver allow-list (migration 070).
 	if deps.ApiserverAllowlist != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/apiserver-allowlist/", deps.ApiserverAllowlist.Get)

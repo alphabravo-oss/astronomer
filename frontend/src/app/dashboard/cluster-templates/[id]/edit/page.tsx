@@ -46,12 +46,12 @@ export default function ClusterTemplateEditPage({ params }: EditPageProps) {
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Back to template
+        Back to bundle
       </Link>
 
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Cluster Templates · Edit
+          Onboarding Bundles · Edit
         </p>
         <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">
           {template.displayName}

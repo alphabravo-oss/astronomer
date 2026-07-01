@@ -928,6 +928,19 @@ type ControlPlaneSilence struct {
 	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
+type ControlPlaneSnapshot struct {
+	ID            uuid.UUID          `json:"id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Name          string             `json:"name"`
+	Status        string             `json:"status"`
+	Location      string             `json:"location"`
+	SizeBytes     pgtype.Int8        `json:"size_bytes"`
+	RequestedByID pgtype.UUID        `json:"requested_by_id"`
+	Error         string             `json:"error"`
+	CreatedAt     time.Time          `json:"created_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+}
+
 type DashboardWidget struct {
 	ID             uuid.UUID       `json:"id"`
 	Name           string          `json:"name"`

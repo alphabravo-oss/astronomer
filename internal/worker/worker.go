@@ -276,6 +276,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeClusterSnapshotPoll, instrumentTask(TypeClusterSnapshotPoll, tasks.HandleClusterSnapshotPoll))
 	w.mux.HandleFunc(TypeClusterSnapshotDispatchScheduled, instrumentTask(TypeClusterSnapshotDispatchScheduled, tasks.HandleClusterSnapshotDispatchScheduled))
 	w.mux.HandleFunc(TypeClusterSnapshotCleanupExpired, instrumentTask(TypeClusterSnapshotCleanupExpired, tasks.HandleClusterSnapshotCleanupExpired))
+	w.mux.HandleFunc(tasks.ControlPlaneSnapshotSweepType, instrumentTask(tasks.ControlPlaneSnapshotSweepType, tasks.HandleControlPlaneSnapshotSweep))
 	w.mux.HandleFunc(TypeCloudCredentialMaterialize, instrumentTask(TypeCloudCredentialMaterialize, tasks.HandleCloudCredentialMaterialize))
 	w.mux.HandleFunc(TypeCloudCredentialDriftReconcile, instrumentTask(TypeCloudCredentialDriftReconcile, tasks.HandleCloudCredentialDriftReconcile))
 	w.mux.HandleFunc(TypePlaintextCredentialMigration, instrumentTask(TypePlaintextCredentialMigration, tasks.HandlePlaintextCredentialMigration))

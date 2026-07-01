@@ -50,11 +50,11 @@ export default function ClusterTemplateDetailPage({ params }: DetailPageProps) {
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to templates
+          Back to bundles
         </Link>
         <PermissionState
           permission="cluster_templates:read"
-          description={<>You need <span className="font-mono">cluster_templates:read</span> to view this template.</>}
+          description={<>You need <span className="font-mono">cluster_templates:read</span> to view this bundle.</>}
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
       </div>
@@ -75,13 +75,13 @@ export default function ClusterTemplateDetailPage({ params }: DetailPageProps) {
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Back to templates
+        Back to bundles
       </Link>
 
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Cluster Template
+            Onboarding Bundle
           </p>
           <div className="flex items-center gap-2 mt-1">
             <Layers className="h-5 w-5 text-muted-foreground" />
@@ -168,7 +168,7 @@ export default function ClusterTemplateDetailPage({ params }: DetailPageProps) {
         <div className="px-5 py-3 border-b border-border">
           <h2 className="text-sm font-medium text-foreground">Bound clusters</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Clusters created from or attached to this template.
+            Registered clusters this bundle has been applied to.
           </p>
         </div>
         <Table className="w-full text-sm">

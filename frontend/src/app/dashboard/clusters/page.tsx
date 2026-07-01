@@ -239,7 +239,7 @@ export default function ClustersPage() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">Clusters</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage and monitor your registered Kubernetes clusters
+            Monitor and manage the existing Kubernetes clusters you&apos;ve registered with Astronomer
           </p>
         </div>
         <button

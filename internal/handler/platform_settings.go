@@ -126,6 +126,12 @@ var settingsRegistry = map[string]settingSpec{
 	"feature.argocd":                  {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
 	"feature.security":                {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
 	"feature.backups":                 {Type: typeBool, Default: true, Description: "Backup and restore tab"},
+	// New opt-in features — Default FALSE (disabled until an operator enables).
+	// NOTE: the FeatureGate middleware hard-codes a true fallback, so these are
+	// additionally gated server-side (config flag for control-plane snapshots;
+	// explicit BoolValue(...,false) for native RBAC / shell scoping).
+	"feature.control_plane_snapshots": {Type: typeBool, Default: false, Description: "Control-plane (etcd) DR snapshots for self-managed clusters (k3s/RKE2/kubeadm)"},
+	"feature.shell_scope_to_caller":   {Type: typeBool, Default: false, Description: "Scope the kubectl shell to the caller's own RBAC instead of the agent SA's cluster-wide grant"},
 	"argocd.auto_adopt_clusters":      {Type: typeBool, Default: true, Description: "Automatically register connected clusters into built-in/configured ArgoCD instances"},
 	"argocd.manage_platform_baseline": {Type: typeBool, Default: true, Description: "Use built-in ArgoCD ApplicationSets to reconcile platform baseline components on managed clusters"},
 	"token.default_ttl_min":           {Type: typeInt, Default: 60, Description: "API token default expiry in minutes; 0 = no expiry", MinInt: 0, MaxInt: 525600 * 10},

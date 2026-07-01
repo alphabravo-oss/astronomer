@@ -96,6 +96,11 @@ type RouterDependencies struct {
 	// /snapshot-schedules/* and /velero-status/ — the per-cluster
 	// Velero self-service surface from migration 052. Nil-safe.
 	ClusterSnapshots *handler.ClusterSnapshotsHandler
+	// ControlPlaneSnapshots owns /api/v1/clusters/{cluster_id}/control-plane-snapshots/*
+	// — the etcd/control-plane DR surface (migration 125). Nil unless
+	// control_plane_snapshots_enabled is set, so the privileged-Job path is
+	// unreachable by default.
+	ControlPlaneSnapshots *handler.ControlPlaneSnapshotHandler
 	// FleetOperations owns /api/v1/fleet-operations/* — coordinated
 	// multi-cluster actions (drain, tool upgrade, apply-template fanout)
 	// with label-selector targeting and bounded blast radius

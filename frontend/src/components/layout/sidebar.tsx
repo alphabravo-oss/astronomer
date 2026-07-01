@@ -107,7 +107,7 @@ const globalNavGroups: NavGroup[] = [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
       { label: 'Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'agents', verb: 'read' } },
-      { label: 'Cluster Templates', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
+      { label: 'Onboarding Bundles', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
     ],
   },
   {
@@ -167,6 +167,10 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
     : [
         { label: 'Image Scans', href: `${base}/image-scans`, icon: ShieldAlert },
         { label: 'Shell', href: `${base}/shell`, icon: TerminalSquare },
+        // Control-plane (etcd) DR snapshots. Tunnel + self-managed only; the
+        // page itself renders a "not available" state for managed control
+        // planes and degrades gracefully when the feature is off server-side.
+        { label: 'Control-plane DR', href: `${base}/control-plane-snapshots`, icon: Database },
       ];
   return [
     {
