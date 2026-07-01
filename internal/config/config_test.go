@@ -24,6 +24,7 @@ func TestLoadDefaultsWorkerMetricsAddr(t *testing.T) {
 func TestFeatureFlagEnvBinding(t *testing.T) {
 	t.Setenv("NATIVE_RBAC_ENABLED", "true")
 	t.Setenv("CONTROL_PLANE_SNAPSHOTS_ENABLED", "true")
+	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "true")
 
 	cfg, err := Load()
 	if err != nil {
@@ -35,15 +36,19 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
 	if !cfg.ControlPlaneSnapshotsEnabled {
 		t.Fatal("CONTROL_PLANE_SNAPSHOTS_ENABLED=true not resolved into cfg.ControlPlaneSnapshotsEnabled")
 	}
+	if !cfg.NamespaceScopedRBACEnabled {
+		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=true not resolved into cfg.NamespaceScopedRBACEnabled")
+	}
 
 	// And default OFF when unset.
 	t.Setenv("NATIVE_RBAC_ENABLED", "")
 	t.Setenv("CONTROL_PLANE_SNAPSHOTS_ENABLED", "")
+	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "")
 	def, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled {
+	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled || def.NamespaceScopedRBACEnabled {
 		t.Fatal("feature flags must default OFF when env is unset")
 	}
 }
