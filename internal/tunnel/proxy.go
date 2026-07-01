@@ -165,6 +165,20 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid response from agent"}`, http.StatusBadGateway)
 		return
 	}
+
+	// Namespace-scoped RBAC: when the authz middleware admitted a cluster-wide
+	// LIST for a namespace-restricted user, it stashed the allow-set in the
+	// context. Filter the buffered list body down to those namespaces before it
+	// reaches the client. A 2xx body that cannot be filtered safely fails closed
+	// with a 403; non-2xx apiserver errors pass through unchanged.
+	if allowed, ok := namespaceFilterFromContext(r.Context()); ok {
+		if err := applyNamespaceFilter(resp, allowed); err != nil {
+			recordK8sProxyError(mode, "namespace_filter_forbidden")
+			http.Error(w, `{"error":"You do not have permission to perform this action"}`, http.StatusForbidden)
+			return
+		}
+	}
+
 	writeK8sResponse(w, resp)
 }
 
@@ -173,8 +187,14 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 // live-state controller emit.
 func isWatchRequest(r *http.Request) bool {
 	q := r.URL.Query()
-	if v := q.Get("watch"); v == "true" || v == "1" {
-		return true
+	// Match the apiserver's own ?watch parsing (strconv.ParseBool), which
+	// accepts TRUE/True/t/T/1 etc. — NOT just "true"/"1". A stricter check here
+	// would misclassify ?watch=TRUE as a unary request while the apiserver
+	// streams a watch (a scoped-RBAC bypass + a hang on the unary path).
+	if v := q.Get("watch"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil && b {
+			return true
+		}
 	}
 	if accept := r.Header.Get("Accept"); strings.Contains(accept, "stream=watch") {
 		return true
@@ -499,6 +519,25 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+
+	// Namespace-scoped RBAC fail-closed on the cross-pod path. When this
+	// (front) pod's authz middleware admitted a cluster-wide LIST for a
+	// namespace-restricted user it stashed the allow-set in r's context. The
+	// owner pod re-runs the same middleware and filters its buffered response,
+	// but we must NEVER stream an owner response through unfiltered when a
+	// filter was requested. A filtered request is always a unary LIST (watches
+	// are 403'd at the middleware), so buffer the owner's body and re-apply the
+	// filter here — idempotent when the owner already filtered, and fail-closed
+	// (403) if the body is unfilterable.
+	if allowed, ok := namespaceFilterFromContext(r.Context()); ok {
+		if p.forwardFilteredOwnerResponse(w, resp, allowed) {
+			return true
+		}
+		recordK8sProxyError(k8sProxyMode(r), "namespace_filter_forbidden")
+		http.Error(w, `{"error":"You do not have permission to perform this action"}`, http.StatusForbidden)
+		return true
+	}
+
 	for k, v := range resp.Header {
 		if !k8sProxyResponseHeaderAllowed(k) {
 			continue
@@ -507,6 +546,39 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return true
+}
+
+// forwardFilteredOwnerResponse buffers the owner pod's response, filters the
+// body to the namespace allow-set, and writes it to w. It returns false (having
+// written nothing) when the body cannot be filtered safely, so the caller fails
+// closed with a 403. Non-2xx owner responses pass through unchanged.
+func (p *ProxyHandler) forwardFilteredOwnerResponse(w http.ResponseWriter, resp *http.Response, allowed map[string]struct{}) bool {
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+
+	payload := &protocol.K8sResponsePayload{
+		StatusCode: resp.StatusCode,
+		Headers:    map[string]string{},
+		Body:       base64.StdEncoding.EncodeToString(bodyBytes),
+	}
+	for k, v := range resp.Header {
+		if len(v) == 0 || !k8sProxyResponseHeaderAllowed(k) {
+			continue
+		}
+		payload.Headers[k] = v[0]
+	}
+
+	if err := applyNamespaceFilter(payload, allowed); err != nil {
+		return false
+	}
+
+	writeK8sResponse(w, payload)
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}

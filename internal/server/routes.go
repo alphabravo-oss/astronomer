@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1012,7 +1013,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			rateLimit(appmiddleware.ClassK8sProxy),
 			requireAuth(deps.JWT, deps.AuthQueries),
 			requireK8sProxyScope(),
-			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries, deps.NativeAuthz),
+			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries, deps.NativeAuthz, deps.NamespaceScopedRBAC),
 			auditK8sProxySecretReads(deps.AuditWriter),
 			auditK8sProxyMutations(deps.AuditWriter),
 		).
@@ -1192,7 +1193,7 @@ func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
 	return clusterID, projectID
 }
 
-func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, native nativeAuthorizer) func(http.Handler) http.Handler {
+func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, native nativeAuthorizer, namespaceScoped bool) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
 		return func(next http.Handler) http.Handler {
 			return next
@@ -1247,6 +1248,37 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 				// evaluator itself refuses escalation groups + exec/logs, so a
 				// native rule can never widen past those guards.
 				if native == nil || !native.Allow(r.Context(), user.ID, clusterID.String(), namespace, ref["api_group"], ref["resource"], string(verb)) {
+					// Namespace-scoped RBAC allow-through-and-filter gate. Both
+					// the coarse and native checks denied because this scoped
+					// user has no cluster-wide grant. If the flag is on and this
+					// is a plain cluster-wide LIST (GET, VerbList, not a watch,
+					// namespace=="") for which the user holds the (resource,
+					// list) permission in at least one namespace on this cluster,
+					// admit the request and stash the authorized-namespace
+					// allow-set. The tunnel proxy filters the buffered list body
+					// down to those namespaces. Namespaced paths were already
+					// authorized above by CheckPermission; watches, mutations,
+					// named GETs, and users with no namespace access all keep
+					// failing closed here.
+					if namespaceScoped &&
+						r.Method == http.MethodGet &&
+						verb == rbac.VerbList &&
+						namespace == "" &&
+						!isK8sProxyWatchRequest(r) &&
+						ref["watch"] != "true" {
+						all, names := engine.AuthorizedNamespaces(bindings, resource, verb, clusterID)
+						switch {
+						case all:
+							// Cluster-wide grant — shouldn't reach here since
+							// CheckPermission would have passed. Serve unfiltered.
+							next.ServeHTTP(w, r)
+							return
+						case len(names) > 0:
+							ctx := tunnel.WithNamespaceFilter(r.Context(), names)
+							next.ServeHTTP(w, r.WithContext(ctx))
+							return
+						}
+					}
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusForbidden)
 					_ = json.NewEncoder(w).Encode(map[string]any{
@@ -1770,8 +1802,14 @@ func isK8sProxyWatchRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
 	}
-	if v := r.URL.Query().Get("watch"); v == "true" || v == "1" {
-		return true
+	// Match the apiserver's own ?watch parsing (strconv.ParseBool: TRUE/t/T/1…),
+	// not just "true"/"1" — otherwise ?watch=TRUE is misclassified as a unary
+	// LIST, admitted by the namespace-scoped list gate, and forwarded as a watch
+	// (a scoped-RBAC bypass). See isWatchRequest in the tunnel package.
+	if v := r.URL.Query().Get("watch"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil && b {
+			return true
+		}
 	}
 	if strings.Contains(r.Header.Get("Accept"), "stream=watch") {
 		return true
