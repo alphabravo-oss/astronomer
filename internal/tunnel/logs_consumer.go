@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -38,6 +39,8 @@ type LogsConsumer struct {
 	queries     middleware.TokenUserQuerier
 	tickets     *auth.StreamTicketStore
 	auditWriter any
+	rbacEngine  *rbac.Engine
+	rbacQuerier middleware.RBACQuerier
 }
 
 // NewLogsConsumer creates a new LogsConsumer.
@@ -73,6 +76,35 @@ func (lc *LogsConsumer) SetAuditWriter(auditWriter any) {
 	lc.auditWriter = auditWriter
 }
 
+// SetAuthorization wires the RBAC engine + binding querier so HandleLogs can
+// enforce per-cluster permissions on the Authorization-header path (the
+// browser ?ticket= path is already RBAC-gated at ticket issuance). Both
+// arguments are optional; when nil the per-cluster check is skipped, matching
+// the optional-auth contract of SetAuth (dev/test runs without RBAC wired).
+func (lc *LogsConsumer) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if lc == nil {
+		return
+	}
+	lc.rbacEngine = engine
+	lc.rbacQuerier = querier
+}
+
+// authorizeCluster reports whether userID holds clusters:read on clusterID.
+// Pod logs frequently contain secrets, so streaming them requires the same
+// clusters:read gate the stream-ticket issuance path
+// (internal/handler/stream_tickets.go) enforces for logs tickets. When the
+// RBAC engine/querier are not wired the check is skipped.
+func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID) bool {
+	if lc.rbacEngine == nil || lc.rbacQuerier == nil {
+		return true
+	}
+	bindings, err := lc.rbacQuerier.GetUserBindings(ctx, userID.String())
+	if err != nil {
+		return false
+	}
+	return lc.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbRead, clusterID, uuid.Nil)
+}
+
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent
 // to the frontend client.
 func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +121,16 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 
 	if clusterID == "" || namespace == "" || pod == "" || container == "" {
 		http.Error(w, `{"error":"cluster_id, namespace, pod, and container are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Per-cluster authorization. Identity alone is not enough — without this
+	// any authenticated user could stream logs (often containing secrets) from
+	// pods on ANY cluster regardless of their RBAC bindings. Enforce before the
+	// cross-pod hand-off so a forged request can't reach a sibling pod either.
+	clusterUUID, err := uuid.Parse(clusterID)
+	if err != nil || !lc.authorizeCluster(r.Context(), userID, clusterUUID) {
+		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
 		return
 	}
 

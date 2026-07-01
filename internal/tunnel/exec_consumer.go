@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -43,6 +44,8 @@ type ExecConsumer struct {
 	queries     appmiddleware.TokenUserQuerier
 	tickets     *iauth.StreamTicketStore
 	auditWriter any
+	rbacEngine  *rbac.Engine
+	rbacQuerier appmiddleware.RBACQuerier
 }
 
 // NewExecConsumer creates a new ExecConsumer.
@@ -81,6 +84,35 @@ func (ec *ExecConsumer) SetAuditWriter(auditWriter any) {
 	ec.auditWriter = auditWriter
 }
 
+// SetAuthorization wires the RBAC engine + binding querier so HandleExec can
+// enforce per-cluster permissions on the Authorization-header path (the
+// browser ?ticket= path is already RBAC-gated at ticket issuance). Both
+// arguments are optional; when nil the per-cluster check is skipped, matching
+// the optional-auth contract of SetAuth (dev/test runs without RBAC wired).
+func (ec *ExecConsumer) SetAuthorization(engine *rbac.Engine, querier appmiddleware.RBACQuerier) {
+	if ec == nil {
+		return
+	}
+	ec.rbacEngine = engine
+	ec.rbacQuerier = querier
+}
+
+// authorizeCluster reports whether userID holds clusters:update on clusterID.
+// An interactive exec session is a cluster write / RCE-equivalent action, so
+// it mirrors the clusters:update gate the stream-ticket issuance path
+// (internal/handler/stream_tickets.go) and the kubectl shell front door
+// enforce. When the RBAC engine/querier are not wired the check is skipped.
+func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID) bool {
+	if ec.rbacEngine == nil || ec.rbacQuerier == nil {
+		return true
+	}
+	bindings, err := ec.rbacQuerier.GetUserBindings(ctx, userID.String())
+	if err != nil {
+		return false
+	}
+	return ec.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil)
+}
+
 // HandleExec upgrades to WebSocket and relays exec I/O between the frontend
 // client and the cluster agent.
 func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +129,16 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 	userID, ok := authenticateStreamRequest(r, ec.queries, ec.jwt, ec.tickets, iauth.StreamKindExec)
 	if !ok {
 		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Per-cluster authorization. Authentication only proves WHO the caller is;
+	// without this an authenticated user could exec into a pod on ANY cluster
+	// regardless of their RBAC bindings. Enforce before the cross-pod hand-off
+	// so a forged request can't reach a sibling pod either.
+	clusterUUID, err := uuid.Parse(clusterID)
+	if err != nil || !ec.authorizeCluster(r.Context(), userID, clusterUUID) {
+		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
 		return
 	}
 

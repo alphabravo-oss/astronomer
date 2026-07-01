@@ -1173,10 +1173,62 @@ func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
 }
 
 func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resource, verb := k8sProxyPermission(r)
-			requirePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
+			user, ok := appmiddleware.GetAuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "authentication_required",
+						"message": "Authentication is required to access this resource",
+					},
+				})
+				return
+			}
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "internal_error",
+						"message": "Failed to retrieve user permissions",
+					},
+				})
+				return
+			}
+			clusterID, projectID := permissionScopeIDs(r)
+			// SECURITY: resolve the target namespace from the PARSED k8s request
+			// path, never from a user-controlled ?namespace= query param. The
+			// proxy forwards the path namespace (/api/v1/namespaces/<ns>/...), so
+			// a namespace-scoped RBAC binding must be evaluated against that same
+			// namespace. Trusting the query would let a caller authorized for one
+			// namespace read another namespace's resources (incl. secrets) by
+			// changing the query. parseK8sProxyObjectRef returns nil (→ empty
+			// namespace) for cluster-scoped / discovery paths, which fails closed
+			// against namespace-scoped bindings — matching the forwarded request.
+			k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+			namespace := parseK8sProxyObjectRef(k8sPath)["namespace"]
+			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "permission_denied",
+						"message": "You do not have permission to perform this action",
+					},
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

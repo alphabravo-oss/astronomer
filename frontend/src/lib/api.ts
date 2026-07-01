@@ -94,6 +94,14 @@ function camelizeKeys<T = unknown>(value: T): T {
 
 api.interceptors.response.use(
   (response) => {
+    // Don't camelize k8s proxy responses. The cluster k8s proxy ('/k8s/')
+    // returns raw Kubernetes objects whose data keys (e.g. ConfigMap/Secret
+    // 'database_url') are significant and must round-trip verbatim. Rewriting
+    // them to camelCase silently corrupts snake_case keys when the user edits
+    // YAML and PUTs it back, and the dry-run diff hides the change.
+    if (response.config?.url?.includes('/k8s/')) {
+      return response;
+    }
     // Don't camelize binary / non-JSON payloads.
     if (response.data && typeof response.data === 'object') {
       response.data = camelizeKeys(response.data);

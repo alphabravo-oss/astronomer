@@ -1,6 +1,11 @@
 package server
 
-import "github.com/go-chi/chi/v5"
+import (
+	"github.com/go-chi/chi/v5"
+
+	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+)
 
 // Code organization: this file holds a domain-specific slice of the
 // protected-route registration originally inlined in routes.go's
@@ -16,6 +21,16 @@ func registerDexRoutes(r chi.Router, deps RouterDependencies) {
 	// takes over.
 	if deps.DexConfig != nil {
 		r.Route("/auth/dex", func(r chi.Router) {
+			// SECURITY: the Dex connector/settings/apply rows become the
+			// identity-provider config the whole platform trusts, so the entire
+			// subtree is admin-only — gate it behind ScopeAdmin + ResourceSSO,
+			// mirroring the /settings/sso routes in routes.go. Authentication is
+			// already applied by the enclosing authenticated router; without this
+			// scope+permission gate any authenticated user could register a
+			// malicious IdP or DoS auth. requireScope only bites API tokens (JWT
+			// sessions fall through to the RBAC permission check, the real gate).
+			r.Use(requireScope(iauth.ScopeAdmin))
+			r.Use(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSSO, rbac.VerbUpdate))
 			r.Get("/connector-types/", deps.DexConfig.ListConnectorTypes)
 			r.Get("/connectors/", deps.DexConfig.ListConnectors)
 			r.Post("/connectors/", deps.DexConfig.CreateConnector)

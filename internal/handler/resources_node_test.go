@@ -110,7 +110,10 @@ func (q *resourceAuditQuerier) InvalidateAllTokens(context.Context, sqlc.Invalid
 
 func TestResourceHandlerDrainNodeEvictsEligiblePodsAndSkipsDaemonSets(t *testing.T) {
 	requester := &resourceDrainRequester{pods: drainPodList{Items: []drainPod{
-		testDrainPod("default", "app-0", "", false),
+		// Owned by a controller → a normal evictable workload pod. (A pod with
+		// no ownerReferences is a drain blocker without force — see
+		// TestResourceHandlerDrainNodeBlocksOwnerlessPodWithoutForce.)
+		testDrainPod("default", "app-0", "ReplicaSet", false),
 		testDrainPod("kube-system", "node-agent", "DaemonSet", false),
 	}}}
 	audit := &resourceAuditQuerier{}
@@ -144,9 +147,41 @@ func TestResourceHandlerDrainNodeEvictsEligiblePodsAndSkipsDaemonSets(t *testing
 	requireResourceAuditActions(t, audit, "cluster.node.drain")
 }
 
+func TestResourceHandlerDrainNodeBlocksOwnerlessPodWithoutForce(t *testing.T) {
+	// A pod with no ownerReferences is irreversibly destroyed by eviction (no
+	// controller recreates it), so kubectl drain refuses it without --force.
+	requester := &resourceDrainRequester{pods: drainPodList{Items: []drainPod{
+		testDrainPod("default", "app-0", "", false),
+	}}}
+	h := NewResourceHandlerWithQueries(&resourceAuditQuerier{}, requester)
+	req := resourceRouteRequest(http.MethodPost, "/api/v1/nodes/cluster-1/node-1/drain/", map[string]string{
+		"cluster_id": "cluster-1",
+		"node_name":  "node-1",
+	})
+	rr := httptest.NewRecorder()
+	h.DrainNode(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data drainNodeResponse `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if envelope.Data.Status != "blocked" || len(envelope.Data.Blockers) != 1 {
+		t.Fatalf("ownerless pod without force should block: %+v", envelope.Data)
+	}
+	if resourceDrainSaw(requester.calls, http.MethodPost, "/api/v1/namespaces/default/pods/app-0/eviction") {
+		t.Fatalf("ownerless pod must not be evicted without force: %+v", requester.calls)
+	}
+}
+
 func TestResourceHandlerDrainNodeBlocksEmptyDirPodsWithoutOverride(t *testing.T) {
 	requester := &resourceDrainRequester{pods: drainPodList{Items: []drainPod{
-		testDrainPod("default", "app-0", "", true),
+		// Owned so the block is attributed to the emptyDir volume, not the
+		// owner-less guard (which precedes it in the switch).
+		testDrainPod("default", "app-0", "ReplicaSet", true),
 	}}}
 	audit := &resourceAuditQuerier{}
 	h := NewResourceHandlerWithQueries(audit, requester)

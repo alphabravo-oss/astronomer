@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -141,10 +142,16 @@ func (h *ArgoCDHandler) SetClusterProxyBaseURL(baseURL string) {
 	h.clusterProxyBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
-// instanceResponse renders an ArgoCD instance for the API. The encrypted
-// auth token is decrypted via the Fernet encryptor when configured and
-// returned as plaintext under "auth_token". The "auth_token_encrypted"
-// column is never exposed.
+// ArgoCDAuthTokenSentinel is the placeholder returned in lieu of the decrypted
+// bearer token in every instance GET/list response. The PUT path treats an
+// incoming value equal to the sentinel as "keep what's stored" so the natural
+// GET → edit → PUT loop doesn't clobber the stored token. Mirrors the
+// RegistryPasswordSentinel redaction pattern used by ClusterRegistry responses.
+const ArgoCDAuthTokenSentinel = "<set>"
+
+// instanceResponse renders an ArgoCD instance for the API. The bearer token is
+// never surfaced: when one is stored it is redacted to ArgoCDAuthTokenSentinel,
+// and the "auth_token_encrypted" column is never exposed.
 func (h *ArgoCDHandler) instanceResponse(instance sqlc.ArgocdInstance) map[string]any {
 	resp := map[string]any{
 		"id":         instance.ID.String(),
@@ -156,12 +163,8 @@ func (h *ArgoCDHandler) instanceResponse(instance sqlc.ArgocdInstance) map[strin
 		"created_at": instance.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at": instance.UpdatedAt.UTC().Format(time.RFC3339),
 	}
-	if h.encryptor != nil && instance.AuthTokenEncrypted != "" {
-		if plaintext, err := h.encryptor.Decrypt(instance.AuthTokenEncrypted); err == nil {
-			resp["auth_token"] = plaintext
-		} else if h.log != nil {
-			h.log.Warn("failed to decrypt argocd auth token", "instance_id", instance.ID.String(), "error", err)
-		}
+	if strings.TrimSpace(instance.AuthTokenEncrypted) != "" {
+		resp["auth_token"] = ArgoCDAuthTokenSentinel
 	}
 	return resp
 }
@@ -320,6 +323,24 @@ func (h *ArgoCDHandler) ListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if restricted {
+		// RBAC-filter the page in-Go (mirrors controllerSummary). No COUNT
+		// matches the visible set, so report the post-filter page length.
+		filtered := make([]sqlc.ArgocdInstance, 0, len(instances))
+		for _, instance := range instances {
+			if h.authz.allowsCluster(bindings, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
+				filtered = append(filtered, instance)
+			}
+		}
+		RespondPaginated(w, r, h.instanceResponses(filtered), int64(len(filtered)))
+		return
+	}
+
 	total, err := h.queries.CountArgoCDInstances(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count ArgoCD instances")
@@ -401,6 +422,9 @@ func (h *ArgoCDHandler) GetInstance(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
 		return
 	}
+	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
+		return
+	}
 
 	RespondJSON(w, http.StatusOK, h.instanceResponse(instance))
 }
@@ -460,8 +484,9 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptionError, "Failed to encrypt auth token")
 		return
 	}
-	if req.AuthToken == "" && req.AuthTokenEncrypted == "" {
-		// Preserve the existing column when the caller did not include one.
+	if (req.AuthToken == "" && req.AuthTokenEncrypted == "") || req.AuthToken == ArgoCDAuthTokenSentinel {
+		// Preserve the existing column when the caller did not include one, or
+		// echoed back the redaction sentinel from a prior GET.
 		tokenColumn = current.AuthTokenEncrypted
 	}
 
@@ -488,11 +513,11 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 
 // ListAppsByInstance handles GET /api/v1/argocd/instances/{id}/apps/.
 func (h *ArgoCDHandler) ListAppsByInstance(w http.ResponseWriter, r *http.Request) {
-	instanceID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
+	instance, ok := h.loadInstance(w, r, rbac.VerbRead)
+	if !ok {
 		return
 	}
+	instanceID := instance.ID
 
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
@@ -530,6 +555,35 @@ func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if restricted {
+		// Applications inherit their cluster from the owning instance; RBAC-filter
+		// the page in-Go (mirrors controllerSummary), caching instance→cluster
+		// lookups. No COUNT matches the visible set, so report the page length.
+		clusterByInstance := make(map[uuid.UUID]uuid.UUID, len(apps))
+		filtered := make([]sqlc.ArgocdApplication, 0, len(apps))
+		for _, app := range apps {
+			clusterID, ok := clusterByInstance[app.ArgocdInstanceID]
+			if !ok {
+				instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
+				if err != nil {
+					continue
+				}
+				clusterID = instance.ClusterID
+				clusterByInstance[app.ArgocdInstanceID] = clusterID
+			}
+			if h.authz.allowsCluster(bindings, clusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
+				filtered = append(filtered, app)
+			}
+		}
+		RespondPaginated(w, r, filtered, int64(len(filtered)))
+		return
+	}
+
 	total, err := h.queries.CountArgoCDApplications(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count ArgoCD applications")
@@ -550,6 +604,14 @@ func (h *ArgoCDHandler) GetApp(w http.ResponseWriter, r *http.Request) {
 	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
+		return
+	}
+	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
 		return
 	}
 
@@ -783,7 +845,7 @@ func (h *ArgoCDHandler) callInstance(ctx context.Context, instance sqlc.ArgocdIn
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := h.http.Do(req)
+	resp, err := h.instanceHTTPClient(instance).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1509,20 +1571,37 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 	}
 }
 
+// instanceHTTPClient returns an HTTP client whose TLS verification honors the
+// instance's verify_ssl setting. When verify_ssl is true the shared client is
+// reused unchanged (connection pooling); when false a dedicated client with
+// InsecureSkipVerify is built so self-signed ArgoCD endpoints are reachable
+// (matches argocd-cli --insecure). Without this, passing the shared client
+// always verified TLS and silently discarded verify_ssl=false.
+func (h *ArgoCDHandler) instanceHTTPClient(instance sqlc.ArgocdInstance) *http.Client {
+	if instance.VerifySsl {
+		return h.http
+	}
+	timeout := 10 * time.Second
+	if h.http != nil && h.http.Timeout != 0 {
+		timeout = h.http.Timeout
+	}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: !instance.VerifySsl},
+		},
+	}
+}
+
 // argoCDClient builds a typed client for the given instance. The token is
 // decrypted on demand to avoid keeping plaintext in memory longer than
-// necessary.
-//
-// We share h.http (the handler's pre-configured *http.Client) for connection
-// pooling. Per-instance TLS verification (instance.VerifySsl) is honored by
-// existing callers (probeInstance, callInstance) at the request layer; if
-// future work needs per-instance TLS configs we'll switch to one client per
-// instance keyed on (api_url, verify_ssl).
+// necessary, and the underlying HTTP client honors instance.VerifySsl via
+// instanceHTTPClient.
 func (h *ArgoCDHandler) argoCDClient(instance sqlc.ArgocdInstance) *argocdclient.Client {
 	return argocdclient.NewClient(instance.ApiUrl, h.decryptInstanceToken(instance), argocdclient.Options{
 		VerifySSL:  instance.VerifySsl,
 		Timeout:    argocdclient.DefaultTimeout,
-		HTTPClient: h.http,
+		HTTPClient: h.instanceHTTPClient(instance),
 	})
 }
 
@@ -1592,7 +1671,7 @@ func (h *ArgoCDHandler) probeInstance(ctx context.Context, instance sqlc.ArgocdI
 	if token := strings.TrimSpace(h.decryptInstanceToken(instance)); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := h.http.Do(req)
+	resp, err := h.instanceHTTPClient(instance).Do(req)
 	if err != nil {
 		return false
 	}

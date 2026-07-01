@@ -1355,6 +1355,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	deps.Exec.SetAuth(jwtManager, queries)
 	deps.Exec.SetStreamTickets(deps.StreamTicketStore)
 	deps.Exec.SetAuditWriter(queries)
+	// Per-cluster RBAC on the Authorization-header exec path (the ?ticket= path
+	// is already gated at ticket issuance). Without this an authenticated user
+	// could exec into any pod on any cluster via a raw XHR/curl bearer token.
+	deps.Exec.SetAuthorization(rbacEngine, rbacQuerier)
 
 	// Browser `new WebSocket(...)` cannot set Authorization either — the pod
 	// logs WS handler accepts one-use stream tickets and the legacy fallback.
@@ -1364,6 +1368,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		deps.Logs.SetAuth(jwtManager, queries)
 		deps.Logs.SetStreamTickets(deps.StreamTicketStore)
 		deps.Logs.SetAuditWriter(queries)
+		deps.Logs.SetAuthorization(rbacEngine, rbacQuerier)
 	}
 
 	// Sprint 17+/082+: same fix for the kubectl-shell session-aware WS

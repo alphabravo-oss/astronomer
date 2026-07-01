@@ -108,7 +108,7 @@ func (h *AuthHandler) PasswordResetRequest(w http.ResponseWriter, r *http.Reques
 	// platform_configuration server_url so the link points at the
 	// dashboard the user actually uses.
 	if h.emails != nil {
-		resetURL := buildResetURL(r, tokenPlain)
+		resetURL := buildResetURL(h.platformServerURL(r.Context()), tokenPlain)
 		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
 			To:       user.Email,
 			Template: "password_reset",
@@ -247,27 +247,48 @@ func randomToken() (string, error) {
 	return hex.EncodeToString(buf[:]), nil
 }
 
-// buildResetURL composes the dashboard URL the user clicks. We use
-// the X-Forwarded-Host header when present (the platform sits behind
-// an ingress/lb in every realistic deployment) and fall back to
-// r.Host when not.
+// buildResetURL composes the dashboard URL the user clicks from a
+// trusted base + the reset token.
 //
-// TODO: once platform_configuration.server_url is reliably populated,
-// prefer that over the request-derived host so the link is stable
-// even when an internal probe hits the API. Carrying the request
-// host today means the email contains the same hostname the user
-// just typed.
-func buildResetURL(r *http.Request, token string) string {
-	scheme := "https"
-	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") == "" {
-		scheme = "http"
+// The base MUST come from the operator-configured
+// platform_configuration.server_url (see platformServerURL), never from
+// the request's Host / X-Forwarded-Host headers: those are
+// attacker-controllable, so deriving the link host from them lets a
+// crafted request mint a valid reset token inside a link pointing at an
+// attacker-owned domain — a victim who clicks it leaks the token and
+// the attacker takes over the account. When the base is empty we emit a
+// host-relative link rather than fall back to the untrusted request
+// host.
+func buildResetURL(base, token string) string {
+	return base + "/reset-password?token=" + token
+}
+
+// platformServerURL returns the trusted base URL for emailed links,
+// taken from platform_configuration.server_url (trailing slash trimmed),
+// or "" when it is unavailable/unset.
+//
+// AuthHandler's querier interfaces do not expose GetPlatformConfig, but
+// the concrete *sqlc.Queries that backs them in production does, so we
+// resolve it via a capability type-assertion (mirroring the anonymous
+// GetPlatformConfig interface agentServerURLFor relies on). Narrow test
+// fakes that lack the method fall through to the empty (host-relative)
+// base. We deliberately do NOT fall back to request headers here.
+func (h *AuthHandler) platformServerURL(ctx context.Context) string {
+	type platformConfigGetter interface {
+		GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 	}
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
+	var g platformConfigGetter
+	if pc, ok := h.passwordResets.(platformConfigGetter); ok {
+		g = pc
+	} else if pc, ok := h.queries.(platformConfigGetter); ok {
+		g = pc
 	}
-	host := r.Host
-	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
-		host = h
+	if g == nil {
+		return ""
 	}
-	return scheme + "://" + host + "/reset-password?token=" + token
+	cfg, err := g.GetPlatformConfig(ctx)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(cfg.ServerUrl), "/")
 }

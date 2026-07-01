@@ -1669,7 +1669,11 @@ func (h *ClusterHandler) GetRegistryConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, config)
+	// Never return the raw registry password or its ciphertext. Map through
+	// the shared DTO so the secret is redacted to RegistryPasswordSentinel
+	// (mirrors the newer /registries handler) while url, username, insecure,
+	// and CA bundle remain intact.
+	RespondJSON(w, http.StatusOK, clusterRegistryConfigToResponse(config))
 }
 
 // GetManifest handles GET /api/v1/clusters/{id}/manifest/.
@@ -2292,7 +2296,10 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 		"insecure":             req.Insecure,
 	})
 
-	RespondJSON(w, http.StatusOK, config)
+	// Redact the secret before echoing back — the raw sqlc row carries both
+	// registry_password and registry_password_encrypted, which must never be
+	// serialized (same reason GET uses the DTO mapper).
+	RespondJSON(w, http.StatusOK, clusterRegistryConfigToResponse(config))
 }
 
 // DeleteRegistryConfig handles DELETE /api/v1/clusters/{id}/registry/.

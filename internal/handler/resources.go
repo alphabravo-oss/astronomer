@@ -60,6 +60,11 @@ type drainNodeRequest struct {
 	DeleteEmptyDirData bool   `json:"delete_empty_dir_data,omitempty"`
 	GracePeriodSeconds *int64 `json:"grace_period_seconds,omitempty"`
 	DryRun             bool   `json:"dry_run,omitempty"`
+	// Force mirrors `kubectl drain --force`: it must be set explicitly to
+	// evict standalone pods (no ownerReferences). Without it such pods are
+	// reported as blockers, because deleting them is irreversible — there
+	// is no controller to recreate them.
+	Force bool `json:"force,omitempty"`
 }
 
 type drainNodePodRef struct {
@@ -1290,6 +1295,11 @@ func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			out.Blockers = append(out.Blockers, podRefString(ref)+": managed by DaemonSet")
+		case len(pod.Metadata.OwnerReferences) == 0 && !req.Force:
+			// Standalone pod with no controller to recreate it. kubectl
+			// drain refuses these without --force; evicting silently is
+			// irreversible data loss. Block unless force is set explicitly.
+			out.Blockers = append(out.Blockers, podRefString(ref)+": not managed by a controller (set force to evict)")
 		case drainPodHasEmptyDir(pod) && !req.DeleteEmptyDirData:
 			out.Blockers = append(out.Blockers, podRefString(ref)+": uses emptyDir volume")
 		default:

@@ -427,6 +427,9 @@ func (h *MonitoringHandler) GetBackendConfig(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	if h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
@@ -512,6 +515,9 @@ func (h *MonitoringHandler) PreviewSharedThanosStack(w http.ResponseWriter, r *h
 }
 
 func (h *MonitoringHandler) InstallSharedThanosStack(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	req, values, secretSpec, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -536,6 +542,9 @@ func (h *MonitoringHandler) InstallSharedThanosStack(w http.ResponseWriter, r *h
 }
 
 func (h *MonitoringHandler) UpgradeSharedThanosStack(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	req, values, secretSpec, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -569,6 +578,9 @@ func (h *MonitoringHandler) UpgradeSharedThanosStack(w http.ResponseWriter, r *h
 }
 
 func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	req, values, secretSpec, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -611,6 +623,9 @@ func (h *MonitoringHandler) ReplaceSharedThanosStack(w http.ResponseWriter, r *h
 }
 
 func (h *MonitoringHandler) UninstallSharedThanosStack(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	if h.helm == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "monitoring deployment is not configured")
 		return
@@ -739,6 +754,9 @@ func (h *MonitoringHandler) PreviewSharedAlertmanager(w http.ResponseWriter, r *
 }
 
 func (h *MonitoringHandler) InstallSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -763,6 +781,9 @@ func (h *MonitoringHandler) InstallSharedAlertmanager(w http.ResponseWriter, r *
 }
 
 func (h *MonitoringHandler) UpgradeSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -796,6 +817,9 @@ func (h *MonitoringHandler) UpgradeSharedAlertmanager(w http.ResponseWriter, r *
 }
 
 func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -839,6 +863,9 @@ func (h *MonitoringHandler) ReplaceSharedAlertmanager(w http.ResponseWriter, r *
 }
 
 func (h *MonitoringHandler) UninstallSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbUpdate) {
+		return
+	}
 	if h.helm == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "monitoring deployment is not configured")
 		return
