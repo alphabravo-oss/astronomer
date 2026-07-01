@@ -120,6 +120,9 @@ func WireSnapshotWorkerMetrics() {
 		}
 		clusterSnapshotsTotal.WithLabelValues(observability.MetricValues(clusterID, outcome)...).Inc()
 	})
+	// Publish the per-cluster in-flight gauge the poller aggregates each tick
+	// (otherwise cluster_snapshots_in_flight stays a documented-but-dead metric).
+	tasks.SetInFlightSnapshotGaugeSetter(SetInFlightSnapshotGauge)
 }
 
 // SetInFlightSnapshotGauge updates the per-cluster in-flight gauge to

@@ -40,6 +40,12 @@ SELECT * FROM alert_rules ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 -- name: ListAlertRulesByCluster :many
 SELECT * FROM alert_rules WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
+-- name: ListAlertRulesByIDs :many
+-- Batch-load rules for a page of alert events so the event-list response can
+-- resolve rule name/severity without a per-row GetAlertRuleByID (the N+1 the
+-- event-list path previously ran).
+SELECT * FROM alert_rules WHERE id = ANY(sqlc.arg(ids)::uuid[]);
+
 -- name: CreateAlertRule :one
 INSERT INTO alert_rules (name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

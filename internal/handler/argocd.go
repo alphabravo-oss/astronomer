@@ -237,11 +237,32 @@ type argocdOperationEnvelope struct {
 // All fields are optional — an empty body is a "sync at targetRevision,
 // no prune, not a dry run" request.
 type SyncRequest struct {
-	Revision           string `json:"revision,omitempty"`
-	Prune              bool   `json:"prune,omitempty"`
-	DryRun             bool   `json:"dry_run,omitempty"`
-	Reason             string `json:"reason,omitempty"`
-	SyncWindowOverride bool   `json:"sync_window_override,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	Prune    bool   `json:"prune,omitempty"`
+	DryRun   bool   `json:"dry_run,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	// SyncWindowOverride is advisory only. ArgoCD's sync API has NO field to
+	// bypass an AppProject deny window, so Astronomer does not — and cannot
+	// from here — force a sync through one. The sync is issued normally and
+	// ArgoCD's own AppProject `manualSync` policy governs whether it proceeds
+	// during a deny window. We still capture the flag + reason in the audit
+	// trail (a justification for the manual sync), and the reconciler records
+	// an explicit event making clear the window was NOT bypassed by
+	// Astronomer, so operators are never misled into believing otherwise.
+	SyncWindowOverride bool `json:"sync_window_override,omitempty"`
+}
+
+// syncWindowOverrideNote returns the operation-timeline note recorded when an
+// operator requests sync_window_override. It states plainly that Astronomer
+// does not bypass ArgoCD sync windows, so the audit trail never implies an
+// override that did not happen. Returns "" when no override was requested.
+// Kept as a pure helper so the honesty of the note is unit-testable without a
+// live ArgoCD instance.
+func syncWindowOverrideNote(override bool) string {
+	if !override {
+		return ""
+	}
+	return "sync_window_override requested: Astronomer does not bypass ArgoCD sync windows; the sync is issued normally and ArgoCD's AppProject manualSync policy governs whether it proceeds during a deny window"
 }
 
 func normalizeSyncRequest(req SyncRequest) (SyncRequest, error) {
@@ -1346,6 +1367,16 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 		"syncWindowOverride":       env.SyncWindowOverride,
 		"syncWindowOverrideReason": env.Reason,
 	})
+	// Be explicit in the timeline: Astronomer does not (and cannot via the
+	// sync API) bypass an ArgoCD deny window. Recording this alongside the
+	// requested flag keeps the audit trail honest instead of implying the
+	// window was overridden.
+	if note := syncWindowOverrideNote(env.SyncWindowOverride); note != "" {
+		h.recordArgoCDOperationEvent(ctx, op.ID, "warn", "sync", note, map[string]any{
+			"applicationId": app.ID.String(),
+			"reason":        env.Reason,
+		})
+	}
 
 	client := h.argoCDClient(instance)
 	opts := argocdclient.SyncOptions{}

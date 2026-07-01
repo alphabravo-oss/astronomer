@@ -45,6 +45,7 @@ type LoggingQuerier interface {
 	UpdateLoggingOutput(ctx context.Context, arg sqlc.UpdateLoggingOutputParams) (sqlc.LoggingOutput, error)
 	DeleteLoggingOutput(ctx context.Context, id uuid.UUID) error
 	CountLoggingOutputs(ctx context.Context) (int64, error)
+	CountOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error)
 	// Pipelines
 	ListLoggingPipelines(ctx context.Context, arg sqlc.ListLoggingPipelinesParams) ([]sqlc.LoggingPipeline, error)
 	ListPipelinesByCluster(ctx context.Context, arg sqlc.ListPipelinesByClusterParams) ([]sqlc.LoggingPipeline, error)
@@ -53,6 +54,7 @@ type LoggingQuerier interface {
 	UpdateLoggingPipeline(ctx context.Context, arg sqlc.UpdateLoggingPipelineParams) (sqlc.LoggingPipeline, error)
 	DeleteLoggingPipeline(ctx context.Context, id uuid.UUID) error
 	CountLoggingPipelines(ctx context.Context) (int64, error)
+	CountPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Operations
 	CreateLoggingOperation(ctx context.Context, arg sqlc.CreateLoggingOperationParams) (sqlc.LoggingOperation, error)
 	GetLoggingOperation(ctx context.Context, id uuid.UUID) (sqlc.LoggingOperation, error)
@@ -293,7 +295,7 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountLoggingOutputs(r.Context())
+	total, err := h.queries.CountOutputsByCluster(r.Context(), pgtype.UUID{Bytes: clusterID, Valid: true})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging outputs")
 		return
@@ -481,7 +483,7 @@ func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := h.queries.CountLoggingPipelines(r.Context())
+	total, err := h.queries.CountPipelinesByCluster(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging pipelines")
 		return

@@ -728,6 +728,50 @@ func (q *Queries) ListAlertRulesByCluster(ctx context.Context, arg ListAlertRule
 	return items, nil
 }
 
+const listAlertRulesByIDs = `-- name: ListAlertRulesByIDs :many
+SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction FROM alert_rules WHERE id = ANY($1::uuid[])
+`
+
+// Batch-load rules for a page of alert events so the event-list response can
+// resolve rule name/severity without a per-row GetAlertRuleByID (the N+1 the
+// event-list path previously ran).
+func (q *Queries) ListAlertRulesByIDs(ctx context.Context, ids []uuid.UUID) ([]AlertRule, error) {
+	rows, err := q.db.Query(ctx, listAlertRulesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlertRule{}
+	for rows.Next() {
+		var i AlertRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ClusterID,
+			&i.RuleType,
+			&i.Configuration,
+			&i.Severity,
+			&i.Enabled,
+			&i.CooldownMinutes,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuleKind,
+			&i.AnomalyStddev,
+			&i.AnomalyWindowSeconds,
+			&i.AnomalyMinSamples,
+			&i.AnomalyDirection,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAlertSilences = `-- name: ListAlertSilences :many
 
 SELECT id, rule_id, cluster_id, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM alert_silences ORDER BY created_at DESC LIMIT $1 OFFSET $2

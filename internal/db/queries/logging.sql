@@ -29,6 +29,11 @@ DELETE FROM logging_outputs WHERE id = $1;
 -- name: CountLoggingOutputs :one
 SELECT count(*) FROM logging_outputs;
 
+-- name: CountOutputsByCluster :one
+-- Total outputs scoped to a single cluster, matching ListOutputsByCluster so
+-- the cluster-scoped list endpoint reports a correct pagination total.
+SELECT count(*) FROM logging_outputs WHERE cluster_id = $1;
+
 -- Logging Pipelines
 
 -- name: GetLoggingPipelineByID :one
@@ -60,3 +65,8 @@ DELETE FROM logging_pipelines WHERE id = $1;
 
 -- name: CountLoggingPipelines :one
 SELECT count(*) FROM logging_pipelines;
+
+-- name: CountPipelinesByCluster :one
+-- Total pipelines scoped to a single cluster, matching ListPipelinesByCluster
+-- so the cluster-scoped list endpoint reports a correct pagination total.
+SELECT count(*) FROM logging_pipelines WHERE cluster_id = $1;

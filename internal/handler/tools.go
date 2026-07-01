@@ -264,10 +264,13 @@ func (h *ToolHandler) EnsureInstalled(ctx context.Context, clusterID uuid.UUID, 
 	if valuesYAML == "" && preset != "" {
 		valuesYAML = presetValuesYAML(tool.Presets, preset)
 	}
-	// Adapt the baseline install to the target distribution as well.
+	// Adapt the baseline install to the target distribution as well. Deep-
+	// merge the distribution base under the caller/preset values so sibling
+	// keys (e.g. securityContext.privileged) are not dropped by a duplicate
+	// top-level key when the two documents are combined.
 	if cluster, cerr := h.queries.GetClusterByID(ctx, clusterID); cerr == nil {
 		if distYAML := distributionInstallValues(slug, cluster.Distribution); distYAML != "" {
-			valuesYAML = distYAML + "\n" + valuesYAML
+			valuesYAML = mergeValueLayers(distYAML, valuesYAML)
 		}
 	}
 
@@ -440,24 +443,21 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.WrongClusterScope, msg)
 		return
 	}
-	// Migration 067 — resolve ${vault://...} markers in the values
-	// blob in-memory before enqueueing the install task. The
-	// installed_charts row (written by the worker) keeps the original
-	// blob from the preset, so a rotated secret takes effect on next
-	// upgrade. Tools install at cluster scope; unqualified vault refs
-	// require the explicit "${vault://<connection>/...}" form.
-	resolvedYAML, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, valuesYAML)
-	if vaultErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.VaultResolveFailed, vaultErr.Error())
-		return
-	}
+	// Migration 067 — the values blob keeps its ${vault://...} markers in
+	// both the enqueued payload and the installed_charts row (written by
+	// the worker), so a rotated secret takes effect on next upgrade and no
+	// cleartext secret is persisted to tool_operations.payload. Resolution
+	// happens at execution time inside the reconciler (sendHelmRaw); the
+	// resolved plaintext only exists in-memory on the wire. Tools install
+	// at cluster scope; unqualified vault refs require the explicit
+	// "${vault://<connection>/...}" form.
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, tool.Slug), "install", toolOperationEnvelope{
 		ClusterID:   req.ClusterID,
 		ToolSlug:    tool.Slug,
 		ReleaseName: releaseName,
 		Namespace:   chartNamespace(tool, chart),
 		Preset:      req.Preset,
-		ValuesYAML:  resolvedYAML,
+		ValuesYAML:  valuesYAML,
 		ChartName:   chart.ChartName,
 		RepoURL:     chart.RepoURL,
 		Version:     tool.VersionConstraint,
@@ -510,20 +510,17 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	}
 	releaseName := existing.ReleaseName
 	chartID := existing.ID
-	// Migration 067 — resolve vault refs before enqueue. Same rules
-	// as the Install path: original blob persists, resolved blob ships.
-	resolvedYAML, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, valuesYAML)
-	if vaultErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.VaultResolveFailed, vaultErr.Error())
-		return
-	}
+	// Migration 067 — the values blob keeps its ${vault://...} markers in
+	// both the payload and the installed_charts row; the reconciler
+	// (sendHelmRaw) resolves them in-memory at execution time so no
+	// cleartext secret is persisted.
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "tools"), "tool_installation", operationTargetKey(clusterID, tool.Slug), "upgrade", toolOperationEnvelope{
 		ClusterID:      req.ClusterID,
 		ToolSlug:       tool.Slug,
 		ReleaseName:    releaseName,
 		Namespace:      existing.Namespace,
 		Preset:         req.Preset,
-		ValuesYAML:     resolvedYAML,
+		ValuesYAML:     valuesYAML,
 		ChartName:      chart.ChartName,
 		RepoURL:        chart.RepoURL,
 		Version:        tool.VersionConstraint,
@@ -907,23 +904,21 @@ func (h *ToolHandler) resolveAction(r *http.Request) (sqlc.ClusterTool, toolActi
 		}
 		return sqlc.ClusterTool{}, toolActionRequest{}, toolChart{}, "", err
 	}
-	valuesYAML := presetValuesYAML(tool.Presets, req.Preset)
-	if req.ValuesOverride != "" {
-		if valuesYAML != "" {
-			valuesYAML += "\n"
-		}
-		valuesYAML += req.ValuesOverride
-	}
-	// Adapt the install to the target distribution (k3s/k3d, OpenShift, …) by
-	// prepending distribution-specific overrides; the preset + user values
-	// concatenated above still take precedence on any conflicting key.
+	presetYAML := presetValuesYAML(tool.Presets, req.Preset)
+	// Adapt the install to the target distribution (k3s/k3d, OpenShift, …).
+	var distYAML string
 	if cid, perr := uuid.Parse(req.ClusterID); perr == nil {
 		if cluster, cerr := h.queries.GetClusterByID(r.Context(), cid); cerr == nil {
-			if distYAML := distributionInstallValues(tool.Slug, cluster.Distribution); distYAML != "" {
-				valuesYAML = distYAML + "\n" + valuesYAML
-			}
+			distYAML = distributionInstallValues(tool.Slug, cluster.Distribution)
 		}
 	}
+	// Deep-merge in increasing precedence: distribution base < preset <
+	// operator override. Merging (rather than concatenating YAML documents)
+	// preserves sibling keys across layers — e.g. a distribution
+	// securityContext.privileged=true survives even when the preset or the
+	// operator only sets securityContext.fsGroup — while a genuinely
+	// conflicting operator value still wins.
+	valuesYAML := mergeValueLayers(distYAML, presetYAML, req.ValuesOverride)
 	return tool, req, firstChart(charts), valuesYAML, nil
 }
 
@@ -931,9 +926,16 @@ func (h *ToolHandler) sendHelmRaw(ctx context.Context, env toolOperationEnvelope
 	if h.helm == nil {
 		return nil, errors.New("helm requester not configured")
 	}
+	// Resolve ${vault://...} markers at execution time so the resolved
+	// plaintext never lands in tool_operations.payload or the
+	// installed_charts row — it only exists in-memory on the wire.
+	blob, err := vaultResolveBlob(ctx, h.vaultResolver, uuid.Nil, env.ValuesYAML)
+	if err != nil {
+		return nil, err
+	}
 	var values map[string]any
-	if env.ValuesYAML != "" {
-		if err := yaml.Unmarshal([]byte(env.ValuesYAML), &values); err != nil {
+	if blob != "" {
+		if err := yaml.Unmarshal([]byte(blob), &values); err != nil {
 			return nil, err
 		}
 	}
@@ -1031,6 +1033,70 @@ func presetValuesYAML(raw json.RawMessage, preset string) string {
 	}
 	data, _ := yaml.Marshal(value)
 	return string(data)
+}
+
+// mergeValueLayers deep-merges YAML values layers in increasing precedence
+// (later layers win on key conflicts) and returns a single values document.
+// It is used to combine the distribution base overrides, the preset, and the
+// operator's values_override without the "duplicate top-level key drops the
+// earlier one" hazard of string-concatenating YAML documents: sibling keys
+// under a shared parent (e.g. securityContext.privileged vs
+// securityContext.fsGroup) are all preserved. If any layer cannot be parsed
+// as a mapping, it falls back to document concatenation (last-wins), matching
+// the previous behaviour.
+func mergeValueLayers(layers ...string) string {
+	merged := map[string]any{}
+	for _, layer := range layers {
+		if strings.TrimSpace(layer) == "" {
+			continue
+		}
+		var m map[string]any
+		if err := yaml.Unmarshal([]byte(layer), &m); err != nil || m == nil {
+			return concatValueLayers(layers...)
+		}
+		merged = mergeValueMaps(merged, m)
+	}
+	out, err := yaml.Marshal(merged)
+	if err != nil {
+		return concatValueLayers(layers...)
+	}
+	return string(out)
+}
+
+// mergeValueMaps recursively merges override into base, returning a new map.
+// Nested maps are merged key-by-key; every other type (scalars, sequences) is
+// replaced wholesale by the override, so an operator list fully overrides a
+// base list rather than being concatenated.
+func mergeValueMaps(base, override map[string]any) map[string]any {
+	out := make(map[string]any, len(base)+len(override))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range override {
+		if bv, ok := out[k]; ok {
+			if bm, bok := bv.(map[string]any); bok {
+				if om, ook := v.(map[string]any); ook {
+					out[k] = mergeValueMaps(bm, om)
+					continue
+				}
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// concatValueLayers is the fallback for mergeValueLayers when a layer is not a
+// YAML mapping: it joins the non-empty layers with newlines in precedence
+// order (later layers last), reproducing the historical concatenation.
+func concatValueLayers(layers ...string) string {
+	parts := make([]string, 0, len(layers))
+	for _, l := range layers {
+		if strings.TrimSpace(l) != "" {
+			parts = append(parts, l)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func normalizeToolStatus(status string) string {

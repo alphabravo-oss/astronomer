@@ -56,6 +56,10 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"30 1 * * *", TypeEnforceAuditLogRetention, "enforce audit_log retention (daily 01:30)"},
 		{"@every 1h", TypeRunScheduledBackups, "run scheduled backups"},
 		{"0 3 * * *", TypeEnforceBackupRetention, "enforce backup retention (daily 03:00)"},
+		// The recompute handler is registered in the mux (worker.go) but had no
+		// schedule entry, so recommendations never refreshed. Off-peak, offset
+		// from the 03:00 retention task.
+		{"30 3 * * *", tasks.ChartRecommendationsRecomputeType, "chart recommendations recompute (daily 03:30)"},
 		// Phase B3: re-apply project ResourceQuota / LimitRange / NetworkPolicy
 		// across every project_namespaces row. The handler also enqueues a
 		// per-namespace reconcile on AddNamespace; this sweep covers drift

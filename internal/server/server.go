@@ -623,7 +623,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	trivyIngester := scanner.NewIngester(queries, database.Pool(), nil, trivyAuditHook)
 	mirrorRouter.SetVulnIngester(crd.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
 	hub.SetMirrorIngester(mirrorRouter)
-	apiserverAuditHandler := handler.NewApiserverAuditHandler(queries)
+	apiserverAuditHandler := handler.NewApiserverAuditHandler(handler.NewApiserverAuditStoreAdapter(queries))
 	hub.SetAuditPersister(apiserverAuditHandler)
 	// PATH A: mint the scoped apiserver-audit ingest token in CONNECT_ACK so an
 	// agent configured with AUDIT_DELIVERY=http can authenticate its direct POST

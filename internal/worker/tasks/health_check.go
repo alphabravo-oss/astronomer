@@ -93,6 +93,15 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
 	})
 }
 
+// healthCheckPageSize is the per-page LIMIT the full-fleet sweep uses.
+// The sweep MUST walk every page, not just the first: ListClusters is
+// `ORDER BY created_at DESC LIMIT $1 OFFSET $2`, so a single Offset:0 read
+// only ever sees the newest healthCheckPageSize clusters. In a fleet larger
+// than one page the oldest clusters would never be re-evaluated — when
+// their agents disconnect their clusters.status would stay frozen at
+// 'active' forever. Paging on Offset covers the whole fleet.
+const healthCheckPageSize = 500
+
 func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, error) {
 	if clusterID != "" {
 		id, err := uuid.Parse(clusterID)
@@ -105,7 +114,21 @@ func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, 
 		}
 		return []sqlc.Cluster{cluster}, nil
 	}
-	return runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
+	// Page through the entire non-decommissioned fleet. Stop when a page
+	// comes back short (fewer than a full page of rows), which means we've
+	// reached the end.
+	var all []sqlc.Cluster
+	for offset := int32(0); ; offset += healthCheckPageSize {
+		page, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: healthCheckPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if int32(len(page)) < healthCheckPageSize {
+			break
+		}
+	}
+	return all, nil
 }
 
 func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {

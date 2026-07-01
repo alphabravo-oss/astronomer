@@ -43,6 +43,7 @@ type AlertingQuerier interface {
 	// Rules
 	ListAlertRules(ctx context.Context, arg sqlc.ListAlertRulesParams) ([]sqlc.AlertRule, error)
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (sqlc.AlertRule, error)
+	ListAlertRulesByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.AlertRule, error)
 	CreateAlertRule(ctx context.Context, arg sqlc.CreateAlertRuleParams) (sqlc.AlertRule, error)
 	UpdateAlertRule(ctx context.Context, arg sqlc.UpdateAlertRuleParams) (sqlc.AlertRule, error)
 	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
@@ -593,10 +594,7 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]map[string]any, 0, len(events))
-	for _, event := range events {
-		items = append(items, h.alertEventResponse(r.Context(), event))
-	}
+	items := alertEventResponsesBatched(r.Context(), h.queries, events)
 	total, _ := h.queries.CountAlertEventsFiltered(r.Context(), sqlc.CountAlertEventsFilteredParams{
 		Status:    status,
 		Severity:  severity,
@@ -1426,6 +1424,88 @@ func (h *AlertingHandler) alertEventResponse(ctx context.Context, event sqlc.Ale
 			}
 		}
 	}
+	return alertEventResponseFields(event, ruleName, severity, clusterName)
+}
+
+// alertEventRefLoader is the narrow batch surface alertEventResponsesBatched
+// needs. AlertingQuerier satisfies it; a test can supply a counting fake.
+type alertEventRefLoader interface {
+	ListAlertRulesByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.AlertRule, error)
+	ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.Cluster, error)
+}
+
+// alertEventResponsesBatched builds the response payloads for a page of events
+// with batched lookups: one ListAlertRulesByIDs + one ListClustersByIDs for the
+// whole page, mirroring alertRuleResponses. Replaces the per-row
+// GetAlertRuleByID + GetClusterByID N+1 (~2 queries per event) the event-list
+// path used to run.
+func alertEventResponsesBatched(ctx context.Context, q alertEventRefLoader, events []sqlc.AlertEvent) []map[string]any {
+	ruleIDSet := map[uuid.UUID]struct{}{}
+	clusterIDSet := map[uuid.UUID]struct{}{}
+	for _, event := range events {
+		ruleIDSet[event.RuleID] = struct{}{}
+		if event.ClusterID.Valid {
+			clusterIDSet[uuid.UUID(event.ClusterID.Bytes)] = struct{}{}
+		}
+	}
+
+	type ruleInfo struct {
+		name     string
+		severity string
+	}
+	rulesByID := map[uuid.UUID]ruleInfo{}
+	if len(ruleIDSet) > 0 {
+		ids := make([]uuid.UUID, 0, len(ruleIDSet))
+		for id := range ruleIDSet {
+			ids = append(ids, id)
+		}
+		if rules, err := q.ListAlertRulesByIDs(ctx, ids); err == nil {
+			for _, rule := range rules {
+				rulesByID[rule.ID] = ruleInfo{name: rule.Name, severity: rule.Severity}
+			}
+		}
+	}
+
+	clusterNames := map[uuid.UUID]any{}
+	if len(clusterIDSet) > 0 {
+		ids := make([]uuid.UUID, 0, len(clusterIDSet))
+		for id := range clusterIDSet {
+			ids = append(ids, id)
+		}
+		if clusters, err := q.ListClustersByIDs(ctx, ids); err == nil {
+			for _, cluster := range clusters {
+				var name any = cluster.DisplayName
+				if cluster.DisplayName == "" {
+					name = cluster.Name
+				}
+				clusterNames[cluster.ID] = name
+			}
+		}
+	}
+
+	items := make([]map[string]any, 0, len(events))
+	for _, event := range events {
+		ruleName := ""
+		severity := "warning"
+		if info, ok := rulesByID[event.RuleID]; ok {
+			ruleName = info.name
+			severity = info.severity
+		}
+		var clusterName any = nil
+		if event.ClusterID.Valid {
+			if n, ok := clusterNames[uuid.UUID(event.ClusterID.Bytes)]; ok {
+				clusterName = n
+			}
+		}
+		items = append(items, alertEventResponseFields(event, ruleName, severity, clusterName))
+	}
+	return items
+}
+
+// alertEventResponseFields renders one event into its wire shape from already
+// resolved rule/cluster metadata. Shared by the single-event path and the
+// batched list path so both stay byte-identical.
+func alertEventResponseFields(event sqlc.AlertEvent, ruleName, severity string, clusterName any) map[string]any {
 	details := decodeJSONMap(event.Details)
 	resp := map[string]any{
 		"id":             event.ID.String(),

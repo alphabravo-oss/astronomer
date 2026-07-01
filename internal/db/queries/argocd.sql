@@ -125,6 +125,16 @@ ORDER BY amc.created_at ASC;
 -- clusters.labels mutation.
 SELECT * FROM argocd_managed_clusters WHERE cluster_id = $1 ORDER BY created_at ASC;
 
+-- name: ListArgoCDManagedClustersByClusterIDs :many
+-- Batched form of ListArgoCDManagedClustersByCluster for the clusters-list
+-- dashboard: one round-trip for a whole page of clusters instead of one query
+-- per cluster (the ArgoCD N+1). Rows are grouped by cluster_id in Go; the
+-- created_at ordering keeps each cluster's per-row order identical to the
+-- single-cluster query.
+SELECT * FROM argocd_managed_clusters
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY created_at ASC;
+
 -- name: DeleteArgoCDManagedCluster :exec
 DELETE FROM argocd_managed_clusters WHERE argocd_instance_id = $1 AND cluster_id = $2;
 

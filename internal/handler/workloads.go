@@ -328,6 +328,28 @@ type eventList struct {
 	} `json:"items"`
 }
 
+// pageWindow slices the fully-materialized cluster resource list to the
+// requested ?limit/?offset window and returns a Pagination describing the full
+// set. The list endpoints below fetch the whole collection from the agent (the
+// apiserver returns it unpaginated over the single tunnel), so without this the
+// handler returned the entire list while advertising a page size it never
+// honoured — following "Next" (offset=20) re-ran the same unbounded fetch and
+// returned the identical rows. Slicing server-side and reporting the real total
+// makes HasMore / NextOffset accurate and stops the duplicate-page behaviour.
+func pageWindow[T any](r *http.Request, items []T) ([]T, Pagination) {
+	limit, offset := queryLimitOffset(r, 20)
+	total := len(items)
+	start := offset
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	return items[start:end], NewPagination(total, limit, offset, end-start)
+}
+
 func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	namespace := r.URL.Query().Get("namespace")
@@ -347,7 +369,11 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		filtered = append(filtered, item)
 	}
-	RespondPaginated(w, r, filtered, int64(len(filtered)))
+	// Slice server-side to the requested page. RespondPaginated computes the
+	// next/prev links from the same ?limit/?offset via queryInt, so paginate
+	// (which reads them identically) keeps the returned page and the advertised
+	// links in sync instead of returning the whole cluster on every page.
+	RespondPaginated(w, r, paginate(filtered, r), int64(len(filtered)))
 }
 
 func (h *WorkloadHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -641,10 +667,10 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i]["name"].(string) < items[j]["name"].(string) })
-	// Namespaces come straight from the cluster's API unpaginated; there is no
-	// COUNT query, so Total is the page length. // TODO(total)
-	limit, offset := queryLimitOffset(r, 20)
-	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
+	// Namespaces come straight from the cluster's API unpaginated; slice to the
+	// requested page so Total reflects the full set and Next advances correctly.
+	page, pagination := pageWindow(r, items)
+	RespondList(w, page, pagination)
 }
 
 func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
@@ -654,10 +680,10 @@ func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	// Nodes come straight from the cluster's API unpaginated; there is no COUNT
-	// query, so Total is the page length. // TODO(total)
-	limit, offset := queryLimitOffset(r, 20)
-	RespondList(w, nodes, NewPagination(len(nodes), limit, offset, len(nodes)))
+	// Nodes come straight from the cluster's API unpaginated; slice to the
+	// requested page so Total reflects the full set and Next advances correctly.
+	page, pagination := pageWindow(r, nodes)
+	RespondList(w, page, pagination)
 }
 
 func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
@@ -700,10 +726,10 @@ func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	// Events come straight from the cluster's API (capped by the limit query
-	// param the agent honours); there is no COUNT query, so Total is the page
-	// length. // TODO(total)
-	limit, offset := queryLimitOffset(r, 20)
-	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
+	// param the agent honours); slice to the requested page so Total reflects the
+	// fetched set and Next advances correctly instead of re-serving the same rows.
+	page, pagination := pageWindow(r, items)
+	RespondList(w, page, pagination)
 }
 
 func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
@@ -714,10 +740,10 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	// Pods come straight from the cluster's API unpaginated; there is no COUNT
-	// query, so Total is the page length. // TODO(total)
-	limit, offset := queryLimitOffset(r, 20)
-	RespondList(w, pods, NewPagination(len(pods), limit, offset, len(pods)))
+	// Pods come straight from the cluster's API unpaginated; slice to the
+	// requested page so Total reflects the full set and Next advances correctly.
+	page, pagination := pageWindow(r, pods)
+	RespondList(w, page, pagination)
 }
 
 func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Request) {
@@ -734,9 +760,10 @@ func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	// Selector-scoped pods come straight from the cluster's API unpaginated;
-	// there is no COUNT query, so Total is the page length. // TODO(total)
-	limit, offset := queryLimitOffset(r, 20)
-	RespondList(w, pods, NewPagination(len(pods), limit, offset, len(pods)))
+	// slice to the requested page so Total reflects the full set and Next
+	// advances correctly instead of re-serving the identical selector result.
+	page, pagination := pageWindow(r, pods)
+	RespondList(w, page, pagination)
 }
 
 func (h *WorkloadHandler) DeletePod(w http.ResponseWriter, r *http.Request) {

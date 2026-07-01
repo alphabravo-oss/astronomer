@@ -90,6 +90,10 @@ type Querier interface {
 	CountAlertSilences(ctx context.Context) (int64, error)
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
 	CountApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Capped count for the high-volume list view: stops scanning after max_rows so
+	// the total never turns into an ever-slower full-index scan as the table grows
+	// to millions of rows per cluster. The UI renders "N+" once the cap is hit.
+	CountApiserverAuditEventsByClusterCapped(ctx context.Context, arg CountApiserverAuditEventsByClusterCappedParams) (int64, error)
 	CountAppsByInstance(ctx context.Context, argocdInstanceID uuid.UUID) (int64, error)
 	CountArgoCDApplications(ctx context.Context) (int64, error)
 	CountArgoCDApplicationsBySyncHealth(ctx context.Context) ([]CountArgoCDApplicationsBySyncHealthRow, error)
@@ -152,6 +156,12 @@ type Querier interface {
 	CountNamespacesInProject(ctx context.Context, id uuid.UUID) (int32, error)
 	CountNetworkPolicyTemplates(ctx context.Context) (int64, error)
 	CountNotificationChannels(ctx context.Context) (int64, error)
+	// Total outputs scoped to a single cluster, matching ListOutputsByCluster so
+	// the cluster-scoped list endpoint reports a correct pagination total.
+	CountOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error)
+	// Total pipelines scoped to a single cluster, matching ListPipelinesByCluster
+	// so the cluster-scoped list endpoint reports a correct pagination total.
+	CountPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountPodSecurityTemplates(ctx context.Context) (int64, error)
 	CountProjectRoles(ctx context.Context) (int64, error)
 	CountProjects(ctx context.Context) (int64, error)
@@ -829,6 +839,11 @@ type Querier interface {
 	// re-delivered batch is a no-op. ListApiserverAuditEventsByCluster powers
 	// the operator read view.
 	InsertApiserverAuditEvent(ctx context.Context, arg InsertApiserverAuditEventParams) error
+	// Multi-row form of InsertApiserverAuditEvent: one round-trip for a whole
+	// ingest batch (up to maxIngestEvents=1000) instead of 1000 sequential
+	// INSERTs. Idempotent on (cluster_id, audit_id) exactly like the single-row
+	// form. Column order matches the unnested array order below.
+	InsertApiserverAuditEventsBatch(ctx context.Context, arg InsertApiserverAuditEventsBatchParams) error
 	InsertClusterConditionRemediation(ctx context.Context, arg InsertClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
 	InsertClusterRegistrationStep(ctx context.Context, arg InsertClusterRegistrationStepParams) (ClusterRegistrationStep, error)
 	// Persists a "we want to send this" record. The handler that wraps a
@@ -889,6 +904,10 @@ type Querier interface {
 	ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]AlertRuleChannel, error)
 	ListAlertRules(ctx context.Context, arg ListAlertRulesParams) ([]AlertRule, error)
 	ListAlertRulesByCluster(ctx context.Context, arg ListAlertRulesByClusterParams) ([]AlertRule, error)
+	// Batch-load rules for a page of alert events so the event-list response can
+	// resolve rule name/severity without a per-row GetAlertRuleByID (the N+1 the
+	// event-list path previously ran).
+	ListAlertRulesByIDs(ctx context.Context, ids []uuid.UUID) ([]AlertRule, error)
 	// Alert Silences
 	ListAlertSilences(ctx context.Context, arg ListAlertSilencesParams) ([]AlertSilence, error)
 	ListAllActiveKubectlSessions(ctx context.Context) ([]KubectlSession, error)
@@ -941,6 +960,12 @@ type Querier interface {
 	// astronomer.io/label-* keys on every relevant cluster Secret after a
 	// clusters.labels mutation.
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]ArgocdManagedCluster, error)
+	// Batched form of ListArgoCDManagedClustersByCluster for the clusters-list
+	// dashboard: one round-trip for a whole page of clusters instead of one query
+	// per cluster (the ArgoCD N+1). Rows are grouped by cluster_id in Go; the
+	// created_at ordering keeps each cluster's per-row order identical to the
+	// single-cluster query.
+	ListArgoCDManagedClustersByClusterIDs(ctx context.Context, clusterIds []uuid.UUID) ([]ArgocdManagedCluster, error)
 	ListArgoCDOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ArgocdOperationEvent, error)
 	ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperationsParams) ([]ArgocdOperation, error)
 	// Compliance report export queries.
@@ -1529,6 +1554,10 @@ type Querier interface {
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
+	// Retention sweep: delete apiserver audit rows older than the cutoff. The table
+	// is otherwise append-only and unbounded (one row per apiserver request, fleet
+	// wide), so a periodic sweeper must call this to keep it from growing forever.
+	PruneApiserverAuditEventsBefore(ctx context.Context, cutoff time.Time) (int64, error)
 	// Retention: keep the newest $2 rows for the cluster, delete the rest.
 	// Only terminal rows are eligible so an in-flight snapshot is never
 	// reaped out from under the poller.

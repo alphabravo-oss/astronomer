@@ -209,11 +209,52 @@ func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) {
 		logSnapshotErr(deps.Log, "list pending snapshots", err)
 		return
 	}
+	// Refresh the per-cluster in-flight gauge from the pending set observed
+	// at fetch time (before any of these rows is mirrored to a terminal
+	// phase below). ListPendingClusterSnapshots only returns non-terminal
+	// rows, so a straight per-cluster count is the in-flight depth. Clusters
+	// that fell to zero since the last tick are reset explicitly.
+	inFlight := map[string]int{}
+	for _, row := range rows {
+		inFlight[row.ClusterID.String()]++
+	}
+	updateInFlightSnapshotGauges(inFlight)
 	for _, row := range rows {
 		if err := pollOneSnapshot(ctx, deps, row); err != nil {
 			logSnapshotErr(deps.Log, "poll snapshot "+row.ID.String(), err)
 		}
 	}
+}
+
+// inFlightGaugeState remembers which cluster_ids carried a non-zero
+// in-flight gauge on the previous tick so a cluster that drains to zero can
+// be reset to 0 (otherwise its gauge would be pinned at its last non-zero
+// value forever, since a zero-count cluster no longer appears in the
+// pending list).
+var (
+	inFlightGaugeMu   sync.Mutex
+	inFlightGaugeSeen = map[string]struct{}{}
+)
+
+// updateInFlightSnapshotGauges sets the gauge for every cluster with pending
+// snapshots this tick and zeroes any cluster that had a non-zero gauge last
+// tick but no longer appears.
+func updateInFlightSnapshotGauges(counts map[string]int) {
+	inFlightGaugeMu.Lock()
+	defer inFlightGaugeMu.Unlock()
+	for cid, n := range counts {
+		setInFlightSnapshotGauge(cid, float64(n))
+	}
+	for cid := range inFlightGaugeSeen {
+		if _, ok := counts[cid]; !ok {
+			setInFlightSnapshotGauge(cid, 0)
+		}
+	}
+	next := make(map[string]struct{}, len(counts))
+	for cid := range counts {
+		next[cid] = struct{}{}
+	}
+	inFlightGaugeSeen = next
 }
 
 func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.ClusterSnapshot) error {
@@ -631,6 +672,21 @@ func SetSnapshotOutcomeRecorder(fn func(clusterID, outcome string)) {
 		return
 	}
 	recordSnapshotOutcome = fn
+}
+
+// setInFlightSnapshotGauge is the worker-side hook into the handler's
+// cluster_snapshots_in_flight GaugeVec. Resolved through a function
+// variable (like recordSnapshotOutcome) so the handler package wires it
+// once at startup without a tasks → handler import cycle. No-op until wired.
+var setInFlightSnapshotGauge = func(clusterID string, count float64) {}
+
+// SetInFlightSnapshotGaugeSetter swaps the in-flight gauge callback.
+// Called once from the handler package at startup.
+func SetInFlightSnapshotGaugeSetter(fn func(clusterID string, count float64)) {
+	if fn == nil {
+		return
+	}
+	setInFlightSnapshotGauge = fn
 }
 
 func logSnapshotErr(log *slog.Logger, msg string, err error) {

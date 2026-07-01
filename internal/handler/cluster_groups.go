@@ -269,6 +269,49 @@ func (h *ClusterGroupHandler) depthOf(ctx context.Context, id uuid.UUID) (int, e
 	return 0, fmt.Errorf("parent chain exceeds maximum depth")
 }
 
+// subtreeHeight returns the height of the subtree rooted at id — the number
+// of edges from id down to its deepest descendant (0 when id has no children).
+// Update uses it to reject a reparent that would push a *descendant* past
+// MaxClusterGroupDepth: validating only the moved node's own new depth misses
+// the case where the node carries a deep subtree along with it. One query
+// (ListClusterGroups) + an in-memory walk, mirroring the List rollup path.
+func (h *ClusterGroupHandler) subtreeHeight(ctx context.Context, id uuid.UUID) (int, error) {
+	groups, err := h.queries.ListClusterGroups(ctx)
+	if err != nil {
+		return 0, err
+	}
+	children := map[uuid.UUID][]uuid.UUID{}
+	for _, g := range groups {
+		if g.ParentID.Valid {
+			pid := uuid.UUID(g.ParentID.Bytes)
+			children[pid] = append(children[pid], g.ID)
+		}
+	}
+	maxDepth := 0
+	type node struct {
+		id    uuid.UUID
+		depth int
+	}
+	stack := []node{{id: id, depth: 0}}
+	// visited guards against a corrupt cycle looping forever.
+	visited := map[uuid.UUID]struct{}{}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, seen := visited[n.id]; seen {
+			continue
+		}
+		visited[n.id] = struct{}{}
+		if n.depth > maxDepth {
+			maxDepth = n.depth
+		}
+		for _, c := range children[n.id] {
+			stack = append(stack, node{id: c, depth: n.depth + 1})
+		}
+	}
+	return maxDepth, nil
+}
+
 // isDescendant returns true if candidate is a descendant of root (or is
 // root itself). Used by Update to prevent reparenting a group under one
 // of its own descendants (which would create a cycle).
@@ -495,6 +538,24 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("Cluster group tree depth is capped at %d (root + %d levels)", MaxClusterGroupDepth, MaxClusterGroupDepth))
 
 		return
+	}
+	// A reparent moves the whole subtree, not just this node. Checking newDepth
+	// alone lets a B→C→D subtree be reparented from depth 0 to depth 1, silently
+	// pushing D to depth 3 — the schema has no CHECK constraint to catch it, so
+	// D persists over-deep and later create-under-D calls 400 on the parent-chain
+	// ceiling. Reject when the deepest descendant would land past the cap.
+	if parent.Valid {
+		height, err := h.subtreeHeight(r.Context(), id)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to validate subtree depth")
+			return
+		}
+		if newDepth+height > MaxClusterGroupDepth {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.MaxDepth,
+				fmt.Sprintf("Cluster group tree depth is capped at %d (root + %d levels)", MaxClusterGroupDepth, MaxClusterGroupDepth))
+
+			return
+		}
 	}
 	color := req.Color
 	if color == "" {

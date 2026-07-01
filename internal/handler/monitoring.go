@@ -1497,6 +1497,85 @@ func (h *MonitoringHandler) realClusterSummary(ctx context.Context, clusterID st
 	return metricSummary(cpuUsage, cpuCapacity, memoryUsage, memoryCapacity, podCount, podCapacity, nodeCount, networkReceive, networkTransmit, diskCapacity-diskAvail, diskCapacity), true, nil
 }
 
+// realNodeSummary computes per-node CPU/memory/pod/network/disk gauges from the
+// cluster's Prometheus/Thanos backend, mirroring realClusterSummary but scoping
+// every query to a single node. node-exporter metrics are matched on the
+// `instance` label (kube-prometheus-stack relabels node-exporter's instance to
+// the Node name) and kube-state metrics on the `node` label. Returns ok=false
+// when no backend is configured so the caller can fall back to capacity-only.
+func (h *MonitoringHandler) realNodeSummary(ctx context.Context, clusterID, node string) (map[string]any, bool, error) {
+	client, cfg, ok, err := h.backendClient(ctx, clusterID)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	selector := labelSelectorForConfig(cfg)
+	instance := `instance="` + escapePromLabel(node) + `",` + selector
+	nodeLabel := `node="` + escapePromLabel(node) + `",` + selector
+	var (
+		cpuUsage, cpuCapacity           float64
+		memoryUsage, memoryCapacity     float64
+		podCount, podCapacity           float64
+		networkReceive, networkTransmit float64
+		diskCapacity, diskAvail         float64
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	scalar := func(query string, dst *float64) {
+		g.Go(func() error {
+			v, err := client.QueryScalar(gctx, query)
+			if err != nil {
+				return err
+			}
+			*dst = v
+			return nil
+		})
+	}
+	scalar(`sum(rate(node_cpu_seconds_total{mode!="idle",`+instance+`}[5m]))`, &cpuUsage)
+	scalar(`count(node_cpu_seconds_total{mode="idle",`+instance+`})`, &cpuCapacity)
+	scalar(`sum(node_memory_MemTotal_bytes{`+instance+`} - node_memory_MemAvailable_bytes{`+instance+`})`, &memoryUsage)
+	scalar(`sum(node_memory_MemTotal_bytes{`+instance+`})`, &memoryCapacity)
+	scalar(`count(kube_pod_info{`+nodeLabel+`})`, &podCount)
+	scalar(`sum(kube_node_status_capacity{resource="pods",unit="integer",`+nodeLabel+`})`, &podCapacity)
+	scalar(`sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+instance+`}[5m]))`, &networkReceive)
+	scalar(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+instance+`}[5m]))`, &networkTransmit)
+	scalar(`sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+instance+`})`, &diskCapacity)
+	scalar(`sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+instance+`})`, &diskAvail)
+	if err := g.Wait(); err != nil {
+		return nil, true, err
+	}
+	return metricSummary(cpuUsage, cpuCapacity, memoryUsage, memoryCapacity, podCount, podCapacity, 1, networkReceive, networkTransmit, diskCapacity-diskAvail, diskCapacity), true, nil
+}
+
+// nodeSummaryFallback builds a node gauge summary from the node's advertised
+// capacity (fetched over the tunnel) when no Prometheus backend is configured.
+// Usage figures come from the node-detail path (metrics-server) when available;
+// otherwise they are zero — capacity-only is still far more useful than the
+// previous 501.
+func (h *MonitoringHandler) nodeSummaryFallback(ctx context.Context, clusterID, node string) (map[string]any, error) {
+	wh := NewWorkloadHandlerWithRequester(h.requester)
+	detail, err := wh.getNodeDetail(ctx, clusterID, node)
+	if err != nil {
+		return nil, err
+	}
+	asFloat := func(v any) float64 {
+		switch n := v.(type) {
+		case int:
+			return float64(n)
+		case int64:
+			return float64(n)
+		case float64:
+			return n
+		default:
+			return 0
+		}
+	}
+	return metricSummary(
+		asFloat(detail["cpuUsage"]), asFloat(detail["cpuCapacity"]),
+		asFloat(detail["memoryUsage"]), asFloat(detail["memoryCapacity"]),
+		asFloat(detail["podCount"]), asFloat(detail["podCapacity"]),
+		1, 0, 0, 0, 0,
+	), nil
+}
+
 func (h *MonitoringHandler) realClusterMetrics(ctx context.Context, clusterID, rawRange string) (map[string]any, bool, error) {
 	client, cfg, ok, err := h.backendClient(ctx, clusterID)
 	if err != nil || !ok {
@@ -3714,8 +3793,20 @@ func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http
 }
 
 // LegacyNodeMetrics proxies GET /api/v1/monitoring/metrics/node/{cluster_id}/{node}/.
-// Returns 501 because there is no cluster-scoped node metrics endpoint yet.
+// Serves live per-node CPU/memory/pod/network/disk gauges from the cluster's
+// Prometheus/Thanos backend when one is configured, falling back to the node's
+// advertised capacity (plus metrics-server usage when wired) otherwise.
 func (h *MonitoringHandler) LegacyNodeMetrics(w http.ResponseWriter, r *http.Request) {
-	// TODO: wire up to a cluster-node metrics endpoint once a Go-side equivalent exists.
-	RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "node metrics not yet implemented")
+	clusterID := chi.URLParam(r, "cluster_id")
+	node := chi.URLParam(r, "node")
+	if summary, ok, err := h.realNodeSummary(r.Context(), clusterID, node); err == nil && ok {
+		RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": summary})
+		return
+	}
+	summary, err := h.nodeSummaryFallback(r.Context(), clusterID, node)
+	if err != nil {
+		RespondJSON(w, http.StatusBadGateway, map[string]any{"status": "error", "error": err.Error()})
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": summary})
 }

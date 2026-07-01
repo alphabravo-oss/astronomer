@@ -333,6 +333,25 @@ func SyncSource(ctx context.Context, sourceID uuid.UUID) error {
 				"path":   parsed.Doc.RepoPath,
 			})
 		}
+
+		// spec.registries / spec.toolPresets are parsed and carried on the
+		// Result but NOT yet reconciled into cluster_registry_configs /
+		// tool installs — that downstream wiring (name → config resolution,
+		// tunnel-side tool install) is not implemented. Surface the declared
+		// names loudly (warn + audit) instead of silently dropping them, so
+		// an operator never assumes a successful sync applied presets it did
+		// not. See wiring_needed for the full-reconcile follow-up.
+		if len(applied.Registries) > 0 || len(applied.ToolPresets) > 0 {
+			gitopsDeps.Log.WarnContext(ctx, "gitops declared registries/toolPresets are not yet reconciled",
+				"source", src.Name, "path", parsed.Doc.RepoPath,
+				"registries", applied.Registries, "tool_presets", applied.ToolPresets)
+			emitAudit(ctx, "gitops.cluster.presets_unreconciled", applied.ClusterID, applied.ClusterName, map[string]any{
+				"source":       src.Name,
+				"path":         parsed.Doc.RepoPath,
+				"registries":   applied.Registries,
+				"tool_presets": applied.ToolPresets,
+			})
+		}
 	}
 
 	// Mass-decommission guard (H10). Only the destructive on_delete

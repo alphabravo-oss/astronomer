@@ -523,12 +523,54 @@ type chartVersionIngestRow struct {
 	CreatedAtUpstream *time.Time      `json:"created_at_upstream"`
 }
 
+// helmRepoAuthConfig mirrors the auth_config JSON we accept for classic
+// (non-OCI) Helm repositories. All fields are optional. Basic auth uses
+// username/password; a bearer token can be supplied under either "token"
+// or "bearer".
+type helmRepoAuthConfig struct {
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Token    string `json:"token,omitempty"`
+	Bearer   string `json:"bearer,omitempty"`
+}
+
+// applyRepoIndexAuth sets the Authorization header on an index.yaml (or
+// test-connection) request from the repository's stored credentials, so
+// private ChartMuseum / Artifactory / Nexus repos can be synced. Mirrors
+// the OCI ingest branch, which already honours username/password. A repo
+// with auth_type "" / "none" is left unauthenticated.
+func applyRepoIndexAuth(req *http.Request, repo sqlc.HelmRepository) {
+	authType := strings.ToLower(strings.TrimSpace(repo.AuthType))
+	if authType == "" || authType == "none" {
+		return
+	}
+	var cfg helmRepoAuthConfig
+	if len(repo.AuthConfig) > 0 {
+		_ = json.Unmarshal(repo.AuthConfig, &cfg)
+	}
+	switch authType {
+	case "basic":
+		if cfg.Username != "" || cfg.Password != "" {
+			req.SetBasicAuth(cfg.Username, cfg.Password)
+		}
+	case "bearer", "token":
+		token := cfg.Token
+		if token == "" {
+			token = cfg.Bearer
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
+}
+
 func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.HelmRepository) (chartCount, versionCount int, err error) {
 	indexURL := strings.TrimRight(repo.Url, "/") + "/index.yaml"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
 	if err != nil {
 		return 0, 0, fmt.Errorf("build index request: %w", err)
 	}
+	applyRepoIndexAuth(req, repo)
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -932,19 +974,16 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create installation")
 		return
 	}
-	// Migration 067 — resolve ${vault://...} markers in the values blob
-	// IN-MEMORY before enqueueing the install task. The DB row keeps
-	// the original blob (so the operator can re-resolve on upgrade and
-	// no cleartext secret is persisted). Catalog installs are
-	// cluster-scoped and not tied to a single project, so unqualified
-	// references (no <connection> segment) require the operator to use
-	// the explicit "${vault://<connection>/...}" form. The hook fails
-	// clear when a reference is unresolvable.
-	resolvedValues, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, installation.ValuesOverride)
-	if vaultErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.VaultResolveFailed, vaultErr.Error())
-		return
-	}
+	// Migration 067 — the values blob keeps its ${vault://...} markers in
+	// both the installed_charts row AND the enqueued operation payload.
+	// Resolution happens at execution time inside the reconciler
+	// (sendHelm), so the resolved plaintext secret is never persisted to
+	// catalog_operations.payload — it only ever exists in-memory on the
+	// wire to the cluster. Catalog installs are cluster-scoped and not
+	// tied to a single project, so unqualified references (no <connection>
+	// segment) require the operator to use the explicit
+	// "${vault://<connection>/...}" form; the reconciler fails the
+	// operation clearly when a reference is unresolvable.
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
 		InstalledChartID: installation.ID.String(),
 		ClusterID:        clusterID.String(),
@@ -954,9 +993,10 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		ChartName:        chart.Name,
 		RepoURL:          repo.Url,
 		Version:          version.Version,
-		// Resolved values flow to the cluster; the persisted row keeps
-		// the original ${vault://...}-bearing blob.
-		ValuesOverride: resolvedValues,
+		// The marker-bearing blob flows to the reconciler unchanged; it
+		// resolves ${vault://...} in-memory right before shipping to the
+		// cluster (see sendHelm).
+		ValuesOverride: installation.ValuesOverride,
 		Notes:          installation.Notes,
 	}, currentUserUUID(r))
 	if err != nil {
@@ -1100,6 +1140,10 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to stage installed chart upgrade")
 		return
 	}
+	// The values blob keeps its ${vault://...} markers here and in the
+	// persisted installed_charts row; the reconciler (sendHelm) resolves
+	// them in-memory at execution time. Without that, the upgrade path
+	// previously shipped the literal placeholder straight to Helm.
 	op, err := h.enqueueOperation(withOperationIdempotency(r, "catalog"), "installed_chart", installed.ID.String(), "upgrade", catalogOperationEnvelope{
 		InstalledChartID: installed.ID.String(),
 		ClusterID:        installed.ClusterID.String(),
@@ -1145,6 +1189,20 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
 		return
 	}
+	// Optional body: an explicit target revision lets operators roll back to
+	// ANY prior revision (parity with `helm rollback <name> <revision>`), not
+	// just the immediately preceding one. An empty body — or a non-positive
+	// revision — falls back to the previous revision.
+	var req struct {
+		Revision int `json:"revision,omitempty"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+	targetRevision := int(max(current.Revision-1, 1))
+	if req.Revision > 0 {
+		targetRevision = req.Revision
+	}
 	if err := h.queries.UpdateInstalledChartStatus(r.Context(), sqlc.UpdateInstalledChartStatusParams{
 		ID:       id,
 		Status:   "pending_rollback",
@@ -1158,7 +1216,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 		ClusterID:        current.ClusterID.String(),
 		ReleaseName:      current.ReleaseName,
 		Namespace:        current.Namespace,
-		RollbackRevision: int(max(current.Revision-1, 1)),
+		RollbackRevision: targetRevision,
 	}, currentUserUUID(r))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue rollback")
@@ -1167,7 +1225,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 	recordAudit(r, h.queries, "catalog.installation.rollback", "installed_chart", current.ID.String(), current.ReleaseName, map[string]any{
 		"cluster_id":        current.ClusterID.String(),
 		"namespace":         current.Namespace,
-		"rollback_revision": int(max(current.Revision-1, 1)),
+		"rollback_revision": targetRevision,
 		"operation_id":      op.ID.String(),
 	})
 	RespondJSON(w, http.StatusAccepted, catalogOperationResponse(op))
@@ -1233,6 +1291,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
 		return
 	}
+	applyRepoIndexAuth(req, repo)
 	resp, err := client.Do(req)
 	if err != nil {
 		RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
@@ -1802,9 +1861,20 @@ func (h *CatalogHandler) checkCatalogMaintenanceWindow(w http.ResponseWriter, r 
 }
 
 func (h *CatalogHandler) sendHelm(ctx context.Context, clusterID string, msgType protocol.MessageType, env catalogOperationEnvelope) (*protocol.HelmResultPayload, error) {
+	// Resolve ${vault://...} markers at execution time. The operation
+	// payload (and the installed_charts row) persist the ORIGINAL
+	// marker-bearing blob, so no cleartext secret ever lands in
+	// catalog_operations.payload; substitution happens here, in-memory,
+	// right before the values are shipped to the cluster. This is also
+	// the path that resolves markers on the UPGRADE flow, which
+	// previously shipped the literal placeholder through to Helm.
+	blob, err := vaultResolveBlob(ctx, h.vaultResolver, uuid.Nil, env.ValuesOverride)
+	if err != nil {
+		return nil, err
+	}
 	var values map[string]any
-	if env.ValuesOverride != "" {
-		if err := yaml.Unmarshal([]byte(env.ValuesOverride), &values); err != nil {
+	if blob != "" {
+		if err := yaml.Unmarshal([]byte(blob), &values); err != nil {
 			return nil, err
 		}
 	}

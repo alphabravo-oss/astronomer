@@ -35,6 +35,32 @@ func (q *Queries) CountLoggingPipelines(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countOutputsByCluster = `-- name: CountOutputsByCluster :one
+SELECT count(*) FROM logging_outputs WHERE cluster_id = $1
+`
+
+// Total outputs scoped to a single cluster, matching ListOutputsByCluster so
+// the cluster-scoped list endpoint reports a correct pagination total.
+func (q *Queries) CountOutputsByCluster(ctx context.Context, clusterID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOutputsByCluster, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPipelinesByCluster = `-- name: CountPipelinesByCluster :one
+SELECT count(*) FROM logging_pipelines WHERE cluster_id = $1
+`
+
+// Total pipelines scoped to a single cluster, matching ListPipelinesByCluster
+// so the cluster-scoped list endpoint reports a correct pagination total.
+func (q *Queries) CountPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPipelinesByCluster, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLoggingOutput = `-- name: CreateLoggingOutput :one
 INSERT INTO logging_outputs (name, output_type, configuration, cluster_id, enabled, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6)

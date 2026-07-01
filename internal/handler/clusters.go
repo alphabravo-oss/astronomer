@@ -562,9 +562,19 @@ func (a metricsRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 // for up to 5s × N clusters. The background metrics
 // publisher (internal/metrics/publisher.go) keeps the cache warm; stale
 // or missing entries return zero values rather than blocking.
-func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Cluster, manageBaseline bool) ClusterResponse {
+func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Cluster, manageBaseline bool, argo *argoCDPageData) ClusterResponse {
 	out := clusterToResponse(c)
-	h.enrichClusterArgoCD(ctx, &out, c, manageBaseline)
+	switch {
+	case argo == nil:
+		// No pre-batched data (defensive) — fall back to the per-cluster query.
+		h.enrichClusterArgoCD(ctx, &out, c, manageBaseline)
+	case !argo.rowsOK:
+		// The batch managed-cluster query failed for the whole page; mirror the
+		// per-cluster rows-error path (baseline only, Registered stays false).
+		setArgoCDBaselineDefaults(&out, c, manageBaseline)
+	default:
+		applyArgoCDEnrichment(&out, c, argo.rowsByCluster[c.ID], argo.candidateApps, argo.appsErr, manageBaseline)
+	}
 	if h.metrics == nil {
 		return out
 	}
@@ -615,10 +625,131 @@ func (h *ClusterHandler) argoCDManageBaseline(ctx context.Context) bool {
 	return manageBaseline
 }
 
-func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterResponse, c sqlc.Cluster, manageBaseline bool) {
-	if h == nil || h.queries == nil || out == nil {
-		return
+// argoCDPageData carries the pre-batched ArgoCD enrichment inputs for a whole
+// page of clusters, built once by List so the per-cluster loop does zero DB
+// queries. rowsOK is false when the batch managed-cluster query failed;
+// appsErr is true when the (single, page-wide) applications query failed.
+type argoCDPageData struct {
+	rowsByCluster map[uuid.UUID][]sqlc.ArgocdManagedCluster
+	rowsOK        bool
+	candidateApps []sqlc.ArgocdApplication
+	appsErr       bool
+}
+
+// argoCDBatchQuerier is the optional batch surface used to collapse the
+// per-cluster ArgoCD N+1 into one query. Declared as an optional interface
+// (rather than folded into ClusterQuerier) so the many existing ClusterQuerier
+// test fakes keep compiling; production *sqlc.Queries satisfies it, so the
+// dashboard List path gets the batched query while callers that don't
+// implement it fall back to the per-cluster enrichment.
+type argoCDBatchQuerier interface {
+	ListArgoCDManagedClustersByClusterIDs(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
+}
+
+// loadArgoCDPageData batches the two ArgoCD enrichment queries for a page:
+// one ListArgoCDManagedClustersByClusterIDs for all clusters, then one
+// ListArgoCDApplicationsByManagedClusterTargets over the union of every
+// cluster's instance-ids/targets. Replaces the ~2-queries-per-cluster N+1 the
+// List loop used to run. Best-effort: a query error is signalled via the
+// rowsOK/appsErr flags so the loop degrades exactly like the old per-cluster
+// path did (baseline-only / "drift unavailable") rather than 500-ing. Returns
+// nil when the store doesn't implement the batch query, so List falls back to
+// the per-cluster enrichClusterArgoCD path.
+func (h *ClusterHandler) loadArgoCDPageData(ctx context.Context, clusters []sqlc.Cluster) *argoCDPageData {
+	if h == nil || h.queries == nil || len(clusters) == 0 {
+		return nil
 	}
+	batchQ, ok := h.queries.(argoCDBatchQuerier)
+	if !ok {
+		return nil
+	}
+	data := &argoCDPageData{rowsByCluster: map[uuid.UUID][]sqlc.ArgocdManagedCluster{}, rowsOK: true}
+	ids := make([]uuid.UUID, len(clusters))
+	for i, c := range clusters {
+		ids[i] = c.ID
+	}
+	rows, err := batchQ.ListArgoCDManagedClustersByClusterIDs(ctx, ids)
+	if err != nil {
+		data.rowsOK = false
+		return data
+	}
+	for _, row := range rows {
+		data.rowsByCluster[row.ClusterID] = append(data.rowsByCluster[row.ClusterID], row)
+	}
+
+	instanceIDs, targets := argoCDPageApplicationTargets(clusters, data.rowsByCluster)
+	if len(instanceIDs) == 0 || len(targets) == 0 {
+		return data
+	}
+	apps, err := h.queries.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
+		ArgocdInstanceIds:   instanceIDs,
+		DestinationClusters: targets,
+	})
+	if err != nil {
+		data.appsErr = true
+		return data
+	}
+	data.candidateApps = apps
+	return data
+}
+
+// argoCDPageApplicationTargets unions every cluster's (instanceIDs, targets)
+// so the page can load candidate apps in a single query. Each cluster later
+// re-filters this candidate set to its own predicate via filterAppsForTargets,
+// making the per-cluster result identical to the single-cluster query.
+func argoCDPageApplicationTargets(clusters []sqlc.Cluster, rowsByCluster map[uuid.UUID][]sqlc.ArgocdManagedCluster) ([]uuid.UUID, []string) {
+	seenIDs := map[uuid.UUID]struct{}{}
+	seenTargets := map[string]struct{}{}
+	var ids []uuid.UUID
+	var targets []string
+	for _, c := range clusters {
+		cIDs, cTargets := argoCDManagedClusterApplicationTargets(c, rowsByCluster[c.ID])
+		for _, id := range cIDs {
+			if _, ok := seenIDs[id]; !ok {
+				seenIDs[id] = struct{}{}
+				ids = append(ids, id)
+			}
+		}
+		for _, t := range cTargets {
+			if _, ok := seenTargets[t]; !ok {
+				seenTargets[t] = struct{}{}
+				targets = append(targets, t)
+			}
+		}
+	}
+	return ids, targets
+}
+
+// filterAppsForTargets applies the ListArgoCDApplicationsByManagedClusterTargets
+// predicate (instance_id ∈ ids AND destination_cluster ∈ targets) in memory, so
+// a page-wide candidate set can be narrowed to one cluster without another
+// query.
+func filterAppsForTargets(apps []sqlc.ArgocdApplication, instanceIDs []uuid.UUID, targets []string) []sqlc.ArgocdApplication {
+	idSet := make(map[uuid.UUID]struct{}, len(instanceIDs))
+	for _, id := range instanceIDs {
+		idSet[id] = struct{}{}
+	}
+	targetSet := make(map[string]struct{}, len(targets))
+	for _, t := range targets {
+		targetSet[t] = struct{}{}
+	}
+	out := make([]sqlc.ArgocdApplication, 0, len(apps))
+	for _, app := range apps {
+		if _, ok := idSet[app.ArgocdInstanceID]; !ok {
+			continue
+		}
+		if _, ok := targetSet[app.DestinationCluster]; !ok {
+			continue
+		}
+		out = append(out, app)
+	}
+	return out
+}
+
+// setArgoCDBaselineDefaults sets the baseline-ownership fields that don't depend
+// on the managed-cluster rows. Shared by the rows-error fast path and the full
+// enrichment so a failed lookup still reports a sensible baseline.
+func setArgoCDBaselineDefaults(out *ClusterResponse, c sqlc.Cluster, manageBaseline bool) {
 	out.ArgoCD.BaselineManagedBy = "helm"
 	if c.IsLocal {
 		out.ArgoCD.BaselineManagedBy = "local"
@@ -626,10 +757,18 @@ func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterRe
 		out.ArgoCD.BaselineManagedBy = "argocd_pending"
 	}
 	out.ArgoCD.BaselineComponents = baselineComponentOwnership(out.ArgoCD.BaselineManagedBy)
-	rows, err := h.queries.ListArgoCDManagedClustersByCluster(ctx, c.ID)
-	if err != nil {
+}
+
+// applyArgoCDEnrichment fills out.ArgoCD from pre-loaded managed-cluster rows
+// and a candidate app set (which may be a page-wide superset — it is re-filtered
+// to this cluster). Mirrors the old per-cluster enrichClusterArgoCD body but
+// takes its inputs as arguments instead of querying, so List can drive it from
+// one batched fetch.
+func applyArgoCDEnrichment(out *ClusterResponse, c sqlc.Cluster, rows []sqlc.ArgocdManagedCluster, candidateApps []sqlc.ArgocdApplication, appsErr, manageBaseline bool) {
+	if out == nil {
 		return
 	}
+	setArgoCDBaselineDefaults(out, c, manageBaseline)
 	out.ArgoCD.Registered = len(rows) > 0
 	out.ArgoCD.InstanceCount = len(rows)
 	out.ArgoCD.ClusterSecretNames = make([]string, 0, len(rows))
@@ -647,15 +786,39 @@ func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterRe
 	if len(instanceIDs) == 0 || len(targets) == 0 {
 		return
 	}
-	apps, err := h.queries.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
-		ArgocdInstanceIds:   instanceIDs,
-		DestinationClusters: targets,
-	})
-	if err != nil {
+	if appsErr {
 		out.ArgoCD.Drift.LastError = "cached ArgoCD application drift unavailable"
 		return
 	}
-	out.ArgoCD.Drift = summarizeArgoCDDrift(apps)
+	out.ArgoCD.Drift = summarizeArgoCDDrift(filterAppsForTargets(candidateApps, instanceIDs, targets))
+}
+
+func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterResponse, c sqlc.Cluster, manageBaseline bool) {
+	if h == nil || h.queries == nil || out == nil {
+		return
+	}
+	rows, err := h.queries.ListArgoCDManagedClustersByCluster(ctx, c.ID)
+	if err != nil {
+		// Preserve the original rows-error behaviour: baseline defaults set,
+		// Registered left false, no drift lookup.
+		setArgoCDBaselineDefaults(out, c, manageBaseline)
+		return
+	}
+	instanceIDs, targets := argoCDManagedClusterApplicationTargets(c, rows)
+	var apps []sqlc.ArgocdApplication
+	appsErr := false
+	if len(instanceIDs) > 0 && len(targets) > 0 {
+		fetched, ferr := h.queries.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
+			ArgocdInstanceIds:   instanceIDs,
+			DestinationClusters: targets,
+		})
+		if ferr != nil {
+			appsErr = true
+		} else {
+			apps = fetched
+		}
+	}
+	applyArgoCDEnrichment(out, c, rows, apps, appsErr, manageBaseline)
 }
 
 func argoCDManagedClusterApplicationTargets(c sqlc.Cluster, rows []sqlc.ArgocdManagedCluster) ([]uuid.UUID, []string) {
@@ -827,9 +990,13 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	decommissioning := h.inFlightDecommissionSet(r.Context(), pageIDs, total)
 
+	// Batch the ArgoCD enrichment for the whole page (managed-cluster rows +
+	// their applications) into two queries instead of ~2 per cluster.
+	argo := h.loadArgoCDPageData(r.Context(), clusters)
+
 	enriched := make([]ClusterResponse, 0, len(clusters))
 	for _, c := range clusters {
-		resp := h.enrichClusterFromCache(r.Context(), c, manageBaseline)
+		resp := h.enrichClusterFromCache(r.Context(), c, manageBaseline, argo)
 		resp.Decommissioning = decommissioning[c.ID]
 		enriched = append(enriched, resp)
 	}
@@ -1989,7 +2156,11 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)
 	userEmail := authenticatedEmail(r)
-	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL)
+	// Mint a short-lived, caller-scoped token so the downloaded file works
+	// with `kubectl` immediately instead of shipping a REPLACE_WITH_API_TOKEN
+	// placeholder the user has to hand-edit.
+	token := h.mintKubeconfigToken(r, cluster)
+	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL, token)
 	yamlBytes, err := yaml.Marshal(kubeconfig)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RenderError, "Failed to render kubeconfig")
@@ -2015,7 +2186,10 @@ func (h *ClusterHandler) PreviewKubeconfig(w http.ResponseWriter, r *http.Reques
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)
 	userEmail := authenticatedEmail(r)
-	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL)
+	// Preview is a UI display (JSON), not a download for kubectl — keep the
+	// placeholder here rather than minting a live credential into a view that
+	// may be rendered/logged. The download path (GenerateKubeconfig) mints.
+	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL, "")
 	RespondJSON(w, http.StatusOK, kubeconfig)
 }
 
@@ -2138,9 +2312,16 @@ func buildDirectKubeconfig(cluster sqlc.Cluster, userEmail string) map[string]an
 	}
 }
 
-func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL string) map[string]any {
+func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL, token string) map[string]any {
 	if userEmail == "" {
 		userEmail = "user"
+	}
+	// When we couldn't mint a token (unauthenticated caller or store without
+	// token support) fall back to the placeholder so the YAML still renders and
+	// the user can paste a token by hand — the old always-broken behaviour, now
+	// only the degraded path.
+	if token == "" {
+		token = "REPLACE_WITH_API_TOKEN"
 	}
 	proxyURL := fmt.Sprintf("%s/api/v1/clusters/%s/k8s", serverURL, cluster.ID.String())
 	return map[string]any{
@@ -2169,11 +2350,59 @@ func buildProxyKubeconfig(cluster sqlc.Cluster, userEmail, serverURL string) map
 			{
 				"name": userEmail,
 				"user": map[string]any{
-					"token": "REPLACE_WITH_API_TOKEN",
+					"token": token,
 				},
 			},
 		},
 	}
+}
+
+// kubeconfigTokenMinter is the optional store surface used to mint the
+// short-lived API token embedded in a downloaded kubeconfig. Optional
+// interface (not folded into ClusterQuerier) so the existing ClusterQuerier
+// fakes keep compiling; production *sqlc.Queries satisfies it.
+type kubeconfigTokenMinter interface {
+	CreateAPIToken(ctx context.Context, arg sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
+}
+
+// kubeconfigTokenTTL bounds the lifetime of the token minted for a downloaded
+// kubeconfig. Short by design: the file is for immediate `kubectl` use, and a
+// leaked download shouldn't grant long-lived access.
+const kubeconfigTokenTTL = 12 * time.Hour
+
+// mintKubeconfigToken creates a short-lived, caller-scoped API token so the
+// downloaded kubeconfig authenticates out of the box. Best-effort: returns ""
+// when there's no authenticated user, the store can't mint tokens, or the
+// insert fails — the caller then renders the hand-edit placeholder instead of
+// failing the download.
+func (h *ClusterHandler) mintKubeconfigToken(r *http.Request, cluster sqlc.Cluster) string {
+	if h == nil || h.queries == nil {
+		return ""
+	}
+	minter, ok := h.queries.(kubeconfigTokenMinter)
+	if !ok {
+		return ""
+	}
+	userID := currentUserUUID(r)
+	if !userID.Valid {
+		return ""
+	}
+	plaintext, hash, prefix, err := generateAPIToken()
+	if err != nil {
+		return ""
+	}
+	if _, err := minter.CreateAPIToken(r.Context(), sqlc.CreateAPITokenParams{
+		UserID:       uuid.UUID(userID.Bytes),
+		Name:         fmt.Sprintf("kubeconfig-%s", cluster.Name),
+		TokenHash:    hash,
+		Prefix:       prefix,
+		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(kubeconfigTokenTTL), Valid: true},
+		Scopes:       json.RawMessage(`[]`),
+		AllowedCidrs: "",
+	}); err != nil {
+		return ""
+	}
+	return plaintext
 }
 
 func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) string {

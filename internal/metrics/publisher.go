@@ -175,11 +175,30 @@ func (p *Publisher) runStatusSweepLoop(ctx context.Context) {
 // Snapshots come from the clustermetrics provider so a tight loop here only
 // hits the database and (mostly) cached snapshots — actual API round-trips
 // happen at most once per cluster per provider TTL.
+// listAllClusters pages through the entire non-decommissioned fleet. Both the
+// metrics publish and the status sweep are authoritative full-fleet passes, so
+// a single Limit:500,Offset:0 read silently froze every cluster past the 500th
+// (its status never transitioned active<->disconnected). Page until short.
+func (p *Publisher) listAllClusters(ctx context.Context) ([]sqlc.Cluster, error) {
+	const pageSize = 500
+	var all []sqlc.Cluster
+	for offset := int32(0); ; offset += pageSize {
+		page, err := p.queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: pageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if len(page) < pageSize {
+			return all, nil
+		}
+	}
+}
+
 func (p *Publisher) publishMetrics(ctx context.Context) {
 	if p.bus == nil || p.queries == nil || p.metrics == nil {
 		return
 	}
-	clusters, err := p.queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
+	clusters, err := p.listAllClusters(ctx)
 	if err != nil {
 		p.log.Debug("metrics publisher: list clusters failed", slog.String("error", err.Error()))
 		return
@@ -217,7 +236,7 @@ func (p *Publisher) sweepStatuses(ctx context.Context) {
 	if p.bus == nil || p.queries == nil {
 		return
 	}
-	clusters, err := p.queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
+	clusters, err := p.listAllClusters(ctx)
 	if err != nil {
 		p.log.Debug("status sweep: list clusters failed", slog.String("error", err.Error()))
 		return

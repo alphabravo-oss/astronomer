@@ -677,6 +677,46 @@ func (q *Queries) ListArgoCDManagedClustersByCluster(ctx context.Context, cluste
 	return items, nil
 }
 
+const listArgoCDManagedClustersByClusterIDs = `-- name: ListArgoCDManagedClustersByClusterIDs :many
+SELECT id, argocd_instance_id, cluster_id, cluster_secret_name, server_url, labels, created_at, updated_at FROM argocd_managed_clusters
+WHERE cluster_id = ANY($1::uuid[])
+ORDER BY created_at ASC
+`
+
+// Batched form of ListArgoCDManagedClustersByCluster for the clusters-list
+// dashboard: one round-trip for a whole page of clusters instead of one query
+// per cluster (the ArgoCD N+1). Rows are grouped by cluster_id in Go; the
+// created_at ordering keeps each cluster's per-row order identical to the
+// single-cluster query.
+func (q *Queries) ListArgoCDManagedClustersByClusterIDs(ctx context.Context, clusterIds []uuid.UUID) ([]ArgocdManagedCluster, error) {
+	rows, err := q.db.Query(ctx, listArgoCDManagedClustersByClusterIDs, clusterIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArgocdManagedCluster{}
+	for rows.Next() {
+		var i ArgocdManagedCluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArgocdInstanceID,
+			&i.ClusterID,
+			&i.ClusterSecretName,
+			&i.ServerUrl,
+			&i.Labels,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstancesByCluster = `-- name: ListInstancesByCluster :many
 SELECT id, name, cluster_id, api_url, auth_token_encrypted, verify_ssl, is_healthy, last_sync, created_at, updated_at FROM argocd_instances WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `

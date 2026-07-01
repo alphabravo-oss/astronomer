@@ -24,6 +24,29 @@ func (q *Queries) CountApiserverAuditEventsByCluster(ctx context.Context, cluste
 	return count, err
 }
 
+const countApiserverAuditEventsByClusterCapped = `-- name: CountApiserverAuditEventsByClusterCapped :one
+SELECT count(*) FROM (
+    SELECT 1 FROM apiserver_audit_events
+    WHERE cluster_id = $1
+    LIMIT $2
+) capped
+`
+
+type CountApiserverAuditEventsByClusterCappedParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	MaxRows   int32     `json:"max_rows"`
+}
+
+// Capped count for the high-volume list view: stops scanning after max_rows so
+// the total never turns into an ever-slower full-index scan as the table grows
+// to millions of rows per cluster. The UI renders "N+" once the cap is hit.
+func (q *Queries) CountApiserverAuditEventsByClusterCapped(ctx context.Context, arg CountApiserverAuditEventsByClusterCappedParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countApiserverAuditEventsByClusterCapped, arg.ClusterID, arg.MaxRows)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const insertApiserverAuditEvent = `-- name: InsertApiserverAuditEvent :exec
 
 INSERT INTO apiserver_audit_events (
@@ -64,6 +87,58 @@ func (q *Queries) InsertApiserverAuditEvent(ctx context.Context, arg InsertApise
 		arg.StatusCode,
 		arg.EventTime,
 		arg.Raw,
+	)
+	return err
+}
+
+const insertApiserverAuditEventsBatch = `-- name: InsertApiserverAuditEventsBatch :exec
+INSERT INTO apiserver_audit_events (
+    cluster_id, audit_id, stage, verb, username, resource, namespace,
+    status_code, event_time, raw
+)
+SELECT
+    unnest($1::uuid[]),
+    unnest($2::text[]),
+    unnest($3::text[]),
+    unnest($4::text[]),
+    unnest($5::text[]),
+    unnest($6::text[]),
+    unnest($7::text[]),
+    unnest($8::int[]),
+    unnest($9::timestamptz[]),
+    unnest($10::jsonb[])
+ON CONFLICT (cluster_id, audit_id) DO NOTHING
+`
+
+type InsertApiserverAuditEventsBatchParams struct {
+	ClusterIds  []uuid.UUID       `json:"cluster_ids"`
+	AuditIds    []string          `json:"audit_ids"`
+	Stages      []string          `json:"stages"`
+	Verbs       []string          `json:"verbs"`
+	Usernames   []string          `json:"usernames"`
+	Resources   []string          `json:"resources"`
+	Namespaces  []string          `json:"namespaces"`
+	StatusCodes []int32           `json:"status_codes"`
+	EventTimes  []time.Time       `json:"event_times"`
+	Raws        []json.RawMessage `json:"raws"`
+}
+
+// Multi-row form of InsertApiserverAuditEvent: one round-trip for a whole
+// ingest batch (up to maxIngestEvents=1000) instead of 1000 sequential
+// INSERTs. Idempotent on (cluster_id, audit_id) exactly like the single-row
+// form. Column order matches the unnested array order below.
+func (q *Queries) InsertApiserverAuditEventsBatch(ctx context.Context, arg InsertApiserverAuditEventsBatchParams) error {
+	_, err := q.db.Exec(ctx, insertApiserverAuditEventsBatch,
+		arg.ClusterIds,
+		arg.AuditIds,
+		arg.Stages,
+		arg.Verbs,
+		arg.Usernames,
+		arg.Resources,
+		arg.Namespaces,
+		arg.StatusCodes,
+		arg.EventTimes,
+		arg.Raws,
 	)
 	return err
 }
@@ -114,4 +189,19 @@ func (q *Queries) ListApiserverAuditEventsByCluster(ctx context.Context, arg Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const pruneApiserverAuditEventsBefore = `-- name: PruneApiserverAuditEventsBefore :execrows
+DELETE FROM apiserver_audit_events WHERE event_time < $1
+`
+
+// Retention sweep: delete apiserver audit rows older than the cutoff. The table
+// is otherwise append-only and unbounded (one row per apiserver request, fleet
+// wide), so a periodic sweeper must call this to keep it from growing forever.
+func (q *Queries) PruneApiserverAuditEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneApiserverAuditEventsBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
