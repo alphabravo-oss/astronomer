@@ -533,9 +533,14 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.WorkloadError, "workload store not configured")
 		return
 	}
+	// Clamp limit to a sane bound (and floor at 1) via the shared helper so a
+	// hostile ?limit=2000000000 can't materialize the whole operations table,
+	// and ?limit=2147483648 can't overflow int32 into a negative LIMIT that
+	// Postgres rejects. Mirrors audit/smtp/webhooks/maintenance handlers.
+	limit, offset := queryLimitOffset(r, 50)
 	arg := sqlc.ListWorkloadOperationsParams{
-		Limit:  int32(queryInt(r, "limit", 50)),
-		Offset: int32(queryInt(r, "offset", 0)),
+		Limit:  int32(limit),
+		Offset: int32(offset),
 	}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}

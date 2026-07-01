@@ -20,6 +20,19 @@ type Querier interface {
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
 	AggregateClusterVulnerabilities(ctx context.Context, clusterID uuid.UUID) (AggregateClusterVulnerabilitiesRow, error)
 	AggregateFleetVulnerabilities(ctx context.Context) (AggregateFleetVulnerabilitiesRow, error)
+	// Atomic archive-then-delete used by the decommission archive_audit phase.
+	//
+	// A single statement so both halves see ONE snapshot: to_archive pins the exact
+	// set of matching audit_log rows, the INSERT copies that set into audit_archive
+	// (ON CONFLICT DO NOTHING keeps re-runs idempotent), and the DELETE removes
+	// EXACTLY that same set. A row committed by a concurrent request after the
+	// statement snapshot is not in to_archive, so it is neither archived nor deleted
+	// here — it survives in audit_log and is picked up on the next decommission
+	// re-run, instead of being DELETEd-but-never-archived (silent audit loss). The
+	// single uuid arg is cast to text for the resource_id / detail->>'cluster_id'
+	// comparisons (uuid::text is the canonical lowercase form Go's uuid.String()
+	// also produces).
+	ArchiveAndPurgeAuditLogsForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Audit archive operations.
 	//
 	// ArchiveAuditLogsForCluster is the bulk INSERT … SELECT used during the
@@ -758,6 +771,11 @@ type Querier interface {
 	GetPodSecurityTemplateByID(ctx context.Context, id uuid.UUID) (PodSecurityTemplate, error)
 	GetPolicyByCluster(ctx context.Context, clusterID uuid.UUID) (ClusterSecurityPolicy, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (Project, error)
+	// Row-locks the project row so AddNamespace / RemoveNamespace serialize their
+	// read-modify-write of the namespaces JSONB list, preventing concurrent
+	// membership changes from clobbering each other (last-writer-wins). Must run
+	// inside a transaction alongside the UpdateProject + project_namespaces write.
+	GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Project, error)
 	GetProjectByNameAndCluster(ctx context.Context, arg GetProjectByNameAndClusterParams) (Project, error)
 	GetProjectCatalogSubscription(ctx context.Context, arg GetProjectCatalogSubscriptionParams) (ProjectCatalogSubscription, error)
 	// Returns the (possibly NULL) default_vault_connection_id pointer. Caller
@@ -1480,6 +1498,13 @@ type Querier interface {
 	LockUser(ctx context.Context, arg LockUserParams) error
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)
+	// Atomic claim: only transition an op that is still claimable — either
+	// 'pending', or a 'running' op whose lease has gone stale (started_at older
+	// than the 1-minute fresh-running window the reconciler uses). Under an HA
+	// deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
+	// the same row; the first UPDATE flips it to running+started_at=now() so the
+	// second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
+	// skips it — preventing a double `POST /applications/{name}/sync` upstream.
 	MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationSuperseded(ctx context.Context, arg MarkArgoCDOperationSupersededParams) (ArgocdOperation, error)
 	MarkCatalogOperationCompleted(ctx context.Context, id uuid.UUID) (CatalogOperation, error)

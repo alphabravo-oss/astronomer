@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -318,7 +319,18 @@ func leaveLocalExclusionsByComponent(ctx context.Context, q baselineToolQuerier)
 	if err != nil {
 		return out
 	}
+	// Ownership decisions can carry an expires_at (a temporary "keep this
+	// component locally managed for N days" cutover). The DB list query is
+	// not time-filtered, so an expired row would otherwise exclude the
+	// cluster from the baseline fan-out FOREVER — ArgoCD would never adopt
+	// the component even though the operator intended the exclusion to
+	// lapse. Drop rows whose expires_at is in the past so the exclusion
+	// ends exactly when the operator set it to.
+	now := time.Now()
 	for _, d := range decisions {
+		if d.ExpiresAt.Valid && !d.ExpiresAt.Time.After(now) {
+			continue
+		}
 		out[d.ComponentSlug] = append(out[d.ComponentSlug], d.ClusterID.String())
 	}
 	return out

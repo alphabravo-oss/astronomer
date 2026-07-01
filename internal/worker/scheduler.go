@@ -54,6 +54,7 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		{"0 2 * * *", TypeCleanupOldAlertEvents, "cleanup old alert events (daily 02:00)"},
 		{"0 1 * * *", TypeEnsureAuditLogPartitions, "ensure audit_log monthly partitions (daily 01:00)"},
 		{"30 1 * * *", TypeEnforceAuditLogRetention, "enforce audit_log retention (daily 01:30)"},
+		{"45 1 * * *", tasks.ApiserverAuditRetentionType, "enforce apiserver_audit_events retention (daily 01:45)"},
 		{"@every 1h", TypeRunScheduledBackups, "run scheduled backups"},
 		{"0 3 * * *", TypeEnforceBackupRetention, "enforce backup retention (daily 03:00)"},
 		// The recompute handler is registered in the mux (worker.go) but had no

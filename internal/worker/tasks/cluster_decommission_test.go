@@ -34,7 +34,6 @@ type fakeDecommQuerier struct {
 	regTokenErr      error
 	agentTokenErr    error
 	archiveErr       error
-	delAuditErr      error
 	registryErr      error
 	healthErr        error
 	conditionsErr    error
@@ -177,14 +176,14 @@ func (f *fakeDecommQuerier) DeleteArgoCDClusterProxyTokensByCluster(_ context.Co
 	return 1, nil
 }
 
-func (f *fakeDecommQuerier) ArchiveAuditLogsForCluster(_ context.Context, _ sqlc.ArchiveAuditLogsForClusterParams) (int64, error) {
-	f.bump("ArchiveAuditLogsForCluster")
+func (f *fakeDecommQuerier) ArchiveAndPurgeAuditLogsForCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("ArchiveAndPurgeAuditLogsForCluster")
 	return 42, f.archiveErr
 }
 
-func (f *fakeDecommQuerier) DeleteAuditLogsForCluster(_ context.Context, _ string) (int64, error) {
-	f.bump("DeleteAuditLogsForCluster")
-	return 42, f.delAuditErr
+func (f *fakeDecommQuerier) DeleteApiserverAuditEventsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteApiserverAuditEventsByCluster")
+	return 8, nil
 }
 
 func (f *fakeDecommQuerier) DeleteClusterRegistryConfigsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
@@ -334,8 +333,7 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 		"DeleteClusterRegistrationTokensByCluster",
 		"DeleteClusterAgentTokensByCluster",
 		"DeleteArgoCDClusterProxyTokensByCluster",
-		"ArchiveAuditLogsForCluster",
-		"DeleteAuditLogsForCluster",
+		"ArchiveAndPurgeAuditLogsForCluster",
 		"DeleteClusterRegistryConfigsByCluster",
 		"DeleteClusterHealthStatusByCluster",
 		"DeleteClusterConditionsByCluster",
@@ -346,6 +344,7 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 		"DeleteClusterSecurityPoliciesByCluster",
 		"DeleteProjectNamespacesByCluster",
 		"DeleteClusterRoleBindingsByCluster",
+		"DeleteApiserverAuditEventsByCluster",
 		"TombstoneCluster",
 	} {
 		if q.calls[name] != 1 {
@@ -622,8 +621,8 @@ func TestRevokeTokenPhaseFailure_RowMarkedFailed(t *testing.T) {
 	if !strings.Contains(q.row.LastError, "boom: postgres unreachable") {
 		t.Errorf("expected LastError to carry inner err, got %q", q.row.LastError)
 	}
-	if q.calls["ArchiveAuditLogsForCluster"] != 0 {
-		t.Errorf("subsequent phase should not have been attempted; calls=%d", q.calls["ArchiveAuditLogsForCluster"])
+	if q.calls["ArchiveAndPurgeAuditLogsForCluster"] != 0 {
+		t.Errorf("subsequent phase should not have been attempted; calls=%d", q.calls["ArchiveAndPurgeAuditLogsForCluster"])
 	}
 	if q.calls["TombstoneCluster"] != 0 {
 		t.Errorf("tombstone should not have been attempted; calls=%d", q.calls["TombstoneCluster"])
@@ -653,6 +652,35 @@ func TestArchivePhaseFailure_RowMarkedFailed(t *testing.T) {
 	// Subsequent phases must not have run:
 	if q.calls["DeleteAlertRulesByCluster"] != 0 {
 		t.Errorf("dependents phase should not have run after archive failed")
+	}
+}
+
+// TestArchiveAuditPhase_AtomicAndApiserverCleanup pins two decommission fixes:
+//   - the archive_audit phase runs a SINGLE atomic archive+purge statement (no
+//     separate archive-SELECT then DELETE window that could drop an in-flight
+//     audit_log row from the live log without archiving it), and
+//   - phaseDeleteDependents drops the cluster's apiserver_audit_events (they are
+//     keyed by cluster_id but never CASCADE-deleted on a soft tombstone).
+func TestArchiveAuditPhase_AtomicAndApiserverCleanup(t *testing.T) {
+	q := newFakeDecommQuerier()
+	tun := &fakeTunnel{connected: true, ack: &protocol.DecommissionAckPayload{}, disconnected: true}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 50 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("runClusterDecommission: %v", err)
+	}
+	if q.row.Status != "succeeded" {
+		t.Fatalf("expected succeeded, got %s (last_error=%q)", q.row.Status, q.row.LastError)
+	}
+	if q.calls["ArchiveAndPurgeAuditLogsForCluster"] != 1 {
+		t.Errorf("archive_audit must use the single atomic statement once, got %d", q.calls["ArchiveAndPurgeAuditLogsForCluster"])
+	}
+	// The non-atomic two-call path must be gone.
+	if q.calls["DeleteAuditLogsForCluster"] != 0 {
+		t.Errorf("legacy non-atomic DeleteAuditLogsForCluster must not be called")
+	}
+	if q.calls["DeleteApiserverAuditEventsByCluster"] != 1 {
+		t.Errorf("decommission must purge apiserver_audit_events once, got %d", q.calls["DeleteApiserverAuditEventsByCluster"])
 	}
 }
 

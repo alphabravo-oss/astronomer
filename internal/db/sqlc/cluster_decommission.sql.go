@@ -13,6 +13,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveAndPurgeAuditLogsForCluster = `-- name: ArchiveAndPurgeAuditLogsForCluster :execrows
+WITH to_archive AS (
+    SELECT
+        id, created_at, schema_version, user_id, actor_auth_method,
+        action, resource_type, resource_id, resource_name,
+        http_method, path, status_code, duration_ms, request_id,
+        ip_address, user_agent, detail, source, correlation_id
+    FROM audit_log
+    WHERE
+        (resource_type = 'cluster' AND resource_id = $1::uuid::text)
+        OR (detail ->> 'cluster_id') = $1::uuid::text
+), inserted AS (
+    INSERT INTO audit_archive (
+        id, created_at, schema_version, user_id, actor_auth_method,
+        action, resource_type, resource_id, resource_name,
+        http_method, path, status_code, duration_ms, request_id,
+        ip_address, user_agent, detail, source, correlation_id,
+        archived_cluster_id
+    )
+    SELECT
+        id, created_at, schema_version, user_id, actor_auth_method,
+        action, resource_type, resource_id, resource_name,
+        http_method, path, status_code, duration_ms, request_id,
+        ip_address, user_agent, detail, source, correlation_id,
+        $1::uuid
+    FROM to_archive
+    ON CONFLICT (id, created_at) DO NOTHING
+)
+DELETE FROM audit_log al
+USING to_archive ta
+WHERE al.id = ta.id AND al.created_at = ta.created_at
+`
+
+// Atomic archive-then-delete used by the decommission archive_audit phase.
+//
+// A single statement so both halves see ONE snapshot: to_archive pins the exact
+// set of matching audit_log rows, the INSERT copies that set into audit_archive
+// (ON CONFLICT DO NOTHING keeps re-runs idempotent), and the DELETE removes
+// EXACTLY that same set. A row committed by a concurrent request after the
+// statement snapshot is not in to_archive, so it is neither archived nor deleted
+// here — it survives in audit_log and is picked up on the next decommission
+// re-run, instead of being DELETEd-but-never-archived (silent audit loss). The
+// single uuid arg is cast to text for the resource_id / detail->>'cluster_id'
+// comparisons (uuid::text is the canonical lowercase form Go's uuid.String()
+// also produces).
+func (q *Queries) ArchiveAndPurgeAuditLogsForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, archiveAndPurgeAuditLogsForCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const archiveAuditLogsForCluster = `-- name: ArchiveAuditLogsForCluster :execrows
 
 INSERT INTO audit_archive (

@@ -29,6 +29,19 @@ import { getConnectorMeta, humaniseFieldName, type FieldMeta } from './connector
 
 const SECRET_PLACEHOLDER = '••••••••';
 
+// Mirror of the snake_case→camelCase transform the shared axios response
+// interceptor (lib/api.ts) applies to every response key. The backend echoes a
+// per-secret marker `__<key>_set: true`; the interceptor rewrites it (e.g.
+// `__clientSecret_set` → `_ClientSecretSet`). We recompute that exact key so we
+// can both (a) detect a stored secret and (b) strip the marker from the submit
+// body instead of persisting it as a garbage config field.
+function snakeToCamelKey(s: string): string {
+  return s.replace(/_([a-z0-9])/g, (_, ch: string) => ch.toUpperCase());
+}
+function camelSecretMarker(key: string): string {
+  return snakeToCamelKey(`__${key}_set`);
+}
+
 export interface ConnectorFormState {
   name: string;
   displayName: string;
@@ -94,9 +107,17 @@ export function ConnectorForm({
   const isSecret = (key: string) => spec.secret.includes(key);
 
   /** True when the connector currently has a non-empty stored secret (read
-   *  from the redacted-then-marked response shape). */
+   *  from the redacted-then-marked response shape).
+   *
+   *  The backend emits a sibling marker `__<key>_set: true`. The shared axios
+   *  response interceptor (lib/api.ts) camelizes every response key, which
+   *  rewrites `__clientSecret_set` into `_ClientSecretSet`. We therefore have
+   *  to look up the marker under BOTH the raw and the camelized key, otherwise
+   *  the `••••••••` placeholder never renders and edits force secret re-entry. */
   const secretIsSet = (key: string): boolean => {
-    return Boolean((initial?.config as Record<string, unknown> | undefined)?.[`__${key}_set`]);
+    const cfg = initial?.config as Record<string, unknown> | undefined;
+    if (!cfg) return false;
+    return Boolean(cfg[`__${key}_set`] || cfg[camelSecretMarker(key)]);
   };
 
   const handleSubmit = () => {
@@ -135,10 +156,18 @@ export function ConnectorForm({
     setClientErrors([]);
 
     // Build the submit body: drop untouched secrets (preserve-on-empty), strip
-    // the `__<name>_set` markers the API echoed back at us.
+    // the secret markers the API echoed back at us — both the raw
+    // `__<name>_set` form and the camelized `_<Name>Set` form the axios
+    // interceptor produces, so neither leaks back as a bogus config key.
+    const markerKeys = new Set<string>();
+    for (const s of spec.secret) {
+      markerKeys.add(`__${s}_set`);
+      markerKeys.add(camelSecretMarker(s));
+    }
     const cleaned: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(config)) {
       if (k.startsWith('__') && k.endsWith('_set')) continue;
+      if (markerKeys.has(k)) continue;
       if (isSecret(k) && !touchedSecrets[k]) continue;
       cleaned[k] = v;
     }

@@ -48,6 +48,13 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: MarkArgoCDOperationRunning :one
+-- Atomic claim: only transition an op that is still claimable — either
+-- 'pending', or a 'running' op whose lease has gone stale (started_at older
+-- than the 1-minute fresh-running window the reconciler uses). Under an HA
+-- deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
+-- the same row; the first UPDATE flips it to running+started_at=now() so the
+-- second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
+-- skips it — preventing a double `POST /applications/{name}/sync` upstream.
 UPDATE argocd_operations
 SET
     status = 'running',
@@ -56,6 +63,10 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status = 'pending'
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+  )
 RETURNING *;
 
 -- name: MarkArgoCDOperationCompleted :one

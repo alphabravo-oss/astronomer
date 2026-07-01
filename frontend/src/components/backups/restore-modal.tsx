@@ -40,6 +40,10 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
   const [confirmText, setConfirmText] = useState('');
 
   const confirmOK = confirmText === backup.name;
+  // When the backup captured namespaces, at least one must stay selected.
+  // An empty selection is an explicit "restore nothing" that we must NOT
+  // silently widen to "restore everything" (see handleSubmit).
+  const namespacesOK = sourceNamespaces.length === 0 || includedFilter.length > 0;
 
   const toggleNamespace = (ns: string) => {
     setIncludedFilter((prev) =>
@@ -48,6 +52,9 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
   };
 
   const handleSubmit = async () => {
+    // Guard: an empty namespace selection means "restore nothing", which we
+    // refuse rather than collapse to `undefined` (= restore ALL namespaces).
+    if (!namespacesOK) return;
     const namespaceMapping: Record<string, string> = {};
     for (const r of mappingRows) {
       const from = r.from.trim();
@@ -57,10 +64,11 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
     try {
       const restore = await create.mutateAsync({
         backup_id: backup.id,
+        // Only omit the filter (= restore every captured namespace) when the
+        // FULL set is selected. A strict subset is sent verbatim; the empty
+        // set is blocked above so it can never reach here as `undefined`.
         included_namespaces:
-          includedFilter.length > 0 && includedFilter.length !== sourceNamespaces.length
-            ? includedFilter
-            : undefined,
+          includedFilter.length === sourceNamespaces.length ? undefined : includedFilter,
         namespace_mapping:
           Object.keys(namespaceMapping).length > 0 ? namespaceMapping : undefined,
         restore_pvs: restorePVs,
@@ -93,7 +101,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!confirmOK || create.isPending}
+            disabled={!confirmOK || !namespacesOK || create.isPending}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-status-warning text-white
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
@@ -137,6 +145,11 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
                   );
                 })}
               </div>
+              {!namespacesOK && (
+                <p className="text-xs text-status-error">
+                  Select at least one namespace to restore.
+                </p>
+              )}
             </div>
           )}
 

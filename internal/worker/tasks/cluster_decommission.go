@@ -178,9 +178,12 @@ type ClusterDecommissionQuerier interface {
 	DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteArgoCDClusterProxyTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 
-	// Phase 3: archive then delete audit rows.
-	ArchiveAuditLogsForCluster(ctx context.Context, arg sqlc.ArchiveAuditLogsForClusterParams) (int64, error)
-	DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error)
+	// Phase 3: archive + delete audit rows atomically. A single statement
+	// (INSERT…SELECT into a snapshot CTE, then DELETE that exact set) so the
+	// DELETE can only remove rows the archive captured — closing the window
+	// where a row committed between a separate archive-SELECT and DELETE was
+	// deleted from audit_log but never archived (silent audit loss).
+	ArchiveAndPurgeAuditLogsForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 
 	// Phase 4: delete dependents.
 	DeleteClusterRegistryConfigsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
@@ -203,6 +206,10 @@ type ClusterDecommissionQuerier interface {
 	DeleteNativeRBACRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteAgentLifecycleOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// apiserver_audit_events are keyed by cluster_id but the cluster row is
+	// tombstoned (soft-deleted), so the FK ON DELETE CASCADE never fires —
+	// phaseDeleteDependents must drop them explicitly or they leak forever.
+	DeleteApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Argo CD managed-cluster mappings + an enumerator so we can audit
 	// the orphans (upstream Argo Secrets that need manual unregister).
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
@@ -746,24 +753,20 @@ func phaseRevokeAgentToken(ctx context.Context, deps ClusterDecommissionDeps, ro
 }
 
 func phaseArchiveAudit(ctx context.Context, deps ClusterDecommissionDeps, row sqlc.ClusterDecommission) (map[string]any, error) {
-	idText := row.ClusterID.String()
-	archived, err := deps.Queries.ArchiveAuditLogsForCluster(ctx, sqlc.ArchiveAuditLogsForClusterParams{
-		ClusterID:     row.ClusterID,
-		ClusterIDText: idText,
-	})
+	// Single atomic statement: archive (INSERT…SELECT into a snapshot CTE) then
+	// DELETE exactly that snapshot set. Because both halves run under one
+	// statement snapshot, a row committed by a concurrent request AFTER the
+	// snapshot is neither archived nor deleted here — it survives in audit_log
+	// and is picked up on the next re-run — instead of being DELETEd-but-never-
+	// archived. ON CONFLICT DO NOTHING on the archive side keeps the phase
+	// idempotent across re-runs.
+	purged, err := deps.Queries.ArchiveAndPurgeAuditLogsForCluster(ctx, row.ClusterID)
 	if err != nil {
-		return nil, fmt.Errorf("archive audit_log rows: %w", err)
-	}
-	deleted, err := deps.Queries.DeleteAuditLogsForCluster(ctx, idText)
-	if err != nil {
-		// Partial state: rows in audit_archive but still in audit_log. The
-		// archive query is ON CONFLICT DO NOTHING so a re-run is a no-op
-		// on the archive side and the delete will succeed cleanly.
-		return map[string]any{"archived": archived}, fmt.Errorf("delete audit_log rows: %w", err)
+		return nil, fmt.Errorf("archive+purge audit_log rows: %w", err)
 	}
 	return map[string]any{
-		"archived": archived,
-		"deleted":  deleted,
+		"archived": purged,
+		"deleted":  purged,
 	}, nil
 }
 
@@ -794,6 +797,11 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		{"native_rbac_rules", q.DeleteNativeRBACRulesByCluster},
 		{"deferred_operations", q.DeleteDeferredOperationsByCluster},
 		{"agent_lifecycle_operations", q.DeleteAgentLifecycleOperationsByCluster},
+		// apiserver_audit_events: keyed by cluster_id but never CASCADE-deleted
+		// because the cluster row is only tombstoned; drop them here so a
+		// decommissioned cluster doesn't leak its (fleet-wide, high-volume)
+		// apiserver audit rows forever.
+		{"apiserver_audit_events", q.DeleteApiserverAuditEventsByCluster},
 	}
 	var firstErr error
 	for _, o := range ops {

@@ -52,6 +52,27 @@ type EmailSender interface {
 	Send(ctx context.Context, msg email.Message) error
 }
 
+// preRenderedEmailSender is the alternate send path the sendOne comment already
+// promised: it ships the enqueue-time rendered body straight through instead of
+// re-rendering the template against an EMPTY data bag. The enqueuer renders the
+// template with the real Data (reset links, alert details, usernames) and stores
+// the result in email_messages.body_text/body_html; re-rendering here against
+// map[string]any{} turned every `{{.Data.X}}` into `<no value>`, so recipients
+// got password-reset emails with no link, "Hello ," account-locked notices, and
+// blank alert bodies — all still marked 'sent'. Primitive params (no shared
+// struct) so *email.Sender can satisfy this without importing this package.
+//
+// WIRING: *email.Sender must grow
+//
+//	SendPreRendered(ctx, to, cc, subject, bodyText, bodyHTML string) error
+//
+// composing the MIME directly from the pre-rendered parts (reusing composeMessage
+// + the live SMTP dial/branding-FROM path). Until then sendOne falls back to the
+// legacy Send so nothing regresses at compile time.
+type preRenderedEmailSender interface {
+	SendPreRendered(ctx context.Context, to, cc, subject, bodyText, bodyHTML string) error
+}
+
 // EmailQuerier is the database surface the dispatch + cleanup tasks
 // need. *sqlc.Queries satisfies it directly.
 type EmailQuerier interface {
@@ -166,35 +187,34 @@ func ageRowsToSkipped(ctx context.Context, rows []sqlc.EmailMessage) {
 	}
 }
 
-// sendOne is the per-row send. Renders into Sender (which already
-// owns the SMTP dialer + Fernet decrypt) and stamps the outcome onto
-// the row.
-//
-// We pass the row's body_text + body_html back through the Sender via
-// a synthetic Template ("email:dispatch:passthrough") because Sender's
-// API is template-name + data. Wiring the dispatcher into the same
-// rendering pipeline means a future "branding changed mid-flight"
-// scenario is consistent (we always re-render against the current
-// branding at SEND time, not enqueue time). For now we use the
-// pre-rendered body via a small alternate send path.
-func sendOne(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
-	// The dispatcher reuses the Sender's template path — the
-	// enqueue-time render is informational (admin view, retry
-	// resilience) and the live send re-renders so a branding mutation
-	// since enqueue is reflected.
-	data := map[string]any{}
-	// We don't have the original template Data after the fact; we
-	// fall back to a "compatibility" data bag that's good enough for
-	// the simple templates. For full fidelity the row also carries
-	// body_text / body_html — those are the source of truth for
-	// what the user actually receives.
-	if err := emailDeps.Sender.Send(ctx, email.Message{
+// deliverEmail ships one row. It prefers the pre-rendered path
+// (SendPreRendered) which passes the enqueue-time rendered body_text/body_html
+// straight through — that is the source of truth for what the recipient
+// receives (reset links, alert details, usernames all substituted at enqueue).
+// Only when the Sender does not implement that path do we fall back to the
+// legacy template re-render; the legacy path is a KNOWN lossy path (it renders
+// against an empty Data bag) kept solely so the dispatcher still compiles/sends
+// before the Sender grows SendPreRendered.
+func deliverEmail(ctx context.Context, row sqlc.EmailMessage) error {
+	if pr, ok := emailDeps.Sender.(preRenderedEmailSender); ok {
+		return pr.SendPreRendered(ctx, row.ToAddress, row.CcAddress, row.Subject, row.BodyText, row.BodyHtml)
+	}
+	return emailDeps.Sender.Send(ctx, email.Message{
 		To:       row.ToAddress,
 		CC:       row.CcAddress,
 		Template: row.Template,
 		Subject:  row.Subject,
-		Data:     data,
-	}); err != nil {
+		// Legacy fallback only: no original Data survives the enqueue, so
+		// dynamic {{.Data.X}} fields render blank. Replaced by the
+		// pre-rendered path above once the Sender implements it.
+		Data: map[string]any{},
+	})
+}
+
+// sendOne is the per-row send. It stamps the delivery outcome
+// (sent/failed/skipped) onto the row after deliverEmail ships it.
+func sendOne(ctx context.Context, row sqlc.EmailMessage, now time.Time) {
+	if err := deliverEmail(ctx, row); err != nil {
 		if errors.Is(err, email.ErrSMTPDisabled) {
 			// Racey but plausible: settings flipped between
 			// Provide() and Send(). Mark skipped, same as the

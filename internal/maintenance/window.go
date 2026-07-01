@@ -247,7 +247,17 @@ func IsBlocked(ctx context.Context, ev WindowEvaluator, opType string, clusterLa
 			return true, &w, nil
 		}
 	}
-	// Second pass: permitted windows that are currently inactive.
+	// Second pass: permitted windows are OR-ed, not AND-ed. A permitted
+	// window means "this op is ONLY allowed while a permitted window is
+	// open". When several permitted windows match the same (op, cluster)
+	// the operation is allowed if ANY of them is currently active — so we
+	// must scan them ALL and block only when at least one permitted
+	// window matches AND none of the matching ones is active. Returning
+	// on the first inactive match (the old behavior) wrongly blocked an
+	// op during window A's open period just because window B was closed.
+	var matched int
+	var activeCount int
+	var firstInactive *Window
 	for i := range windows {
 		w := windows[i]
 		if !w.Enabled {
@@ -266,9 +276,16 @@ func IsBlocked(ctx context.Context, ev WindowEvaluator, opType string, clusterLa
 		if err != nil {
 			continue
 		}
-		if !active {
-			return true, &w, nil
+		matched++
+		if active {
+			activeCount++
+		} else if firstInactive == nil {
+			wc := w
+			firstInactive = &wc
 		}
+	}
+	if matched > 0 && activeCount == 0 {
+		return true, firstInactive, nil
 	}
 	return false, nil, nil
 }

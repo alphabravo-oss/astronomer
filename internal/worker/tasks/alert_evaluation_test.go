@@ -72,6 +72,72 @@ func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T)
 	}
 }
 
+// pagingEventQuerier serves alert events from an in-memory slice honoring
+// Limit/Offset so listAllAlertEventsByRule's paging can be exercised.
+type pagingEventQuerier struct {
+	RuntimeQuerier
+	events []sqlc.AlertEvent
+	calls  int
+}
+
+func (q *pagingEventQuerier) ListAlertEventsByRule(_ context.Context, arg sqlc.ListAlertEventsByRuleParams) ([]sqlc.AlertEvent, error) {
+	q.calls++
+	start := int(arg.Offset)
+	if start >= len(q.events) {
+		return nil, nil
+	}
+	end := start + int(arg.Limit)
+	if end > len(q.events) {
+		end = len(q.events)
+	}
+	return q.events[start:end], nil
+}
+
+// A global rule on a large fleet fires one event per cluster. The read-back
+// must return EVERY active event, not just the first page — otherwise a firing
+// cluster past the old 200-row cap is invisible (stuck-firing + alert storm).
+func TestListAllAlertEventsByRule_PagesBeyondOneBatch(t *testing.T) {
+	saved := runtimeDeps
+	t.Cleanup(func() { runtimeDeps = saved })
+
+	ruleID := uuid.New()
+	total := int(alertEvalSweepPageSize)*2 + 37 // spans three pages
+	sentinel := uuid.New()
+	events := make([]sqlc.AlertEvent, total)
+	for i := range events {
+		events[i] = sqlc.AlertEvent{ID: uuid.New(), RuleID: ruleID, Status: "firing"}
+	}
+	// Put a firing event well past the old 200-row cap; it must still be read.
+	events[total-1] = sqlc.AlertEvent{
+		ID:        sentinel,
+		RuleID:    ruleID,
+		Status:    "firing",
+		ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
+	}
+	q := &pagingEventQuerier{events: events}
+	runtimeDeps = RuntimeDependencies{Queries: q}
+
+	got, err := listAllAlertEventsByRule(context.Background(), ruleID)
+	if err != nil {
+		t.Fatalf("listAllAlertEventsByRule: %v", err)
+	}
+	if len(got) != total {
+		t.Fatalf("expected all %d events read across pages, got %d", total, len(got))
+	}
+	found := false
+	for _, e := range got {
+		if e.ID == sentinel {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("event past the first page (old 200-row cap) was not read back")
+	}
+	if q.calls < 3 {
+		t.Fatalf("expected paging to issue >=3 reads, got %d", q.calls)
+	}
+}
+
 func TestCooldownElapsed_ResolvedEventWithinWindowBlocks(t *testing.T) {
 	rule := sqlc.AlertRule{CooldownMinutes: 10}
 	now := time.Now().UTC()

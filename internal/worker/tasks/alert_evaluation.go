@@ -78,11 +78,7 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 			if err != nil {
 				return err
 			}
-			existingEvents, err := runtimeDeps.Queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
-				RuleID: rule.ID,
-				Limit:  200,
-				Offset: 0,
-			})
+			existingEvents, err := listAllAlertEventsByRule(ctx, rule.ID)
 			if err != nil {
 				return err
 			}
@@ -204,6 +200,37 @@ func listActiveSilences(ctx context.Context) ([]sqlc.AlertSilence, error) {
 	var all []sqlc.AlertSilence
 	for offset := int32(0); ; offset += alertEvalSweepPageSize {
 		page, err := runtimeDeps.Queries.ListAlertSilences(ctx, sqlc.ListAlertSilencesParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			break
+		}
+		all = append(all, page...)
+		if int32(len(page)) < alertEvalSweepPageSize {
+			break
+		}
+	}
+	return all, nil
+}
+
+// listAllAlertEventsByRule pages through every alert event for a rule until a
+// short batch, mirroring listAllAlertRules/listActiveSilences. A single
+// Limit:200 read silently dropped every event past the 200 most-recently-fired
+// rows. Since global rules now fan out one event PER cluster, a fleet larger
+// than 200 firing clusters left a currently-firing cluster's event outside the
+// window: it was never transitioned to resolved on recovery (stuck-firing) and,
+// while still triggering, filterActiveEventsForCluster saw len==0 so a fresh
+// event fired every tick (alert storm). Paging considers every cluster's active
+// event regardless of fleet size.
+func listAllAlertEventsByRule(ctx context.Context, ruleID uuid.UUID) ([]sqlc.AlertEvent, error) {
+	var all []sqlc.AlertEvent
+	for offset := int32(0); ; offset += alertEvalSweepPageSize {
+		page, err := runtimeDeps.Queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
+			RuleID: ruleID,
+			Limit:  alertEvalSweepPageSize,
+			Offset: offset,
+		})
 		if err != nil {
 			return nil, err
 		}

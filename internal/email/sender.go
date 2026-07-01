@@ -226,6 +226,40 @@ func (s *Sender) Send(ctx context.Context, msg Message) error {
 		_ = subject
 	}
 
+	return s.deliver(ctx, cfg, subject, msg.To, msg.CC, rendered.BodyText, rendered.BodyHTML)
+}
+
+// SendPreRendered delivers a message whose subject/body were already rendered
+// at enqueue time, WITHOUT re-running the template engine. The email dispatcher
+// uses this so a queued notification ships the body it was rendered with rather
+// than re-rendering the template against an empty data bag (which produced
+// blank/garbled emails). Validation + SMTP transport mirror Send exactly.
+func (s *Sender) SendPreRendered(ctx context.Context, to, cc, subject, bodyText, bodyHTML string) error {
+	cfg, err := s.cfg.Provide(ctx)
+	if err != nil {
+		return fmt.Errorf("load smtp settings: %w", err)
+	}
+	if !cfg.Enabled {
+		return ErrSMTPDisabled
+	}
+	if cfg.Host == "" {
+		return fmt.Errorf("smtp host is not configured")
+	}
+	if cfg.FromAddress == "" {
+		return ErrInvalidFromAddress
+	}
+	if _, err := mail.ParseAddress(cfg.FromAddress); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidFromAddress, err)
+	}
+	if to == "" {
+		return fmt.Errorf("recipient is required")
+	}
+	return s.deliver(ctx, cfg, subject, to, cc, bodyText, bodyHTML)
+}
+
+// deliver composes the MIME multipart/alternative body and performs the SMTP
+// transport. Shared by Send (post-render) and SendPreRendered.
+func (s *Sender) deliver(ctx context.Context, cfg Settings, subject, to, cc, bodyText, bodyHTML string) error {
 	// MIME message. We assemble a multipart/alternative with the
 	// text part first (older clients prefer the first part) and the
 	// HTML part second.
@@ -233,7 +267,7 @@ func (s *Sender) Send(ctx context.Context, msg Message) error {
 	if cfg.FromName != "" {
 		from = formatAddr(cfg.FromName, cfg.FromAddress)
 	}
-	body, err := composeMessage(subject, from, msg.To, msg.CC, rendered.BodyText, rendered.BodyHTML)
+	body, err := composeMessage(subject, from, to, cc, bodyText, bodyHTML)
 	if err != nil {
 		return fmt.Errorf("compose mime: %w", err)
 	}
@@ -282,7 +316,7 @@ func (s *Sender) Send(ctx context.Context, msg Message) error {
 	if err := client.Mail(cfg.FromAddress); err != nil {
 		return fmt.Errorf("smtp MAIL FROM: %w", err)
 	}
-	for _, addr := range allRecipients(msg.To, msg.CC) {
+	for _, addr := range allRecipients(to, cc) {
 		if err := client.Rcpt(addr); err != nil {
 			return fmt.Errorf("smtp RCPT TO %s: %w", addr, err)
 		}

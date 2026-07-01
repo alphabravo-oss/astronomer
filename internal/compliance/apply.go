@@ -186,7 +186,26 @@ func Revert(ctx context.Context, q Querier, applicationID uuid.UUID, userID uuid
 		return fmt.Errorf("decode previous_state: %w", err)
 	}
 
-	if err := writeSpec(ctx, q, snap, userID, logger); err != nil {
+	// Load the canonical spec of the baseline that was applied so we
+	// know WHICH fields it owns. A restore must re-write every owned
+	// field — including the ones whose captured previous value is
+	// false/empty/zero — otherwise a hardening baseline that flipped
+	// e.g. totp.required ON can never be turned back OFF (writeSpec
+	// only writes truthy scalars, so `false` would be silently
+	// skipped and the security setting stays pinned on). Ownership
+	// can't be recovered from the snapshot alone because a captured
+	// `false` is indistinguishable from a field the baseline never
+	// touched, so we consult the canonical spec for the owner set.
+	baseRow, err := q.GetComplianceBaseline(ctx, app.BaselineID)
+	if err != nil {
+		return fmt.Errorf("load baseline for revert: %w", err)
+	}
+	canonical, ok := BySlug(baseRow.Slug)
+	if !ok {
+		return fmt.Errorf("baseline slug %q has no canonical spec in registry", baseRow.Slug)
+	}
+
+	if err := restoreSpec(ctx, q, canonical.Spec, snap, userID, logger); err != nil {
 		return fmt.Errorf("restore previous_state: %w", err)
 	}
 
@@ -373,6 +392,74 @@ func writeSpec(ctx context.Context, q Querier, spec BaselineSpec, userID uuid.UU
 			slog.Int("count", len(spec.ReadAuditPolicies)))
 	}
 
+	return nil
+}
+
+// restoreSpec re-applies a captured previous_state during Revert.
+// Unlike writeSpec (which is set-only-when-truthy, correct for a
+// forward Apply that never wants to write a "0"/""/false a baseline
+// didn't specify), restoreSpec writes every scalar the baseline OWNS
+// unconditionally — including the captured false/empty/zero value — so
+// a revert genuinely undoes what the apply pinned on. `owner` is the
+// canonical spec of the applied baseline (the ownership set); `snap`
+// carries the pre-apply values to restore.
+//
+// Richer collection fields (quota plans, alert/maintenance templates,
+// the arbitrary platform-settings map) don't suffer the truthy-skip
+// bug — their snapshot values are real, non-empty entries — so they're
+// restored via the shared writeSpec writer.
+func restoreSpec(ctx context.Context, q Querier, owner, snap BaselineSpec, userID uuid.UUID, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	// Restore the collection/table-backed fields first via the shared
+	// writer (these carry real captured values, no truthy-skip issue).
+	if err := writeSpec(ctx, q, snap, userID, logger); err != nil {
+		return err
+	}
+
+	uid := pgtypeUUID(userID)
+	set := func(key string, v any) error {
+		val, _ := json.Marshal(v)
+		if _, err := q.UpsertPlatformSetting(ctx, sqlc.UpsertPlatformSettingParams{
+			Key: key, Value: val, UpdatedBy: uid,
+		}); err != nil {
+			return fmt.Errorf("restore %s: %w", key, err)
+		}
+		return nil
+	}
+
+	// Scalar settings the baseline owns: write the captured value
+	// unconditionally so a revert to false/""/0 actually lands.
+	if owner.AuditRetentionDays > 0 {
+		if err := set("audit.retention_days", snap.AuditRetentionDays); err != nil {
+			return err
+		}
+	}
+	if owner.PSSProfile != "" {
+		if err := set("pod_security.default_profile", snap.PSSProfile); err != nil {
+			return err
+		}
+	}
+	if owner.RequiredTOTP {
+		if err := set("totp.required", snap.RequiredTOTP); err != nil {
+			return err
+		}
+	}
+	if owner.RequiredSMTP {
+		if err := set("smtp.required", snap.RequiredSMTP); err != nil {
+			return err
+		}
+	}
+	if len(owner.RequiredWebhooks) > 0 {
+		webhooks := snap.RequiredWebhooks
+		if webhooks == nil {
+			webhooks = []string{}
+		}
+		if err := set("webhooks.required", webhooks); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

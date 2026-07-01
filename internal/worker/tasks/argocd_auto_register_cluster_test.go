@@ -224,6 +224,40 @@ func TestArgoCDAutoRegisterDefaultsEnabledWhenSettingMissing(t *testing.T) {
 	}
 }
 
+// The fleet sweep must be leader-gated: a non-leader replica must NOT run the
+// per-cluster token-minting/index-repair body (which otherwise races sibling
+// replicas on proxy-token upserts). The enqueued per-cluster path stays
+// unguarded, but the nil-cluster_id sweep is skipped off the lease holder.
+func TestArgoCDAutoRegisterSweepSkippedOnNonLeader(t *testing.T) {
+	ResetArgoCDAutoRegister()
+	t.Cleanup(ResetArgoCDAutoRegister)
+	savedRuntime := runtimeDeps
+	t.Cleanup(func() { runtimeDeps = savedRuntime })
+
+	q := &argoCDAutoRegisterTestQuerier{setting: boolPlatformSetting(true)}
+	ConfigureArgoCDAutoRegister(ArgoCDAutoRegisterDeps{Queries: q})
+	runtimeDeps = RuntimeDependencies{Leader: &fakeLeader{held: false}}
+
+	if err := HandleArgoCDAutoRegisterCluster(context.Background(), asynq.NewTask(ArgoCDAutoRegisterClusterType, nil)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if q.listTouched {
+		t.Fatal("non-leader replica must not run the fleet sweep (ListClusters was called)")
+	}
+
+	// Sanity: the same call on the lease holder DOES run the sweep.
+	q2 := &argoCDAutoRegisterTestQuerier{setting: boolPlatformSetting(true)}
+	ResetArgoCDAutoRegister()
+	ConfigureArgoCDAutoRegister(ArgoCDAutoRegisterDeps{Queries: q2})
+	runtimeDeps = RuntimeDependencies{Leader: &fakeLeader{held: true}}
+	if err := HandleArgoCDAutoRegisterCluster(context.Background(), asynq.NewTask(ArgoCDAutoRegisterClusterType, nil)); err != nil {
+		t.Fatalf("handle (leader): %v", err)
+	}
+	if !q2.listTouched {
+		t.Fatal("lease holder must run the fleet sweep")
+	}
+}
+
 func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
 	ResetArgoCDAutoRegister()
 	t.Cleanup(ResetArgoCDAutoRegister)

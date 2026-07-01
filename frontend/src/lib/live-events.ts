@@ -210,6 +210,12 @@ const KNOWN_EVENT_TYPES: LiveEventType[] = [
   'cluster.k8s_changed',
   'agent.reconnecting',
   'agent.failed',
+  // Sprint 078 — cluster registration wizard live events. These MUST be
+  // registered here (they are not the default 'message' type), otherwise
+  // openSource never calls addEventListener for them and the adoption
+  // timeline silently degrades to 5s polling instead of live SSE updates.
+  'cluster.registration.step',
+  'cluster.registration.phase',
 ];
 
 function scheduleReconnect(state: ConnectionState): void {

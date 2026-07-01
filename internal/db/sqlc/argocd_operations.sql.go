@@ -528,9 +528,20 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status = 'pending'
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+  )
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at
 `
 
+// Atomic claim: only transition an op that is still claimable — either
+// 'pending', or a 'running' op whose lease has gone stale (started_at older
+// than the 1-minute fresh-running window the reconciler uses). Under an HA
+// deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
+// the same row; the first UPDATE flips it to running+started_at=now() so the
+// second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
+// skips it — preventing a double `POST /applications/{name}/sync` upstream.
 func (q *Queries) MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error) {
 	row := q.db.QueryRow(ctx, markArgoCDOperationRunning, id)
 	var i ArgocdOperation

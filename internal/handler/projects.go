@@ -94,7 +94,45 @@ type ProjectHandler struct {
 	// enforcer gates Create against the per-project cluster-density cap
 	// (migration 051, max_clusters_per_project). Optional + nil-safe.
 	enforcer *quota.Enforcer
+
+	// runTx wraps the namespaces JSONB update and the project_namespaces
+	// sidecar write in a single pgx transaction (mirrors compliance_baselines'
+	// runTx seam). nil means AddNamespace / RemoveNamespace fall back to the
+	// legacy non-atomic path so existing tests that hand the handler only
+	// `queries` keep working.
+	runTx projectRunTxFunc
+
+	// rbacBindings is the cache-fronted RBAC binding querier. project_namespaces
+	// membership is a NEW input to the namespace-scoped synthetic bindings that
+	// GetUserBindings caches, so AddNamespace / RemoveNamespace flush the cache
+	// after a membership change — otherwise a removed namespace keeps granting
+	// access for up to the cache TTL. Optional + nil-safe.
+	rbacBindings middleware.RBACQuerier
 }
+
+// ProjectNamespaceTx is the tx-scoped query surface AddNamespace /
+// RemoveNamespace use to mutate the projects.namespaces JSONB and the
+// project_namespaces sidecar atomically. GetProjectByIDForUpdate takes a
+// SELECT ... FOR UPDATE row lock so concurrent add/remove calls serialize on
+// the read-modify-write of the JSONB list instead of last-writer-wins.
+type ProjectNamespaceTx interface {
+	GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
+	UpdateProject(ctx context.Context, arg sqlc.UpdateProjectParams) (sqlc.Project, error)
+	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
+	DeleteProjectNamespace(ctx context.Context, arg sqlc.DeleteProjectNamespaceParams) error
+}
+
+// projectRunTxFunc runs fn inside a single pgx transaction, committing on a nil
+// return and rolling back otherwise. Production wiring begins a pgx tx and hands
+// sqlc.New(tx); test code models the same atomicity with an in-memory fake.
+type projectRunTxFunc func(ctx context.Context, fn func(q ProjectNamespaceTx) error) error
+
+// Sentinel errors used to steer the tx closures' failure back to the right HTTP
+// status without leaking the (rolled-back) tx across the handler boundary.
+var (
+	errNamespaceAlreadyInProject = errors.New("namespace already in project")
+	errNamespaceNotInProject     = errors.New("namespace not in project")
+)
 
 type projectOwnershipQuerier interface {
 	GetProjectOwnership(ctx context.Context, id uuid.UUID) (sqlc.FleetOwnership, error)
@@ -186,6 +224,39 @@ func (h *ProjectHandler) SetMaintenanceGate(g *MaintenanceGate) {
 		return
 	}
 	h.maintenanceGate = g
+}
+
+// SetRunTx wires the pgx-transaction seam used by AddNamespace / RemoveNamespace
+// to write the namespaces JSONB and the project_namespaces sidecar atomically.
+// Optional; nil keeps the legacy non-atomic path.
+func (h *ProjectHandler) SetRunTx(runTx projectRunTxFunc) {
+	if h == nil {
+		return
+	}
+	h.runTx = runTx
+}
+
+// SetRBACInvalidator wires the cache-fronted RBAC binding querier so
+// AddNamespace / RemoveNamespace can flush the namespace-scoped authorization
+// cache after a membership change. Optional + nil-safe.
+func (h *ProjectHandler) SetRBACInvalidator(bindings middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.rbacBindings = bindings
+}
+
+// invalidateRBACCache flushes the whole RBAC binding cache. Called after a
+// project_namespaces membership change: project_namespaces feeds the
+// namespace-scoped synthetic bindings, and there is no reverse project->users
+// index for a targeted invalidation, so we mirror rbac.go's invalidateAll.
+func (h *ProjectHandler) invalidateRBACCache() {
+	if h == nil || h.rbacBindings == nil {
+		return
+	}
+	if inv, ok := h.rbacBindings.(middleware.RBACCacheInvalidator); ok {
+		inv.InvalidateAll()
+	}
 }
 
 // StartReconciler runs an in-process periodic sweep that re-applies every
@@ -1150,31 +1221,72 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	namespaces = append(namespaces, req.Namespace)
-	encoded, err := json.Marshal(namespaces)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
-		return
+	var updated sqlc.Project
+	if h.runTx != nil {
+		// Atomic path: row-lock the project, re-read the namespaces JSONB under
+		// the lock, and write both the JSONB list and the project_namespaces
+		// sidecar in one transaction. Either both land or neither does — no
+		// silent half-write, and concurrent AddNamespace calls serialize on the
+		// lock instead of last-writer-wins clobbering the JSONB.
+		txErr := h.runTx(r.Context(), func(q ProjectNamespaceTx) error {
+			locked, lerr := q.GetProjectByIDForUpdate(r.Context(), id)
+			if lerr != nil {
+				return lerr
+			}
+			nsList := decodeNamespaceList(locked.Namespaces)
+			for _, ns := range nsList {
+				if ns == req.Namespace {
+					return errNamespaceAlreadyInProject
+				}
+			}
+			encoded, merr := json.Marshal(append(nsList, req.Namespace))
+			if merr != nil {
+				return merr
+			}
+			u, uerr := q.UpdateProject(r.Context(), projectUpdateParams(locked, encoded))
+			if uerr != nil {
+				return uerr
+			}
+			if _, uerr := q.UpsertProjectNamespace(r.Context(), sqlc.UpsertProjectNamespaceParams{
+				ProjectID: locked.ID,
+				ClusterID: locked.ClusterID,
+				Namespace: req.Namespace,
+			}); uerr != nil {
+				return uerr
+			}
+			updated = u
+			return nil
+		})
+		if txErr != nil {
+			switch {
+			case errors.Is(txErr, errNamespaceAlreadyInProject):
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
+			case errors.Is(txErr, pgx.ErrNoRows):
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+			default:
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			}
+			return
+		}
+		// The sidecar row is committed; schedule enforcement out-of-band.
+		h.dispatchProjectReconcile(r.Context(), project.ID, project.ClusterID, req.Namespace, "apply")
+	} else {
+		encoded, merr := json.Marshal(append(namespaces, req.Namespace))
+		if merr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
+			return
+		}
+		var uerr error
+		updated, uerr = h.queries.UpdateProject(r.Context(), projectUpdateParams(project, encoded))
+		if uerr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			return
+		}
+		h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, req.Namespace)
 	}
-
-	updated, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
-		ID:                       id,
-		DisplayName:              project.DisplayName,
-		Description:              project.Description,
-		Namespaces:               encoded,
-		ResourceQuota:            defaultIfEmpty(project.ResourceQuota, `{}`),
-		LimitRange:               defaultIfEmpty(project.LimitRange, `{}`),
-		NetworkPolicyMode:        defaultMode(project.NetworkPolicyMode),
-		PodSecurityProfile:       project.PodSecurityProfile,
-		ResourceQuotaCpuLimit:    project.ResourceQuotaCpuLimit,
-		ResourceQuotaMemoryLimit: project.ResourceQuotaMemoryLimit,
-		ResourceQuotaPodCount:    project.ResourceQuotaPodCount,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-		return
-	}
-	h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, req.Namespace)
+	// Membership changed: flush the namespace-scoped RBAC cache so the new grant
+	// is visible immediately instead of after the cache TTL.
+	h.invalidateRBACCache()
 	h.recordProjectAudit(r, "project.add_namespace", updated, map[string]any{"namespace": req.Namespace})
 	RespondJSON(w, http.StatusOK, projectToResponse(updated))
 }
@@ -1223,33 +1335,83 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	encoded, err := json.Marshal(filtered)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
-		return
-	}
+	var updated sqlc.Project
+	if h.runTx != nil {
+		// Atomic path: row-lock the project, re-filter the namespaces JSONB under
+		// the lock, and delete the project_namespaces sidecar row in the same
+		// transaction so the two sources of truth can never diverge on a partial
+		// failure. In-cluster cleanup is dispatched only after the tx commits.
+		txErr := h.runTx(r.Context(), func(q ProjectNamespaceTx) error {
+			locked, lerr := q.GetProjectByIDForUpdate(r.Context(), id)
+			if lerr != nil {
+				return lerr
+			}
+			nsList := decodeNamespaceList(locked.Namespaces)
+			kept := make([]string, 0, len(nsList))
+			present := false
+			for _, ns := range nsList {
+				if ns == req.Namespace {
+					present = true
+					continue
+				}
+				kept = append(kept, ns)
+			}
+			if !present {
+				return errNamespaceNotInProject
+			}
+			encoded, merr := json.Marshal(kept)
+			if merr != nil {
+				return merr
+			}
+			u, uerr := q.UpdateProject(r.Context(), projectUpdateParams(locked, encoded))
+			if uerr != nil {
+				return uerr
+			}
+			if derr := q.DeleteProjectNamespace(r.Context(), sqlc.DeleteProjectNamespaceParams{
+				ProjectID: locked.ID,
+				ClusterID: locked.ClusterID,
+				Namespace: req.Namespace,
+			}); derr != nil {
+				return derr
+			}
+			updated = u
+			return nil
+		})
+		if txErr != nil {
+			switch {
+			case errors.Is(txErr, errNamespaceNotInProject):
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
+			case errors.Is(txErr, pgx.ErrNoRows):
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+			default:
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			}
+			return
+		}
+		// Sidecar row is gone; schedule the in-cluster managed-CR cleanup. The
+		// remove task's own DeleteProjectNamespace is an idempotent no-op now.
+		h.dispatchProjectReconcile(r.Context(), project.ID, project.ClusterID, req.Namespace, "remove")
+	} else {
+		encoded, merr := json.Marshal(filtered)
+		if merr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
+			return
+		}
 
-	// Enqueue cleanup BEFORE the DB update so the task still has the row to
-	// reference; the cleanup task itself deletes the project_namespaces row.
-	h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, req.Namespace)
+		// Enqueue cleanup BEFORE the DB update so the task still has the row to
+		// reference; the cleanup task itself deletes the project_namespaces row.
+		h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, req.Namespace)
 
-	updated, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
-		ID:                       id,
-		DisplayName:              project.DisplayName,
-		Description:              project.Description,
-		Namespaces:               encoded,
-		ResourceQuota:            defaultIfEmpty(project.ResourceQuota, `{}`),
-		LimitRange:               defaultIfEmpty(project.LimitRange, `{}`),
-		NetworkPolicyMode:        defaultMode(project.NetworkPolicyMode),
-		PodSecurityProfile:       project.PodSecurityProfile,
-		ResourceQuotaCpuLimit:    project.ResourceQuotaCpuLimit,
-		ResourceQuotaMemoryLimit: project.ResourceQuotaMemoryLimit,
-		ResourceQuotaPodCount:    project.ResourceQuotaPodCount,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-		return
+		var uerr error
+		updated, uerr = h.queries.UpdateProject(r.Context(), projectUpdateParams(project, encoded))
+		if uerr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			return
+		}
 	}
+	// Membership changed: flush the namespace-scoped RBAC cache so the revoked
+	// grant stops authorizing immediately instead of after the cache TTL.
+	h.invalidateRBACCache()
 	h.recordProjectAudit(r, "project.remove_namespace", updated, map[string]any{"namespace": req.Namespace})
 	RespondJSON(w, http.StatusOK, projectToResponse(updated))
 }
@@ -1408,6 +1570,61 @@ func defaultMode(mode string) string {
 		return mode
 	default:
 		return "none"
+	}
+}
+
+// projectUpdateParams builds the UpdateProject params that carry every existing
+// policy/metadata field through unchanged while swapping in a new namespaces
+// list. Shared by AddNamespace / RemoveNamespace so the JSONB write is identical
+// on the legacy and transactional paths.
+func projectUpdateParams(p sqlc.Project, namespaces json.RawMessage) sqlc.UpdateProjectParams {
+	return sqlc.UpdateProjectParams{
+		ID:                       p.ID,
+		DisplayName:              p.DisplayName,
+		Description:              p.Description,
+		Namespaces:               namespaces,
+		ResourceQuota:            defaultIfEmpty(p.ResourceQuota, `{}`),
+		LimitRange:               defaultIfEmpty(p.LimitRange, `{}`),
+		NetworkPolicyMode:        defaultMode(p.NetworkPolicyMode),
+		PodSecurityProfile:       p.PodSecurityProfile,
+		ResourceQuotaCpuLimit:    p.ResourceQuotaCpuLimit,
+		ResourceQuotaMemoryLimit: p.ResourceQuotaMemoryLimit,
+		ResourceQuotaPodCount:    p.ResourceQuotaPodCount,
+	}
+}
+
+// dispatchProjectReconcile builds and dispatches a project reconcile task
+// (op="apply" or "remove") WITHOUT touching the project_namespaces sidecar —
+// the transactional Add/Remove paths already write the sidecar row inside their
+// tx, so this only schedules the in-cluster enforcement/cleanup apply.
+func (h *ProjectHandler) dispatchProjectReconcile(ctx context.Context, projectID, clusterID uuid.UUID, namespace, op string) {
+	if h == nil {
+		return
+	}
+	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
+		ProjectID: projectID.String(),
+		ClusterID: clusterID.String(),
+		Namespace: namespace,
+		Op:        op,
+	})
+	if err != nil {
+		h.logger().Warn("build project reconcile task", "op", op, "error", err)
+		return
+	}
+	if h.requester != nil {
+		h.dispatchProjectTask(ctx, task)
+		return
+	}
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+	task = asynq.NewTask(task.Type(), payload)
+	if h.enqueueProjectTaskOutbox(ctx, task, projectID, clusterID, namespace, op) {
+		return
+	}
+	if h.queue == nil {
+		return
+	}
+	if _, err := h.queue.Enqueue(task); err != nil {
+		h.logger().Warn("enqueue project reconcile task", "op", op, "error", err)
 	}
 }
 

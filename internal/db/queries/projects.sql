@@ -1,6 +1,13 @@
 -- name: GetProjectByID :one
 SELECT * FROM projects WHERE id = $1;
 
+-- name: GetProjectByIDForUpdate :one
+-- Row-locks the project row so AddNamespace / RemoveNamespace serialize their
+-- read-modify-write of the namespaces JSONB list, preventing concurrent
+-- membership changes from clobbering each other (last-writer-wins). Must run
+-- inside a transaction alongside the UpdateProject + project_namespaces write.
+SELECT * FROM projects WHERE id = $1 FOR UPDATE;
+
 -- name: GetProjectByNameAndCluster :one
 SELECT * FROM projects WHERE name = $1 AND cluster_id = $2;
 

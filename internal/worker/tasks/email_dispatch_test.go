@@ -60,6 +60,79 @@ type fakeProvider struct{ cfg email.Settings }
 
 func (f fakeProvider) Provide(_ context.Context) (email.Settings, error) { return f.cfg, nil }
 
+// preRenderedFakeSender implements both Send and SendPreRendered so the
+// dispatcher exercises the pre-rendered path and we can assert the stored body
+// is shipped verbatim (not re-rendered against an empty Data bag).
+type preRenderedFakeSender struct {
+	preRenderedCalls int
+	legacyCalls      int
+	lastBodyText     string
+	lastBodyHTML     string
+	lastSubject      string
+	lastTo           string
+}
+
+func (f *preRenderedFakeSender) Send(_ context.Context, _ email.Message) error {
+	f.legacyCalls++
+	return nil
+}
+
+func (f *preRenderedFakeSender) SendPreRendered(_ context.Context, to, _, subject, bodyText, bodyHTML string) error {
+	f.preRenderedCalls++
+	f.lastTo = to
+	f.lastSubject = subject
+	f.lastBodyText = bodyText
+	f.lastBodyHTML = bodyHTML
+	return nil
+}
+
+// The dispatcher must ship the enqueue-time rendered body (which carries the
+// working reset link / alert details), NOT re-render the template against an
+// empty data bag. When the Sender supports SendPreRendered, the stored
+// body_text/body_html are passed through unchanged.
+func TestEmailDispatcher_UsesPreRenderedBody(t *testing.T) {
+	body := "Reset your password: https://astronomer.example/reset?token=abc123"
+	q := &fakeEmailQuerier{
+		queued: []sqlc.EmailMessage{{
+			ID:        uuid.New(),
+			Status:    "queued",
+			ToAddress: "user@example.com",
+			Template:  "password_reset",
+			Subject:   "Reset your password",
+			BodyText:  body,
+			BodyHtml:  "<p>" + body + "</p>",
+			CreatedAt: time.Now(),
+		}},
+	}
+	sender := &preRenderedFakeSender{}
+	prev := emailDeps
+	defer func() { emailDeps = prev }()
+	ConfigureEmail(EmailDeps{
+		Queries:  q,
+		Sender:   sender,
+		Provider: fakeProvider{cfg: email.Settings{Enabled: true}},
+	})
+
+	if err := HandleEmailDispatch(context.Background(), &asynq.Task{}); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if sender.preRenderedCalls != 1 {
+		t.Fatalf("expected 1 pre-rendered send, got %d", sender.preRenderedCalls)
+	}
+	if sender.legacyCalls != 0 {
+		t.Fatalf("legacy re-render path must not be used when SendPreRendered is available, got %d calls", sender.legacyCalls)
+	}
+	if sender.lastBodyText != body {
+		t.Errorf("body_text not passed through verbatim:\n got: %q\nwant: %q", sender.lastBodyText, body)
+	}
+	if sender.lastBodyHTML != "<p>"+body+"</p>" {
+		t.Errorf("body_html not passed through verbatim: %q", sender.lastBodyHTML)
+	}
+	if len(q.sentIDs) != 1 {
+		t.Errorf("expected row marked sent, got %d", len(q.sentIDs))
+	}
+}
+
 func TestEmailDispatcher_BatchProcesses(t *testing.T) {
 	q := &fakeEmailQuerier{
 		queued: []sqlc.EmailMessage{

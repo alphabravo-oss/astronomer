@@ -112,6 +112,43 @@ func ConfigureSIEM(deps SIEMDeps) {
 	if siemDeps.TransportFactory == nil {
 		siemDeps.TransportFactory = defaultSIEMTransportFactory
 	}
+	// Drop any cached per-forwarder HTTP clients so a re-wire (or a test
+	// swapping deps) doesn't hand out a client bound to stale TLS config.
+	siemHTTPClientMu.Lock()
+	siemHTTPClientCache = map[uuid.UUID]cachedSIEMHTTPClient{}
+	siemHTTPClientMu.Unlock()
+}
+
+// cachedSIEMHTTPClient memoizes a forwarder's *http.Client so keep-alive
+// connections are reused across the 2s drains. key fingerprints the TLS-relevant
+// forwarder fields; when they change the client is rebuilt.
+type cachedSIEMHTTPClient struct {
+	key    string
+	client *http.Client
+}
+
+var (
+	siemHTTPClientMu    sync.Mutex
+	siemHTTPClientCache = map[uuid.UUID]cachedSIEMHTTPClient{}
+)
+
+// httpClientForForwarder returns a pooled *http.Client for the forwarder,
+// building it once and reusing it across drains. The HEC/NDJSON transports
+// previously allocated a fresh *http.Transport on every 2s tick (Close() is a
+// no-op, so nothing was ever reused) — thousands of redundant TLS handshakes an
+// hour under sustained load. Caching keyed by (tls_skip_verify, ca_cert_pem,
+// timeout) keeps a single keep-alive pool per forwarder while still rebuilding
+// when the operator changes TLS settings.
+func httpClientForForwarder(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client {
+	key := fmt.Sprintf("%t|%d|%s", sub.TlsSkipVerify, int64(timeout), sub.CaCertPem)
+	siemHTTPClientMu.Lock()
+	defer siemHTTPClientMu.Unlock()
+	if c, ok := siemHTTPClientCache[sub.ID]; ok && c.key == key {
+		return c.client
+	}
+	client := buildHTTPClient(sub, timeout)
+	siemHTTPClientCache[sub.ID] = cachedSIEMHTTPClient{key: key, client: client}
+	return client
 }
 
 // authBlob is the decrypted shape stored in siem_forwarders.auth_encrypted.
@@ -436,10 +473,10 @@ func defaultSIEMTransportFactory(sub sqlc.SiemForwarder, secret authBlob) (siem.
 		}
 		return siem.NewSyslogTLS(sub.Endpoint, cfg, dialTimeout), nil
 	case siem.TransportSplunkHEC:
-		client := buildHTTPClient(sub, dialTimeout)
+		client := httpClientForForwarder(sub, dialTimeout)
 		return siem.NewSplunkHEC(sub.Endpoint, secret.Token, client), nil
 	case siem.TransportNDJSONHTTPS:
-		client := buildHTTPClient(sub, dialTimeout)
+		client := httpClientForForwarder(sub, dialTimeout)
 		hdr := http.Header{}
 		for k, v := range secret.Headers {
 			hdr.Set(k, v)

@@ -127,6 +127,20 @@ func HandleArgoCDAutoRegisterCluster(ctx context.Context, t *asynq.Task) error {
 		return autoRegisterClusterIntoArgoCD(ctx, deps, cluster)
 	}
 
+	// Fleet sweep: leader-gate the whole body so only the lease holder runs it.
+	// This is the one periodic reconciler that used to run on EVERY worker
+	// replica; two replicas sweeping a newly-connected cluster concurrently both
+	// mint a distinct proxy token and RegisterCluster (upsert) last-writer-wins,
+	// so ArgoCD ends up presenting a bearer whose hash the DB no longer stores ->
+	// 401 until the next sweep re-converges. Every replica also duplicated the
+	// full ListSecrets index repair each tick. The per-cluster enqueued path
+	// (p.ClusterID != "", asynq.Unique) above stays unguarded.
+	return runPeriodicTaskWithLeader(ctx, ArgoCDAutoRegisterClusterType, func() error {
+		return runArgoCDAutoRegisterSweep(ctx, deps)
+	})
+}
+
+func runArgoCDAutoRegisterSweep(ctx context.Context, deps ArgoCDAutoRegisterDeps) error {
 	runStarted := time.Now().UTC()
 	// Load the ArgoCD instance set once for the whole sweep and thread it into
 	// each per-cluster registration below, instead of re-querying every

@@ -457,6 +457,20 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	projectHandler.SetTaskOutbox(queries)
 	projectHandler.SetK8sRequester(requester)
 	projectHandler.SetLogger(logger)
+	// Atomic namespace add/remove: row-lock the project and write the JSONB
+	// array + project_namespaces sidecar in one transaction, so a mid-write
+	// failure can't desync them. Pool-backed; unit tests wire their own runner.
+	projectHandler.SetRunTx(func(ctx context.Context, fn func(q handler.ProjectNamespaceTx) error) error {
+		tx, err := database.Pool().BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if err := fn(sqlc.New(tx)); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	})
 	// Cluster templates (migration 049). Owns /api/v1/cluster-templates/*
 	// CRUD plus the per-cluster bind/apply/reapply/detach surface. The
 	// asynq client is shared with the rest of the platform so apply

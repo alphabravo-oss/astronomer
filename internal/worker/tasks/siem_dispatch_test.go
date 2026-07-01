@@ -368,3 +368,35 @@ func queueRow(id int64, fid uuid.UUID, name string) sqlc.SiemForwardQueue {
 
 // silence unused linter warnings on pgtype import when no other test uses it.
 var _ = pgtype.Timestamptz{}
+
+// TestHTTPClientForForwarder_ReusesPooledClient pins the keep-alive fix: the
+// HEC/NDJSON forwarders must reuse a single pooled *http.Client across drains
+// instead of allocating a fresh *http.Transport (and a full TLS handshake) on
+// every 2s tick. The client is only rebuilt when a TLS-relevant field changes.
+func TestHTTPClientForForwarder_ReusesPooledClient(t *testing.T) {
+	// Start from a clean cache.
+	ConfigureSIEM(SIEMDeps{})
+
+	fid := uuid.New()
+	fwd := sqlc.SiemForwarder{ID: fid, TimeoutSeconds: 10}
+
+	c1 := httpClientForForwarder(fwd, 10*time.Second)
+	c2 := httpClientForForwarder(fwd, 10*time.Second)
+	if c1 != c2 {
+		t.Fatal("expected the same pooled *http.Client to be reused across drains")
+	}
+
+	// A TLS-relevant change must rebuild the client so stale config is not
+	// silently reused.
+	fwd.TlsSkipVerify = true
+	c3 := httpClientForForwarder(fwd, 10*time.Second)
+	if c3 == c1 {
+		t.Fatal("expected a new client after tls_skip_verify changed")
+	}
+
+	// Different forwarder id => different client.
+	other := sqlc.SiemForwarder{ID: uuid.New(), TimeoutSeconds: 10}
+	if httpClientForForwarder(other, 10*time.Second) == c1 {
+		t.Fatal("expected distinct clients per forwarder id")
+	}
+}

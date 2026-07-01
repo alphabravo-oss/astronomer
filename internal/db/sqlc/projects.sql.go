@@ -210,6 +210,47 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 	return i, err
 }
 
+const getProjectByIDForUpdate = `-- name: GetProjectByIDForUpdate :one
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects WHERE id = $1 FOR UPDATE
+`
+
+// Row-locks the project row so AddNamespace / RemoveNamespace serialize their
+// read-modify-write of the namespaces JSONB list, preventing concurrent
+// membership changes from clobbering each other (last-writer-wins). Must run
+// inside a transaction alongside the UpdateProject + project_namespaces write.
+func (q *Queries) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByIDForUpdate, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Description,
+		&i.ClusterID,
+		&i.Namespaces,
+		&i.ResourceQuota,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LimitRange,
+		&i.NetworkPolicyMode,
+		&i.PodSecurityProfile,
+		&i.ResourceQuotaCpuLimit,
+		&i.ResourceQuotaMemoryLimit,
+		&i.ResourceQuotaPodCount,
+		&i.QuotaPlan,
+		&i.QuotaOverrides,
+		&i.DefaultVaultConnectionID,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
+	)
+	return i, err
+}
+
 const getProjectByNameAndCluster = `-- name: GetProjectByNameAndCluster :one
 SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects WHERE name = $1 AND cluster_id = $2
 `
