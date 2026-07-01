@@ -2,12 +2,24 @@ package server
 
 import (
 	"context"
+	"net/http"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 )
+
+// requireListPermission wraps appmiddleware.RequireListPermission with the same
+// nil-guard pass-through as requirePermission (routes.go). When the
+// namespace_scoped_rbac_enabled flag (deps.NamespaceScopedRBAC) is off it is
+// byte-identical to requirePermission for the same resource/verb.
+func requireListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb, namespaceScoped bool) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return appmiddleware.RequireListPermission(engine, querier, resource, verb, namespaceScoped)
+}
 
 // Code organization: this file holds a domain-specific slice of the
 // protected-route registration originally inlined in routes.go's
@@ -91,17 +103,17 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/", deps.Workloads.ListOperations)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/{id}/", deps.Workloads.GetOperation)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbUpdate)).Post("/workloads/operations/{id}/retry/", deps.Workloads.RetryOperation)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbList)).Get("/clusters/{cluster_id}/workloads/", deps.Workloads.List)
+			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbList, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/workloads/", deps.Workloads.List)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.Workloads.Get)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbRead)).Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods/", deps.Workloads.ListWorkloadPods)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbScale)).Patch("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/", deps.Workloads.Scale)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRestart)).Post("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/", deps.Workloads.Restart)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbDelete)).Delete("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.Workloads.Delete)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/namespaces/", deps.Workloads.ListNamespaces)
+			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/namespaces/", deps.Workloads.ListNamespaces)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbList)).Get("/clusters/{cluster_id}/nodes/", deps.Workloads.ListNodes)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbRead)).Get("/clusters/{cluster_id}/nodes/{node_name}/", deps.Workloads.GetNode)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/events/", deps.Workloads.ListEvents)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbList)).Get("/clusters/{cluster_id}/pods/", deps.Workloads.ListPods)
+			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/events/", deps.Workloads.ListEvents)
+			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbList, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/pods/", deps.Workloads.ListPods)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.Workloads.DeletePod)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbLogs)).Get("/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/", deps.Workloads.PodLogs)
 		})

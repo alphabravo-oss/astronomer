@@ -16,6 +16,10 @@ import (
 type authorizationSupport struct {
 	engine  *rbac.Engine
 	querier middleware.RBACQuerier
+	// namespaceScoped enables per-namespace result filtering on list handlers.
+	// Default false: authorizedNamespaces returns all=true immediately (no DB
+	// call), so list responses are byte-identical to the pre-feature behavior.
+	namespaceScoped bool
 }
 
 var errAuthorizationNotConfigured = errors.New("authorization support is not configured")
@@ -135,6 +139,38 @@ func requireSuperuser(w http.ResponseWriter, r *http.Request, querier userByIDQu
 func (a *authorizationSupport) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
 	a.engine = engine
 	a.querier = querier
+}
+
+// SetNamespaceScoped toggles per-namespace list filtering. Wired from the
+// namespace_scoped_rbac_enabled config flag. Off (default) = no filtering.
+func (a *authorizationSupport) SetNamespaceScoped(enabled bool) {
+	a.namespaceScoped = enabled
+}
+
+// authorizedNamespaces reports the namespace visibility the caller has for
+// (resource, verb) at clusterID.
+//
+//   - all==true: the caller may see everything. Returned when the feature flag
+//     is off (fast path, no DB call), when authorization is not configured, or
+//     when the caller holds a superuser / cluster-wide grant. names is nil.
+//   - all==false: the caller is namespace-restricted; names is the exact
+//     allow-set of visible namespaces (possibly empty → see nothing).
+//
+// A non-nil error means the binding lookup failed; callers must fail closed
+// (surface a 500) rather than fall back to showing everything.
+func (a *authorizationSupport) authorizedNamespaces(ctx context.Context, clusterID uuid.UUID, resource rbac.Resource, verb rbac.Verb) (bool, map[string]struct{}, error) {
+	if a == nil || !a.namespaceScoped {
+		return true, nil, nil
+	}
+	bindings, restricted, err := a.bindingsForContext(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+	if !restricted || a.engine == nil {
+		return true, nil, nil
+	}
+	all, names := a.engine.AuthorizedNamespaces(bindings, resource, verb, clusterID)
+	return all, names, nil
 }
 
 func (a *authorizationSupport) authorizeClusterAction(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, resource rbac.Resource, verb rbac.Verb) bool {

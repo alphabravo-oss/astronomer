@@ -113,6 +113,67 @@ func (h *WorkloadHandler) SetAuthorization(engine *rbac.Engine, querier middlewa
 	h.authz.SetAuthorization(engine, querier)
 }
 
+// SetNamespaceScopedRBAC toggles per-namespace filtering of the list handlers
+// (pods/namespaces/events/workloads). Wired from the
+// namespace_scoped_rbac_enabled config flag; default false leaves list
+// responses byte-identical to the pre-feature behavior.
+func (h *WorkloadHandler) SetNamespaceScopedRBAC(enabled bool) {
+	if h == nil {
+		return
+	}
+	h.authz.SetNamespaceScoped(enabled)
+}
+
+// parseClusterUUID parses the cluster_id route param into a uuid. On a malformed
+// value it returns the zero UUID, which no cluster binding matches — so a
+// namespace-scoped caller fails closed (empty allow-set) rather than seeing
+// everything.
+func parseClusterUUID(id string) uuid.UUID {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return uuid.UUID{}
+	}
+	return parsed
+}
+
+// filterItemsByNamespaceKey returns only the items whose namespace (read from
+// map key `key`) is in the allow-set. Strict allow-list: an item whose key is
+// missing, non-string, or empty is dropped (fail closed) — a namespace-scoped
+// caller never sees cluster-scoped or unlabeled objects.
+func filterItemsByNamespaceKey(items []map[string]any, key string, allowed map[string]struct{}) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		ns, ok := item[key].(string)
+		if !ok || ns == "" {
+			continue
+		}
+		if _, permitted := allowed[ns]; permitted {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// filterEventsByNamespace mirrors filterItemsByNamespaceKey but reads the
+// namespace from the nested involvedObject.namespace field.
+func filterEventsByNamespace(items []map[string]any, allowed map[string]struct{}) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		obj, ok := item["involvedObject"].(map[string]any)
+		if !ok {
+			continue
+		}
+		ns, ok := obj["namespace"].(string)
+		if !ok || ns == "" {
+			continue
+		}
+		if _, permitted := allowed[ns]; permitted {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
 func (h *WorkloadHandler) StartReconciler(ctx context.Context) {
 	if h == nil || h.queries == nil {
 		return
@@ -360,6 +421,15 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
+	}
+
+	all, names, err := h.authz.authorizedNamespaces(r.Context(), parseClusterUUID(clusterID), rbac.ResourceWorkloads, rbac.VerbList)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if !all {
+		workloads = filterItemsByNamespaceKey(workloads, "namespace", names)
 	}
 
 	filtered := make([]map[string]any, 0, len(workloads))
@@ -667,6 +737,14 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i]["name"].(string) < items[j]["name"].(string) })
+	all, names, err := h.authz.authorizedNamespaces(r.Context(), parseClusterUUID(clusterID), rbac.ResourceClusters, rbac.VerbRead)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if !all {
+		items = filterItemsByNamespaceKey(items, "name", names)
+	}
 	// Namespaces come straight from the cluster's API unpaginated; slice to the
 	// requested page so Total reflects the full set and Next advances correctly.
 	page, pagination := pageWindow(r, items)
@@ -725,6 +803,14 @@ func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 			"lastTimestamp":  evt.LastTimestamp,
 		})
 	}
+	all, names, err := h.authz.authorizedNamespaces(r.Context(), parseClusterUUID(clusterID), rbac.ResourceClusters, rbac.VerbRead)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if !all {
+		items = filterEventsByNamespace(items, names)
+	}
 	// Events come straight from the cluster's API (capped by the limit query
 	// param the agent honours); slice to the requested page so Total reflects the
 	// fetched set and Next advances correctly instead of re-serving the same rows.
@@ -739,6 +825,14 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
+	}
+	all, names, err := h.authz.authorizedNamespaces(r.Context(), parseClusterUUID(clusterID), rbac.ResourcePods, rbac.VerbList)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if !all {
+		pods = filterItemsByNamespaceKey(pods, "namespace", names)
 	}
 	// Pods come straight from the cluster's API unpaginated; slice to the
 	// requested page so Total reflects the full set and Next advances correctly.

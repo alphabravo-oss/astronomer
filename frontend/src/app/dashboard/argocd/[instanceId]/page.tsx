@@ -312,6 +312,11 @@ function OverviewTab({
     queryFn: () => listArgoOperations({ limit: 5 }),
     refetchInterval: 15000,
   });
+  const { data: appsets } = useQuery({
+    queryKey: queryKeys.argocd.appsets(instanceId),
+    queryFn: () => listArgoApplicationSets(instanceId),
+    refetchInterval: 30000,
+  });
 
   // Client-side rollups over the same live apps the table renders.
   const flatApps = (apps ?? []).map(flattenArgoApp);
@@ -329,6 +334,7 @@ function OverviewTab({
   const stats: { label: string; value: string; onClick?: () => void }[] = [
     { label: 'Connectivity', value: health?.isHealthy ? 'Healthy' : 'Unhealthy' },
     { label: 'Applications', value: String(apps?.length ?? 0), onClick: () => setTab('apps') },
+    { label: 'ApplicationSets', value: String(appsets?.length ?? 0), onClick: () => setTab('appsets') },
     { label: 'AppProjects', value: String(projects?.length ?? 0), onClick: () => setTab('projects') },
     { label: 'Repositories', value: String(repos?.length ?? 0), onClick: () => setTab('repos') },
     { label: 'Managed Clusters', value: String(clusters?.length ?? 0), onClick: () => setTab('clusters') },
@@ -346,7 +352,7 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
         {stats.map((s) =>
           s.onClick ? (
             <button key={s.label} onClick={s.onClick} className={`${cardBtn} p-4`}>
@@ -361,6 +367,15 @@ function OverviewTab({
           ),
         )}
       </div>
+
+      {/* Honesty line: an instance with ApplicationSets but no generated Applications
+          isn't "broken" — its generators just matched nothing yet. */}
+      {(apps?.length ?? 0) === 0 && (appsets?.length ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          0 Applications · {appsets?.length ?? 0} ApplicationSet
+          {(appsets?.length ?? 0) === 1 ? '' : 's'} targeting 0 matched clusters
+        </p>
+      )}
 
       {/* Application sync rollup — each bucket deep-links into the filtered Apps tab. */}
       <section className="space-y-2">
@@ -434,6 +449,76 @@ function OverviewTab({
                 </div>
               </div>
             ))
+          )}
+        </div>
+      </section>
+
+      {/* ApplicationSets — generator summary + optional health chip so an
+          instance with sets but no generated Applications reads as "working,
+          no targets" rather than an empty/broken Apps list. */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-foreground">ApplicationSets</h3>
+          <button
+            onClick={() => setTab('appsets')}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all
+          </button>
+        </div>
+        <div className="rounded-lg border border-border bg-card divide-y divide-border/60">
+          {(appsets ?? []).length === 0 ? (
+            <p className="p-4 text-xs text-muted-foreground">No ApplicationSets defined.</p>
+          ) : (
+            (appsets ?? []).map((set) => {
+              const kinds = set.spec.generators.map((g) =>
+                g.list ? 'list' : g.clusters ? 'clusters' : g.git ? 'git' : 'other',
+              );
+              const errorCond = set.status?.conditions?.find(
+                (c) => c.type === 'ErrorOccurred' && c.status === 'True',
+              );
+              return (
+                <div
+                  key={set.metadata.name}
+                  className="flex items-center justify-between gap-3 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-mono text-foreground truncate">
+                      {set.metadata.name}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {kinds.length === 0 ? (
+                        <span className="text-2xs text-muted-foreground">no generators</span>
+                      ) : (
+                        kinds.map((kind, i) => (
+                          <span
+                            key={i}
+                            className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground"
+                          >
+                            {kind}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    {errorCond ? (
+                      <span
+                        title={errorCond.message}
+                        className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        Error
+                      </span>
+                    ) : set.status ? (
+                      <span className="text-2xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        OK
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </section>

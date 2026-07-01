@@ -417,13 +417,17 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// /pods/watch/ SSE endpoint.
 	workloadHandler.SetPodWatcher(requester)
 	rbacEngine := rbac.NewEngine()
-	rbacQuerier := appmiddleware.NewSQLCRBACQuerier(queries)
+	rbacQuerier := appmiddleware.NewSQLCRBACQuerierWithNamespaceScoping(queries, cfg.NamespaceScopedRBACEnabled)
 	monitoringHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	argocdHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	toolHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	// Handler-side result filtering must be enabled TOGETHER with the list gate
+	// (below via deps.NamespaceScopedRBAC): the gate admits scoped users, the
+	// handler filters their results. Enabling one without the other would leak.
+	workloadHandler.SetNamespaceScopedRBAC(cfg.NamespaceScopedRBACEnabled)
 	// Fail-fast on a bad REDIS_URL — the old silent localhost fallback was
 	// a production footgun. Returning an error
 	// surfaces the misconfig at process start instead of letting every
@@ -1091,10 +1095,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 			return h
 		}(),
-		RBACQueries:    rbacQuerier,
-		RBACEngine:     rbacEngine,
-		Security:       securityHandler,
-		ApiserverAudit: apiserverAuditHandler,
+		RBACQueries:         rbacQuerier,
+		RBACEngine:          rbacEngine,
+		NamespaceScopedRBAC: cfg.NamespaceScopedRBACEnabled,
+		Security:            securityHandler,
+		ApiserverAudit:      apiserverAuditHandler,
 		ImageVulns: func() *handler.ImageVulnHandler {
 			h := handler.NewImageVulnHandler(queries)
 			h.SetK8sRequester(requester)

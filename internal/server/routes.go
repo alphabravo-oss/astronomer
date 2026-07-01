@@ -108,6 +108,10 @@ type RouterDependencies struct {
 	// NativeRBAC serves the native-rule CRUD API (author/list/delete). Nil
 	// unless native_rbac_enabled.
 	NativeRBAC *handler.NativeRBACHandler
+	// NamespaceScopedRBAC gates the namespace/project-scoped list gate on the
+	// typed cluster resource routes. False = the routes use the standard
+	// RequirePermission (unchanged behavior).
+	NamespaceScopedRBAC bool
 	// FleetOperations owns /api/v1/fleet-operations/* — coordinated
 	// multi-cluster actions (drain, tool upgrade, apply-template fanout)
 	// with label-selector targeting and bounded blast radius

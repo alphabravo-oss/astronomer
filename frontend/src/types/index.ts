@@ -1957,6 +1957,9 @@ export interface ArgoApplicationSetSpec {
 export interface ArgoApplicationSet {
   metadata: { name: string; namespace?: string };
   spec: ArgoApplicationSetSpec;
+  status?: {
+    conditions?: { type: string; status: string; message?: string }[];
+  };
 }
 
 export interface ArgoCreateApplicationSetRequest {

@@ -18,6 +18,11 @@ import (
 type userBindingsQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]sqlc.ListUserBindingsWithRolesRow, error)
+	// ListProjectNamespaces resolves the (cluster_id, namespace) rows a project
+	// owns. Used only when namespace-scoped RBAC reads are enabled: each project
+	// binding is expanded into synthetic namespace-scoped cluster bindings so the
+	// pure engine matches them per-cluster.
+	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
 }
 
 // SQLCRBACQuerier adapts sqlc queries to the RBAC middleware binding interface.
@@ -28,6 +33,12 @@ type userBindingsQuerier interface {
 type SQLCRBACQuerier struct {
 	queries userBindingsQuerier
 	cache   *RBACCache
+	// namespaceScoping toggles project→namespace binding expansion in
+	// GetUserBindings. Default false keeps behavior byte-identical: project
+	// bindings are emitted exactly as before and grant nothing on cluster
+	// resource routes. Set via SetNamespaceScoping / the WithNamespaceScoping
+	// constructor from the namespace_scoped_rbac_enabled config flag.
+	namespaceScoping bool
 }
 
 // NewSQLCRBACQuerier builds the querier with a default cache (15s TTL,
@@ -38,6 +49,30 @@ func NewSQLCRBACQuerier(queries *sqlc.Queries) *SQLCRBACQuerier {
 		return nil
 	}
 	return &SQLCRBACQuerier{queries: queries, cache: NewRBACCache()}
+}
+
+// NewSQLCRBACQuerierWithNamespaceScoping is like NewSQLCRBACQuerier but sets the
+// project→namespace expansion flag at construction time. Kept as a separate
+// constructor so the existing NewSQLCRBACQuerier callers stay untouched.
+func NewSQLCRBACQuerierWithNamespaceScoping(queries *sqlc.Queries, namespaceScoping bool) *SQLCRBACQuerier {
+	q := NewSQLCRBACQuerier(queries)
+	if q != nil {
+		q.namespaceScoping = namespaceScoping
+	}
+	return q
+}
+
+// SetNamespaceScoping toggles project→namespace binding expansion. Safe on nil
+// receivers. Flipping it invalidates any already-cached bindings so the next
+// lookup rebuilds them with the new expansion behavior.
+func (q *SQLCRBACQuerier) SetNamespaceScoping(enabled bool) {
+	if q == nil {
+		return
+	}
+	q.namespaceScoping = enabled
+	if q.cache != nil {
+		q.cache.InvalidateAll()
+	}
 }
 
 // NewSQLCRBACQuerierWithCache lets callers (tests, future tuning knobs) pass
@@ -154,10 +189,73 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 		results = append(results, binding)
 	}
 
+	// Namespace-scoped reads (flag-gated): expand every project binding into
+	// synthetic namespace-scoped CLUSTER bindings, one per (cluster_id,
+	// namespace) row the project owns. The pure engine then matches them
+	// per-cluster unchanged — this is what makes a project member's cluster-read
+	// resolve to exactly their project's namespaces. The original project
+	// binding is kept so project-scoped routes keep working. When the flag is
+	// off this block is skipped entirely and behavior is byte-identical.
+	if q.namespaceScoping {
+		expanded, err := q.expandProjectBindings(ctx, userID, results)
+		if err != nil {
+			return nil, err
+		}
+		results = expanded
+	}
+
 	if q.cache != nil {
 		q.cache.Put(userID, results)
 	}
 	return results, nil
+}
+
+// expandProjectBindings appends synthetic namespace-scoped cluster bindings for
+// each project binding. Fails closed: any DB error resolving a project's
+// namespaces propagates as an error (→ the caller denies the request) rather
+// than silently granting or dropping scope.
+func (q *SQLCRBACQuerier) expandProjectBindings(ctx context.Context, userID string, bindings []rbac.RoleBinding) ([]rbac.RoleBinding, error) {
+	// Resolve each distinct project only once even if the user holds several
+	// bindings on it.
+	nsCache := make(map[string][]sqlc.ProjectNamespace)
+	var synthetic []rbac.RoleBinding
+	for _, b := range bindings {
+		if b.Scope != "project" || b.ProjectID == "" {
+			continue
+		}
+		rows, ok := nsCache[b.ProjectID]
+		if !ok {
+			projectUUID, err := uuid.Parse(b.ProjectID)
+			if err != nil {
+				// A malformed project ID cannot be expanded; fail closed by
+				// contributing no namespaces for it.
+				nsCache[b.ProjectID] = nil
+				continue
+			}
+			rows, err = q.queries.ListProjectNamespaces(ctx, projectUUID)
+			if err != nil {
+				return nil, err
+			}
+			nsCache[b.ProjectID] = rows
+		}
+		for _, row := range rows {
+			synthetic = append(synthetic, rbac.RoleBinding{
+				UserID:    userID,
+				Group:     b.Group,
+				RoleRules: b.RoleRules,
+				BindingID: b.BindingID,
+				RoleID:    b.RoleID,
+				RoleName:  b.RoleName,
+				Scope:     "cluster",
+				ClusterID: row.ClusterID.String(),
+				Namespace: row.Namespace,
+			})
+		}
+	}
+	if len(synthetic) == 0 {
+		return bindings, nil
+	}
+	return append(bindings, synthetic...), nil
 }
 
 func decodeRoleRules(raw json.RawMessage) ([]rbac.Rule, error) {

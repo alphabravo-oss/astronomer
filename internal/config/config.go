@@ -105,7 +105,13 @@ type Config struct {
 	// (no native authorizer injected) and the rule-authoring API is
 	// unregistered. It only ever GRANTS explicitly-authored access, so
 	// enabling it with zero rules is a no-op.
-	NativeRBACEnabled               bool   `mapstructure:"native_rbac_enabled"`
+	NativeRBACEnabled bool `mapstructure:"native_rbac_enabled"`
+	// NamespaceScopedRBACEnabled gates namespace/project-scoped cluster resource
+	// reads. Default false: when off, project bindings still grant nothing on
+	// cluster routes and list handlers return the full cluster (byte-identical
+	// to today). When on, project bindings resolve to their namespaces and list
+	// results are filtered to the caller's authorized namespaces.
+	NamespaceScopedRBACEnabled      bool   `mapstructure:"namespace_scoped_rbac_enabled"`
 	KubectlShellImage               string `mapstructure:"kubectl_shell_image"`
 	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
 	KubectlShellSessionHardCapHours int    `mapstructure:"kubectl_shell_session_hard_cap_hours"`
@@ -228,6 +234,7 @@ func Load() (*Config, error) {
 		"kubectl_shell_session_hard_cap_hours",
 		"control_plane_snapshots_enabled",
 		"native_rbac_enabled",
+		"namespace_scoped_rbac_enabled",
 		"argocd_ui_upstream",
 		"argocd_cluster_proxy_base_url",
 		"argocd_internal_proxy_addr",
