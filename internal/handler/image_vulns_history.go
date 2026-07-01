@@ -244,12 +244,14 @@ func (h *ImageVulnHandler) ClusterExportCSV(w http.ResponseWriter, r *http.Reque
 // ReportHistory handles
 // GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history/.
 // Returns the per-image snapshot timeline so the drawer can show how
-// a single workload's CVE counts evolved over time. We don't filter
-// by cluster_id at the query layer (the report_id is globally unique)
-// but we still parse the cluster_id from the URL for RBAC scoping —
-// the route guard already enforces cluster:read.
+// a single workload's CVE counts evolved over time. report_id is
+// globally unique, so besides the route guard's cluster:read on the URL
+// cluster we also drop any returned snapshot whose cluster_id doesn't
+// match the URL cluster — otherwise a report_id from another cluster
+// would leak that cluster's history (cross-cluster IDOR).
 func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request) {
-	if _, ok := parseClusterID(w, r); !ok {
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 	reportID, err := uuid.Parse(chi.URLParam(r, "report_id"))
@@ -279,6 +281,13 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 
 	out := make([]map[string]any, 0, len(rows))
 	for _, s := range rows {
+		// Cluster isolation: report_id is globally unique, so a report from a
+		// different cluster could otherwise leak through the {cluster_id} route
+		// guard. Drop any snapshot not owned by the URL cluster, mirroring the
+		// row.ClusterID != clusterID check in the snapshot/netpol handlers.
+		if s.ClusterID != clusterID {
+			continue
+		}
 		out = append(out, map[string]any{
 			"scanned_at": pgTimeString(s.ScannedAt),
 			"critical":   s.CriticalCount,

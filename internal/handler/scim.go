@@ -228,6 +228,15 @@ func (h *SCIMHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// change. active=false maps to is_active=false, which the login + stream
 	// auth paths treat as disabled.
 	if existing, err := h.queries.GetUserByUsername(r.Context(), userName); err == nil {
+		// A re-provision (POST against an existing username) is an update in
+		// disguise and reaches UpdateUser + revokeUserSessions just like
+		// PUT/PATCH, so it needs the same privileged-account guard: an IdP
+		// must not be able to deactivate + kill a superuser's sessions, or
+		// rewrite their email/username, via the create endpoint. Fail closed.
+		if existing.IsSuperuser || existing.IsStaff {
+			h.scimError(w, http.StatusForbidden, "cannot modify privileged user")
+			return
+		}
 		updated, err := h.queries.UpdateUser(r.Context(), sqlc.UpdateUserParams{
 			ID:        existing.ID,
 			Email:     email,
@@ -303,6 +312,17 @@ func (h *SCIMHandler) PutUser(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
 		h.scimError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	// Privileged accounts are off-limits to the IdP, exactly as in
+	// DeleteUser. A SCIM client (Okta/Azure bearer token, or a
+	// compromised/misconfigured IdP) must not be able to PUT active:false
+	// against every superuser — that flips is_active AND revokes their live
+	// sessions, locking every platform admin out simultaneously — nor
+	// silently rewrite a privileged account's email/username (which, given
+	// SSO email-based matching, enables rebinding the account). Fail closed.
+	if existing.IsSuperuser || existing.IsStaff {
+		h.scimError(w, http.StatusForbidden, "cannot modify privileged user")
 		return
 	}
 	// userName is immutable here: PUT replaces attributes of the resource
@@ -391,6 +411,14 @@ func (h *SCIMHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
 		h.scimError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	// Same privileged-account guard as DeleteUser/PutUser: PATCH
+	// replace active:false is Okta/Azure AD's primary deactivation op, so
+	// without this a SCIM client could deactivate + kill the sessions of
+	// every superuser. Fail closed before any mutation.
+	if existing.IsSuperuser || existing.IsStaff {
+		h.scimError(w, http.StatusForbidden, "cannot modify privileged user")
 		return
 	}
 	// Start from the current resource; each replace op mutates it in place.

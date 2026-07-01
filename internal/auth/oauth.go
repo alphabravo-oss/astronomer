@@ -453,6 +453,20 @@ func (m *SSOManager) fetchGenericOIDCUserInfo(ctx context.Context, p *SSOProvide
 		return nil, fmt.Errorf("validating id_token for %s: %w", p.Name, err)
 	}
 
+	// Refuse an email the IdP explicitly flags as unverified. The signature
+	// / issuer / audience all validate for such a token — email_verified is
+	// a *content* assertion, not a signing one — so without this check an
+	// attacker who can set an unverified email at the IdP links to (and is
+	// issued the session of) any existing account, including a superuser.
+	// The OIDCClaims bool can't tell "absent" from "false", so we consult
+	// the raw (already signature-verified) claims to only reject an explicit
+	// false and leave the omit-the-claim IdPs working.
+	if claims.Email != "" {
+		if raw, perr := parseJWTClaims(rawIDToken); perr == nil && emailUnverified(raw) {
+			return nil, fmt.Errorf("id_token email for %s is not verified by the provider", p.Name)
+		}
+	}
+
 	username := claims.PreferredUsername
 	if username == "" {
 		username = claims.Email
@@ -574,6 +588,13 @@ func (m *SSOManager) fetchOIDCUserInfo(token *oauth2.Token) (*SSOUserInfo, error
 		return nil, fmt.Errorf("parsing oidc id_token: %w", err)
 	}
 	email := claimString(claims, "email")
+	// Reject an explicitly-unverified email even on the parse-without-verify
+	// legacy path: account linking is by email, so an unverified email is an
+	// account-hijack primitive regardless of whether we verified the token's
+	// signature. (Absent email_verified is tolerated — see emailUnverified.)
+	if email != "" && emailUnverified(claims) {
+		return nil, fmt.Errorf("oidc id_token email is not verified by the provider")
+	}
 	username := claimString(claims, "preferred_username")
 	if username == "" {
 		username = email
@@ -657,6 +678,34 @@ func claimString(claims map[string]any, key string) string {
 		return value
 	}
 	return ""
+}
+
+// emailUnverified reports whether the id_token carries an email but
+// explicitly asserts email_verified=false. An IdP that lets users pick an
+// arbitrary, unverified email (self-service Keycloak/Authentik realms, or
+// any misconfigured connector) can otherwise auto-provision or hijack an
+// account by setting the profile email to a victim's — findOrCreateUser
+// links by email, so an unverified match yields the victim's session.
+//
+// We reject only an EXPLICIT false: many conformant IdPs (Azure AD, some
+// Okta configs) omit the claim entirely, and treating "absent" as
+// unverified would break legitimate logins. Absent => not asserted => the
+// caller proceeds; present-and-false => the account is not the caller's to
+// claim => reject. Both a JSON boolean and the string forms IdPs
+// occasionally emit ("false"/"true") are honoured.
+func emailUnverified(claims map[string]any) bool {
+	v, ok := claims["email_verified"]
+	if !ok {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return !t
+	case string:
+		return strings.EqualFold(strings.TrimSpace(t), "false")
+	default:
+		return false
+	}
 }
 
 func claimStringSlice(value any) []string {

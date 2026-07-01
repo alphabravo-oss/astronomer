@@ -46,13 +46,18 @@ type GroupSyncQuerier interface {
 	UpsertUserIDPGroups(ctx context.Context, arg sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error)
 	GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (sqlc.UserIdpGroup, error)
 
-	ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype.UUID) ([]sqlc.GlobalRoleBinding, error)
-	ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]sqlc.ClusterRoleBinding, error)
-	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]sqlc.ProjectRoleBinding, error)
+	// Connector-scoped list/create: reconciliation must only revoke bindings
+	// granted by the SAME connector currently syncing, so a user entitled
+	// under multiple connectors doesn't lose one connector's roles on a login
+	// through another. IS NOT DISTINCT FROM makes a NULL connector match legacy
+	// NULL-connector rows.
+	ListGroupSyncGlobalBindingsForConnector(ctx context.Context, arg sqlc.ListGroupSyncGlobalBindingsForConnectorParams) ([]sqlc.GlobalRoleBinding, error)
+	ListGroupSyncClusterBindingsForConnector(ctx context.Context, arg sqlc.ListGroupSyncClusterBindingsForConnectorParams) ([]sqlc.ClusterRoleBinding, error)
+	ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg sqlc.ListGroupSyncProjectBindingsForConnectorParams) ([]sqlc.ProjectRoleBinding, error)
 
-	CreateGroupSyncGlobalBinding(ctx context.Context, arg sqlc.CreateGroupSyncGlobalBindingParams) (sqlc.GlobalRoleBinding, error)
-	CreateGroupSyncClusterBinding(ctx context.Context, arg sqlc.CreateGroupSyncClusterBindingParams) (sqlc.ClusterRoleBinding, error)
-	CreateGroupSyncProjectBinding(ctx context.Context, arg sqlc.CreateGroupSyncProjectBindingParams) (sqlc.ProjectRoleBinding, error)
+	CreateGroupSyncGlobalBindingForConnector(ctx context.Context, arg sqlc.CreateGroupSyncGlobalBindingForConnectorParams) (sqlc.GlobalRoleBinding, error)
+	CreateGroupSyncClusterBindingForConnector(ctx context.Context, arg sqlc.CreateGroupSyncClusterBindingForConnectorParams) (sqlc.ClusterRoleBinding, error)
+	CreateGroupSyncProjectBindingForConnector(ctx context.Context, arg sqlc.CreateGroupSyncProjectBindingForConnectorParams) (sqlc.ProjectRoleBinding, error)
 
 	DeleteGroupSyncGlobalBinding(ctx context.Context, id uuid.UUID) error
 	DeleteGroupSyncClusterBinding(ctx context.Context, id uuid.UUID) error
@@ -201,7 +206,10 @@ func SyncUserGroups(
 	//    ManualBindingPreserved test's protection.
 
 	// --- global ---
-	existingGlobal, err := q.ListGroupSyncGlobalBindings(ctx, uid)
+	existingGlobal, err := q.ListGroupSyncGlobalBindingsForConnector(ctx, sqlc.ListGroupSyncGlobalBindingsForConnectorParams{
+		UserID:               uid,
+		GroupSyncConnectorID: connectorID,
+	})
 	if err != nil {
 		groupSyncTotal.WithLabelValues(observability.MetricValues("error")...).Inc()
 		return SyncResult{}, fmt.Errorf("group_sync: list global: %w", err)
@@ -230,9 +238,10 @@ func SyncUserGroups(
 		if _, already := seenGlobal[key]; already {
 			continue
 		}
-		row, err := q.CreateGroupSyncGlobalBinding(ctx, sqlc.CreateGroupSyncGlobalBindingParams{
-			UserID: uid,
-			RoleID: m.RoleID,
+		row, err := q.CreateGroupSyncGlobalBindingForConnector(ctx, sqlc.CreateGroupSyncGlobalBindingForConnectorParams{
+			UserID:               uid,
+			RoleID:               m.RoleID,
+			GroupSyncConnectorID: connectorID,
 		})
 		if err != nil {
 			// pgx.ErrNoRows means ON CONFLICT DO NOTHING fired —
@@ -252,7 +261,10 @@ func SyncUserGroups(
 	}
 
 	// --- cluster ---
-	existingCluster, err := q.ListGroupSyncClusterBindings(ctx, uid)
+	existingCluster, err := q.ListGroupSyncClusterBindingsForConnector(ctx, sqlc.ListGroupSyncClusterBindingsForConnectorParams{
+		UserID:               uid,
+		GroupSyncConnectorID: connectorID,
+	})
 	if err != nil {
 		groupSyncTotal.WithLabelValues(observability.MetricValues("error")...).Inc()
 		return SyncResult{}, fmt.Errorf("group_sync: list cluster: %w", err)
@@ -287,10 +299,11 @@ func SyncUserGroups(
 		if _, already := seenCluster[key]; already {
 			continue
 		}
-		row, err := q.CreateGroupSyncClusterBinding(ctx, sqlc.CreateGroupSyncClusterBindingParams{
-			UserID:    uid,
-			RoleID:    m.RoleID,
-			ClusterID: m.ClusterID.Bytes,
+		row, err := q.CreateGroupSyncClusterBindingForConnector(ctx, sqlc.CreateGroupSyncClusterBindingForConnectorParams{
+			UserID:               uid,
+			RoleID:               m.RoleID,
+			ClusterID:            m.ClusterID.Bytes,
+			GroupSyncConnectorID: connectorID,
 		})
 		if err != nil {
 			if isNoRows(err) {
@@ -309,7 +322,10 @@ func SyncUserGroups(
 	}
 
 	// --- project ---
-	existingProject, err := q.ListGroupSyncProjectBindings(ctx, uid)
+	existingProject, err := q.ListGroupSyncProjectBindingsForConnector(ctx, sqlc.ListGroupSyncProjectBindingsForConnectorParams{
+		UserID:               uid,
+		GroupSyncConnectorID: connectorID,
+	})
 	if err != nil {
 		groupSyncTotal.WithLabelValues(observability.MetricValues("error")...).Inc()
 		return SyncResult{}, fmt.Errorf("group_sync: list project: %w", err)
@@ -342,10 +358,11 @@ func SyncUserGroups(
 		if _, already := seenProject[key]; already {
 			continue
 		}
-		row, err := q.CreateGroupSyncProjectBinding(ctx, sqlc.CreateGroupSyncProjectBindingParams{
-			UserID:    uid,
-			RoleID:    m.RoleID,
-			ProjectID: m.ProjectID.Bytes,
+		row, err := q.CreateGroupSyncProjectBindingForConnector(ctx, sqlc.CreateGroupSyncProjectBindingForConnectorParams{
+			UserID:               uid,
+			RoleID:               m.RoleID,
+			ProjectID:            m.ProjectID.Bytes,
+			GroupSyncConnectorID: connectorID,
 		})
 		if err != nil {
 			if isNoRows(err) {

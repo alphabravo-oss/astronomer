@@ -80,6 +80,17 @@ type cloudCredentialMaterializationTaskOutboxQuerier interface {
 	DeleteCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams) error
 }
 
+// cloudCredentialNamespaceAuthQuerier is the optional slice of the querier
+// used to authorize a credential's target_refs against the namespaces the
+// request's project actually owns. A caller with Project-Update on project
+// A must not be able to materialize (write) or delete a Secret in a
+// (cluster, namespace) owned by a different project — that would be
+// cross-tenant tampering / DoS. The production querier (*sqlc.Queries)
+// satisfies this; the check is enforced whenever the surface is present.
+type cloudCredentialNamespaceAuthQuerier interface {
+	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
+}
+
 // CloudCredentialEnqueuer is the asynq surface the handler uses to fire
 // materialize tasks. *asynq.Client satisfies this; tests pass a stub.
 // Nil-safe — when unwired, writes still succeed and the periodic drift
@@ -397,7 +408,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
 		return
 	}
-	targetRefs, err := h.canonicaliseTargetRefs(r.Context(), req.TargetRefs, req.Name)
+	targetRefs, err := h.canonicaliseTargetRefs(r.Context(), projectID, req.TargetRefs, req.Name)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTargetRefs, err.Error())
 		return
@@ -532,7 +543,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	// hands back a non-nil empty slice — good enough).
 	refsCanonical := decodeStoredTargetRefs(existing.TargetRefs)
 	if req.TargetRefs != nil {
-		canon, err := h.canonicaliseTargetRefs(r.Context(), req.TargetRefs, existing.Name)
+		canon, err := h.canonicaliseTargetRefs(r.Context(), existing.ProjectID, req.TargetRefs, existing.Name)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTargetRefs, err.Error())
 			return
@@ -771,9 +782,29 @@ func (h *CloudCredentialHandler) decryptToMap(ciphertext string) (map[string]str
 // canonicaliseTargetRefs validates the incoming target_refs slice and
 // fills in a default secret_name for any entry that omitted one.
 // Verifies each cluster_id exists; rejects bad UUIDs / empty namespaces.
-func (h *CloudCredentialHandler) canonicaliseTargetRefs(ctx context.Context, in []TargetRef, credName string) ([]TargetRef, error) {
+//
+// It also AUTHORIZES each (cluster, namespace) against the set of
+// namespaces the request's project owns (project_namespaces). Without this
+// a caller with Project-Update on projectID could point a target_ref at any
+// (cluster, namespace) in an imported cluster owned by a different project
+// and have the worker force-apply — or, on delete, remove — a Secret there.
+// Ownership is loaded once up front; when the querier does not expose the
+// namespace surface (narrow unit fakes) the check is skipped, but the
+// production wiring always supplies it.
+func (h *CloudCredentialHandler) canonicaliseTargetRefs(ctx context.Context, projectID uuid.UUID, in []TargetRef, credName string) ([]TargetRef, error) {
 	if len(in) == 0 {
 		return []TargetRef{}, nil
+	}
+	var ownedNS map[string]struct{}
+	if authQ, ok := h.queries.(cloudCredentialNamespaceAuthQuerier); ok {
+		rows, err := authQ.ListProjectNamespaces(ctx, projectID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify target namespace ownership")
+		}
+		ownedNS = make(map[string]struct{}, len(rows))
+		for _, ns := range rows {
+			ownedNS[ns.ClusterID.String()+"|"+ns.Namespace] = struct{}{}
+		}
 	}
 	defaultName := defaultSecretName(credName)
 	out := make([]TargetRef, 0, len(in))
@@ -800,6 +831,14 @@ func (h *CloudCredentialHandler) canonicaliseTargetRefs(ctx context.Context, in 
 		// queue a doomed task.
 		if _, err := h.queries.GetClusterByID(ctx, ref.ClusterID); err != nil {
 			return nil, fmt.Errorf("target_ref.cluster_id %q not found", ref.ClusterID.String())
+		}
+		// Authorize the (cluster, namespace) against the project's owned
+		// namespaces. Fail closed: an unowned pair is rejected so a
+		// low-privileged caller can't write/delete Secrets cross-tenant.
+		if ownedNS != nil {
+			if _, owned := ownedNS[ref.ClusterID.String()+"|"+ns]; !owned {
+				return nil, fmt.Errorf("target_ref cluster %s namespace %q is not owned by this project", ref.ClusterID.String(), ns)
+			}
 		}
 		key := ref.ClusterID.String() + "|" + ns
 		if _, dup := seen[key]; dup {

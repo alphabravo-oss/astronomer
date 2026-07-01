@@ -277,8 +277,14 @@ DELETE FROM control_plane_snapshots c
 WHERE c.cluster_id = $1
   AND c.status IN ('succeeded', 'failed')
   AND c.id NOT IN (
+      -- Keep-set must also be terminal-only: an in-flight (pending/running)
+      -- row is always newest (the sweep creates a row then immediately prunes),
+      -- so counting it here would let it occupy a retention slot and delete an
+      -- extra terminal snapshot. Scope to terminal rows so retention keeps the
+      -- newest $2 SUCCEEDED/FAILED snapshots regardless of in-flight rows.
       SELECT s.id FROM control_plane_snapshots s
       WHERE s.cluster_id = $1
+        AND s.status IN ('succeeded', 'failed')
       ORDER BY s.created_at DESC
       LIMIT $2
   )

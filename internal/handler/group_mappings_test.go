@@ -187,6 +187,60 @@ func (f *fakeGroupMappings) CreateGroupSyncProjectBinding(_ context.Context, arg
 	f.project[row.ID] = row
 	return row, nil
 }
+
+// Connector-scoped variants (used by SyncUserGroups). Filter/stamp by connector
+// mirroring `group_sync_connector_id IS NOT DISTINCT FROM`.
+func gmConnMatch(row, arg pgtype.UUID) bool {
+	if arg.Valid != row.Valid {
+		return false
+	}
+	if !arg.Valid {
+		return true
+	}
+	return row.Bytes == arg.Bytes
+}
+func (f *fakeGroupMappings) ListGroupSyncGlobalBindingsForConnector(_ context.Context, arg sqlc.ListGroupSyncGlobalBindingsForConnectorParams) ([]sqlc.GlobalRoleBinding, error) {
+	out := []sqlc.GlobalRoleBinding{}
+	for _, b := range f.global {
+		if b.UserID.Valid && arg.UserID.Valid && b.UserID.Bytes == arg.UserID.Bytes && gmConnMatch(b.GroupSyncConnectorID, arg.GroupSyncConnectorID) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+func (f *fakeGroupMappings) ListGroupSyncClusterBindingsForConnector(_ context.Context, arg sqlc.ListGroupSyncClusterBindingsForConnectorParams) ([]sqlc.ClusterRoleBinding, error) {
+	out := []sqlc.ClusterRoleBinding{}
+	for _, b := range f.cluster {
+		if b.UserID.Valid && arg.UserID.Valid && b.UserID.Bytes == arg.UserID.Bytes && gmConnMatch(b.GroupSyncConnectorID, arg.GroupSyncConnectorID) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+func (f *fakeGroupMappings) ListGroupSyncProjectBindingsForConnector(_ context.Context, arg sqlc.ListGroupSyncProjectBindingsForConnectorParams) ([]sqlc.ProjectRoleBinding, error) {
+	out := []sqlc.ProjectRoleBinding{}
+	for _, b := range f.project {
+		if b.UserID.Valid && arg.UserID.Valid && b.UserID.Bytes == arg.UserID.Bytes && gmConnMatch(b.GroupSyncConnectorID, arg.GroupSyncConnectorID) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+func (f *fakeGroupMappings) CreateGroupSyncGlobalBindingForConnector(_ context.Context, arg sqlc.CreateGroupSyncGlobalBindingForConnectorParams) (sqlc.GlobalRoleBinding, error) {
+	row := sqlc.GlobalRoleBinding{ID: uuid.New(), UserID: arg.UserID, RoleID: arg.RoleID, Source: "group_sync", GroupSyncConnectorID: arg.GroupSyncConnectorID}
+	f.global[row.ID] = row
+	return row, nil
+}
+func (f *fakeGroupMappings) CreateGroupSyncClusterBindingForConnector(_ context.Context, arg sqlc.CreateGroupSyncClusterBindingForConnectorParams) (sqlc.ClusterRoleBinding, error) {
+	row := sqlc.ClusterRoleBinding{ID: uuid.New(), UserID: arg.UserID, RoleID: arg.RoleID, ClusterID: arg.ClusterID, Source: "group_sync", GroupSyncConnectorID: arg.GroupSyncConnectorID}
+	f.cluster[row.ID] = row
+	return row, nil
+}
+func (f *fakeGroupMappings) CreateGroupSyncProjectBindingForConnector(_ context.Context, arg sqlc.CreateGroupSyncProjectBindingForConnectorParams) (sqlc.ProjectRoleBinding, error) {
+	row := sqlc.ProjectRoleBinding{ID: uuid.New(), UserID: arg.UserID, RoleID: arg.RoleID, ProjectID: arg.ProjectID, Source: "group_sync", GroupSyncConnectorID: arg.GroupSyncConnectorID}
+	f.project[row.ID] = row
+	return row, nil
+}
 func (f *fakeGroupMappings) DeleteGroupSyncGlobalBinding(_ context.Context, id uuid.UUID) error {
 	delete(f.global, id)
 	return nil

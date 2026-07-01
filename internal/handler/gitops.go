@@ -332,9 +332,22 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
-	auth := req.Auth
-	if auth == GitOpsAuthSentinel || auth == "" {
-		auth = existing.AuthEncrypted
+	// auth blob: a sentinel or empty value means "keep the stored blob".
+	// A fresh, non-sentinel value must be encrypted at rest exactly like
+	// Create — otherwise a PUT that rotates the git PAT / SSH key would
+	// silently persist the new credential in PLAINTEXT in auth_encrypted
+	// (the sync worker's decryptGitAuth() falls back to the raw value on a
+	// Fernet-decrypt miss, so the leak is invisible at runtime).
+	authBlob := req.Auth
+	if authBlob == GitOpsAuthSentinel || authBlob == "" {
+		authBlob = existing.AuthEncrypted
+	} else if h.encryptor != nil {
+		ct, encErr := h.encryptor.Encrypt(authBlob)
+		if encErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt gitops auth blob")
+			return
+		}
+		authBlob = ct
 	}
 	enabled := existing.Enabled
 	if req.Enabled != nil {
@@ -351,7 +364,7 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Branch:                gitopsDefaultString(req.Branch, existing.Branch),
 		PathPrefix:            req.PathPrefix,
 		AuthMode:              gitopsDefaultString(req.AuthMode, existing.AuthMode),
-		AuthEncrypted:         auth,
+		AuthEncrypted:         authBlob,
 		SyncMode:              gitopsDefaultString(req.SyncMode, existing.SyncMode),
 		SyncIntervalSeconds:   defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
 		OnDelete:              gitopsDefaultString(req.OnDelete, existing.OnDelete),

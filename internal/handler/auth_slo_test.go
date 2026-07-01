@@ -84,6 +84,25 @@ func (s *recordingSSOSessionStore) GetSSOSession(_ context.Context, jti string) 
 	return row, nil
 }
 
+func (s *recordingSSOSessionStore) GetLatestSSOSessionByUser(_ context.Context, userID uuid.UUID) (sqlc.SsoSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out sqlc.SsoSession
+	found := false
+	for _, row := range s.rows {
+		if row.UserID == userID {
+			if !found || row.CreatedAt.After(out.CreatedAt) {
+				out = row
+				found = true
+			}
+		}
+	}
+	if !found {
+		return sqlc.SsoSession{}, errNoRows
+	}
+	return out, nil
+}
+
 func (s *recordingSSOSessionStore) DeleteSSOSession(_ context.Context, jti string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

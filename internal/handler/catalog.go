@@ -855,6 +855,12 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
+	// The per-cluster installation list (and ?cluster_id= on the fleet list,
+	// which delegates here) carries values_override — gate it on the cluster's
+	// own catalog:read so a caller without a grant there can't read it.
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
 
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
@@ -1073,7 +1079,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	items, err := h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{
+	rows, err := h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{
 		Limit:  int32(queryInt(r, "limit", 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
@@ -1081,12 +1087,48 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list installed charts")
 		return
 	}
-	total, err := h.queries.CountInstalledCharts(r.Context())
+	// Fleet-wide unscoped listing: filter to clusters the caller can read
+	// (superuser/unrestricted sees all) and never emit values_override in a
+	// list projection — it carries secrets and is only exposed, gated, via
+	// GetInstalledChartValues.
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count installed charts")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
-	RespondPaginated(w, r, items, total)
+	items := make([]map[string]any, 0, len(rows))
+	for _, ic := range rows {
+		if restricted && !h.authz.allowsCluster(bindings, ic.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+			continue
+		}
+		items = append(items, installedChartListItem(ic))
+	}
+	// TODO(total): list is RBAC-filtered in-Go; no COUNT matches the visible
+	// set, so use the post-filter page length.
+	limit := queryInt(r, "limit", 20)
+	offset := queryInt(r, "offset", 0)
+	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
+}
+
+// installedChartListItem projects an installed_charts row for the fleet list.
+// It deliberately omits values_override (secrets) — that field is only
+// returned by the cluster-gated GetInstalledChartValues endpoint.
+func installedChartListItem(ic sqlc.InstalledChart) map[string]any {
+	return map[string]any{
+		"id":               ic.ID.String(),
+		"cluster_id":       ic.ClusterID.String(),
+		"chart_version_id": ic.ChartVersionID,
+		"release_name":     ic.ReleaseName,
+		"namespace":        ic.Namespace,
+		"status":           ic.Status,
+		"revision":         ic.Revision,
+		"notes":            ic.Notes,
+		"tool_slug":        ic.ToolSlug,
+		"preset_used":      ic.PresetUsed,
+		"drift_detected":   ic.DriftDetected,
+		"created_at":       ic.CreatedAt.UTC().Format(time.RFC3339),
+		"updated_at":       ic.UpdatedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 // CreateInstalledChart handles POST /api/v1/catalog/installed/.
@@ -1401,6 +1443,13 @@ func (h *CatalogHandler) GetInstalledChartValues(w http.ResponseWriter, r *http.
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		return
+	}
+	// values_override routinely carries secrets (DB passwords, API keys).
+	// Gate on the release's own cluster like the sibling upgrade/delete
+	// handlers so a caller without catalog:read on that cluster gets a 403
+	// instead of a fleet-wide values leak.
+	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{

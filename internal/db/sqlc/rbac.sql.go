@@ -88,7 +88,7 @@ func (q *Queries) CreateClusterRole(ctx context.Context, arg CreateClusterRolePa
 const createClusterRoleBinding = `-- name: CreateClusterRoleBinding :one
 INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, namespace)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id
 `
 
 type CreateClusterRoleBindingParams struct {
@@ -118,6 +118,7 @@ func (q *Queries) CreateClusterRoleBinding(ctx context.Context, arg CreateCluste
 		&i.UpdatedAt,
 		&i.Source,
 		&i.Namespace,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -164,7 +165,7 @@ func (q *Queries) CreateGlobalRole(ctx context.Context, arg CreateGlobalRolePara
 const createGlobalRoleBinding = `-- name: CreateGlobalRoleBinding :one
 INSERT INTO global_role_bindings (user_id, "group", role_id)
 VALUES ($1, $2, $3)
-RETURNING id, user_id, "group", role_id, created_at, updated_at, source
+RETURNING id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id
 `
 
 type CreateGlobalRoleBindingParams struct {
@@ -184,6 +185,7 @@ func (q *Queries) CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalR
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -230,7 +232,7 @@ func (q *Queries) CreateProjectRole(ctx context.Context, arg CreateProjectRolePa
 const createProjectRoleBinding = `-- name: CreateProjectRoleBinding :one
 INSERT INTO project_role_bindings (user_id, "group", role_id, project_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source
+RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id
 `
 
 type CreateProjectRoleBindingParams struct {
@@ -257,6 +259,7 @@ func (q *Queries) CreateProjectRoleBinding(ctx context.Context, arg CreateProjec
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -317,7 +320,7 @@ func (q *Queries) DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) er
 
 const getClusterRoleBindingByID = `-- name: GetClusterRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id FROM cluster_role_bindings WHERE id = $1
 `
 
 // Cluster Role Bindings
@@ -334,6 +337,7 @@ func (q *Queries) GetClusterRoleBindingByID(ctx context.Context, id uuid.UUID) (
 		&i.UpdatedAt,
 		&i.Source,
 		&i.Namespace,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -363,7 +367,7 @@ func (q *Queries) GetClusterRoleByID(ctx context.Context, id uuid.UUID) (Cluster
 
 const getGlobalRoleBindingByID = `-- name: GetGlobalRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, created_at, updated_at, source FROM global_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id FROM global_role_bindings WHERE id = $1
 `
 
 // Global Role Bindings
@@ -378,6 +382,7 @@ func (q *Queries) GetGlobalRoleBindingByID(ctx context.Context, id uuid.UUID) (G
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -407,7 +412,7 @@ func (q *Queries) GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (GlobalRo
 
 const getProjectRoleBindingByID = `-- name: GetProjectRoleBindingByID :one
 
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings WHERE id = $1
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings WHERE id = $1
 `
 
 // Project Role Bindings
@@ -423,6 +428,7 @@ func (q *Queries) GetProjectRoleBindingByID(ctx context.Context, id uuid.UUID) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -451,7 +457,7 @@ func (q *Queries) GetProjectRoleByID(ctx context.Context, id uuid.UUID) (Project
 }
 
 const listClusterRoleBindings = `-- name: ListClusterRoleBindings :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id FROM cluster_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListClusterRoleBindingsParams struct {
@@ -478,6 +484,7 @@ func (q *Queries) ListClusterRoleBindings(ctx context.Context, arg ListClusterRo
 			&i.UpdatedAt,
 			&i.Source,
 			&i.Namespace,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}
@@ -490,7 +497,7 @@ func (q *Queries) ListClusterRoleBindings(ctx context.Context, arg ListClusterRo
 }
 
 const listClusterRoleBindingsByCluster = `-- name: ListClusterRoleBindingsByCluster :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id FROM cluster_role_bindings WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListClusterRoleBindingsByClusterParams struct {
@@ -518,6 +525,7 @@ func (q *Queries) ListClusterRoleBindingsByCluster(ctx context.Context, arg List
 			&i.UpdatedAt,
 			&i.Source,
 			&i.Namespace,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}
@@ -569,7 +577,7 @@ func (q *Queries) ListClusterRoles(ctx context.Context, arg ListClusterRolesPara
 }
 
 const listGlobalRoleBindings = `-- name: ListGlobalRoleBindings :many
-SELECT id, user_id, "group", role_id, created_at, updated_at, source FROM global_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id FROM global_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListGlobalRoleBindingsParams struct {
@@ -594,6 +602,7 @@ func (q *Queries) ListGlobalRoleBindings(ctx context.Context, arg ListGlobalRole
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}
@@ -645,7 +654,7 @@ func (q *Queries) ListGlobalRoles(ctx context.Context, arg ListGlobalRolesParams
 }
 
 const listProjectRoleBindings = `-- name: ListProjectRoleBindings :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectRoleBindingsParams struct {
@@ -671,6 +680,7 @@ func (q *Queries) ListProjectRoleBindings(ctx context.Context, arg ListProjectRo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}
@@ -683,7 +693,7 @@ func (q *Queries) ListProjectRoleBindings(ctx context.Context, arg ListProjectRo
 }
 
 const listProjectRoleBindingsByProject = `-- name: ListProjectRoleBindingsByProject :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListProjectRoleBindingsByProjectParams struct {
@@ -710,6 +720,7 @@ func (q *Queries) ListProjectRoleBindingsByProject(ctx context.Context, arg List
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}

@@ -20,8 +20,10 @@
 package gitops
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 
 	"gopkg.in/yaml.v3"
 )
@@ -101,6 +103,60 @@ func Parse(content []byte, repoPath string) (ClusterRegistration, error) {
 	}
 	doc.RepoPath = repoPath
 	return doc, nil
+}
+
+// ParseAll decodes EVERY YAML document in content (files separated by the
+// `---` document marker are a normal GitOps/kubectl pattern) and returns
+// one ClusterRegistration per document that matches the expected
+// apiVersion+kind.
+//
+// Documents that are valid YAML but not a ClusterRegistration (wrong
+// apiVersion or kind, e.g. a Namespace or a kustomization.yaml sharing the
+// file) are silently skipped — the multi-document equivalent of the
+// single-doc IsSkippable path — so a trailing ClusterRegistration is never
+// lost just because it wasn't the first doc in the file. Empty documents
+// (a bare `---` or comment-only doc) are ignored.
+//
+// Malformed YAML and a MATCHING doc with an empty metadata.name are
+// surfaced as errors (operator intent to register), mirroring Parse.
+func ParseAll(content []byte, repoPath string) ([]ClusterRegistration, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(content))
+	out := []ClusterRegistration{}
+	for {
+		var doc ClusterRegistration
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalformedYAML, err)
+		}
+		// Empty document (bare `---`, only comments, or an explicit null):
+		// nothing to register, skip without error.
+		if doc.APIVersion == "" && doc.Kind == "" && doc.Metadata.Name == "" {
+			continue
+		}
+		// Non-ClusterRegistration document — skip it (do not fail the file)
+		// so a mixed multi-doc file still registers its ClusterRegistrations.
+		if doc.APIVersion != APIVersion || doc.Kind != Kind {
+			continue
+		}
+		if doc.Metadata.Name == "" {
+			return nil, ErrMissingName
+		}
+		if doc.Spec.Labels == nil {
+			doc.Spec.Labels = map[string]string{}
+		}
+		if doc.Spec.Registries == nil {
+			doc.Spec.Registries = []string{}
+		}
+		if doc.Spec.ToolPresets == nil {
+			doc.Spec.ToolPresets = []string{}
+		}
+		doc.RepoPath = repoPath
+		out = append(out, doc)
+	}
+	return out, nil
 }
 
 // IsSkippable reports whether err means the file simply wasn't a

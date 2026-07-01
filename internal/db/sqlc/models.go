@@ -740,15 +740,16 @@ type ClusterRole struct {
 }
 
 type ClusterRoleBinding struct {
-	ID        uuid.UUID   `json:"id"`
-	UserID    pgtype.UUID `json:"user_id"`
-	Group     string      `json:"group"`
-	RoleID    uuid.UUID   `json:"role_id"`
-	ClusterID uuid.UUID   `json:"cluster_id"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
-	Source    string      `json:"source"`
-	Namespace string      `json:"namespace"`
+	ID                   uuid.UUID   `json:"id"`
+	UserID               pgtype.UUID `json:"user_id"`
+	Group                string      `json:"group"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	ClusterID            uuid.UUID   `json:"cluster_id"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+	Source               string      `json:"source"`
+	Namespace            string      `json:"namespace"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
 }
 
 type ClusterSecurityPolicy struct {
@@ -1103,13 +1104,14 @@ type GlobalRole struct {
 }
 
 type GlobalRoleBinding struct {
-	ID        uuid.UUID   `json:"id"`
-	UserID    pgtype.UUID `json:"user_id"`
-	Group     string      `json:"group"`
-	RoleID    uuid.UUID   `json:"role_id"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
-	Source    string      `json:"source"`
+	ID                   uuid.UUID   `json:"id"`
+	UserID               pgtype.UUID `json:"user_id"`
+	Group                string      `json:"group"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+	Source               string      `json:"source"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
 }
 
 type HelmChart struct {
@@ -1656,14 +1658,15 @@ type ProjectRole struct {
 }
 
 type ProjectRoleBinding struct {
-	ID        uuid.UUID   `json:"id"`
-	UserID    pgtype.UUID `json:"user_id"`
-	Group     string      `json:"group"`
-	RoleID    uuid.UUID   `json:"role_id"`
-	ProjectID uuid.UUID   `json:"project_id"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
-	Source    string      `json:"source"`
+	ID                   uuid.UUID   `json:"id"`
+	UserID               pgtype.UUID `json:"user_id"`
+	Group                string      `json:"group"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	ProjectID            uuid.UUID   `json:"project_id"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+	Source               string      `json:"source"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
 }
 
 type PrometheusDatasource struct {

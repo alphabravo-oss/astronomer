@@ -297,11 +297,16 @@ type Querier interface {
 	// table's scope_matches CHECK constraint will reject mismatched rows.
 	CreateGroupMapping(ctx context.Context, arg CreateGroupMappingParams) (IdentityGroupMapping, error)
 	CreateGroupSyncClusterBinding(ctx context.Context, arg CreateGroupSyncClusterBindingParams) (ClusterRoleBinding, error)
+	CreateGroupSyncClusterBindingForConnector(ctx context.Context, arg CreateGroupSyncClusterBindingForConnectorParams) (ClusterRoleBinding, error)
 	// Marks the source column with 'group_sync' on insert. ON CONFLICT
 	// DO NOTHING handles the idempotent re-sync case (manual binding
 	// on (user_id, role_id) wins; group_sync row stays absent).
 	CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGroupSyncGlobalBindingParams) (GlobalRoleBinding, error)
+	// Same idempotent insert as CreateGroupSyncGlobalBinding but stamps the
+	// granting connector so a later sync can scope its revocation diff.
+	CreateGroupSyncGlobalBindingForConnector(ctx context.Context, arg CreateGroupSyncGlobalBindingForConnectorParams) (GlobalRoleBinding, error)
 	CreateGroupSyncProjectBinding(ctx context.Context, arg CreateGroupSyncProjectBindingParams) (ProjectRoleBinding, error)
+	CreateGroupSyncProjectBindingForConnector(ctx context.Context, arg CreateGroupSyncProjectBindingForConnectorParams) (ProjectRoleBinding, error)
 	CreateHelmChart(ctx context.Context, arg CreateHelmChartParams) (HelmChart, error)
 	CreateHelmChartVersion(ctx context.Context, arg CreateHelmChartVersionParams) (HelmChartVersion, error)
 	CreateHelmRepository(ctx context.Context, arg CreateHelmRepositoryParams) (HelmRepository, error)
@@ -377,6 +382,11 @@ type Querier interface {
 	DeleteAlertSilencesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// 90-day retention sweep — drop rows older than the given cutoff.
 	DeleteApiserverAllowlistSnapshotsOlderThan(ctx context.Context, capturedAt time.Time) error
+	// Decommission cleanup: drop every audit row for a cluster. Cluster rows are
+	// soft-deleted (tombstoned) rather than hard-deleted, so the FK ON DELETE
+	// CASCADE never fires on decommission; phaseDeleteDependents must call this
+	// explicitly or a tombstoned cluster leaks its audit rows forever.
+	DeleteApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteArgoCDClusterProxyTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteArgoCDInstance(ctx context.Context, id uuid.UUID) error
 	DeleteArgoCDManagedCluster(ctx context.Context, arg DeleteArgoCDManagedClusterParams) error
@@ -713,6 +723,13 @@ type Querier interface {
 	// rows the reconciler itself writes every sweep (those are always the newest
 	// row and would otherwise defeat the growing interval).
 	GetLatestNonSkipClusterConditionRemediation(ctx context.Context, arg GetLatestNonSkipClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
+	// Logout fallback for the SLO flow. The row is keyed by the access JTI
+	// captured at login; after the SPA silently refreshes, the caller's
+	// access JTI no longer matches (GetSSOSession returns no rows) even
+	// though the upstream session — and its id_token_hint — is still live.
+	// Resolve the newest non-expired upstream session for the user so
+	// RP-initiated logout keeps working past the first token refresh.
+	GetLatestSSOSessionByUser(ctx context.Context, userID uuid.UUID) (SsoSession, error)
 	// Surfaces "when did we last *prove* the backups work?". Distinct from
 	// the latest row because the most recent drill may have failed; the
 	// staleness alert fires on the gap from the latest *success*, not the
@@ -1199,11 +1216,22 @@ type Querier interface {
 	// rows back in one read.
 	ListGroupMappingsForConnector(ctx context.Context, connectorID pgtype.UUID) ([]IdentityGroupMapping, error)
 	ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error)
+	ListGroupSyncClusterBindingsForConnector(ctx context.Context, arg ListGroupSyncClusterBindingsForConnectorParams) ([]ClusterRoleBinding, error)
 	// Enumerates the user's group_sync-managed global bindings so the
 	// sync loop can compute the revocation diff. Manual bindings are
 	// explicitly excluded.
 	ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype.UUID) ([]GlobalRoleBinding, error)
+	// Finding #3 (connector-scoped reconciliation). These mirror the
+	// ListGroupSync*Bindings queries above but additionally filter by the
+	// granting connector (migration 128's group_sync_connector_id). The
+	// reconciler must enumerate — and therefore only revoke — the bindings
+	// granted by the connector currently syncing, so a user entitled under
+	// multiple connectors doesn't lose one connector's roles on a login
+	// through another. IS NOT DISTINCT FROM makes a NULL (wildcard-connector /
+	// legacy) parameter match NULL-connector rows.
+	ListGroupSyncGlobalBindingsForConnector(ctx context.Context, arg ListGroupSyncGlobalBindingsForConnectorParams) ([]GlobalRoleBinding, error)
 	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
+	ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg ListGroupSyncProjectBindingsForConnectorParams) ([]ProjectRoleBinding, error)
 	ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) ([]HelmChart, error)
 	ListHelmRepositories(ctx context.Context, arg ListHelmRepositoriesParams) ([]HelmRepository, error)
 	ListInstalledCharts(ctx context.Context, arg ListInstalledChartsParams) ([]InstalledChart, error)

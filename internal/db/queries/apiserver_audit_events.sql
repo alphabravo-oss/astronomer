@@ -60,3 +60,10 @@ SELECT count(*) FROM (
 -- is otherwise append-only and unbounded (one row per apiserver request, fleet
 -- wide), so a periodic sweeper must call this to keep it from growing forever.
 DELETE FROM apiserver_audit_events WHERE event_time < sqlc.arg(cutoff);
+
+-- name: DeleteApiserverAuditEventsByCluster :execrows
+-- Decommission cleanup: drop every audit row for a cluster. Cluster rows are
+-- soft-deleted (tombstoned) rather than hard-deleted, so the FK ON DELETE
+-- CASCADE never fires on decommission; phaseDeleteDependents must call this
+-- explicitly or a tombstoned cluster leaks its audit rows forever.
+DELETE FROM apiserver_audit_events WHERE cluster_id = sqlc.arg(cluster_id);

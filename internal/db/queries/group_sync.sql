@@ -100,6 +100,50 @@ DELETE FROM cluster_role_bindings WHERE id = $1 AND source = 'group_sync';
 -- name: DeleteGroupSyncProjectBinding :exec
 DELETE FROM project_role_bindings WHERE id = $1 AND source = 'group_sync';
 
+-- Finding #3 (connector-scoped reconciliation). These mirror the
+-- ListGroupSync*Bindings queries above but additionally filter by the
+-- granting connector (migration 128's group_sync_connector_id). The
+-- reconciler must enumerate — and therefore only revoke — the bindings
+-- granted by the connector currently syncing, so a user entitled under
+-- multiple connectors doesn't lose one connector's roles on a login
+-- through another. IS NOT DISTINCT FROM makes a NULL (wildcard-connector /
+-- legacy) parameter match NULL-connector rows.
+
+-- name: ListGroupSyncGlobalBindingsForConnector :many
+SELECT * FROM global_role_bindings
+WHERE user_id = $1 AND source = 'group_sync'
+  AND group_sync_connector_id IS NOT DISTINCT FROM $2;
+
+-- name: ListGroupSyncClusterBindingsForConnector :many
+SELECT * FROM cluster_role_bindings
+WHERE user_id = $1 AND source = 'group_sync'
+  AND group_sync_connector_id IS NOT DISTINCT FROM $2;
+
+-- name: ListGroupSyncProjectBindingsForConnector :many
+SELECT * FROM project_role_bindings
+WHERE user_id = $1 AND source = 'group_sync'
+  AND group_sync_connector_id IS NOT DISTINCT FROM $2;
+
+-- name: CreateGroupSyncGlobalBindingForConnector :one
+-- Same idempotent insert as CreateGroupSyncGlobalBinding but stamps the
+-- granting connector so a later sync can scope its revocation diff.
+INSERT INTO global_role_bindings (user_id, "group", role_id, source, group_sync_connector_id)
+VALUES ($1, '', $2, 'group_sync', $3)
+ON CONFLICT (user_id, role_id) DO NOTHING
+RETURNING *;
+
+-- name: CreateGroupSyncClusterBindingForConnector :one
+INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, source, group_sync_connector_id)
+VALUES ($1, '', $2, $3, 'group_sync', $4)
+ON CONFLICT (user_id, role_id, cluster_id) DO NOTHING
+RETURNING *;
+
+-- name: CreateGroupSyncProjectBindingForConnector :one
+INSERT INTO project_role_bindings (user_id, "group", role_id, project_id, source, group_sync_connector_id)
+VALUES ($1, '', $2, $3, 'group_sync', $4)
+ON CONFLICT (user_id, role_id, project_id) DO NOTHING
+RETURNING *;
+
 -- name: CountGroupSyncGlobalBindings :one
 SELECT count(*) FROM global_role_bindings WHERE source = 'group_sync';
 

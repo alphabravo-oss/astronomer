@@ -109,7 +109,7 @@ const createGroupSyncClusterBinding = `-- name: CreateGroupSyncClusterBinding :o
 INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, source)
 VALUES ($1, '', $2, $3, 'group_sync')
 ON CONFLICT (user_id, role_id, cluster_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id
 `
 
 type CreateGroupSyncClusterBindingParams struct {
@@ -131,6 +131,44 @@ func (q *Queries) CreateGroupSyncClusterBinding(ctx context.Context, arg CreateG
 		&i.UpdatedAt,
 		&i.Source,
 		&i.Namespace,
+		&i.GroupSyncConnectorID,
+	)
+	return i, err
+}
+
+const createGroupSyncClusterBindingForConnector = `-- name: CreateGroupSyncClusterBindingForConnector :one
+INSERT INTO cluster_role_bindings (user_id, "group", role_id, cluster_id, source, group_sync_connector_id)
+VALUES ($1, '', $2, $3, 'group_sync', $4)
+ON CONFLICT (user_id, role_id, cluster_id) DO NOTHING
+RETURNING id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id
+`
+
+type CreateGroupSyncClusterBindingForConnectorParams struct {
+	UserID               pgtype.UUID `json:"user_id"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	ClusterID            uuid.UUID   `json:"cluster_id"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+func (q *Queries) CreateGroupSyncClusterBindingForConnector(ctx context.Context, arg CreateGroupSyncClusterBindingForConnectorParams) (ClusterRoleBinding, error) {
+	row := q.db.QueryRow(ctx, createGroupSyncClusterBindingForConnector,
+		arg.UserID,
+		arg.RoleID,
+		arg.ClusterID,
+		arg.GroupSyncConnectorID,
+	)
+	var i ClusterRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.ClusterID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+		&i.Namespace,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -139,7 +177,7 @@ const createGroupSyncGlobalBinding = `-- name: CreateGroupSyncGlobalBinding :one
 INSERT INTO global_role_bindings (user_id, "group", role_id, source)
 VALUES ($1, '', $2, 'group_sync')
 ON CONFLICT (user_id, role_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, created_at, updated_at, source
+RETURNING id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id
 `
 
 type CreateGroupSyncGlobalBindingParams struct {
@@ -161,6 +199,38 @@ func (q *Queries) CreateGroupSyncGlobalBinding(ctx context.Context, arg CreateGr
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.GroupSyncConnectorID,
+	)
+	return i, err
+}
+
+const createGroupSyncGlobalBindingForConnector = `-- name: CreateGroupSyncGlobalBindingForConnector :one
+INSERT INTO global_role_bindings (user_id, "group", role_id, source, group_sync_connector_id)
+VALUES ($1, '', $2, 'group_sync', $3)
+ON CONFLICT (user_id, role_id) DO NOTHING
+RETURNING id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id
+`
+
+type CreateGroupSyncGlobalBindingForConnectorParams struct {
+	UserID               pgtype.UUID `json:"user_id"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+// Same idempotent insert as CreateGroupSyncGlobalBinding but stamps the
+// granting connector so a later sync can scope its revocation diff.
+func (q *Queries) CreateGroupSyncGlobalBindingForConnector(ctx context.Context, arg CreateGroupSyncGlobalBindingForConnectorParams) (GlobalRoleBinding, error) {
+	row := q.db.QueryRow(ctx, createGroupSyncGlobalBindingForConnector, arg.UserID, arg.RoleID, arg.GroupSyncConnectorID)
+	var i GlobalRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -169,7 +239,7 @@ const createGroupSyncProjectBinding = `-- name: CreateGroupSyncProjectBinding :o
 INSERT INTO project_role_bindings (user_id, "group", role_id, project_id, source)
 VALUES ($1, '', $2, $3, 'group_sync')
 ON CONFLICT (user_id, role_id, project_id) DO NOTHING
-RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source
+RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id
 `
 
 type CreateGroupSyncProjectBindingParams struct {
@@ -190,6 +260,43 @@ func (q *Queries) CreateGroupSyncProjectBinding(ctx context.Context, arg CreateG
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Source,
+		&i.GroupSyncConnectorID,
+	)
+	return i, err
+}
+
+const createGroupSyncProjectBindingForConnector = `-- name: CreateGroupSyncProjectBindingForConnector :one
+INSERT INTO project_role_bindings (user_id, "group", role_id, project_id, source, group_sync_connector_id)
+VALUES ($1, '', $2, $3, 'group_sync', $4)
+ON CONFLICT (user_id, role_id, project_id) DO NOTHING
+RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id
+`
+
+type CreateGroupSyncProjectBindingForConnectorParams struct {
+	UserID               pgtype.UUID `json:"user_id"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	ProjectID            uuid.UUID   `json:"project_id"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+func (q *Queries) CreateGroupSyncProjectBindingForConnector(ctx context.Context, arg CreateGroupSyncProjectBindingForConnectorParams) (ProjectRoleBinding, error) {
+	row := q.db.QueryRow(ctx, createGroupSyncProjectBindingForConnector,
+		arg.UserID,
+		arg.RoleID,
+		arg.ProjectID,
+		arg.GroupSyncConnectorID,
+	)
+	var i ProjectRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+		&i.GroupSyncConnectorID,
 	)
 	return i, err
 }
@@ -358,7 +465,7 @@ func (q *Queries) ListGroupMappingsForConnector(ctx context.Context, connectorID
 }
 
 const listGroupSyncClusterBindings = `-- name: ListGroupSyncClusterBindings :many
-SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace FROM cluster_role_bindings WHERE user_id = $1 AND source = 'group_sync'
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id FROM cluster_role_bindings WHERE user_id = $1 AND source = 'group_sync'
 `
 
 func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtype.UUID) ([]ClusterRoleBinding, error) {
@@ -380,6 +487,49 @@ func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtyp
 			&i.UpdatedAt,
 			&i.Source,
 			&i.Namespace,
+			&i.GroupSyncConnectorID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupSyncClusterBindingsForConnector = `-- name: ListGroupSyncClusterBindingsForConnector :many
+SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id FROM cluster_role_bindings
+WHERE user_id = $1 AND source = 'group_sync'
+  AND group_sync_connector_id IS NOT DISTINCT FROM $2
+`
+
+type ListGroupSyncClusterBindingsForConnectorParams struct {
+	UserID               pgtype.UUID `json:"user_id"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+func (q *Queries) ListGroupSyncClusterBindingsForConnector(ctx context.Context, arg ListGroupSyncClusterBindingsForConnectorParams) ([]ClusterRoleBinding, error) {
+	rows, err := q.db.Query(ctx, listGroupSyncClusterBindingsForConnector, arg.UserID, arg.GroupSyncConnectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterRoleBinding{}
+	for rows.Next() {
+		var i ClusterRoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Group,
+			&i.RoleID,
+			&i.ClusterID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Source,
+			&i.Namespace,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}
@@ -392,7 +542,7 @@ func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtyp
 }
 
 const listGroupSyncGlobalBindings = `-- name: ListGroupSyncGlobalBindings :many
-SELECT id, user_id, "group", role_id, created_at, updated_at, source FROM global_role_bindings WHERE user_id = $1 AND source = 'group_sync'
+SELECT id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id FROM global_role_bindings WHERE user_id = $1 AND source = 'group_sync'
 `
 
 // Enumerates the user's group_sync-managed global bindings so the
@@ -415,6 +565,56 @@ func (q *Queries) ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.GroupSyncConnectorID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupSyncGlobalBindingsForConnector = `-- name: ListGroupSyncGlobalBindingsForConnector :many
+
+SELECT id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id FROM global_role_bindings
+WHERE user_id = $1 AND source = 'group_sync'
+  AND group_sync_connector_id IS NOT DISTINCT FROM $2
+`
+
+type ListGroupSyncGlobalBindingsForConnectorParams struct {
+	UserID               pgtype.UUID `json:"user_id"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+// Finding #3 (connector-scoped reconciliation). These mirror the
+// ListGroupSync*Bindings queries above but additionally filter by the
+// granting connector (migration 128's group_sync_connector_id). The
+// reconciler must enumerate — and therefore only revoke — the bindings
+// granted by the connector currently syncing, so a user entitled under
+// multiple connectors doesn't lose one connector's roles on a login
+// through another. IS NOT DISTINCT FROM makes a NULL (wildcard-connector /
+// legacy) parameter match NULL-connector rows.
+func (q *Queries) ListGroupSyncGlobalBindingsForConnector(ctx context.Context, arg ListGroupSyncGlobalBindingsForConnectorParams) ([]GlobalRoleBinding, error) {
+	rows, err := q.db.Query(ctx, listGroupSyncGlobalBindingsForConnector, arg.UserID, arg.GroupSyncConnectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GlobalRoleBinding{}
+	for rows.Next() {
+		var i GlobalRoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Group,
+			&i.RoleID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Source,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}
@@ -427,7 +627,7 @@ func (q *Queries) ListGroupSyncGlobalBindings(ctx context.Context, userID pgtype
 }
 
 const listGroupSyncProjectBindings = `-- name: ListGroupSyncProjectBindings :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source FROM project_role_bindings WHERE user_id = $1 AND source = 'group_sync'
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings WHERE user_id = $1 AND source = 'group_sync'
 `
 
 func (q *Queries) ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error) {
@@ -448,6 +648,48 @@ func (q *Queries) ListGroupSyncProjectBindings(ctx context.Context, userID pgtyp
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Source,
+			&i.GroupSyncConnectorID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupSyncProjectBindingsForConnector = `-- name: ListGroupSyncProjectBindingsForConnector :many
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings
+WHERE user_id = $1 AND source = 'group_sync'
+  AND group_sync_connector_id IS NOT DISTINCT FROM $2
+`
+
+type ListGroupSyncProjectBindingsForConnectorParams struct {
+	UserID               pgtype.UUID `json:"user_id"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+func (q *Queries) ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg ListGroupSyncProjectBindingsForConnectorParams) ([]ProjectRoleBinding, error) {
+	rows, err := q.db.Query(ctx, listGroupSyncProjectBindingsForConnector, arg.UserID, arg.GroupSyncConnectorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectRoleBinding{}
+	for rows.Next() {
+		var i ProjectRoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Group,
+			&i.RoleID,
+			&i.ProjectID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Source,
+			&i.GroupSyncConnectorID,
 		); err != nil {
 			return nil, err
 		}

@@ -19,9 +19,15 @@ package handler
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -133,19 +139,111 @@ func (t *DefaultCloudTester) TestGCP(ctx context.Context, blob map[string]string
 	if key.ClientEmail == "" || key.PrivateKey == "" {
 		return CloudTestResult{OK: false, Message: "service_account_json missing client_email or private_key"}, nil
 	}
-	// We don't actually mint a real signed JWT here in the stub-free
-	// path because that would require the full RSA-sign machinery; the
-	// realistic equivalent is to call the token URI with a deliberately
-	// invalid assertion and assert on the structured "invalid_grant"
-	// vs network failure response. A proper SDK-backed implementation
-	// is a follow-up — see the deferred items in the migration's PR
-	// description.
-	//
-	// For the test endpoint contract: a parseable JSON with the right
-	// shape is reported as "credential structure looks valid (mint a
-	// token to fully verify)". The audit row still captures the
-	// outcome label.
-	return CloudTestResult{OK: true, Message: fmt.Sprintf("service account JSON parses (client_email=%s, project_id=%s); mint a token to fully verify", key.ClientEmail, key.ProjectID)}, nil
+	tokenURI := strings.TrimSpace(key.TokenURI)
+	if tokenURI == "" {
+		tokenURI = "https://oauth2.googleapis.com/token"
+	}
+	// Sign a real JWT assertion with the service-account's RSA private key
+	// and exchange it at the token URI. Merely parsing the JSON is NOT
+	// enough: a revoked/rotated key produces syntactically-valid JSON, and
+	// reporting OK on that would greenlight a dead credential. Only a 200
+	// with an access_token from the OAuth token endpoint proves the private
+	// key + client_email pair is still recognised by Google.
+	assertion, err := signGCPServiceAccountJWT(key.PrivateKey, key.ClientEmail, tokenURI)
+	if err != nil {
+		return CloudTestResult{OK: false, Message: fmt.Sprintf("failed to sign JWT with service-account private_key: %s", err.Error())}, nil
+	}
+	form := url.Values{
+		"grant_type": []string{"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"assertion":  []string{assertion},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURI, strings.NewReader(form.Encode()))
+	if err != nil {
+		return CloudTestResult{OK: false, Message: err.Error()}, nil
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := t.httpClient().Do(req)
+	if err != nil {
+		return CloudTestResult{OK: false, Message: err.Error()}, nil
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return CloudTestResult{OK: false, Message: fmt.Sprintf("token endpoint returned status %d: %s", resp.StatusCode, summariseGCPError(body))}, nil
+	}
+	var parsed struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil || parsed.AccessToken == "" {
+		return CloudTestResult{OK: false, Message: "token endpoint returned 200 but no access_token"}, nil
+	}
+	return CloudTestResult{OK: true, Message: fmt.Sprintf("acquired %s token for %s (expires in %ds)", parsed.TokenType, key.ClientEmail, parsed.ExpiresIn)}, nil
+}
+
+// signGCPServiceAccountJWT builds and RS256-signs the JWT-bearer assertion
+// used in the OAuth 2.0 service-account flow: a JWT with iss=client_email,
+// scope=cloud-platform, aud=tokenURI, iat/exp, signed with the SA's RSA
+// private key. Uses stdlib crypto only (no oauth2/google dependency).
+func signGCPServiceAccountJWT(privateKeyPEM, clientEmail, audience string) (string, error) {
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return "", fmt.Errorf("private_key is not valid PEM")
+	}
+	var rsaKey *rsa.PrivateKey
+	if k, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		rk, ok := k.(*rsa.PrivateKey)
+		if !ok {
+			return "", fmt.Errorf("private_key is not an RSA key")
+		}
+		rsaKey = rk
+	} else if k, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		rsaKey = k
+	} else {
+		return "", fmt.Errorf("private_key could not be parsed as PKCS#8 or PKCS#1")
+	}
+	now := time.Now()
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	claims := map[string]any{
+		"iss":   clientEmail,
+		"scope": "https://www.googleapis.com/auth/cloud-platform",
+		"aud":   audience,
+		"iat":   now.Unix(),
+		"exp":   now.Add(time.Hour).Unix(),
+	}
+	claimsJSON, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	signingInput := header + "." + base64.RawURLEncoding.EncodeToString(claimsJSON)
+	digest := sha256.Sum256([]byte(signingInput))
+	sig, err := rsa.SignPKCS1v15(rand.Reader, rsaKey, crypto.SHA256, digest[:])
+	if err != nil {
+		return "", err
+	}
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
+}
+
+// summariseGCPError extracts the "error_description" from a Google OAuth
+// error body. Falls back to a snippet on parse failure.
+func summariseGCPError(body []byte) string {
+	var doc struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+	if err := json.Unmarshal(body, &doc); err == nil && doc.Error != "" {
+		if doc.ErrorDescription != "" {
+			return fmt.Sprintf("%s: %s", doc.Error, doc.ErrorDescription)
+		}
+		return doc.Error
+	}
+	if len(body) > 200 {
+		body = body[:200]
+	}
+	return string(body)
 }
 
 // TestAzure exchanges the client_id / client_secret for an access
@@ -318,8 +416,3 @@ func signedGet(ctx context.Context, client *http.Client, accessKey, secretKey, r
 	body, _ := io.ReadAll(resp.Body)
 	return body, resp.StatusCode, nil
 }
-
-// _ keeps the base64 import that the worker code uses available here
-// for the future SDK-backed JWT mint path; remove if unused after
-// switching to the SDK-native implementation.
-var _ = base64.StdEncoding

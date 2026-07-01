@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -13,6 +14,14 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
+
+// serviceProxyMaxBodyBytes caps how large a request body the service proxy will
+// buffer into the control-plane process before forwarding it through the
+// tunnel. Without a cap an authenticated user could POST a multi-gigabyte body
+// to an allowlisted target and exhaust the process's memory (io.ReadAll has no
+// bound). 10 MiB comfortably covers legitimate proxied API calls (Prometheus /
+// Grafana / dashboard requests) while failing closed on abuse.
+const serviceProxyMaxBodyBytes = 10 << 20
 
 type ServiceProxyToolQuerier interface {
 	ListEnabledTools(ctx context.Context) ([]sqlc.ClusterTool, error)
@@ -82,8 +91,13 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		proxyPath += "?" + r.URL.RawQuery
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, serviceProxyMaxBodyBytes))
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "request body exceeds maximum allowed size")
+			return
+		}
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Failed to read request body")
 		return
 	}

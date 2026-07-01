@@ -18,6 +18,8 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // AnomalyBaselineQuerier is the narrow interface the handler needs.
@@ -34,11 +36,22 @@ type AnomalyBaselineQuerier interface {
 // endpoints.
 type AnomalyHandler struct {
 	queries AnomalyBaselineQuerier
+	authz   authorizationSupport
 }
 
 // NewAnomalyHandler builds an AnomalyHandler.
 func NewAnomalyHandler(queries AnomalyBaselineQuerier) *AnomalyHandler {
 	return &AnomalyHandler{queries: queries}
+}
+
+// SetAuthorization wires the RBAC engine + bindings querier the read
+// handlers use to scope baselines to clusters the caller may monitor.
+// Until wired, restricted callers fail closed (see authorizeClusterAction).
+func (h *AnomalyHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.authz.SetAuthorization(engine, querier)
 }
 
 // List handles GET /api/v1/anomaly-baselines/.
@@ -54,6 +67,11 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		clusterID, err := uuid.Parse(clusterIDRaw)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidClusterID, "Invalid clusterId")
+			return
+		}
+		// Scoped listing: gate on the requested cluster so a caller without
+		// monitoring:read there can't read its metric baselines.
+		if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceMonitoring, rbac.VerbRead) {
 			return
 		}
 		rows, err := h.queries.ListAnomalyBaselinesByCluster(r.Context(), clusterID)
@@ -72,6 +90,14 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 		return
 	}
+	// Unscoped fleet listing: filter to clusters the caller may monitor
+	// (unrestricted/superuser sees all). Never disclose cross-tenant
+	// baselines to a cluster-scoped caller.
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		return
+	}
 	limit := int32(queryInt(r, "limit", 50))
 	offset := int32(queryInt(r, "offset", 0))
 	rows, err := h.queries.ListAnomalyBaselines(r.Context(), sqlc.ListAnomalyBaselinesParams{
@@ -84,10 +110,14 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, b := range rows {
+		if restricted && !h.authz.allowsCluster(bindings, b.ClusterID, rbac.ResourceMonitoring, rbac.VerbRead) {
+			continue
+		}
 		items = append(items, anomalyBaselineResponse(b))
 	}
-	total, _ := h.queries.CountAnomalyBaselines(r.Context())
-	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
+	// TODO(total): list is RBAC-filtered in-Go; the COUNT would overcount the
+	// visible set, so report the post-filter page length.
+	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
 }
 
 // Get handles GET /api/v1/anomaly-baselines/{id}/.
@@ -104,6 +134,11 @@ func (h *AnomalyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	row, err := h.queries.GetAnomalyBaselineByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Anomaly baseline not found")
+		return
+	}
+	// Resolve the baseline's own cluster and gate on it so UUID iteration
+	// can't disclose another tenant's metric baselines.
+	if !h.authz.authorizeClusterAction(w, r, row.ClusterID, rbac.ResourceMonitoring, rbac.VerbRead) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, anomalyBaselineResponse(row))

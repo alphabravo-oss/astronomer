@@ -545,8 +545,31 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 		w.Header()[k] = v
 	}
 	w.WriteHeader(resp.StatusCode)
+	flusher, _ := w.(http.Flusher)
+	if isWatchRequest(r) && flusher != nil {
+		// Streaming (watch/SSE) response: flush every chunk to the client
+		// immediately. A plain io.Copy with a single trailing Flush buffers
+		// each event in bufio until ~2KB accumulate, so small ADDED/MODIFIED/
+		// bookmark events on a quiet resource are held for minutes and the
+		// cross-pod watch appears frozen even though data is flowing. Copy-
+		// and-flush per read mirrors consumeStreamingResponse's local path.
+		buf := make([]byte, 32*1024)
+		for {
+			n, rerr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, werr := w.Write(buf[:n]); werr != nil {
+					break
+				}
+				flusher.Flush()
+			}
+			if rerr != nil {
+				break
+			}
+		}
+		return true
+	}
 	_, _ = io.Copy(w, resp.Body)
-	if flusher, ok := w.(http.Flusher); ok {
+	if flusher != nil {
 		flusher.Flush()
 	}
 	return true

@@ -108,12 +108,6 @@ func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID 
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent
 // to the frontend client.
 func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
-	userID, ok := authenticateStreamRequest(r, lc.queries, lc.jwt, lc.tickets, auth.StreamKindLogs)
-	if !ok {
-		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
-		return
-	}
-
 	clusterID := chi.URLParam(r, "cluster_id")
 	namespace := chi.URLParam(r, "namespace")
 	pod := chi.URLParam(r, "pod")
@@ -124,21 +118,30 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per-cluster authorization. Identity alone is not enough — without this
-	// any authenticated user could stream logs (often containing secrets) from
-	// pods on ANY cluster regardless of their RBAC bindings. Enforce before the
-	// cross-pod hand-off so a forged request can't reach a sibling pod either.
-	clusterUUID, err := uuid.Parse(clusterID)
-	if err != nil || !lc.authorizeCluster(r.Context(), userID, clusterUUID) {
-		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
+	// Multi-replica WS hand-off — same rationale as exec_consumer.go, and do it
+	// BEFORE consuming the one-use stream ticket. Forward the upgrade to the
+	// sibling pod that owns the tunnel before we authenticate/Accept, so log
+	// frames flow on the agent-owning pod and don't drop into "no stream
+	// found". Authenticating first would burn the browser's single-use
+	// ?ticket= on this non-owner pod, so the owner pod's re-Validate returns
+	// not-found and 401s the session. The sibling that terminates the stream
+	// runs its own authenticateStreamRequest + authorizeCluster below.
+	if ForwardWSToOwnerPod(lc.hub, lc.log, w, r, clusterID) {
 		return
 	}
 
-	// Multi-replica WS hand-off — same rationale as exec_consumer.go.
-	// Forward the upgrade to the sibling pod that owns the tunnel
-	// before we Accept, so log frames flow on the agent-owning pod
-	// and don't drop into "no stream found".
-	if ForwardWSToOwnerPod(lc.hub, lc.log, w, r, clusterID) {
+	userID, ok := authenticateStreamRequest(r, lc.queries, lc.jwt, lc.tickets, auth.StreamKindLogs)
+	if !ok {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Per-cluster authorization. Identity alone is not enough — without this
+	// any authenticated user could stream logs (often containing secrets) from
+	// pods on ANY cluster regardless of their RBAC bindings.
+	clusterUUID, err := uuid.Parse(clusterID)
+	if err != nil || !lc.authorizeCluster(r.Context(), userID, clusterUUID) {
+		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
 		return
 	}
 
@@ -179,6 +182,24 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer agent.Streams.CloseStream(streamID)
+	// Tell the agent to stop tailing when this WS ends. Without this, on
+	// client disconnect we close only our LOCAL stream — the agent's
+	// follow=true kubelet stream + its pump goroutine keep running forever
+	// (its sendFn still succeeds because the tunnel WS is up), leaking one
+	// goroutine + one open kubelet log connection per opened-then-closed
+	// follow view. Mirrors exec_consumer.go sending MsgExecEnd on read-loop
+	// exit; agent/logs.go:HandleLogStop cancels the session context and the
+	// goroutine drains. Registered after CloseStream so it runs first (LIFO):
+	// signal the agent, then tear down the local stream.
+	defer func() {
+		stopMsg := &protocol.Message{
+			Type:      protocol.MsgLogStop,
+			StreamID:  streamID,
+			ClusterID: clusterID,
+			Timestamp: time.Now().UTC(),
+		}
+		_ = lc.hub.SendToAgent(clusterID, stopMsg)
+	}()
 
 	// Parse query parameters for log options.
 	follow := r.URL.Query().Get("follow") == "true"

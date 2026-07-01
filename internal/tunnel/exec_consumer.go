@@ -126,6 +126,25 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Multi-replica WS hand-off — do this BEFORE consuming the one-use stream
+	// ticket. If the cluster's tunnel is owned by a sibling pod (the redis
+	// locator knows), forward the entire HTTP-Upgrade to that pod so the WS
+	// lands where the agent tunnel terminates. Without this the
+	// K8S_STREAM_FRAME replies arrive on the agent-owning pod, find no
+	// matching stream on this pod, and the WS dies with "no stream found for
+	// message".
+	//
+	// Routing needs no identity, so we forward before authenticating. If we
+	// authenticated first, the browser's single-use ?ticket= would be burned
+	// (Redis Take) on THIS non-owner pod; the owner pod would then re-Validate,
+	// get not-found, and 401 — hard-failing HA browser sessions ~50% of the
+	// time. The sibling that actually terminates the stream runs its own
+	// authenticateStreamRequest + authorizeCluster below, so a forged request
+	// still can't reach a pod's agent unauthenticated.
+	if ForwardWSToOwnerPod(ec.hub, ec.log, w, r, clusterID) {
+		return
+	}
+
 	userID, ok := authenticateStreamRequest(r, ec.queries, ec.jwt, ec.tickets, iauth.StreamKindExec)
 	if !ok {
 		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
@@ -134,21 +153,10 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 
 	// Per-cluster authorization. Authentication only proves WHO the caller is;
 	// without this an authenticated user could exec into a pod on ANY cluster
-	// regardless of their RBAC bindings. Enforce before the cross-pod hand-off
-	// so a forged request can't reach a sibling pod either.
+	// regardless of their RBAC bindings.
 	clusterUUID, err := uuid.Parse(clusterID)
 	if err != nil || !ec.authorizeCluster(r.Context(), userID, clusterUUID) {
 		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
-		return
-	}
-
-	// Multi-replica WS hand-off. If the cluster's tunnel is owned by a
-	// sibling pod (the redis locator knows), forward the entire
-	// HTTP-Upgrade to that pod so the WS lands where the agent
-	// tunnel terminates. Without this the K8S_STREAM_FRAME replies
-	// arrive on the agent-owning pod, find no matching stream on this
-	// pod, and the WS dies with "no stream found for message".
-	if ForwardWSToOwnerPod(ec.hub, ec.log, w, r, clusterID) {
 		return
 	}
 

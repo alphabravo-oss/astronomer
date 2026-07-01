@@ -643,6 +643,16 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 		enabled = false
 	}
 	manifestBytes, _ := json.Marshal(validation.Manifest)
+	// Signed-bundle gate must be re-armed on re-install. The upsert preserves
+	// the prior bundle_verified on ON CONFLICT, so a re-install that swaps in a
+	// new/unsigned bundle (changed checksum or manifest) would otherwise inherit
+	// the old verified flag and mount as Tier-2 without ever being re-verified.
+	// Treat the gate as still valid only when the stored bundle descriptor is
+	// byte-identical to what we're upserting.
+	prior, priorErr := h.findExtension(r.Context(), validation.Manifest.Name)
+	bundleUnchanged := priorErr == nil &&
+		prior.Checksum == validation.Checksum &&
+		string(prior.Manifest) == string(manifestBytes)
 	row, err := h.queries.UpsertUIExtension(r.Context(), sqlc.UpsertUIExtensionParams{
 		Name:                validation.Manifest.Name,
 		DisplayName:         extensionDisplayName(validation.Manifest),
@@ -657,6 +667,17 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InstallFailed, "Failed to install extension")
 		return
+	}
+	if row.BundleVerified && !bundleUnchanged {
+		reset, rErr := h.queries.SetUIExtensionBundleVerified(r.Context(), sqlc.SetUIExtensionBundleVerifiedParams{
+			Name:           row.Name,
+			BundleVerified: false,
+		})
+		if rErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset bundle verification")
+			return
+		}
+		row = reset
 	}
 	recordAudit(r, h.auditor, "admin.extension.installed", "ui_extension", row.ID.String(), row.Name, map[string]any{
 		"name":                 row.Name,

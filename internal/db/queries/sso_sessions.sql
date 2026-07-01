@@ -41,6 +41,18 @@ SELECT * FROM sso_sessions WHERE jti = $1;
 -- operator-facing audit row that records how many were torn down).
 SELECT * FROM sso_sessions WHERE user_id = $1 ORDER BY created_at DESC;
 
+-- name: GetLatestSSOSessionByUser :one
+-- Logout fallback for the SLO flow. The row is keyed by the access JTI
+-- captured at login; after the SPA silently refreshes, the caller's
+-- access JTI no longer matches (GetSSOSession returns no rows) even
+-- though the upstream session — and its id_token_hint — is still live.
+-- Resolve the newest non-expired upstream session for the user so
+-- RP-initiated logout keeps working past the first token refresh.
+SELECT * FROM sso_sessions
+WHERE user_id = $1 AND expires_at > now()
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- name: DeleteSSOSession :exec
 -- Drops a single row by JTI. Called by Logout after the end-session
 -- redirect URL is built, so the upstream session can't be redirected

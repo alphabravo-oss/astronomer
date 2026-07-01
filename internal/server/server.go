@@ -424,6 +424,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	// Anomaly-baselines read endpoints gate on cluster authz (fail closed:
+	// unwired → 500 for any authenticated caller), so this MUST be set.
+	anomalyHandler := handler.NewAnomalyHandler(queries)
+	anomalyHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Handler-side result filtering must be enabled TOGETHER with the list gate
 	// (below via deps.NamespaceScopedRBAC): the gate admits scoped users, the
 	// handler filters their results. Enabling one without the other would leak.
@@ -1043,7 +1047,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Tools:                 toolHandler,
 		Audit:                 handler.NewAuditHandler(queries),
 		Alerting:              handler.NewAlertingHandlerWithDeps(queries, requester),
-		Anomaly:               handler.NewAnomalyHandler(queries),
+		Anomaly:               anomalyHandler,
 		ArgoCD:                argocdHandler,
 		Backups:               backupHandler,
 		Catalog:               catalogHandler,

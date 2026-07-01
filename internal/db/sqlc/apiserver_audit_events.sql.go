@@ -47,6 +47,22 @@ func (q *Queries) CountApiserverAuditEventsByClusterCapped(ctx context.Context, 
 	return count, err
 }
 
+const deleteApiserverAuditEventsByCluster = `-- name: DeleteApiserverAuditEventsByCluster :execrows
+DELETE FROM apiserver_audit_events WHERE cluster_id = $1
+`
+
+// Decommission cleanup: drop every audit row for a cluster. Cluster rows are
+// soft-deleted (tombstoned) rather than hard-deleted, so the FK ON DELETE
+// CASCADE never fires on decommission; phaseDeleteDependents must call this
+// explicitly or a tombstoned cluster leaks its audit rows forever.
+func (q *Queries) DeleteApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteApiserverAuditEventsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertApiserverAuditEvent = `-- name: InsertApiserverAuditEvent :exec
 
 INSERT INTO apiserver_audit_events (

@@ -208,10 +208,16 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOInvalidRequest, "Missing code or state")
 		return
 	}
-	if !h.consumeState(state, provider) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state did not match")
-		return
-	}
+	// CSRF protection is enforced by the HMAC-signed `astro_sso_state`
+	// cookie verified below, which is stateless and therefore HA-safe: a
+	// Login served by replica A and a Callback served by replica B (behind
+	// a round-robin LB) both validate against the same JWT signing key.
+	// The in-memory state map is consulted best-effort only — it is local
+	// to a single process, so requiring a hit here breaks SSO in any
+	// multi-replica deployment. We consume it (for single-process replay
+	// detection + GC) but never fail the callback on a miss; the signed
+	// cookie is the authority.
+	h.consumeState(state, provider)
 	cookie, err := r.Cookie("astro_sso_state")
 	if err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie missing")
@@ -258,7 +264,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// must NOT block the login response — the user is already
 	// authenticated. The Logout fallback ("JWT revoked locally only")
 	// covers the degraded path.
-	h.persistSSOSession(r, user.ID, provider, access, info)
+	h.persistSSOSession(r, user.ID, provider, access, info, refresh)
 
 	if provisioned {
 		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: user.ID, Valid: true},
@@ -308,7 +314,11 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 //
 // Encrypted at rest because the id_token is bearer-equivalent while
 // it's valid. Never logged.
-func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provider, accessToken string, info *auth.SSOUserInfo) {
+// refreshToken is variadic (optional) so existing callers that only have
+// the access token continue to compile; when supplied it anchors the row's
+// expires_at to the session (refresh) lifetime instead of the access
+// token's — see the ExpiresAt comment below.
+func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provider, accessToken string, info *auth.SSOUserInfo, refreshToken ...string) {
 	if h == nil {
 		return
 	}
@@ -346,6 +356,21 @@ func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provid
 	if claims.ID == "" || claims.ExpiresAt == nil {
 		return
 	}
+	// The row's lifetime must track the SESSION (refresh-token) lifetime,
+	// not the access token's (default: minutes). The upstream id_token is
+	// captured only once, at login — the silent access-token refresh the
+	// SPA performs never re-fetches it — so if this row is purged when the
+	// first access token expires, single sign-out is dead for any session
+	// older than one access lifetime (the row is gone before Logout can
+	// find it). Anchor expires_at to the refresh token's exp so the row
+	// survives the whole session and a user-scoped Logout lookup can still
+	// resolve it after the access JTI has rotated.
+	expiresAt := claims.ExpiresAt.Time
+	if len(refreshToken) > 0 && refreshToken[0] != "" {
+		if refreshClaims, rerr := h.jwt.ValidateToken(refreshToken[0]); rerr == nil && refreshClaims.ExpiresAt != nil {
+			expiresAt = refreshClaims.ExpiresAt.Time
+		}
+	}
 	cipher, err := h.encryptor.Encrypt(info.UpstreamIDToken)
 	if err != nil {
 		// Same audit + degrade. The user has a valid JWT; SLO just
@@ -363,7 +388,7 @@ func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provid
 		ProviderName:             provider,
 		UpstreamIDTokenEncrypted: cipher,
 		EndSessionEndpoint:       info.EndSessionEndpoint,
-		ExpiresAt:                claims.ExpiresAt.Time,
+		ExpiresAt:                expiresAt,
 	}); err != nil {
 		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
 			"sso.session_skipped", "user", userID.String(), "", map[string]any{

@@ -61,6 +61,7 @@ type RevocationQuerier interface {
 // degrades to "JWT revoked locally only" (the pre-054 behaviour).
 type SSOSessionStore interface {
 	GetSSOSession(ctx context.Context, jti string) (sqlc.SsoSession, error)
+	GetLatestSSOSessionByUser(ctx context.Context, userID uuid.UUID) (sqlc.SsoSession, error)
 	DeleteSSOSession(ctx context.Context, jti string) error
 }
 
@@ -834,6 +835,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// matching sso_sessions row. Empty means "no bearer / no valid
 	// JTI" → no SLO redirect.
 	var jtiForSLO string
+	// userIDForSLO carries the caller's user id out of the revocation block so
+	// the SLO lookup can fall back to the newest sso_sessions row for the user
+	// when the access JTI has rotated past a silent refresh (the row is keyed
+	// on the login-time access JTI, which no longer matches).
+	var userIDForSLO uuid.UUID
 
 	// Extract the JTI from the bearer JWT so we can add THIS token's
 	// JTI to the deny list. We don't trust the AuthenticatedUser to
@@ -867,6 +873,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 					auditDetail["jti"] = claims.ID
 					auditDetail["revoked"] = true
 					jtiForSLO = claims.ID
+					userIDForSLO = claims.UserID
 				}
 				// Terminate the entire session, not just this access token.
 				// The refresh token (7-day lifetime) carries a JTI we don't
@@ -900,7 +907,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// degrades to "no redirect_url" → local logout only.
 	redirectURL := ""
 	if jtiForSLO != "" {
-		redirectURL = h.buildSSOLogoutRedirect(r, jtiForSLO, &auditDetail)
+		redirectURL = h.buildSSOLogoutRedirect(r, jtiForSLO, userIDForSLO, &auditDetail)
 	}
 
 	if ok && authUser != nil {
@@ -931,11 +938,24 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // deletes the sso_sessions row on every outcome (success OR fallback)
 // because the JWT is already revoked and the stored id_token can't be
 // reused safely.
-func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, auditDetail *map[string]any) string {
+func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, userID uuid.UUID, auditDetail *map[string]any) string {
 	if h == nil || h.ssoSessions == nil || h.encryptor == nil {
 		return ""
 	}
 	session, err := h.ssoSessions.GetSSOSession(r.Context(), jti)
+	if err != nil {
+		// The row is keyed on the LOGIN-time access JTI; after a silent SPA
+		// refresh the caller's current JTI no longer matches. Fall back to the
+		// newest sso_sessions row for the user so single-sign-out still fires.
+		// (id_token can't be re-minted on refresh, so we can't re-key the row.)
+		if userID != (uuid.UUID{}) {
+			if latest, lerr := h.ssoSessions.GetLatestSSOSessionByUser(r.Context(), userID); lerr == nil {
+				session = latest
+				jti = latest.Jti // delete the row we actually resolved
+				err = nil
+			}
+		}
+	}
 	if err != nil {
 		// sql.ErrNoRows is the dominant case here — local-password
 		// users, or an SSO session row already cleaned up by a

@@ -160,6 +160,81 @@ func (f *fakeGroupSync) CreateGroupSyncProjectBinding(_ context.Context, arg sql
 	return row, nil
 }
 
+// connMatch models the SQL `group_sync_connector_id IS NOT DISTINCT FROM $2`:
+// a NULL param matches NULL rows; a Valid param matches only that connector.
+func connMatch(row, arg pgtype.UUID) bool {
+	if arg.Valid != row.Valid {
+		return false
+	}
+	if !arg.Valid {
+		return true // both NULL
+	}
+	return row.Bytes == arg.Bytes
+}
+
+func (f *fakeGroupSync) ListGroupSyncGlobalBindingsForConnector(_ context.Context, arg sqlc.ListGroupSyncGlobalBindingsForConnectorParams) ([]sqlc.GlobalRoleBinding, error) {
+	out := []sqlc.GlobalRoleBinding{}
+	for _, b := range f.global {
+		if b.UserID.Valid && arg.UserID.Valid && b.UserID.Bytes == arg.UserID.Bytes && connMatch(b.GroupSyncConnectorID, arg.GroupSyncConnectorID) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeGroupSync) ListGroupSyncClusterBindingsForConnector(_ context.Context, arg sqlc.ListGroupSyncClusterBindingsForConnectorParams) ([]sqlc.ClusterRoleBinding, error) {
+	out := []sqlc.ClusterRoleBinding{}
+	for _, b := range f.cluster {
+		if b.UserID.Valid && arg.UserID.Valid && b.UserID.Bytes == arg.UserID.Bytes && connMatch(b.GroupSyncConnectorID, arg.GroupSyncConnectorID) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeGroupSync) ListGroupSyncProjectBindingsForConnector(_ context.Context, arg sqlc.ListGroupSyncProjectBindingsForConnectorParams) ([]sqlc.ProjectRoleBinding, error) {
+	out := []sqlc.ProjectRoleBinding{}
+	for _, b := range f.project {
+		if b.UserID.Valid && arg.UserID.Valid && b.UserID.Bytes == arg.UserID.Bytes && connMatch(b.GroupSyncConnectorID, arg.GroupSyncConnectorID) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeGroupSync) CreateGroupSyncGlobalBindingForConnector(_ context.Context, arg sqlc.CreateGroupSyncGlobalBindingForConnectorParams) (sqlc.GlobalRoleBinding, error) {
+	f.createCalls++
+	key := [2]uuid.UUID{arg.UserID.Bytes, arg.RoleID}
+	if f.manualGlobal[key] {
+		return sqlc.GlobalRoleBinding{}, pgx.ErrNoRows
+	}
+	row := sqlc.GlobalRoleBinding{ID: uuid.New(), UserID: arg.UserID, RoleID: arg.RoleID, Source: "group_sync", GroupSyncConnectorID: arg.GroupSyncConnectorID}
+	f.global[row.ID] = row
+	return row, nil
+}
+
+func (f *fakeGroupSync) CreateGroupSyncClusterBindingForConnector(_ context.Context, arg sqlc.CreateGroupSyncClusterBindingForConnectorParams) (sqlc.ClusterRoleBinding, error) {
+	f.createCalls++
+	key := [3]uuid.UUID{arg.UserID.Bytes, arg.RoleID, arg.ClusterID}
+	if f.manualCluster[key] {
+		return sqlc.ClusterRoleBinding{}, pgx.ErrNoRows
+	}
+	row := sqlc.ClusterRoleBinding{ID: uuid.New(), UserID: arg.UserID, RoleID: arg.RoleID, ClusterID: arg.ClusterID, Source: "group_sync", GroupSyncConnectorID: arg.GroupSyncConnectorID}
+	f.cluster[row.ID] = row
+	return row, nil
+}
+
+func (f *fakeGroupSync) CreateGroupSyncProjectBindingForConnector(_ context.Context, arg sqlc.CreateGroupSyncProjectBindingForConnectorParams) (sqlc.ProjectRoleBinding, error) {
+	f.createCalls++
+	key := [3]uuid.UUID{arg.UserID.Bytes, arg.RoleID, arg.ProjectID}
+	if f.manualProject[key] {
+		return sqlc.ProjectRoleBinding{}, pgx.ErrNoRows
+	}
+	row := sqlc.ProjectRoleBinding{ID: uuid.New(), UserID: arg.UserID, RoleID: arg.RoleID, ProjectID: arg.ProjectID, Source: "group_sync", GroupSyncConnectorID: arg.GroupSyncConnectorID}
+	f.project[row.ID] = row
+	return row, nil
+}
+
 func (f *fakeGroupSync) DeleteGroupSyncGlobalBinding(_ context.Context, id uuid.UUID) error {
 	f.deleteCalls++
 	delete(f.global, id)
@@ -231,6 +306,43 @@ func TestSyncUserGroups_AddsBindings(t *testing.T) {
 	}
 }
 
+// TestSyncUserGroups_DoesNotRevokeOtherConnectorBindings is the T16
+// regression: a login through connector A (with no matching claims) must NOT
+// revoke a group_sync binding granted by connector B — the reconcile is
+// connector-scoped, so a user entitled under multiple connectors keeps each
+// connector's roles.
+func TestSyncUserGroups_DoesNotRevokeOtherConnectorBindings(t *testing.T) {
+	f := newFakeSync()
+	userID := uuid.New()
+	connectorA := uuid.New()
+	connectorB := uuid.New()
+
+	// A stale-looking binding owned by connector B.
+	bBinding := sqlc.GlobalRoleBinding{
+		ID:                   uuid.New(),
+		UserID:               pgtype.UUID{Bytes: userID, Valid: true},
+		RoleID:               uuid.New(),
+		Source:               "group_sync",
+		GroupSyncConnectorID: pgtype.UUID{Bytes: connectorB, Valid: true},
+	}
+	f.global[bBinding.ID] = bBinding
+
+	// Login through connector A with no matching claims: A reconciles A's
+	// bindings only, so B's binding must be untouched.
+	res, err := SyncUserGroups(context.Background(), f, userID,
+		pgtype.UUID{Bytes: connectorA, Valid: true},
+		[]string{}, true)
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if len(res.Removed) != 0 {
+		t.Fatalf("connector A revoked %d binding(s); connector B's grant must survive", len(res.Removed))
+	}
+	if _, still := f.global[bBinding.ID]; !still {
+		t.Fatalf("connector B binding %s was revoked by a connector A sync", bBinding.ID)
+	}
+}
+
 // TestSyncUserGroups_RemovesStaleBindings — user previously had a
 // group_sync binding for group X; this login's claims no longer
 // include X; the binding gets deleted.
@@ -240,13 +352,15 @@ func TestSyncUserGroups_RemovesStaleBindings(t *testing.T) {
 	connectorID := uuid.New()
 	roleID := uuid.New()
 
-	// Pre-seed a group_sync binding that doesn't correspond to any
-	// mapping the user's claims will match this round.
+	// Pre-seed a group_sync binding for THIS connector that doesn't
+	// correspond to any mapping the user's claims will match this round.
+	// (Connector-scoped: a sync only revokes its own connector's bindings.)
 	existing := sqlc.GlobalRoleBinding{
-		ID:     uuid.New(),
-		UserID: pgtype.UUID{Bytes: userID, Valid: true},
-		RoleID: roleID,
-		Source: "group_sync",
+		ID:                   uuid.New(),
+		UserID:               pgtype.UUID{Bytes: userID, Valid: true},
+		RoleID:               roleID,
+		Source:               "group_sync",
+		GroupSyncConnectorID: pgtype.UUID{Bytes: connectorID, Valid: true},
 	}
 	f.global[existing.ID] = existing
 
