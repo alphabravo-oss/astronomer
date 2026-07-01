@@ -11,6 +11,7 @@ import {
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { Project } from '@/types';
 import {
@@ -26,10 +27,26 @@ import { toastError } from '@/lib/toast';
 export default function ProjectsPage() {
   const router = useRouter();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
 
-  const { data: projectsData, isLoading: projectsLoading } = useProjects();
+  const {
+    data: projectsData,
+    isLoading: projectsLoading,
+    isError: projectsError,
+    refetch: refetchProjects,
+  } = useProjects();
   const { data: clustersData } = useClusters();
   const deleteProject = useDeleteProject();
+
+  const confirmDeleteProject = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteProject.mutateAsync(deleteTarget.id);
+    } catch {
+      // Error surfaced by the mutation's toast handler.
+    }
+    setDeleteTarget(null);
+  };
 
   const projects = projectsData?.data || [];
 
@@ -179,11 +196,7 @@ export default function ProjectsPage() {
       accessor: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => {
-              if (confirm('Delete this project? This action cannot be undone.')) {
-                deleteProject.mutate(row.id);
-              }
-            }}
+            onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete project"
           >
@@ -222,6 +235,8 @@ export default function ProjectsPage() {
         keyExtractor={(row) => row.id}
         searchPlaceholder="Search projects..."
         loading={projectsLoading}
+        isError={projectsError}
+        onRetry={() => refetchProjects()}
         emptyMessage="No projects created yet"
         onRowClick={(row) => router.push(`/dashboard/projects/${row.id}`)}
       />
@@ -230,6 +245,18 @@ export default function ProjectsPage() {
       {showCreateModal && (
         <CreateProjectModal onClose={() => setShowCreateModal(false)} />
       )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteProject}
+        title="Delete Project"
+        description={`Delete the project "${deleteTarget?.displayName || deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteProject.isPending}
+      />
     </div>
   );
 }
@@ -288,7 +315,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Project</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>

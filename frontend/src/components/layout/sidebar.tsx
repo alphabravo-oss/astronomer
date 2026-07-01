@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { usePathname } from '@/lib/navigation';
+import { usePathname, useRouter } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import {
   LayoutDashboard,
@@ -55,6 +55,7 @@ import { can, isSuperuser, type PermissionVerb } from '@/lib/permissions';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import {
   useCluster,
+  useClusters,
   useClusterNodes,
   useTools,
   useClusterToolsStatus,
@@ -118,10 +119,18 @@ const globalNavGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Continuous Delivery',
+    items: [
+      { label: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch, permission: { resource: 'argocd', verb: 'read' }, featureFlag: 'feature.argocd' },
+      // Git-cluster-sources config lives under settings; surface it alongside
+      // ArgoCD so GitOps is a single top-level destination.
+      { label: 'Git Sources', href: '/dashboard/settings/gitops', icon: GitBranch, permission: { resource: 'settings', verb: 'read' } },
+    ],
+  },
+  {
     label: 'Integrations',
     items: [
       { label: 'Cluster Tools', href: '/dashboard/tools', icon: Wrench, permission: { resource: 'catalog', verb: 'read' }, featureFlag: 'feature.catalog' },
-      { label: 'ArgoCD', href: '/dashboard/argocd', icon: GitBranch, permission: { resource: 'argocd', verb: 'read' }, featureFlag: 'feature.argocd' },
       { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, permission: { resource: 'settings', verb: 'read' } },
     ],
   },
@@ -231,16 +240,21 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
       ],
     },
     {
-      label: 'More Resources',
+      label: 'RBAC',
       items: [
-        // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
-        { label: 'Custom Resources', href: `${base}/custom-resources`, icon: Puzzle, permission: { resource: 'custom_resources', verb: 'read' } },
-        { label: 'CRDs', href: `${base}/crds`, icon: Puzzle, countKey: 'crds' },
         { label: 'ServiceAccounts', href: `${base}/serviceaccounts`, icon: UserCircle, countKey: 'serviceaccounts' },
         { label: 'ClusterRoles', href: `${base}/k8s-clusterroles`, icon: KeyRound, countKey: 'k8sClusterroles' },
         { label: 'ClusterRoleBindings', href: `${base}/k8s-clusterrolebindings`, icon: Link2, countKey: 'k8sClusterrolebindings' },
         { label: 'Roles', href: `${base}/k8s-roles`, icon: KeyRound, countKey: 'k8sRoles' },
         { label: 'RoleBindings', href: `${base}/k8s-rolebindings`, icon: Link2, countKey: 'k8sRolebindings' },
+      ],
+    },
+    {
+      label: 'More Resources',
+      items: [
+        // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
+        { label: 'Custom Resources', href: `${base}/custom-resources`, icon: Puzzle, permission: { resource: 'custom_resources', verb: 'read' } },
+        { label: 'CRDs', href: `${base}/crds`, icon: Puzzle, countKey: 'crds' },
         { label: 'Endpoints', href: `${base}/endpoints`, icon: Globe, countKey: 'endpoints' },
         { label: 'ReplicaSets', href: `${base}/replicasets`, icon: Copy, countKey: 'replicasets' },
       ],
@@ -310,6 +324,43 @@ function useResourceCounts(clusterId: string) {
     endpoints: endpoints?.length ?? 0,
     replicasets: replicasets?.length ?? 0,
   };
+}
+
+// Persistent cluster switcher — hop from cluster A to cluster B while staying on
+// the same sub-route (swap the id in the path, preserve the trailing segment) so
+// you don't have to round-trip through "All Clusters". Only mounts inside a
+// cluster context, so the clusters list isn't fetched on global pages.
+function ClusterSwitcher({ clusterId, fallbackName }: { clusterId: string; fallbackName: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data: clusters } = useClusters();
+  const list = clusters?.data ?? [];
+  // Everything after /dashboard/clusters/<id> (e.g. "/nodes", "" for overview).
+  const subRoute = pathname.slice(`/dashboard/clusters/${clusterId}`.length);
+  const knowsCurrent = list.some((c) => c.id === clusterId);
+
+  return (
+    <select
+      value={clusterId}
+      onChange={(e) => {
+        const nextId = e.target.value;
+        if (nextId !== clusterId) router.push(`/dashboard/clusters/${nextId}${subRoute}`);
+      }}
+      className="w-full h-7 px-2 rounded-md border border-sidebar-border bg-transparent
+        text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring
+        hover:bg-accent/50 transition-colors cursor-pointer"
+      title="Switch cluster"
+      aria-label="Switch cluster"
+    >
+      {/* Keep the current cluster selectable even before the list resolves. */}
+      {!knowsCurrent && <option value={clusterId}>{fallbackName}</option>}
+      {list.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.displayName || c.name}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 // Tool UI links for installed tools with web interfaces
@@ -529,17 +580,36 @@ export function Sidebar() {
     [cluster?.isLocal, clusterId, featureFlags, isClusterContext, user],
   );
 
-  // Accordion state: only one group open at a time
-  const [openGroup, setOpenGroup] = useState<string | null>('Cluster');
+  // Multiple groups may stay open at once (the cluster nav has 7 groups; a
+  // single-open accordion collapses your context every time you expand another).
+  // Seed from each group's `defaultOpen` flag.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set(navGroups.filter((g) => g.defaultOpen).map((g) => g.label)),
+  );
 
-  // Auto-expand the group containing the active route
+  // Keep `defaultOpen` groups open and auto-expand the group containing the
+  // active route (e.g. after a context switch) without collapsing the rest.
   useEffect(() => {
-    const activeGroup = navGroups.find(g =>
-      g.items.some(item =>
-        item.exact ? pathname === item.href : pathname.startsWith(item.href)
-      )
-    );
-    if (activeGroup) setOpenGroup(activeGroup.label);
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const g of navGroups) {
+        if (g.defaultOpen && !next.has(g.label)) {
+          next.add(g.label);
+          changed = true;
+        }
+      }
+      const activeGroup = navGroups.find((g) =>
+        g.items.some((item) =>
+          item.exact ? pathname === item.href : pathname.startsWith(item.href)
+        )
+      );
+      if (activeGroup && !next.has(activeGroup.label)) {
+        next.add(activeGroup.label);
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
   }, [navGroups, pathname]);
 
   return (
@@ -591,11 +661,12 @@ export function Sidebar() {
             <span>All Clusters</span>
           </Link>
           <div className="px-2 mt-1">
-            <p className="text-sm font-medium text-foreground truncate">
-              {cluster?.displayName || cluster?.name || 'Cluster'}
-            </p>
+            <ClusterSwitcher
+              clusterId={clusterId!}
+              fallbackName={cluster?.displayName || cluster?.name || 'Cluster'}
+            />
             {cluster?.kubernetesVersion && (
-              <p className="text-2xs text-muted-foreground">v{cluster.kubernetesVersion}</p>
+              <p className="text-2xs text-muted-foreground mt-1 px-1">v{cluster.kubernetesVersion}</p>
             )}
           </div>
         </div>
@@ -622,8 +693,15 @@ export function Sidebar() {
             collapsed={sidebarCollapsed}
             counts={isClusterContext ? counts : undefined}
             isClusterContext={isClusterContext}
-            isOpen={openGroup === group.label}
-            onToggle={() => setOpenGroup(openGroup === group.label ? null : group.label)}
+            isOpen={openGroups.has(group.label)}
+            onToggle={() =>
+              setOpenGroups((prev) => {
+                const next = new Set(prev);
+                if (next.has(group.label)) next.delete(group.label);
+                else next.add(group.label);
+                return next;
+              })
+            }
           />
         ))}
         {isClusterContext && (

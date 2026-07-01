@@ -15,8 +15,8 @@
 // bus event today; the prompt asked us to use `cluster.k8s_changed` as a
 // proxy and that's what we do.
 
-import { useState } from 'react';
-import { useParams, useRouter } from '@/lib/navigation';
+import { useCallback, useState } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from '@/lib/navigation';
 import { useTabParam } from '@/lib/use-tab-param';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
@@ -37,6 +37,7 @@ import {
   RotateCcw,
   Server,
   Trash2,
+  X,
   XCircle,
   RefreshCw,
 } from 'lucide-react';
@@ -76,11 +77,13 @@ import { flattenArgoApp, shortRepo } from '@/components/argocd/argo-utils';
 import { formatRelativeTime } from '@/lib/utils';
 import type {
   ArgoApplicationSet,
+  ArgoHealthStatus,
   ArgoLiveApplication,
   ArgoManagedCluster,
   ArgoOperation,
   ArgoProject,
   ArgoRepository,
+  ArgoSyncStatus,
   Cluster,
 } from '@/types';
 
@@ -107,6 +110,15 @@ function isBrowserReachable(url: string): boolean {
   }
 }
 
+// Overview rollup buckets. Kept in sync with flattenArgoApp's coerced values.
+const SYNC_ROLLUP: ArgoSyncStatus[] = ['Synced', 'OutOfSync', 'Unknown'];
+const HEALTH_ROLLUP: ArgoHealthStatus[] = ['Healthy', 'Degraded', 'Progressing', 'Missing'];
+
+// Applications-tab URL filters. '' == no filter (falls back to the empty
+// bucket so `?sync=`/absent both mean "show everything").
+const SYNC_FILTER_KEYS = ['', 'Synced', 'OutOfSync', 'Unknown'] as const;
+const HEALTH_FILTER_KEYS = ['', 'Healthy', 'Degraded', 'Progressing', 'Suspended', 'Missing', 'Unknown'] as const;
+
 const TABS: { id: TabId; label: string; icon: typeof GitBranch }[] = [
   { id: 'overview', label: 'Overview', icon: Activity },
   { id: 'apps', label: 'Applications', icon: Rocket },
@@ -122,7 +134,25 @@ export default function InstanceDetailPage() {
   const router = useRouter();
   const instanceId = params.instanceId as string;
 
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useTabParam(TAB_KEYS, 'overview');
+
+  // Atomic deep-link into the Applications tab pre-filtered by sync/health.
+  // Doing it in one router.replace avoids the race two useTabParam setters
+  // would hit (each clones the same stale searchParams snapshot).
+  const goToAppsFiltered = useCallback(
+    (filter: { sync?: ArgoSyncStatus; health?: ArgoHealthStatus }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', 'apps');
+      params.delete('sync');
+      params.delete('health');
+      if (filter.sync) params.set('sync', filter.sync);
+      if (filter.health) params.set('health', filter.health);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
 
   const { data: instance, isLoading: instanceLoading } = useQuery({
     queryKey: queryKeys.argocd.instance(instanceId),
@@ -217,7 +247,9 @@ export default function InstanceDetailPage() {
       </div>
 
       <div>
-        {tab === 'overview' && <OverviewTab instanceId={instanceId} />}
+        {tab === 'overview' && (
+          <OverviewTab instanceId={instanceId} setTab={setTab} goToApps={goToAppsFiltered} />
+        )}
         {tab === 'apps' && <ApplicationsTab instanceId={instanceId} />}
         {tab === 'projects' && <ProjectsTab instanceId={instanceId} />}
         {tab === 'appsets' && <ApplicationSetsTab instanceId={instanceId} />}
@@ -233,7 +265,16 @@ export default function InstanceDetailPage() {
 // Overview tab
 // ============================================================
 
-function OverviewTab({ instanceId }: { instanceId: string }) {
+function OverviewTab({
+  instanceId,
+  setTab,
+  goToApps,
+}: {
+  instanceId: string;
+  setTab: (tab: TabId) => void;
+  goToApps: (filter: { sync?: ArgoSyncStatus; health?: ArgoHealthStatus }) => void;
+}) {
+  const router = useRouter();
   const { data: health } = useQuery({
     queryKey: queryKeys.argocd.instanceHealth(instanceId),
     queryFn: () => getArgoInstanceHealth(instanceId),
@@ -264,29 +305,139 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
     queryFn: () => getArgoOrphanReport(instanceId),
     refetchInterval: 60000,
   });
+  // Distinct key from the Operations tab (which pulls limit:100) so the two
+  // caches don't clobber each other's page size.
+  const { data: recentOps } = useQuery({
+    queryKey: ['argocd', 'operations', 'recent'] as const,
+    queryFn: () => listArgoOperations({ limit: 5 }),
+    refetchInterval: 15000,
+  });
 
-  const stats = [
-    { label: 'Health', value: health?.isHealthy ? 'Healthy' : 'Unhealthy' },
-    { label: 'Applications', value: String(apps?.length ?? 0) },
-    { label: 'AppProjects', value: String(projects?.length ?? 0) },
-    { label: 'Repositories', value: String(repos?.length ?? 0) },
-    { label: 'Managed Clusters', value: String(clusters?.length ?? 0) },
-    { label: 'Orphaned Baseline Apps', value: String(orphanReport?.orphanApplicationCount ?? 0) },
+  // Client-side rollups over the same live apps the table renders.
+  const flatApps = (apps ?? []).map(flattenArgoApp);
+  const syncRollup = SYNC_ROLLUP.map((key) => ({
+    key,
+    count: flatApps.filter((a) => a.syncStatus === key).length,
+  }));
+  const healthRollup = HEALTH_ROLLUP.map((key) => ({
+    key,
+    count: flatApps.filter((a) => a.healthStatus === key).length,
+  }));
+
+  // "Connectivity" is the instance-level reachability badge (dup of the header
+  // badge); the sync/health rollups below carry the per-application story.
+  const stats: { label: string; value: string; onClick?: () => void }[] = [
+    { label: 'Connectivity', value: health?.isHealthy ? 'Healthy' : 'Unhealthy' },
+    { label: 'Applications', value: String(apps?.length ?? 0), onClick: () => setTab('apps') },
+    { label: 'AppProjects', value: String(projects?.length ?? 0), onClick: () => setTab('projects') },
+    { label: 'Repositories', value: String(repos?.length ?? 0), onClick: () => setTab('repos') },
+    { label: 'Managed Clusters', value: String(clusters?.length ?? 0), onClick: () => setTab('clusters') },
+    {
+      label: 'Orphaned Baseline Apps',
+      value: String(orphanReport?.orphanApplicationCount ?? 0),
+      onClick: () => setTab('apps'),
+    },
   ];
 
+  // Base card-button styling (padding applied per-use to avoid p-* collisions).
+  const cardBtn =
+    'text-left rounded-lg border border-border bg-card transition-colors hover:border-primary ' +
+    'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-lg border border-border bg-card p-4"
-          >
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
-          </div>
-        ))}
+        {stats.map((s) =>
+          s.onClick ? (
+            <button key={s.label} onClick={s.onClick} className={`${cardBtn} p-4`}>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
+            </button>
+          ) : (
+            <div key={s.label} className="rounded-lg border border-border bg-card p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
+            </div>
+          ),
+        )}
       </div>
+
+      {/* Application sync rollup — each bucket deep-links into the filtered Apps tab. */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Application sync</h3>
+        <div className="grid grid-cols-3 gap-3">
+          {syncRollup.map((r) => (
+            <button
+              key={r.key}
+              onClick={() => goToApps({ sync: r.key })}
+              className={`${cardBtn} p-3`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <SyncStatusBadge syncStatus={r.key} />
+                <span className="text-xl font-semibold tabular-nums text-foreground">{r.count}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Application health rollup. */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Application health</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {healthRollup.map((r) => (
+            <button
+              key={r.key}
+              onClick={() => goToApps({ health: r.key })}
+              className={`${cardBtn} p-3`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <HealthStatusBadge healthStatus={r.key} />
+                <span className="text-xl font-semibold tabular-nums text-foreground">{r.count}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Recent reconciler operations — compact top-5 with a jump to the full tab. */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-foreground">Recent operations</h3>
+          <button
+            onClick={() => setTab('operations')}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all
+          </button>
+        </div>
+        <div className="rounded-lg border border-border bg-card divide-y divide-border/60">
+          {(recentOps ?? []).length === 0 ? (
+            <p className="p-4 text-xs text-muted-foreground">No reconciler activity yet.</p>
+          ) : (
+            (recentOps ?? []).slice(0, 5).map((op) => (
+              <div key={op.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-foreground truncate">
+                    <span className="capitalize">{op.operationType}</span>{' '}
+                    <span className="text-xs font-mono text-muted-foreground">{op.targetType}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {op.targetKey.slice(0, 12)}…
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <StatusBadge status={mapOperationStatus(op.status)} label={titleCase(op.status)} />
+                  <span className="text-xs text-muted-foreground">
+                    {op.startedAt ? formatRelativeTime(op.startedAt) : '—'}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
       {!!orphanReport?.orphanApplicationCount && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
           <div className="flex items-start gap-3">
@@ -305,7 +456,17 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
               ) : null}
               <div className="mt-3 divide-y divide-border/60">
                 {orphanReport.orphanApplications.slice(0, 5).map((app) => (
-                  <div key={`${app.name}:${app.destinationCluster}`} className="py-2 first:pt-0 last:pb-0">
+                  <button
+                    key={`${app.name}:${app.destinationCluster}`}
+                    onClick={() => {
+                      if (app.id) {
+                        router.push(`/dashboard/argocd/${instanceId}/applications/${app.id}`);
+                      } else {
+                        setTab('apps');
+                      }
+                    }}
+                    className="block w-full text-left py-2 first:pt-0 last:pb-0 rounded transition-colors hover:bg-amber-500/10 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium text-foreground truncate">{app.name}</p>
                       <div className="flex shrink-0 items-center gap-1">
@@ -325,7 +486,7 @@ function OverviewTab({ instanceId }: { instanceId: string }) {
                         {app.applicationSetName}
                       </p>
                     ) : null}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -345,6 +506,11 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ArgoLiveApplication | null>(null);
+
+  // Deep-link filters from the Overview rollups (?sync=… / ?health=…).
+  // '' means no filter. Read via the shared URL-param hook.
+  const [syncFilter, setSyncFilter] = useTabParam(SYNC_FILTER_KEYS, '', 'sync');
+  const [healthFilter, setHealthFilter] = useTabParam(HEALTH_FILTER_KEYS, '', 'health');
 
   const { data: apps = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.liveApps(instanceId),
@@ -371,7 +537,9 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   const idForApp = (name: string): string | undefined =>
     dbApps?.find((a) => a.name === name)?.id;
 
-  const flat = apps.map(flattenArgoApp);
+  let flat = apps.map(flattenArgoApp);
+  if (syncFilter) flat = flat.filter((a) => a.syncStatus === syncFilter);
+  if (healthFilter) flat = flat.filter((a) => a.healthStatus === healthFilter);
 
   const deleteApp = useMutation({
     mutationFn: () => deleteArgoApplicationByName(instanceId, deleteTarget!.metadata.name),
@@ -464,11 +632,31 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {syncFilter && (
+            <button
+              onClick={() => setSyncFilter('')}
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-full border border-border bg-muted text-xs text-foreground hover:bg-accent transition-colors"
+            >
+              Sync: {syncFilter}
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          {healthFilter && (
+            <button
+              onClick={() => setHealthFilter('')}
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-full border border-border bg-muted text-xs text-foreground hover:bg-accent transition-colors"
+            >
+              Health: {healthFilter}
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
         <button
           onClick={() => setShowCreate(true)}
           className="inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:opacity-90 transition-opacity"
+            text-sm font-medium hover:opacity-90 transition-opacity shrink-0"
         >
           <Plus className="h-4 w-4" />
           New Application

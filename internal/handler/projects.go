@@ -22,6 +22,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -89,6 +90,10 @@ type ProjectHandler struct {
 	// maintenanceGate is the migration-057 hook on project.delete.
 	// Optional + nil-safe; see clusters.SetMaintenanceGate.
 	maintenanceGate *MaintenanceGate
+
+	// enforcer gates Create against the per-project cluster-density cap
+	// (migration 051, max_clusters_per_project). Optional + nil-safe.
+	enforcer *quota.Enforcer
 }
 
 type projectOwnershipQuerier interface {
@@ -162,6 +167,17 @@ func (h *ProjectHandler) configureProjectReconcile() {
 
 // SetLogger replaces the handler's logger. Optional; defaults to slog.Default.
 func (h *ProjectHandler) SetLogger(log *slog.Logger) { h.log = log }
+
+// SetQuotaEnforcer wires the per-tenant quota enforcer that gates Create
+// against the per-project cluster-density cap (migration 051,
+// max_clusters_per_project). Optional; nil disables the check so tests can
+// construct the handler without it.
+func (h *ProjectHandler) SetQuotaEnforcer(e *quota.Enforcer) {
+	if h == nil {
+		return
+	}
+	h.enforcer = e
+}
 
 // SetMaintenanceGate wires the migration-057 maintenance-window gate
 // applied to project.delete. Optional + nil-safe.
@@ -451,6 +467,25 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project")
 		return
 	}
+
+	// Per-project cluster-density cap (migration 051, max_clusters_per_project).
+	// CheckProjectClusterAdd resolves the project's cluster + effective plan
+	// from the row, so it can only run once the project exists; on a breach we
+	// roll the insert back before it grows a namespace/reconcile footprint.
+	if h.enforcer != nil {
+		if qerr := h.enforcer.CheckProjectClusterAdd(r.Context(), project.ID); qerr != nil {
+			if derr := h.queries.DeleteProject(r.Context(), project.ID); derr != nil {
+				h.logger().Warn("failed to roll back over-quota project", "project_id", project.ID.String(), "error", derr)
+			}
+			if qe, ok := quota.IsQuotaExceeded(qerr); ok {
+				WriteQuotaExceeded(w, qe)
+				return
+			}
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate project cluster quota")
+			return
+		}
+	}
+
 	h.recordProjectAudit(r, "project.create", project, map[string]any{"clusterId": req.ClusterID, "namespaces": decodeJSONArray(req.Namespaces)})
 
 	// Seed the project_namespaces sidecar from any namespaces specified at

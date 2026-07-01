@@ -248,6 +248,8 @@ export default function AuditLogPage() {
         searchable={false}
         pageSize={PAGE_SIZE}
         loading={auditQuery.isLoading}
+        isError={auditQuery.isError}
+        onRetry={() => auditQuery.refetch()}
         emptyMessage="No audit rows"
         onRowClick={setSelected}
         serverSide={{

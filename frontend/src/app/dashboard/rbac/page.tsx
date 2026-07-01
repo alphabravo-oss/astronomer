@@ -15,6 +15,7 @@ import {
   useMyEffectivePermissions,
 } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { RoleEditor } from '@/components/rbac/role-editor';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { OverlayShell } from '@/components/ui/overlay-shell';
@@ -74,31 +75,42 @@ export default function RBACPage() {
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [resetPasswordResult, setResetPasswordResult] = useState<{ userId: string; password: string } | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<User | null>(null);
 
-  const { data: globalRoles, isLoading: globalLoading } = useGlobalRoles();
-  const { data: clusterRoles, isLoading: clusterLoading } = useClusterRoles();
-  const { data: projectRoles, isLoading: projectLoading } = useProjectRoles();
-  const { data: usersData, isLoading: usersLoading } = useUsers();
-  const { data: bindings, isLoading: bindingsLoading } = useRoleBindings();
+  const { data: globalRoles, isLoading: globalLoading, isError: globalError, refetch: refetchGlobal } = useGlobalRoles();
+  const { data: clusterRoles, isLoading: clusterLoading, isError: clusterError, refetch: refetchCluster } = useClusterRoles();
+  const { data: projectRoles, isLoading: projectLoading, isError: projectError, refetch: refetchProject } = useProjectRoles();
+  const { data: usersData, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useUsers();
+  const { data: bindings, isLoading: bindingsLoading, isError: bindingsError, refetch: refetchBindings } = useRoleBindings();
 
   const deleteUser = useDeleteUser();
   const resetPassword = useResetUserPassword();
 
   const users = usersData?.data || [];
 
-  const handleDeleteUser = (user: User) => {
-    if (!confirm(`Delete user "${user.displayName || user.username}"? This action cannot be undone.`)) return;
-    deleteUser.mutate(user.id);
-  };
+  const handleDeleteUser = (user: User) => setDeleteUserTarget(user);
+  const handleResetPassword = (user: User) => setResetPasswordTarget(user);
 
-  const handleResetPassword = async (user: User) => {
-    if (!confirm(`Reset password for "${user.displayName || user.username}"? A new temporary password will be generated.`)) return;
+  const confirmDeleteUser = async () => {
+    if (!deleteUserTarget) return;
     try {
-      const result = await resetPassword.mutateAsync(user.id);
-      setResetPasswordResult({ userId: user.id, password: result.temporaryPassword });
+      await deleteUser.mutateAsync(deleteUserTarget.id);
     } catch {
       // Error handled by mutation
     }
+    setDeleteUserTarget(null);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!resetPasswordTarget) return;
+    try {
+      const result = await resetPassword.mutateAsync(resetPasswordTarget.id);
+      setResetPasswordResult({ userId: resetPasswordTarget.id, password: result.temporaryPassword });
+    } catch {
+      // Error handled by mutation
+    }
+    setResetPasswordTarget(null);
   };
 
   const globalRoleColumns: Column<GlobalRole>[] = [
@@ -413,6 +425,8 @@ export default function RBACPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search global roles..."
             loading={globalLoading}
+            isError={globalError}
+            onRetry={() => refetchGlobal()}
             emptyMessage="No global roles defined"
           />
         )}
@@ -424,6 +438,8 @@ export default function RBACPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search cluster roles..."
             loading={clusterLoading}
+            isError={clusterError}
+            onRetry={() => refetchCluster()}
             emptyMessage="No cluster roles defined"
           />
         )}
@@ -435,6 +451,8 @@ export default function RBACPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search project roles..."
             loading={projectLoading}
+            isError={projectError}
+            onRetry={() => refetchProject()}
             emptyMessage="No project roles defined"
           />
         )}
@@ -446,6 +464,8 @@ export default function RBACPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search users..."
             loading={usersLoading}
+            isError={usersError}
+            onRetry={() => refetchUsers()}
             emptyMessage="No users found"
           />
         )}
@@ -457,6 +477,8 @@ export default function RBACPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search bindings..."
             loading={bindingsLoading}
+            isError={bindingsError}
+            onRetry={() => refetchBindings()}
             emptyMessage="No role bindings found"
           />
         )}
@@ -493,6 +515,29 @@ export default function RBACPage() {
           onClose={() => setResetPasswordResult(null)}
         />
       )}
+
+      {/* Delete User Confirmation */}
+      <ConfirmDialog
+        open={!!deleteUserTarget}
+        onClose={() => setDeleteUserTarget(null)}
+        onConfirm={confirmDeleteUser}
+        title="Delete User"
+        description={`Delete user "${deleteUserTarget?.displayName || deleteUserTarget?.username}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteUser.isPending}
+      />
+
+      {/* Reset Password Confirmation */}
+      <ConfirmDialog
+        open={!!resetPasswordTarget}
+        onClose={() => setResetPasswordTarget(null)}
+        onConfirm={confirmResetPassword}
+        title="Reset Password"
+        description={`Reset password for "${resetPasswordTarget?.displayName || resetPasswordTarget?.username}"? A new temporary password will be generated.`}
+        confirmText="Reset Password"
+        loading={resetPassword.isPending}
+      />
     </div>
   );
 }
@@ -504,7 +549,7 @@ function EffectivePermissionsPanel() {
     projectId: context.projectId.trim() || undefined,
     namespace: context.namespace.trim() || undefined,
   };
-  const { data, isLoading } = useMyEffectivePermissions(selectedContext);
+  const { data, isLoading, isError, refetch } = useMyEffectivePermissions(selectedContext);
   const permissions = data?.permissions || [];
   const bindings = data?.bindings || [];
   const responseContext = data?.context;
@@ -631,6 +676,8 @@ function EffectivePermissionsPanel() {
         keyExtractor={(row) => `${row.resource}:${row.verb}`}
         searchPlaceholder="Search effective permissions..."
         loading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
         emptyMessage="No effective permissions found"
         pageSize={25}
       />
@@ -641,6 +688,8 @@ function EffectivePermissionsPanel() {
         keyExtractor={(row) => row.bindingId || `${row.scope}:${row.roleId}:${row.roleName}`}
         searchPlaceholder="Search permission sources..."
         loading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
         emptyMessage="No role bindings contribute permissions"
         pageSize={10}
       />
@@ -770,7 +819,7 @@ function CreateUserModal({
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create User</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -934,7 +983,7 @@ function EditUserModal({
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Edit User</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -1080,7 +1129,7 @@ function ResetPasswordResultModal({
       <div className="relative w-full max-w-md rounded-xl border border-border bg-popover shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Password Reset</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>

@@ -58,6 +58,10 @@ type SCIMQuerier interface {
 	TouchSCIMToken(ctx context.Context, id uuid.UUID) error
 	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
 	UpdateUser(ctx context.Context, arg sqlc.UpdateUserParams) (sqlc.User, error)
+	// InvalidateAllTokens bumps the per-user JWT cutoff so a SCIM-driven
+	// deactivation (active=false) or deprovision (DELETE) terminates the
+	// user's live sessions instead of only blocking future logins.
+	InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
 	GetUserByEmail(ctx context.Context, email string) (sqlc.User, error)
@@ -71,6 +75,11 @@ type SCIMQuerier interface {
 // SCIMHandler owns the /scim/v2/* surface.
 type SCIMHandler struct {
 	queries SCIMQuerier
+	// jwt is the optional JWT manager used to flush the positive-
+	// validation cache when a SCIM deactivate/deprovision revokes a
+	// user's sessions. Nil-safe: revokeUserSessions handles a nil
+	// manager, so an unwired install still stamps the DB token cutoff.
+	jwt *auth.JWTManager
 }
 
 // NewSCIMHandler builds a usable handler. queries may be nil for
@@ -78,6 +87,16 @@ type SCIMHandler struct {
 // routes are simply omitted from the router in that case.
 func NewSCIMHandler(queries SCIMQuerier) *SCIMHandler {
 	return &SCIMHandler{queries: queries}
+}
+
+// SetJWTManager wires the JWT manager so SCIM-driven deactivation /
+// deprovision can flush the in-process JWT validation cache (mirrors the
+// admin force-logout path). Optional; nil-safe.
+func (h *SCIMHandler) SetJWTManager(j *auth.JWTManager) {
+	if h == nil {
+		return
+	}
+	h.jwt = j
 }
 
 // --- SCIM wire shapes ---
@@ -221,6 +240,14 @@ func (h *SCIMHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 			h.scimError(w, http.StatusInternalServerError, "failed to update user")
 			return
 		}
+		// A re-provision that flips active true->false is a deactivation;
+		// kill the user's live sessions the same way the users-admin path does.
+		if existing.IsActive && !active {
+			if err := revokeUserSessions(r.Context(), h.queries, h.jwt, existing.ID, "scim_deactivated"); err != nil {
+				h.scimError(w, http.StatusInternalServerError, "failed to invalidate sessions")
+				return
+			}
+		}
 		h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
 		return
 	} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -310,6 +337,13 @@ func (h *SCIMHandler) PutUser(w http.ResponseWriter, r *http.Request) {
 		h.scimError(w, http.StatusInternalServerError, "failed to update user")
 		return
 	}
+	// PUT active:false is a deactivation; terminate the user's live sessions.
+	if existing.IsActive && !active {
+		if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "scim_deactivated"); err != nil {
+			h.scimError(w, http.StatusInternalServerError, "failed to invalidate sessions")
+			return
+		}
+	}
 	h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
 }
 
@@ -383,6 +417,14 @@ func (h *SCIMHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.scimError(w, http.StatusInternalServerError, "failed to update user")
 		return
+	}
+	// PATCH replace active:false (Okta/Azure AD's primary deactivation op)
+	// must revoke the user's live sessions, not just block future logins.
+	if existing.IsActive && !params.IsActive {
+		if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "scim_deactivated"); err != nil {
+			h.scimError(w, http.StatusInternalServerError, "failed to invalidate sessions")
+			return
+		}
 	}
 	h.writeSCIM(w, http.StatusOK, toSCIMUser(updated))
 }
@@ -568,6 +610,12 @@ func (h *SCIMHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if u.IsSuperuser || u.IsStaff {
 		h.scimError(w, http.StatusForbidden, "cannot delete privileged user")
+		return
+	}
+	// Deprovision: revoke the user's live sessions before removing the row so
+	// an in-flight JWT can't outlive the account.
+	if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "scim_deprovisioned"); err != nil {
+		h.scimError(w, http.StatusInternalServerError, "failed to invalidate sessions")
 		return
 	}
 	if err := h.queries.DeleteUser(r.Context(), id); err != nil {

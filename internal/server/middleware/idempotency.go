@@ -24,6 +24,7 @@
 //     retry re-runs the handler, which is exactly the pre-existing behaviour.
 //   - Bounded only by TTL + janitor: keys evict after the TTL, so the map
 //     cannot grow without bound under a fixed key churn rate.
+//
 // If you need durable, multi-replica idempotency, wire the handler-layer
 // DB-backed path — do not grow this into a distributed cache.
 package middleware
@@ -211,7 +212,9 @@ func (rec *idempotencyRecorder) Write(p []byte) (int, error) {
 
 // Idempotency returns middleware that dedupes retried mutating requests
 // carrying an `Idempotency-Key` header within a short in-memory TTL,
-// replaying the cached status+body on retry. It self-skips reads
+// replaying the cached status+body on retry. Only 2xx and deterministic 4xx
+// outcomes are cached; a 5xx is left uncached so a client retry re-executes
+// the handler instead of being handed a stale transient error. It self-skips reads
 // (GET/HEAD/OPTIONS) and requests without the header, so it is safe to apply
 // to a whole route group without per-route POST/PUT/PATCH tagging — the same
 // method-gating contract as RequireWriteScopeForMutations.
@@ -263,6 +266,16 @@ func idempotencyWith(ctx context.Context, ttl time.Duration, now func() time.Tim
 				rec.truncated,
 			)
 			completed = true
+
+			// 5xx responses are transient: caching one would replay a server
+			// error for the full TTL and defeat the client's own retry. The
+			// entry is finalized above so any concurrent duplicate in flight
+			// still sees this exact response, but it is immediately dropped
+			// from the cache so the next retry re-executes the handler fresh.
+			// 2xx and deterministic 4xx client errors stay cached.
+			if rec.status >= 500 {
+				store.abandon(key, entry)
+			}
 		})
 	}
 }

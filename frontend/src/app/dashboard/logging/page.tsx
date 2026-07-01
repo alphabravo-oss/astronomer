@@ -23,6 +23,7 @@ import {
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { LoggingOutput, LoggingPipeline, LoggingOutputType, LoggingOperation } from '@/types';
 import {
@@ -168,12 +169,15 @@ export default function LoggingPage() {
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [opsStatusFilter, setOpsStatusFilter] = useState<string>('');
   const [opsTargetFilter, setOpsTargetFilter] = useState<string>('');
+  const [deleteOutputTarget, setDeleteOutputTarget] = useState<LoggingOutput | null>(null);
+  const [deletePipelineTarget, setDeletePipelineTarget] = useState<LoggingPipeline | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const { data: outputs, isLoading: outputsLoading } = useLoggingOutputs();
-  const { data: pipelines, isLoading: pipelinesLoading } = useLoggingPipelines();
+  const { data: outputs, isLoading: outputsLoading, isError: outputsError, refetch: refetchOutputs } = useLoggingOutputs();
+  const { data: pipelines, isLoading: pipelinesLoading, isError: pipelinesError, refetch: refetchPipelines } = useLoggingPipelines();
   // Server-side params kept narrow so the list query key changes drive the
   // refetch — client-side filtering of the bigger fields happens in DataTable.
-  const { data: operations, isLoading: operationsLoading } = useLoggingOperations({
+  const { data: operations, isLoading: operationsLoading, isError: operationsError, refetch: refetchOperations } = useLoggingOperations({
     status: opsStatusFilter || undefined,
     target_type: opsTargetFilter || undefined,
     limit: 100,
@@ -181,14 +185,18 @@ export default function LoggingPage() {
   const testOutput = useTestLoggingOutput();
   const retryOperation = useRetryLoggingOperation();
 
-  const handleDeleteOutput = async (id: string) => {
-    if (!confirm('Delete this logging output?')) return;
+  const handleDeleteOutput = async () => {
+    if (!deleteOutputTarget) return;
+    setDeleting(true);
     try {
-      await deleteLoggingOutput(id);
+      await deleteLoggingOutput(deleteOutputTarget.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
       toastSuccess('Logging output deleted');
+      setDeleteOutputTarget(null);
     } catch (error) {
       toastError(`Failed to delete output: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -202,14 +210,18 @@ export default function LoggingPage() {
     }
   };
 
-  const handleDeletePipeline = async (id: string) => {
-    if (!confirm('Delete this logging pipeline?')) return;
+  const handleDeletePipeline = async () => {
+    if (!deletePipelineTarget) return;
+    setDeleting(true);
     try {
-      await deleteLoggingPipeline(id);
+      await deleteLoggingPipeline(deletePipelineTarget.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
       toastSuccess('Logging pipeline deleted');
+      setDeletePipelineTarget(null);
     } catch (error) {
       toastError(`Failed to delete pipeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -307,7 +319,7 @@ export default function LoggingPage() {
             Test
           </button>
           <button
-            onClick={() => handleDeleteOutput(row.id)}
+            onClick={() => setDeleteOutputTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete output"
           >
@@ -503,7 +515,7 @@ export default function LoggingPage() {
       accessor: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => handleDeletePipeline(row.id)}
+            onClick={() => setDeletePipelineTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete pipeline"
           >
@@ -582,6 +594,8 @@ export default function LoggingPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search logging outputs..."
             loading={outputsLoading}
+            isError={outputsError}
+            onRetry={() => refetchOutputs()}
             emptyMessage="No logging outputs configured"
           />
         )}
@@ -593,6 +607,8 @@ export default function LoggingPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search logging pipelines..."
             loading={pipelinesLoading}
+            isError={pipelinesError}
+            onRetry={() => refetchPipelines()}
             emptyMessage="No logging pipelines configured"
           />
         )}
@@ -644,6 +660,8 @@ export default function LoggingPage() {
               keyExtractor={(row) => row.id}
               searchPlaceholder="Search operations..."
               loading={operationsLoading}
+              isError={operationsError}
+              onRetry={() => refetchOperations()}
               emptyMessage="No reconciler activity yet."
               pageSize={20}
             />
@@ -663,6 +681,30 @@ export default function LoggingPage() {
           onClose={() => setShowPipelineModal(false)}
         />
       )}
+
+      {/* Delete Output Confirmation */}
+      <ConfirmDialog
+        open={!!deleteOutputTarget}
+        onClose={() => setDeleteOutputTarget(null)}
+        onConfirm={handleDeleteOutput}
+        title="Delete Logging Output"
+        description={`Delete the logging output "${deleteOutputTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleting}
+      />
+
+      {/* Delete Pipeline Confirmation */}
+      <ConfirmDialog
+        open={!!deletePipelineTarget}
+        onClose={() => setDeletePipelineTarget(null)}
+        onConfirm={handleDeletePipeline}
+        title="Delete Logging Pipeline"
+        description={`Delete the logging pipeline "${deletePipelineTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleting}
+      />
     </div>
   );
 }
@@ -711,7 +753,7 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Logging Output</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -924,7 +966,7 @@ function CreatePipelineModal({
       <div className="relative w-full max-w-2xl max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Logging Pipeline</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>

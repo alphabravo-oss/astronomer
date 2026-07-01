@@ -63,7 +63,7 @@ type MonitoringQuerier interface {
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (sqlc.BackupStorageConfig, error)
 	ListNotificationChannels(ctx context.Context, arg sqlc.ListNotificationChannelsParams) ([]sqlc.NotificationChannel, error)
 	ListAlertRules(ctx context.Context, arg sqlc.ListAlertRulesParams) ([]sqlc.AlertRule, error)
-	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]sqlc.NotificationChannel, error)
+	ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]sqlc.AlertRuleChannel, error)
 }
 
 func NewMonitoringHandler() *MonitoringHandler {
@@ -2233,6 +2233,31 @@ func (h *MonitoringHandler) applySharedAlertmanager(ctx context.Context, msgType
 }
 
 func (h *MonitoringHandler) renderSharedAlertmanagerConfig(ctx context.Context, channels []sqlc.NotificationChannel, rules []sqlc.AlertRule) (string, error) {
+	// Load every rule<->channel link for the rule set in ONE query and build a
+	// channel_id -> set(rule_id) map, instead of the old N+1 that ran
+	// ListChannelsForAlertRule for every rule on every shared Alertmanager
+	// Preview/Install/Upgrade/Replace (O(channels x rules) round-trips). Mirrors
+	// AlertingHandler.renderAlertmanagerConfig.
+	channelRuleSet := map[uuid.UUID]map[uuid.UUID]bool{}
+	if len(rules) > 0 {
+		ruleIDs := make([]uuid.UUID, 0, len(rules))
+		for _, rule := range rules {
+			ruleIDs = append(ruleIDs, rule.ID)
+		}
+		links, err := h.queries.ListAlertRuleChannelsByRules(ctx, ruleIDs)
+		if err != nil {
+			return "", err
+		}
+		for _, link := range links {
+			set := channelRuleSet[link.NotificationChannelID]
+			if set == nil {
+				set = map[uuid.UUID]bool{}
+				channelRuleSet[link.NotificationChannelID] = set
+			}
+			set[link.AlertRuleID] = true
+		}
+	}
+
 	receivers := []map[string]any{{"name": "null"}}
 	routes := []map[string]any{}
 	for _, channel := range channels {
@@ -2255,11 +2280,7 @@ func (h *MonitoringHandler) renderSharedAlertmanagerConfig(ctx context.Context, 
 			continue
 		}
 		receivers = append(receivers, receiver)
-		channelRules, err := h.rulesForChannel(ctx, rules, channel.ID)
-		if err != nil {
-			return "", err
-		}
-		for _, rule := range channelRules {
+		for _, rule := range rulesForChannel(rules, channelRuleSet[channel.ID]) {
 			routes = append(routes, map[string]any{
 				"receiver": receiverName,
 				"matchers": []string{fmt.Sprintf(`astronomer_rule_id="%s"`, rule.ID.String())},
@@ -2286,23 +2307,6 @@ func (h *MonitoringHandler) renderSharedAlertmanagerConfig(ctx context.Context, 
 		return "", err
 	}
 	return string(raw), nil
-}
-
-func (h *MonitoringHandler) rulesForChannel(ctx context.Context, allRules []sqlc.AlertRule, channelID uuid.UUID) ([]sqlc.AlertRule, error) {
-	matched := make([]sqlc.AlertRule, 0)
-	for _, rule := range allRules {
-		channels, err := h.queries.ListChannelsForAlertRule(ctx, rule.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, channel := range channels {
-			if channel.ID == channelID {
-				matched = append(matched, rule)
-				break
-			}
-		}
-	}
-	return matched, nil
 }
 
 func sanitizeMonitoringValues(values map[string]any) map[string]any {

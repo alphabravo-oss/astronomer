@@ -43,8 +43,8 @@ export default function MonitoringPage() {
 
   const { data: summary } = useClusterMetricsSummary(selectedClusterId || '');
   const { data: metrics, isLoading: metricsLoading } = useClusterMetrics(selectedClusterId || '', timeRange);
-  const { data: nodes } = useClusterNodes(selectedClusterId || '');
-  const { data: namespaces } = useClusterNamespaces(selectedClusterId || '');
+  const { data: nodes, isLoading: nodesLoading, isError: nodesError, refetch: refetchNodes } = useClusterNodes(selectedClusterId || '');
+  const { data: namespaces, isLoading: namespacesLoading, isError: namespacesError, refetch: refetchNamespaces } = useClusterNamespaces(selectedClusterId || '');
 
   const timeRanges = [
     { value: '1h', label: '1H' },
@@ -302,6 +302,9 @@ export default function MonitoringPage() {
           columns={nodeColumns}
           keyExtractor={(row) => row.name}
           searchPlaceholder="Search nodes..."
+          loading={nodesLoading}
+          isError={nodesError}
+          onRetry={() => refetchNodes()}
           pageSize={10}
         />
       </div>
@@ -314,6 +317,9 @@ export default function MonitoringPage() {
           columns={nsColumns}
           keyExtractor={(row) => row.name}
           searchPlaceholder="Search namespaces..."
+          loading={namespacesLoading}
+          isError={namespacesError}
+          onRetry={() => refetchNamespaces()}
           pageSize={10}
         />
       </div>

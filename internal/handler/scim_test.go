@@ -25,6 +25,14 @@ type fakeSCIMQuerier struct {
 	// lookupErr, when non-nil, is returned by GetUserByUsername to
 	// simulate a transient DB failure (not a "no rows" miss).
 	lookupErr error
+	// invalidatedTokensFor records user ids passed to InvalidateAllTokens so
+	// tests can assert SCIM deactivate/deprovision revoked live sessions.
+	invalidatedTokensFor []uuid.UUID
+}
+
+func (f *fakeSCIMQuerier) InvalidateAllTokens(_ context.Context, arg sqlc.InvalidateAllTokensParams) error {
+	f.invalidatedTokensFor = append(f.invalidatedTokensFor, arg.ID)
+	return nil
 }
 
 func (f *fakeSCIMQuerier) GetSCIMTokenByHash(_ context.Context, hash string) (sqlc.ScimToken, error) {

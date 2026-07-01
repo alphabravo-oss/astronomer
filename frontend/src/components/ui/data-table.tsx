@@ -76,6 +76,15 @@ interface DataTableProps<T> {
   loadingRows?: number;
   emptyMessage?: string;
   loading?: boolean;
+  /**
+   * When true, the table renders a single distinct error row (styled unlike the
+   * empty state) instead of data/loading/empty. Pass `query.isError` here.
+   */
+  isError?: boolean;
+  /** Message shown in the error row. */
+  errorMessage?: string;
+  /** Optional retry action; when provided, an inline Retry button is shown. */
+  onRetry?: () => void;
   toolbar?: ReactNode;
   className?: string;
   /**
@@ -173,6 +182,9 @@ export function DataTable<T>({
   loadingRows,
   emptyMessage = 'No results found',
   loading = false,
+  isError = false,
+  errorMessage = 'Failed to load — try again',
+  onRetry,
   toolbar,
   className,
   persistKey,
@@ -516,6 +528,9 @@ export function DataTable<T>({
           loading={loading}
           skeletonRows={skeletonRows}
           emptyMessage={emptyMessage}
+          isError={isError}
+          errorMessage={errorMessage}
+          onRetry={onRetry}
           keyExtractor={keyExtractor}
           onRowClick={onRowClick}
           focusedRowIndex={focusedRowIndex}
@@ -604,7 +619,27 @@ export function DataTable<T>({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {isError ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={activeColumns.length + (selectable ? 1 : 0)}
+                    className="px-4 py-12 text-center"
+                  >
+                    <div className="flex flex-col items-center gap-3 text-sm text-destructive">
+                      <span>{errorMessage}</span>
+                      {onRetry && (
+                        <button
+                          onClick={onRetry}
+                          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-destructive/50
+                            text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : loading ? (
                 Array.from({ length: skeletonRows }).map((_, i) => (
                   <TableRow key={i} className="border-b border-border last:border-0">
                     {selectable && <TableCell className={selectPadding}><div className="h-4 w-4 rounded bg-muted animate-pulse" /></TableCell>}
@@ -762,6 +797,9 @@ function VirtualizedGrid<T>({
   loading,
   skeletonRows,
   emptyMessage,
+  isError,
+  errorMessage,
+  onRetry,
   keyExtractor,
   onRowClick,
   focusedRowIndex,
@@ -782,6 +820,9 @@ function VirtualizedGrid<T>({
   loading: boolean;
   skeletonRows: number;
   emptyMessage: string;
+  isError: boolean;
+  errorMessage: string;
+  onRetry?: () => void;
   keyExtractor: (row: T) => string;
   onRowClick?: (row: T) => void;
   focusedRowIndex: number;
@@ -883,7 +924,24 @@ function VirtualizedGrid<T>({
         </div>
 
         {/* Body */}
-        {loading ? (
+        {isError ? (
+          <div role="row">
+            <div role="gridcell" className="px-4 py-12 text-center">
+              <div className="flex flex-col items-center gap-3 text-sm text-destructive">
+                <span>{errorMessage}</span>
+                {onRetry && (
+                  <button
+                    onClick={onRetry}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-destructive/50
+                      text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : loading ? (
           <div>
             {Array.from({ length: skeletonRows }).map((_, i) => (
               <div

@@ -21,10 +21,12 @@ package handler
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -83,11 +85,12 @@ func DefaultGitOpsSyncRunner() GitOpsSyncRunner { return defaultSyncRunner{} }
 
 // GitOpsHandler owns /api/v1/admin/gitops-sources/*. Superuser-gated.
 type GitOpsHandler struct {
-	queries   GitOpsQuerier
-	runner    GitOpsSyncRunner
-	log       *slog.Logger
-	audit     AuthAuditWriter
-	encryptor *auth.Encryptor
+	queries       GitOpsQuerier
+	runner        GitOpsSyncRunner
+	log           *slog.Logger
+	audit         AuthAuditWriter
+	encryptor     *auth.Encryptor
+	webhookSecret string
 }
 
 // SetEncryptor wires the Fernet encryptor for gitops auth blobs
@@ -113,6 +116,16 @@ func NewGitOpsHandler(q GitOpsQuerier, runner GitOpsSyncRunner, log *slog.Logger
 
 // SetAuditWriter wires the audit log writer.
 func (h *GitOpsHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
+
+// SetWebhookSecret wires the shared secret that inbound git-provider push
+// webhooks must present. When empty the Webhook endpoint is disabled (503)
+// so it can never be triggered unauthenticated.
+func (h *GitOpsHandler) SetWebhookSecret(secret string) {
+	if h == nil {
+		return
+	}
+	h.webhookSecret = secret
+}
 
 // gitopsSourceResponse is the wire shape returned by every handler. The
 // auth_encrypted column is replaced with a sentinel.
@@ -426,6 +439,56 @@ func (h *GitOpsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, map[string]any{"status": "synced"})
 }
 
+// Webhook handles POST /api/v1/gitops/sources/{id}/webhook/. It lets a git
+// provider (GitHub/GitLab push hook, or a CI job) trigger an immediate
+// SyncSource so merge-to-deploy no longer waits for the interval tick.
+//
+// Unlike the /admin/ routes this is NOT superuser-JWT gated — the caller is
+// an external system, not a console user — so it authenticates on a shared
+// secret presented in the X-Astronomer-Webhook-Secret header (or an
+// Authorization: Bearer token), constant-time compared. When no secret is
+// configured the endpoint is closed (503) rather than open.
+func (h *GitOpsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
+	if h.webhookSecret == "" {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps webhook secret not configured")
+		return
+	}
+	provided := r.Header.Get("X-Astronomer-Webhook-Secret")
+	if provided == "" {
+		provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(h.webhookSecret)) != 1 {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid webhook secret")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
+		return
+	}
+	if h.runner == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps sync runner not configured")
+		return
+	}
+	row, err := h.queries.GetGitOpsSource(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
+			return
+		}
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load gitops source")
+		return
+	}
+	if err := h.runner.SyncSource(r.Context(), id); err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, err.Error())
+		return
+	}
+	recordAudit(r, h.queries, "admin.gitops_source.synced", "gitops_source", id.String(), row.Name, map[string]any{
+		"trigger": "webhook",
+	})
+	RespondJSON(w, http.StatusOK, map[string]any{"status": "synced"})
+}
+
 // Preview handles GET /api/v1/admin/gitops-sources/{id}/preview/.
 func (h *GitOpsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
@@ -463,7 +526,13 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 		return
 	}
+	// Memoize the cluster lookup per request so a source with the same
+	// cluster registered under multiple repo paths resolves the name once
+	// instead of a GetClusterByID per row (N+1). Mirrors the instance→cluster
+	// cache in argocd.ListAllApps and the clusterName cache in projects.
 	out := make([]map[string]any, 0, len(rows))
+	clusterCache := make(map[uuid.UUID]sqlc.Cluster, len(rows))
+	clusterMissing := make(map[uuid.UUID]struct{})
 	for _, link := range rows {
 		entry := map[string]any{
 			"cluster_id":      link.ClusterID.String(),
@@ -475,8 +544,19 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 		if link.TombstonedAt.Valid {
 			entry["tombstoned_at"] = link.TombstonedAt.Time.UTC().Format(time.RFC3339)
 		}
-		cluster, err := h.queries.GetClusterByID(r.Context(), link.ClusterID)
-		if err == nil {
+		cluster, ok := clusterCache[link.ClusterID]
+		if !ok {
+			if _, missed := clusterMissing[link.ClusterID]; !missed {
+				c, cerr := h.queries.GetClusterByID(r.Context(), link.ClusterID)
+				if cerr == nil {
+					cluster, ok = c, true
+					clusterCache[link.ClusterID] = c
+				} else {
+					clusterMissing[link.ClusterID] = struct{}{}
+				}
+			}
+		}
+		if ok {
 			entry["cluster_name"] = cluster.Name
 			entry["display_name"] = cluster.DisplayName
 		}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"io"
@@ -173,6 +174,16 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update user")
 		return
 	}
+	// Security: deactivating a user must terminate their live sessions, not
+	// just block future logins. When is_active transitions true->false, run
+	// the same token-cutoff + JWT-cache flush that ForceLogoutUser uses so an
+	// in-flight JWT can't outlive the deactivation.
+	if current.IsActive && !isActive {
+		if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "user_deactivated"); err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to invalidate sessions")
+			return
+		}
+	}
 	recordAudit(r, h.queries, "user.update", "user", user.ID.String(), user.Username, map[string]any{
 		"email":     user.Email,
 		"is_active": user.IsActive,
@@ -194,6 +205,14 @@ func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		return
+	}
+	// Security: revoke the user's live sessions before removing the row so an
+	// in-flight JWT can't outlive the account. Stamping the cutoff while the
+	// row still exists (and flushing the JWT cache) closes the window where a
+	// recently-cached JTI would otherwise stay valid for one more TTL.
+	if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "user_deleted"); err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to invalidate sessions")
 		return
 	}
 	if err := h.queries.DeleteUser(r.Context(), id); err != nil {
@@ -463,6 +482,34 @@ var errSuperuserRequired = &authError{"Superuser privileges required"}
 type authError struct{ msg string }
 
 func (e *authError) Error() string { return e.msg }
+
+// tokenInvalidator is the narrow DB surface revokeUserSessions needs — the
+// per-user JWT cutoff bump. Satisfied by both ResourceQuerier (users admin)
+// and SCIMQuerier (SCIM deprovision), so the two handlers share one code path.
+type tokenInvalidator interface {
+	InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error
+}
+
+// revokeUserSessions terminates a user's live JWT sessions. It stamps
+// users.tokens_invalidated_at = now() (so every token issued before now is
+// rejected on its next validation) and flushes the JWT positive-validation
+// cache (so a recently-cached JTI doesn't survive the revocation for one more
+// TTL). This is the same core ForceLogoutUser runs, minus the SSO back-channel
+// logout, and is reused by the user-admin (deactivate/delete) and SCIM
+// (deprovision / active=false) paths so an account change actually kills live
+// sessions. jwt may be nil (InvalidateCache is nil-safe). reason is the metric
+// label recorded on auth_revocations_total{kind="user"}.
+func revokeUserSessions(ctx context.Context, q tokenInvalidator, jwt *auth.JWTManager, id uuid.UUID, reason string) error {
+	if err := q.InvalidateAllTokens(ctx, sqlc.InvalidateAllTokensParams{
+		ID:                  id,
+		TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		return err
+	}
+	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", reason)...).Inc()
+	jwt.InvalidateCache()
+	return nil
+}
 
 func formatTimestamptz(t pgtype.Timestamptz) string {
 	if !t.Valid {

@@ -1229,6 +1229,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			// without an encryption key keep working but leave the
 			// blob plaintext.
 			h.SetEncryptor(encryptor)
+			// Shared secret for inbound git-provider push webhooks. Empty =
+			// the /gitops/sources/{id}/webhook/ endpoint stays disabled (503).
+			h.SetWebhookSecret(cfg.GitopsWebhookSecret)
 			return h
 		}(),
 		ProjectCatalogs: projectCatalogsHandler,

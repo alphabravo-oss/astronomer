@@ -105,8 +105,10 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 }
 
 // AuditLog returns middleware that logs mutating API requests.
-// It only logs POST/PUT/PATCH/DELETE to /api/ paths (excluding skip paths)
-// when the response status is < 400.
+// It logs POST/PUT/PATCH/DELETE to /api/ paths (excluding skip paths)
+// regardless of outcome, so denied/failed mutations (4xx such as 401/403/409,
+// and 5xx) are recorded with their status for the compliance trail — not just
+// successful ones.
 func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
 	return AuditLogWithWriter(log, nil)
 }
@@ -138,11 +140,10 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
 
-			// Only log successful responses.
-			if sw.status >= 400 {
-				return
-			}
-
+			// Record every mutating request, including denials and failures.
+			// Dropping 4xx (401/403/409) / 5xx here would leave DENIED/FAILED
+			// mutations invisible in the audit log — a compliance blind spot.
+			// The status is carried through so the outcome is auditable.
 			resourceType, resourceID := parsePathResource(r.URL.Path)
 
 			log.Info("audit",

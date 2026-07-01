@@ -731,6 +731,10 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/gitops-sources/{id}/sync/", deps.GitOps.Sync)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/gitops-sources/{id}/preview/", deps.GitOps.Preview)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/gitops-sources/{id}/clusters/", deps.GitOps.ListClusters)
+			// Push webhook: NOT JWT-gated (a git provider can't present a JWT) —
+			// the handler authenticates via the X-Astronomer-Webhook-Secret shared
+			// secret and 503s when no secret is configured.
+			r.Post("/gitops/sources/{id}/webhook/", deps.GitOps.Webhook)
 		}
 
 		if deps.GroupMappings != nil {

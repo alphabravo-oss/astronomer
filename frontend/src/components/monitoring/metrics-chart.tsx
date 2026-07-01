@@ -106,14 +106,14 @@ export function MetricsChart({
 
           <CartesianGrid
             strokeDasharray="3 3"
-            stroke="hsl(240 3.7% 15.9%)"
+            stroke="hsl(var(--border))"
             vertical={false}
           />
 
           <XAxis
             dataKey="timestamp"
             tickFormatter={formatTimestamp}
-            stroke="hsl(240 5% 64.9%)"
+            stroke="hsl(var(--muted-foreground))"
             fontSize={11}
             tickLine={false}
             axisLine={false}
@@ -122,7 +122,7 @@ export function MetricsChart({
 
           <YAxis
             tickFormatter={formatValue}
-            stroke="hsl(240 5% 64.9%)"
+            stroke="hsl(var(--muted-foreground))"
             fontSize={11}
             tickLine={false}
             axisLine={false}

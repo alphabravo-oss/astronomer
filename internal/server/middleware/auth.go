@@ -241,10 +241,19 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 					AuthMethod: "jwt",
 				}
 				if queries != nil {
-					if dbUser, err := queries.GetUserByID(r.Context(), claims.UserID); err == nil {
-						user.Email = dbUser.Email
-						user.Username = dbUser.Username
+					// Fail closed, mirroring the api-token branch above: a
+					// JWT whose user was deleted (lookup error) or
+					// deactivated (is_active=false) must be rejected here.
+					// Previously the lookup error was ignored and IsActive
+					// was never checked, so a live JWT outlived the account
+					// change until its own natural expiry.
+					dbUser, err := queries.GetUserByID(r.Context(), claims.UserID)
+					if err != nil || !dbUser.IsActive {
+						authError(w, "authentication_required", "Invalid or expired token")
+						return
 					}
+					user.Email = dbUser.Email
+					user.Username = dbUser.Username
 				}
 			}
 

@@ -39,6 +39,10 @@ type Config struct {
 	// (GET /api/v1/register/signed/{cluster_id}). Empty falls back to
 	// SecretKey at wiring time so a single-secret install still works.
 	ManifestSigningSecret string `mapstructure:"manifest_signing_secret"`
+	// GitopsWebhookSecret is the shared secret a git-provider push webhook must
+	// present (X-Astronomer-Webhook-Secret) to trigger an immediate gitops sync.
+	// Empty (default) leaves the webhook endpoint disabled.
+	GitopsWebhookSecret string `mapstructure:"gitops_webhook_secret"`
 
 	// ServerURL is the externally-reachable URL of this Astronomer install
 	// (e.g. http://astronomer.example.com:8080). It seeds

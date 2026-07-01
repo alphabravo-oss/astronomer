@@ -464,8 +464,11 @@ export function useLiveClusterMetricsMerger(): void {
       queryClient.setQueryData(qk.clusters.detail(payload.cluster_id), (old: unknown) =>
         mergeClusterStatusIntoDetail(old, payload.new_status!),
       );
-      // Also kick a hard refresh so any dependent caches catch up.
-      queryClient.invalidateQueries({ queryKey: qk.clusters.detail(payload.cluster_id) });
+      // NOTE: we deliberately do NOT invalidateQueries here. The optimistic
+      // patch above already reflects the new status; an unconditional
+      // invalidate on every SSE tick queued an immediate refetch that could
+      // race the patch and flip the row back to its stale server value. Any
+      // dependent caches catch up via the query's own periodic refetch.
     };
 
     state.target.addEventListener('cluster.metrics', onMetrics as EventListener);

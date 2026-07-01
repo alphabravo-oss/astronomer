@@ -19,6 +19,7 @@ import {
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { OverlayShell } from '@/components/ui/overlay-shell';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type {
   AlertRule,
@@ -80,11 +81,12 @@ export default function AlertingPage() {
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [showSilenceModal, setShowSilenceModal] = useState(false);
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState<AlertRule | null>(null);
 
-  const { data: rules, isLoading: rulesLoading } = useAlertRules();
-  const { data: events, isLoading: eventsLoading } = useAlertEvents();
-  const { data: channels, isLoading: channelsLoading } = useNotificationChannels();
-  const { data: silences, isLoading: silencesLoading } = useAlertSilences();
+  const { data: rules, isLoading: rulesLoading, isError: rulesError, refetch: refetchRules } = useAlertRules();
+  const { data: events, isLoading: eventsLoading, isError: eventsError, refetch: refetchEvents } = useAlertEvents();
+  const { data: channels, isLoading: channelsLoading, isError: channelsError, refetch: refetchChannels } = useNotificationChannels();
+  const { data: silences, isLoading: silencesLoading, isError: silencesError, refetch: refetchSilences } = useAlertSilences();
 
   const acknowledgeAlert = useAcknowledgeAlert();
   const resolveAlert = useResolveAlert();
@@ -163,7 +165,7 @@ export default function AlertingPage() {
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={() => { if (confirm('Delete this alert rule?')) deleteRule.mutate(row.id); }}
+            onClick={() => setDeleteRuleTarget(row)}
             className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete rule"
           >
@@ -438,6 +440,8 @@ export default function AlertingPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search alert rules..."
             loading={rulesLoading}
+            isError={rulesError}
+            onRetry={() => refetchRules()}
             emptyMessage="No alert rules configured"
           />
         )}
@@ -449,6 +453,8 @@ export default function AlertingPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search active alerts..."
             loading={eventsLoading}
+            isError={eventsError}
+            onRetry={() => refetchEvents()}
             emptyMessage="No active alerts"
           />
         )}
@@ -460,6 +466,8 @@ export default function AlertingPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search notification channels..."
             loading={channelsLoading}
+            isError={channelsError}
+            onRetry={() => refetchChannels()}
             emptyMessage="No notification channels configured"
           />
         )}
@@ -471,6 +479,8 @@ export default function AlertingPage() {
             keyExtractor={(row) => row.id}
             searchPlaceholder="Search silences..."
             loading={silencesLoading}
+            isError={silencesError}
+            onRetry={() => refetchSilences()}
             emptyMessage="No active silences"
           />
         )}
@@ -493,6 +503,23 @@ export default function AlertingPage() {
       {showSilenceModal && (
         <SilenceModal onClose={() => setShowSilenceModal(false)} />
       )}
+
+      {/* Delete Rule Confirmation */}
+      <ConfirmDialog
+        open={!!deleteRuleTarget}
+        onClose={() => setDeleteRuleTarget(null)}
+        onConfirm={() => {
+          if (!deleteRuleTarget) return;
+          deleteRule.mutate(deleteRuleTarget.id, {
+            onSuccess: () => setDeleteRuleTarget(null),
+          });
+        }}
+        title="Delete Alert Rule"
+        description={`Delete the alert rule "${deleteRuleTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteRule.isPending}
+      />
     </div>
   );
 }
@@ -513,9 +540,9 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
     threshold: rule?.threshold?.toString() || '',
     duration: rule?.duration || '5m',
     enabled: rule?.enabled ?? true,
-    // Sprint 072 — rule_kind toggle + anomaly knobs. The kind defaults
-    // to 'threshold' so old rules edit unchanged.
-    ruleKind: (rule?.ruleKind || 'threshold') as 'threshold' | 'anomaly',
+    // Sprint 072 — anomaly knobs. The anomaly evaluator is driven off the
+    // single `type` field (type === 'anomaly'); there is no separate rule-kind
+    // toggle, so the Type select and the payload can never disagree.
     metric: rule?.metric || 'cluster_cpu_percent',
     anomalyStddev: rule?.anomalyStddev?.toString() || '3',
     anomalyWindowSeconds: rule?.anomalyWindowSeconds?.toString() || '86400',
@@ -524,7 +551,7 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
   });
 
   const handleSave = async () => {
-    const isAnomaly = form.ruleKind === 'anomaly';
+    const isAnomaly = form.type === 'anomaly';
     const data: Partial<AlertRule> & {
       rule_kind?: string;
       anomaly_stddev?: number;
@@ -543,8 +570,8 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
       // Send the new fields with the snake_case names the backend
       // CreateAlertRuleRequest expects. The handler also reads camelCase
       // via Type/RuleType aliases, but the snake_case path is
-      // canonical.
-      rule_kind: form.ruleKind,
+      // canonical. rule_kind is derived from `type` so the two stay in sync.
+      rule_kind: isAnomaly ? 'anomaly' : 'threshold',
       metric: isAnomaly ? form.metric : undefined,
       anomaly_stddev: isAnomaly ? parseFloat(form.anomalyStddev) : undefined,
       anomaly_window_seconds: isAnomaly ? parseInt(form.anomalyWindowSeconds, 10) : undefined,
@@ -573,7 +600,7 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
           <h3 className="text-lg font-semibold text-foreground">
             {rule ? 'Edit Alert Rule' : 'Create Alert Rule'}
           </h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -639,29 +666,6 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
             </div>
           </div>
 
-          {/* Sprint 072 — Rule Kind toggle. Threshold uses the existing
-              static-threshold path; Anomaly uses the rolling-baseline
-              evaluator. Only Anomaly shows the per-metric knobs below. */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">Rule kind</label>
-            <div className="flex gap-1.5">
-              {(['threshold', 'anomaly'] as const).map((kind) => (
-                <button
-                  key={kind}
-                  onClick={() => setForm((f) => ({ ...f, ruleKind: kind }))}
-                  className={cn(
-                    'flex-1 px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors',
-                    form.ruleKind === kind
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {kind}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">PromQL Query</label>
             <textarea
@@ -674,7 +678,7 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
             />
           </div>
 
-          {form.ruleKind === 'anomaly' && (
+          {form.type === 'anomaly' && (
             <div className="space-y-3 p-3 rounded-md border border-border bg-muted/30">
               <div className="text-xs text-muted-foreground">
                 Anomaly rules fire when the current value of <b>metric</b> deviates from the
@@ -895,7 +899,7 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Add Notification Channel</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -1038,7 +1042,7 @@ function SilenceModal({ onClose }: { onClose: () => void }) {
       <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold text-foreground">Create Silence</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>

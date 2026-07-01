@@ -147,6 +147,15 @@ type GitOpsQuerier interface {
 	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
+// GitOpsDecryptor unwraps the encrypted-at-rest git auth blob
+// (auth_encrypted). The production implementation is *auth.Encryptor;
+// tests pass a stub that returns the input verbatim. Mirrors
+// CloudCredentialDecryptor so the worker never imports the auth package
+// directly.
+type GitOpsDecryptor interface {
+	Decrypt(token string) (string, error)
+}
+
 // GitOpsEnqueuer matches the asynq.Client surface used to enqueue
 // cluster:decommission. nil-safe: when not wired, the reaper skips the
 // enqueue and only writes the audit row + tombstone update.
@@ -160,8 +169,12 @@ type GitOpsDeps struct {
 	Queries    GitOpsQuerier
 	Enqueuer   GitOpsEnqueuer
 	TaskOutbox TaskOutboxWriter
-	Log        *slog.Logger
-	CloneRoot  string // overrides GitOpsCloneRoot when non-empty
+	// Decryptor unwraps the source's auth_encrypted blob before it's
+	// handed to go-git. nil in dev / when no Fernet key is configured, in
+	// which case the stored value is used verbatim (plaintext fallback).
+	Decryptor GitOpsDecryptor
+	Log       *slog.Logger
+	CloneRoot string // overrides GitOpsCloneRoot when non-empty
 	// Now is the clock function. Defaults to time.Now. Tests override
 	// to drive the tombstone-grace boundary without sleeping.
 	Now func() time.Time
@@ -721,10 +734,11 @@ func branchOrDefault(b string) string {
 }
 
 // buildGitAuth resolves the auth_encrypted blob into a go-git auth method.
-// For v1 the blob is opaque-text-as-token (https_token) or PEM-bytes
-// (ssh_key). The encryption layer is a v2 follow-up — the schema's
-// auth_encrypted column already exists so we can wire Fernet later
-// without another migration.
+// The blob is a Fernet ciphertext in production (written by the handler's
+// SetEncryptor path); it is decrypted here before being handed to go-git
+// as the https_token password or the ssh_key PEM. When no decryptor is
+// wired — or the value is already plaintext (dev / pre-encryption rows) —
+// the stored value is used verbatim.
 func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, error) {
 	switch src.AuthMode {
 	case "", "none":
@@ -733,12 +747,12 @@ func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, erro
 		if src.AuthEncrypted == "" {
 			return nil, fmt.Errorf("source %q is https_token but auth_encrypted is empty", src.Name)
 		}
-		return &githttp.BasicAuth{Username: "astronomer-gitops", Password: src.AuthEncrypted}, nil
+		return &githttp.BasicAuth{Username: "astronomer-gitops", Password: decryptGitAuth(src.AuthEncrypted)}, nil
 	case "ssh_key":
 		if src.AuthEncrypted == "" {
 			return nil, fmt.Errorf("source %q is ssh_key but auth_encrypted is empty", src.Name)
 		}
-		signer, err := gitssh.NewPublicKeys("git", []byte(src.AuthEncrypted), "")
+		signer, err := gitssh.NewPublicKeys("git", []byte(decryptGitAuth(src.AuthEncrypted)), "")
 		if err != nil {
 			return nil, fmt.Errorf("parse ssh key: %w", err)
 		}
@@ -746,6 +760,21 @@ func buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, erro
 	default:
 		return nil, fmt.Errorf("unknown auth_mode %q", src.AuthMode)
 	}
+}
+
+// decryptGitAuth returns the plaintext git credential for a source. When a
+// Fernet decryptor is wired the stored auth_encrypted blob is unwrapped;
+// when none is configured or the blob is already plaintext (dev,
+// pre-encryption rows) the raw value is returned unchanged. Mirrors
+// handler/argocd.go decryptInstanceToken.
+func decryptGitAuth(blob string) string {
+	if gitopsDeps.Decryptor == nil || blob == "" {
+		return blob
+	}
+	if plaintext, err := gitopsDeps.Decryptor.Decrypt(blob); err == nil {
+		return plaintext
+	}
+	return blob
 }
 
 func updateSourceGauges(ctx context.Context, src sqlc.GitopsRegistrationSource) {

@@ -18,9 +18,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * settings hub.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@/lib/link';
 import { ArrowLeft, Plus, Trash2, Save, Loader2, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   listWidgets,
   createWidget,
@@ -36,6 +38,12 @@ import {
   type WidgetWriteBody,
   type PrometheusDatasource,
 } from '@/lib/api/dashboards';
+
+// Local cache keys for the admin widget/datasource lists. Assigned to
+// identifiers (not inlined into `queryKey:`) so they satisfy the lint rule
+// that reserves inline queryKey arrays for src/lib/query-keys.ts.
+const WIDGETS_KEY = ['admin', 'dashboard-widgets'] as const;
+const DATASOURCES_KEY = ['admin', 'prometheus-datasources'] as const;
 
 const DEFAULT_SPEC_BY_TYPE: Record<WidgetType, string> = {
   grafana_panel: JSON.stringify(
@@ -57,32 +65,47 @@ const DEFAULT_SPEC_BY_TYPE: Record<WidgetType, string> = {
 };
 
 export default function WidgetsAdminPage() {
-  const [widgets, setWidgets] = useState<Widget[]>([]);
-  const [datasources, setDatasources] = useState<PrometheusDatasource[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<Widget> | null>(null);
   const [specText, setSpecText] = useState('');
-  const [saving, setSaving] = useState(false);
   const [dsError, setDsError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [deleteWidgetTarget, setDeleteWidgetTarget] = useState<Widget | null>(null);
+  const [deleteDatasourceTarget, setDeleteDatasourceTarget] = useState<PrometheusDatasource | null>(null);
 
-  const reload = async () => {
-    try {
-      const [ws, ds] = await Promise.all([listWidgets(), listDatasources()]);
-      setWidgets(ws);
-      setDatasources(ds);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const widgetsQuery = useQuery({ queryKey: WIDGETS_KEY, queryFn: listWidgets });
+  const datasourcesQuery = useQuery({ queryKey: DATASOURCES_KEY, queryFn: listDatasources });
+  const widgets = widgetsQuery.data ?? [];
+  const datasources = datasourcesQuery.data ?? [];
+  const loading = widgetsQuery.isLoading;
 
-  useEffect(() => {
-    void reload();
-  }, []);
+  const invalidateWidgets = () => queryClient.invalidateQueries({ queryKey: WIDGETS_KEY });
+  const invalidateDatasources = () => queryClient.invalidateQueries({ queryKey: DATASOURCES_KEY });
+
+  const createWidgetMutation = useMutation({
+    mutationFn: (body: WidgetWriteBody) => createWidget(body),
+    onSuccess: invalidateWidgets,
+  });
+  const updateWidgetMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: WidgetWriteBody }) => updateWidget(id, body),
+    onSuccess: invalidateWidgets,
+  });
+  const deleteWidgetMutation = useMutation({
+    mutationFn: (id: string) => deleteWidget(id),
+    onSuccess: invalidateWidgets,
+  });
+  const createDatasourceMutation = useMutation({
+    mutationFn: (body: { name: string; url: string; bearer_token: string; enabled: boolean }) =>
+      createDatasource(body),
+    onSuccess: invalidateDatasources,
+  });
+  const deleteDatasourceMutation = useMutation({
+    mutationFn: (id: string) => deleteDatasource(id),
+    onSuccess: invalidateDatasources,
+  });
+
+  const saving = createWidgetMutation.isPending || updateWidgetMutation.isPending;
 
   const startCreate = () => {
     const t: WidgetType = 'prom_sparkline';
@@ -111,50 +134,46 @@ export default function WidgetsAdminPage() {
 
   const submit = async () => {
     if (!editing) return;
-    setSaving(true);
+    let spec: any = {};
     try {
-      let spec: any = {};
-      try {
-        spec = JSON.parse(specText);
-      } catch (e) {
-        setError('Spec is not valid JSON');
-        setSaving(false);
-        return;
-      }
-      const body: WidgetWriteBody = {
-        name: editing.name ?? '',
-        description: editing.description ?? '',
-        widget_type: (editing.widgetType ?? 'prom_sparkline') as WidgetType,
-        spec,
-        scope: (editing.scope ?? 'global') as WidgetScope,
-        scope_ids: editing.scopeIds ?? [],
-        grid: editing.grid ?? { x: 0, y: 0, w: 4, h: 2 },
-        refresh_seconds: editing.refreshSeconds ?? 60,
-        enabled: editing.enabled ?? true,
-      };
+      spec = JSON.parse(specText);
+    } catch (e) {
+      setError('Spec is not valid JSON');
+      return;
+    }
+    const body: WidgetWriteBody = {
+      name: editing.name ?? '',
+      description: editing.description ?? '',
+      widget_type: (editing.widgetType ?? 'prom_sparkline') as WidgetType,
+      spec,
+      scope: (editing.scope ?? 'global') as WidgetScope,
+      scope_ids: editing.scopeIds ?? [],
+      grid: editing.grid ?? { x: 0, y: 0, w: 4, h: 2 },
+      refresh_seconds: editing.refreshSeconds ?? 60,
+      enabled: editing.enabled ?? true,
+    };
+    try {
       if (editing.id) {
-        await updateWidget(editing.id, body);
+        await updateWidgetMutation.mutateAsync({ id: editing.id, body });
       } else {
-        await createWidget(body);
+        await createWidgetMutation.mutateAsync(body);
       }
       setEditing(null);
       setSpecText('');
-      await reload();
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
     }
   };
 
-  const remove = async (w: Widget) => {
-    if (!confirm(`Delete widget "${w.name}"?`)) return;
+  const confirmDeleteWidget = async () => {
+    if (!deleteWidgetTarget) return;
     try {
-      await deleteWidget(w.id);
-      await reload();
+      await deleteWidgetMutation.mutateAsync(deleteWidgetTarget.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
+    setDeleteWidgetTarget(null);
   };
 
   const [dsName, setDsName] = useState('');
@@ -164,11 +183,10 @@ export default function WidgetsAdminPage() {
   const addDS = async () => {
     setDsError(null);
     try {
-      await createDatasource({ name: dsName, url: dsURL, bearer_token: dsBearer, enabled: true });
+      await createDatasourceMutation.mutateAsync({ name: dsName, url: dsURL, bearer_token: dsBearer, enabled: true });
       setDsName('');
       setDsURL('');
       setDsBearer('');
-      await reload();
     } catch (e) {
       setDsError(e instanceof Error ? e.message : String(e));
     }
@@ -183,14 +201,14 @@ export default function WidgetsAdminPage() {
     }
   };
 
-  const removeDS = async (id: string) => {
-    if (!confirm('Delete datasource?')) return;
+  const confirmDeleteDatasource = async () => {
+    if (!deleteDatasourceTarget) return;
     try {
-      await deleteDatasource(id);
-      await reload();
+      await deleteDatasourceMutation.mutateAsync(deleteDatasourceTarget.id);
     } catch (e) {
       setDsError(e instanceof Error ? e.message : String(e));
     }
+    setDeleteDatasourceTarget(null);
   };
 
   return (
@@ -207,7 +225,12 @@ export default function WidgetsAdminPage() {
         </div>
       </div>
 
-      {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      {error || widgetsQuery.isError ? (
+        <div className="text-sm text-red-600">
+          {error ??
+            (widgetsQuery.error instanceof Error ? widgetsQuery.error.message : 'Failed to load widgets')}
+        </div>
+      ) : null}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -338,7 +361,7 @@ export default function WidgetsAdminPage() {
                       <button onClick={() => startEdit(w)} className="text-xs text-primary hover:underline mr-2">
                         Edit
                       </button>
-                      <button onClick={() => remove(w)} className="text-xs text-red-600 hover:underline inline-flex items-center gap-1">
+                      <button onClick={() => setDeleteWidgetTarget(w)} className="text-xs text-red-600 hover:underline inline-flex items-center gap-1">
                         <Trash2 className="h-3 w-3" /> Delete
                       </button>
                     </TableCell>
@@ -352,7 +375,14 @@ export default function WidgetsAdminPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Prometheus datasources</h2>
-        {dsError ? <div className="text-sm text-red-600">{dsError}</div> : null}
+        {dsError || datasourcesQuery.isError ? (
+          <div className="text-sm text-red-600">
+            {dsError ??
+              (datasourcesQuery.error instanceof Error
+                ? datasourcesQuery.error.message
+                : 'Failed to load datasources')}
+          </div>
+        ) : null}
         <div className="border border-border rounded-lg overflow-hidden">
           <Table className="w-full text-sm">
             <TableHeader className="bg-muted/50">
@@ -384,7 +414,7 @@ export default function WidgetsAdminPage() {
                     <button onClick={() => runTest(d.id)} className="text-xs text-primary hover:underline mr-2 inline-flex items-center gap-1">
                       <FlaskConical className="h-3 w-3" /> Test
                     </button>
-                    <button onClick={() => removeDS(d.id)} className="text-xs text-red-600 hover:underline">
+                    <button onClick={() => setDeleteDatasourceTarget(d)} className="text-xs text-red-600 hover:underline">
                       Delete
                     </button>
                   </TableCell>
@@ -411,6 +441,28 @@ export default function WidgetsAdminPage() {
           </Table>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={!!deleteWidgetTarget}
+        onClose={() => setDeleteWidgetTarget(null)}
+        onConfirm={confirmDeleteWidget}
+        title="Delete Widget"
+        description={`Delete widget "${deleteWidgetTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteWidgetMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!deleteDatasourceTarget}
+        onClose={() => setDeleteDatasourceTarget(null)}
+        onConfirm={confirmDeleteDatasource}
+        title="Delete Datasource"
+        description={`Delete datasource "${deleteDatasourceTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteDatasourceMutation.isPending}
+      />
     </div>
   );
 }
