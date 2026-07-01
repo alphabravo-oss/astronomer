@@ -8,9 +8,8 @@ import (
 
 // Config holds all configuration for the application.
 type Config struct {
-	DatabaseURL     string `mapstructure:"database_url"`
-	RedisURL        string `mapstructure:"redis_url"`
-	CeleryBrokerURL string `mapstructure:"celery_broker_url"`
+	DatabaseURL string `mapstructure:"database_url"`
+	RedisURL    string `mapstructure:"redis_url"`
 
 	// pgxpool sizing — operator-tunable via the chart's `database.*`
 	// values. Zero values fall through to the
@@ -27,7 +26,6 @@ type Config struct {
 
 	CORSAllowedOrigins    string `mapstructure:"cors_allowed_origins"`
 	SessionTimeoutMinutes int    `mapstructure:"session_timeout_minutes"`
-	AgentTokenExpiryHours int    `mapstructure:"agent_token_expiry_hours"`
 	// RegistrationTokenTTLHours (task A3) is the single, documented TTL applied
 	// to every operator-facing registration-token mint path (POST /register/,
 	// GetManifest, the signed-manifest mint, and the worker reissue). Default 1h
@@ -234,12 +232,10 @@ func Load() (*Config, error) {
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "database_url", Value: "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable"},
 		envconfig.Default{Key: "redis_url", Value: "redis://localhost:6379/0"},
-		envconfig.Default{Key: "celery_broker_url", Value: "redis://localhost:6379/1"},
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
 		envconfig.Default{Key: "session_timeout_minutes", Value: 60},
-		envconfig.Default{Key: "agent_token_expiry_hours", Value: 24},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},

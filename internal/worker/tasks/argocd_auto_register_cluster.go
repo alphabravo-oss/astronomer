@@ -35,6 +35,11 @@ const (
 
 var argoCDProxyTokenTTL = 180 * 24 * time.Hour
 
+// argoCDAutoRegisterSweepPageSize bounds each ListClusters batch during the
+// periodic sweep so fleets larger than the old fixed 1000-row cap are fully
+// covered instead of silently truncated.
+const argoCDAutoRegisterSweepPageSize = 500
+
 var errArgoCDManagedClusterCredentialUnavailable = errors.New("argocd managed-cluster credential unavailable")
 
 type ArgoCDAutoRegisterQuerier interface {
@@ -123,40 +128,55 @@ func HandleArgoCDAutoRegisterCluster(ctx context.Context, t *asynq.Task) error {
 	}
 
 	runStarted := time.Now().UTC()
-	clusters, err := deps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		runErr := fmt.Errorf("list clusters: %w", err)
-		recordRepairJobFailure(ctx, deps.Queries, ArgoCDAutoRegisterClusterType, runErr, map[string]any{"mode": "sweep"})
-		return runErr
-	}
+	// Load the ArgoCD instance set once for the whole sweep and thread it into
+	// each per-cluster registration below, instead of re-querying every
+	// instance once per cluster.
 	instances, err := deps.Queries.ListArgoCDInstances(ctx, sqlc.ListArgoCDInstancesParams{Limit: 1000, Offset: 0})
 	if err != nil {
 		runErr := fmt.Errorf("list argocd instances for repair: %w", err)
-		recordRepairJobFailure(ctx, deps.Queries, ArgoCDAutoRegisterClusterType, runErr, map[string]any{
-			"mode":             "sweep",
-			"clusters_checked": len(clusters),
-		})
+		recordRepairJobFailure(ctx, deps.Queries, ArgoCDAutoRegisterClusterType, runErr, map[string]any{"mode": "sweep"})
 		return runErr
 	}
 	var firstErr error
+	clustersListed := 0
 	eligibleClusters := 0
-	for _, cluster := range clusters {
-		if !cluster.IsLocal && !cluster.LastHeartbeat.Valid {
-			continue
+	// Page through clusters rather than capping the sweep at a single 1000-row
+	// batch, so fleets larger than one page are fully reconciled.
+	for offset := int32(0); ; offset += argoCDAutoRegisterSweepPageSize {
+		page, err := deps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: argoCDAutoRegisterSweepPageSize, Offset: offset})
+		if err != nil {
+			runErr := fmt.Errorf("list clusters: %w", err)
+			recordRepairJobFailure(ctx, deps.Queries, ArgoCDAutoRegisterClusterType, runErr, map[string]any{
+				"mode":            "sweep",
+				"clusters_listed": clustersListed,
+			})
+			return runErr
 		}
-		eligibleClusters++
-		if err := autoRegisterClusterIntoArgoCD(ctx, deps, cluster); err != nil {
-			runtimeLogger().WarnContext(ctx, "argocd auto-register failed",
-				"cluster_id", cluster.ID.String(),
-				"error", err)
-			if firstErr == nil {
-				firstErr = err
+		if len(page) == 0 {
+			break
+		}
+		clustersListed += len(page)
+		for _, cluster := range page {
+			if !cluster.IsLocal && !cluster.LastHeartbeat.Valid {
+				continue
 			}
+			eligibleClusters++
+			if err := autoRegisterClusterIntoArgoCDWithInstances(ctx, deps, cluster, instances); err != nil {
+				runtimeLogger().WarnContext(ctx, "argocd auto-register failed",
+					"cluster_id", cluster.ID.String(),
+					"error", err)
+				if firstErr == nil {
+					firstErr = err
+				}
+			}
+		}
+		if int32(len(page)) < argoCDAutoRegisterSweepPageSize {
+			break
 		}
 	}
 	metadata := map[string]any{
 		"mode":              "sweep",
-		"clusters_listed":   len(clusters),
+		"clusters_listed":   clustersListed,
 		"eligible_clusters": eligibleClusters,
 		"argocd_instances":  len(instances),
 		"duration_ms":       time.Since(runStarted).Milliseconds(),
@@ -272,6 +292,15 @@ func clusterMatchesAutoRegisterSelector(cluster sqlc.Cluster, selector map[strin
 }
 
 func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterDeps, cluster sqlc.Cluster) error {
+	return autoRegisterClusterIntoArgoCDWithInstances(ctx, deps, cluster, nil)
+}
+
+// autoRegisterClusterIntoArgoCDWithInstances registers a single cluster into
+// every configured ArgoCD instance. When preloadedInstances is non-nil the
+// caller's already-loaded slice is reused (the sweep path, which loads the
+// instance set once); passing nil makes this function load the instances
+// itself (the single-cluster task path).
+func autoRegisterClusterIntoArgoCDWithInstances(ctx context.Context, deps ArgoCDAutoRegisterDeps, cluster sqlc.Cluster, preloadedInstances []sqlc.ArgocdInstance) error {
 	if !cluster.IsLocal && !cluster.LastHeartbeat.Valid {
 		return nil
 	}
@@ -297,10 +326,14 @@ func autoRegisterClusterIntoArgoCD(ctx context.Context, deps ArgoCDAutoRegisterD
 		writeArgoCDRegistrationStep(ctx, deps, cluster.ID, "argocd_registering", "running", nil, "")
 		upsertArgoCDAdoptionCondition(ctx, deps, cluster.ID, "Unknown", "RegistrationInProgress", "Astronomer is registering this cluster into ArgoCD.")
 	}
-	instances, err := deps.Queries.ListArgoCDInstances(ctx, sqlc.ListArgoCDInstancesParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		recordArgoCDRegistrationFailure(ctx, deps, cluster.ID, err)
-		return fmt.Errorf("list argocd instances: %w", err)
+	instances := preloadedInstances
+	if instances == nil {
+		var err error
+		instances, err = deps.Queries.ListArgoCDInstances(ctx, sqlc.ListArgoCDInstancesParams{Limit: 1000, Offset: 0})
+		if err != nil {
+			recordArgoCDRegistrationFailure(ctx, deps, cluster.ID, err)
+			return fmt.Errorf("list argocd instances: %w", err)
+		}
 	}
 	if len(instances) == 0 {
 		if alreadyManaged {

@@ -562,9 +562,9 @@ func (a metricsRequesterAdapter) Do(ctx context.Context, clusterID, method, path
 // for up to 5s × N clusters. The background metrics
 // publisher (internal/metrics/publisher.go) keeps the cache warm; stale
 // or missing entries return zero values rather than blocking.
-func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Cluster) ClusterResponse {
+func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Cluster, manageBaseline bool) ClusterResponse {
 	out := clusterToResponse(c)
-	h.enrichClusterArgoCD(ctx, &out, c)
+	h.enrichClusterArgoCD(ctx, &out, c, manageBaseline)
 	if h.metrics == nil {
 		return out
 	}
@@ -582,7 +582,9 @@ func (h *ClusterHandler) enrichClusterFromCache(ctx context.Context, c sqlc.Clus
 // keep a hung agent from holding the HTTP handler indefinitely.
 func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster) ClusterResponse {
 	out := clusterToResponse(c)
-	h.enrichClusterArgoCD(ctx, &out, c)
+	// Single-cluster slow path: one settings read here is not an N+1, so we
+	// resolve manageBaseline inline rather than threading it from the caller.
+	h.enrichClusterArgoCD(ctx, &out, c, h.argoCDManageBaseline(ctx))
 	if h.metrics == nil {
 		return out
 	}
@@ -596,9 +598,12 @@ func (h *ClusterHandler) enrichClusterFresh(ctx context.Context, c sqlc.Cluster)
 	return out
 }
 
-func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterResponse, c sqlc.Cluster) {
-	if h == nil || h.queries == nil || out == nil {
-		return
+// argoCDManageBaseline reads the global argocd.manage_platform_baseline
+// platform setting (default true). Hoisted out of enrichClusterArgoCD so the
+// List loop resolves it once per page instead of once per cluster. Nil-safe.
+func (h *ClusterHandler) argoCDManageBaseline(ctx context.Context) bool {
+	if h == nil || h.queries == nil {
+		return true
 	}
 	manageBaseline := true
 	if row, err := h.queries.GetPlatformSetting(ctx, "argocd.manage_platform_baseline"); err == nil && len(row.Value) > 0 {
@@ -606,6 +611,13 @@ func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterRe
 		if err := json.Unmarshal(row.Value, &b); err == nil {
 			manageBaseline = b
 		}
+	}
+	return manageBaseline
+}
+
+func (h *ClusterHandler) enrichClusterArgoCD(ctx context.Context, out *ClusterResponse, c sqlc.Cluster, manageBaseline bool) {
+	if h == nil || h.queries == nil || out == nil {
+		return
 	}
 	out.ArgoCD.BaselineManagedBy = "helm"
 	if c.IsLocal {
@@ -780,8 +792,12 @@ type UpdateRegistryConfigRequest struct {
 
 // List handles GET /api/v1/clusters/.
 func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
-	offset := int32(queryInt(r, "offset", 0))
+	// Clamp limit/offset via the shared helper: limit → [1,200] (default 20),
+	// offset → >=0. Previously an int32(queryInt(...)) with no upper bound, so
+	// e.g. limit=3e9 overflowed the int32 param to a negative value.
+	limitInt, offsetInt := queryLimitOffset(r, 20)
+	limit := int32(limitInt)
+	offset := int32(offsetInt)
 
 	clusters, err := h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{
 		Limit:  limit,
@@ -798,30 +814,60 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// One query for all in-flight decommissions → mark the matching rows
-	// Decommissioning (avoids an N+1 per cluster). Best-effort: on error we
-	// just don't flag anything.
-	decommissioning := h.inFlightDecommissionSet(r.Context())
+	// Hoist the global platform-setting read out of the per-cluster loop:
+	// one settings query for the whole page instead of one per cluster.
+	manageBaseline := h.argoCDManageBaseline(r.Context())
+
+	// One query for all in-flight decommissions, scoped to this page's cluster
+	// IDs → mark the matching rows Decommissioning (avoids an N+1 per cluster).
+	// Best-effort: on error we just don't flag anything.
+	pageIDs := make([]uuid.UUID, len(clusters))
+	for i, c := range clusters {
+		pageIDs[i] = c.ID
+	}
+	decommissioning := h.inFlightDecommissionSet(r.Context(), pageIDs, total)
 
 	enriched := make([]ClusterResponse, 0, len(clusters))
 	for _, c := range clusters {
-		resp := h.enrichClusterFromCache(r.Context(), c)
+		resp := h.enrichClusterFromCache(r.Context(), c, manageBaseline)
 		resp.Decommissioning = decommissioning[c.ID]
 		enriched = append(enriched, resp)
 	}
 	RespondPaginated(w, r, enriched, total)
 }
 
-// inFlightDecommissionSet returns the set of cluster IDs with a pending/running
-// decommission. Best-effort — returns an empty set on any error.
-func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context) map[uuid.UUID]bool {
+// inFlightDecommissionSet returns which of the given cluster IDs have a
+// pending/running decommission. Best-effort — returns an empty set on any
+// error. The fetch is bounded by the total (non-tombstoned) cluster count
+// rather than a fixed cap: an in-flight decommission always belongs to a
+// still-existing cluster, so the number of in-flight rows can never exceed
+// total. The old fixed 500 cap silently rendered clusters past the cap as
+// Decommissioning=false once the fleet had >500 concurrent decommissions.
+// The already-fetched rows are then filtered to this page's IDs in Go.
+func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context, ids []uuid.UUID, total int64) map[uuid.UUID]bool {
 	set := map[uuid.UUID]bool{}
-	rows, err := h.queries.ListPendingClusterDecommissions(ctx, 500)
+	if len(ids) == 0 {
+		return set
+	}
+	want := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		want[id] = struct{}{}
+	}
+	limit := total
+	if limit > 1<<31-1 {
+		limit = 1<<31 - 1
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	rows, err := h.queries.ListPendingClusterDecommissions(ctx, int32(limit))
 	if err != nil {
 		return set
 	}
 	for _, row := range rows {
-		set[row.ClusterID] = true
+		if _, ok := want[row.ClusterID]; ok {
+			set[row.ClusterID] = true
+		}
 	}
 	return set
 }

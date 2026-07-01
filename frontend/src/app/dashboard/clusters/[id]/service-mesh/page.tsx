@@ -471,10 +471,9 @@ export default function ClusterServiceMeshPage() {
         </div>
       )}
       {detection && detection.detectedMesh === 'linkerd' && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <HealthTile label="ServiceProfiles" value={detection.serviceProfileCount} />
           <HealthTile label="Servers" value={detection.serverAuthCount} />
-          <HealthTile label="VirtualServices" value="—" />
           <HealthTile
             label="mTLS coverage"
             value={detection.mtlsCoveragePct}

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -321,9 +321,10 @@ func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Reques
 		}
 		resp = append(resp, monitoringOperationResponse(item))
 	}
-	// No COUNT query exists for monitoring operations; report the page
-	// length as the total. // TODO(total): add CountMonitoringOperations.
-	RespondList(w, resp, NewPagination(len(resp), int(limit), int(offset), len(resp)))
+	// List is filtered in-Go by RBAC; no COUNT matches the visible set.
+	// has_more is inferred from the DB page (len(items)) being full, not the
+	// post-filter resp, so next_offset advances over rows skipped by RBAC.
+	RespondList(w, resp, NewPaginationFromPage(int(limit), int(offset), len(items)))
 }
 
 func (h *MonitoringHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
@@ -1385,27 +1386,33 @@ func (h *MonitoringHandler) workloadSummary(ctx context.Context, clusterID, kind
 	return summary, nil
 }
 
-func (h *MonitoringHandler) metricsSeries(summary map[string]any, rawRange, label string) map[string]any {
-	data := h.zeroMetrics()
-	pointCount, span := metricWindow(rawRange)
-	now := time.Now().UTC()
-	series := func(name, unit string, current, baseline float64) map[string]any {
+// metricsSeries is the fallback returned when no Prometheus/Thanos time-series
+// backend is configured for the cluster. It returns empty series (preserving
+// the shape the frontend expects: name/label/unit/data) plus an explicit
+// "available": false flag, rather than synthesizing a fabricated CPU/mem ramp
+// that would be indistinguishable from real telemetry. The scalar summary is
+// still surfaced separately via the /summary endpoint; only the invented
+// time-series points are dropped here.
+func (h *MonitoringHandler) metricsSeries(_ map[string]any, _ string, label string) map[string]any {
+	series := func(name, unit string) map[string]any {
 		return map[string]any{
 			"name":  name,
 			"label": label,
 			"unit":  unit,
-			"data":  metricPoints(now, pointCount, span, current, baseline),
+			"data":  []map[string]any{},
 		}
 	}
-	data["cpuUsage"] = series("CPU Usage", "cores", summaryFloat(summary["cpuUsage"]), 0.72)
-	data["cpuCapacity"] = series("CPU Capacity", "cores", summaryFloat(summary["cpuCapacity"]), 1.0)
-	data["memoryUsage"] = series("Memory Usage", "bytes", summaryFloat(summary["memoryUsage"]), 0.76)
-	data["memoryCapacity"] = series("Memory Capacity", "bytes", summaryFloat(summary["memoryCapacity"]), 1.0)
-	data["networkReceive"] = series("Network Receive", "bytes", summaryFloat(summary["networkReceive"]), 0.68)
-	data["networkTransmit"] = series("Network Transmit", "bytes", summaryFloat(summary["networkTransmit"]), 0.64)
-	data["diskUsage"] = series("Disk Usage", "bytes", summaryFloat(summary["diskUsage"]), 0.83)
-	data["podCount"] = series("Pod Count", "count", summaryFloat(summary["podCount"]), 0.9)
-	return data
+	return map[string]any{
+		"available":       false,
+		"cpuUsage":        series("CPU Usage", "cores"),
+		"cpuCapacity":     series("CPU Capacity", "cores"),
+		"memoryUsage":     series("Memory Usage", "bytes"),
+		"memoryCapacity":  series("Memory Capacity", "bytes"),
+		"networkReceive":  series("Network Receive", "bytes"),
+		"networkTransmit": series("Network Transmit", "bytes"),
+		"diskUsage":       series("Disk Usage", "bytes"),
+		"podCount":        series("Pod Count", "count"),
+	}
 }
 
 func metricWindow(rawRange string) (int, time.Duration) {
@@ -1419,30 +1426,6 @@ func metricWindow(rawRange string) (int, time.Duration) {
 	default:
 		return 12, time.Hour
 	}
-}
-
-func metricPoints(now time.Time, count int, span time.Duration, current, baseline float64) []map[string]any {
-	if count < 2 {
-		count = 2
-	}
-	if baseline <= 0 {
-		baseline = 1
-	}
-	step := span / time.Duration(count-1)
-	points := make([]map[string]any, 0, count)
-	for i := 0; i < count; i++ {
-		ratio := baseline + (float64(i)/float64(count-1))*(1-baseline)
-		points = append(points, map[string]any{
-			"timestamp": now.Add(-span + (step * time.Duration(i))).Format(time.RFC3339),
-			"value":     roundedMetric(current * ratio),
-		})
-	}
-	return points
-}
-
-func roundedMetric(v float64) float64 {
-	out, _ := strconv.ParseFloat(fmt.Sprintf("%.2f", v), 64)
-	return out
 }
 
 func cloneMetricSummary(in map[string]any) map[string]any {
@@ -1474,48 +1457,41 @@ func (h *MonitoringHandler) realClusterSummary(ctx context.Context, clusterID st
 		return nil, ok, err
 	}
 	selector := labelSelectorForConfig(cfg)
-	cpuUsage, err := client.QueryScalar(ctx, `sum(rate(node_cpu_seconds_total{mode!="idle",`+selector+`}[5m]))`)
-	if err != nil {
-		return nil, true, err
+	// These scalar queries are mutually independent, so fan them out
+	// concurrently rather than paying ~11 serial Thanos round-trips. Each
+	// goroutine writes to its own destination variable, so no additional
+	// synchronization is required; errgroup cancels the shared context and
+	// surfaces the first error.
+	var (
+		cpuUsage, cpuCapacity            float64
+		memoryUsage, memoryCapacity      float64
+		podCount, podCapacity, nodeCount float64
+		networkReceive, networkTransmit  float64
+		diskCapacity, diskAvail          float64
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	scalar := func(query string, dst *float64) {
+		g.Go(func() error {
+			v, err := client.QueryScalar(gctx, query)
+			if err != nil {
+				return err
+			}
+			*dst = v
+			return nil
+		})
 	}
-	cpuCapacity, err := client.QueryScalar(ctx, `sum(machine_cpu_cores{`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	memoryUsage, err := client.QueryScalar(ctx, `sum(node_memory_MemTotal_bytes{`+selector+`} - node_memory_MemAvailable_bytes{`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	memoryCapacity, err := client.QueryScalar(ctx, `sum(node_memory_MemTotal_bytes{`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	podCount, err := client.QueryScalar(ctx, `count(kube_pod_info{`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	podCapacity, err := client.QueryScalar(ctx, `sum(kube_node_status_capacity{resource="pods",unit="integer",`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	nodeCount, err := client.QueryScalar(ctx, `count(kube_node_info{`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	networkReceive, err := client.QueryScalar(ctx, `sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+selector+`}[5m]))`)
-	if err != nil {
-		return nil, true, err
-	}
-	networkTransmit, err := client.QueryScalar(ctx, `sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+selector+`}[5m]))`)
-	if err != nil {
-		return nil, true, err
-	}
-	diskCapacity, err := client.QueryScalar(ctx, `sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`})`)
-	if err != nil {
-		return nil, true, err
-	}
-	diskAvail, err := client.QueryScalar(ctx, `sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`})`)
-	if err != nil {
+	scalar(`sum(rate(node_cpu_seconds_total{mode!="idle",`+selector+`}[5m]))`, &cpuUsage)
+	scalar(`sum(machine_cpu_cores{`+selector+`})`, &cpuCapacity)
+	scalar(`sum(node_memory_MemTotal_bytes{`+selector+`} - node_memory_MemAvailable_bytes{`+selector+`})`, &memoryUsage)
+	scalar(`sum(node_memory_MemTotal_bytes{`+selector+`})`, &memoryCapacity)
+	scalar(`count(kube_pod_info{`+selector+`})`, &podCount)
+	scalar(`sum(kube_node_status_capacity{resource="pods",unit="integer",`+selector+`})`, &podCapacity)
+	scalar(`count(kube_node_info{`+selector+`})`, &nodeCount)
+	scalar(`sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+selector+`}[5m]))`, &networkReceive)
+	scalar(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+selector+`}[5m]))`, &networkTransmit)
+	scalar(`sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`})`, &diskCapacity)
+	scalar(`sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`})`, &diskAvail)
+	if err := g.Wait(); err != nil {
 		return nil, true, err
 	}
 	return metricSummary(cpuUsage, cpuCapacity, memoryUsage, memoryCapacity, podCount, podCapacity, nodeCount, networkReceive, networkTransmit, diskCapacity-diskAvail, diskCapacity), true, nil
@@ -1683,30 +1659,48 @@ func regexpEscape(value string) string {
 
 func (h *MonitoringHandler) promSeriesSet(ctx context.Context, client *imonitoring.Client, start, end time.Time, step time.Duration, selector, label string, queries map[string]string) (map[string]any, error) {
 	data := h.zeroMetrics()
+	// The range queries are mutually independent, so fan them out concurrently
+	// rather than issuing them serially. Each goroutine builds its own series
+	// value and only takes the mutex to publish into the shared data map (Go
+	// map writes are not concurrency-safe even for distinct keys).
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
 	for key, queryFmt := range queries {
-		query := fmt.Sprintf(queryFmt, selector, selector)
-		points, err := client.QueryRange(ctx, query, start, end, step)
-		if err != nil {
-			return nil, err
-		}
-		switch key {
-		case "cpuUsage":
-			data[key] = rangeSeries("CPU Usage", label, "cores", points)
-		case "cpuCapacity":
-			data[key] = rangeSeries("CPU Capacity", label, "cores", points)
-		case "memoryUsage":
-			data[key] = rangeSeries("Memory Usage", label, "bytes", points)
-		case "memoryCapacity":
-			data[key] = rangeSeries("Memory Capacity", label, "bytes", points)
-		case "networkReceive":
-			data[key] = rangeSeries("Network Receive", label, "bytes", points)
-		case "networkTransmit":
-			data[key] = rangeSeries("Network Transmit", label, "bytes", points)
-		case "diskUsage":
-			data[key] = rangeSeries("Disk Usage", label, "bytes", points)
-		case "podCount":
-			data[key] = rangeSeries("Pod Count", label, "count", points)
-		}
+		g.Go(func() error {
+			query := fmt.Sprintf(queryFmt, selector, selector)
+			points, err := client.QueryRange(gctx, query, start, end, step)
+			if err != nil {
+				return err
+			}
+			var series map[string]any
+			switch key {
+			case "cpuUsage":
+				series = rangeSeries("CPU Usage", label, "cores", points)
+			case "cpuCapacity":
+				series = rangeSeries("CPU Capacity", label, "cores", points)
+			case "memoryUsage":
+				series = rangeSeries("Memory Usage", label, "bytes", points)
+			case "memoryCapacity":
+				series = rangeSeries("Memory Capacity", label, "bytes", points)
+			case "networkReceive":
+				series = rangeSeries("Network Receive", label, "bytes", points)
+			case "networkTransmit":
+				series = rangeSeries("Network Transmit", label, "bytes", points)
+			case "diskUsage":
+				series = rangeSeries("Disk Usage", label, "bytes", points)
+			case "podCount":
+				series = rangeSeries("Pod Count", label, "count", points)
+			default:
+				return nil
+			}
+			mu.Lock()
+			data[key] = series
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return data, nil
 }

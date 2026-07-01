@@ -117,6 +117,9 @@ func (q *argoCDQueryRecorder) GetArgoCDOperation(context.Context, uuid.UUID) (sq
 func (q *argoCDQueryRecorder) ListArgoCDOperations(context.Context, sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
 }
+func (q *argoCDQueryRecorder) CountArgoCDOperations(context.Context, sqlc.CountArgoCDOperationsParams) (int64, error) {
+	return 0, nil
+}
 func (q *argoCDQueryRecorder) ListPendingArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
 }

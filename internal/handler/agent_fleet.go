@@ -33,6 +33,7 @@ type AgentFleetQuerier interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
 	ListActiveConnections(ctx context.Context) ([]sqlc.AgentConnection, error)
 	ListConnectionsByCluster(ctx context.Context, arg sqlc.ListConnectionsByClusterParams) ([]sqlc.AgentConnection, error)
+	ListLatestConnectionsByClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.AgentConnection, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
 	CreateAgentLifecycleOperation(ctx context.Context, arg sqlc.CreateAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error)
@@ -347,6 +348,26 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Load the most recent connection per cluster for the page in a single
+	// DISTINCT ON query rather than one fallback query per disconnected
+	// cluster (disconnected is the steady state, so the per-row fallback used
+	// to issue up to ~500 queries per page).
+	latestByCluster := make(map[uuid.UUID]sqlc.AgentConnection, len(clusters))
+	if len(clusters) > 0 {
+		clusterIDs := make([]uuid.UUID, len(clusters))
+		for i, cluster := range clusters {
+			clusterIDs[i] = cluster.ID
+		}
+		latest, lerr := h.queries.ListLatestConnectionsByClusters(r.Context(), clusterIDs)
+		if lerr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.AgentConnectionError, "Failed to list agent connections")
+			return
+		}
+		for _, conn := range latest {
+			latestByCluster[conn.ClusterID] = conn
+		}
+	}
+
 	now := h.now().UTC()
 	items := make([]agentFleetItem, 0, len(clusters))
 	summary := agentFleetSummary{
@@ -363,13 +384,8 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, cluster := range clusters {
 		conn, connected := activeByCluster[cluster.ID]
 		if !connected {
-			latest, lerr := h.queries.ListConnectionsByCluster(r.Context(), sqlc.ListConnectionsByClusterParams{
-				ClusterID: cluster.ID,
-				Limit:     1,
-				Offset:    0,
-			})
-			if lerr == nil && len(latest) > 0 {
-				conn = latest[0]
+			if latest, ok := latestByCluster[cluster.ID]; ok {
+				conn = latest
 			}
 		}
 		item := buildAgentFleetItem(cluster, conn, connected, now)

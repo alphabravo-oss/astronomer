@@ -36,12 +36,28 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
     let mounted = true;
     let timers: ReturnType<typeof setTimeout>[] = [];
 
+    // Refresh on a per-widget cadence. We schedule one timer per widget
+    // based on its refreshSeconds; consecutive client polls inside the
+    // server's 30s cache window share an upstream fetch. Scheduling is
+    // driven off the freshly fetched list (not the `widgets` state, which
+    // is null at mount and stale inside this effect closure), so the
+    // interval actually keeps firing after the first load.
+    const schedule = (list: RenderedWidget[]) => {
+      timers.forEach(clearTimeout);
+      timers = [];
+      list.forEach((w) => {
+        const sec = Math.max(5, w.refreshSeconds || 60);
+        timers.push(setTimeout(load, sec * 1000));
+      });
+    };
+
     const load = async () => {
       try {
         const list = await fetcher();
         if (!mounted) return;
         setWidgets(list);
         setError(null);
+        schedule(list);
       } catch (e) {
         if (!mounted) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -52,25 +68,10 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
 
     void load();
 
-    // Refresh on a per-widget cadence. We schedule one timer per widget
-    // based on its refreshSeconds; consecutive client polls inside the
-    // server's 30s cache window share an upstream fetch.
-    const schedule = () => {
-      timers.forEach(clearTimeout);
-      timers = [];
-      if (!widgets) return;
-      widgets.forEach((w) => {
-        const sec = Math.max(5, w.refreshSeconds || 60);
-        timers.push(setTimeout(load, sec * 1000));
-      });
-    };
-    schedule();
-
     return () => {
       mounted = false;
       timers.forEach(clearTimeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher]);
 
   if (loading && !widgets) {

@@ -46,12 +46,75 @@ func (q *Queries) AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChann
 	return err
 }
 
+const countActiveAlertsByRules = `-- name: CountActiveAlertsByRules :many
+SELECT rule_id, count(*) AS active_count
+FROM alert_events
+WHERE status IN ('firing', 'acknowledged')
+  AND rule_id = ANY($1::uuid[])
+GROUP BY rule_id
+`
+
+type CountActiveAlertsByRulesRow struct {
+	RuleID      uuid.UUID `json:"rule_id"`
+	ActiveCount int64     `json:"active_count"`
+}
+
+// Aggregates the active (firing/acknowledged) alert count per rule for a
+// set of rules in a single query, replacing the per-rule 200-event fetch
+// the rule list used to COUNT active alerts in Go.
+func (q *Queries) CountActiveAlertsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]CountActiveAlertsByRulesRow, error) {
+	rows, err := q.db.Query(ctx, countActiveAlertsByRules, ruleIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountActiveAlertsByRulesRow{}
+	for rows.Next() {
+		var i CountActiveAlertsByRulesRow
+		if err := rows.Scan(&i.RuleID, &i.ActiveCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countAlertEvents = `-- name: CountAlertEvents :one
 SELECT count(*) FROM alert_events
 `
 
 func (q *Queries) CountAlertEvents(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countAlertEvents)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countAlertEventsFiltered = `-- name: CountAlertEventsFiltered :one
+SELECT count(*) FROM alert_events
+WHERE (
+    $1::text IS NULL OR status = $1::text
+) AND (
+    $2::uuid IS NULL OR cluster_id = $2::uuid
+) AND (
+    $3::text IS NULL
+    OR rule_id IN (SELECT id FROM alert_rules WHERE severity = $3::text)
+)
+`
+
+type CountAlertEventsFilteredParams struct {
+	Status    pgtype.Text `json:"status"`
+	ClusterID pgtype.UUID `json:"cluster_id"`
+	Severity  pgtype.Text `json:"severity"`
+}
+
+// Total matching the same status/severity/cluster filters as
+// ListAlertEventsFiltered, so pagination reports a correct total.
+func (q *Queries) CountAlertEventsFiltered(ctx context.Context, arg CountAlertEventsFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlertEventsFiltered, arg.Status, arg.ClusterID, arg.Severity)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -352,6 +415,27 @@ func (q *Queries) GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule
 	return i, err
 }
 
+const getAlertSilenceByID = `-- name: GetAlertSilenceByID :one
+SELECT id, rule_id, cluster_id, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM alert_silences WHERE id = $1
+`
+
+func (q *Queries) GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (AlertSilence, error) {
+	row := q.db.QueryRow(ctx, getAlertSilenceByID, id)
+	var i AlertSilence
+	err := row.Scan(
+		&i.ID,
+		&i.RuleID,
+		&i.ClusterID,
+		&i.Reason,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getNotificationChannelByID = `-- name: GetNotificationChannelByID :one
 
 SELECT id, name, channel_type, configuration, enabled, created_by_id, created_at, updated_at FROM notification_channels WHERE id = $1
@@ -449,6 +533,98 @@ func (q *Queries) ListAlertEventsByRule(ctx context.Context, arg ListAlertEvents
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertEventsFiltered = `-- name: ListAlertEventsFiltered :many
+SELECT id, rule_id, cluster_id, status, message, details, fired_at, resolved_at, acknowledged_by_id, acknowledged_at, created_at, updated_at FROM alert_events
+WHERE (
+    $3::text IS NULL OR status = $3::text
+) AND (
+    $4::uuid IS NULL OR cluster_id = $4::uuid
+) AND (
+    $5::text IS NULL
+    OR rule_id IN (SELECT id FROM alert_rules WHERE severity = $5::text)
+)
+ORDER BY fired_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAlertEventsFilteredParams struct {
+	Limit     int32       `json:"limit"`
+	Offset    int32       `json:"offset"`
+	Status    pgtype.Text `json:"status"`
+	ClusterID pgtype.UUID `json:"cluster_id"`
+	Severity  pgtype.Text `json:"severity"`
+}
+
+// Page of alert events with the status/severity/cluster filters pushed
+// into SQL (severity lives on the rule). Any filter is optional; a NULL
+// narg disables that predicate.
+func (q *Queries) ListAlertEventsFiltered(ctx context.Context, arg ListAlertEventsFilteredParams) ([]AlertEvent, error) {
+	rows, err := q.db.Query(ctx, listAlertEventsFiltered,
+		arg.Limit,
+		arg.Offset,
+		arg.Status,
+		arg.ClusterID,
+		arg.Severity,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlertEvent{}
+	for rows.Next() {
+		var i AlertEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.RuleID,
+			&i.ClusterID,
+			&i.Status,
+			&i.Message,
+			&i.Details,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertRuleChannelsByRules = `-- name: ListAlertRuleChannelsByRules :many
+SELECT alert_rule_id, notification_channel_id FROM alert_rule_channels
+WHERE alert_rule_id = ANY($1::uuid[])
+`
+
+// Bulk fetch of rule<->channel links for a set of rules, so the
+// alertmanager renderer and rule list can build a rule_id->channel map
+// in Go instead of issuing one ListChannelsForAlertRule per rule (N+1).
+func (q *Queries) ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]AlertRuleChannel, error) {
+	rows, err := q.db.Query(ctx, listAlertRuleChannelsByRules, ruleIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlertRuleChannel{}
+	for rows.Next() {
+		var i AlertRuleChannel
+		if err := rows.Scan(&i.AlertRuleID, &i.NotificationChannelID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -617,6 +793,69 @@ func (q *Queries) ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid
 			&i.CreatedByID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersByIDs = `-- name: ListClustersByIDs :many
+
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE id = ANY($1::uuid[])
+`
+
+// Cluster lookups (alerting)
+// Bulk cluster lookup so the rule list can resolve every cluster name for
+// a page in one query instead of one GetClusterByID per rule.
+func (q *Queries) ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]Cluster, error) {
+	rows, err := q.db.Query(ctx, listClustersByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cluster{}
+	for rows.Next() {
+		var i Cluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Status,
+			&i.ApiServerUrl,
+			&i.CaCertificate,
+			&i.Environment,
+			&i.Region,
+			&i.Provider,
+			&i.Labels,
+			&i.Annotations,
+			&i.Distribution,
+			&i.AgentVersion,
+			&i.LastHeartbeat,
+			&i.KubernetesVersion,
+			&i.NodeCount,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsLocal,
+			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
 		); err != nil {
 			return nil, err
 		}

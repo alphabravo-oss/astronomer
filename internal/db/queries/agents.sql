@@ -4,6 +4,12 @@ SELECT * FROM agent_connections WHERE cluster_id = $1 ORDER BY connected_at DESC
 -- name: ListActiveConnections :many
 SELECT * FROM agent_connections WHERE status = 'connected' ORDER BY connected_at DESC;
 
+-- name: ListLatestConnectionsByClusters :many
+SELECT DISTINCT ON (cluster_id) *
+FROM agent_connections
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY cluster_id, connected_at DESC;
+
 -- name: CreateAgentConnection :one
 INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

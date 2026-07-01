@@ -49,20 +49,26 @@ type AlertingQuerier interface {
 	AddAlertRuleChannel(ctx context.Context, arg sqlc.AddAlertRuleChannelParams) error
 	RemoveAlertRuleChannel(ctx context.Context, arg sqlc.RemoveAlertRuleChannelParams) error
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]sqlc.NotificationChannel, error)
+	ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]sqlc.AlertRuleChannel, error)
 	CountAlertRules(ctx context.Context) (int64, error)
 	// Events
 	ListAlertEvents(ctx context.Context, arg sqlc.ListAlertEventsParams) ([]sqlc.AlertEvent, error)
 	ListAlertEventsByRule(ctx context.Context, arg sqlc.ListAlertEventsByRuleParams) ([]sqlc.AlertEvent, error)
+	ListAlertEventsFiltered(ctx context.Context, arg sqlc.ListAlertEventsFilteredParams) ([]sqlc.AlertEvent, error)
+	CountAlertEventsFiltered(ctx context.Context, arg sqlc.CountAlertEventsFilteredParams) (int64, error)
+	CountActiveAlertsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]sqlc.CountActiveAlertsByRulesRow, error)
 	GetAlertEventByID(ctx context.Context, id uuid.UUID) (sqlc.AlertEvent, error)
 	AcknowledgeAlertEvent(ctx context.Context, arg sqlc.AcknowledgeAlertEventParams) error
 	UpdateAlertEventStatus(ctx context.Context, arg sqlc.UpdateAlertEventStatusParams) error
 	CountAlertEvents(ctx context.Context) (int64, error)
 	// Silences
 	ListAlertSilences(ctx context.Context, arg sqlc.ListAlertSilencesParams) ([]sqlc.AlertSilence, error)
+	GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (sqlc.AlertSilence, error)
 	CreateAlertSilence(ctx context.Context, arg sqlc.CreateAlertSilenceParams) (sqlc.AlertSilence, error)
 	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
 	CountAlertSilences(ctx context.Context) (int64, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+	ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.Cluster, error)
 	GetDefaultMonitoringBackend(ctx context.Context) (sqlc.MonitoringBackend, error)
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error)
 }
@@ -382,10 +388,7 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]map[string]any, 0, len(rules))
-	for _, rule := range rules {
-		items = append(items, h.alertRuleResponse(r.Context(), rule))
-	}
+	items := h.alertRuleResponses(r.Context(), rules)
 	total, _ := h.queries.CountAlertRules(r.Context())
 	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
@@ -554,37 +557,52 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
 
-	events, err := h.queries.ListAlertEvents(r.Context(), sqlc.ListAlertEventsParams{
-		Limit:  limit,
-		Offset: offset,
+	// Filters are pushed into SQL so pagination totals are correct across
+	// pages (previously status/severity/cluster were applied in-memory to a
+	// single page, so status=firing returned 0 while firing events existed
+	// on later pages).
+	var status pgtype.Text
+	if v := r.URL.Query().Get("status"); v != "" {
+		status = pgtype.Text{String: v, Valid: true}
+	}
+	var severity pgtype.Text
+	if v := r.URL.Query().Get("severity"); v != "" {
+		severity = pgtype.Text{String: v, Valid: true}
+	}
+	var clusterID pgtype.UUID
+	if v := r.URL.Query().Get("clusterId"); v != "" {
+		parsed, parseErr := uuid.Parse(v)
+		if parseErr != nil {
+			// An unparseable cluster filter matches nothing, mirroring the
+			// old in-memory string compare against a UUID column.
+			RespondList(w, []map[string]any{}, NewPagination(0, int(limit), int(offset), 0))
+			return
+		}
+		clusterID = pgtype.UUID{Bytes: parsed, Valid: true}
+	}
+
+	events, err := h.queries.ListAlertEventsFiltered(r.Context(), sqlc.ListAlertEventsFilteredParams{
+		Status:    status,
+		Severity:  severity,
+		ClusterID: clusterID,
+		Limit:     limit,
+		Offset:    offset,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert events")
 		return
 	}
 
-	statusFilter := r.URL.Query().Get("status")
-	severityFilter := r.URL.Query().Get("severity")
-	clusterFilter := r.URL.Query().Get("clusterId")
 	items := make([]map[string]any, 0, len(events))
 	for _, event := range events {
-		item := h.alertEventResponse(r.Context(), event)
-		if statusFilter != "" && item["status"] != statusFilter {
-			continue
-		}
-		if severityFilter != "" && item["severity"] != severityFilter {
-			continue
-		}
-		if clusterFilter != "" && item["clusterId"] != clusterFilter {
-			continue
-		}
-		items = append(items, item)
+		items = append(items, h.alertEventResponse(r.Context(), event))
 	}
-	// Filters (status/severity/cluster) are applied in-memory after the
-	// page query, so a COUNT of all events wouldn't match the filtered
-	// page. Use the page length as the total. // TODO(total): push the
-	// status/severity/cluster filters into a counted SQL query.
-	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
+	total, _ := h.queries.CountAlertEventsFiltered(r.Context(), sqlc.CountAlertEventsFilteredParams{
+		Status:    status,
+		Severity:  severity,
+		ClusterID: clusterID,
+	})
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
 }
 
 // GetEvent handles GET /api/v1/alerting/events/{id}/.
@@ -795,19 +813,8 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
-	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
+	match, err := h.queries.GetAlertSilenceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load silence")
-		return
-	}
-	var match *sqlc.AlertSilence
-	for i := range silences {
-		if silences[i].ID == id {
-			match = &silences[i]
-			break
-		}
-	}
-	if match == nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
@@ -820,7 +827,7 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
-	expired := *match
+	expired := match
 	expired.EndsAt = time.Now()
 	recordAudit(r, h.queries, "alert.silence.expire", "alert_silence", id.String(), match.Reason, nil)
 	RespondJSON(w, http.StatusOK, alertSilenceResponse(expired))
@@ -834,19 +841,8 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{Limit: 1000, Offset: 0})
+	match, err := h.queries.GetAlertSilenceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load silence")
-		return
-	}
-	var match *sqlc.AlertSilence
-	for i := range silences {
-		if silences[i].ID == id {
-			match = &silences[i]
-			break
-		}
-	}
-	if match == nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
 		return
 	}
@@ -1021,6 +1017,30 @@ func (h *AlertingHandler) renderRulerRules(ctx context.Context, rules []sqlc.Ale
 }
 
 func (h *AlertingHandler) renderAlertmanagerConfig(ctx context.Context, channels []sqlc.NotificationChannel, rules []sqlc.AlertRule) (string, error) {
+	// Load every rule<->channel link for the rule set in ONE query and
+	// build a channel_id -> set(rule_id) map, instead of the old N+1 that
+	// ran ListChannelsForAlertRule for every rule on every alerting
+	// mutation (O(channels x rules) round-trips).
+	channelRuleSet := map[uuid.UUID]map[uuid.UUID]bool{}
+	if len(rules) > 0 {
+		ruleIDs := make([]uuid.UUID, 0, len(rules))
+		for _, rule := range rules {
+			ruleIDs = append(ruleIDs, rule.ID)
+		}
+		links, err := h.queries.ListAlertRuleChannelsByRules(ctx, ruleIDs)
+		if err != nil {
+			return "", err
+		}
+		for _, link := range links {
+			set := channelRuleSet[link.NotificationChannelID]
+			if set == nil {
+				set = map[uuid.UUID]bool{}
+				channelRuleSet[link.NotificationChannelID] = set
+			}
+			set[link.AlertRuleID] = true
+		}
+	}
+
 	receivers := []map[string]any{{"name": "null"}}
 	routes := []map[string]any{}
 	for _, channel := range channels {
@@ -1047,11 +1067,7 @@ func (h *AlertingHandler) renderAlertmanagerConfig(ctx context.Context, channels
 			continue
 		}
 		receivers = append(receivers, receiver)
-		channelRules, err := h.rulesForChannel(ctx, rules, channel.ID)
-		if err != nil {
-			return "", err
-		}
-		for _, rule := range channelRules {
+		for _, rule := range rulesForChannel(rules, channelRuleSet[channel.ID]) {
 			routes = append(routes, map[string]any{
 				"receiver": receiverName,
 				"matchers": []string{fmt.Sprintf(`astronomer_rule_id="%s"`, rule.ID.String())},
@@ -1125,21 +1141,20 @@ func (h *AlertingHandler) renderThanosAlertmanagerEndpoints(ctx context.Context)
 	return string(raw), true, nil
 }
 
-func (h *AlertingHandler) rulesForChannel(ctx context.Context, allRules []sqlc.AlertRule, channelID uuid.UUID) ([]sqlc.AlertRule, error) {
-	matched := make([]sqlc.AlertRule, 0)
+// rulesForChannel returns the rules whose IDs are in ruleSet, preserving
+// the order of allRules. ruleSet is the precomputed set of rule IDs linked
+// to a given channel (see renderAlertmanagerConfig's bulk link load).
+func rulesForChannel(allRules []sqlc.AlertRule, ruleSet map[uuid.UUID]bool) []sqlc.AlertRule {
+	if len(ruleSet) == 0 {
+		return nil
+	}
+	matched := make([]sqlc.AlertRule, 0, len(ruleSet))
 	for _, rule := range allRules {
-		channels, err := h.queries.ListChannelsForAlertRule(ctx, rule.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, channel := range channels {
-			if channel.ID == channelID {
-				matched = append(matched, rule)
-				break
-			}
+		if ruleSet[rule.ID] {
+			matched = append(matched, rule)
 		}
 	}
-	return matched, nil
+	return matched
 }
 
 func fallbackPromExpr(rule sqlc.AlertRule, cfg map[string]any) string {
@@ -1279,35 +1294,79 @@ func applyNamedResource(ctx context.Context, requester K8sRequester, clusterID, 
 }
 
 func (h *AlertingHandler) alertRuleResponse(ctx context.Context, rule sqlc.AlertRule) map[string]any {
+	items := h.alertRuleResponses(ctx, []sqlc.AlertRule{rule})
+	if len(items) == 0 {
+		return map[string]any{}
+	}
+	return items[0]
+}
+
+// alertRuleResponses builds the response payloads for a page of rules with
+// batched lookups: one query aggregates active-alert counts by rule_id, one
+// bulk-loads rule<->channel links, and one bulk-loads the referenced
+// clusters — replacing the ~3-queries-per-rule (incl. a 200-event fetch just
+// to COUNT active alerts) the single-rule path used to run per rule.
+func (h *AlertingHandler) alertRuleResponses(ctx context.Context, rules []sqlc.AlertRule) []map[string]any {
+	ruleIDs := make([]uuid.UUID, 0, len(rules))
+	clusterIDSet := map[uuid.UUID]struct{}{}
+	for _, rule := range rules {
+		ruleIDs = append(ruleIDs, rule.ID)
+		if rule.ClusterID.Valid {
+			clusterIDSet[uuid.UUID(rule.ClusterID.Bytes)] = struct{}{}
+		}
+	}
+
+	activeByRule := map[uuid.UUID]int{}
+	channelsByRule := map[uuid.UUID][]string{}
+	if len(ruleIDs) > 0 {
+		if counts, err := h.queries.CountActiveAlertsByRules(ctx, ruleIDs); err == nil {
+			for _, c := range counts {
+				activeByRule[c.RuleID] = int(c.ActiveCount)
+			}
+		}
+		if links, err := h.queries.ListAlertRuleChannelsByRules(ctx, ruleIDs); err == nil {
+			for _, link := range links {
+				channelsByRule[link.AlertRuleID] = append(channelsByRule[link.AlertRuleID], link.NotificationChannelID.String())
+			}
+		}
+	}
+
+	clusterNames := map[uuid.UUID]any{}
+	if len(clusterIDSet) > 0 {
+		ids := make([]uuid.UUID, 0, len(clusterIDSet))
+		for id := range clusterIDSet {
+			ids = append(ids, id)
+		}
+		if clusters, err := h.queries.ListClustersByIDs(ctx, ids); err == nil {
+			for _, cluster := range clusters {
+				var name any = cluster.DisplayName
+				if cluster.DisplayName == "" {
+					name = cluster.Name
+				}
+				clusterNames[cluster.ID] = name
+			}
+		}
+	}
+
+	items := make([]map[string]any, 0, len(rules))
+	for _, rule := range rules {
+		channelIDs := channelsByRule[rule.ID]
+		if channelIDs == nil {
+			channelIDs = []string{}
+		}
+		var clusterName any = nil
+		if rule.ClusterID.Valid {
+			if n, ok := clusterNames[uuid.UUID(rule.ClusterID.Bytes)]; ok {
+				clusterName = n
+			}
+		}
+		items = append(items, alertRuleResponseFields(rule, activeByRule[rule.ID], clusterName, channelIDs))
+	}
+	return items
+}
+
+func alertRuleResponseFields(rule sqlc.AlertRule, activeAlerts int, clusterName any, channelIDs []string) map[string]any {
 	cfg := decodeJSONMap(rule.Configuration)
-	activeAlerts := 0
-	clusterName := any(nil)
-	if events, err := h.queries.ListAlertEventsByRule(ctx, sqlc.ListAlertEventsByRuleParams{
-		RuleID: rule.ID,
-		Limit:  200,
-		Offset: 0,
-	}); err == nil {
-		for _, event := range events {
-			if event.Status == "firing" || event.Status == "acknowledged" {
-				activeAlerts++
-			}
-		}
-	}
-	if rule.ClusterID.Valid {
-		if cluster, err := h.queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes)); err == nil {
-			clusterName = cluster.DisplayName
-			if clusterName == "" {
-				clusterName = cluster.Name
-			}
-		}
-	}
-	channelIDs := []string{}
-	if channels, err := h.queries.ListChannelsForAlertRule(ctx, rule.ID); err == nil {
-		channelIDs = make([]string, 0, len(channels))
-		for _, channel := range channels {
-			channelIDs = append(channelIDs, channel.ID.String())
-		}
-	}
 	return map[string]any{
 		"id":                     rule.ID.String(),
 		"name":                   rule.Name,

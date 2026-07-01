@@ -13,6 +13,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countWorkloadOperationsByStatus = `-- name: CountWorkloadOperationsByStatus :many
+SELECT
+    status,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (
+        WHERE status = 'running'
+          AND started_at IS NOT NULL
+          AND started_at < now() - interval '1 minute'
+    ) AS stale_running
+FROM workload_operations
+GROUP BY status
+`
+
+type CountWorkloadOperationsByStatusRow struct {
+	Status       string `json:"status"`
+	Total        int64  `json:"total"`
+	StaleRunning int64  `json:"stale_running"`
+}
+
+// NOTE: this aggregates the workload_operations table; it lives in this file
+// only because of the per-agent SQL-file ownership split for this change. sqlc
+// compiles every queries/*.sql file into one package, so the generated method
+// is identical regardless of which file the query sits in. Central build may
+// relocate it to workload_operations.sql. Powers WorkloadHandler.ControllerStatus,
+// replacing a capped ListWorkloadOperations(limit 1000) scan with a server-side
+// GROUP BY. stale_running counts running operations started over a minute ago
+// (matches the handler's 60s stale threshold).
+func (q *Queries) CountWorkloadOperationsByStatus(ctx context.Context) ([]CountWorkloadOperationsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, countWorkloadOperationsByStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountWorkloadOperationsByStatusRow{}
+	for rows.Next() {
+		var i CountWorkloadOperationsByStatusRow
+		if err := rows.Scan(&i.Status, &i.Total, &i.StaleRunning); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createMonitoringOperation = `-- name: CreateMonitoringOperation :one
 INSERT INTO monitoring_operations (
     target_type,

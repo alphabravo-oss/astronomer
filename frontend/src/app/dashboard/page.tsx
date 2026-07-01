@@ -310,22 +310,6 @@ export default function DashboardPage() {
               hint="across all clusters"
             />
             <HealthRow
-              href="/dashboard/security"
-              icon={<ShieldCheck className="h-4 w-4" />}
-              label="Security posture"
-              value="—"
-              tone="default"
-              hint="run a scan"
-            />
-            <HealthRow
-              href="/dashboard/settings/compliance/baselines"
-              icon={<ShieldCheck className="h-4 w-4" />}
-              label="Compliance baseline"
-              value="—"
-              tone="default"
-              hint="not applied"
-            />
-            <HealthRow
               href="/dashboard/settings/backup-drill"
               icon={<ShieldCheck className="h-4 w-4" />}
               label="Backup restore drill"

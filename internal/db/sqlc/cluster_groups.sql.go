@@ -133,6 +133,71 @@ func (q *Queries) GetClusterGroupByID(ctx context.Context, id uuid.UUID) (Cluste
 	return i, err
 }
 
+const listClusterGroupCountsRollup = `-- name: ListClusterGroupCountsRollup :many
+WITH RECURSIVE
+direct AS (
+    SELECT group_id AS gid, COUNT(*)::bigint AS n
+    FROM clusters
+    WHERE group_id IS NOT NULL
+    GROUP BY group_id
+),
+closure AS (
+    -- seed: every enabled group rolls up to itself
+    SELECT id AS ancestor_id, id AS descendant_id
+    FROM cluster_groups
+    WHERE enabled = true
+    UNION ALL
+    -- extend down the tree: each descendant's enabled children
+    SELECT cl.ancestor_id, c.id
+    FROM closure cl
+    INNER JOIN cluster_groups c ON c.parent_id = cl.descendant_id
+    WHERE c.enabled = true
+),
+tree AS (
+    SELECT cl.ancestor_id AS gid, COALESCE(SUM(d.n), 0)::bigint AS n
+    FROM closure cl
+    LEFT JOIN direct d ON d.gid = cl.descendant_id
+    GROUP BY cl.ancestor_id
+)
+SELECT g.id AS group_id,
+       COALESCE(dr.n, 0)::bigint AS cluster_count,
+       COALESCE(tr.n, 0)::bigint AS cluster_count_tree
+FROM cluster_groups g
+LEFT JOIN direct dr ON dr.gid = g.id
+LEFT JOIN tree tr ON tr.gid = g.id
+WHERE g.enabled = true
+`
+
+type ListClusterGroupCountsRollupRow struct {
+	GroupID          uuid.UUID `json:"group_id"`
+	ClusterCount     int64     `json:"cluster_count"`
+	ClusterCountTree int64     `json:"cluster_count_tree"`
+}
+
+// Single grouped rollup replacing the per-node CountClustersInGroup +
+// CountClustersInGroupTree pair (2 queries, one recursive, per node). Returns
+// one row per enabled group with its direct cluster count and its subtree
+// (self + all enabled descendants) cluster count.
+func (q *Queries) ListClusterGroupCountsRollup(ctx context.Context) ([]ListClusterGroupCountsRollupRow, error) {
+	rows, err := q.db.Query(ctx, listClusterGroupCountsRollup)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClusterGroupCountsRollupRow{}
+	for rows.Next() {
+		var i ListClusterGroupCountsRollupRow
+		if err := rows.Scan(&i.GroupID, &i.ClusterCount, &i.ClusterCountTree); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusterGroups = `-- name: ListClusterGroups :many
 
 SELECT id, name, slug, description, parent_id, color, icon, enabled, created_by, created_at, updated_at

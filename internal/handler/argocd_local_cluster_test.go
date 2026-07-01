@@ -88,6 +88,9 @@ func (q *argocdManagedClusterQueryStub) GetArgoCDOperation(context.Context, uuid
 func (q *argocdManagedClusterQueryStub) ListArgoCDOperations(context.Context, sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
 }
+func (q *argocdManagedClusterQueryStub) CountArgoCDOperations(context.Context, sqlc.CountArgoCDOperationsParams) (int64, error) {
+	return 0, nil
+}
 func (q *argocdManagedClusterQueryStub) ListPendingArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
 }

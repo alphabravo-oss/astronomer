@@ -30,6 +30,12 @@ type Querier interface {
 	// against the cluster_id as a string.
 	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
 	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
+	// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
+	// (jsonb_to_recordset) so a whole chart's versions land in one query
+	// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
+	// ingest idempotent against concurrent syncs; RETURNING version yields
+	// exactly the rows that were newly inserted so the caller can count them.
+	BulkCreateHelmChartVersions(ctx context.Context, arg BulkCreateHelmChartVersionsParams) ([]string, error)
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
@@ -65,6 +71,10 @@ type Querier interface {
 	// keeps the verify path race-free: a concurrent login attempt that
 	// sees used_at IS NULL will have its UPDATE no-op.
 	ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCodeParams) (int64, error)
+	// Aggregates the active (firing/acknowledged) alert count per rule for a
+	// set of rules in a single query, replacing the per-rule 200-event fetch
+	// the rule list used to COUNT active alerts in Go.
+	CountActiveAlertsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]CountActiveAlertsByRulesRow, error)
 	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Drives the startup-time deprecation warning (migration 045). Counts
 	// enabled sso_configurations rows that have NOT been stamped as migrated
@@ -73,6 +83,9 @@ type Querier interface {
 	// the migration story.
 	CountActiveUnmigratedSSORows(ctx context.Context) (int64, error)
 	CountAlertEvents(ctx context.Context) (int64, error)
+	// Total matching the same status/severity/cluster filters as
+	// ListAlertEventsFiltered, so pagination reports a correct total.
+	CountAlertEventsFiltered(ctx context.Context, arg CountAlertEventsFilteredParams) (int64, error)
 	CountAlertRules(ctx context.Context) (int64, error)
 	CountAlertSilences(ctx context.Context) (int64, error)
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
@@ -81,6 +94,7 @@ type Querier interface {
 	CountArgoCDApplications(ctx context.Context) (int64, error)
 	CountArgoCDApplicationsBySyncHealth(ctx context.Context) ([]CountArgoCDApplicationsBySyncHealthRow, error)
 	CountArgoCDInstances(ctx context.Context) (int64, error)
+	CountArgoCDOperations(ctx context.Context, arg CountArgoCDOperationsParams) (int64, error)
 	// The size estimate retained for compliance dashboards and future durable
 	// background export planning. The current handler streams inline and keeps
 	// async compliance exports disabled until durable job/output state exists.
@@ -90,6 +104,7 @@ type Querier interface {
 	CountBackupStorageConfigs(ctx context.Context) (int64, error)
 	CountBackups(ctx context.Context) (int64, error)
 	CountBlessedCharts(ctx context.Context) (int64, error)
+	CountChartsByRepositoryIDs(ctx context.Context, repositoryIds []uuid.UUID) (int64, error)
 	// Counts attempts for a (cluster, type) within a window. The reconciler
 	// uses this as a daily-cap circuit breaker so a permanently-broken
 	// cluster can't drive unbounded token reissuance / audit-log growth.
@@ -119,6 +134,7 @@ type Querier interface {
 	CountFleetOperations(ctx context.Context, status pgtype.Text) (int64, error)
 	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	CountGitOpsTombstonedBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
+	CountGlobalHelmRepositories(ctx context.Context) (int64, error)
 	CountGlobalRoles(ctx context.Context) (int64, error)
 	CountGroupMappings(ctx context.Context) (int64, error)
 	CountGroupSyncClusterBindings(ctx context.Context) (int64, error)
@@ -163,6 +179,15 @@ type Querier interface {
 	CountVulnerabilitiesForReport(ctx context.Context, arg CountVulnerabilitiesForReportParams) (int64, error)
 	CountVulnerableImagesForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
+	// NOTE: this aggregates the workload_operations table; it lives in this file
+	// only because of the per-agent SQL-file ownership split for this change. sqlc
+	// compiles every queries/*.sql file into one package, so the generated method
+	// is identical regardless of which file the query sits in. Central build may
+	// relocate it to workload_operations.sql. Powers WorkloadHandler.ControllerStatus,
+	// replacing a capped ListWorkloadOperations(limit 1000) scan with a server-side
+	// GROUP BY. stale_running counts running operations started over a minute ago
+	// (matches the handler's 60s stale threshold).
+	CountWorkloadOperationsByStatus(ctx context.Context) ([]CountWorkloadOperationsByStatusRow, error)
 	CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error)
 	CreateAgentConnection(ctx context.Context, arg CreateAgentConnectionParams) (AgentConnection, error)
 	CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) (AlertEvent, error)
@@ -517,6 +542,7 @@ type Querier interface {
 	GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEvent, error)
 	// Alert Rules
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule, error)
+	GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (AlertSilence, error)
 	GetAnomalyBaseline(ctx context.Context, arg GetAnomalyBaselineParams) (AnomalyBaseline, error)
 	GetAnomalyBaselineByID(ctx context.Context, id uuid.UUID) (AnomalyBaseline, error)
 	// Apiserver allow-list CRUD (migration 070).
@@ -622,6 +648,10 @@ type Querier interface {
 	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (HelmRepository, error)
 	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (HelmRepository, error)
 	GetImageVulnerabilityReportByID(ctx context.Context, id uuid.UUID) (ImageVulnerabilityReport, error)
+	// Indexed lookup (cluster_id + tool_slug) for the duplicate-install guard.
+	// Replaces the previous first-200-row in-Go scan, which missed the 409
+	// when a cluster had more than 200 installed charts before the duplicate.
+	GetInstalledChartByClusterAndTool(ctx context.Context, arg GetInstalledChartByClusterAndToolParams) (InstalledChart, error)
 	// Installed Charts
 	GetInstalledChartByID(ctx context.Context, id uuid.UUID) (InstalledChart, error)
 	GetInstalledChartByRelease(ctx context.Context, arg GetInstalledChartByReleaseParams) (InstalledChart, error)
@@ -827,6 +857,14 @@ type Querier interface {
 	ListAdminCatalogsIncludingProjectOwned(ctx context.Context, arg ListAdminCatalogsIncludingProjectOwnedParams) ([]HelmRepository, error)
 	ListAlertEvents(ctx context.Context, arg ListAlertEventsParams) ([]AlertEvent, error)
 	ListAlertEventsByRule(ctx context.Context, arg ListAlertEventsByRuleParams) ([]AlertEvent, error)
+	// Page of alert events with the status/severity/cluster filters pushed
+	// into SQL (severity lives on the rule). Any filter is optional; a NULL
+	// narg disables that predicate.
+	ListAlertEventsFiltered(ctx context.Context, arg ListAlertEventsFilteredParams) ([]AlertEvent, error)
+	// Bulk fetch of rule<->channel links for a set of rules, so the
+	// alertmanager renderer and rule list can build a rule_id->channel map
+	// in Go instead of issuing one ListChannelsForAlertRule per rule (N+1).
+	ListAlertRuleChannelsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]AlertRuleChannel, error)
 	ListAlertRules(ctx context.Context, arg ListAlertRulesParams) ([]AlertRule, error)
 	ListAlertRulesByCluster(ctx context.Context, arg ListAlertRulesByClusterParams) ([]AlertRule, error)
 	// Alert Silences
@@ -918,11 +956,20 @@ type Querier interface {
 	// Generated sqlc output is the canonical Go API for this surface.
 	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
+	// Lightweight probe used by the repo-index ingest path to bulk-load the
+	// set of already-known version strings for a chart in a single round
+	// trip, replacing the per-version SELECT probe.
+	ListChartVersionStrings(ctx context.Context, chartID uuid.UUID) ([]string, error)
 	// Same ordering rationale as GetLatestChartVersion — the version
 	// dropdown in the install/upgrade modal needs newest-first by upstream
 	// publish time, not by DB insert order.
 	ListChartVersions(ctx context.Context, arg ListChartVersionsParams) ([]HelmChartVersion, error)
 	ListChartsByRepository(ctx context.Context, arg ListChartsByRepositoryParams) ([]HelmChart, error)
+	// Project-scoped catalog browse: charts across the project's visible
+	// catalog set in a single query with real LIMIT/OFFSET, instead of
+	// fanning out a Limit:1000 query per catalog and slicing in Go (which
+	// silently truncated any catalog with >1000 charts).
+	ListChartsByRepositoryIDs(ctx context.Context, arg ListChartsByRepositoryIDsParams) ([]HelmChart, error)
 	// Materializations -------------------------------------------------------
 	ListCloudCredentialMaterializations(ctx context.Context, credentialID uuid.UUID) ([]CloudCredentialMaterialization, error)
 	// Cloud credentials CRUD (migration 053).
@@ -942,6 +989,11 @@ type Querier interface {
 	// clusters because their conditions are about to be deleted by the
 	// decommission reconciler anyway.
 	ListClusterConditionsByStatus(ctx context.Context, status string) ([]ClusterCondition, error)
+	// Single grouped rollup replacing the per-node CountClustersInGroup +
+	// CountClustersInGroupTree pair (2 queries, one recursive, per node). Returns
+	// one row per enabled group with its direct cluster count and its subtree
+	// (self + all enabled descendants) cluster count.
+	ListClusterGroupCountsRollup(ctx context.Context) ([]ListClusterGroupCountsRollupRow, error)
 	// Migration 066 — cluster groups CRUD + tree expansion.
 	//
 	// The Go shim in internal/db/sqlc/cluster_groups.sql.go hand-implements
@@ -995,6 +1047,10 @@ type Querier interface {
 	// Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
 	// their row in the DB for forensics but never appear in the UI list.
 	ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error)
+	// Cluster lookups (alerting)
+	// Bulk cluster lookup so the rule list can resolve every cluster name for
+	// a page in one query instead of one GetClusterByID per rule.
+	ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]Cluster, error)
 	ListClustersByStatus(ctx context.Context, arg ListClustersByStatusParams) ([]Cluster, error)
 	// Periodic policy: join each cluster's durable token to its registration
 	// policy and surface clusters whose token_rotation_days policy (>0) has
@@ -1066,6 +1122,12 @@ type Querier interface {
 	// cluster:decommission for each. The handler tier owns CRUD over the
 	// sources themselves and the per-source /clusters/ + /preview/ readers.
 	ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
+	// Admin default catalog view: only operator-curated global catalogs
+	// (owner_project_id IS NULL). Filtering + paginating at the DB layer
+	// avoids the over-fetch/in-Go-filter dance that dropped globals past the
+	// slack window and emitted empty trailing pages once private rows were
+	// excluded.
+	ListGlobalHelmRepositories(ctx context.Context, arg ListGlobalHelmRepositoriesParams) ([]HelmRepository, error)
 	ListGlobalRoleBindings(ctx context.Context, arg ListGlobalRoleBindingsParams) ([]GlobalRoleBinding, error)
 	ListGlobalRoles(ctx context.Context, arg ListGlobalRolesParams) ([]GlobalRole, error)
 	// Admin endpoint GET (paginated).
@@ -1098,6 +1160,7 @@ type Querier interface {
 	ListInstalledChartsForDriftSweep(ctx context.Context, limit int32) ([]InstalledChart, error)
 	ListInstancesByCluster(ctx context.Context, arg ListInstancesByClusterParams) ([]ArgocdInstance, error)
 	ListKubectlSessionCommands(ctx context.Context, arg ListKubectlSessionCommandsParams) ([]KubectlSessionCommand, error)
+	ListLatestConnectionsByClusters(ctx context.Context, clusterIds []uuid.UUID) ([]AgentConnection, error)
 	ListLoggingOperationEvents(ctx context.Context, operationID uuid.UUID) ([]LoggingOperationEvent, error)
 	ListLoggingOperations(ctx context.Context, arg ListLoggingOperationsParams) ([]LoggingOperation, error)
 	ListLoggingOutputs(ctx context.Context, arg ListLoggingOutputsParams) ([]LoggingOutput, error)

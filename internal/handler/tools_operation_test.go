@@ -96,6 +96,13 @@ func (q *toolQueryRecorder) GetInstalledChartByRelease(_ context.Context, arg sq
 	}
 	return item, nil
 }
+func (q *toolQueryRecorder) GetInstalledChartByClusterAndTool(_ context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
+	item, ok := q.installedBySlug[arg.ToolSlug]
+	if !ok {
+		return sqlc.InstalledChart{}, pgx.ErrNoRows
+	}
+	return item, nil
+}
 func (q *toolQueryRecorder) CreateInstalledChart(_ context.Context, arg sqlc.CreateInstalledChartParams) (sqlc.InstalledChart, error) {
 	q.created = append(q.created, arg)
 	item := sqlc.InstalledChart{

@@ -76,6 +76,7 @@ type ArgoCDQuerier interface {
 	CreateArgoCDOperation(ctx context.Context, arg sqlc.CreateArgoCDOperationParams) (sqlc.ArgocdOperation, error)
 	GetArgoCDOperation(ctx context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error)
 	ListArgoCDOperations(ctx context.Context, arg sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error)
+	CountArgoCDOperations(ctx context.Context, arg sqlc.CountArgoCDOperationsParams) (int64, error)
 	ListPendingArgoCDOperations(ctx context.Context, limit int32) ([]sqlc.ArgocdOperation, error)
 	GetLatestArgoCDOperationForTarget(ctx context.Context, arg sqlc.GetLatestArgoCDOperationForTargetParams) (sqlc.ArgocdOperation, error)
 	MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error)
@@ -902,6 +903,16 @@ func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list ArgoCD operations")
 		return
 	}
+	// Grand total across all pages, honouring the same target/status filters.
+	total, err := h.queries.CountArgoCDOperations(r.Context(), sqlc.CountArgoCDOperationsParams{
+		TargetType: arg.TargetType,
+		TargetKey:  arg.TargetKey,
+		Status:     arg.Status,
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count ArgoCD operations")
+		return
+	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
@@ -917,10 +928,14 @@ func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, argocdOperationResponse(op))
 	}
-	// No COUNT query exists for the RBAC-filtered operation list, so Total
-	// reflects the items on this page. // TODO(total): add a COUNT that
-	// honours the same target/status/RBAC filters for a true grand total.
-	RespondList(w, items, NewPagination(len(items), int(limit), int(offset), len(items)))
+	// has_more/next_offset are inferred from the DB page (len(ops)) being full
+	// — not the post-filter items — so paging advances over RBAC-skipped rows.
+	// Total is the real grand total from CountArgoCDOperations (pre-RBAC, same
+	// target/status filters), replacing the old page-length-as-total bug that
+	// forced has_more to always be false.
+	page := NewPaginationFromPage(int(limit), int(offset), len(ops))
+	page.Total = int(total)
+	RespondList(w, items, page)
 }
 
 func (h *ArgoCDHandler) GetOperation(w http.ResponseWriter, r *http.Request) {

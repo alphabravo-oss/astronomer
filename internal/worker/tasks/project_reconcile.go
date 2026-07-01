@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -90,6 +91,13 @@ const (
 // the row. Longer than the typical apply (which is sub-second) but short
 // enough that a crashed worker doesn't strand the row for long.
 const reconcileLeaseTTL = 30 * time.Second
+
+// projectReconcileSweepMaxRows bounds how many project_namespaces rows a single
+// periodic sweep processes. Each reconcile fans out ~8 tunnel RPCs, so an
+// unbounded fleet-wide sweep could hammer the tunnel every interval. The sweep
+// processes the stalest rows first (see HandleProjectReconcileAll), so any rows
+// past the cap are simply picked up on subsequent ticks — no row is starved.
+const projectReconcileSweepMaxRows = 200
 
 // ProjectReconcileQuerier is the slice of sqlc.Queries the reconcile task
 // needs. Defined locally so tests can stand up a fake without importing the
@@ -227,6 +235,23 @@ func HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("list project namespaces: %w", err)
 		}
+		// Process the stalest rows first so that when the fleet exceeds the
+		// per-tick cap, every namespace is still reconciled over successive
+		// ticks instead of the tail being starved. Never-reconciled rows
+		// (zero timestamp) sort first, ahead of previously reconciled ones.
+		sort.SliceStable(rows, func(i, j int) bool {
+			return projectNamespaceReconcileOrder(rows[i]).Before(projectNamespaceReconcileOrder(rows[j]))
+		})
+		if len(rows) > projectReconcileSweepMaxRows {
+			rows = rows[:projectReconcileSweepMaxRows]
+		}
+		// Cache each cluster's registry config for the duration of this tick so
+		// a sweep spanning many namespaces on the same cluster doesn't refetch
+		// the identical config once per row.
+		q := &perTickRegistryCachingQuerier{
+			ProjectReconcileQuerier: projectDeps.Queries,
+			cache:                   map[uuid.UUID]cachedRegistryConfig{},
+		}
 		for _, row := range rows {
 			lease := pgtype.Timestamptz{Time: time.Now().UTC().Add(reconcileLeaseTTL), Valid: true}
 			claimed, err := projectDeps.Queries.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
@@ -246,12 +271,52 @@ func HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
 				_ = markReconciled(ctx, projectDeps.Queries, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error())
 				continue
 			}
-			if err := reconcileProjectNamespace(ctx, projectDeps.Queries, projectDeps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
+			if err := reconcileProjectNamespace(ctx, q, projectDeps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
 				runtimeLogger().WarnContext(ctx, "project reconcile failed", "project_id", claimed.ProjectID.String(), "namespace", claimed.Namespace, "error", err)
 			}
 		}
 		return nil
 	})
+}
+
+// projectNamespaceReconcileOrder returns the sort key used to process the
+// stalest rows first during the periodic sweep. A row that has never been
+// reconciled (invalid timestamp) sorts as the zero time, i.e. ahead of every
+// row that has a real last_reconciled_at.
+func projectNamespaceReconcileOrder(row sqlc.ProjectNamespace) time.Time {
+	if row.LastReconciledAt.Valid {
+		return row.LastReconciledAt.Time
+	}
+	return time.Time{}
+}
+
+// cachedRegistryConfig memoizes one GetClusterRegistryConfig result (including
+// its error, e.g. the "no rows" sentinel) for the duration of a single sweep.
+type cachedRegistryConfig struct {
+	cfg sqlc.ClusterRegistryConfig
+	err error
+}
+
+// perTickRegistryCachingQuerier wraps a ProjectReconcileQuerier and memoizes
+// GetClusterRegistryConfig per cluster ID so a fleet-wide sweep touching many
+// namespaces on the same cluster fetches that cluster's registry config once
+// instead of once per namespace row. All other querier methods pass through to
+// the embedded querier unchanged. The sweep loop is single-goroutine, so no
+// locking is required. GetClusterRegistryConfig returns the config by value, so
+// callers that mutate their copy (materializeProjectRegistryPassword) cannot
+// corrupt the cached entry.
+type perTickRegistryCachingQuerier struct {
+	ProjectReconcileQuerier
+	cache map[uuid.UUID]cachedRegistryConfig
+}
+
+func (c *perTickRegistryCachingQuerier) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
+	if entry, ok := c.cache[clusterID]; ok {
+		return entry.cfg, entry.err
+	}
+	cfg, err := c.ProjectReconcileQuerier.GetClusterRegistryConfig(ctx, clusterID)
+	c.cache[clusterID] = cachedRegistryConfig{cfg: cfg, err: err}
+	return cfg, err
 }
 
 // reconcileProjectNamespace renders and applies the three managed objects

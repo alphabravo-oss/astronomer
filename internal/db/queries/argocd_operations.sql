@@ -25,6 +25,16 @@ WHERE (
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
+-- name: CountArgoCDOperations :one
+SELECT COUNT(*)::bigint FROM argocd_operations
+WHERE (
+    sqlc.narg(target_type)::text IS NULL OR target_type = sqlc.narg(target_type)::text
+) AND (
+    sqlc.narg(target_key)::text IS NULL OR target_key = sqlc.narg(target_key)::text
+) AND (
+    sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text
+);
+
 -- name: ListPendingArgoCDOperations :many
 SELECT * FROM argocd_operations
 WHERE status IN ('pending', 'running')

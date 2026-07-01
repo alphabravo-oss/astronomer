@@ -18,7 +18,6 @@ data:
   ENV: {{ .Values.config.env | quote }}
   DEBUG: {{ .Values.config.debug | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
-  ALLOWED_HOSTS: {{ .Values.config.allowedHosts | quote }}
   CORS_ALLOWED_ORIGINS: {{ .Values.config.corsAllowedOrigins | quote }}
   # External URL of this install; seeds platform_configuration.server_url
   # on first boot so the Argo self-management loop can render the right

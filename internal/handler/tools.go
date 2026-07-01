@@ -36,6 +36,8 @@ type ToolQuerier interface {
 	CountInstalledCharts(ctx context.Context) (int64, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg sqlc.ListInstalledChartsByClusterParams) ([]sqlc.InstalledChart, error)
 	GetInstalledChartByRelease(ctx context.Context, arg sqlc.GetInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
+	// Indexed duplicate-install guard (cluster_id, tool_slug).
+	GetInstalledChartByClusterAndTool(ctx context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error)
 	CreateInstalledChart(ctx context.Context, arg sqlc.CreateInstalledChartParams) (sqlc.InstalledChart, error)
 	UpdateInstalledChartStatus(ctx context.Context, arg sqlc.UpdateInstalledChartStatusParams) error
 	AdoptInstalledChartByRelease(ctx context.Context, arg sqlc.AdoptInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
@@ -660,29 +662,24 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 			bySlug[item.ToolSlug.String] = item
 		}
 	}
-	pendingOps, _ := h.queries.ListToolOperations(r.Context(), sqlc.ListToolOperationsParams{
-		Limit:  200,
-		Offset: 0,
-		Status: pgtype.Text{String: OpStatusPending, Valid: true},
-	})
-	runningOps, _ := h.queries.ListToolOperations(r.Context(), sqlc.ListToolOperationsParams{
-		Limit:  200,
-		Offset: 0,
-		Status: pgtype.Text{String: OpStatusRunning, Valid: true},
-	})
+	// Scope the in-flight operation lookup to this cluster's tool targets
+	// instead of scanning the newest 200 pending + 200 running ops
+	// globally (which silently dropped in-flight ops on busy fleets). Each
+	// enabled tool's latest op is fetched by its indexed (target_type,
+	// target_key) tuple; only pending/running ops surface as a live badge.
 	opBySlug := map[string]sqlc.ToolOperation{}
-	for _, op := range append(pendingOps, runningOps...) {
-		var env toolOperationEnvelope
-		if json.Unmarshal(op.Payload, &env) != nil {
+	for _, tool := range tools {
+		op, err := h.queries.GetLatestToolOperationForTarget(r.Context(), sqlc.GetLatestToolOperationForTargetParams{
+			TargetType: "tool_installation",
+			TargetKey:  operationTargetKey(clusterID, tool.Slug),
+		})
+		if err != nil {
 			continue
 		}
-		if env.ClusterID != clusterID.String() {
+		if op.Status != OpStatusPending && op.Status != OpStatusRunning {
 			continue
 		}
-		if existing, ok := opBySlug[env.ToolSlug]; ok && existing.CreatedAt.After(op.CreatedAt) {
-			continue
-		}
-		opBySlug[env.ToolSlug] = op
+		opBySlug[tool.Slug] = op
 	}
 	statuses := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
@@ -953,20 +950,20 @@ func (h *ToolHandler) sendHelmRaw(ctx context.Context, env toolOperationEnvelope
 var errInstalledChartNotFound = errors.New("installed chart not found")
 
 func (h *ToolHandler) findInstalledTool(ctx context.Context, clusterID uuid.UUID, slug string) (sqlc.InstalledChart, error) {
-	items, err := h.queries.ListInstalledChartsByCluster(ctx, sqlc.ListInstalledChartsByClusterParams{
+	// Indexed (cluster_id, tool_slug) lookup. The previous first-200-row
+	// in-Go scan missed the duplicate-install 409 once a cluster had more
+	// than 200 installed charts before the one being re-installed.
+	item, err := h.queries.GetInstalledChartByClusterAndTool(ctx, sqlc.GetInstalledChartByClusterAndToolParams{
 		ClusterID: clusterID,
-		Limit:     200,
-		Offset:    0,
+		ToolSlug:  slug,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sqlc.InstalledChart{}, errInstalledChartNotFound
+		}
 		return sqlc.InstalledChart{}, err
 	}
-	for _, item := range items {
-		if item.ToolSlug.Valid && item.ToolSlug.String == slug {
-			return item, nil
-		}
-	}
-	return sqlc.InstalledChart{}, errInstalledChartNotFound
+	return item, nil
 }
 
 func parseToolCharts(raw json.RawMessage) ([]toolChart, error) {

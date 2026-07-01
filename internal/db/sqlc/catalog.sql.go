@@ -70,6 +70,79 @@ func (q *Queries) AdoptInstalledChartByRelease(ctx context.Context, arg AdoptIns
 	return i, err
 }
 
+const bulkCreateHelmChartVersions = `-- name: BulkCreateHelmChartVersions :many
+INSERT INTO helm_chart_versions (chart_id, version, app_version, digest, urls, created_at_upstream)
+SELECT
+    $1::uuid,
+    x.version,
+    x.app_version,
+    x.digest,
+    x.urls,
+    x.created_at_upstream
+FROM jsonb_to_recordset($2::jsonb) AS x(
+    version text,
+    app_version text,
+    digest text,
+    urls jsonb,
+    created_at_upstream timestamptz
+)
+ON CONFLICT (chart_id, version) DO NOTHING
+RETURNING version
+`
+
+type BulkCreateHelmChartVersionsParams struct {
+	ChartID uuid.UUID       `json:"chart_id"`
+	Rows    json.RawMessage `json:"rows"`
+}
+
+// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
+// (jsonb_to_recordset) so a whole chart's versions land in one query
+// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
+// ingest idempotent against concurrent syncs; RETURNING version yields
+// exactly the rows that were newly inserted so the caller can count them.
+func (q *Queries) BulkCreateHelmChartVersions(ctx context.Context, arg BulkCreateHelmChartVersionsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, bulkCreateHelmChartVersions, arg.ChartID, arg.Rows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countChartsByRepositoryIDs = `-- name: CountChartsByRepositoryIDs :one
+SELECT count(*) FROM helm_charts
+WHERE repository_id = ANY($1::uuid[])
+`
+
+func (q *Queries) CountChartsByRepositoryIDs(ctx context.Context, repositoryIds []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countChartsByRepositoryIDs, repositoryIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countGlobalHelmRepositories = `-- name: CountGlobalHelmRepositories :one
+SELECT count(*) FROM helm_repositories WHERE owner_project_id IS NULL
+`
+
+func (q *Queries) CountGlobalHelmRepositories(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countGlobalHelmRepositories)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countHelmCharts = `-- name: CountHelmCharts :one
 SELECT count(*) FROM helm_charts
 `
@@ -522,6 +595,48 @@ func (q *Queries) GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (Helm
 	return i, err
 }
 
+const getInstalledChartByClusterAndTool = `-- name: GetInstalledChartByClusterAndTool :one
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts
+WHERE cluster_id = $1::uuid
+  AND tool_slug = $2::text
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetInstalledChartByClusterAndToolParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	ToolSlug  string    `json:"tool_slug"`
+}
+
+// Indexed lookup (cluster_id + tool_slug) for the duplicate-install guard.
+// Replaces the previous first-200-row in-Go scan, which missed the 409
+// when a cluster had more than 200 installed charts before the duplicate.
+func (q *Queries) GetInstalledChartByClusterAndTool(ctx context.Context, arg GetInstalledChartByClusterAndToolParams) (InstalledChart, error) {
+	row := q.db.QueryRow(ctx, getInstalledChartByClusterAndTool, arg.ClusterID, arg.ToolSlug)
+	var i InstalledChart
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.ChartVersionID,
+		&i.ReleaseName,
+		&i.Namespace,
+		&i.ValuesOverride,
+		&i.Status,
+		&i.Revision,
+		&i.Notes,
+		&i.InstalledByID,
+		&i.RequestID,
+		&i.ToolSlug,
+		&i.PresetUsed,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DriftDetected,
+		&i.DriftDetail,
+		&i.DriftCheckedAt,
+	)
+	return i, err
+}
+
 const getInstalledChartByID = `-- name: GetInstalledChartByID :one
 
 SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE id = $1
@@ -625,6 +740,33 @@ func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) 
 	return i, err
 }
 
+const listChartVersionStrings = `-- name: ListChartVersionStrings :many
+SELECT version FROM helm_chart_versions WHERE chart_id = $1
+`
+
+// Lightweight probe used by the repo-index ingest path to bulk-load the
+// set of already-known version strings for a chart in a single round
+// trip, replacing the per-version SELECT probe.
+func (q *Queries) ListChartVersionStrings(ctx context.Context, chartID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listChartVersionStrings, chartID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChartVersions = `-- name: ListChartVersions :many
 SELECT id, chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream, created_at, updated_at, content_hydrated_at FROM helm_chart_versions
 WHERE chart_id = $1
@@ -719,12 +861,115 @@ func (q *Queries) ListChartsByRepository(ctx context.Context, arg ListChartsByRe
 	return items, nil
 }
 
+const listChartsByRepositoryIDs = `-- name: ListChartsByRepositoryIDs :many
+SELECT id, repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated, created_at, updated_at FROM helm_charts
+WHERE repository_id = ANY($1::uuid[])
+ORDER BY name ASC
+LIMIT $3 OFFSET $2
+`
+
+type ListChartsByRepositoryIDsParams struct {
+	RepositoryIds []uuid.UUID `json:"repository_ids"`
+	QueryOffset   int32       `json:"query_offset"`
+	QueryLimit    int32       `json:"query_limit"`
+}
+
+// Project-scoped catalog browse: charts across the project's visible
+// catalog set in a single query with real LIMIT/OFFSET, instead of
+// fanning out a Limit:1000 query per catalog and slicing in Go (which
+// silently truncated any catalog with >1000 charts).
+func (q *Queries) ListChartsByRepositoryIDs(ctx context.Context, arg ListChartsByRepositoryIDsParams) ([]HelmChart, error) {
+	rows, err := q.db.Query(ctx, listChartsByRepositoryIDs, arg.RepositoryIds, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HelmChart{}
+	for rows.Next() {
+		var i HelmChart
+		if err := rows.Scan(
+			&i.ID,
+			&i.RepositoryID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.IconUrl,
+			&i.HomeUrl,
+			&i.Category,
+			&i.Keywords,
+			&i.Maintainers,
+			&i.Deprecated,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledHelmRepositories = `-- name: ListEnabledHelmRepositories :many
 SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories WHERE enabled = true ORDER BY name ASC
 `
 
 func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error) {
 	rows, err := q.db.Query(ctx, listEnabledHelmRepositories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HelmRepository{}
+	for rows.Next() {
+		var i HelmRepository
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Url,
+			&i.RepoType,
+			&i.Description,
+			&i.IsDefault,
+			&i.AuthType,
+			&i.AuthConfig,
+			&i.Enabled,
+			&i.LastSyncedAt,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGlobalHelmRepositories = `-- name: ListGlobalHelmRepositories :many
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories
+WHERE owner_project_id IS NULL
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListGlobalHelmRepositoriesParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+// Admin default catalog view: only operator-curated global catalogs
+// (owner_project_id IS NULL). Filtering + paginating at the DB layer
+// avoids the over-fetch/in-Go-filter dance that dropped globals past the
+// slack window and emitted empty trailing pages once private rows were
+// excluded.
+func (q *Queries) ListGlobalHelmRepositories(ctx context.Context, arg ListGlobalHelmRepositoriesParams) ([]HelmRepository, error) {
+	rows, err := q.db.Query(ctx, listGlobalHelmRepositories, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

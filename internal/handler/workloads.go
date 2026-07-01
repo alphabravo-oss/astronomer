@@ -20,6 +20,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
+	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -63,6 +64,7 @@ type WorkloadQuerier interface {
 	CreateWorkloadOperation(ctx context.Context, arg sqlc.CreateWorkloadOperationParams) (sqlc.WorkloadOperation, error)
 	GetWorkloadOperation(ctx context.Context, id uuid.UUID) (sqlc.WorkloadOperation, error)
 	ListWorkloadOperations(ctx context.Context, arg sqlc.ListWorkloadOperationsParams) ([]sqlc.WorkloadOperation, error)
+	CountWorkloadOperationsByStatus(ctx context.Context) ([]sqlc.CountWorkloadOperationsByStatusRow, error)
 	ListPendingWorkloadOperations(ctx context.Context, limit int32) ([]sqlc.WorkloadOperation, error)
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (sqlc.WorkloadOperation, error)
 	MarkWorkloadOperationCompleted(ctx context.Context, id uuid.UUID) (sqlc.WorkloadOperation, error)
@@ -231,6 +233,18 @@ type podList struct {
 	Items []podResource `json:"items"`
 }
 
+// podMetadataList decodes a PartialObjectMetadataList (or a full PodList — both
+// carry metadata.namespace). Used by callers that only need per-namespace or
+// per-node pod counts, so they don't pull every pod's spec+status.
+type podMetadataList struct {
+	Items []struct {
+		Metadata struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	} `json:"items"`
+}
+
 type namespaceList struct {
 	Items []struct {
 		Metadata struct {
@@ -380,18 +394,6 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 
 func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	clusterID, kind, namespace, name := chi.URLParam(r, "cluster_id"), chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
-	patch := map[string]any{
-		"spec": map[string]any{
-			"template": map[string]any{
-				"metadata": map[string]any{
-					"annotations": map[string]string{
-						"kubectl.kubernetes.io/restartedAt": time.Now().UTC().Format(time.RFC3339),
-					},
-				},
-			},
-		},
-	}
-	_ = patch
 	if _, err := workloadPath(kind, namespace, name); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
 		return
@@ -537,14 +539,44 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 		RespondJSON(w, http.StatusOK, map[string]any{"reconciler": map[string]any{"enabled": false, "queueDepth": 0}})
 		return
 	}
-	ops, err := h.queries.ListWorkloadOperations(r.Context(), sqlc.ListWorkloadOperationsParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load workload controller status")
-		return
-	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		return
+	}
+	// Fast path: unrestricted callers get exact, uncapped counts straight from
+	// the database via a GROUP BY aggregation. This avoids streaming up to 1000
+	// operation rows and recomputing per-operation authorization on every status
+	// poll — the aggregation runs entirely server-side.
+	if !restricted {
+		rows, err := h.queries.CountWorkloadOperationsByStatus(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load workload controller status")
+			return
+		}
+		counts := make(map[string]int, len(rows))
+		staleRunning := 0
+		for _, row := range rows {
+			counts[row.Status] = int(row.Total)
+			staleRunning += int(row.StaleRunning)
+		}
+		summary := operationStatusSummary{
+			Counts:                counts,
+			StaleRunning:          staleRunning,
+			StaleThresholdSeconds: 60,
+		}
+		summary.QueueDepth = operationstate.QueueDepth(counts)
+		RespondJSON(w, http.StatusOK, map[string]any{
+			"reconciler": summary.reconcilerMap(),
+			"operations": summary.Counts,
+		})
+		return
+	}
+	// Restricted callers need per-operation cluster authorization, which depends
+	// on the operation payload; fall back to loading rows and filtering in Go.
+	ops, err := h.queries.ListWorkloadOperations(r.Context(), sqlc.ListWorkloadOperationsParams{Limit: 1000, Offset: 0})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load workload controller status")
 		return
 	}
 	opSummary := summarizeOperations(r.Context(), ops, operationStatusSummaryConfig[sqlc.WorkloadOperation]{
@@ -554,9 +586,6 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) > time.Minute
 		},
 		Include: func(_ context.Context, op sqlc.WorkloadOperation) bool {
-			if !restricted {
-				return true
-			}
 			clusterID, err := workloadOperationClusterID(op)
 			return err == nil && h.authz.allowsCluster(bindings, clusterID, rbac.ResourceWorkloads, rbac.VerbRead)
 		},
@@ -586,8 +615,11 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	var pods podList
-	_ = h.getJSON(r.Context(), clusterID, "/api/v1/pods", &pods)
+	pods, err := h.listPodMetadata(r.Context(), clusterID, "/api/v1/pods")
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		return
+	}
 	counts := map[string]int{}
 	for _, pod := range pods.Items {
 		counts[pod.Metadata.Namespace]++
@@ -864,6 +896,46 @@ func (h *WorkloadHandler) listPods(ctx context.Context, clusterID, namespace, se
 	return items, nil
 }
 
+// listPodsFieldSelector lists pods filtered server-side by a fieldSelector
+// (e.g. spec.nodeName=<node>) so the whole-cluster pod set never crosses the
+// tunnel just to be filtered in Go.
+func (h *WorkloadHandler) listPodsFieldSelector(ctx context.Context, clusterID, fieldSelector string) ([]map[string]any, error) {
+	path := "/api/v1/pods?fieldSelector=" + url.QueryEscape(fieldSelector)
+	var pods podList
+	if err := h.getJSON(ctx, clusterID, path, &pods); err != nil {
+		return nil, err
+	}
+	items := make([]map[string]any, 0, len(pods.Items))
+	for _, pod := range pods.Items {
+		items = append(items, podToMap(clusterID, pod))
+	}
+	return items, nil
+}
+
+// listPodMetadata fetches a lightweight PartialObjectMetadataList of pods. The
+// content-negotiation Accept header asks the apiserver to strip spec/status;
+// it falls back to a normal PodList when partial metadata isn't available, and
+// podMetadataList decodes either shape.
+func (h *WorkloadHandler) listPodMetadata(ctx context.Context, clusterID, path string) (*podMetadataList, error) {
+	if h.requester == nil {
+		return nil, fmt.Errorf("tunnel requester not configured")
+	}
+	headers := requestHeaders("")
+	headers["Accept"] = "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json"
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return nil, err
+	}
+	var out podMetadataList
+	if err := parseJSONResponse(resp, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (h *WorkloadHandler) getNodes(ctx context.Context, clusterID string) ([]map[string]any, error) {
 	var nodes nodeList
 	if err := h.getJSON(ctx, clusterID, "/api/v1/nodes", &nodes); err != nil {
@@ -908,28 +980,28 @@ func (h *WorkloadHandler) getNodeDetail(ctx context.Context, clusterID, nodeName
 	if err := h.getJSON(ctx, clusterID, "/api/v1/nodes/"+nodeName, &node); err != nil {
 		return nil, err
 	}
-	pods, _ := h.listPods(ctx, clusterID, "", "")
-	nodePods := make([]map[string]any, 0)
-	nodePodKeys := make([]string, 0)
+	// Scope the pod list to this node server-side (mirrors DrainNode) instead of
+	// pulling every pod in the cluster and filtering in Go.
+	pods, _ := h.listPodsFieldSelector(ctx, clusterID, "spec.nodeName="+nodeName)
+	nodePods := make([]map[string]any, 0, len(pods))
+	nodePodKeys := make([]string, 0, len(pods))
 	for _, pod := range pods {
-		if pod["node"] == nodeName {
-			ns, _ := pod["namespace"].(string)
-			pn, _ := pod["name"].(string)
-			nodePodKeys = append(nodePodKeys, ns+"/"+pn)
-			nodePods = append(nodePods, map[string]any{
+		ns, _ := pod["namespace"].(string)
+		pn, _ := pod["name"].(string)
+		nodePodKeys = append(nodePodKeys, ns+"/"+pn)
+		nodePods = append(nodePods, map[string]any{
+			"name":      pod["name"],
+			"namespace": pod["namespace"],
+			"status":    pod["status"],
+			"ready":     pod["ready"],
+			"restarts":  pod["restarts"],
+			"createdAt": pod["createdAt"],
+			"images":    pod["images"],
+			"metadata": map[string]any{
 				"name":      pod["name"],
 				"namespace": pod["namespace"],
-				"status":    pod["status"],
-				"ready":     pod["ready"],
-				"restarts":  pod["restarts"],
-				"createdAt": pod["createdAt"],
-				"images":    pod["images"],
-				"metadata": map[string]any{
-					"name":      pod["name"],
-					"namespace": pod["namespace"],
-				},
-			})
-		}
+			},
+		})
 	}
 
 	// Pull real CPU/memory usage from the metrics provider. The provider

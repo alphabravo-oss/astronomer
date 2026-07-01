@@ -88,3 +88,23 @@ SET
     updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: CountWorkloadOperationsByStatus :many
+-- NOTE: this aggregates the workload_operations table; it lives in this file
+-- only because of the per-agent SQL-file ownership split for this change. sqlc
+-- compiles every queries/*.sql file into one package, so the generated method
+-- is identical regardless of which file the query sits in. Central build may
+-- relocate it to workload_operations.sql. Powers WorkloadHandler.ControllerStatus,
+-- replacing a capped ListWorkloadOperations(limit 1000) scan with a server-side
+-- GROUP BY. stale_running counts running operations started over a minute ago
+-- (matches the handler's 60s stale threshold).
+SELECT
+    status,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (
+        WHERE status = 'running'
+          AND started_at IS NOT NULL
+          AND started_at < now() - interval '1 minute'
+    ) AS stale_running
+FROM workload_operations
+GROUP BY status;

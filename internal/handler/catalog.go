@@ -34,6 +34,11 @@ type CatalogQuerier interface {
 	// Repositories
 	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (sqlc.HelmRepository, error)
 	ListHelmRepositories(ctx context.Context, arg sqlc.ListHelmRepositoriesParams) ([]sqlc.HelmRepository, error)
+	// ListGlobalHelmRepositories + CountGlobalHelmRepositories back the
+	// admin default view (owner_project_id IS NULL) with DB-layer filter +
+	// pagination.
+	ListGlobalHelmRepositories(ctx context.Context, arg sqlc.ListGlobalHelmRepositoriesParams) ([]sqlc.HelmRepository, error)
+	CountGlobalHelmRepositories(ctx context.Context) (int64, error)
 	CreateHelmRepository(ctx context.Context, arg sqlc.CreateHelmRepositoryParams) (sqlc.HelmRepository, error)
 	UpdateHelmRepository(ctx context.Context, arg sqlc.UpdateHelmRepositoryParams) (sqlc.HelmRepository, error)
 	DeleteHelmRepository(ctx context.Context, id uuid.UUID) error
@@ -48,6 +53,10 @@ type CatalogQuerier interface {
 	CountHelmChartsByTag(ctx context.Context, tag string) (int64, error)
 	ListChartVersions(ctx context.Context, arg sqlc.ListChartVersionsParams) ([]sqlc.HelmChartVersion, error)
 	ListChartsByRepository(ctx context.Context, arg sqlc.ListChartsByRepositoryParams) ([]sqlc.HelmChart, error)
+	// Project-scoped catalog browse across a set of repo ids in a single
+	// query with real LIMIT/OFFSET + COUNT (replaces the per-catalog fan-out).
+	ListChartsByRepositoryIDs(ctx context.Context, arg sqlc.ListChartsByRepositoryIDsParams) ([]sqlc.HelmChart, error)
+	CountChartsByRepositoryIDs(ctx context.Context, repositoryIds []uuid.UUID) (int64, error)
 	GetHelmChartByID(ctx context.Context, id uuid.UUID) (sqlc.HelmChart, error)
 	GetHelmChartByRepoAndName(ctx context.Context, arg sqlc.GetHelmChartByRepoAndNameParams) (sqlc.HelmChart, error)
 	CreateHelmChart(ctx context.Context, arg sqlc.CreateHelmChartParams) (sqlc.HelmChart, error)
@@ -57,6 +66,10 @@ type CatalogQuerier interface {
 	GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) (sqlc.HelmChartVersion, error)
 	GetHelmChartVersion(ctx context.Context, arg sqlc.GetHelmChartVersionParams) (sqlc.HelmChartVersion, error)
 	CreateHelmChartVersion(ctx context.Context, arg sqlc.CreateHelmChartVersionParams) (sqlc.HelmChartVersion, error)
+	// Repo-index ingest fast path: bulk-load known versions once, then
+	// multi-row insert new ones (ON CONFLICT DO NOTHING) per chart.
+	ListChartVersionStrings(ctx context.Context, chartID uuid.UUID) ([]string, error)
+	BulkCreateHelmChartVersions(ctx context.Context, arg sqlc.BulkCreateHelmChartVersionsParams) ([]string, error)
 	// Sprint 082 — lazy hydration writeback for default_values + readme.
 	UpdateHelmChartVersionContent(ctx context.Context, arg sqlc.UpdateHelmChartVersionContentParams) error
 	// Sprint 082 — joined Apps tab listing (chart name/icon/version + repo).
@@ -253,57 +266,27 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Legacy admin path — explicit column list in catalog.sql.go means
-	// the existing query never sees owner_project_id, but we still want
-	// the admin default view to hide private catalogs. Filter in-Go:
-	// the row count for a typical install is modest enough that this
-	// doesn't warrant another sqlc query just for the admin default.
-	repos, err := h.queries.ListHelmRepositories(r.Context(), sqlc.ListHelmRepositoriesParams{
-		Limit:  limit + offset + 50, // small over-fetch slack for the filter
-		Offset: 0,
+	// Admin default view hides project-owned (private) catalogs. Filter
+	// and paginate on owner_project_id IS NULL at the DB layer: the old
+	// over-fetch-plus-in-Go-filter path emitted empty trailing pages once
+	// private rows were removed and silently dropped globals that fell
+	// past the fixed over-fetch slack window.
+	repos, err := h.queries.ListGlobalHelmRepositories(r.Context(), sqlc.ListGlobalHelmRepositoriesParams{
+		Limit:  limit,
+		Offset: offset,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list repositories")
 		return
 	}
 
-	// Project-owned rows are filtered out by cross-checking
-	// owner_project_id via GetHelmRepositoryWithOwner. We accept the
-	// per-row lookup for the admin path because the default page size
-	// is 20 and the index on (id) makes each lookup O(log n).
-	visible := make([]sqlc.HelmRepository, 0, len(repos))
-	for _, repo := range repos {
-		row, err := h.queries.GetHelmRepositoryWithOwner(r.Context(), repo.ID)
-		if err != nil {
-			// Fall back to inclusive behaviour on lookup error so a
-			// transient DB hiccup never masks operator-visible rows.
-			visible = append(visible, repo)
-			continue
-		}
-		if row.OwnerProjectID.Valid {
-			continue
-		}
-		visible = append(visible, repo)
-	}
-
-	// Slice the in-memory page after filtering.
-	if int(offset) > len(visible) {
-		visible = nil
-	} else {
-		end := int(offset) + int(limit)
-		if end > len(visible) {
-			end = len(visible)
-		}
-		visible = visible[offset:end]
-	}
-
-	total, err := h.queries.CountHelmRepositories(r.Context())
+	total, err := h.queries.CountGlobalHelmRepositories(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count repositories")
 		return
 	}
 
-	RespondPaginated(w, r, visible, total)
+	RespondPaginated(w, r, repos, total)
 }
 
 // CreateRepoRequest represents the request body for creating a helm repository.
@@ -527,6 +510,19 @@ type helmIndexChartMaint struct {
 	URL   string `json:"url"`
 }
 
+// chartVersionIngestRow is one element of the JSON payload handed to
+// BulkCreateHelmChartVersions (parsed server-side via jsonb_to_recordset).
+// The JSON keys must match the recordset column names exactly. A nil
+// CreatedAtUpstream serialises to JSON null → SQL NULL, preserving the
+// previous per-row behaviour for charts without an upstream publish date.
+type chartVersionIngestRow struct {
+	Version           string          `json:"version"`
+	AppVersion        string          `json:"app_version"`
+	Digest            string          `json:"digest"`
+	URLs              json.RawMessage `json:"urls"`
+	CreatedAtUpstream *time.Time      `json:"created_at_upstream"`
+}
+
 func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.HelmRepository) (chartCount, versionCount int, err error) {
 	indexURL := strings.TrimRight(repo.Url, "/") + "/index.yaml"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
@@ -613,38 +609,64 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 			}
 		}
 		chartCount++
+
+		// Bulk-load the versions already known for this chart in one query
+		// instead of a SELECT probe per version, then multi-row INSERT the
+		// new ones (ON CONFLICT DO NOTHING) in a single round trip. This
+		// turns tens of thousands of serial round-trips on a large repo
+		// into two queries per chart.
+		existingVersions, err := h.queries.ListChartVersionStrings(ctx, chart.ID)
+		if err != nil {
+			return chartCount, versionCount, fmt.Errorf("load existing versions for %s: %w", chartName, err)
+		}
+		known := make(map[string]struct{}, len(existingVersions))
+		for _, ver := range existingVersions {
+			known[ver] = struct{}{}
+		}
+
+		rows := make([]chartVersionIngestRow, 0, len(versions))
 		for _, v := range versions {
 			if v.Version == "" {
 				continue
 			}
-			if _, err := h.queries.GetHelmChartVersion(ctx, sqlc.GetHelmChartVersionParams{
-				ChartID: chart.ID,
-				Version: v.Version,
-			}); err == nil {
+			// Skip versions we already have and de-dup repeats within the
+			// index entry so the multi-row insert never carries the same
+			// (chart_id, version) pair twice.
+			if _, ok := known[v.Version]; ok {
 				continue
 			}
+			known[v.Version] = struct{}{}
 			urlsJSON, _ := json.Marshal(v.URLs)
 			if len(urlsJSON) == 0 {
 				urlsJSON = []byte(`[]`)
 			}
-			if _, err := h.queries.CreateHelmChartVersion(ctx, sqlc.CreateHelmChartVersionParams{
-				ChartID:       chart.ID,
-				Version:       v.Version,
-				AppVersion:    v.AppVersion,
-				Digest:        v.Digest,
-				Urls:          urlsJSON,
-				ValuesSchema:  json.RawMessage(`{}`),
-				DefaultValues: "",
-				Readme:        "",
-				CreatedAtUpstream: pgtype.Timestamptz{
-					Time:  v.Created,
-					Valid: !v.Created.IsZero(),
-				},
-			}); err != nil {
-				return chartCount, versionCount, fmt.Errorf("create chart version %s/%s: %w", chartName, v.Version, err)
+			row := chartVersionIngestRow{
+				Version:    v.Version,
+				AppVersion: v.AppVersion,
+				Digest:     v.Digest,
+				URLs:       json.RawMessage(urlsJSON),
 			}
-			versionCount++
+			if !v.Created.IsZero() {
+				created := v.Created
+				row.CreatedAtUpstream = &created
+			}
+			rows = append(rows, row)
 		}
+		if len(rows) == 0 {
+			continue
+		}
+		rowsJSON, err := json.Marshal(rows)
+		if err != nil {
+			return chartCount, versionCount, fmt.Errorf("marshal chart versions for %s: %w", chartName, err)
+		}
+		inserted, err := h.queries.BulkCreateHelmChartVersions(ctx, sqlc.BulkCreateHelmChartVersionsParams{
+			ChartID: chart.ID,
+			Rows:    rowsJSON,
+		})
+		if err != nil {
+			return chartCount, versionCount, fmt.Errorf("create chart versions for %s: %w", chartName, err)
+		}
+		versionCount += len(inserted)
 	}
 	return chartCount, versionCount, nil
 }
@@ -694,33 +716,33 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve project catalogs")
 			return
 		}
-		// Fan out per-catalog. The repo count per project is small
-		// enough (typically <20) that a per-repo ListChartsByRepository
-		// query is the right shape — no need for an IN-list query.
-		merged := []sqlc.HelmChart{}
+		// Single IN-list query over the project's visible catalog set with
+		// real LIMIT/OFFSET + COUNT. The old path fanned out a Limit:1000
+		// query per catalog and sliced in Go, which silently truncated any
+		// catalog holding more than 1000 charts.
+		repoIDs := make([]uuid.UUID, 0, len(visibleCatalogs))
 		for _, cat := range visibleCatalogs {
-			rowsForRepo, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
-				RepositoryID: cat.ID,
-				Limit:        1000,
-				Offset:       0,
-			})
-			if err != nil {
-				continue
-			}
-			merged = append(merged, rowsForRepo...)
+			repoIDs = append(repoIDs, cat.ID)
 		}
-		// Slice in-memory to honor the caller's limit/offset.
-		total := int64(len(merged))
-		if int(offset) > len(merged) {
-			merged = nil
-		} else {
-			end := int(offset) + int(limit)
-			if end > len(merged) {
-				end = len(merged)
-			}
-			merged = merged[offset:end]
+		if len(repoIDs) == 0 {
+			RespondPaginated(w, r, []sqlc.HelmChart{}, 0)
+			return
 		}
-		RespondPaginated(w, r, merged, total)
+		charts, err := h.queries.ListChartsByRepositoryIDs(r.Context(), sqlc.ListChartsByRepositoryIDsParams{
+			RepositoryIds: repoIDs,
+			QueryLimit:    limit,
+			QueryOffset:   offset,
+		})
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project charts")
+			return
+		}
+		total, err := h.queries.CountChartsByRepositoryIDs(r.Context(), repoIDs)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project charts")
+			return
+		}
+		RespondPaginated(w, r, charts, total)
 		return
 	}
 

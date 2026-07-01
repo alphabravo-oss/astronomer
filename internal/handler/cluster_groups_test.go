@@ -246,6 +246,26 @@ func (f *fakeClusterGroupQuerier) CountClustersInGroupTree(_ context.Context, gr
 	return n, nil
 }
 
+// ListClusterGroupCountsRollup mirrors the new single-query rollup by reusing
+// the fake's per-group count logic, so the list test's count assertions hold.
+func (f *fakeClusterGroupQuerier) ListClusterGroupCountsRollup(ctx context.Context) ([]sqlc.ListClusterGroupCountsRollupRow, error) {
+	groups, err := f.ListClusterGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sqlc.ListClusterGroupCountsRollupRow, 0, len(groups))
+	for _, g := range groups {
+		direct, _ := f.CountClustersInGroup(ctx, g.ID)
+		tree, _ := f.CountClustersInGroupTree(ctx, g.ID)
+		out = append(out, sqlc.ListClusterGroupCountsRollupRow{
+			GroupID:          g.ID,
+			ClusterCount:     direct,
+			ClusterCountTree: tree,
+		})
+	}
+	return out, nil
+}
+
 func (f *fakeClusterGroupQuerier) AssignClusterGroup(_ context.Context, arg sqlc.AssignClusterGroupParams) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

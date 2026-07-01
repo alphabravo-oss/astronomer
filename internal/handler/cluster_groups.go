@@ -73,6 +73,7 @@ type ClusterGroupQuerier interface {
 	ListClustersInGroupTree(ctx context.Context, rootID uuid.UUID) ([]sqlc.ClusterInGroupRow, error)
 	CountClustersInGroup(ctx context.Context, groupID uuid.UUID) (int64, error)
 	CountClustersInGroupTree(ctx context.Context, groupID uuid.UUID) (int64, error)
+	ListClusterGroupCountsRollup(ctx context.Context) ([]sqlc.ListClusterGroupCountsRollupRow, error)
 	AssignClusterGroup(ctx context.Context, arg sqlc.AssignClusterGroupParams) error
 	UnassignClusterGroup(ctx context.Context, clusterID uuid.UUID) error
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
@@ -307,6 +308,15 @@ func (h *ClusterGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster groups")
 		return
 	}
+	// Per-node cluster counts in ONE grouped rollup query instead of the old
+	// 2-queries-per-node (direct + recursive-CTE subtree) fan-out. Errors are
+	// non-fatal — an empty map leaves counts at zero, matching prior behaviour.
+	countsByID := make(map[uuid.UUID]sqlc.ListClusterGroupCountsRollupRow)
+	if counts, err := h.queries.ListClusterGroupCountsRollup(r.Context()); err == nil {
+		for _, c := range counts {
+			countsByID[c.GroupID] = c
+		}
+	}
 	out := make([]ClusterGroupTreeResponse, 0, len(rows))
 	for _, row := range rows {
 		base := clusterGroupToResponse(sqlc.ClusterGroup{
@@ -322,15 +332,9 @@ func (h *ClusterGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:   row.CreatedAt,
 			UpdatedAt:   row.UpdatedAt,
 		})
-		// Per-node cluster counts. The direct count is cheap; the tree
-		// rollup is a recursive CTE so we only fetch it lazily — but for
-		// the sidebar render we DO need both, so eat the cost here.
-		// Errors are non-fatal (zero count surfaces instead).
-		if n, err := h.queries.CountClustersInGroup(r.Context(), row.ID); err == nil {
-			base.ClusterCount = n
-		}
-		if n, err := h.queries.CountClustersInGroupTree(r.Context(), row.ID); err == nil {
-			base.ClusterCountTree = n
+		if c, ok := countsByID[row.ID]; ok {
+			base.ClusterCount = c.ClusterCount
+			base.ClusterCountTree = c.ClusterCountTree
 		}
 		out = append(out, ClusterGroupTreeResponse{
 			ClusterGroupResponse: base,

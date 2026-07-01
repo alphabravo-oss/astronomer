@@ -74,6 +74,44 @@ WITH RECURSIVE subtree AS (
 )
 SELECT COUNT(*)::bigint FROM clusters cl WHERE cl.group_id IN (SELECT subtree.id FROM subtree);
 
+-- name: ListClusterGroupCountsRollup :many
+-- Single grouped rollup replacing the per-node CountClustersInGroup +
+-- CountClustersInGroupTree pair (2 queries, one recursive, per node). Returns
+-- one row per enabled group with its direct cluster count and its subtree
+-- (self + all enabled descendants) cluster count.
+WITH RECURSIVE
+direct AS (
+    SELECT group_id AS gid, COUNT(*)::bigint AS n
+    FROM clusters
+    WHERE group_id IS NOT NULL
+    GROUP BY group_id
+),
+closure AS (
+    -- seed: every enabled group rolls up to itself
+    SELECT id AS ancestor_id, id AS descendant_id
+    FROM cluster_groups
+    WHERE enabled = true
+    UNION ALL
+    -- extend down the tree: each descendant's enabled children
+    SELECT cl.ancestor_id, c.id
+    FROM closure cl
+    INNER JOIN cluster_groups c ON c.parent_id = cl.descendant_id
+    WHERE c.enabled = true
+),
+tree AS (
+    SELECT cl.ancestor_id AS gid, COALESCE(SUM(d.n), 0)::bigint AS n
+    FROM closure cl
+    LEFT JOIN direct d ON d.gid = cl.descendant_id
+    GROUP BY cl.ancestor_id
+)
+SELECT g.id AS group_id,
+       COALESCE(dr.n, 0)::bigint AS cluster_count,
+       COALESCE(tr.n, 0)::bigint AS cluster_count_tree
+FROM cluster_groups g
+LEFT JOIN direct dr ON dr.gid = g.id
+LEFT JOIN tree tr ON tr.gid = g.id
+WHERE g.enabled = true;
+
 -- name: AssignClusterGroup :exec
 UPDATE clusters SET group_id = $2, updated_at = now() WHERE id = $1;
 

@@ -60,11 +60,13 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 			return err
 		}
 		for _, rule := range rules {
-			triggered, message, details, targetClusterID, err := evaluateRule(ctx, rule)
-			if err != nil {
-				return err
-			}
-			silence, err := activeSilenceForRule(ctx, rule, targetClusterID)
+			// A global (rule.ClusterID invalid) rule produces one evaluation
+			// PER cluster; a cluster-scoped or anomaly rule produces exactly
+			// one. Fetch the rule's events once, then process each (rule,
+			// cluster) evaluation independently so concurrent outages each
+			// fire their own event and a recovered cluster is resolved even
+			// while other clusters are still triggering.
+			evaluations, err := evaluateRule(ctx, rule)
 			if err != nil {
 				return err
 			}
@@ -76,73 +78,11 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 			if err != nil {
 				return err
 			}
-			activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
-			if !triggered {
-				for _, event := range activeEvents {
-					if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
-						ID:         event.ID,
-						Status:     "resolved",
-						ResolvedAt: pgTime(time.Now()),
-					}); err != nil {
-						return err
-					}
-					// Only "firing"/"acknowledged" events represent an
-					// alert that actually paged someone; "silenced" ones
-					// never notified on trigger, so we don't notify on
-					// resolve either.
-					if event.Status == "firing" || event.Status == "acknowledged" {
-						dispatchAlertNotifications(ctx, rule, event, "Astronomer alert resolved: "+rule.Name,
-							fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
-					}
+			for _, eval := range evaluations {
+				if err := processRuleEvaluation(ctx, rule, eval, existingEvents); err != nil {
+					return err
 				}
-				continue
 			}
-			if silence != nil && len(activeEvents) > 0 {
-				for _, event := range activeEvents {
-					if event.Status == "silenced" {
-						continue
-					}
-					if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
-						ID:     event.ID,
-						Status: "silenced",
-					}); err != nil {
-						return err
-					}
-				}
-				continue
-			}
-			if len(activeEvents) > 0 {
-				runtimeLogger().InfoContext(ctx, "alert already active, skipping duplicate event", "rule_id", rule.ID.String())
-				continue
-			}
-			if !cooldownElapsed(rule, existingEvents, targetClusterID) {
-				runtimeLogger().InfoContext(ctx, "alert cooldown active, skipping event", "rule_id", rule.ID.String())
-				continue
-			}
-			status := "firing"
-			if silence != nil {
-				status = "silenced"
-				detailMap := decodeWorkerJSONMap(details)
-				detailMap["silence_reason"] = silence.Reason
-				detailMap["silence_id"] = silence.ID.String()
-				details, _ = json.Marshal(detailMap)
-				message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
-			}
-			event, err := runtimeDeps.Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
-				RuleID:    rule.ID,
-				ClusterID: targetClusterID,
-				Status:    status,
-				Message:   message,
-				Details:   details,
-			})
-			if err != nil {
-				return err
-			}
-			if silence != nil {
-				runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
-				continue
-			}
-			dispatchAlertNotifications(ctx, rule, event, "Astronomer alert: "+rule.Name, message, false)
 		}
 
 		slog.InfoContext(ctx, "alert evaluation complete")
@@ -242,9 +182,109 @@ func alertRulesForEvaluation(ctx context.Context, ruleID string) ([]sqlc.AlertRu
 	return runtimeDeps.Queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: 500, Offset: 0})
 }
 
-func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byte, pgtype.UUID, error) {
+// ruleClusterEval is one (rule, cluster) evaluation outcome. Cluster-scoped
+// and anomaly rules yield a single value; a global rule yields one per
+// matching cluster so each cluster's firing/recovery is tracked
+// independently instead of collapsing to the first triggering cluster.
+type ruleClusterEval struct {
+	triggered bool
+	message   string
+	details   []byte
+	clusterID pgtype.UUID
+}
+
+// processRuleEvaluation applies a single (rule, cluster) evaluation: it
+// resolves the cluster's active events when no longer triggering, silences
+// them under an active silence, dedups against an already-active event, and
+// otherwise fires a fresh event (subject to cooldown). Events are keyed by
+// (rule, cluster) via filterActiveEventsForCluster / cooldownElapsed, so a
+// global rule's clusters never clobber one another.
+func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleClusterEval, existingEvents []sqlc.AlertEvent) error {
+	targetClusterID := eval.clusterID
+	message := eval.message
+	details := eval.details
+
+	silence, err := activeSilenceForRule(ctx, rule, targetClusterID)
+	if err != nil {
+		return err
+	}
+	activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
+	if !eval.triggered {
+		for _, event := range activeEvents {
+			if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+				ID:         event.ID,
+				Status:     "resolved",
+				ResolvedAt: pgTime(time.Now()),
+			}); err != nil {
+				return err
+			}
+			// Only "firing"/"acknowledged" events represent an
+			// alert that actually paged someone; "silenced" ones
+			// never notified on trigger, so we don't notify on
+			// resolve either.
+			if event.Status == "firing" || event.Status == "acknowledged" {
+				dispatchAlertNotifications(ctx, rule, event, "Astronomer alert resolved: "+rule.Name,
+					fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
+			}
+		}
+		return nil
+	}
+	if silence != nil && len(activeEvents) > 0 {
+		for _, event := range activeEvents {
+			if event.Status == "silenced" {
+				continue
+			}
+			if err := runtimeDeps.Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+				ID:     event.ID,
+				Status: "silenced",
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if len(activeEvents) > 0 {
+		runtimeLogger().InfoContext(ctx, "alert already active, skipping duplicate event", "rule_id", rule.ID.String())
+		return nil
+	}
+	if !cooldownElapsed(rule, existingEvents, targetClusterID) {
+		runtimeLogger().InfoContext(ctx, "alert cooldown active, skipping event", "rule_id", rule.ID.String())
+		return nil
+	}
+	status := "firing"
+	if silence != nil {
+		status = "silenced"
+		detailMap := decodeWorkerJSONMap(details)
+		detailMap["silence_reason"] = silence.Reason
+		detailMap["silence_id"] = silence.ID.String()
+		details, _ = json.Marshal(detailMap)
+		message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
+	}
+	event, err := runtimeDeps.Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
+		RuleID:    rule.ID,
+		ClusterID: targetClusterID,
+		Status:    status,
+		Message:   message,
+		Details:   details,
+	})
+	if err != nil {
+		return err
+	}
+	if silence != nil {
+		runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
+		return nil
+	}
+	dispatchAlertNotifications(ctx, rule, event, "Astronomer alert: "+rule.Name, message, false)
+	return nil
+}
+
+// evaluateRule evaluates a rule and returns one ruleClusterEval per cluster
+// the rule covers. Cluster-scoped and anomaly rules return exactly one
+// element; a global rule returns one per cluster so every currently-triggering
+// cluster fires and every recovered cluster resolves within the same tick.
+func evaluateRule(ctx context.Context, rule sqlc.AlertRule) ([]ruleClusterEval, error) {
 	if !rule.Enabled {
-		return false, "", nil, pgtype.UUID{}, nil
+		return []ruleClusterEval{{}}, nil
 	}
 	config := decodeWorkerJSONMap(rule.Configuration)
 	// Sprint 072 — anomaly-kind rules use the rolling baseline
@@ -254,13 +294,17 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 	// to no-fire when no baseline row exists yet (identical to
 	// "not enough samples").
 	if stringFromWorkerMap(config, "rule_kind") == "anomaly" {
-		return evaluateAnomalyRule(ctx, rule, config)
+		triggered, message, details, clusterID, err := evaluateAnomalyRule(ctx, rule, config)
+		if err != nil {
+			return nil, err
+		}
+		return []ruleClusterEval{{triggered: triggered, message: message, details: details, clusterID: clusterID}}, nil
 	}
 	if rule.ClusterID.Valid {
 		details := baseRuleDetails(rule, config)
 		cluster, err := runtimeDeps.Queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes))
 		if err != nil {
-			return false, "", nil, pgtype.UUID{}, err
+			return nil, err
 		}
 		health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
 		healthKnown := healthErr == nil
@@ -276,16 +320,27 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 		details["cpu_usage_percent"] = health.CpuUsagePercent
 		details["memory_usage_percent"] = health.MemoryUsagePercent
 		if triggered, message, payload, clusterID, ok, err := evaluatePromQLRule(ctx, rule, config, cluster, details); err != nil {
-			return false, "", nil, pgtype.UUID{}, err
+			return nil, err
 		} else if ok {
-			return triggered, message, payload, clusterID, nil
+			return []ruleClusterEval{{triggered: triggered, message: message, details: payload, clusterID: clusterID}}, nil
 		}
-		return evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
+		triggered, message, payload, clusterID, err := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
+		if err != nil {
+			return nil, err
+		}
+		return []ruleClusterEval{{triggered: triggered, message: message, details: payload, clusterID: clusterID}}, nil
 	}
 	clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
 	if err != nil {
-		return false, "", nil, pgtype.UUID{}, err
+		return nil, err
 	}
+	// No clusters: emit a single non-triggering, cluster-less evaluation so
+	// any stale active events for this rule still resolve (preserves the old
+	// "resolve everything when nothing triggers" behavior).
+	if len(clusters) == 0 {
+		return []ruleClusterEval{{}}, nil
+	}
+	evaluations := make([]ruleClusterEval, 0, len(clusters))
 	for _, cluster := range clusters {
 		details := baseRuleDetails(rule, config)
 		details["scope"] = "global"
@@ -303,28 +358,18 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) (bool, string, []byt
 		details["cpu_usage_percent"] = health.CpuUsagePercent
 		details["memory_usage_percent"] = health.MemoryUsagePercent
 		if triggered, message, payload, clusterID, ok, evalErr := evaluatePromQLRule(ctx, rule, config, cluster, details); evalErr != nil {
-			return false, "", nil, pgtype.UUID{}, evalErr
+			return nil, evalErr
 		} else if ok {
-			if triggered {
-				return true, message, payload, clusterID, nil
-			}
+			evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
 			continue
 		}
 		triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
 		if evalErr != nil {
-			return false, "", nil, pgtype.UUID{}, evalErr
+			return nil, evalErr
 		}
-		if triggered {
-			return true, message, payload, clusterID, nil
-		}
+		evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
 	}
-	blob, _ := json.Marshal(map[string]any{
-		"severity":  rule.Severity,
-		"rule_type": rule.RuleType,
-		"scope":     "global",
-		"query":     stringFromWorkerMap(config, "query"),
-	})
-	return false, "", blob, pgtype.UUID{}, nil
+	return evaluations, nil
 }
 
 func filterActiveEvents(events []sqlc.AlertEvent) []sqlc.AlertEvent {

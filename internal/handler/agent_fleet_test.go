@@ -80,6 +80,24 @@ func (f *fakeAgentFleetQuerier) ListConnectionsByCluster(_ context.Context, arg 
 	return f.history[arg.ClusterID], nil
 }
 
+func (f *fakeAgentFleetQuerier) ListLatestConnectionsByClusters(_ context.Context, clusterIDs []uuid.UUID) ([]sqlc.AgentConnection, error) {
+	out := make([]sqlc.AgentConnection, 0, len(clusterIDs))
+	for _, id := range clusterIDs {
+		var latest *sqlc.AgentConnection
+		for i := range f.history[id] {
+			c := f.history[id][i]
+			if latest == nil || c.ConnectedAt.After(latest.ConnectedAt) {
+				cc := c
+				latest = &cc
+			}
+		}
+		if latest != nil {
+			out = append(out, *latest)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeAgentFleetQuerier) ListClusterConditions(_ context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error) {
 	return f.conditions[clusterID], nil
 }

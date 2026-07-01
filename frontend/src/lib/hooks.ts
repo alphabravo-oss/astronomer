@@ -444,8 +444,14 @@ export function usePodLogs(
       },
       {
         follow: true,
-        tailLines: effectiveTailLines,
-        sinceSeconds: effectiveSinceSeconds,
+        // The REST query above already returned the historical tail (up to
+        // 500 lines / the since-window). Opening the follow stream with the
+        // same tail/since would replay all of those lines again, duplicating
+        // the whole buffer on every open. Ask the backend for NO backfill
+        // (tail_lines=0) and only lines newer than ~now (since=1s) so the
+        // stream contributes strictly NEW output on top of the REST fetch.
+        tailLines: 0,
+        sinceSeconds: 1,
       }
     );
 

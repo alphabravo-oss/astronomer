@@ -69,6 +69,30 @@ func (q *Queries) CompleteArgoCDOperationWithResult(ctx context.Context, arg Com
 	return i, err
 }
 
+const countArgoCDOperations = `-- name: CountArgoCDOperations :one
+SELECT COUNT(*)::bigint FROM argocd_operations
+WHERE (
+    $1::text IS NULL OR target_type = $1::text
+) AND (
+    $2::text IS NULL OR target_key = $2::text
+) AND (
+    $3::text IS NULL OR status = $3::text
+)
+`
+
+type CountArgoCDOperationsParams struct {
+	TargetType pgtype.Text `json:"target_type"`
+	TargetKey  pgtype.Text `json:"target_key"`
+	Status     pgtype.Text `json:"status"`
+}
+
+func (q *Queries) CountArgoCDOperations(ctx context.Context, arg CountArgoCDOperationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countArgoCDOperations, arg.TargetType, arg.TargetKey, arg.Status)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createArgoCDOperation = `-- name: CreateArgoCDOperation :one
 INSERT INTO argocd_operations (
     target_type,

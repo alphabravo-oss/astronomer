@@ -835,3 +835,43 @@ func TestHandler_RequiresProjectAdmin(t *testing.T) {
 		t.Errorf("malformed project should 400; got %d", rec.Code)
 	}
 }
+
+// Stubs for the batched catalog queries added by the sweep-tail N+1 fixes.
+// Embedders (minimalCatalogQuerier, installedCatalogAuditQuerier) inherit these.
+func (q *fakeProjectCatalogQuerier) ListGlobalHelmRepositories(context.Context, sqlc.ListGlobalHelmRepositoriesParams) ([]sqlc.HelmRepository, error) {
+	return nil, nil
+}
+func (q *fakeProjectCatalogQuerier) CountGlobalHelmRepositories(context.Context) (int64, error) {
+	return 0, nil
+}
+func (q *fakeProjectCatalogQuerier) ListChartsByRepositoryIDs(_ context.Context, arg sqlc.ListChartsByRepositoryIDsParams) ([]sqlc.HelmChart, error) {
+	out := []sqlc.HelmChart{}
+	for _, rid := range arg.RepositoryIds {
+		out = append(out, q.chartsByRepo[rid]...)
+	}
+	if int(arg.QueryOffset) >= len(out) {
+		out = nil
+	} else if arg.QueryOffset > 0 {
+		out = out[arg.QueryOffset:]
+	}
+	if arg.QueryLimit > 0 && int(arg.QueryLimit) < len(out) {
+		out = out[:arg.QueryLimit]
+	}
+	return out, nil
+}
+func (q *fakeProjectCatalogQuerier) CountChartsByRepositoryIDs(_ context.Context, repoIDs []uuid.UUID) (int64, error) {
+	n := int64(0)
+	for _, rid := range repoIDs {
+		n += int64(len(q.chartsByRepo[rid]))
+	}
+	return n, nil
+}
+func (q *fakeProjectCatalogQuerier) ListChartVersionStrings(context.Context, uuid.UUID) ([]string, error) {
+	return nil, nil
+}
+func (q *fakeProjectCatalogQuerier) BulkCreateHelmChartVersions(context.Context, sqlc.BulkCreateHelmChartVersionsParams) ([]string, error) {
+	return nil, nil
+}
+func (q *fakeProjectCatalogQuerier) GetInstalledChartByClusterAndTool(context.Context, sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
+	return sqlc.InstalledChart{}, pgx.ErrNoRows
+}

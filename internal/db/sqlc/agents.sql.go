@@ -155,6 +155,48 @@ func (q *Queries) ListConnectionsByCluster(ctx context.Context, arg ListConnecti
 	return items, nil
 }
 
+const listLatestConnectionsByClusters = `-- name: ListLatestConnectionsByClusters :many
+SELECT DISTINCT ON (cluster_id) id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at
+FROM agent_connections
+WHERE cluster_id = ANY($1::uuid[])
+ORDER BY cluster_id, connected_at DESC
+`
+
+func (q *Queries) ListLatestConnectionsByClusters(ctx context.Context, clusterIds []uuid.UUID) ([]AgentConnection, error) {
+	rows, err := q.db.Query(ctx, listLatestConnectionsByClusters, clusterIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentConnection{}
+	for rows.Next() {
+		var i AgentConnection
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.AgentID,
+			&i.SessionID,
+			&i.ConnectedAt,
+			&i.DisconnectedAt,
+			&i.LastPing,
+			&i.Status,
+			&i.ChannelName,
+			&i.PodName,
+			&i.NodeName,
+			&i.AgentVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAgentConnectionPing = `-- name: UpdateAgentConnectionPing :exec
 UPDATE agent_connections SET last_ping = now() WHERE id = $1
 `
