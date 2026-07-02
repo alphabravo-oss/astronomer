@@ -89,3 +89,12 @@ WHERE c.cluster_id = $1
       ORDER BY s.created_at DESC
       LIMIT $2
   );
+
+-- name: DeleteControlPlaneSnapshotsByCluster :execrows
+-- Decommission cleanup. The cluster row is only TOMBSTONED (soft-deleted) on
+-- decommission, so the control_plane_snapshots.cluster_id FK ON DELETE CASCADE
+-- never fires; phaseDeleteDependents must drop these rows explicitly or a
+-- decommissioned self-managed cluster leaks all its etcd-snapshot registry
+-- rows forever (same integrity gap migration 127 closed for the sibling
+-- apiserver_audit_events table, missed for this one added in migration 125).
+DELETE FROM control_plane_snapshots WHERE cluster_id = $1;

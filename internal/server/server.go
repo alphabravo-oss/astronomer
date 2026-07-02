@@ -576,6 +576,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		nativeRBACAuthz = newNativeRBACAuthorizer(queries)
 		nativeRBACHandler = handler.NewNativeRBACHandler(queries)
 		nativeRBACHandler.SetInvalidator(nativeRBACAuthz.Invalidate)
+		// Privilege-escalation guard on native-rule authoring: the caller must
+		// already hold the mapped (resource, verb) at the rule's scope. Without
+		// this the guard is a no-op and an rbac:create holder can self-escalate.
+		nativeRBACHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	}
 	// Fleet operations (migration 056). Coordinated multi-cluster actions
 	// (drain N clusters, upgrade a tool across the fleet, apply-template

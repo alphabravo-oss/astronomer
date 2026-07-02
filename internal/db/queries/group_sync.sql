@@ -108,21 +108,34 @@ DELETE FROM project_role_bindings WHERE id = $1 AND source = 'group_sync';
 -- multiple connectors doesn't lose one connector's roles on a login
 -- through another. IS NOT DISTINCT FROM makes a NULL (wildcard-connector /
 -- legacy) parameter match NULL-connector rows.
+--
+-- Sweep-4 fix (wildcard/legacy over-retention): we ALSO enumerate
+-- NULL-connector rows on every sync (OR group_sync_connector_id IS NULL),
+-- regardless of the connector being synced. NULL provenance means
+-- "wildcard-owned or legacy pre-128 grant" — connector-agnostic — so it
+-- must be reconciled on every login. Without this, a wildcard grant
+-- stamped for connector A (or a legacy NULL row) is never revisited when
+-- the operator deletes the mapping and the user only logs in via
+-- connector B, so the (possibly admin) role is retained indefinitely.
+-- Bindings owned by a *named* connector stay scoped to that connector.
 
 -- name: ListGroupSyncGlobalBindingsForConnector :many
 SELECT * FROM global_role_bindings
 WHERE user_id = $1 AND source = 'group_sync'
-  AND group_sync_connector_id IS NOT DISTINCT FROM $2;
+  AND (group_sync_connector_id IS NOT DISTINCT FROM $2
+       OR group_sync_connector_id IS NULL);
 
 -- name: ListGroupSyncClusterBindingsForConnector :many
 SELECT * FROM cluster_role_bindings
 WHERE user_id = $1 AND source = 'group_sync'
-  AND group_sync_connector_id IS NOT DISTINCT FROM $2;
+  AND (group_sync_connector_id IS NOT DISTINCT FROM $2
+       OR group_sync_connector_id IS NULL);
 
 -- name: ListGroupSyncProjectBindingsForConnector :many
 SELECT * FROM project_role_bindings
 WHERE user_id = $1 AND source = 'group_sync'
-  AND group_sync_connector_id IS NOT DISTINCT FROM $2;
+  AND (group_sync_connector_id IS NOT DISTINCT FROM $2
+       OR group_sync_connector_id IS NULL);
 
 -- name: CreateGroupSyncGlobalBindingForConnector :one
 -- Same idempotent insert as CreateGroupSyncGlobalBinding but stamps the

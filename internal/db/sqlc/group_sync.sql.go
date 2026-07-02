@@ -502,7 +502,8 @@ func (q *Queries) ListGroupSyncClusterBindings(ctx context.Context, userID pgtyp
 const listGroupSyncClusterBindingsForConnector = `-- name: ListGroupSyncClusterBindingsForConnector :many
 SELECT id, user_id, "group", role_id, cluster_id, created_at, updated_at, source, namespace, group_sync_connector_id FROM cluster_role_bindings
 WHERE user_id = $1 AND source = 'group_sync'
-  AND group_sync_connector_id IS NOT DISTINCT FROM $2
+  AND (group_sync_connector_id IS NOT DISTINCT FROM $2
+       OR group_sync_connector_id IS NULL)
 `
 
 type ListGroupSyncClusterBindingsForConnectorParams struct {
@@ -581,7 +582,8 @@ const listGroupSyncGlobalBindingsForConnector = `-- name: ListGroupSyncGlobalBin
 
 SELECT id, user_id, "group", role_id, created_at, updated_at, source, group_sync_connector_id FROM global_role_bindings
 WHERE user_id = $1 AND source = 'group_sync'
-  AND group_sync_connector_id IS NOT DISTINCT FROM $2
+  AND (group_sync_connector_id IS NOT DISTINCT FROM $2
+       OR group_sync_connector_id IS NULL)
 `
 
 type ListGroupSyncGlobalBindingsForConnectorParams struct {
@@ -597,6 +599,16 @@ type ListGroupSyncGlobalBindingsForConnectorParams struct {
 // multiple connectors doesn't lose one connector's roles on a login
 // through another. IS NOT DISTINCT FROM makes a NULL (wildcard-connector /
 // legacy) parameter match NULL-connector rows.
+//
+// Sweep-4 fix (wildcard/legacy over-retention): we ALSO enumerate
+// NULL-connector rows on every sync (OR group_sync_connector_id IS NULL),
+// regardless of the connector being synced. NULL provenance means
+// "wildcard-owned or legacy pre-128 grant" — connector-agnostic — so it
+// must be reconciled on every login. Without this, a wildcard grant
+// stamped for connector A (or a legacy NULL row) is never revisited when
+// the operator deletes the mapping and the user only logs in via
+// connector B, so the (possibly admin) role is retained indefinitely.
+// Bindings owned by a *named* connector stay scoped to that connector.
 func (q *Queries) ListGroupSyncGlobalBindingsForConnector(ctx context.Context, arg ListGroupSyncGlobalBindingsForConnectorParams) ([]GlobalRoleBinding, error) {
 	rows, err := q.db.Query(ctx, listGroupSyncGlobalBindingsForConnector, arg.UserID, arg.GroupSyncConnectorID)
 	if err != nil {
@@ -663,7 +675,8 @@ func (q *Queries) ListGroupSyncProjectBindings(ctx context.Context, userID pgtyp
 const listGroupSyncProjectBindingsForConnector = `-- name: ListGroupSyncProjectBindingsForConnector :many
 SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings
 WHERE user_id = $1 AND source = 'group_sync'
-  AND group_sync_connector_id IS NOT DISTINCT FROM $2
+  AND (group_sync_connector_id IS NOT DISTINCT FROM $2
+       OR group_sync_connector_id IS NULL)
 `
 
 type ListGroupSyncProjectBindingsForConnectorParams struct {

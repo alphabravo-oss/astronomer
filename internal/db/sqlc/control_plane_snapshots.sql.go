@@ -69,6 +69,24 @@ func (q *Queries) CreateControlPlaneSnapshot(ctx context.Context, arg CreateCont
 	return i, err
 }
 
+const deleteControlPlaneSnapshotsByCluster = `-- name: DeleteControlPlaneSnapshotsByCluster :execrows
+DELETE FROM control_plane_snapshots WHERE cluster_id = $1
+`
+
+// Decommission cleanup. The cluster row is only TOMBSTONED (soft-deleted) on
+// decommission, so the control_plane_snapshots.cluster_id FK ON DELETE CASCADE
+// never fires; phaseDeleteDependents must drop these rows explicitly or a
+// decommissioned self-managed cluster leaks all its etcd-snapshot registry
+// rows forever (same integrity gap migration 127 closed for the sibling
+// apiserver_audit_events table, missed for this one added in migration 125).
+func (q *Queries) DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteControlPlaneSnapshotsByCluster, clusterID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getControlPlaneSnapshotByID = `-- name: GetControlPlaneSnapshotByID :one
 SELECT id, cluster_id, name, status, location, size_bytes,
        requested_by_id, error, created_at, completed_at

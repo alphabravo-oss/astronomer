@@ -31,7 +31,15 @@ func isPrivilegeEscalationGroup(group string) bool {
 	case "rbac.authorization.k8s.io",
 		"admissionregistration.k8s.io",
 		"apiregistration.k8s.io",
-		"apiextensions.k8s.io":
+		"apiextensions.k8s.io",
+		// certificates.k8s.io: approving/signing a CertificateSigningRequest
+		// mints an arbitrary client cert (e.g. CN=system:masters), which is
+		// cluster-admin-equivalent. A native rule granting CSR verbs must never
+		// be honored — keep it behind an explicit coarse grant.
+		"certificates.k8s.io",
+		// authentication.k8s.io: TokenRequest / TokenReview can mint or validate
+		// bearer tokens for other identities; treat as escalation.
+		"authentication.k8s.io":
 		return true
 	}
 	return false

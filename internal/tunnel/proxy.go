@@ -219,6 +219,21 @@ func k8sProxyMode(r *http.Request) string {
 // The first frame must be a header. After that, headers cannot be amended
 // (HTTP semantics); any further header frames are ignored.
 func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.Request, stream *Stream, clusterID string) {
+	// When we stop draining this watch (client disconnect, end frame, or stream
+	// close) tell the agent to cancel its upstream kube-apiserver watch. Without
+	// this the agent's HandleStreamRequest goroutine + apiserver watch leak, and
+	// its continued Send() calls for every watch event can fill the 256-slot
+	// sendCh and force a full-tunnel reset that kills every other stream/op for
+	// the cluster. Mirrors logs_consumer.go emitting MsgLogStop.
+	defer func() {
+		_ = p.hub.SendToAgent(clusterID, &protocol.Message{
+			Type:      protocol.MsgK8sStreamStop,
+			StreamID:  stream.ID,
+			ClusterID: clusterID,
+			Timestamp: time.Now().UTC(),
+		})
+	}()
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		recordK8sProxyError("watch", "streaming_not_supported")

@@ -210,6 +210,12 @@ type ClusterDecommissionQuerier interface {
 	// tombstoned (soft-deleted), so the FK ON DELETE CASCADE never fires —
 	// phaseDeleteDependents must drop them explicitly or they leak forever.
 	DeleteApiserverAuditEventsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// control_plane_snapshots (etcd DR snapshot registry, migration 125) are
+	// also keyed by cluster_id with an ON DELETE CASCADE FK that never fires
+	// because the cluster row is tombstoned, not hard-deleted — drop them
+	// here so a decommissioned cluster doesn't leak its snapshot rows forever
+	// (mirrors the apiserver_audit_events treatment above).
+	DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Argo CD managed-cluster mappings + an enumerator so we can audit
 	// the orphans (upstream Argo Secrets that need manual unregister).
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
@@ -802,6 +808,9 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		// decommissioned cluster doesn't leak its (fleet-wide, high-volume)
 		// apiserver audit rows forever.
 		{"apiserver_audit_events", q.DeleteApiserverAuditEventsByCluster},
+		// control_plane_snapshots: cluster_id-keyed, orphaned by the tombstone
+		// (ON DELETE CASCADE never fires) — drop explicitly, same as above.
+		{"control_plane_snapshots", q.DeleteControlPlaneSnapshotsByCluster},
 	}
 	var firstErr error
 	for _, o := range ops {

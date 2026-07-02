@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -280,12 +281,12 @@ func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, op
 		}
 	}
 
-	updated, err := s.q.UpdateClusterRegistrationPhase(ctx, sqlc.UpdateClusterRegistrationPhaseParams{
-		ID:                      clusterID,
-		RegistrationPhase:       string(next),
-		RegistrationStartedAt:   startedAt,
-		RegistrationCompletedAt: completedAt,
-	})
+	// Persist via compare-and-swap on the phase we read. If a concurrent
+	// Advance already moved the row off `record.RegistrationPhase` (e.g. an
+	// operator Cancel racing the apply worker's success event), the CAS
+	// matches zero rows and we bail with ErrIllegalTransition rather than
+	// clobbering the winner and firing side effects for the wrong outcome.
+	updated, err := s.writePhase(ctx, clusterID, record.RegistrationPhase, string(next), startedAt, completedAt)
 	if err != nil {
 		return record, err
 	}
@@ -332,6 +333,47 @@ func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, op
 		}
 	}
 	return updatedRecord, nil
+}
+
+// phaseCASQuerier is the optional compare-and-swap surface for the phase
+// column. *sqlc.Queries gains UpdateClusterRegistrationPhaseCAS via the
+// hand-shim (see internal/db/queries/cluster_registration.sql). It's declared
+// as a narrow OPTIONAL interface — mirroring the audit-writer type-switch
+// pattern used by the reconciler — so a smaller Querier wired in tests still
+// compiles and simply falls back to the unconditional update. The method
+// takes positional args (not a generated *Params struct) so this file
+// compiles before the shim is regenerated; the shim's signature must match.
+type phaseCASQuerier interface {
+	UpdateClusterRegistrationPhaseCAS(ctx context.Context, id uuid.UUID, expectedPhase, nextPhase string, startedAt, completedAt pgtype.Timestamptz) (sqlc.UpdateClusterRegistrationPhaseRow, error)
+}
+
+// writePhase persists the phase move. When the underlying Querier supports
+// compare-and-swap it writes conditionally on the phase we read (`expected`),
+// so a concurrent transition that already moved the row is NOT clobbered: a
+// zero-row CAS result surfaces as ErrIllegalTransition (a lost race), which
+// every Advance caller already treats as an idempotent no-op. Callers whose
+// Querier predates CAS fall back to the original unconditional update,
+// preserving legacy behaviour exactly.
+func (s *Service) writePhase(ctx context.Context, clusterID uuid.UUID, expected, next string, startedAt, completedAt pgtype.Timestamptz) (sqlc.UpdateClusterRegistrationPhaseRow, error) {
+	if cas, ok := s.q.(phaseCASQuerier); ok {
+		row, err := cas.UpdateClusterRegistrationPhaseCAS(ctx, clusterID, expected, next, startedAt, completedAt)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// CAS miss: the phase changed under us between our read and
+				// this write (a concurrent Advance won the race, or the
+				// cluster was deleted). Don't overwrite the winner.
+				return sqlc.UpdateClusterRegistrationPhaseRow{}, ErrIllegalTransition
+			}
+			return sqlc.UpdateClusterRegistrationPhaseRow{}, err
+		}
+		return row, nil
+	}
+	return s.q.UpdateClusterRegistrationPhase(ctx, sqlc.UpdateClusterRegistrationPhaseParams{
+		ID:                      clusterID,
+		RegistrationPhase:       next,
+		RegistrationStartedAt:   startedAt,
+		RegistrationCompletedAt: completedAt,
+	})
 }
 
 // AdvanceOption tweaks the side-effects of Advance. Used by the apply

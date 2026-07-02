@@ -63,6 +63,7 @@ const ClusterConditionReconcileType = "cluster_condition:reconcile"
 // vocabulary.
 const (
 	ccrStatusFalse              = "False"
+	ccrStatusTrue               = "True"
 	ccrOutcomeOk                = "success"
 	ccrOutcomeFail              = "failed"
 	ccrOutcomeSkip              = "skipped"
@@ -124,8 +125,43 @@ func HandleClusterConditionReconcile(ctx context.Context, _ *asynq.Task) error {
 				)
 			}
 		}
+		// Problem-when-True conditions. Most conditions encode the failure
+		// as status=False (Connected=False → disconnected), but a handful
+		// invert that polarity: TemplateApplyStuck=True is the failure. The
+		// drift sweep upserts TemplateApplyStuck=True for rows wedged in
+		// 'applying'; if we only scanned status=False those rows would never
+		// reach remediateTemplateApplyStuck and the wizard would sit red
+		// forever. Scan the True set too, but dispatch ONLY the types whose
+		// True state is remediable so a Connected=True (healthy) row isn't
+		// mistakenly routed into the connectivity remedy.
+		trueRows, err := runtimeDeps.Queries.ListClusterConditionsByStatus(ctx, ccrStatusTrue)
+		if err != nil {
+			return fmt.Errorf("list true conditions: %w", err)
+		}
+		for _, row := range trueRows {
+			if !ccrRemediableWhenTrue(row.Type) {
+				continue
+			}
+			if err := reconcileOneCondition(ctx, row); err != nil {
+				runtimeLogger().WarnContext(ctx, "cluster condition reconcile failed",
+					"cluster_id", row.ClusterID.String(),
+					"type", row.Type,
+					"error", err,
+				)
+			}
+		}
 		return nil
 	})
+}
+
+// ccrRemediableWhenTrue reports whether a condition of the given type is
+// remediable when its status is 'True' (i.e. True encodes the problem
+// state). Conditions whose failure is status=False (Connected, …) are NOT
+// listed here — they're handled by the status=False sweep. Keeping this a
+// tight allowlist prevents a healthy X=True row (e.g. Connected=True) from
+// being fed into a remedy meant for the False state.
+func ccrRemediableWhenTrue(condType string) bool {
+	return condType == ConditionTemplateApplyStuck
 }
 
 // reconcileOneCondition is the per-row dispatch. Looks up the latest

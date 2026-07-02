@@ -56,6 +56,12 @@ SET task_type             = EXCLUDED.task_type,
     unique_seconds        = EXCLUDED.unique_seconds,
     max_delivery_attempts = EXCLUDED.max_delivery_attempts,
     status                = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.status ELSE 'pending' END,
+    -- Re-opening a non-delivered row starts a FRESH delivery budget:
+    -- without this an old row whose attempt_count climbed to
+    -- max_delivery_attempts (dead-lettered) would re-open to 'pending'
+    -- but keep its exhausted count, so the very next transient error
+    -- dead-letters it again with zero real retries.
+    attempt_count         = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.attempt_count ELSE 0 END,
     next_attempt_at       = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.next_attempt_at ELSE EXCLUDED.next_attempt_at END,
     locked_until          = NULL,
     last_error            = CASE WHEN task_outbox.status = 'delivered' THEN task_outbox.last_error ELSE '' END,

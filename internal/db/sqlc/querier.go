@@ -455,6 +455,13 @@ type Querier interface {
 	// individual uninstalls.
 	DeleteClusterTemplateApplication(ctx context.Context, clusterID uuid.UUID) error
 	DeleteControlPlaneSilence(ctx context.Context, id uuid.UUID) error
+	// Decommission cleanup. The cluster row is only TOMBSTONED (soft-deleted) on
+	// decommission, so the control_plane_snapshots.cluster_id FK ON DELETE CASCADE
+	// never fires; phaseDeleteDependents must drop these rows explicitly or a
+	// decommissioned self-managed cluster leaks all its etcd-snapshot registry
+	// rows forever (same integrity gap migration 127 closed for the sibling
+	// apiserver_audit_events table, missed for this one added in migration 125).
+	DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDashboardWidget(ctx context.Context, id uuid.UUID) error
 	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
@@ -1247,6 +1254,16 @@ type Querier interface {
 	// multiple connectors doesn't lose one connector's roles on a login
 	// through another. IS NOT DISTINCT FROM makes a NULL (wildcard-connector /
 	// legacy) parameter match NULL-connector rows.
+	//
+	// Sweep-4 fix (wildcard/legacy over-retention): we ALSO enumerate
+	// NULL-connector rows on every sync (OR group_sync_connector_id IS NULL),
+	// regardless of the connector being synced. NULL provenance means
+	// "wildcard-owned or legacy pre-128 grant" — connector-agnostic — so it
+	// must be reconciled on every login. Without this, a wildcard grant
+	// stamped for connector A (or a legacy NULL row) is never revisited when
+	// the operator deletes the mapping and the user only logs in via
+	// connector B, so the (possibly admin) role is retained indefinitely.
+	// Bindings owned by a *named* connector stay scoped to that connector.
 	ListGroupSyncGlobalBindingsForConnector(ctx context.Context, arg ListGroupSyncGlobalBindingsForConnectorParams) ([]GlobalRoleBinding, error)
 	ListGroupSyncProjectBindings(ctx context.Context, userID pgtype.UUID) ([]ProjectRoleBinding, error)
 	ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg ListGroupSyncProjectBindingsForConnectorParams) ([]ProjectRoleBinding, error)
@@ -1785,6 +1802,15 @@ type Querier interface {
 	// real values and updates normally.
 	UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error
 	UpdateClusterRegistrationPhase(ctx context.Context, arg UpdateClusterRegistrationPhaseParams) (UpdateClusterRegistrationPhaseRow, error)
+	// Compare-and-swap variant of UpdateClusterRegistrationPhase. The write only
+	// lands if the row is STILL in the phase the caller read ($5); otherwise it
+	// matches zero rows and returns no row (pgx.ErrNoRows), signalling a lost
+	// update race. Closes the read-modify-write hole in registration.Advance:
+	// two callers (e.g. an operator Cancel racing the apply worker's success
+	// event) both read phase='provisioning' and both issued an unconditional
+	// UPDATE by id, so the last writer clobbered the winning transition and
+	// IsTerminal side effects fired for the wrong outcome.
+	UpdateClusterRegistrationPhaseCAS(ctx context.Context, arg UpdateClusterRegistrationPhaseCASParams) (UpdateClusterRegistrationPhaseCASRow, error)
 	UpdateClusterRegistrationStep(ctx context.Context, arg UpdateClusterRegistrationStepParams) (ClusterRegistrationStep, error)
 	UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClusterRegistryConfigParams) (ClusterRegistryConfig, error)
 	UpdateClusterRole(ctx context.Context, arg UpdateClusterRoleParams) (ClusterRole, error)

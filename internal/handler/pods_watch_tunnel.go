@@ -63,6 +63,21 @@ func (r *TunnelK8sRequester) WatchPods(ctx context.Context, clusterID, namespace
 	go func() {
 		defer close(out)
 		defer agent.Streams.CloseStream(streamID)
+		// Tell the agent to cancel its kube-apiserver watch when this SSE
+		// consumer goes away (client navigated off the pods page → ctx.Done).
+		// Without this we close only our LOCAL stream; the agent's
+		// HandleStreamRequest goroutine + apiserver watch keep running and keep
+		// base64-encoding pod events into frames we discard. Registered after
+		// CloseStream so it runs first (LIFO): signal the agent, then tear down
+		// the local stream. Mirrors logs_consumer.go emitting MsgLogStop.
+		defer func() {
+			_ = r.hub.SendToAgent(clusterID, &protocol.Message{
+				Type:      protocol.MsgK8sStreamStop,
+				StreamID:  streamID,
+				ClusterID: clusterID,
+				Timestamp: time.Now().UTC(),
+			})
+		}()
 
 		var buf bytes.Buffer
 		// errStatus is set from a header frame whose StatusCode >= 400; while

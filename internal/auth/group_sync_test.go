@@ -160,14 +160,20 @@ func (f *fakeGroupSync) CreateGroupSyncProjectBinding(_ context.Context, arg sql
 	return row, nil
 }
 
-// connMatch models the SQL `group_sync_connector_id IS NOT DISTINCT FROM $2`:
-// a NULL param matches NULL rows; a Valid param matches only that connector.
+// connMatch models the SQL enumeration predicate
+// `group_sync_connector_id IS NOT DISTINCT FROM $2 OR group_sync_connector_id
+// IS NULL`: a NULL-provenance (wildcard/legacy) row always matches so it's
+// reconciled on every sync; a named-connector row matches only when the
+// synced connector agrees (IS NOT DISTINCT FROM).
 func connMatch(row, arg pgtype.UUID) bool {
+	if !row.Valid {
+		// group_sync_connector_id IS NULL — wildcard-owned / legacy row,
+		// enumerated on every sync regardless of the login connector.
+		return true
+	}
+	// IS NOT DISTINCT FROM $2 for a named-connector row.
 	if arg.Valid != row.Valid {
 		return false
-	}
-	if !arg.Valid {
-		return true // both NULL
 	}
 	return row.Bytes == arg.Bytes
 }

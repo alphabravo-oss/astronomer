@@ -186,6 +186,11 @@ func (f *fakeDecommQuerier) DeleteApiserverAuditEventsByCluster(_ context.Contex
 	return 8, nil
 }
 
+func (f *fakeDecommQuerier) DeleteControlPlaneSnapshotsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	f.bump("DeleteControlPlaneSnapshotsByCluster")
+	return 3, nil
+}
+
 func (f *fakeDecommQuerier) DeleteClusterRegistryConfigsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
 	f.bump("DeleteClusterRegistryConfigsByCluster")
 	return 1, f.registryErr
@@ -345,6 +350,7 @@ func TestSuccessPath_AllPhasesRunInOrder(t *testing.T) {
 		"DeleteProjectNamespacesByCluster",
 		"DeleteClusterRoleBindingsByCluster",
 		"DeleteApiserverAuditEventsByCluster",
+		"DeleteControlPlaneSnapshotsByCluster",
 		"TombstoneCluster",
 	} {
 		if q.calls[name] != 1 {
@@ -890,6 +896,9 @@ func TestDeleteDependents_CleansSnapshotSchedulesAndOrphanTables(t *testing.T) {
 		"DeleteNativeRBACRulesByCluster",
 		"DeleteDeferredOperationsByCluster",
 		"DeleteAgentLifecycleOperationsByCluster",
+		// control_plane_snapshots: etcd DR snapshot registry (migration 125),
+		// orphaned by the tombstone exactly like apiserver_audit_events.
+		"DeleteControlPlaneSnapshotsByCluster",
 	} {
 		if q.calls[name] != 1 {
 			t.Errorf("expected %s called once during delete_dependents, got %d", name, q.calls[name])

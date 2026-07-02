@@ -38,6 +38,12 @@ type K8sProxy struct {
 	log        *slog.Logger
 
 	tokenSrc *bearerTokenSource
+
+	// streams tracks the per-StreamID cancel func for in-flight
+	// HandleStreamRequest watches so a MsgK8sStreamStop from the server can
+	// cancel the kube-apiserver watch + pump goroutine. Mirrors LogHandler.
+	streamsMu sync.Mutex
+	streams   map[string]context.CancelFunc
 }
 
 // bearerTokenSource provides a refreshing bearer token for in-cluster requests.
@@ -114,6 +120,7 @@ func NewK8sProxy(log *slog.Logger) (*K8sProxy, error) {
 		httpClient: &http.Client{Transport: transport},
 		log:        log,
 		tokenSrc:   tokenSrc,
+		streams:    make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -146,6 +153,7 @@ func NewK8sProxyWithConfig(cfg *rest.Config, log *slog.Logger) (*K8sProxy, error
 		restConfig: cfg,
 		httpClient: &http.Client{Transport: transport},
 		log:        log,
+		streams:    make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -153,6 +161,15 @@ func NewK8sProxyWithConfig(cfg *rest.Config, log *slog.Logger) (*K8sProxy, error
 // body chunk-by-chunk over the tunnel. Sized to match the chunk granularity
 // k8s typically uses for watch events without dwarfing the WS frame budget.
 const k8sStreamChunkSize = 16 * 1024
+
+// maxK8sResponseBodyBytes caps how large a single proxied unary k8s response
+// body the agent will buffer in memory (via HandleRequest/HandleRequestStreaming).
+// Matches the server-side reassembly cap (handler.maxAssembledResponseBytes,
+// 64 MiB) so nothing that previously succeeded through chunking is newly
+// rejected; bodies past it fail closed with a 413 Status object. Watches use
+// the true-streaming HandleStreamRequest path and are not bounded here. Kept a
+// var (not const) so it is configurable and overridable in tests.
+var maxK8sResponseBodyBytes int64 = 64 * 1024 * 1024
 
 // HandleStreamRequest processes a K8S_STREAM_REQUEST and emits one or more
 // K8S_STREAM_FRAME messages back over the tunnel. Used for Watch and other
@@ -170,6 +187,18 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 	}
 
 	p.log.Info("proxying k8s stream", "method", req.Method, "path", req.Path)
+
+	// Per-stream cancellation: when the server's consumer stops draining (client
+	// disconnect, end frame, or stream close) it sends MsgK8sStreamStop, which
+	// HandleStreamStop uses to cancel this context. That aborts the in-flight
+	// kube-apiserver watch (httpReq is built with streamCtx) so resp.Body.Read
+	// unblocks and this goroutine drains instead of streaming forever into a
+	// discarded stream.
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	p.registerStream(msg.StreamID, cancel)
+	defer p.unregisterStream(msg.StreamID)
+	ctx = streamCtx
 
 	targetURL := p.restConfig.Host + req.Path
 
@@ -247,6 +276,41 @@ func (p *K8sProxy) sendStreamFrame(sendFn func(*protocol.Message) error, streamI
 		Timestamp: time.Now().UTC(),
 		Payload:   payload,
 	})
+}
+
+// registerStream records the cancel func for an in-flight stream so a later
+// MsgK8sStreamStop can terminate it.
+func (p *K8sProxy) registerStream(streamID string, cancel context.CancelFunc) {
+	p.streamsMu.Lock()
+	if p.streams == nil {
+		p.streams = make(map[string]context.CancelFunc)
+	}
+	p.streams[streamID] = cancel
+	p.streamsMu.Unlock()
+}
+
+// unregisterStream drops the cancel func for a completed stream.
+func (p *K8sProxy) unregisterStream(streamID string) {
+	p.streamsMu.Lock()
+	delete(p.streams, streamID)
+	p.streamsMu.Unlock()
+}
+
+// HandleStreamStop cancels an in-flight k8s stream (Watch) whose consumer has
+// gone away. Cancelling the per-stream context aborts the kube-apiserver watch
+// and lets HandleStreamRequest's read loop drain and emit its end frame.
+// Unknown stream IDs are a no-op (the stream may have already ended), matching
+// LogHandler.HandleLogStop.
+func (p *K8sProxy) HandleStreamStop(msg *protocol.Message) error {
+	p.streamsMu.Lock()
+	cancel, ok := p.streams[msg.StreamID]
+	p.streamsMu.Unlock()
+	if !ok {
+		p.log.Debug("k8s stream stop for unknown stream", "stream_id", msg.StreamID)
+		return nil
+	}
+	cancel()
+	return nil
 }
 
 func (p *K8sProxy) sendStreamEnd(sendFn func(*protocol.Message) error, streamID string, cause error) error {
@@ -390,9 +454,27 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 		_ = resp.Body.Close()
 	}()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Cap the in-memory read: a single non-paginated LIST on a large cluster
+	// (all pods/events/secrets) or a GET of a multi-hundred-MiB object would
+	// otherwise allocate the full body plus its base64 copy at once and, with
+	// goroutine-per-message dispatch, several concurrent large reads multiply
+	// this and OOM the agent pod. service_proxy caps the same way. Read one
+	// byte past the limit so we can distinguish "exactly at cap" from "over".
+	limited := io.LimitReader(resp.Body, maxK8sResponseBodyBytes+1)
+	respBody, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("read k8s response body: %w", err)
+	}
+	if int64(len(respBody)) > maxK8sResponseBodyBytes {
+		// Fail closed with a 413 Status object rather than forwarding a
+		// truncated (and therefore corrupt/unparseable) body. The status body
+		// mirrors what the apiserver itself returns so clients handle it.
+		statusJSON := fmt.Sprintf(
+			`{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"response body exceeds agent %d-byte limit","reason":"RequestEntityTooLarge","code":413}`,
+			maxK8sResponseBodyBytes,
+		)
+		return []byte(statusJSON), http.StatusRequestEntityTooLarge,
+			map[string]string{"Content-Type": "application/json"}, nil
 	}
 
 	respHeaders := make(map[string]string)

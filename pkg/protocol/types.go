@@ -27,6 +27,11 @@ const (
 	// {Kind:"data"} frames, then exactly one {Kind:"end"}.
 	MsgK8sStreamRequest MessageType = "K8S_STREAM_REQUEST"
 	MsgK8sStreamFrame   MessageType = "K8S_STREAM_FRAME"
+	// MsgK8sStreamStop is the server's request to terminate a k8s stream
+	// (Watch) early. The agent cancels the per-stream context so its
+	// kube-apiserver watch connection and pump goroutine drain, mirroring
+	// MsgLogStop. StreamID identifies the stream; no payload is required.
+	MsgK8sStreamStop MessageType = "K8S_STREAM_STOP"
 
 	// Helm operations
 	MsgHelmInstall   MessageType = "HELM_INSTALL"

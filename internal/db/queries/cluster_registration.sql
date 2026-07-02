@@ -16,6 +16,23 @@ SET registration_phase = $2,
 WHERE id = $1
 RETURNING id, registration_phase, registration_started_at, registration_completed_at, install_baseline;
 
+-- name: UpdateClusterRegistrationPhaseCAS :one
+-- Compare-and-swap variant of UpdateClusterRegistrationPhase. The write only
+-- lands if the row is STILL in the phase the caller read ($5); otherwise it
+-- matches zero rows and returns no row (pgx.ErrNoRows), signalling a lost
+-- update race. Closes the read-modify-write hole in registration.Advance:
+-- two callers (e.g. an operator Cancel racing the apply worker's success
+-- event) both read phase='provisioning' and both issued an unconditional
+-- UPDATE by id, so the last writer clobbered the winning transition and
+-- IsTerminal side effects fired for the wrong outcome.
+UPDATE clusters
+SET registration_phase = $2,
+    registration_started_at = COALESCE(registration_started_at, $3),
+    registration_completed_at = $4
+WHERE id = $1
+  AND registration_phase = $5
+RETURNING id, registration_phase, registration_started_at, registration_completed_at, install_baseline;
+
 -- name: SetClusterInstallBaseline :one
 UPDATE clusters
 SET install_baseline = $2

@@ -113,6 +113,10 @@ func runConnect(logger *slog.Logger) error {
 		// reply.
 		tunnel.RegisterHandler(protocol.MsgK8sStreamRequest,
 			agent.AdaptStreamingHandler(tunnel, k8s.HandleStreamRequest))
+		// Per-stream cancellation: the server sends MsgK8sStreamStop when a
+		// watch/passthrough-stream client disconnects; without this handler the
+		// agent leaks the kube-apiserver watch + goroutine per abandoned stream.
+		tunnel.RegisterHandler(protocol.MsgK8sStreamStop, agent.AdaptVoidHandler(k8s.HandleStreamStop))
 
 		client := k8s.Client()
 		restConfig := k8s.RESTConfig()

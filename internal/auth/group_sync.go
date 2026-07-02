@@ -47,10 +47,13 @@ type GroupSyncQuerier interface {
 	GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (sqlc.UserIdpGroup, error)
 
 	// Connector-scoped list/create: reconciliation must only revoke bindings
-	// granted by the SAME connector currently syncing, so a user entitled
+	// granted by the SAME named connector currently syncing, so a user entitled
 	// under multiple connectors doesn't lose one connector's roles on a login
 	// through another. IS NOT DISTINCT FROM makes a NULL connector match legacy
-	// NULL-connector rows.
+	// NULL-connector rows. The list queries ALSO enumerate NULL-connector rows
+	// unconditionally: NULL provenance = wildcard-owned or legacy pre-128 grant,
+	// which is connector-agnostic and must be reconciled (and revoked) on every
+	// sync — otherwise a deleted wildcard mapping never revokes its grants.
 	ListGroupSyncGlobalBindingsForConnector(ctx context.Context, arg sqlc.ListGroupSyncGlobalBindingsForConnectorParams) ([]sqlc.GlobalRoleBinding, error)
 	ListGroupSyncClusterBindingsForConnector(ctx context.Context, arg sqlc.ListGroupSyncClusterBindingsForConnectorParams) ([]sqlc.ClusterRoleBinding, error)
 	ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg sqlc.ListGroupSyncProjectBindingsForConnectorParams) ([]sqlc.ProjectRoleBinding, error)
@@ -239,9 +242,14 @@ func SyncUserGroups(
 			continue
 		}
 		row, err := q.CreateGroupSyncGlobalBindingForConnector(ctx, sqlc.CreateGroupSyncGlobalBindingForConnectorParams{
-			UserID:               uid,
-			RoleID:               m.RoleID,
-			GroupSyncConnectorID: connectorID,
+			UserID: uid,
+			RoleID: m.RoleID,
+			// Provenance is the MAPPING's connector (NULL for a wildcard
+			// mapping), NOT the login connectorID. A wildcard grant must be
+			// stamped NULL so it's reconciled on every login and revoked
+			// when the mapping is deleted — stamping the login connector
+			// hides it from other-connector syncs (the sweep-3 regression).
+			GroupSyncConnectorID: m.ConnectorID,
 		})
 		if err != nil {
 			// pgx.ErrNoRows means ON CONFLICT DO NOTHING fired —
@@ -300,10 +308,11 @@ func SyncUserGroups(
 			continue
 		}
 		row, err := q.CreateGroupSyncClusterBindingForConnector(ctx, sqlc.CreateGroupSyncClusterBindingForConnectorParams{
-			UserID:               uid,
-			RoleID:               m.RoleID,
-			ClusterID:            m.ClusterID.Bytes,
-			GroupSyncConnectorID: connectorID,
+			UserID:    uid,
+			RoleID:    m.RoleID,
+			ClusterID: m.ClusterID.Bytes,
+			// Mapping provenance, not the login connector (see global path).
+			GroupSyncConnectorID: m.ConnectorID,
 		})
 		if err != nil {
 			if isNoRows(err) {
@@ -359,10 +368,11 @@ func SyncUserGroups(
 			continue
 		}
 		row, err := q.CreateGroupSyncProjectBindingForConnector(ctx, sqlc.CreateGroupSyncProjectBindingForConnectorParams{
-			UserID:               uid,
-			RoleID:               m.RoleID,
-			ProjectID:            m.ProjectID.Bytes,
-			GroupSyncConnectorID: connectorID,
+			UserID:    uid,
+			RoleID:    m.RoleID,
+			ProjectID: m.ProjectID.Bytes,
+			// Mapping provenance, not the login connector (see global path).
+			GroupSyncConnectorID: m.ConnectorID,
 		})
 		if err != nil {
 			if isNoRows(err) {

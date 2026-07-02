@@ -132,8 +132,19 @@ type projectRunTxFunc func(ctx context.Context, fn func(q ProjectNamespaceTx) er
 var (
 	errNamespaceAlreadyInProject = errors.New("namespace already in project")
 	errNamespaceNotInProject     = errors.New("namespace not in project")
+	// errNamespaceOwnedByOtherProject signals the DB-level uniqueness guard
+	// (partial UNIQUE index on project_namespaces(cluster_id, namespace),
+	// migration 129) rejected the sidecar insert because another project on
+	// the same cluster already owns the namespace. This is the race-safe
+	// backstop for the pre-tx cross-project check, which is a TOCTOU: two
+	// concurrent AddNamespace calls to DIFFERENT projects lock different
+	// project rows and both sail past the pre-tx read.
+	errNamespaceOwnedByOtherProject = errors.New("namespace owned by another project")
 )
 
+// isUniqueViolation reports whether err is a Postgres unique_violation
+// (SQLSTATE 23505). Used to translate the project_namespaces uniqueness
+// guard into a clean 409 instead of a generic 500.
 type projectOwnershipQuerier interface {
 	GetProjectOwnership(ctx context.Context, id uuid.UUID) (sqlc.FleetOwnership, error)
 }
@@ -1252,6 +1263,16 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 				ClusterID: locked.ClusterID,
 				Namespace: req.Namespace,
 			}); uerr != nil {
+				// A unique_violation here is the (cluster_id, namespace)
+				// guard firing: another project on this cluster already
+				// owns the namespace. The ON CONFLICT in UpsertProjectNamespace
+				// only absorbs the PK (project_id, cluster_id, namespace)
+				// conflict — same-project re-adds — so 23505 always means a
+				// cross-project claim (and same-project is already caught
+				// above by the in-lock nsList scan).
+				if isUniqueViolation(uerr) {
+					return errNamespaceOwnedByOtherProject
+				}
 				return uerr
 			}
 			updated = u
@@ -1261,6 +1282,8 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case errors.Is(txErr, errNamespaceAlreadyInProject):
 				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
+			case errors.Is(txErr, errNamespaceOwnedByOtherProject):
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already assigned to another project on this cluster.")
 			case errors.Is(txErr, pgx.ErrNoRows):
 				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 			default:

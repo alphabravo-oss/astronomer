@@ -279,6 +279,59 @@ func (q *Queries) UpdateClusterRegistrationPhase(ctx context.Context, arg Update
 	return i, err
 }
 
+const updateClusterRegistrationPhaseCAS = `-- name: UpdateClusterRegistrationPhaseCAS :one
+UPDATE clusters
+SET registration_phase = $2,
+    registration_started_at = COALESCE(registration_started_at, $3),
+    registration_completed_at = $4
+WHERE id = $1
+  AND registration_phase = $5
+RETURNING id, registration_phase, registration_started_at, registration_completed_at, install_baseline
+`
+
+type UpdateClusterRegistrationPhaseCASParams struct {
+	ID                      uuid.UUID          `json:"id"`
+	RegistrationPhase       string             `json:"registration_phase"`
+	RegistrationStartedAt   pgtype.Timestamptz `json:"registration_started_at"`
+	RegistrationCompletedAt pgtype.Timestamptz `json:"registration_completed_at"`
+	RegistrationPhase_2     string             `json:"registration_phase_2"`
+}
+
+type UpdateClusterRegistrationPhaseCASRow struct {
+	ID                      uuid.UUID          `json:"id"`
+	RegistrationPhase       string             `json:"registration_phase"`
+	RegistrationStartedAt   pgtype.Timestamptz `json:"registration_started_at"`
+	RegistrationCompletedAt pgtype.Timestamptz `json:"registration_completed_at"`
+	InstallBaseline         pgtype.Bool        `json:"install_baseline"`
+}
+
+// Compare-and-swap variant of UpdateClusterRegistrationPhase. The write only
+// lands if the row is STILL in the phase the caller read ($5); otherwise it
+// matches zero rows and returns no row (pgx.ErrNoRows), signalling a lost
+// update race. Closes the read-modify-write hole in registration.Advance:
+// two callers (e.g. an operator Cancel racing the apply worker's success
+// event) both read phase='provisioning' and both issued an unconditional
+// UPDATE by id, so the last writer clobbered the winning transition and
+// IsTerminal side effects fired for the wrong outcome.
+func (q *Queries) UpdateClusterRegistrationPhaseCAS(ctx context.Context, arg UpdateClusterRegistrationPhaseCASParams) (UpdateClusterRegistrationPhaseCASRow, error) {
+	row := q.db.QueryRow(ctx, updateClusterRegistrationPhaseCAS,
+		arg.ID,
+		arg.RegistrationPhase,
+		arg.RegistrationStartedAt,
+		arg.RegistrationCompletedAt,
+		arg.RegistrationPhase_2,
+	)
+	var i UpdateClusterRegistrationPhaseCASRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+	)
+	return i, err
+}
+
 const updateClusterRegistrationStep = `-- name: UpdateClusterRegistrationStep :one
 UPDATE cluster_registration_steps
 SET status = $2,

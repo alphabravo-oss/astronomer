@@ -12,6 +12,8 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // NativeRBACQuerier is the DB surface the native-rule CRUD handler needs.
@@ -29,10 +31,28 @@ type NativeRBACQuerier interface {
 type NativeRBACHandler struct {
 	queries    NativeRBACQuerier
 	invalidate func(userID string)
+	// engine + bindings drive the privilege-escalation guard in Create: a
+	// caller may only author a native rule for permissions they themselves
+	// already hold at the rule's scope (or be a superuser). Optional; when
+	// either is nil the guard is skipped, preserving the handler's
+	// optional-authorization contract used by unit tests / pre-auth deploys.
+	engine   *rbac.Engine
+	bindings middleware.RBACQuerier
 }
 
 func NewNativeRBACHandler(queries NativeRBACQuerier) *NativeRBACHandler {
 	return &NativeRBACHandler{queries: queries}
+}
+
+// SetAuthorization wires the RBAC engine + caller-binding lookup used by the
+// Create escalation guard. Mirror of the coarse RBAC handler's
+// SetAuthorization. Wiring lives in server.go (integrator-owned).
+func (h *NativeRBACHandler) SetAuthorization(engine *rbac.Engine, bindings middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.engine = engine
+	h.bindings = bindings
 }
 
 // SetInvalidator wires a callback fired after a rule mutation so the authz
@@ -59,6 +79,10 @@ var escalationGroups = map[string]bool{
 	"admissionregistration.k8s.io": true,
 	"apiregistration.k8s.io":       true,
 	"apiextensions.k8s.io":         true,
+	// CSR signing / token minting are cluster-admin-equivalent; keep in sync
+	// with rbac.isPrivilegeEscalationGroup so the evaluator refuses them too.
+	"certificates.k8s.io":   true,
+	"authentication.k8s.io": true,
 }
 
 type nativeRuleResponse struct {
@@ -150,6 +174,17 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 		clusterID = pgtype.UUID{Bytes: cid, Valid: true}
 	}
 
+	// Privilege-escalation guard (Kubernetes "you cannot grant permissions you
+	// do not hold"): a native rule is an additive allow, so an rbac:create
+	// holder who lacks e.g. secrets/pods access must NOT be able to self-author
+	// (or author for anyone) a native rule that grants it. For every verb, the
+	// CALLER must already hold the mapped coarse permission at the rule's
+	// cluster/namespace scope, or be a superuser. Skipped only when
+	// authorization is unwired (nil engine/bindings) — see SetAuthorization.
+	if !h.enforceNoNativeEscalation(w, r, apiGroup, resource, verbs, clusterID, strings.TrimSpace(req.Namespace)) {
+		return
+	}
+
 	row, err := h.queries.CreateNativeRBACRule(r.Context(), sqlc.CreateNativeRBACRuleParams{
 		UserID:      userID,
 		ClusterID:   clusterID,
@@ -223,6 +258,103 @@ func (h *NativeRBACHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		"target_user": row.UserID.String(),
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// enforceNoNativeEscalation implements the "cannot grant what you do not hold"
+// guard for native-rule authoring. It maps the rule's (apiGroup, resource) to
+// the coarse RBAC resource the k8s-proxy authz hook would charge the request
+// against, then requires the caller's own bindings to already satisfy each verb
+// at the rule's scope. Superusers pass via the engine's IsSuperuser
+// short-circuit. Returns false (and writes a 4xx) when the rule may not be
+// authored; true means Create may proceed. No-op (returns true) when
+// authorization is unwired.
+func (h *NativeRBACHandler) enforceNoNativeEscalation(w http.ResponseWriter, r *http.Request, apiGroup, resource string, verbs []string, clusterID pgtype.UUID, namespace string) bool {
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !ok || user == nil {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to author this rule")
+		return false
+	}
+	callerBindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load caller bindings")
+		return false
+	}
+	mapped := mapNativeRuleResource(apiGroup, resource)
+	var cid uuid.UUID
+	if clusterID.Valid {
+		cid = uuid.UUID(clusterID.Bytes)
+	}
+	for _, v := range verbs {
+		if !h.engine.CheckPermission(callerBindings, mapped, rbac.Verb(v), cid, uuid.UUID{}, namespace) {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+				"Cannot author a native rule granting permissions you do not already hold at this scope")
+			return false
+		}
+	}
+	return true
+}
+
+// mapNativeRuleResource mirrors the k8s-proxy authz hook's classification
+// (internal/server/routes.go k8sProxyPermission): a native rule's
+// (apiGroup, resource) is charged against a built-in coarse resource when the
+// resource is a recognised Kubernetes type, else against ResourceCustomResources
+// when it names a non-core apiGroup (a CRD), else the generic clusters resource.
+// Keep in sync with knownK8sProxyResource / k8sProxyResourcePolicy.
+func mapNativeRuleResource(apiGroup, resource string) rbac.Resource {
+	if res, ok := knownNativeK8sResource(resource); ok {
+		return res
+	}
+	if strings.TrimSpace(apiGroup) != "" {
+		return rbac.ResourceCustomResources
+	}
+	return rbac.ResourceClusters
+}
+
+// knownNativeK8sResource mirrors server.knownK8sProxyResource (which lives in an
+// integrator-owned file this handler may not import). Keep the two in sync.
+func knownNativeK8sResource(resourceType string) (rbac.Resource, bool) {
+	switch strings.ToLower(strings.TrimSpace(resourceType)) {
+	case "services", "service", "endpoints", "endpoint":
+		return rbac.ResourceServices, true
+	case "ingresses", "ingress",
+		"gateways", "gateway",
+		"httproutes", "httproute",
+		"gatewayclasses", "gatewayclass",
+		"grpcroutes", "grpcroute",
+		"tcproutes", "tcproute",
+		"udproutes", "udproute",
+		"tlsroutes", "tlsroute",
+		"referencegrants", "referencegrant":
+		return rbac.ResourceIngresses, true
+	case "networkpolicies", "networkpolicy":
+		return rbac.ResourceNetworkPolicies, true
+	case "persistentvolumes", "persistentvolume", "pv",
+		"persistentvolumeclaims", "persistentvolumeclaim", "pvc",
+		"storageclasses", "storageclass":
+		return rbac.ResourceStorage, true
+	case "configmaps", "configmap":
+		return rbac.ResourceConfigMaps, true
+	case "secrets", "secret":
+		return rbac.ResourceSecrets, true
+	case "pods", "pod":
+		return rbac.ResourcePods, true
+	case "nodes", "node":
+		return rbac.ResourceNodes, true
+	case "deployments", "deployment",
+		"daemonsets", "daemonset",
+		"statefulsets", "statefulset",
+		"replicasets", "replicaset",
+		"jobs", "job",
+		"cronjobs", "cronjob",
+		"hpa", "horizontalpodautoscalers", "horizontalpodautoscaler",
+		"poddisruptionbudgets", "poddisruptionbudget":
+		return rbac.ResourceWorkloads, true
+	default:
+		return "", false
+	}
 }
 
 func nativeRulesToResponses(rows []sqlc.NativeRbacRule) []nativeRuleResponse {
