@@ -267,34 +267,55 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
   ];
 }
 
-// Hook to fetch resource counts for a cluster
-function useResourceCounts(clusterId: string) {
-  const { data: nodes } = useClusterNodes(clusterId);
-  const { data: namespaces } = useClusterNamespaces(clusterId);
-  const { data: events } = useClusterEvents(clusterId, { limit: 200 });
-  const { data: pods } = useClusterPods(clusterId);
-  const { data: workloads } = useWorkloads(clusterId);
-  const { data: services } = useServices(clusterId);
-  const { data: ingresses } = useIngresses(clusterId);
-  const { data: networkPolicies } = useNetworkPolicies(clusterId);
-  const { data: pvs } = usePersistentVolumes(clusterId);
-  const { data: pvcs } = usePersistentVolumeClaims(clusterId);
-  const { data: storageClasses } = useStorageClasses(clusterId);
+// Hook to fetch resource counts for a cluster.
+//
+// Counts are only shown inside a nav group when that group is expanded (a
+// collapsed group renders no items). Fetching every group's list — including
+// every Secret and ConfigMap — on 15-30s intervals for groups the operator
+// isn't even looking at is sustained wasted load on the single per-cluster
+// agent tunnel + member apiserver. So we lazily enable each group's queries
+// only while its nav group is open: the underlying hooks all gate on
+// `enabled: !!clusterId`, so passing an empty id for a collapsed group leaves
+// its query disabled (and stops its refetch interval) until the operator
+// expands it. Cached counts persist across collapses.
+function useResourceCounts(clusterId: string, openGroups: Set<string>) {
+  // Per-group cluster id: real id when the owning group is open, '' (disabled)
+  // otherwise. Group labels mirror getClusterNavGroups().
+  const forGroup = (group: string) => (clusterId && openGroups.has(group) ? clusterId : '');
+  const clusterCid = forGroup('Cluster');
+  const workloadsCid = forGroup('Workloads');
+  const svcCid = forGroup('Service Discovery');
+  const storageCid = forGroup('Storage');
+  const policyCid = forGroup('Policy');
+  const rbacCid = forGroup('RBAC');
+  const moreCid = forGroup('More Resources');
+
+  const { data: nodes } = useClusterNodes(clusterCid);
+  const { data: namespaces } = useClusterNamespaces(clusterCid);
+  const { data: events } = useClusterEvents(clusterCid, { limit: 200 });
+  const { data: pods } = useClusterPods(workloadsCid);
+  const { data: workloads } = useWorkloads(workloadsCid);
+  const { data: services } = useServices(svcCid);
+  const { data: ingresses } = useIngresses(svcCid);
+  const { data: networkPolicies } = useNetworkPolicies(policyCid);
+  const { data: pvs } = usePersistentVolumes(storageCid);
+  const { data: pvcs } = usePersistentVolumeClaims(storageCid);
+  const { data: storageClasses } = useStorageClasses(storageCid);
   // Generic resource counts
-  const { data: configmaps } = useGenericResources(clusterId, 'configmaps');
-  const { data: secrets } = useGenericResources(clusterId, 'secrets');
-  const { data: hpa } = useGenericResources(clusterId, 'hpa');
-  const { data: resourcequotas } = useGenericResources(clusterId, 'resourcequotas');
-  const { data: limitranges } = useGenericResources(clusterId, 'limitranges');
-  const { data: pdbs } = useGenericResources(clusterId, 'poddisruptionbudgets');
-  const { data: crds } = useGenericResources(clusterId, 'crds');
-  const { data: serviceaccounts } = useGenericResources(clusterId, 'serviceaccounts');
-  const { data: k8sClusterroles } = useGenericResources(clusterId, 'k8s-clusterroles');
-  const { data: k8sClusterrolebindings } = useGenericResources(clusterId, 'k8s-clusterrolebindings');
-  const { data: k8sRoles } = useGenericResources(clusterId, 'k8s-roles');
-  const { data: k8sRolebindings } = useGenericResources(clusterId, 'k8s-rolebindings');
-  const { data: endpoints } = useGenericResources(clusterId, 'endpoints');
-  const { data: replicasets } = useGenericResources(clusterId, 'replicasets');
+  const { data: configmaps } = useGenericResources(storageCid, 'configmaps');
+  const { data: secrets } = useGenericResources(storageCid, 'secrets');
+  const { data: hpa } = useGenericResources(svcCid, 'hpa');
+  const { data: resourcequotas } = useGenericResources(policyCid, 'resourcequotas');
+  const { data: limitranges } = useGenericResources(policyCid, 'limitranges');
+  const { data: pdbs } = useGenericResources(policyCid, 'poddisruptionbudgets');
+  const { data: crds } = useGenericResources(moreCid, 'crds');
+  const { data: serviceaccounts } = useGenericResources(rbacCid, 'serviceaccounts');
+  const { data: k8sClusterroles } = useGenericResources(rbacCid, 'k8s-clusterroles');
+  const { data: k8sClusterrolebindings } = useGenericResources(rbacCid, 'k8s-clusterrolebindings');
+  const { data: k8sRoles } = useGenericResources(rbacCid, 'k8s-roles');
+  const { data: k8sRolebindings } = useGenericResources(rbacCid, 'k8s-rolebindings');
+  const { data: endpoints } = useGenericResources(moreCid, 'endpoints');
+  const { data: replicasets } = useGenericResources(moreCid, 'replicasets');
 
   const allWorkloads = workloads?.data || [];
 
@@ -571,9 +592,6 @@ export function Sidebar() {
   // Fetch cluster name for header
   const { data: cluster } = useCluster(clusterId || '');
 
-  // Fetch resource counts when in cluster context
-  const counts = useResourceCounts(isClusterContext ? clusterId! : '');
-
   const navGroups = useMemo(
     () => filterNavGroups(
       isClusterContext
@@ -591,6 +609,10 @@ export function Sidebar() {
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(navGroups.filter((g) => g.defaultOpen).map((g) => g.label)),
   );
+
+  // Fetch resource counts when in cluster context — only for groups that are
+  // currently expanded (see useResourceCounts).
+  const counts = useResourceCounts(isClusterContext ? clusterId! : '', openGroups);
 
   // Keep `defaultOpen` groups open and auto-expand the group containing the
   // active route (e.g. after a context switch) without collapsing the rest.

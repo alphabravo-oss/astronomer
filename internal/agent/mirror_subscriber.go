@@ -303,10 +303,21 @@ func (s *MirrorSubscriber) runDynamicGVR(ctx context.Context, gvr schema.GroupVe
 		})
 
 		innerStop := make(chan struct{})
+		// iterDone scopes the stop-watcher goroutine to THIS iteration. The
+		// watcher owns innerStop's close exclusively — it fires on ctx /
+		// parentStop (real shutdown) OR on iterDone (this attempt failed and
+		// the loop is about to retry). This is the ONLY place innerStop is
+		// closed, so a failed attempt can't leak a blocked watcher goroutine
+		// (previously one per ~30s retry for an absent CRD) and shutdown can't
+		// double-close innerStop (previously `panic: close of closed channel`
+		// when parentStop woke every leaked watcher after line 341 had already
+		// closed that iteration's innerStop).
+		iterDone := make(chan struct{})
 		go func() {
 			select {
 			case <-ctx.Done():
 			case <-parentStop:
+			case <-iterDone:
 			}
 			close(innerStop)
 		}()
@@ -333,12 +344,18 @@ func (s *MirrorSubscriber) runDynamicGVR(ctx context.Context, gvr schema.GroupVe
 		if ok {
 			s.log.Info("mirror subscriber: dynamic GVR online", "gvr", gvr.String(), "kind", kind)
 			s.recordStore(kind, inf.GetStore(), true)
-			// Block until shutdown — the informer is now running.
+			// Block until shutdown — the informer is now running. The watcher
+			// goroutine closes innerStop when ctx/parentStop fire; we never
+			// close iterDone on the success path so it keeps running as the
+			// long-lived informer's stop signal.
 			<-innerStop
 			return
 		}
 
-		close(innerStop)
+		// Attempt failed: end this iteration. Closing iterDone makes the
+		// watcher goroutine close innerStop exactly once and exit — no leaked
+		// goroutine, no double-close of innerStop.
+		close(iterDone)
 		s.log.Info("mirror subscriber: dynamic GVR not yet available, will retry",
 			"gvr", gvr.String(), "retry_in", backoff)
 		select {

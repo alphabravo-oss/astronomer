@@ -21,7 +21,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { RenderedWidget } from '@/lib/api/dashboards';
 
@@ -31,6 +31,17 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
   const [widgets, setWidgets] = useState<RenderedWidget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Keep the latest fetcher in a ref so parent re-renders (which hand us a new
+  // `fetcher` identity on every render — the cluster detail page re-renders on
+  // each SSE metrics tick) do NOT tear down the effect and reschedule every
+  // widget timer. The effect below runs once and reads fetcherRef.current, so
+  // polling stays on each widget's own refreshSeconds cadence instead of
+  // firing the full /render fan-out on every parent render.
+  const fetcherRef = useRef(fetcher);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
 
   useEffect(() => {
     let mounted = true;
@@ -53,7 +64,7 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
 
     const load = async () => {
       try {
-        const list = await fetcher();
+        const list = await fetcherRef.current();
         if (!mounted) return;
         setWidgets(list);
         setError(null);
@@ -72,7 +83,9 @@ export function WidgetGrid({ fetcher, emptyHint, hideWhenEmpty, title }: { fetch
       mounted = false;
       timers.forEach(clearTimeout);
     };
-  }, [fetcher]);
+    // Intentionally empty deps: the fetcher is read through fetcherRef so a new
+    // fetcher identity from a parent re-render doesn't reschedule the grid.
+  }, []);
 
   if (loading && !widgets) {
     return (

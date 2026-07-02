@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useK8sGetYaml, useK8sApplyYaml, useK8sDryRunYaml } from '@/lib/hooks';
 import { YamlEditor } from '@/components/ui/yaml-editor';
 import { ModalShell } from '@/components/ui/modal-shell';
@@ -85,9 +85,17 @@ export function YamlPanel({
   const applyYaml = useK8sApplyYaml();
   const dryRunYaml = useK8sDryRunYaml();
 
-  // Sync fetched YAML into editor state
+  // Read the current edit mode through a ref inside the sync effect so the
+  // effect stays keyed on [yaml] only. A background refetch (refetchOnWindowFocus
+  // after an alt-tab, or a k8s.all cache invalidation from any mutation) delivers
+  // a new server YAML string; without this guard the effect would overwrite the
+  // editor and silently discard the operator's in-progress edits.
+  const editModeRef = useRef(editMode);
+  editModeRef.current = editMode;
+
+  // Seed the editor from fetched YAML, but never while the operator is editing.
   useEffect(() => {
-    if (yaml) {
+    if (yaml && !editModeRef.current) {
       setEditedYaml(yaml);
       setPreview(null);
     }

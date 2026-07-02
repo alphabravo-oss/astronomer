@@ -348,25 +348,23 @@ func IsActive(w Window, now time.Time) (bool, error) {
 	if dur <= 0 {
 		return false, nil
 	}
-	// To find the most recent open before now, step Next() forward
-	// from a time that's guaranteed to be earlier than the most recent
-	// fire (now - 366d covers any sane cron). The last Next() result
-	// before now is the most recent open.
+	// The window is active iff some cron fire F satisfies F <= now < F+dur,
+	// i.e. F lands in (now-dur, now]. So we only need to look back one
+	// duration, not 366 days: start the cursor at now-dur and take the FIRST
+	// fire after it. If that fire is <= now the window is open; otherwise no
+	// fire lands inside the duration and it's closed.
+	//
+	// This replaces the old 366-day forward walk, whose iteration count was
+	// (fires in 366 days) — e.g. ~525k for a `* * * * *` cron on EVERY gated
+	// mutation (times the number of matching permitted windows after the
+	// sweep-3 OR refactor). The cost is now bounded by fires-per-duration and
+	// the closed case is a single Next() call.
 	nowLoc := now.In(loc)
-	cursor := nowLoc.Add(-366 * 24 * time.Hour)
-	var lastOpen time.Time
-	for {
-		next := expr.Next(cursor)
-		if next.IsZero() || next.After(nowLoc) {
-			break
-		}
-		lastOpen = next
-		cursor = next
-	}
-	if lastOpen.IsZero() {
+	next := expr.Next(nowLoc.Add(-dur))
+	if next.IsZero() {
 		return false, nil
 	}
-	return nowLoc.Sub(lastOpen) < dur, nil
+	return !next.After(nowLoc), nil
 }
 
 // NextOpen returns the next time the window will open (i.e. the next
@@ -400,7 +398,13 @@ func NextClose(w Window, now time.Time) time.Time {
 	}
 	dur := time.Duration(w.DurationMinutes) * time.Minute
 	nowLoc := now.In(loc)
-	cursor := nowLoc.Add(-366 * 24 * time.Hour)
+	// Only meaningful when the window is currently active, in which case the
+	// most-recent open is guaranteed to be within the last duration (now -
+	// lastOpen < dur). So start the walk at now-dur rather than now-366d and
+	// keep the last fire <= now; the iteration count is bounded by
+	// fires-per-duration instead of fires-per-year. (Same optimization as
+	// IsActive; NextClose formerly repeated the full 366-day walk here.)
+	cursor := nowLoc.Add(-dur)
 	var lastOpen time.Time
 	for {
 		next := expr.Next(cursor)

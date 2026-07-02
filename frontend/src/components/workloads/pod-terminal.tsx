@@ -52,6 +52,13 @@ export function PodTerminal({
 }: PodTerminalProps) {
   const { ref, write, resize, focus } = useTerminal();
   const wsRef = useRef<WebSocket | null>(null);
+  // Tracks the in-flight connect attempt so a cleanup (unmount, container
+  // switch, StrictMode double-invoke) that runs *before* the stream-ticket XHR
+  // resolves can cancel it. Without this, cleanup sees wsRef.current === null,
+  // closes nothing, and the pending .then later opens an orphaned WebSocket on
+  // an unmounted component — leaking a server-side exec stream (SPDY session +
+  // one of the shared per-agent slots) until the browser GCs it.
+  const connectAttemptRef = useRef<{ cancelled: boolean } | null>(null);
   // Latest cols/rows wterm has reported via onResize — used to send the
   // initial TIOCSWINSZ on WS open.
   const sizeRef = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
@@ -75,9 +82,15 @@ export function PodTerminal({
     const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = process.env.NEXT_PUBLIC_WS_URL || `${wsProtocol}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`;
 
+    const attempt = { cancelled: false };
+    connectAttemptRef.current = attempt;
+
     setStatus('connecting');
     createStreamTicket('exec', clusterId)
       .then(({ ticket }) => {
+        // Cleanup already ran while the ticket was in flight — don't open a
+        // socket that nothing will ever close.
+        if (attempt.cancelled) return;
         const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
         const wsUrl = `${wsHost}/exec/${clusterId}/${namespace}/${pod}/${selectedContainer}/${ticketQuery}`;
         const ws = new WebSocket(wsUrl);
@@ -130,11 +143,10 @@ export function PodTerminal({
         };
       })
       .catch((error: Error) => {
+        if (attempt.cancelled) return;
         setStatus('error');
         write(`\r\n\x1b[31mFailed to create stream ticket: ${error.message}\x1b[0m\r\n`);
       });
-
-    return wsRef.current;
   }, [clusterId, namespace, pod, selectedContainer, write]);
 
   // Fires once the wterm WASM core is up. The actual WS connect is driven by
@@ -162,6 +174,9 @@ export function PodTerminal({
     if (!ready) return;
     connectWebSocket();
     return () => {
+      // Cancel any still-pending ticket so its .then won't open an orphan
+      // socket after we've torn down.
+      if (connectAttemptRef.current) connectAttemptRef.current.cancelled = true;
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

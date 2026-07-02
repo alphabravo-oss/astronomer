@@ -23,6 +23,7 @@ package metrics
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -53,6 +54,16 @@ const (
 	// This sweep is the AUTHORITATIVE writer (transition-only, event-emitting,
 	// status-preserving, local-exempt); the worker check is a coarser backstop.
 	staleHeartbeatThreshold = 2 * time.Minute
+
+	// metricsFanoutConcurrency bounds how many per-cluster snapshot fetches run
+	// in parallel each tick. A serial loop paid up to the 4s stall timeout ONE
+	// cluster at a time, so a few hundred active clusters — or a partition that
+	// stalls many agents at once — made a single pass take minutes, far longer
+	// than the 10s cadence, so the cache never stayed warm and most clusters
+	// published stale/zero metrics forever. A bounded fan-out keeps one pass to
+	// roughly ceil(active/concurrency) timeout windows regardless of fleet size
+	// while still capping concurrent tunnel round-trips.
+	metricsFanoutConcurrency = 16
 )
 
 // ClusterQuerier is the minimal subset of sqlc.Queries the publisher needs.
@@ -204,15 +215,7 @@ func (p *Publisher) publishMetrics(ctx context.Context) {
 		return
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	for _, c := range clusters {
-		if c.Status != "active" {
-			continue
-		}
-		// 4s per cluster bounds a worst-case agent stall; cache hits return
-		// almost instantly so the typical loop runs in microseconds.
-		mctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-		snap := p.metrics.Get(mctx, c.ID.String(), c.IsLocal)
-		cancel()
+	publish := func(c sqlc.Cluster, snap clustermetrics.Snapshot) {
 		p.bus.Publish(events.TypeClusterMetrics, map[string]any{
 			"cluster_id":        c.ID.String(),
 			"cpu_percentage":    snap.CPUPercentage,
@@ -221,6 +224,38 @@ func (p *Publisher) publishMetrics(ctx context.Context) {
 			"timestamp":         now,
 		})
 	}
+	sem := make(chan struct{}, metricsFanoutConcurrency)
+	var wg sync.WaitGroup
+	for _, c := range clusters {
+		if c.Status != "active" {
+			continue
+		}
+		// A stalled/half-disconnected remote agent whose heartbeat is already
+		// past the staleness threshold would cost the full 4s timeout for a
+		// snapshot that comes back empty anyway: the provider's cache TTL (30s)
+		// is far shorter than the threshold (2m), so any cached snapshot is
+		// already expired and Get would pay the full round-trip. Publish a zero
+		// snapshot without the round-trip so one dead agent never slows the
+		// pass; the status sweep flips it to disconnected shortly.
+		if !c.IsLocal && (!c.LastHeartbeat.Valid || time.Since(c.LastHeartbeat.Time) > p.threshold) {
+			publish(c, clustermetrics.Snapshot{})
+			continue
+		}
+		c := c
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			// 4s per cluster bounds a worst-case agent stall; cache hits return
+			// almost instantly so the typical fetch runs in microseconds.
+			mctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+			snap := p.metrics.Get(mctx, c.ID.String(), c.IsLocal)
+			cancel()
+			publish(c, snap)
+		}()
+	}
+	wg.Wait()
 }
 
 // sweepStatuses checks every cluster's last_heartbeat and flips the status

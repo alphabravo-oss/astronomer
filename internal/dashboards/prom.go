@@ -194,12 +194,34 @@ func cacheKey(dsID, query, duration string) string {
 	return dsID + "\x00" + query + "\x00" + duration
 }
 
+// cacheSweepThreshold is the entry count past which putMatrix/putStat sweep
+// expired keys before inserting. Delete-on-expired-read reclaims keys that get
+// re-queried, but a key for a deleted widget or a retired time-range never gets
+// read again — without this sweep those entries would sit resident forever,
+// making the cache a slow permanent heap leak rather than a TTL cache.
+const cacheSweepThreshold = 1024
+
+// sweepExpiredLocked drops every entry whose TTL has elapsed. Caller holds c.mu.
+func (c *promCache) sweepExpiredLocked(now time.Time) {
+	for k, e := range c.entries {
+		if now.After(e.expires) {
+			delete(c.entries, k)
+		}
+	}
+}
+
 // getMatrix returns a cached matrix if present + still valid.
 func (c *promCache) getMatrix(k string) (PromMatrix, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[k]
-	if !ok || e.kind != "matrix" || time.Now().After(e.expires) {
+	// Evict on expired read so a re-queried key (e.g. the time-range picker
+	// cycling 1h/6h/24h) doesn't leave a dead entry resident past its TTL.
+	if ok && time.Now().After(e.expires) {
+		delete(c.entries, k)
+		ok = false
+	}
+	if !ok || e.kind != "matrix" {
 		if c.onMiss != nil {
 			c.onMiss()
 		}
@@ -214,6 +236,9 @@ func (c *promCache) getMatrix(k string) (PromMatrix, bool) {
 func (c *promCache) putMatrix(k string, m PromMatrix) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if len(c.entries) >= cacheSweepThreshold {
+		c.sweepExpiredLocked(time.Now())
+	}
 	c.entries[k] = cacheEntry{
 		expires: time.Now().Add(c.ttl),
 		matrix:  m,
@@ -225,7 +250,11 @@ func (c *promCache) getStat(k string) (float64, bool, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[k]
-	if !ok || e.kind != "stat" || time.Now().After(e.expires) {
+	if ok && time.Now().After(e.expires) {
+		delete(c.entries, k)
+		ok = false
+	}
+	if !ok || e.kind != "stat" {
 		if c.onMiss != nil {
 			c.onMiss()
 		}
@@ -240,6 +269,9 @@ func (c *promCache) getStat(k string) (float64, bool, bool) {
 func (c *promCache) putStat(k string, v float64, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if len(c.entries) >= cacheSweepThreshold {
+		c.sweepExpiredLocked(time.Now())
+	}
 	c.entries[k] = cacheEntry{
 		expires: time.Now().Add(c.ttl),
 		stat:    v,

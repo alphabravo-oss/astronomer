@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -19,6 +20,75 @@ func requireListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerie
 		return func(next http.Handler) http.Handler { return next }
 	}
 	return appmiddleware.RequireListPermission(engine, querier, resource, verb, namespaceScoped)
+}
+
+// requireNamespacePickerListPermission gates the cluster Namespaces and Events
+// list routes. These back the namespace picker and the events view that the
+// namespace-scoped (project) persona depends on — but that persona is granted
+// workloads/pods, NOT clusters:read. Gating them on clusters:read the way the
+// coarse path does (requireListPermission with ResourceClusters) locks the
+// exact users this feature serves out with a hard 403: CheckPermission(clusters,
+// read) fails, and HasAnyNamespaceAccess(clusters, read) is empty because the
+// synthetic per-namespace bindings carry the project role's rules (workloads/
+// pods/…), never clusters:read.
+//
+// This wrapper keeps clusters:read as the PRIMARY check, so with the flag OFF it
+// is byte-identical to requirePermission(clusters, read) — no behavior change
+// for the pre-feature path. Only when namespaceScoped is on does it additionally
+// admit a caller who holds any namespace-scoped read on workloads OR pods (the
+// resources project roles actually grant, and exactly what the sibling Pods and
+// Workloads list pages key off). The handler then filters the returned list down
+// to the caller's authorized namespaces, so admission never widens what they see.
+func requireNamespacePickerListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, namespaceScoped bool) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := appmiddleware.GetAuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "authentication_required",
+						"message": "Authentication is required to access this resource",
+					},
+				})
+				return
+			}
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "internal_error",
+						"message": "Failed to retrieve user permissions",
+					},
+				})
+				return
+			}
+			clusterID, projectID := permissionScopeIDs(r)
+			allowed := engine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbRead, clusterID, projectID)
+			if !allowed && namespaceScoped {
+				allowed = engine.HasAnyNamespaceAccess(bindings, rbac.ResourceWorkloads, rbac.VerbList, clusterID) ||
+					engine.HasAnyNamespaceAccess(bindings, rbac.ResourcePods, rbac.VerbList, clusterID)
+			}
+			if !allowed {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{
+						"code":    "permission_denied",
+						"message": "You do not have permission to perform this action",
+					},
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // Code organization: this file holds a domain-specific slice of the
@@ -109,10 +179,10 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbScale)).Patch("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/", deps.Workloads.Scale)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRestart)).Post("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/", deps.Workloads.Restart)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceWorkloads, rbac.VerbDelete)).Delete("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.Workloads.Delete)
-			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/namespaces/", deps.Workloads.ListNamespaces)
+			r.With(requireNamespacePickerListPermission(deps.RBACEngine, deps.RBACQueries, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/namespaces/", deps.Workloads.ListNamespaces)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbList)).Get("/clusters/{cluster_id}/nodes/", deps.Workloads.ListNodes)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceNodes, rbac.VerbRead)).Get("/clusters/{cluster_id}/nodes/{node_name}/", deps.Workloads.GetNode)
-			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/events/", deps.Workloads.ListEvents)
+			r.With(requireNamespacePickerListPermission(deps.RBACEngine, deps.RBACQueries, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/events/", deps.Workloads.ListEvents)
 			r.With(requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbList, deps.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/pods/", deps.Workloads.ListPods)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.Workloads.DeletePod)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbLogs)).Get("/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/", deps.Workloads.PodLogs)

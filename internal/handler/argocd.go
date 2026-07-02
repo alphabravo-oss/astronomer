@@ -1500,12 +1500,33 @@ func isTerminalArgoCDPhase(phase string) bool {
 // it calls GetApp upstream and folds the response into our row. Operations
 // that exceed MaxArgoCDOperationPolls are timed out as failed.
 func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
+	// Claim + resolve metadata under the lock (cheap DB reads only), then
+	// dispatch the per-op upstream GetApp + fold work concurrently OUTSIDE
+	// the lock via the same bounded pool processPendingOperations uses. A
+	// serial loop here blocked the single reconciler goroutine for the full
+	// client timeout (~10s) per unreachable instance — 50 stuck ops = ~500s
+	// during which opTicker starved and no pending operations were claimed.
+	// The bounded fan-out caps one pass at ~ceil(N/helmConcurrency)×timeout,
+	// and stays serialized w.r.t. processPendingOperations (both run on the
+	// reconciler goroutine and dispatchClaimed blocks until done), so no new
+	// row-write race is introduced.
+	dispatchClaimed(ctx, h.helmConcurrency, h.claimRunningArgoCDPolls(ctx))
+}
+
+// claimRunningArgoCDPolls lists the running sync operations and, for each
+// pollable one, resolves its application + instance rows under h.mu and packs
+// the upstream GetApp + result-fold into a claimedOp.Run closure. The cheap
+// terminal cases (bad payload, unparsable app id, poll-attempt timeout) are
+// handled inline under the lock exactly as before; only the upstream round-trip
+// and its DB fold move to the concurrent dispatch phase.
+func (h *ArgoCDHandler) claimRunningArgoCDPolls(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ops, err := h.queries.ListRunningArgoCDOperations(ctx, 50)
 	if err != nil {
-		return
+		return nil
 	}
+	claimed := make([]claimedOp, 0, len(ops))
 	for _, op := range ops {
 		// Only sync operations are async-pollable today.
 		if op.OperationType != "sync" {
@@ -1533,6 +1554,25 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 			h.failOperationWithMessage(ctx, op, "Failed", "timed out waiting for ArgoCD sync to converge")
 			continue
 		}
+		op, app, instance := op, app, instance
+		claimed = append(claimed, claimedOp{
+			ID: op.ID,
+			Run: func(ctx context.Context) error {
+				h.pollOneRunningOperation(ctx, op, app, instance)
+				return nil
+			},
+		})
+	}
+	return claimed
+}
+
+// pollOneRunningOperation performs the upstream GetApp for a single running
+// sync operation and folds the response into the operation + application rows.
+// Runs outside h.mu (dispatched by claimRunningArgoCDPolls) so a slow/unreachable
+// instance can't stall the others. All bookkeeping is inline because argocd's
+// terminal state depends on the operationResult.async flag.
+func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.ArgocdOperation, app sqlc.ArgocdApplication, instance sqlc.ArgocdInstance) {
+	{
 		client := h.argoCDClient(instance)
 		upstream, err := client.GetApp(ctx, app.Name)
 		if err != nil {
@@ -1540,7 +1580,7 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 			// errors are terminal.
 			if argocdclient.IsKind(err, argocdclient.ErrUnauthorized) || argocdclient.IsKind(err, argocdclient.ErrNotFound) {
 				h.failOperationWithMessage(ctx, op, "Failed", err.Error())
-				continue
+				return
 			}
 			_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
 				ID:          op.ID,
@@ -1549,7 +1589,7 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 				Revision:    op.Revision,
 				Message:     err.Error(),
 			})
-			continue
+			return
 		}
 		res := operationResultFromApp(upstream)
 		resourceCreatedCount := app.ResourceCreatedCount
@@ -1584,7 +1624,7 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 				Revision:    firstNonEmptyString(res.revision, op.Revision),
 				Message:     res.message,
 			})
-			continue
+			return
 		}
 		// Terminal upstream phase.
 		if res.phase == "Succeeded" {
@@ -1599,7 +1639,7 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 				Revision:    res.revision,
 				Message:     res.message,
 			})
-			continue
+			return
 		}
 		// Failed / Error.
 		h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "ArgoCD sync failed", map[string]any{

@@ -650,9 +650,24 @@ func stateUpdateKey(payload protocol.StateUpdatePayload) string {
 // shared per-(cluster, kind, namespace) rate limiter for state-update
 // fan-out. Lazy init keeps the hub zero-value safe for tests that don't
 // route any STATE_UPDATEs.
+//
+// Double-checked locking: the common case (limiter already built) reads
+// h.stateLim under the shared RLock so a fleet-scale STATE_UPDATE flood
+// no longer serializes every state frame — and blocks concurrent RLock
+// readers (publishHeartbeat, handleMetrics, publish) — on the hub-wide
+// EXCLUSIVE write lock. Only the first call per hub takes the write lock
+// to construct the limiter.
 func (h *Hub) stateLimiter() *stateUpdateLimiter {
+	h.mu.RLock()
+	lim := h.stateLim
+	h.mu.RUnlock()
+	if lim != nil {
+		return lim
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// Re-check under the write lock: a racing caller may have constructed
+	// it between our RUnlock and Lock.
 	if h.stateLim == nil {
 		h.stateLim = newStateUpdateLimiter(stateUpdateMinInterval)
 	}
@@ -668,6 +683,10 @@ type stateUpdateLimiter struct {
 	last        map[string]time.Time
 	minInterval time.Duration
 	now         func() time.Time
+	// calls counts allow() invocations so the O(N) eviction sweep can be
+	// amortized to once per evictSampleEvery calls rather than running on
+	// every call once the map exceeds the size threshold.
+	calls uint64
 }
 
 func newStateUpdateLimiter(minInterval time.Duration) *stateUpdateLimiter {
@@ -700,11 +719,25 @@ func (r *stateUpdateLimiter) allow(key string) bool {
 // gets at least one rate-limited follow-up before its entry decays.
 const stateLimiterEvictAfter = 60 * time.Second
 
+// evictSampleEvery is how often (in allow() calls) the O(N) eviction
+// sweep is permitted to run. Amortizes the sweep so a churny key set
+// that keeps the map above the size threshold does not pay a full map
+// scan on every single state frame.
+const evictSampleEvery = 256
+
 // evictLocked runs lazily inside Allow; not a separate goroutine so
 // tests don't have to gate on a background tick. mu is already held.
 func (r *stateUpdateLimiter) evictLocked(now time.Time) {
-	// Sample every ~256 calls to amortize cost; map iteration is O(N).
-	if len(r.last) < 256 {
+	// Amortize the O(N) sweep to once per evictSampleEvery calls. A pure
+	// len(r.last) threshold made the sweep run on EVERY call whenever the
+	// map stayed above the threshold (churny ephemeral namespaces / short-
+	// lived CRs never let it drop back below), defeating amortization. Gate
+	// on an actual call counter so the scan runs at most once per interval.
+	r.calls++
+	if r.calls%evictSampleEvery != 0 {
+		return
+	}
+	if len(r.last) < evictSampleEvery {
 		return
 	}
 	cutoff := now.Add(-stateLimiterEvictAfter)

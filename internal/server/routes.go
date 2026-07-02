@@ -1193,6 +1193,25 @@ func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
 	return clusterID, projectID
 }
 
+// nativeNamespaceLister is an OPTIONAL capability a nativeAuthorizer may
+// implement (via a type assertion) to participate in the cluster-wide-list
+// allow-set filter, not just the single-namespace Allow() check. It returns the
+// namespace visibility the user's native per-CRD rules grant for a cluster-wide
+// LIST of (apiGroup, resource, verb) on clusterID:
+//
+//   - all==true  → a native rule grants this list without namespace narrowing
+//     (any namespace). names must be ignored.
+//   - all==false → names is the exact allow-set of namespaces the native rules
+//     grant for this list (possibly empty → contributes nothing).
+//
+// Implementations MUST apply the same conservative guards as rbac.NativeAllow
+// (refuse privilege-escalation api groups; native rules never widen exec/logs),
+// so folding these namespaces into the list filter can never grant more than an
+// operator explicitly authored. *nativeRBACAuthorizer implements this.
+type nativeNamespaceLister interface {
+	AuthorizedNamespaces(ctx context.Context, userID, clusterID, apiGroup, resource, verb string) (all bool, names map[string]struct{})
+}
+
 func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, native nativeAuthorizer, namespaceScoped bool) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
 		return func(next http.Handler) http.Handler {
@@ -1267,6 +1286,35 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 						!isK8sProxyWatchRequest(r) &&
 						ref["watch"] != "true" {
 						all, names := engine.AuthorizedNamespaces(bindings, resource, verb, clusterID)
+						// Fold native per-namespace list grants into the allow-set
+						// too. Coarse project bindings already participate (via
+						// AuthorizedNamespaces above), but a user whose ONLY grant
+						// for this CRD is a native namespaced rule would otherwise
+						// 403 on a cluster-wide LIST instead of getting a filtered
+						// result — the native layer is only consulted as a single-
+						// namespace Allow() above, never for list-filtering. The
+						// optional nativeNamespaceLister capability (implemented by
+						// *nativeRBACAuthorizer) enumerates the namespaces the
+						// user's native rules grant for this (api_group, resource,
+						// list) at this cluster; the same escalation-group / exec-
+						// logs guards apply inside it, so it can never widen past
+						// those. A nil authorizer or one that doesn't implement the
+						// capability leaves behavior unchanged.
+						if !all {
+							if lister, ok := native.(nativeNamespaceLister); ok && lister != nil {
+								nativeAll, nativeNames := lister.AuthorizedNamespaces(r.Context(), user.ID, clusterID.String(), ref["api_group"], ref["resource"], string(verb))
+								if nativeAll {
+									all = true
+								} else if len(nativeNames) > 0 {
+									if names == nil {
+										names = make(map[string]struct{}, len(nativeNames))
+									}
+									for ns := range nativeNames {
+										names[ns] = struct{}{}
+									}
+								}
+							}
+						}
 						switch {
 						case all:
 							// Cluster-wide grant — shouldn't reach here since

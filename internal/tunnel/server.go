@@ -672,7 +672,11 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	// 6. On disconnect: remove from map, close connection.
-	h.removeAgent(agent)
+	// removeAgent reports whether WE were still the registered agent. On a
+	// same-pod reconnect, a newer HandleWebSocket may have already replaced
+	// us in the map (h.agents.Set cancelled our ctx); in that case
+	// DeleteIfSame is a no-op and returns false — we were superseded.
+	stillOwner := h.removeAgent(agent)
 	agent.Streams.CloseAll()
 	_ = conn.Close(websocket.StatusNormalClosure, "disconnected")
 
@@ -683,12 +687,23 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.persistDisconnect(context.Background(), agent)
 	h.publish("cluster.disconnected", agent.ClusterID, agent.SessionID, agent.AgentVersion)
 
-	// Clear the locator entry so siblings stop forwarding to us.
+	// Clear the locator entry so siblings stop forwarding to us — but ONLY
+	// if we were still the registered owner. On a same-pod reconnect the
+	// newer connection already ran loc.Set (installing a fresh refresh loop
+	// under l.cancels[clusterID] and rewriting redis to this pod). If the
+	// superseded goroutine called Delete here it would cancel the NEW
+	// refresh loop and CAS-delete the redis key (whose value still equals
+	// this pod's own address, so the compare matches) — leaving the cluster
+	// live in the in-memory map but with no directory entry and no loop to
+	// re-add one, so sibling replicas 503. Skipping Delete when superseded
+	// leaves the newer connection's locator entry intact.
 	// Best-effort; the TTL will reap stragglers if redis is down.
-	h.mu.RLock()
-	disconnectLoc := h.locator
-	h.mu.RUnlock()
-	disconnectLoc.Delete(context.Background(), agent.ClusterID)
+	if stillOwner {
+		h.mu.RLock()
+		disconnectLoc := h.locator
+		h.mu.RUnlock()
+		disconnectLoc.Delete(context.Background(), agent.ClusterID)
+	}
 }
 
 // readPump reads messages from the WebSocket and dispatches them.
@@ -757,9 +772,13 @@ func (h *Hub) writePump(ctx context.Context, agent *AgentConnection) {
 	}
 }
 
-// removeAgent removes an agent from the hub if it matches the current registration.
-func (h *Hub) removeAgent(agent *AgentConnection) {
-	h.agents.DeleteIfSame(agent.ClusterID, agent)
+// removeAgent removes an agent from the hub if it matches the current
+// registration. Returns true when this agent was still the registered owner
+// and was removed; false when it had already been superseded by a newer
+// connection (same-pod reconnect) — the caller uses this to avoid clobbering
+// the newer connection's locator entry.
+func (h *Hub) removeAgent(agent *AgentConnection) bool {
+	return h.agents.DeleteIfSame(agent.ClusterID, agent)
 }
 
 // GetAgent returns the connection for a cluster, or nil if not connected.
@@ -854,6 +873,18 @@ func (h *Hub) disconnectImpl(clusterID string) bool {
 	)
 	agent.cancel()
 	agent.Streams.CloseAll()
+	// Clear the locator directory entry. On the forced-disconnect path we
+	// already ran agents.Delete above, so HandleWebSocket's teardown will see
+	// removeAgent()==false and skip its own (now owner-gated) loc.Delete — so
+	// this path must clear the entry itself or a decommissioned/force-dropped
+	// cluster keeps a stale redis directory row pointing here until its TTL,
+	// making siblings reverse-proxy to a pod whose agent is already gone.
+	h.mu.RLock()
+	loc := h.locator
+	h.mu.RUnlock()
+	if loc != nil {
+		loc.Delete(context.Background(), clusterID)
+	}
 	return true
 }
 

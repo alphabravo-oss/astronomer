@@ -67,6 +67,22 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			return err
 		}
+		// Hoist the fleet list + per-cluster health ONCE per tick and share it
+		// across every global rule. Without this each global rule re-paged the
+		// whole fleet and re-read GetClusterHealthStatus per cluster — G scans +
+		// G×C point reads/tick even though the rows are identical within a tick.
+		// Only built when a global (cluster-less) rule exists; cluster-scoped and
+		// anomaly rules don't touch it.
+		var fleet *fleetHealthSnapshot
+		for _, rule := range rules {
+			if !rule.ClusterID.Valid {
+				fleet, err = buildFleetHealthSnapshot(ctx)
+				if err != nil {
+					return err
+				}
+				break
+			}
+		}
 		for _, rule := range rules {
 			// A global (rule.ClusterID invalid) rule produces one evaluation
 			// PER cluster; a cluster-scoped or anomaly rule produces exactly
@@ -74,7 +90,7 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 			// cluster) evaluation independently so concurrent outages each
 			// fire their own event and a recovered cluster is resolved even
 			// while other clusters are still triggering.
-			evaluations, err := evaluateRule(ctx, rule)
+			evaluations, err := evaluateRule(ctx, rule, fleet)
 			if err != nil {
 				return err
 			}
@@ -362,7 +378,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 // the rule covers. Cluster-scoped and anomaly rules return exactly one
 // element; a global rule returns one per cluster so every currently-triggering
 // cluster fires and every recovered cluster resolves within the same tick.
-func evaluateRule(ctx context.Context, rule sqlc.AlertRule) ([]ruleClusterEval, error) {
+func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSnapshot) ([]ruleClusterEval, error) {
 	if !rule.Enabled {
 		return []ruleClusterEval{{}}, nil
 	}
@@ -406,48 +422,42 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) ([]ruleClusterEval, 
 		}
 		return []ruleClusterEval{{triggered: triggered, message: message, details: payload, clusterID: clusterID}}, nil
 	}
-	// Page through the whole fleet rather than capping the fan-out at a single
-	// 500-row batch: clusters beyond the first page must still fire and, more
-	// importantly, resolve their already-firing events each tick.
+	// Global rule: evaluate every cluster in the fleet. The fleet list + a
+	// cluster_id→health map are hoisted ONCE per tick (buildFleetHealthSnapshot,
+	// like the silence hoist) and shared across all global rules — the rows are
+	// identical across rules within a tick, so re-paging the fleet + re-reading
+	// GetClusterHealthStatus per rule (G full-fleet scans + G×C point reads)
+	// was pure redundancy. When fleet is nil (defensive: caller couldn't build
+	// it) fall back to paging the fleet inline so behavior is preserved.
 	evaluations := make([]ruleClusterEval, 0)
-	for offset := int32(0); ; offset += alertEvalSweepPageSize {
-		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
-		if err != nil {
-			return nil, err
-		}
-		if len(clusters) == 0 {
-			break
-		}
-		for _, cluster := range clusters {
-			details := baseRuleDetails(rule, config)
-			details["scope"] = "global"
-			health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
-			healthKnown := healthErr == nil
-			if healthErr != nil {
-				health = sqlc.ClusterHealthStatus{}
+	if fleet != nil {
+		for _, cluster := range fleet.clusters {
+			eval, err := evaluateGlobalClusterRow(ctx, rule, config, cluster, fleet.health[cluster.ID], fleet.known[cluster.ID])
+			if err != nil {
+				return nil, err
 			}
-			details["cluster_id"] = cluster.ID.String()
-			details["cluster_name"] = cluster.Name
-			details["cluster_status"] = cluster.Status
-			details["last_heartbeat"] = nullableWorkerTime(cluster.LastHeartbeat)
-			details["node_count"] = health.NodeCount
-			details["pod_count"] = health.PodCount
-			details["cpu_usage_percent"] = health.CpuUsagePercent
-			details["memory_usage_percent"] = health.MemoryUsagePercent
-			if triggered, message, payload, clusterID, ok, evalErr := evaluatePromQLRule(ctx, rule, config, cluster, details); evalErr != nil {
-				return nil, evalErr
-			} else if ok {
-				evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
-				continue
-			}
-			triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
-			if evalErr != nil {
-				return nil, evalErr
-			}
-			evaluations = append(evaluations, ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID})
+			evaluations = append(evaluations, eval)
 		}
-		if int32(len(clusters)) < alertEvalSweepPageSize {
-			break
+	} else {
+		for offset := int32(0); ; offset += alertEvalSweepPageSize {
+			clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+			if err != nil {
+				return nil, err
+			}
+			if len(clusters) == 0 {
+				break
+			}
+			for _, cluster := range clusters {
+				health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+				eval, evalErr := evaluateGlobalClusterRow(ctx, rule, config, cluster, health, healthErr == nil)
+				if evalErr != nil {
+					return nil, evalErr
+				}
+				evaluations = append(evaluations, eval)
+			}
+			if int32(len(clusters)) < alertEvalSweepPageSize {
+				break
+			}
 		}
 	}
 	// No clusters: emit a single non-triggering, cluster-less evaluation so
@@ -457,6 +467,77 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule) ([]ruleClusterEval, 
 		return []ruleClusterEval{{}}, nil
 	}
 	return evaluations, nil
+}
+
+// evaluateGlobalClusterRow evaluates a single cluster row for a global rule,
+// using the pre-fetched (health, healthKnown) so the caller can share one
+// per-tick fleet+health snapshot across every global rule instead of
+// re-querying per rule. Mirrors the per-cluster body of the global fan-out.
+func evaluateGlobalClusterRow(ctx context.Context, rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, healthKnown bool) (ruleClusterEval, error) {
+	details := baseRuleDetails(rule, config)
+	details["scope"] = "global"
+	details["cluster_id"] = cluster.ID.String()
+	details["cluster_name"] = cluster.Name
+	details["cluster_status"] = cluster.Status
+	details["last_heartbeat"] = nullableWorkerTime(cluster.LastHeartbeat)
+	details["node_count"] = health.NodeCount
+	details["pod_count"] = health.PodCount
+	details["cpu_usage_percent"] = health.CpuUsagePercent
+	details["memory_usage_percent"] = health.MemoryUsagePercent
+	if triggered, message, payload, clusterID, ok, evalErr := evaluatePromQLRule(ctx, rule, config, cluster, details); evalErr != nil {
+		return ruleClusterEval{}, evalErr
+	} else if ok {
+		return ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID}, nil
+	}
+	triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
+	if evalErr != nil {
+		return ruleClusterEval{}, evalErr
+	}
+	return ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID}, nil
+}
+
+// fleetHealthSnapshot is the once-per-tick fleet view shared across all global
+// rule evaluations: the full non-decommissioned cluster list plus a
+// cluster_id→health map (and a "was the health read known" set). Building it
+// once collapses the old G full-fleet scans + G×C GetClusterHealthStatus reads
+// (G global rules, C clusters) down to one scan + C reads per tick.
+type fleetHealthSnapshot struct {
+	clusters []sqlc.Cluster
+	health   map[uuid.UUID]sqlc.ClusterHealthStatus
+	known    map[uuid.UUID]bool
+}
+
+// buildFleetHealthSnapshot pages the entire fleet once and reads each cluster's
+// health once, returning the shared snapshot the global-rule fan-out reads from.
+func buildFleetHealthSnapshot(ctx context.Context) (*fleetHealthSnapshot, error) {
+	snap := &fleetHealthSnapshot{
+		health: map[uuid.UUID]sqlc.ClusterHealthStatus{},
+		known:  map[uuid.UUID]bool{},
+	}
+	for offset := int32(0); ; offset += alertEvalSweepPageSize {
+		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		if len(clusters) == 0 {
+			break
+		}
+		for _, cluster := range clusters {
+			snap.clusters = append(snap.clusters, cluster)
+			health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+			if healthErr != nil {
+				snap.health[cluster.ID] = sqlc.ClusterHealthStatus{}
+				snap.known[cluster.ID] = false
+				continue
+			}
+			snap.health[cluster.ID] = health
+			snap.known[cluster.ID] = true
+		}
+		if int32(len(clusters)) < alertEvalSweepPageSize {
+			break
+		}
+	}
+	return snap, nil
 }
 
 func filterActiveEvents(events []sqlc.AlertEvent) []sqlc.AlertEvent {
