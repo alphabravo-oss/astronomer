@@ -187,7 +187,9 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
         <iframe
           className="flex-1 w-full h-full border-0"
           src={url}
-          sandbox="allow-same-origin allow-scripts"
+          // scripts-only: never add allow-same-origin alongside allow-scripts —
+          // the pair lets framed content script its way out of the sandbox.
+          sandbox="allow-scripts"
           loading="lazy"
           title={widget.name}
         />
@@ -200,7 +202,7 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
         <iframe
           className="flex-1 w-full h-full border-0"
           src={url}
-          sandbox="allow-same-origin allow-scripts"
+          sandbox="allow-scripts"
           loading="lazy"
           title={widget.name}
         />

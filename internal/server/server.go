@@ -422,6 +422,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	argocdHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	toolHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	catalogHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	backupHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	loggingHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	workloadHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Anomaly-baselines read endpoints gate on cluster authz (fail closed:

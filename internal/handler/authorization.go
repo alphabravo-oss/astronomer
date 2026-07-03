@@ -189,6 +189,29 @@ func (a *authorizationSupport) authorizeClusterAction(w http.ResponseWriter, r *
 	return true
 }
 
+// resourceScopeFilter returns a predicate for filtering a list of resources the
+// caller may see for (resource, verb). Each item is checked by its cluster: a
+// cluster-scoped item (valid==true) needs a matching cluster grant; an unscoped
+// (global) item needs a global grant. restricted==false means the caller is
+// unrestricted and the predicate always returns true (the returned total should
+// stay exact). On a binding-lookup failure it writes a 500 and returns ok=false.
+func (a *authorizationSupport) resourceScopeFilter(w http.ResponseWriter, r *http.Request, resource rbac.Resource, verb rbac.Verb) (allow func(clusterID uuid.UUID, valid bool) bool, restricted bool, ok bool) {
+	bindings, restricted, err := a.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return nil, false, false
+	}
+	if !restricted {
+		return func(uuid.UUID, bool) bool { return true }, false, true
+	}
+	return func(clusterID uuid.UUID, valid bool) bool {
+		if valid {
+			return a.allowsCluster(bindings, clusterID, resource, verb)
+		}
+		return a.allowsGlobal(bindings, resource, verb)
+	}, true, true
+}
+
 func (a *authorizationSupport) bindingsForContext(ctx context.Context) ([]rbac.RoleBinding, bool, error) {
 	if a == nil || a.engine == nil || a.querier == nil {
 		if _, ok := middleware.GetAuthenticatedUser(ctx); ok {

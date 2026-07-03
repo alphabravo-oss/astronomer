@@ -163,6 +163,63 @@ func TestNativeRBACCreate_AllowsLegitAuthor(t *testing.T) {
 	}
 }
 
+// TestNativeRBACCreate_BlocksWildcardCoreEscalation is the regression proof for
+// the audit finding: a caller holding clusters:* + rbac:* (but no secrets grant)
+// must NOT be able to author {apiGroup:"", resource:"*"}. That wildcard grants
+// secret reads at request time (rbac.NativeAllow), yet the old guard charged it
+// only against clusters:<verb> and let it through. It must now be charged
+// against the full sensitive set and denied.
+func TestNativeRBACCreate_BlocksWildcardCoreEscalation(t *testing.T) {
+	callerID := uuid.NewString()
+	// Caller can manage clusters and RBAC but holds no secrets/pods/etc. access.
+	clustersAndRBAC := []rbac.RoleBinding{{
+		UserID: callerID,
+		RoleRules: []rbac.Rule{
+			{Resource: string(rbac.ResourceClusters), Verbs: []string{"*"}},
+			{Resource: string(rbac.ResourceRBAC), Verbs: []string{"*"}},
+		},
+	}}
+	h, q := newGuardedNativeHandler(clustersAndRBAC)
+
+	rec := httptest.NewRecorder()
+	req := createNativeRuleReq(t, callerID, map[string]any{
+		"userId":   callerID,
+		"apiGroup": "",
+		"resource": "*",
+		"verbs":    []string{"read"},
+	})
+	h.Create(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403 for wildcard-core escalation, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if q.created != 0 {
+		t.Fatalf("wildcard-core escalation must not persist, got %d writes", q.created)
+	}
+
+	// A caller who genuinely holds every sensitive resource (superuser-like via
+	// explicit grants) can author it. Grant read on the whole sensitive set.
+	rules := []rbac.Rule{{Resource: string(rbac.ResourceClusters), Verbs: []string{"*"}}}
+	for _, res := range sensitiveNativeResources() {
+		rules = append(rules, rbac.Rule{Resource: string(res), Verbs: []string{string(rbac.VerbRead)}})
+	}
+	h2, q2 := newGuardedNativeHandler([]rbac.RoleBinding{{UserID: callerID, RoleRules: rules}})
+	rec2 := httptest.NewRecorder()
+	req2 := createNativeRuleReq(t, callerID, map[string]any{
+		"userId":   callerID,
+		"apiGroup": "",
+		"resource": "*",
+		"verbs":    []string{"read"},
+	})
+	h2.Create(rec2, req2)
+	if rec2.Code != http.StatusCreated {
+		t.Fatalf("fully-privileged wildcard author want 201, got %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	if q2.created != 1 {
+		t.Fatalf("privileged wildcard author should persist one rule, got %d", q2.created)
+	}
+}
+
 // TestNativeRBACCreate_ScopeMismatchDenied proves the guard is scope-aware: a
 // caller holding secrets:read only on cluster A cannot author an all-clusters
 // (empty clusterId) rule granting secret reads everywhere.

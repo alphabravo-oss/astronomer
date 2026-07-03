@@ -282,35 +282,77 @@ func (h *NativeRBACHandler) enforceNoNativeEscalation(w http.ResponseWriter, r *
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load caller bindings")
 		return false
 	}
-	mapped := mapNativeRuleResource(apiGroup, resource)
+	charged := nativeRuleChargedResources(apiGroup, resource)
 	var cid uuid.UUID
 	if clusterID.Valid {
 		cid = uuid.UUID(clusterID.Bytes)
 	}
 	for _, v := range verbs {
-		if !h.engine.CheckPermission(callerBindings, mapped, rbac.Verb(v), cid, uuid.UUID{}, namespace) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
-				"Cannot author a native rule granting permissions you do not already hold at this scope")
-			return false
+		for _, mapped := range charged {
+			if !h.engine.CheckPermission(callerBindings, mapped, rbac.Verb(v), cid, uuid.UUID{}, namespace) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+					"Cannot author a native rule granting permissions you do not already hold at this scope")
+				return false
+			}
 		}
 	}
 	return true
 }
 
-// mapNativeRuleResource mirrors the k8s-proxy authz hook's classification
-// (internal/server/routes.go k8sProxyPermission): a native rule's
-// (apiGroup, resource) is charged against a built-in coarse resource when the
-// resource is a recognised Kubernetes type, else against ResourceCustomResources
-// when it names a non-core apiGroup (a CRD), else the generic clusters resource.
-// Keep in sync with knownK8sProxyResource / k8sProxyResourcePolicy.
-func mapNativeRuleResource(apiGroup, resource string) rbac.Resource {
-	if res, ok := knownNativeK8sResource(resource); ok {
-		return res
+// sensitiveNativeResources is every coarse built-in a core-group wildcard rule
+// grants at request time (rbac.NativeAllow honours {apiGroup:"", resource:"*"}
+// for every core type, including secrets). Authoring such a rule must therefore
+// require the caller to already hold each of these.
+func sensitiveNativeResources() []rbac.Resource {
+	return []rbac.Resource{
+		rbac.ResourceSecrets, rbac.ResourcePods, rbac.ResourceConfigMaps,
+		rbac.ResourceStorage, rbac.ResourceNodes, rbac.ResourceServices,
+		rbac.ResourceWorkloads, rbac.ResourceIngresses, rbac.ResourceNetworkPolicies,
 	}
-	if strings.TrimSpace(apiGroup) != "" {
-		return rbac.ResourceCustomResources
+}
+
+// nativeRuleChargedResources returns the coarse RBAC resources a native rule's
+// (apiGroup, resource) must be authorized against. A precisely-named built-in
+// maps to its single coarse resource. A wildcard or unrecognised *core* resource
+// is charged against the full sensitive set (fail closed) so it cannot be
+// authored for the price of clusters:<verb> alone — the escalation the previous
+// mapNativeRuleResource("", "*") -> ResourceClusters fallback allowed. Keep the
+// per-type mapping in sync with knownNativeK8sResource / the k8s-proxy hook.
+func nativeRuleChargedResources(apiGroup, resource string) []rbac.Resource {
+	res := strings.ToLower(strings.TrimSpace(resource))
+	grp := strings.TrimSpace(apiGroup)
+	wildcardResource := res == "*" || res == ""
+	coreGroup := grp == ""
+	allGroups := grp == "*"
+
+	withClusters := func(rs []rbac.Resource) []rbac.Resource {
+		return append(rs, rbac.ResourceClusters)
 	}
-	return rbac.ResourceClusters
+
+	if !wildcardResource {
+		if mapped, ok := knownNativeK8sResource(res); ok {
+			return []rbac.Resource{mapped}
+		}
+		// Unrecognised resource under a named CRD group → a custom resource.
+		if !coreGroup && !allGroups {
+			return []rbac.Resource{rbac.ResourceCustomResources}
+		}
+		// Unrecognised *core* resource (e.g. serviceaccounts): cannot prove it
+		// harmless, so fail closed against the full sensitive set.
+		return withClusters(sensitiveNativeResources())
+	}
+
+	// Wildcard resource: grants every resource in the group's scope.
+	switch {
+	case coreGroup:
+		return withClusters(sensitiveNativeResources())
+	case allGroups:
+		// apiGroup "*" + resource "*" is cluster-admin equivalent.
+		return withClusters(append(sensitiveNativeResources(), rbac.ResourceCustomResources))
+	default:
+		// "*" within a single named CRD group.
+		return []rbac.Resource{rbac.ResourceCustomResources}
+	}
 }
 
 // knownNativeK8sResource mirrors server.knownK8sProxyResource (which lives in an

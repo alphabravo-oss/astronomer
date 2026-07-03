@@ -52,3 +52,17 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
 		t.Fatal("feature flags must default OFF when env is unset")
 	}
 }
+
+// TestGitopsWebhookSecretEnvBinding guards the fix for the finding that
+// GITOPS_WEBHOOK_SECRET was never bound, so the git push-webhook sync endpoint
+// could never be enabled in any deployment (it 503s on an empty secret).
+func TestGitopsWebhookSecretEnvBinding(t *testing.T) {
+	t.Setenv("GITOPS_WEBHOOK_SECRET", "hunter2-webhook")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.GitopsWebhookSecret != "hunter2-webhook" {
+		t.Fatalf("GITOPS_WEBHOOK_SECRET not resolved into cfg.GitopsWebhookSecret, got %q", cfg.GitopsWebhookSecret)
+	}
+}

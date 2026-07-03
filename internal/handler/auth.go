@@ -795,6 +795,26 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MFA-enforcement gate, mirroring Login. Without this a user who held a live
+	// refresh token when enrollment was turned on could roll it forward forever
+	// without ever enrolling — the inverse of the enroll-only lockout. Hand back
+	// the same enrollment-only challenge so the SPA drives them through the QR
+	// flow before a fresh session is issued.
+	if h.totpEnforced(r.Context()) && h.totpGate != nil && !h.totpGate.IsEnrolled(r.Context(), user.ID) {
+		enrollChallenge, gerr := h.jwt.GeneratePurposeToken(user.ID, auth.PurposeTOTPEnrollOnly, auth.TOTPChallengeTTL)
+		if gerr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to mint enrollment challenge")
+			return
+		}
+		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.refresh_totp_enroll_required", "user", user.ID.String(), user.Username, nil)
+		RespondJSONUnwrapped(w, http.StatusLocked, map[string]any{
+			"error":           "totp_enrollment_required",
+			"challenge_token": enrollChallenge,
+		})
+		return
+	}
+
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")

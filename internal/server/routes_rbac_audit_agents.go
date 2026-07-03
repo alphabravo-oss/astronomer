@@ -116,34 +116,49 @@ func registerRBACAuditAgentRoutes(r chi.Router, deps RouterDependencies) {
 	}
 
 	if deps.Alerting != nil {
+		// Alerting was previously mounted with no authorization at all: any
+		// authenticated user could read channel delivery secrets (Slack webhook
+		// URLs, PagerDuty keys), tamper with rules, and silence alerts. Gate every
+		// verb on ResourceAlerts, matching the audit/rbac sibling blocks. Reads
+		// need alerts:read (or :list); state changes need :update; creates :create;
+		// deletes :delete.
+		alertsRead := requireAnyPermission(
+			deps.RBACEngine,
+			deps.RBACQueries,
+			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbRead},
+			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbList},
+		)
+		alertsCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAlerts, rbac.VerbCreate)
+		alertsUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAlerts, rbac.VerbUpdate)
+		alertsDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAlerts, rbac.VerbDelete)
 		r.Route("/alerting", func(r chi.Router) {
-			r.Get("/channels/", deps.Alerting.ListChannels)
-			r.Post("/channels/", deps.Alerting.CreateChannel)
-			r.Get("/channels/{id}/", deps.Alerting.GetChannel)
-			r.Put("/channels/{id}/", deps.Alerting.UpdateChannel)
-			r.Delete("/channels/{id}/", deps.Alerting.DeleteChannel)
-			r.Post("/channels/{id}/test/", deps.Alerting.TestChannel)
-			r.Get("/rules/", deps.Alerting.ListRules)
-			r.Post("/rules/", deps.Alerting.CreateRule)
-			r.Get("/rules/{id}/", deps.Alerting.GetRule)
-			r.Put("/rules/{id}/", deps.Alerting.UpdateRule)
-			r.Delete("/rules/{id}/", deps.Alerting.DeleteRule)
-			r.Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
-			r.Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
-			r.Get("/events/", deps.Alerting.ListEvents)
-			r.Get("/events/{id}/", deps.Alerting.GetEvent)
-			r.Post("/events/{id}/acknowledge/", deps.Alerting.AcknowledgeEvent)
-			r.Post("/events/{id}/resolve/", deps.Alerting.ResolveEvent)
-			r.Get("/silences/", deps.Alerting.ListSilences)
-			r.Post("/silences/", deps.Alerting.CreateSilence)
-			r.Delete("/silences/{id}/", deps.Alerting.DeleteSilence)
-			r.Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
+			r.With(alertsRead).Get("/channels/", deps.Alerting.ListChannels)
+			r.With(alertsCreate).Post("/channels/", deps.Alerting.CreateChannel)
+			r.With(alertsRead).Get("/channels/{id}/", deps.Alerting.GetChannel)
+			r.With(alertsUpdate).Put("/channels/{id}/", deps.Alerting.UpdateChannel)
+			r.With(alertsDelete).Delete("/channels/{id}/", deps.Alerting.DeleteChannel)
+			r.With(alertsUpdate).Post("/channels/{id}/test/", deps.Alerting.TestChannel)
+			r.With(alertsRead).Get("/rules/", deps.Alerting.ListRules)
+			r.With(alertsCreate).Post("/rules/", deps.Alerting.CreateRule)
+			r.With(alertsRead).Get("/rules/{id}/", deps.Alerting.GetRule)
+			r.With(alertsUpdate).Put("/rules/{id}/", deps.Alerting.UpdateRule)
+			r.With(alertsDelete).Delete("/rules/{id}/", deps.Alerting.DeleteRule)
+			r.With(alertsUpdate).Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
+			r.With(alertsUpdate).Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
+			r.With(alertsRead).Get("/events/", deps.Alerting.ListEvents)
+			r.With(alertsRead).Get("/events/{id}/", deps.Alerting.GetEvent)
+			r.With(alertsUpdate).Post("/events/{id}/acknowledge/", deps.Alerting.AcknowledgeEvent)
+			r.With(alertsUpdate).Post("/events/{id}/resolve/", deps.Alerting.ResolveEvent)
+			r.With(alertsRead).Get("/silences/", deps.Alerting.ListSilences)
+			r.With(alertsCreate).Post("/silences/", deps.Alerting.CreateSilence)
+			r.With(alertsDelete).Delete("/silences/{id}/", deps.Alerting.DeleteSilence)
+			r.With(alertsUpdate).Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
 		})
 		// Python-named alerts/* alias paths for the frontend's expected URLs.
 		r.Route("/alerts", func(r chi.Router) {
-			r.Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
-			r.Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
-			r.Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
+			r.With(alertsUpdate).Post("/rules/{id}/enable/", deps.Alerting.EnableRule)
+			r.With(alertsUpdate).Post("/rules/{id}/disable/", deps.Alerting.DisableRule)
+			r.With(alertsUpdate).Post("/silences/{id}/expire/", deps.Alerting.ExpireSilence)
 		})
 	}
 

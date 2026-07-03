@@ -209,7 +209,11 @@ func publishToBus(event Event, row sqlc.CreateAuditLogV1Params) {
 		"http_method":       row.HTTPMethod,
 		"path":              row.Path,
 		"status_code":       row.StatusCode,
-		"detail":            event.Detail,
+		// Sanitize on the egress path too — buildRow already scrubs the copy
+		// written to the DB, but SIEM/webhook subscribers read this bus payload,
+		// so a future caller putting a secret-shaped key in Detail must not leak
+		// it unredacted to external sinks.
+		"detail": SanitizeDetail(event.Detail),
 	}
 	p.Publish("audit."+row.Action, data)
 }

@@ -239,6 +239,7 @@ func Load() (*Config, error) {
 		"argocd_cluster_proxy_base_url",
 		"argocd_internal_proxy_addr",
 		"manifest_signing_secret",
+		"gitops_webhook_secret",
 		"dex_bundled_enabled",
 		"auth_local_password_only",
 		"astronomer_catalog_url",

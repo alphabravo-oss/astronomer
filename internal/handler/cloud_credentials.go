@@ -32,6 +32,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -900,7 +902,7 @@ func (h *CloudCredentialHandler) upsertMaterializationWithTaskOutbox(ctx context
 		ClusterID:           ref.ClusterID,
 		Namespace:           ref.Namespace,
 		SecretName:          ref.SecretName,
-		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(cred.ID, ref, op), Valid: true},
+		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(cred.ID, ref, op, cloudCredentialDataVersion(cred)), Valid: true},
 		TaskType:            task.Type(),
 		Payload:             task.Payload(),
 		QueueName:           "default",
@@ -932,7 +934,7 @@ func (h *CloudCredentialHandler) deleteMaterializationWithTaskOutbox(ctx context
 		CredentialID:        credentialID,
 		ClusterID:           ref.ClusterID,
 		Namespace:           ref.Namespace,
-		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(uuid.Nil, ref, "delete"), Valid: true},
+		DedupeKey:           pgtype.Text{String: cloudCredentialMaterializeDedupeKey(uuid.Nil, ref, "delete", ""), Valid: true},
 		TaskType:            task.Type(),
 		Payload:             task.Payload(),
 		QueueName:           "default",
@@ -964,7 +966,7 @@ func (h *CloudCredentialHandler) enqueueMaterialize(ctx context.Context, cred sq
 		task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
 		if h.taskOutbox != nil {
 			if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
-				DedupeKey:           cloudCredentialMaterializeDedupeKey(cred.ID, ref, op),
+				DedupeKey:           cloudCredentialMaterializeDedupeKey(cred.ID, ref, op, cloudCredentialDataVersion(cred)),
 				QueueName:           "default",
 				MaxRetry:            3,
 				MaxDeliveryAttempts: 20,
@@ -998,7 +1000,7 @@ func (h *CloudCredentialHandler) enqueueDelete(ctx context.Context, ref TargetRe
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
 	if h.taskOutbox != nil {
 		if _, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
-			DedupeKey:           cloudCredentialMaterializeDedupeKey(uuid.Nil, ref, "delete"),
+			DedupeKey:           cloudCredentialMaterializeDedupeKey(uuid.Nil, ref, "delete", ""),
 			QueueName:           "default",
 			MaxRetry:            3,
 			MaxDeliveryAttempts: 20,
@@ -1011,14 +1013,33 @@ func (h *CloudCredentialHandler) enqueueDelete(ctx context.Context, ref TargetRe
 	}
 }
 
-func cloudCredentialMaterializeDedupeKey(credentialID uuid.UUID, ref TargetRef, op string) string {
-	return fmt.Sprintf("cloud_credential_materialize:%s:%s:%s:%s:%s",
+// cloudCredentialMaterializeDedupeKey builds the task_outbox / materialization
+// dedupe key. dataVersion is a short fingerprint of the credential's current
+// encrypted value (empty for deletes). Folding it in is what makes a credential
+// *rotation* re-materialize: without it, an UPDATE that changes only
+// data_encrypted (secret_name and refs unchanged) produced the identical key, so
+// the already-'delivered' outbox row and 'applied' materialization row both
+// deduped the change away and the in-cluster Secret silently kept the old value.
+// A changed value now yields a new key → a fresh 'pending' outbox row → the
+// worker re-applies the rotated credential.
+func cloudCredentialMaterializeDedupeKey(credentialID uuid.UUID, ref TargetRef, op string, dataVersion string) string {
+	return fmt.Sprintf("cloud_credential_materialize:%s:%s:%s:%s:%s:%s",
 		credentialID.String(),
 		ref.ClusterID.String(),
 		ref.Namespace,
 		ref.SecretName,
 		op,
+		dataVersion,
 	)
+}
+
+// cloudCredentialDataVersion is a short, stable fingerprint of a credential's
+// current encrypted payload. data_encrypted is re-written (freshly Fernet-
+// encrypted) on every credential update, so this changes whenever the stored
+// value changes — exactly when a re-materialize must fire.
+func cloudCredentialDataVersion(cred sqlc.CloudCredential) string {
+	sum := sha256.Sum256([]byte(cred.DataEncrypted))
+	return hex.EncodeToString(sum[:6])
 }
 
 // audit writes a best-effort audit row using the optional auditor.

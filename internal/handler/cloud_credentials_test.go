@@ -232,7 +232,10 @@ func TestCloudCredentialsMaterializeWritesTaskOutbox(t *testing.T) {
 	if arg.TaskType != tasks.CloudCredentialMaterializeType {
 		t.Fatalf("task type = %q, want %q", arg.TaskType, tasks.CloudCredentialMaterializeType)
 	}
-	wantDedupe := "cloud_credential_materialize:" + credentialID.String() + ":" + clusterID.String() + ":apps:aws-prod:apply"
+	// Dedupe key now carries a trailing data-version fingerprint so a credential
+	// rotation re-fires the materialize task instead of being deduped away.
+	dataVersion := cloudCredentialDataVersion(sqlc.CloudCredential{ID: credentialID})
+	wantDedupe := "cloud_credential_materialize:" + credentialID.String() + ":" + clusterID.String() + ":apps:aws-prod:apply:" + dataVersion
 	if !arg.DedupeKey.Valid || arg.DedupeKey.String != wantDedupe {
 		t.Fatalf("dedupe key = %+v, want %s", arg.DedupeKey, wantDedupe)
 	}

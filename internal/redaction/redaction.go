@@ -87,7 +87,9 @@ func String(value string) string {
 	if strings.Contains(lower, "-----begin ") && strings.Contains(lower, " private key-----") {
 		return PrivateKeyMarker
 	}
-	if strings.Contains(lower, "apiVersion:") && strings.Contains(lower, "clusters:") && strings.Contains(lower, "users:") {
+	// `lower` is already lowercased, so the needle must be too — the previous
+	// mixed-case "apiVersion:" literal never matched, disabling this branch.
+	if strings.Contains(lower, "apiversion:") && strings.Contains(lower, "clusters:") && strings.Contains(lower, "users:") {
 		return KubeconfigMarker
 	}
 	out := value

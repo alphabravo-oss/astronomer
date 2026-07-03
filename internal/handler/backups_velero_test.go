@@ -648,7 +648,9 @@ func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
 	id := uuid.New()
-	q := &fakeBackupQuerier{}
+	// UpdateStorageConfig now loads the row first (to authorize against its
+	// cluster), so the fake must know about it.
+	q := &fakeBackupQuerier{cfg: sqlc.BackupStorageConfig{ID: id, Name: "primary", Bucket: "backups"}}
 	h := NewBackupHandler(q)
 	h.SetEncryptor(enc)
 

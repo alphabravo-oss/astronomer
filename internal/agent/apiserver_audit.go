@@ -131,6 +131,24 @@ type httpAuditSender struct {
 // hung server can't wedge the tailer's poll loop forever. getToken is the lazy
 // accessor for the CONNECT_ACK-delivered token; fallback carries batches over
 // the tunnel until (or unless) a token arrives.
+// newAuditHTTPClient builds the direct-HTTP audit client, trusting the same
+// management CA bundle the tunnel pins (BuildTLSConfig). When no CA is
+// configured BuildTLSConfig returns a nil tls.Config and we return a plain
+// OS-trust client — identical to the pre-fix behavior for public-CA clusters.
+func newAuditHTTPClient(cfg *AgentConfig) (*http.Client, error) {
+	tlsCfg, err := BuildTLSConfig(cfg.CACert, cfg.CAChecksum)
+	if err != nil {
+		return nil, err
+	}
+	if tlsCfg == nil {
+		return &http.Client{Timeout: 30 * time.Second}, nil
+	}
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+	}, nil
+}
+
 func newHTTPAuditSender(client *http.Client, wsServerURL, clusterID string, getToken func() string, fallback AuditEventSender, log *slog.Logger) *httpAuditSender {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
@@ -228,7 +246,18 @@ func SelectAuditSender(cfg *AgentConfig, tunnel AuditBatchSender, tokenGetter fu
 	case "stub":
 		return stubAuditSender{log: log}
 	case "http":
-		return newHTTPAuditSender(nil, cfg.ServerURL, cfg.ClusterID, tokenGetter, newTunnelAuditSender(tunnel), log)
+		// Build the outbound client with the same management CA bundle the tunnel
+		// pins. Without this, on a private/self-signed-CA cluster every audit POST
+		// fails TLS (OS trust store only), the tailer never advances its
+		// checkpoint, and apiserver audit events are silently never delivered.
+		client, err := newAuditHTTPClient(cfg)
+		if err != nil {
+			if log != nil {
+				log.Warn("apiserver-audit: building HTTP client with CA bundle failed; falling back to tunnel delivery", "error", err)
+			}
+			return newTunnelAuditSender(tunnel)
+		}
+		return newHTTPAuditSender(client, cfg.ServerURL, cfg.ClusterID, tokenGetter, newTunnelAuditSender(tunnel), log)
 	default: // "tunnel" and any unrecognized value
 		return newTunnelAuditSender(tunnel)
 	}

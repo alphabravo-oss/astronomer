@@ -99,11 +99,27 @@ keyrotate \
   --encryption-key "${NEW_KEY},${OLD_KEY}"
 ```
 
-The tool rewrites every row in:
+The tool rewrites every row in every column-stored Fernet secret. As of this
+writing that is:
 
 - `sso_configurations.client_secret_encrypted`
 - `argocd_instances.auth_token_encrypted`
 - `backup_storage_configs.encrypted_credentials`
+- `vault_connections.auth_encrypted`
+- `gitops_registration_sources.auth_encrypted`
+- `prometheus_datasources.auth_encrypted`
+- `siem_forwarders.auth_encrypted`
+- `cloud_credentials.data_encrypted`
+- `smtp_settings.password_encrypted`
+- `cluster_registry_configs.registry_password_encrypted`
+- `webhook_subscriptions.secret_encrypted`
+- `argocd_cluster_proxy_tokens.token_encrypted`
+- `user_totp_enrollments.secret_encrypted` (TOTP/MFA secrets)
+- `sso_sessions.upstream_id_token_encrypted`
+
+The authoritative list is `rewriteTargets` in `cmd/keyrotate/main.go`; a build
+test (`cmd/keyrotate/coverage_test.go`) fails if a migration adds an encrypted
+column that is not swept, so this list cannot silently drift.
 
 It also prints the count of `dex_connectors` rows: their encrypted
 fields live inside a JSONB blob (per-connector-type schema), so the

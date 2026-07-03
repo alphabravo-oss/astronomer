@@ -107,35 +107,39 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		r.With(featureGate("feature.backups", deps.SettingsCache)).Route("/backups", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Backups.ControllerStatus)
 			r.Get("/", deps.Backups.ListBackups)
-			r.Post("/", deps.Backups.CreateBackup)
+			// Backup/restore mutations run destructive Velero operations against a
+			// managed cluster, so they carry the write-scope backstop (same
+			// contract as the catalog/workload subtrees: reads + JWT sessions +
+			// legacy empty-scope tokens pass; RBAC stays primary in-handler).
+			r.With(mutationWriteScope).Post("/", deps.Backups.CreateBackup)
 			// Alias for the frontend: GET /backups/runs/ lists backup runs in
 			// the same shape as GET /backups/. The frontend's "runs" tab calls
 			// this URL; without the alias the chi router 404s the path.
 			r.Get("/runs/", deps.Backups.ListBackups)
 			r.Get("/{id}/", deps.Backups.GetBackup)
-			r.Delete("/{id}/", deps.Backups.DeleteBackup)
-			r.Post("/{id}/restore/", deps.Backups.CreateRestoreByBackup)
+			r.With(mutationWriteScope).Delete("/{id}/", deps.Backups.DeleteBackup)
+			r.With(mutationWriteScope).Post("/{id}/restore/", deps.Backups.CreateRestoreByBackup)
 			r.Get("/restores/", deps.Backups.ListRestores)
 			r.Get("/storage/", deps.Backups.ListStorageConfigs)
-			r.Post("/storage/", deps.Backups.CreateStorageConfig)
+			r.With(mutationWriteScope).Post("/storage/", deps.Backups.CreateStorageConfig)
 			r.Get("/storage/{id}/", deps.Backups.GetStorageConfig)
-			r.Put("/storage/{id}/", deps.Backups.UpdateStorageConfig)
-			r.Delete("/storage/{id}/", deps.Backups.DeleteStorageConfig)
-			r.Post("/storage/{id}/test/", deps.Backups.TestStorageConfig)
-			r.Post("/storage/{id}/test-connection/", deps.Backups.TestStorageConfig)
+			r.With(mutationWriteScope).Put("/storage/{id}/", deps.Backups.UpdateStorageConfig)
+			r.With(mutationWriteScope).Delete("/storage/{id}/", deps.Backups.DeleteStorageConfig)
+			r.With(mutationWriteScope).Post("/storage/{id}/test/", deps.Backups.TestStorageConfig)
+			r.With(mutationWriteScope).Post("/storage/{id}/test-connection/", deps.Backups.TestStorageConfig)
 			// Python-named alias paths (storage-configs/) so both clients work.
 			r.Get("/storage-configs/", deps.Backups.ListStorageConfigs)
-			r.Post("/storage-configs/", deps.Backups.CreateStorageConfig)
+			r.With(mutationWriteScope).Post("/storage-configs/", deps.Backups.CreateStorageConfig)
 			r.Get("/storage-configs/{id}/", deps.Backups.GetStorageConfig)
-			r.Put("/storage-configs/{id}/", deps.Backups.UpdateStorageConfig)
-			r.Delete("/storage-configs/{id}/", deps.Backups.DeleteStorageConfig)
-			r.Post("/storage-configs/{id}/test-connection/", deps.Backups.TestStorageConfig)
+			r.With(mutationWriteScope).Put("/storage-configs/{id}/", deps.Backups.UpdateStorageConfig)
+			r.With(mutationWriteScope).Delete("/storage-configs/{id}/", deps.Backups.DeleteStorageConfig)
+			r.With(mutationWriteScope).Post("/storage-configs/{id}/test-connection/", deps.Backups.TestStorageConfig)
 			r.Get("/schedules/", deps.Backups.ListSchedules)
-			r.Post("/schedules/", deps.Backups.CreateSchedule)
+			r.With(mutationWriteScope).Post("/schedules/", deps.Backups.CreateSchedule)
 			r.Get("/schedules/{id}/", deps.Backups.GetSchedule)
-			r.Put("/schedules/{id}/", deps.Backups.UpdateSchedule)
-			r.Delete("/schedules/{id}/", deps.Backups.DeleteSchedule)
-			r.Post("/schedules/{id}/trigger-now/", deps.Backups.TriggerSchedule)
+			r.With(mutationWriteScope).Put("/schedules/{id}/", deps.Backups.UpdateSchedule)
+			r.With(mutationWriteScope).Delete("/schedules/{id}/", deps.Backups.DeleteSchedule)
+			r.With(mutationWriteScope).Post("/schedules/{id}/trigger-now/", deps.Backups.TriggerSchedule)
 		})
 	}
 

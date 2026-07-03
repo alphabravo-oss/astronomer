@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,18 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
+
+// k8sProxyMaxBodyBytes caps the request body buffered per proxied k8s call
+// before it is base64-encoded and JSON-marshalled onto the tunnel. Without it a
+// single authenticated request could stream a multi-GB body that inflates to
+// ~2.6–3.7× resident memory (ReadAll + base64 + JSON) and OOM-kills the shared
+// replica, dropping every tenant's tunnel. 16 MiB matches the internal helm
+// door and comfortably covers large kubectl-apply manifests.
+const k8sProxyMaxBodyBytes = 16 << 20
+
+// errRequestBodyTooLarge signals the proxied body exceeded k8sProxyMaxBodyBytes;
+// the handler maps it to 413 Request Entity Too Large.
+var errRequestBodyTooLarge = errors.New("request body exceeds limit")
 
 const (
 	// k8sProxyTimeout is the maximum time to wait for a K8s response from the agent.
@@ -95,6 +108,11 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 	// Build K8sRequestPayload from the HTTP request.
 	payload, err := buildK8sRequestPayload(r)
 	if err != nil {
+		if errors.Is(err, errRequestBodyTooLarge) {
+			recordK8sProxyError(mode, "payload_too_large")
+			http.Error(w, `{"error":"request body too large"}`, http.StatusRequestEntityTooLarge)
+			return
+		}
 		p.log.Error("failed to build request payload",
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
@@ -394,12 +412,17 @@ func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error
 		headers[key] = values[0]
 	}
 
-	// Read and base64-encode the body.
+	// Read and base64-encode the body, capped so a huge payload can't OOM the
+	// shared replica. Read one byte past the limit to distinguish "exactly at
+	// the cap" from "over".
 	var body string
 	if r.Body != nil {
-		bodyBytes, err := io.ReadAll(r.Body)
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, k8sProxyMaxBodyBytes+1))
 		if err != nil {
 			return nil, fmt.Errorf("reading request body: %w", err)
+		}
+		if int64(len(bodyBytes)) > k8sProxyMaxBodyBytes {
+			return nil, errRequestBodyTooLarge
 		}
 		if len(bodyBytes) > 0 {
 			body = base64.StdEncoding.EncodeToString(bodyBytes)
@@ -502,6 +525,12 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	}
 
 	target := fmt.Sprintf("http://%s%s", addr, r.URL.RequestURI())
+	// Cap the streamed body so a giant payload can't be relayed to the owner
+	// pod (which would buffer it in buildK8sRequestPayload). MaxBytesReader
+	// makes the owner-pod read fail cleanly past the limit.
+	if r.Body != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, k8sProxyMaxBodyBytes)
+	}
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
 	if err != nil {
 		p.log.Warn("tunnel proxy: build upstream request",

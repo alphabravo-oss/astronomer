@@ -5,7 +5,14 @@ import (
 	"strings"
 )
 
-const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:"
+// defaultContentSecurityPolicy hardens API + first-party responses. script-src
+// deliberately omits 'unsafe-inline' so an injected inline <script> won't run;
+// API responses are JSON (no scripts), and any HTML-serving handler/proxy that
+// genuinely needs inline scripts (e.g. the embedded ArgoCD UI) either carries
+// its own upstream CSP — preserved by the reverse proxy — or sets one first
+// (SecurityHeaders only fills an empty header). style-src keeps 'unsafe-inline'
+// because first-party styled components rely on it.
+const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:"
 
 // SecurityHeaders adds browser hardening headers for API and proxied UI
 // responses. It deliberately avoids overriding handler-provided values so

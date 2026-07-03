@@ -142,10 +142,10 @@ INSERT INTO audit_log (
 ) VALUES `
 
 // BatchInsertAuditLog issues a single multi-row INSERT for the given rows.
-// PostgreSQL caps a single statement at ~65 535 bind parameters; at 16
-// columns per row that's ~4 095 rows in a single Exec — we expect batch
-// sizes of 50-250 in production, so the limit is academic but the
-// implementation chunks defensively just in case.
+// PostgreSQL caps a single statement at 65 535 bind parameters; at
+// auditLogColumnsPerRow (17) columns per row that's 3 855 rows in a single
+// Exec — we expect batch sizes of 50-250 in production, so the limit is
+// academic but the implementation chunks defensively just in case.
 //
 // We hand-build the VALUES list because sqlc's :copyfrom path uses
 // PostgreSQL COPY, which doesn't go through the same parameter-substitution
@@ -159,9 +159,10 @@ func (q *Queries) BatchInsertAuditLog(ctx context.Context, rows []CreateAuditLog
 		return nil
 	}
 
-	// PostgreSQL bind-parameter limit. Stay conservative — 4000 rows per
-	// statement leaves headroom for any wrapper that adds its own params.
-	const maxRowsPerExec = 4000
+	// PostgreSQL bind-parameter limit is 65 535. Derive the row cap from the
+	// actual column count so a chunk can never overflow it (the previous fixed
+	// 4000 × 17 columns = 68 000 params overflowed and dropped the whole batch).
+	const maxRowsPerExec = 65535 / auditLogColumnsPerRow
 	for start := 0; start < len(rows); start += maxRowsPerExec {
 		end := start + maxRowsPerExec
 		if end > len(rows) {

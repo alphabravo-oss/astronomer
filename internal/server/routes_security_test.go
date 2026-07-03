@@ -2665,11 +2665,7 @@ func isPublicAuthFlow(pattern string) bool {
 
 func isRouterPublicReadPattern(pattern string) bool {
 	switch pattern {
-	case "/api/v1/activity":
-		return true
 	case "/api/v1/settings/general", "/api/v1/settings/sso", "/api/v1/settings/sso/presets", "/api/v1/settings/branding", "/api/v1/settings/banner", "/api/v1/settings/features":
-		return true
-	case "/api/v1/users", "/api/v1/users/{id}":
 		return true
 	case "/api/v1/register/ca.crt":
 		return true

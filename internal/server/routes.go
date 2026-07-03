@@ -497,8 +497,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// hitting verify with 1m TOTP codes would otherwise have
 			// 10s windows of guess room per minute.
 			r.With(appmiddleware.LoginRateLimit(5, time.Minute)).Post("/auth/totp/verify/", deps.TOTP.Verify)
-			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/enroll/start/", deps.TOTP.EnrollStart)
-			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/enroll/confirm/", deps.TOTP.EnrollConfirm)
+			// Enroll start/confirm accept EITHER a live session OR the
+			// PurposeTOTPEnrollOnly challenge Login issues when MFA enrollment is
+			// enforced and the user has not yet enrolled. Without the challenge
+			// path a forced-enrollment user has no session and could never enroll.
+			enrollAuth := enrollChallengeOrAuth(deps.JWT, deps.AuthQueries)
+			r.With(enrollAuth).Post("/auth/totp/enroll/start/", deps.TOTP.EnrollStart)
+			r.With(enrollAuth).Post("/auth/totp/enroll/confirm/", deps.TOTP.EnrollConfirm)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/disable/", deps.TOTP.Disable)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/auth/totp/status/", deps.TOTP.Status)
 			r.With(requireAuth(deps.JWT, deps.AuthQueries)).Post("/auth/totp/recovery-codes/regenerate/", deps.TOTP.RegenerateRecoveryCodes)
@@ -514,7 +519,18 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		}
 
 		if deps.Resources != nil {
-			r.Get("/activity/", deps.Resources.ListActivity)
+			// The activity feed exposes a rolling stream of operations + named
+			// resources drawn from the audit log; gate it like the audit-log read
+			// (requireAuth + audit_logs read/list) instead of leaving it public.
+			r.With(
+				requireAuth(deps.JWT, deps.AuthQueries),
+				requireAnyPermission(
+					deps.RBACEngine,
+					deps.RBACQueries,
+					permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbRead},
+					permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbList},
+				),
+			).Get("/activity/", deps.Resources.ListActivity)
 			r.Route("/settings", func(r chi.Router) {
 				r.Get("/general/", deps.Resources.GetGeneralSettings)
 				r.With(requireAuth(deps.JWT, deps.AuthQueries), requireScope(iauth.ScopeAdmin), requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).
@@ -569,8 +585,22 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					monitoringMutate.Delete("/monitoring/alertmanager/uninstall/", deps.Monitoring.UninstallSharedAlertmanager)
 				}
 			})
-			r.Get("/users/", deps.Resources.ListUsers)
-			r.Get("/users/{id}/", deps.Resources.GetUser)
+			// The user directory (usernames, emails, last-login, active state) is
+			// operator PII and must not be readable unauthenticated. Reads require
+			// auth + users:read/list, mirroring the write routes' users RBAC.
+			r.With(
+				requireAuth(deps.JWT, deps.AuthQueries),
+				requireAnyPermission(
+					deps.RBACEngine,
+					deps.RBACQueries,
+					permissionRequirement{resource: rbac.ResourceUsers, verb: rbac.VerbRead},
+					permissionRequirement{resource: rbac.ResourceUsers, verb: rbac.VerbList},
+				),
+			).Get("/users/", deps.Resources.ListUsers)
+			r.With(
+				requireAuth(deps.JWT, deps.AuthQueries),
+				requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceUsers, rbac.VerbRead),
+			).Get("/users/{id}/", deps.Resources.GetUser)
 		}
 
 		if deps.Auth != nil {
@@ -1083,6 +1113,18 @@ func requireAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) 
 		}
 	}
 	return appmiddleware.RequireAuthWithQueries(jwt, queries)
+}
+
+// enrollChallengeOrAuth guards a route with either a normal session or a
+// PurposeTOTPEnrollOnly challenge (see AuthOrTOTPEnrollChallenge). Mirrors
+// requireAuth's nil-jwt passthrough for test wiring.
+func enrollChallengeOrAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) func(http.Handler) http.Handler {
+	if jwt == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+	return appmiddleware.AuthOrTOTPEnrollChallenge(jwt, queries)
 }
 
 // requireScope returns the API-token scope-enforcement middleware

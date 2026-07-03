@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -42,6 +43,27 @@ func NewServiceProxy(log *slog.Logger) *ServiceProxy {
 	}
 }
 
+// isValidDNSLabel reports whether s is a valid RFC 1123 DNS label — the format
+// Kubernetes Service and Namespace names must take (lowercase alphanumerics and
+// '-', 1–63 chars, no leading/trailing '-'). Rejecting anything else stops a
+// crafted name from smuggling userinfo, a port, or a path separator into the
+// proxied URL's authority.
+func isValidDNSLabel(s string) bool {
+	if len(s) == 0 || len(s) > 63 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case c == '-' && i != 0 && i != len(s)-1:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // HandleRequest decodes a SERVICE_PROXY_REQUEST and returns a
 // SERVICE_PROXY_RESPONSE. The response body is always base64-encoded, matching
 // the Go protocol convention (K8sResponsePayload, etc.).
@@ -64,8 +86,29 @@ func (sp *ServiceProxy) HandleRequest(ctx context.Context, msg *protocol.Message
 		path = "/"
 	}
 
-	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d%s",
-		req.ServiceName, req.Namespace, port, path)
+	// Validate the host components strictly and build the URL via net/url so a
+	// crafted ServiceName/Namespace (e.g. userinfo "@169.254.169.254", an extra
+	// ":port", or a "/" to smuggle a different authority) can't redirect this
+	// in-cluster call to an arbitrary host (SSRF).
+	if !isValidDNSLabel(req.ServiceName) || !isValidDNSLabel(req.Namespace) {
+		return sp.errorResponse(msg, http.StatusBadRequest, fmt.Errorf("invalid service or namespace name")), nil
+	}
+	if port < 1 || port > 65535 {
+		return sp.errorResponse(msg, http.StatusBadRequest, fmt.Errorf("invalid port %d", port)), nil
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	reqPath, rawQuery := path, ""
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		reqPath, rawQuery = path[:i], path[i+1:]
+	}
+	targetURL := (&url.URL{
+		Scheme:   "http",
+		Host:     fmt.Sprintf("%s.%s.svc.cluster.local:%d", req.ServiceName, req.Namespace, port),
+		Path:     reqPath,
+		RawQuery: rawQuery,
+	}).String()
 
 	sp.log.Info("service proxy request",
 		"service", req.ServiceName,
@@ -91,7 +134,7 @@ func (sp *ServiceProxy) HandleRequest(ctx context.Context, msg *protocol.Message
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(reqCtx, method, url, bodyReader)
+	httpReq, err := http.NewRequestWithContext(reqCtx, method, targetURL, bodyReader)
 	if err != nil {
 		return sp.errorResponse(msg, http.StatusInternalServerError, err), nil
 	}

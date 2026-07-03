@@ -244,6 +244,11 @@ type enrollConfirmRequest struct {
 type enrollConfirmResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 	Enrolled      bool     `json:"enrolled"`
+	// Token/Refresh are populated ONLY when the caller reached confirm via the
+	// forced-enrollment challenge (they had no session). Completing enrollment
+	// logs them in, so we mint and return the real session pair here.
+	Token   string `json:"token,omitempty"`
+	Refresh string `json:"refresh,omitempty"`
 }
 
 // EnrollConfirm handles POST /api/v1/auth/totp/enroll/confirm/.
@@ -371,7 +376,22 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	RespondJSON(w, http.StatusOK, enrollConfirmResponse{RecoveryCodes: codes, Enrolled: true})
+	resp := enrollConfirmResponse{RecoveryCodes: codes, Enrolled: true}
+	// Forced-enrollment path: the caller authenticated with the enroll-only
+	// challenge and has no session. Now that MFA is enrolled, mint the real
+	// session pair and log them in — otherwise they'd complete enrollment and
+	// still be stuck at a login wall.
+	if middleware.IsTOTPEnrollOnlyAuth(r.Context()) {
+		accessToken, refreshToken, terr := h.jwt.GenerateTokenPair(userID)
+		if terr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate session")
+			return
+		}
+		setBrowserSessionCookies(w, r, accessToken, refreshToken)
+		resp.Token = accessToken
+		resp.Refresh = refreshToken
+	}
+	RespondJSON(w, http.StatusOK, resp)
 }
 
 // --- Disable ---

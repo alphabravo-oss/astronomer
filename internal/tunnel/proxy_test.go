@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -87,6 +88,22 @@ func TestBuildK8sRequestPayload(t *testing.T) {
 	}
 	if string(decoded) != bodyContent {
 		t.Fatalf("expected body %q, got %q", bodyContent, string(decoded))
+	}
+}
+
+func TestBuildK8sRequestPayload_BodyTooLarge(t *testing.T) {
+	// A body just over the cap is rejected (guards the OOM vector); a body at
+	// the cap still succeeds.
+	oversize := strings.Repeat("a", k8sProxyMaxBodyBytes+1)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/c1/k8s/api/v1/pods", strings.NewReader(oversize))
+	if _, err := buildK8sRequestPayload(req); !errors.Is(err, errRequestBodyTooLarge) {
+		t.Fatalf("oversize body: want errRequestBodyTooLarge, got %v", err)
+	}
+
+	atCap := strings.Repeat("a", k8sProxyMaxBodyBytes)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/clusters/c1/k8s/api/v1/pods", strings.NewReader(atCap))
+	if _, err := buildK8sRequestPayload(req); err != nil {
+		t.Fatalf("body at cap should succeed, got %v", err)
 	}
 }
 

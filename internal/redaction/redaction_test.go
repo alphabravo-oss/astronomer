@@ -66,3 +66,21 @@ func TestByteCount(t *testing.T) {
 		t.Fatalf("byte count = %q", got)
 	}
 }
+
+// TestStringRedactsKubeconfigUnderNonSensitiveKey guards the fix for the
+// case-folding bug that disabled the kubeconfig string detector: a full
+// kubeconfig YAML sitting in a value (not under a "kubeconfig"-named key) must
+// still be redacted, since it carries certificate-authority-data / client-key
+// material.
+func TestStringRedactsKubeconfigUnderNonSensitiveKey(t *testing.T) {
+	kubeconfig := "apiVersion: v1\nclusters:\n- cluster:\n    certificate-authority-data: SECRETCA\nusers:\n- user:\n    client-key-data: SECRETKEY\n"
+	got := String(kubeconfig)
+	if got != KubeconfigMarker {
+		t.Fatalf("kubeconfig string should be redacted to %q, got %q", KubeconfigMarker, got)
+	}
+	// And via Payload under a non-sensitive key.
+	out := Payload(map[string]any{"note": kubeconfig}).(map[string]any)
+	if s, _ := out["note"].(string); strings.Contains(s, "SECRETCA") || strings.Contains(s, "SECRETKEY") {
+		t.Fatalf("kubeconfig leaked under non-sensitive key: %v", out["note"])
+	}
+}

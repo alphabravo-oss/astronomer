@@ -19,6 +19,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -76,6 +78,7 @@ type BackupHandler struct {
 	requester  K8sRequester
 	httpClient *http.Client
 	log        *slog.Logger
+	authz      authorizationSupport
 }
 
 // NewBackupHandler creates a new backup handler.
@@ -85,6 +88,28 @@ func NewBackupHandler(queries BackupQuerier) *BackupHandler {
 		log:        slog.Default(),
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
+}
+
+// SetAuthorization wires the RBAC engine + binding querier used to enforce
+// ResourceBackups permission on every handler. Until this is called the handler
+// fails closed for authenticated callers (bindingsForContext returns a
+// not-configured error → 500) rather than allowing unauthenticated access.
+func (h *BackupHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.authz.SetAuthorization(engine, querier)
+}
+
+// authorizeBackup gates an action against ResourceBackups. Cluster-scoped rows
+// are checked against the caller's grant on that cluster; unscoped (global) rows
+// require a global backups grant. It writes the error response and returns false
+// when the caller is not permitted.
+func (h *BackupHandler) authorizeBackup(w http.ResponseWriter, r *http.Request, clusterID pgtype.UUID, verb rbac.Verb) bool {
+	if clusterID.Valid {
+		return h.authz.authorizeClusterAction(w, r, uuid.UUID(clusterID.Bytes), rbac.ResourceBackups, verb)
+	}
+	return h.authz.authorizeGlobalAction(w, r, rbac.ResourceBackups, verb)
 }
 
 // SetEncryptor wires the Fernet encryptor used to round-trip cloud credentials
@@ -129,6 +154,10 @@ func (h *BackupHandler) SetLogger(log *slog.Logger) {
 
 // ControllerStatus summarizes backup subsystem operational state.
 func (h *BackupHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
+	// Aggregates every cluster's backup state, so it needs a global read grant.
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceBackups, rbac.VerbRead) {
+		return
+	}
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load backups")
@@ -223,6 +252,10 @@ func (h *BackupHandler) controllerSummary(ctx context.Context) (map[string]any, 
 
 // ListStorageConfigs handles GET /api/v1/backups/storage/.
 func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Request) {
+	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
+	if !ok {
+		return
+	}
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
 
@@ -243,7 +276,13 @@ func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Reques
 
 	out := make([]map[string]any, 0, len(configs))
 	for _, c := range configs {
+		if !allow(uuid.UUID(c.ClusterID.Bytes), c.ClusterID.Valid) {
+			continue
+		}
 		out = append(out, h.storageResponse(c))
+	}
+	if restricted {
+		total = int64(len(out))
 	}
 	RespondPaginated(w, r, out, total)
 }
@@ -274,6 +313,9 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 	clusterID, err := h.optionalClusterID(req.ClusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	if !h.authorizeBackup(w, r, clusterID, rbac.VerbCreate) {
 		return
 	}
 
@@ -348,6 +390,9 @@ func (h *BackupHandler) GetStorageConfig(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
 		return
 	}
+	if !h.authorizeBackup(w, r, config.ClusterID, rbac.VerbRead) {
+		return
+	}
 
 	RespondJSON(w, http.StatusOK, h.storageResponse(config))
 }
@@ -360,11 +405,17 @@ func (h *BackupHandler) DeleteStorageConfig(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Look up before delete so we can put the friendly name in the audit row.
-	configName := ""
-	if existing, lookupErr := h.queries.GetBackupStorageConfigByID(r.Context(), id); lookupErr == nil {
-		configName = existing.Name
+	// Look up before delete so we can authorize against the row's cluster and
+	// put the friendly name in the audit row.
+	existing, err := h.queries.GetBackupStorageConfigByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		return
 	}
+	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbDelete) {
+		return
+	}
+	configName := existing.Name
 	if err := h.queries.DeleteBackupStorageConfig(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete storage config")
 		return
@@ -392,6 +443,21 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 	clusterID, err := h.optionalClusterID(req.ClusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+
+	// Authorize against both the existing row's cluster and the requested target
+	// cluster, so a caller cannot edit a config they don't control or re-home it
+	// onto a cluster they lack permission for.
+	existing, err := h.queries.GetBackupStorageConfigByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		return
+	}
+	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbUpdate) {
+		return
+	}
+	if clusterID.Valid && clusterID != existing.ClusterID && !h.authorizeBackup(w, r, clusterID, rbac.VerbUpdate) {
 		return
 	}
 
@@ -460,6 +526,9 @@ func (h *BackupHandler) TestStorageConfig(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
 		return
 	}
+	if !h.authorizeBackup(w, r, cfg.ClusterID, rbac.VerbUpdate) {
+		return
+	}
 	access, secret, err := h.decryptCredentials(cfg)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to decrypt credentials")
@@ -487,6 +556,10 @@ func (h *BackupHandler) TestStorageConfig(w http.ResponseWriter, r *http.Request
 
 // ListBackups handles GET /api/v1/backups/.
 func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
+	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
+	if !ok {
+		return
+	}
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
 
@@ -507,7 +580,13 @@ func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]BackupResponse, 0, len(backups))
 	for _, b := range backups {
+		if !allow(uuid.UUID(b.ClusterID.Bytes), b.ClusterID.Valid) {
+			continue
+		}
 		items = append(items, backupToResponse(b))
+	}
+	if restricted {
+		total = int64(len(items))
 	}
 	RespondPaginated(w, r, items, total)
 }
@@ -538,6 +617,9 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	storage, err := h.queries.GetBackupStorageConfigByID(r.Context(), storageID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		return
+	}
+	if !h.authorizeBackup(w, r, storage.ClusterID, rbac.VerbCreate) {
 		return
 	}
 
@@ -602,6 +684,9 @@ func (h *BackupHandler) GetBackup(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
 		return
 	}
+	if !h.authorizeBackup(w, r, backup.ClusterID, rbac.VerbRead) {
+		return
+	}
 
 	RespondJSON(w, http.StatusOK, backupToResponse(backup))
 }
@@ -613,10 +698,15 @@ func (h *BackupHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid backup ID")
 		return
 	}
-	backupName := ""
-	if existing, lookupErr := h.queries.GetBackupByID(r.Context(), id); lookupErr == nil {
-		backupName = existing.Name
+	existing, err := h.queries.GetBackupByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
+		return
 	}
+	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbDelete) {
+		return
+	}
+	backupName := existing.Name
 	if err := h.queries.DeleteBackup(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete backup")
 		return
@@ -629,6 +719,10 @@ func (h *BackupHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 
 // ListSchedules handles GET /api/v1/backups/schedules/.
 func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
+	if !ok {
+		return
+	}
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
 
@@ -649,7 +743,13 @@ func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]BackupScheduleResponse, 0, len(schedules))
 	for _, s := range schedules {
+		if !allow(uuid.UUID(s.ClusterID.Bytes), s.ClusterID.Valid) {
+			continue
+		}
 		items = append(items, backupScheduleToResponse(s))
+	}
+	if restricted {
+		total = int64(len(items))
 	}
 	RespondPaginated(w, r, items, total)
 }
@@ -694,6 +794,9 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	if !clusterID.Valid {
 		clusterID = storage.ClusterID
+	}
+	if !h.authorizeBackup(w, r, clusterID, rbac.VerbCreate) {
+		return
 	}
 
 	veleroNS := strings.TrimSpace(req.VeleroNamespace)
@@ -756,6 +859,9 @@ func (h *BackupHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
 		return
 	}
+	if !h.authorizeBackup(w, r, schedule.ClusterID, rbac.VerbRead) {
+		return
+	}
 	RespondJSON(w, http.StatusOK, backupScheduleToResponse(schedule))
 }
 
@@ -767,10 +873,15 @@ func (h *BackupHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scheduleName := ""
-	if existing, lookupErr := h.queries.GetBackupScheduleByID(r.Context(), id); lookupErr == nil {
-		scheduleName = existing.Name
+	existing, err := h.queries.GetBackupScheduleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		return
 	}
+	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbDelete) {
+		return
+	}
+	scheduleName := existing.Name
 	if err := h.queries.DeleteBackupSchedule(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
 		return
@@ -817,6 +928,12 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.queries.GetBackupScheduleByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		return
+	}
+	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbUpdate) {
+		return
+	}
+	if clusterID.Valid && clusterID != existing.ClusterID && !h.authorizeBackup(w, r, clusterID, rbac.VerbUpdate) {
 		return
 	}
 
@@ -896,6 +1013,10 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 	if !clusterID.Valid {
 		clusterID = storage.ClusterID
 	}
+	// Triggering creates a real backup run against the cluster — gate as create.
+	if !h.authorizeBackup(w, r, clusterID, rbac.VerbCreate) {
+		return
+	}
 	veleroNS := schedule.VeleroNamespace
 	if veleroNS == "" {
 		veleroNS = storage.VeleroNamespace
@@ -955,6 +1076,11 @@ func (h *BackupHandler) CreateRestore(w http.ResponseWriter, r *http.Request) {
 	backup, err := h.queries.GetBackupByID(r.Context(), backupID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
+		return
+	}
+	// A restore overwrites live namespaces on the backup's cluster — the most
+	// destructive backup action. Gate it against that cluster's backups grant.
+	if !h.authorizeBackup(w, r, backup.ClusterID, rbac.VerbCreate) {
 		return
 	}
 
@@ -1034,6 +1160,10 @@ func (h *BackupHandler) createRestoreOperation(ctx context.Context, params sqlc.
 
 // ListRestores handles GET /api/v1/backups/restores/.
 func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
+	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
+	if !ok {
+		return
+	}
 	limit := int32(queryInt(r, "limit", 20))
 	offset := int32(queryInt(r, "offset", 0))
 
@@ -1054,7 +1184,13 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]RestoreOperationResponse, 0, len(restores))
 	for _, row := range restores {
+		if !allow(uuid.UUID(row.ClusterID.Bytes), row.ClusterID.Valid) {
+			continue
+		}
 		items = append(items, restoreOperationToResponse(row))
+	}
+	if restricted {
+		total = int64(len(items))
 	}
 	RespondPaginated(w, r, items, total)
 }

@@ -91,16 +91,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	// Each target is a (table, primary-key column, ciphertext column) triple.
-	// Add new rows here when introducing new encrypted columns.
-	targets := []target{
-		{"sso_configurations", "id", "client_secret_encrypted"},
-		{"argocd_instances", "id", "auth_token_encrypted"},
-		{"backup_storage_configs", "id", "encrypted_credentials"},
-	}
-
 	total := stats{}
-	for _, t := range targets {
+	for _, t := range rewriteTargets {
 		s := rewriteColumn(ctx, log, db, enc, t, *batchSize, *dryRun)
 		total.scanned += s.scanned
 		total.rewrote += s.rewrote
@@ -141,6 +133,39 @@ func main() {
 
 type target struct {
 	table, idCol, column string
+}
+
+// rewriteTargets is every Fernet-protected column stored as a plain ciphertext
+// column, as a (table, primary-key column, ciphertext column) triple. This MUST
+// stay complete: any *_encrypted / encrypted_* column that a live server writes
+// with *auth.Encryptor and is NOT listed here becomes undecryptable once the old
+// key is dropped. cmd/keyrotate/coverage_test.go fails the build if a migration
+// introduces an encrypted column that is neither listed here nor explicitly
+// exempted (jsonbExemptColumns). See docs/secret-column-inventory.md.
+var rewriteTargets = []target{
+	{"sso_configurations", "id", "client_secret_encrypted"},
+	{"argocd_instances", "id", "auth_token_encrypted"},
+	{"backup_storage_configs", "id", "encrypted_credentials"},
+	{"vault_connections", "id", "auth_encrypted"},
+	{"gitops_registration_sources", "id", "auth_encrypted"},
+	{"prometheus_datasources", "id", "auth_encrypted"},
+	{"siem_forwarders", "id", "auth_encrypted"},
+	{"cloud_credentials", "id", "data_encrypted"},
+	{"smtp_settings", "id", "password_encrypted"},
+	{"cluster_registry_configs", "id", "registry_password_encrypted"},
+	{"webhook_subscriptions", "id", "secret_encrypted"},
+	{"argocd_cluster_proxy_tokens", "id", "token_encrypted"},
+	{"user_totp_enrollments", "user_id", "secret_encrypted"},
+	{"sso_sessions", "jti", "upstream_id_token_encrypted"},
+}
+
+// jsonbExemptColumns are encrypted columns that keyrotate deliberately does NOT
+// sweep because the ciphertext lives inside a JSONB blob with a per-row schema,
+// not a column-typed value. These are re-encrypted by re-saving the row through
+// the owning handler (see the dex_connectors note below and the runbook).
+var jsonbExemptColumns = map[string]string{
+	// table.column -> reason
+	"dex_connectors.config": "encrypted fields live inside per-connector-type JSONB; re-saved via PATCH /api/v1/dex/connectors/{id}",
 }
 
 func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.Encryptor, t target, batchSize int, dryRun bool) stats {

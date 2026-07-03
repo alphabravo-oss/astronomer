@@ -1402,10 +1402,49 @@ func notificationChannelResponse(channel sqlc.NotificationChannel) map[string]an
 		"name":      channel.Name,
 		"type":      channel.ChannelType,
 		"enabled":   channel.Enabled,
-		"config":    decodeJSONMap(channel.Configuration),
+		"config":    redactChannelConfig(decodeJSONMap(channel.Configuration)),
 		"createdAt": channel.CreatedAt.UTC().Format(time.RFC3339),
 		"updatedAt": channel.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+// redactChannelConfig masks delivery secrets before a notification-channel
+// config is returned on any read path. A channel config *is* the credential
+// (Slack webhook URL, PagerDuty routing key, generic webhook token), so any
+// value under a secret-shaped key is replaced with a marker while the key is
+// preserved so the UI can still tell the channel is configured. Callers who
+// need the real value must re-enter it on update (write-only secret pattern).
+func redactChannelConfig(cfg map[string]any) map[string]any {
+	if cfg == nil {
+		return cfg
+	}
+	out := make(map[string]any, len(cfg))
+	for k, v := range cfg {
+		if channelSecretKey(k) {
+			if v == nil || v == "" {
+				out[k] = v
+			} else {
+				out[k] = "[redacted]"
+			}
+			continue
+		}
+		if nested, ok := v.(map[string]any); ok {
+			out[k] = redactChannelConfig(nested)
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func channelSecretKey(key string) bool {
+	n := strings.NewReplacer("-", "", "_", "", ".", "").Replace(strings.ToLower(key))
+	for _, s := range []string{"url", "token", "key", "secret", "password", "webhook", "credential"} {
+		if strings.Contains(n, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *AlertingHandler) alertEventResponse(ctx context.Context, event sqlc.AlertEvent) map[string]any {

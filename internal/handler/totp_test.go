@@ -602,6 +602,50 @@ func TestTOTPPolicy_RuntimeEnforcement(t *testing.T) {
 	}
 }
 
+// TestRefreshEnforcesEnrollment is the regression test for the finding that
+// POST /auth/refresh re-issued a session pair without the MFA-enrollment gate
+// Login applies, so a user holding a live refresh token when enforcement was
+// turned on could roll it forward forever without enrolling. Refresh must now
+// hand back the same enroll-only challenge.
+func TestRefreshEnforcesEnrollment(t *testing.T) {
+	user := makeTestUser(t, true)
+	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	store := newFakeTOTPStore()
+	enc := mustEncryptor(t)
+
+	mock := newMockQuerier(user)
+	authH := NewAuthHandler(mock, jwtMgr)
+	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	authH.SetTOTPGate(totpH)
+	authH.SetTOTPPolicy(func(context.Context) bool { return true }) // enforcement ON
+
+	_, refresh, err := jwtMgr.GenerateTokenPair(user.ID)
+	if err != nil {
+		t.Fatalf("mint refresh: %v", err)
+	}
+	body := mustJSON(t, map[string]string{"refresh": refresh})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	authH.Refresh(w, req)
+
+	if w.Code != http.StatusLocked {
+		t.Fatalf("refresh under enforcement (unenrolled): status = %d; want 423 (body=%s)", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp["error"] != "totp_enrollment_required" {
+		t.Errorf("error = %v; want totp_enrollment_required", resp["error"])
+	}
+	if _, ok := resp["challenge_token"].(string); !ok {
+		t.Errorf("missing enroll challenge_token on refresh")
+	}
+	// The refresh must NOT have minted a usable session.
+	if _, ok := resp["token"]; ok {
+		t.Errorf("refresh must not issue a session while enrollment is unmet")
+	}
+}
+
 // TestTOTPPolicy_FailsClosedOnDBError is the regression test for the
 // MFA-enforcement read failing OPEN on a transient DB error. The runtime
 // resolver (server.NewApp wires it over queries.GetPlatformSetting) must
