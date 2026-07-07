@@ -228,6 +228,10 @@ WHERE operation_id = $1 AND status = 'failed';
 -- string-map comparison that's easier to reason about than a JSONB
 -- predicate, and the cluster count never exceeds a few thousand
 -- in any deployment we've seen).
-SELECT id, name, labels FROM clusters
+--
+-- group_id (migration 066) is the at-most-one cluster_groups
+-- membership; the orchestrator maps it into the candidate's GroupIDs
+-- slice so matchGroupIDs selectors can resolve.
+SELECT id, name, labels, group_id FROM clusters
 WHERE decommissioned_at IS NULL
 ORDER BY name ASC;

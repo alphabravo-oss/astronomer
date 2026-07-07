@@ -483,6 +483,23 @@ func addCluster(q *fakeFleetQuerier, labels map[string]string) uuid.UUID {
 	return c.ID
 }
 
+// addClusterWithGroup registers one cluster whose clusters.group_id is
+// set to the given group (migration 066 — at most one group). A zero
+// groupID leaves the membership NULL, matching an ungrouped cluster.
+func addClusterWithGroup(q *fakeFleetQuerier, labels map[string]string, groupID uuid.UUID) uuid.UUID {
+	labelsRaw, _ := json.Marshal(labels)
+	c := sqlc.ListClustersForSelectorEvaluationRow{
+		ID:     uuid.New(),
+		Name:   "cluster-" + uuid.New().String()[:8],
+		Labels: labelsRaw,
+	}
+	if groupID != uuid.Nil {
+		c.GroupID = pgtype.UUID{Bytes: groupID, Valid: true}
+	}
+	q.clusters = append(q.clusters, c)
+	return c.ID
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────
@@ -876,5 +893,46 @@ func TestFleetSelector_MatchExpressions(t *testing.T) {
 	got = EvaluateFleetSelector(sel, cands)
 	if len(got) != 1 || got[0].Name != "d" {
 		t.Errorf("DoesNotExist: got %d, want 1 (d)", len(got))
+	}
+}
+
+// TestFleetOperation_LaunchMatchesByGroupID proves the orchestrator now
+// wires clusters.group_id (migration 066) into each candidate's GroupIDs
+// so a matchGroupIDs selector resolves. BEFORE THE FIX the candidate
+// list was built without group membership, so a group-targeted operation
+// matched nothing and completed as "0 clusters".
+func TestFleetOperation_LaunchMatchesByGroupID(t *testing.T) {
+	q := newFakeFleetQuerier()
+
+	groupA := uuid.New()
+	groupB := uuid.New()
+
+	inGroup := addClusterWithGroup(q, map[string]string{"tier": "prod"}, groupA)
+	_ = addClusterWithGroup(q, map[string]string{"tier": "prod"}, groupB) // other group
+	_ = addClusterWithGroup(q, map[string]string{"tier": "prod"}, uuid.Nil) // ungrouped
+
+	op := mkFleetOp("group-a-upgrade", FleetOpTypeToolUpgrade, FleetStrategyParallel, FleetOnErrorAbort, 3,
+		map[string]any{"matchGroupIDs": []string{groupA.String()}})
+	q.ops[op.ID] = op
+
+	d := newFakeFleetDispatcher(q)
+	deps := FleetOrchestrateDeps{Queries: q, Dispatcher: d, MaintenanceWindow: NoopMaintenanceWindowChecker{}}
+
+	if err := runFleetOrchestrateTick(context.Background(), deps); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+
+	if got := len(q.targets[op.ID]); got != 1 {
+		t.Fatalf("expected 1 target (the cluster in group A), got %d", got)
+	}
+	targeted := map[uuid.UUID]bool{}
+	for _, tgt := range q.targets[op.ID] {
+		targeted[tgt.ClusterID] = true
+	}
+	if !targeted[inGroup] {
+		t.Errorf("group-A member %s not among targets %v", inGroup, targeted)
+	}
+	if q.ops[op.ID].Status != FleetOpStatusRunning {
+		t.Errorf("expected running, got %q", q.ops[op.ID].Status)
 	}
 }

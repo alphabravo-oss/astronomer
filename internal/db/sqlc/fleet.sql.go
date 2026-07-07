@@ -266,15 +266,16 @@ func (q *Queries) GetFleetOperation(ctx context.Context, id uuid.UUID) (FleetOpe
 }
 
 const listClustersForSelectorEvaluation = `-- name: ListClustersForSelectorEvaluation :many
-SELECT id, name, labels FROM clusters
+SELECT id, name, labels, group_id FROM clusters
 WHERE decommissioned_at IS NULL
 ORDER BY name ASC
 `
 
 type ListClustersForSelectorEvaluationRow struct {
-	ID     uuid.UUID       `json:"id"`
-	Name   string          `json:"name"`
-	Labels json.RawMessage `json:"labels"`
+	ID      uuid.UUID       `json:"id"`
+	Name    string          `json:"name"`
+	Labels  json.RawMessage `json:"labels"`
+	GroupID pgtype.UUID     `json:"group_id"`
 }
 
 // All non-decommissioned clusters. The orchestrator's selector
@@ -291,7 +292,7 @@ func (q *Queries) ListClustersForSelectorEvaluation(ctx context.Context) ([]List
 	items := []ListClustersForSelectorEvaluationRow{}
 	for rows.Next() {
 		var i ListClustersForSelectorEvaluationRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Labels); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Labels, &i.GroupID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

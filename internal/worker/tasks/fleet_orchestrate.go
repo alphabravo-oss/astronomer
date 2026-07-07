@@ -384,10 +384,19 @@ func launchFleetOperation(ctx context.Context, deps FleetOrchestrateDeps, op sql
 	}
 	candidates := make([]FleetClusterCandidate, 0, len(rows))
 	for _, r := range rows {
+		var groupIDs []string
+		// A cluster belongs to at most one group (migration 066:
+		// clusters.group_id). Map a present membership into the
+		// single-element GroupIDs slice the selector's matchGroupIDs
+		// branch intersects against; NULL contributes no group.
+		if r.GroupID.Valid {
+			groupIDs = []string{uuid.UUID(r.GroupID.Bytes).String()}
+		}
 		candidates = append(candidates, FleetClusterCandidate{
-			ID:     r.ID,
-			Name:   r.Name,
-			Labels: DecodeClusterLabels(r.Labels),
+			ID:       r.ID,
+			Name:     r.Name,
+			Labels:   DecodeClusterLabels(r.Labels),
+			GroupIDs: groupIDs,
 		})
 	}
 	matched := EvaluateFleetSelector(sel, candidates)
