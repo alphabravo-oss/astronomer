@@ -61,7 +61,7 @@ Security-critical fixes verified by their own tests: R-01 argocd-authz (6 tests 
 | O-10 | Low | ✅ Done | `management-plane.json` dashboard (also fixes the latent chart-glob so all dashboards ship) |
 | F-06 | Low | ✅ Done | settings hub shows "Admins only" to non-superusers instead of 17 dead cards |
 | P-01 | Low | ✅ Done | RBAC role inheritance (`resolveInherited`): transitive union, cycle + scope-mismatch fail-closed, provenance in preview API + 6 tests |
-| P-02 | Low | ✅ Done | Live-watch: `useResourceWatch` hook folds pods-SSE + `?watch=true` proxy frames into the react-query cache with polling fallback (workloads page wired; resources page is a follow-on) |
+| P-02 | Low | ✅ Done | Live-watch: (1) `useResourceWatch` folds pods-SSE + `?watch=true` proxy frames into the cache on the workloads page; (2) `useResourceWatchInvalidation` extends live-watch to the whole cluster explorer — it watches the on-screen kind's k8s stream and debounce-invalidates the list on real changes (no server-transform duplication), augmenting the coarse `cluster.k8s_changed` signal, with polling fallback |
 | P-03 | Low | ✅ Done | Alert inhibition: migration 132, CRUD API (admin-scoped), two-pass eval suppression, inhibition UI + tests |
 | P-04 | Low | ✅ Done | Custom Gatekeeper authoring: migration 133, list/validate/create/delete (RBAC fail-closed + audited), YAML+Rego structural validation, DNS-1123 name/kind guard, SSA via tunnel, policy UI + tests |
 

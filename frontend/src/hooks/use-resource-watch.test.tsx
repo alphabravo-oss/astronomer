@@ -15,6 +15,7 @@ jest.mock('@/lib/api', () => ({
 
 import {
   useResourceWatch,
+  useResourceWatchInvalidation,
   foldWatchFrame,
   identityOf,
   type K8sList,
@@ -208,5 +209,55 @@ describe('useResourceWatch — proxy fetch-stream transport', () => {
     );
     await waitFor(() => expect(result.current.status).toBe('fallback'));
     expect(result.current.live).toBe(false);
+  });
+
+  function streamResponseLocal(lines: string[]): Response {
+    const encoder = new TextEncoder();
+    let i = 0;
+    const body = {
+      getReader() {
+        return {
+          read() {
+            if (i < lines.length) {
+              const chunk = encoder.encode(lines[i] + '\n');
+              i += 1;
+              return Promise.resolve({ value: chunk, done: false });
+            }
+            return Promise.resolve({ value: undefined, done: true });
+          },
+        };
+      },
+    };
+    return { ok: true, body } as unknown as Response;
+  }
+
+  it('useResourceWatchInvalidation invalidates the list query on a change frame', async () => {
+    const { client, wrapper } = makeWrapper();
+    const listKey = ['generic', 'c1', 'configmaps'];
+    const invPrefix = ['generic', 'c1'];
+    // Seed a cached list so there is something to invalidate.
+    client.setQueryData(listKey, [{ name: 'cm1' }]);
+    const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
+
+    global.fetch = jest.fn().mockResolvedValue(
+      streamResponseLocal([
+        JSON.stringify({ type: 'MODIFIED', object: { metadata: { uid: 'cm1', name: 'cm1', namespace: 'ns' } } }),
+      ]),
+    ) as unknown as typeof fetch;
+
+    renderHook(
+      () =>
+        useResourceWatchInvalidation({
+          clusterId: 'c1',
+          path: 'api/v1/configmaps',
+          queryKeys: [invPrefix],
+          debounceMs: 10,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: invPrefix }));
+    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    expect(calledUrl).toContain('/clusters/c1/k8s/api/v1/configmaps?watch=true');
   });
 });

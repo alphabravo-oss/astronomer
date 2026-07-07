@@ -92,6 +92,82 @@ function isWatchVerb(v: string): v is WatchVerb {
   return v === 'ADDED' || v === 'MODIFIED' || v === 'DELETED';
 }
 
+/**
+ * Open a proxy watch (`GET /clusters/{id}/k8s/{path}?watch=true`) and invoke
+ * `onFrame` for every NDJSON `{ type, object }` frame, reporting connection
+ * state via `onStatus`. Returns a cleanup that aborts the stream. Shared by the
+ * cache-folding hook and the invalidation hook so the streaming/parse logic
+ * lives in exactly one place.
+ */
+function consumeProxyWatch(
+  clusterId: string,
+  path: string,
+  onFrame: (verb: WatchVerb, obj: unknown) => void,
+  onStatus: (s: 'live' | 'fallback') => void,
+): () => void {
+  const controller = new AbortController();
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${API_BASE}/clusters/${clusterId}/k8s/${path}${sep}watch=true`;
+  let cancelled = false;
+
+  (async () => {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      if (!cancelled) onStatus('fallback');
+      return;
+    }
+    if (!res.ok || !res.body) {
+      if (!cancelled) onStatus('fallback');
+      return;
+    }
+    if (!cancelled) onStatus('live');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl = buf.indexOf('\n');
+        while (nl >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          nl = buf.indexOf('\n');
+          if (!line) continue;
+          let frame: { type?: string; object?: unknown };
+          try {
+            frame = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (frame.type && isWatchVerb(frame.type) && frame.object) {
+            if (!cancelled) onFrame(frame.type, frame.object);
+          }
+        }
+      }
+      // Stream closed cleanly (server ended the watch) — resume polling.
+      if (!cancelled) onStatus('fallback');
+    } catch {
+      // Aborted on unmount, or the connection dropped mid-stream.
+      if (!cancelled) onStatus('fallback');
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
+}
+
 /** Watch source: the dedicated pods SSE stream, or a generic proxy list path. */
 export type WatchSource =
   | { kind: 'pods'; namespace?: string }
@@ -207,68 +283,82 @@ export function useResourceWatch<T extends K8sObject = K8sObject>(
     }
 
     // --- Proxy transport (chunked NDJSON via fetch streaming) ---
-    const controller = new AbortController();
-    const sep = src.path.includes('?') ? '&' : '?';
-    const url = `${API_BASE}/clusters/${clusterId}/k8s/${src.path}${sep}watch=true`;
+    return consumeProxyWatch(
+      clusterId,
+      src.path,
+      (verb, obj) => {
+        if (!cancelled) apply(verb, obj as T);
+      },
+      (s) => {
+        if (!cancelled) setStatus(s);
+      },
+    );
+  }, [clusterId, keyStr, sourceStr, enabled, queryClient]);
 
-    (async () => {
-      let res: Response;
-      try {
-        res = await fetch(url, {
-          method: 'GET',
-          credentials: 'include',
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
-      } catch {
-        if (!cancelled) setStatus('fallback');
-        return;
-      }
-      if (!res.ok || !res.body) {
-        if (!cancelled) setStatus('fallback');
-        return;
-      }
-      if (!cancelled) setStatus('live');
+  return { status, live: status === 'live' };
+}
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      try {
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          let nl = buf.indexOf('\n');
-          while (nl >= 0) {
-            const line = buf.slice(0, nl).trim();
-            buf = buf.slice(nl + 1);
-            nl = buf.indexOf('\n');
-            if (!line) continue;
-            let frame: { type?: string; object?: T };
-            try {
-              frame = JSON.parse(line);
-            } catch {
-              continue;
-            }
-            if (frame.type && isWatchVerb(frame.type) && frame.object) {
-              if (!cancelled) apply(frame.type, frame.object);
-            }
-          }
-        }
-        // Stream closed cleanly (server ended the watch) — resume polling.
-        if (!cancelled) setStatus('fallback');
-      } catch {
-        // Aborted on unmount, or the connection dropped mid-stream.
-        if (!cancelled) setStatus('fallback');
-      }
-    })();
+/**
+ * Live-watch a curated list kind as a *change signal* (P-02, explorer tables).
+ *
+ * The workloads page folds raw watch frames straight into its `{ items }`
+ * cache. The explorer tables can't do that: they cache a server-*transformed*
+ * shape (computed status, age, restarts), so reproducing it from a raw watch
+ * object client-side would duplicate server logic and drift. Instead this hook
+ * opens the same proxy watch and, on any add/modify/delete, debounce-
+ * invalidates the given React Query keys so the table refetches its normal
+ * transformed list — per-kind liveness with no transform duplication.
+ *
+ * It augments the coarse `cluster.k8s_changed` signal (see useLiveQueryInvalidation)
+ * with a precise, immediate signal for the kind actually on screen, and quietly
+ * settles on `fallback` (the caller's poll keeps it fresh) if the watch can't open.
+ */
+export function useResourceWatchInvalidation(opts: {
+  clusterId: string;
+  /** k8s list path, e.g. 'api/v1/pods'. Empty disables the watch. */
+  path: string;
+  /** Query keys (prefix-matched) to invalidate when the kind changes. */
+  queryKeys: QueryKey[];
+  enabled?: boolean;
+  /** Collapse a burst of frames (e.g. the initial list sync) into one refetch. */
+  debounceMs?: number;
+}): ResourceWatchResult {
+  const { clusterId, path, queryKeys, enabled = true, debounceMs = 400 } = opts;
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<WatchStatus>('idle');
+  const keysStr = JSON.stringify(queryKeys);
+
+  useEffect(() => {
+    if (!enabled || !clusterId || !path) {
+      setStatus('idle');
+      return;
+    }
+    setStatus('connecting');
+    const keys = JSON.parse(keysStr) as QueryKey[];
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const stop = consumeProxyWatch(
+      clusterId,
+      path,
+      () => {
+        if (cancelled || timer) return; // one refetch per debounce window
+        timer = setTimeout(() => {
+          timer = null;
+          for (const k of keys) queryClient.invalidateQueries({ queryKey: k });
+        }, debounceMs);
+      },
+      (s) => {
+        if (!cancelled) setStatus(s);
+      },
+    );
 
     return () => {
       cancelled = true;
-      controller.abort();
+      stop();
+      if (timer) clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clusterId, keyStr, sourceStr, enabled, queryClient]);
+  }, [clusterId, path, keysStr, enabled, debounceMs, queryClient]);
 
   return { status, live: status === 'live' };
 }

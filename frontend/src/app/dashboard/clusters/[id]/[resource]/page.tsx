@@ -37,6 +37,7 @@ import {
   queryKeys,
 } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useResourceWatchInvalidation } from '@/hooks/use-resource-watch';
 import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -48,7 +49,7 @@ import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
-import { k8sResourcePath, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
+import { k8sResourcePath, k8sListPath, getResourceDef, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
 import { usePermissionDecision, canonicalPermissionResource } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -2796,6 +2797,27 @@ export default function ClusterResourcePage() {
       queryKeys.clusters.detail(clusterId),
     ],
   );
+
+  // Precise, immediate liveness for the kind actually on screen: watch its k8s
+  // list stream and refetch this cluster's lists the moment it changes, instead
+  // of waiting for the coarse cluster-wide signal above (which the agent emits
+  // only on a heartbeat cadence). Only core/apps/batch/networking kinds with a
+  // known API path are watchable; unknown or custom types fall through to the
+  // coarse signal + polling. React Query only refetches *active* queries, so a
+  // change to the on-screen kind refreshes just that table.
+  const watchDef = getResourceDef(resource);
+  useResourceWatchInvalidation({
+    clusterId,
+    path: watchDef ? k8sListPath(resource) : '',
+    queryKeys: [
+      ['clusters', clusterId],
+      ['workloads', clusterId],
+      ['storage', clusterId],
+      ['networking', clusterId],
+      ['generic', clusterId],
+    ],
+    enabled: !!clusterId && !!watchDef,
+  });
 
   if (clusterLoading) {
     return (
