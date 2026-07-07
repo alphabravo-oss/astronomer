@@ -19,7 +19,10 @@ type dbHealthChecker interface {
 // binary's embedded ExpectedSchemaVersion (C-03). *db.DB implements it; the test
 // fakes don't, so the gate only runs against the real database.
 type schemaVersionChecker interface {
-	SchemaVersion(ctx context.Context) (int64, error)
+	// SchemaVersion returns the applied schema version and the latest row's
+	// golang-migrate dirty flag. dirty=true means the newest migration is in
+	// progress or crashed mid-DDL, so the gate must treat it as not-ready.
+	SchemaVersion(ctx context.Context) (int64, bool, error)
 }
 
 // dbPoolSaturationReporter is an optional add-on to dbHealthChecker so the
@@ -116,11 +119,21 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// schema_migrations.version >= the version this binary was built against.
 		if sv, ok := h.db.(schemaVersionChecker); ok && h.expectedSchemaVersion > 0 {
 			ctx, cancel := context.WithTimeout(r.Context(), h.timeout)
-			got, err := sv.SchemaVersion(ctx)
+			got, dirty, err := sv.SchemaVersion(ctx)
 			cancel()
 			switch {
 			case err != nil:
 				checks["schema_version"] = readinessCheck{OK: false, Error: err.Error()}
+				statusCode = http.StatusServiceUnavailable
+			case dirty:
+				// golang-migrate marks the row dirty BEFORE running the
+				// migration and clears it only on success, so dirty=true means
+				// the latest migration is mid-flight or crashed mid-DDL. Hold
+				// the pod out of rotation rather than serve a half-applied schema.
+				checks["schema_version"] = readinessCheck{
+					OK:    false,
+					Error: "schema migration in progress or failed (dirty)",
+				}
 				statusCode = http.StatusServiceUnavailable
 			case got < h.expectedSchemaVersion:
 				checks["schema_version"] = readinessCheck{

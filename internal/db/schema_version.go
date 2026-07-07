@@ -1,6 +1,11 @@
 package db
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+)
 
 // ExpectedSchemaVersion is the highest migration number the binary was built
 // against. /readyz gates the pod out of Service rotation until the applied
@@ -14,19 +19,27 @@ import "context"
 const ExpectedSchemaVersion int64 = 133
 
 // SchemaVersion returns the currently-applied golang-migrate schema version
-// (max(version) in schema_migrations). It reports 0 — not an error — when the
-// table does not exist yet or is empty (a fresh, pre-migration install), so the
-// readiness probe treats "not migrated yet" as not-ready rather than errored.
-func (d *DB) SchemaVersion(ctx context.Context) (int64, error) {
+// (the highest row in schema_migrations) along with that row's dirty flag. It
+// reports version=0, dirty=false — not an error — when the table does not exist
+// yet or is empty (a fresh, pre-migration install), so the readiness probe
+// treats "not migrated yet" as not-ready rather than errored.
+//
+// golang-migrate writes (version=N, dirty=true) BEFORE running migration N and
+// flips dirty=false only on success, so dirty=true means the latest migration is
+// in progress or crashed mid-DDL. The readiness probe must hold the pod out of
+// Service rotation in that state (it would otherwise serve traffic against a
+// half-applied schema).
+func (d *DB) SchemaVersion(ctx context.Context) (int64, bool, error) {
 	if d == nil || d.pool == nil {
-		return 0, nil
+		return 0, false, nil
 	}
 	var version int64
-	if err := d.pool.QueryRow(ctx, `SELECT COALESCE(max(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
-		if isUndefinedTable(err) {
-			return 0, nil
+	var dirty bool
+	if err := d.pool.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version, &dirty); err != nil {
+		if isUndefinedTable(err) || errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
 		}
-		return 0, err
+		return 0, false, err
 	}
-	return version, nil
+	return version, dirty, nil
 }
