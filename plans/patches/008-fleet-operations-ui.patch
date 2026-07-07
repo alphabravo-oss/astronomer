@@ -1,0 +1,1897 @@
+diff --git a/frontend/src/app/dashboard/fleet/[id]/page.tsx b/frontend/src/app/dashboard/fleet/[id]/page.tsx
+new file mode 100644
+index 0000000..d011b62
+--- /dev/null
++++ b/frontend/src/app/dashboard/fleet/[id]/page.tsx
+@@ -0,0 +1,146 @@
++'use client';
++
++/**
++ * Fleet Operations · Detail (DIR-01).
++ *
++ * Header (status + rollup counters), lifecycle controls, and a polling
++ * per-cluster target-status table. Polling stops when the operation reaches
++ * a terminal status (completed / failed / aborted).
++ */
++import { use } from 'react';
++import { useQuery } from '@tanstack/react-query';
++import { Link } from '@/lib/link';
++import { ArrowLeft } from 'lucide-react';
++import { PageShell } from '@/components/ui/page';
++import { ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
++import { FleetStatusBadge } from '@/components/fleet/fleet-status-badge';
++import { FleetOperationControls } from '@/components/fleet/fleet-operation-controls';
++import { FleetTargetTable } from '@/components/fleet/fleet-target-table';
++import { useCurrentUser } from '@/lib/hooks';
++import { can } from '@/lib/permissions';
++import { queryKeys } from '@/lib/hooks';
++import {
++  fleetOpTypeLabel,
++  getFleetOperation,
++  isTerminalFleetStatus,
++} from '@/lib/api/fleet-operations';
++import { cn, formatRelativeTime } from '@/lib/utils';
++
++interface DetailPageProps {
++  params: Promise<{ id: string }>;
++}
++
++export default function FleetOperationDetailPage({ params }: DetailPageProps) {
++  const { id } = use(params);
++  const { data: user } = useCurrentUser();
++  const canRead = can(user, 'fleet_operations', 'read');
++  const canUpdate = can(user, 'fleet_operations', 'update');
++
++  const query = useQuery({
++    queryKey: queryKeys.fleetOperations.detail(id),
++    queryFn: () => getFleetOperation(id),
++    enabled: canRead,
++    refetchInterval: (q) => {
++      const s = q.state.data?.status;
++      return s && isTerminalFleetStatus(s) ? false : 5000;
++    },
++  });
++
++  const op = query.data;
++
++  const back = (
++    <Link
++      href="/dashboard/fleet"
++      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
++    >
++      <ArrowLeft className="h-3.5 w-3.5" /> Fleet Operations
++    </Link>
++  );
++
++  if (!canRead) {
++    return (
++      <PageShell>
++        {back}
++        <PermissionState permission="fleet_operations:read" />
++      </PageShell>
++    );
++  }
++
++  if (query.isLoading) {
++    return (
++      <PageShell>
++        {back}
++        <LoadingState />
++      </PageShell>
++    );
++  }
++
++  if (query.isError || !op) {
++    return (
++      <PageShell>
++        {back}
++        <ErrorState description="Failed to load fleet operation." onRetry={() => query.refetch()} />
++      </PageShell>
++    );
++  }
++
++  const counters: { label: string; value: number; tone: string }[] = [
++    { label: 'Total', value: op.total_clusters, tone: 'text-foreground' },
++    { label: 'Completed', value: op.completed_clusters, tone: 'text-status-success' },
++    { label: 'Failed', value: op.failed_clusters, tone: 'text-status-error' },
++    { label: 'Skipped', value: op.skipped_clusters, tone: 'text-status-neutral' },
++  ];
++
++  return (
++    <PageShell>
++      {back}
++
++      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
++        <div className="min-w-0">
++          <div className="flex items-center gap-3">
++            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{op.name}</h1>
++            <FleetStatusBadge status={op.status} />
++          </div>
++          <p className="mt-1 text-sm text-muted-foreground">
++            {fleetOpTypeLabel(op.operation_type)}
++            {' · '}
++            {op.strategy}
++            {op.strategy === 'parallel' ? ` (max ${op.max_concurrent})` : ''}
++            {' · on error: '}
++            {op.on_error}
++          </p>
++          {op.description ? (
++            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{op.description}</p>
++          ) : null}
++        </div>
++        <FleetOperationControls operation={op} canUpdate={canUpdate} />
++      </div>
++
++      {op.last_error ? (
++        <div className="rounded-md border border-status-error/40 bg-status-error/10 px-4 py-3 text-sm text-status-error">
++          {op.last_error}
++        </div>
++      ) : null}
++
++      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
++        {counters.map((c) => (
++          <div key={c.label} className="rounded-lg border border-border bg-card p-4">
++            <p className="text-xs uppercase tracking-wide text-muted-foreground">{c.label}</p>
++            <p className={cn('mt-1 text-2xl font-semibold', c.tone)}>{c.value}</p>
++          </div>
++        ))}
++      </div>
++
++      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
++        <span>Created {formatRelativeTime(op.created_at)}</span>
++        {op.started_at ? <span>Started {formatRelativeTime(op.started_at)}</span> : null}
++        {op.completed_at ? <span>Completed {formatRelativeTime(op.completed_at)}</span> : null}
++      </div>
++
++      <div className="space-y-3">
++        <h2 className="text-sm font-semibold text-foreground">Targets</h2>
++        <FleetTargetTable operationId={op.id} status={op.status} />
++      </div>
++    </PageShell>
++  );
++}
+diff --git a/frontend/src/app/dashboard/fleet/page.tsx b/frontend/src/app/dashboard/fleet/page.tsx
+new file mode 100644
+index 0000000..e944d56
+--- /dev/null
++++ b/frontend/src/app/dashboard/fleet/page.tsx
+@@ -0,0 +1,108 @@
++'use client';
++
++/**
++ * Fleet Operations — list + create launcher (DIR-01).
++ *
++ * Surfaces the bulk fleet-operations backend (upgrade / install / uninstall /
++ * apply-template / rotate-agent-token fanned out across the fleet) as a
++ * first-class dashboard feature. Read-gated on `fleet_operations:list`;
++ * create is gated on `fleet_operations:create`.
++ */
++import { useState } from 'react';
++import { useQuery } from '@tanstack/react-query';
++import { Plus, Rocket } from 'lucide-react';
++import { PageHeader, PageShell } from '@/components/ui/page';
++import { PermissionState } from '@/components/ui/empty-state';
++import { FleetOperationList } from '@/components/fleet/fleet-operation-list';
++import { CreateFleetOperationDialog } from '@/components/fleet/create-fleet-operation-dialog';
++import { useCurrentUser } from '@/lib/hooks';
++import { can } from '@/lib/permissions';
++import { getFleetOperations, type FleetOperationStatus } from '@/lib/api/fleet-operations';
++import { queryKeys } from '@/lib/hooks';
++
++const STATUS_FILTERS: { value: '' | FleetOperationStatus; label: string }[] = [
++  { value: '', label: 'All statuses' },
++  { value: 'pending', label: 'Pending' },
++  { value: 'running', label: 'Running' },
++  { value: 'paused', label: 'Paused' },
++  { value: 'completed', label: 'Completed' },
++  { value: 'failed', label: 'Failed' },
++  { value: 'aborted', label: 'Aborted' },
++];
++
++export default function FleetOperationsPage() {
++  const { data: user } = useCurrentUser();
++  const canList = can(user, 'fleet_operations', 'list');
++  const canCreate = can(user, 'fleet_operations', 'create');
++
++  const [status, setStatus] = useState<'' | FleetOperationStatus>('');
++  const [showCreate, setShowCreate] = useState(false);
++
++  const params = status ? { status } : undefined;
++  const query = useQuery({
++    queryKey: queryKeys.fleetOperations.list(params),
++    queryFn: () => getFleetOperations({ ...(params ?? {}), limit: 100 }),
++    enabled: canList,
++    // Poll the list so in-flight operations' counters/status stay fresh.
++    refetchInterval: 15000,
++  });
++
++  if (!canList) {
++    return (
++      <PageShell>
++        <PageHeader
++          eyebrow="Platform"
++          title="Fleet Operations"
++          description="Drive an upgrade, install, or template apply across the whole fleet from one place."
++        />
++        <PermissionState permission="fleet_operations:list" />
++      </PageShell>
++    );
++  }
++
++  return (
++    <PageShell>
++      <PageHeader
++        eyebrow="Platform"
++        title="Fleet Operations"
++        description="Drive an upgrade, install, or template apply across the whole fleet from one place."
++        actions={
++          canCreate ? (
++            <button
++              type="button"
++              onClick={() => setShowCreate(true)}
++              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
++            >
++              <Plus className="h-4 w-4" /> New operation
++            </button>
++          ) : null
++        }
++      />
++
++      <div className="flex items-center gap-2">
++        <Rocket className="h-4 w-4 text-muted-foreground" />
++        <select
++          aria-label="status filter"
++          value={status}
++          onChange={(e) => setStatus(e.target.value as '' | FleetOperationStatus)}
++          className="h-8 rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++        >
++          {STATUS_FILTERS.map((f) => (
++            <option key={f.value} value={f.value}>
++              {f.label}
++            </option>
++          ))}
++        </select>
++      </div>
++
++      <FleetOperationList
++        operations={query.data?.data ?? []}
++        loading={query.isLoading}
++        isError={query.isError}
++        onRetry={() => query.refetch()}
++      />
++
++      {showCreate && <CreateFleetOperationDialog onClose={() => setShowCreate(false)} />}
++    </PageShell>
++  );
++}
+diff --git a/frontend/src/components/fleet/create-fleet-operation-dialog.tsx b/frontend/src/components/fleet/create-fleet-operation-dialog.tsx
+new file mode 100644
+index 0000000..90b07ff
+--- /dev/null
++++ b/frontend/src/components/fleet/create-fleet-operation-dialog.tsx
+@@ -0,0 +1,264 @@
++'use client';
++
++import { useMemo, useState } from 'react';
++import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
++import { Loader2, Rocket } from 'lucide-react';
++import { ModalShell } from '@/components/ui/modal-shell';
++import { useRouter } from '@/lib/navigation';
++import { toastApiError, toastSuccess } from '@/lib/toast';
++import { getClusters, listClusterGroups } from '@/lib/api';
++import {
++  createFleetOperation,
++  evaluateFleetSelector,
++  selectorIsEmpty,
++  FLEET_OPERATION_TYPES,
++  type CreateFleetOperationRequest,
++  type FleetOperationType,
++  type FleetOnError,
++  type FleetSelector,
++  type FleetStrategy,
++  type SelectorCandidate,
++} from '@/lib/api/fleet-operations';
++import { queryKeys } from '@/lib/hooks';
++import { SelectorBuilder } from './selector-builder';
++import { OperationSpecFields } from './operation-spec-fields';
++
++interface CreateFleetOperationDialogProps {
++  onClose: () => void;
++}
++
++export function CreateFleetOperationDialog({ onClose }: CreateFleetOperationDialogProps) {
++  const router = useRouter();
++  const queryClient = useQueryClient();
++
++  const [name, setName] = useState('');
++  const [description, setDescription] = useState('');
++  const [operationType, setOperationType] = useState<FleetOperationType>('tool_upgrade');
++  const [selector, setSelector] = useState<FleetSelector>({});
++  const [spec, setSpec] = useState<Record<string, unknown> | undefined>({});
++  const [strategy, setStrategy] = useState<FleetStrategy>('parallel');
++  const [maxConcurrent, setMaxConcurrent] = useState(3);
++  const [onError, setOnError] = useState<FleetOnError>('abort');
++  const [respectMaintenanceWindows, setRespectMaintenanceWindows] = useState(true);
++
++  // Clusters + groups power label autocomplete, the group multi-select, and
++  // the client-side match-count preview (no backend dry-run endpoint exists).
++  const clustersQuery = useQuery({ queryKey: queryKeys.clusters.list(), queryFn: () => getClusters({ pageSize: 500 }) });
++  const groupsQuery = useQuery({ queryKey: queryKeys.clusterGroups.all, queryFn: listClusterGroups });
++
++  const clusters = useMemo(() => clustersQuery.data?.data ?? [], [clustersQuery.data]);
++  const groups = groupsQuery.data ?? [];
++
++  const labelSuggestions = useMemo(() => {
++    const out: Record<string, Set<string>> = {};
++    for (const c of clusters) {
++      for (const [k, v] of Object.entries(c.labels ?? {})) {
++        (out[k] ??= new Set()).add(v);
++      }
++    }
++    return Object.fromEntries(Object.entries(out).map(([k, set]) => [k, Array.from(set).sort()]));
++  }, [clusters]);
++
++  // Preview evaluates label/expression matchers only — group membership is
++  // resolved server-side, so a selector using matchGroupIDs is annotated.
++  const usesGroups = (selector.matchGroupIDs?.length ?? 0) > 0;
++  const previewSelector: FleetSelector = { ...selector, matchGroupIDs: undefined };
++  const candidates: SelectorCandidate[] = clusters.map((c) => ({ labels: c.labels ?? {} }));
++  const matchCount = selectorIsEmpty(previewSelector)
++    ? 0
++    : evaluateFleetSelector(previewSelector, candidates).length;
++
++  const isToolOp =
++    operationType === 'tool_upgrade' ||
++    operationType === 'tool_install' ||
++    operationType === 'tool_uninstall';
++  const isTemplateOp = operationType === 'apply_template';
++
++  const specValid =
++    (!isToolOp || Boolean((spec?.slug as string | undefined)?.trim())) &&
++    (!isTemplateOp || Boolean((spec?.template_id as string | undefined)?.trim()));
++
++  const emptySelector = selectorIsEmpty(selector);
++  const canSubmit = name.trim().length > 0 && !emptySelector && specValid;
++
++  const create = useMutation({
++    mutationFn: () => {
++      const effectiveMax = strategy === 'sequential' ? 1 : Math.min(100, Math.max(1, maxConcurrent));
++      const body: CreateFleetOperationRequest = {
++        name: name.trim(),
++        description: description.trim() || undefined,
++        operation_type: operationType,
++        selector,
++        strategy,
++        max_concurrent: effectiveMax,
++        on_error: onError,
++        respect_maintenance_windows: respectMaintenanceWindows,
++      };
++      if (operationType !== 'rotate_agent_token') {
++        body.operation_spec = spec ?? {};
++      }
++      return createFleetOperation(body);
++    },
++    onSuccess: (op) => {
++      queryClient.invalidateQueries({ queryKey: queryKeys.fleetOperations.all });
++      toastSuccess(`Fleet operation "${op.name}" created`);
++      onClose();
++      router.push(`/dashboard/fleet/${op.id}`);
++    },
++    onError: (error: Error) => toastApiError('Create failed', error),
++  });
++
++  const inputClass =
++    'h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring';
++
++  return (
++    <ModalShell
++      title="New fleet operation"
++      onClose={onClose}
++      size="xl"
++      panelClassName="max-w-3xl max-h-[90vh] bg-popover overflow-hidden flex flex-col"
++      bodyClassName="overflow-y-auto"
++      footerClassName="bg-muted/30"
++      titleIcon={
++        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
++          <Rocket className="h-4 w-4 text-muted-foreground" />
++        </div>
++      }
++      footer={
++        <div className="flex items-center justify-between gap-2">
++          <span className="text-xs text-muted-foreground">
++            {emptySelector ? (
++              <span className="text-status-warning">Selector must match at least one cluster.</span>
++            ) : (
++              <>
++                {matchCount} cluster{matchCount === 1 ? '' : 's'} match
++                {usesGroups ? ' label filters (groups evaluated server-side)' : ''}
++              </>
++            )}
++          </span>
++          <div className="flex items-center gap-2">
++            <button
++              type="button"
++              onClick={onClose}
++              disabled={create.isPending}
++              className="inline-flex h-8 items-center rounded px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
++            >
++              Cancel
++            </button>
++            <button
++              type="button"
++              onClick={() => create.mutate()}
++              disabled={!canSubmit || create.isPending}
++              className="inline-flex h-8 items-center gap-1.5 rounded bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
++            >
++              {create.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
++              Create operation
++            </button>
++          </div>
++        </div>
++      }
++    >
++      <div className="space-y-5">
++        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Name</label>
++            <input
++              aria-label="name"
++              value={name}
++              onChange={(e) => setName(e.target.value)}
++              placeholder="Upgrade monitoring across prod"
++              className={inputClass}
++            />
++          </div>
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Operation type</label>
++            <select
++              aria-label="operation type"
++              value={operationType}
++              onChange={(e) => setOperationType(e.target.value as FleetOperationType)}
++              className={inputClass}
++            >
++              {FLEET_OPERATION_TYPES.map((t) => (
++                <option key={t.value} value={t.value}>
++                  {t.label}
++                </option>
++              ))}
++            </select>
++          </div>
++        </div>
++
++        <div className="space-y-1.5">
++          <label className="text-sm font-medium text-foreground">Description</label>
++          <input
++            aria-label="description"
++            value={description}
++            onChange={(e) => setDescription(e.target.value)}
++            placeholder="Optional context for the audit trail"
++            className={inputClass}
++          />
++        </div>
++
++        <div className="rounded-lg border border-border p-4">
++          <OperationSpecFields operationType={operationType} onChange={setSpec} />
++        </div>
++
++        <div className="rounded-lg border border-border p-4">
++          <p className="mb-3 text-sm font-medium text-foreground">Target selector</p>
++          <SelectorBuilder onChange={setSelector} labelSuggestions={labelSuggestions} groups={groups} />
++        </div>
++
++        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Strategy</label>
++            <select
++              aria-label="strategy"
++              value={strategy}
++              onChange={(e) => setStrategy(e.target.value as FleetStrategy)}
++              className={inputClass}
++            >
++              <option value="parallel">Parallel</option>
++              <option value="sequential">Sequential</option>
++            </select>
++          </div>
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Max concurrent</label>
++            <input
++              aria-label="max concurrent"
++              type="number"
++              min={1}
++              max={100}
++              value={strategy === 'sequential' ? 1 : maxConcurrent}
++              disabled={strategy === 'sequential'}
++              onChange={(e) => setMaxConcurrent(Number(e.target.value) || 1)}
++              className={`${inputClass} disabled:opacity-50`}
++            />
++            {strategy === 'sequential' && (
++              <p className="text-xs text-muted-foreground">Sequential runs one cluster at a time.</p>
++            )}
++          </div>
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">On error</label>
++            <select
++              aria-label="on error"
++              value={onError}
++              onChange={(e) => setOnError(e.target.value as FleetOnError)}
++              className={inputClass}
++            >
++              <option value="abort">Abort remaining</option>
++              <option value="continue">Continue</option>
++            </select>
++          </div>
++          <label className="flex items-center gap-2 self-end pb-2 text-sm text-foreground">
++            <input
++              type="checkbox"
++              checked={respectMaintenanceWindows}
++              onChange={(e) => setRespectMaintenanceWindows(e.target.checked)}
++              className="h-4 w-4 rounded border-border"
++            />
++            Respect maintenance windows
++          </label>
++        </div>
++      </div>
++    </ModalShell>
++  );
++}
+diff --git a/frontend/src/components/fleet/fleet-operation-controls.tsx b/frontend/src/components/fleet/fleet-operation-controls.tsx
+new file mode 100644
+index 0000000..3697912
+--- /dev/null
++++ b/frontend/src/components/fleet/fleet-operation-controls.tsx
+@@ -0,0 +1,118 @@
++'use client';
++
++import { useState } from 'react';
++import { useMutation, useQueryClient } from '@tanstack/react-query';
++import { Pause, Play, Ban, RotateCcw, Loader2 } from 'lucide-react';
++import { ConfirmDialog } from '@/components/ui/confirm-dialog';
++import { toastApiError, toastSuccess } from '@/lib/toast';
++import {
++  abortFleetOperation,
++  pauseFleetOperation,
++  resumeFleetOperation,
++  retryFailedFleetOperation,
++  type FleetOperation,
++} from '@/lib/api/fleet-operations';
++import { queryKeys } from '@/lib/hooks';
++
++interface FleetOperationControlsProps {
++  operation: FleetOperation;
++  canUpdate: boolean;
++}
++
++type Action = 'pause' | 'resume' | 'abort' | 'retry';
++
++const RUNNERS: Record<Action, (id: string) => Promise<FleetOperation>> = {
++  pause: pauseFleetOperation,
++  resume: resumeFleetOperation,
++  abort: abortFleetOperation,
++  retry: retryFailedFleetOperation,
++};
++
++export function FleetOperationControls({ operation, canUpdate }: FleetOperationControlsProps) {
++  const queryClient = useQueryClient();
++  const [confirmAbort, setConfirmAbort] = useState(false);
++
++  const status = operation.status;
++  // State machine (backend transitionStatus): pause from running, resume from
++  // paused, abort from pending|running|paused. retry-failed whenever there are
++  // failed targets. Anything else is disabled so we never offer a 409 action.
++  const canPause = canUpdate && status === 'running';
++  const canResume = canUpdate && status === 'paused';
++  const canAbort = canUpdate && ['pending', 'running', 'paused'].includes(status);
++  const canRetry =
++    canUpdate && (operation.failed_clusters > 0 || status === 'failed' || status === 'aborted');
++
++  const run = useMutation({
++    mutationFn: (action: Action) => RUNNERS[action](operation.id),
++    onSuccess: (op, action) => {
++      queryClient.invalidateQueries({ queryKey: queryKeys.fleetOperations.detail(operation.id) });
++      queryClient.invalidateQueries({ queryKey: queryKeys.fleetOperations.all });
++      toastSuccess(`Operation ${action === 'retry' ? 'retry queued' : op.status}`);
++    },
++    onError: (error: Error) => {
++      // 409 invalid-transition is surfaced as a toast; the detail query keeps
++      // polling so the buttons re-sync to the true status.
++      toastApiError('Action failed', error);
++      queryClient.invalidateQueries({ queryKey: queryKeys.fleetOperations.detail(operation.id) });
++    },
++  });
++
++  const pending = run.isPending;
++
++  return (
++    <>
++      <div className="flex flex-wrap items-center gap-2">
++        <button
++          type="button"
++          onClick={() => run.mutate('pause')}
++          disabled={!canPause || pending}
++          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40"
++        >
++          {pending && run.variables === 'pause' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pause className="h-3.5 w-3.5" />}
++          Pause
++        </button>
++        <button
++          type="button"
++          onClick={() => run.mutate('resume')}
++          disabled={!canResume || pending}
++          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40"
++        >
++          {pending && run.variables === 'resume' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
++          Resume
++        </button>
++        <button
++          type="button"
++          onClick={() => run.mutate('retry')}
++          disabled={!canRetry || pending}
++          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40"
++        >
++          {pending && run.variables === 'retry' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
++          Retry failed
++        </button>
++        <button
++          type="button"
++          onClick={() => setConfirmAbort(true)}
++          disabled={!canAbort || pending}
++          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-status-error/40 bg-background px-3 text-xs font-medium text-status-error hover:bg-status-error/10 disabled:opacity-40"
++        >
++          <Ban className="h-3.5 w-3.5" />
++          Abort
++        </button>
++      </div>
++
++      <ConfirmDialog
++        open={confirmAbort}
++        onClose={() => setConfirmAbort(false)}
++        onConfirm={() => {
++          setConfirmAbort(false);
++          run.mutate('abort');
++        }}
++        title="Abort fleet operation"
++        description="In-flight targets finish their current work, but no new clusters are dispatched. This cannot be undone."
++        confirmText="Abort operation"
++        variant="destructive"
++        loading={pending}
++      />
++    </>
++  );
++}
+diff --git a/frontend/src/components/fleet/fleet-operation-list.tsx b/frontend/src/components/fleet/fleet-operation-list.tsx
+new file mode 100644
+index 0000000..1ad5c1b
+--- /dev/null
++++ b/frontend/src/components/fleet/fleet-operation-list.tsx
+@@ -0,0 +1,87 @@
++'use client';
++
++import { useRouter } from '@/lib/navigation';
++import { DataTable, type Column } from '@/components/ui/data-table';
++import { formatRelativeTime } from '@/lib/utils';
++import { fleetOpTypeLabel, type FleetOperation } from '@/lib/api/fleet-operations';
++import { FleetStatusBadge } from './fleet-status-badge';
++
++interface FleetOperationListProps {
++  operations: FleetOperation[];
++  loading?: boolean;
++  isError?: boolean;
++  onRetry?: () => void;
++}
++
++export function FleetOperationList({ operations, loading, isError, onRetry }: FleetOperationListProps) {
++  const router = useRouter();
++
++  const columns: Column<FleetOperation>[] = [
++    {
++      key: 'name',
++      header: 'Name',
++      accessor: (row) => (
++        <div className="min-w-0">
++          <p className="truncate font-medium text-foreground">{row.name}</p>
++          {row.description ? (
++            <p className="truncate text-xs text-muted-foreground">{row.description}</p>
++          ) : null}
++        </div>
++      ),
++      sortAccessor: (row) => row.name,
++    },
++    {
++      key: 'type',
++      header: 'Type',
++      accessor: (row) => (
++        <span className="text-sm text-muted-foreground">{fleetOpTypeLabel(row.operation_type)}</span>
++      ),
++      sortAccessor: (row) => row.operation_type,
++    },
++    {
++      key: 'status',
++      header: 'Status',
++      accessor: (row) => <FleetStatusBadge status={row.status} />,
++      sortAccessor: (row) => row.status,
++    },
++    {
++      key: 'progress',
++      header: 'Progress',
++      accessor: (row) => (
++        <span className="font-mono text-xs text-muted-foreground">
++          {row.completed_clusters}/{row.total_clusters} done
++          {row.failed_clusters > 0 ? (
++            <span className="text-status-error"> · {row.failed_clusters} failed</span>
++          ) : null}
++          {row.skipped_clusters > 0 ? (
++            <span className="text-status-neutral"> · {row.skipped_clusters} skipped</span>
++          ) : null}
++        </span>
++      ),
++      sortAccessor: (row) => row.completed_clusters,
++    },
++    {
++      key: 'created',
++      header: 'Created',
++      accessor: (row) => (
++        <span className="text-xs text-muted-foreground">{formatRelativeTime(row.created_at)}</span>
++      ),
++      sortAccessor: (row) => row.created_at,
++    },
++  ];
++
++  return (
++    <DataTable
++      data={operations}
++      columns={columns}
++      keyExtractor={(row) => row.id}
++      loading={loading}
++      isError={isError}
++      onRetry={onRetry}
++      emptyMessage="No fleet operations yet."
++      searchable
++      searchPlaceholder="Search operations…"
++      onRowClick={(row) => router.push(`/dashboard/fleet/${row.id}`)}
++    />
++  );
++}
+diff --git a/frontend/src/components/fleet/fleet-status-badge.tsx b/frontend/src/components/fleet/fleet-status-badge.tsx
+new file mode 100644
+index 0000000..ae3a20c
+--- /dev/null
++++ b/frontend/src/components/fleet/fleet-status-badge.tsx
+@@ -0,0 +1,46 @@
++'use client';
++
++import { cn } from '@/lib/utils';
++
++/**
++ * Shared status pill for fleet operations and their per-cluster targets.
++ * A dedicated map (rather than the generic statusBgColor) so paused /
++ * aborted / skipped / completed read the way an operator expects.
++ */
++const FLEET_STATUS_COLOR: Record<string, string> = {
++  pending: 'bg-status-info/10 text-status-info',
++  running: 'bg-status-info/10 text-status-info',
++  paused: 'bg-status-warning/10 text-status-warning',
++  completed: 'bg-status-success/10 text-status-success',
++  succeeded: 'bg-status-success/10 text-status-success',
++  failed: 'bg-status-error/10 text-status-error',
++  aborted: 'bg-status-error/10 text-status-error',
++  skipped: 'bg-status-neutral/10 text-status-neutral',
++};
++
++function labelFor(status: string): string {
++  return status.charAt(0).toUpperCase() + status.slice(1);
++}
++
++export function FleetStatusBadge({ status, className }: { status: string; className?: string }) {
++  const key = status.toLowerCase();
++  const color = FLEET_STATUS_COLOR[key] ?? 'bg-status-neutral/10 text-status-neutral';
++  const active = key === 'running';
++  return (
++    <span
++      className={cn(
++        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
++        color,
++        className,
++      )}
++    >
++      <span className="relative flex h-1.5 w-1.5">
++        {active && (
++          <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-75 animate-pulse-dot" />
++        )}
++        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
++      </span>
++      {labelFor(status)}
++    </span>
++  );
++}
+diff --git a/frontend/src/components/fleet/fleet-target-table.tsx b/frontend/src/components/fleet/fleet-target-table.tsx
+new file mode 100644
+index 0000000..c8d03f7
+--- /dev/null
++++ b/frontend/src/components/fleet/fleet-target-table.tsx
+@@ -0,0 +1,95 @@
++'use client';
++
++import { useMemo } from 'react';
++import { useQuery } from '@tanstack/react-query';
++import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
++import { getClusters } from '@/lib/api';
++import { getFleetTargets, isTerminalFleetStatus } from '@/lib/api/fleet-operations';
++import { queryKeys } from '@/lib/hooks';
++import { formatRelativeTime } from '@/lib/utils';
++import { FleetStatusBadge } from './fleet-status-badge';
++
++interface FleetTargetTableProps {
++  operationId: string;
++  /** Parent operation status — polling stops once it is terminal. */
++  status: string;
++}
++
++export function FleetTargetTable({ operationId, status }: FleetTargetTableProps) {
++  const terminal = isTerminalFleetStatus(status);
++
++  const targetsQuery = useQuery({
++    queryKey: queryKeys.fleetOperations.targets(operationId),
++    queryFn: () => getFleetTargets(operationId, { limit: 200 }),
++    refetchInterval: terminal ? false : 5000,
++  });
++
++  const clustersQuery = useQuery({
++    queryKey: queryKeys.clusters.list(),
++    queryFn: () => getClusters({ pageSize: 500 }),
++  });
++
++  const clusterName = useMemo(() => {
++    const map = new Map<string, string>();
++    for (const c of clustersQuery.data?.data ?? []) {
++      map.set(c.id, c.displayName || c.name);
++    }
++    return map;
++  }, [clustersQuery.data]);
++
++  const targets = targetsQuery.data?.data ?? [];
++
++  if (targetsQuery.isLoading) {
++    return <p className="text-sm text-muted-foreground">Loading targets…</p>;
++  }
++
++  if (targets.length === 0) {
++    return (
++      <p className="text-sm text-muted-foreground">
++        No targets yet. The orchestrator evaluates the selector on the pending → running
++        transition; targets appear once the operation starts.
++      </p>
++    );
++  }
++
++  return (
++    <div className="overflow-x-auto">
++      <Table>
++        <TableHeader>
++          <TableRow>
++            <TableHead>Cluster</TableHead>
++            <TableHead>Status</TableHead>
++            <TableHead>Sub-operation</TableHead>
++            <TableHead>Started</TableHead>
++            <TableHead>Completed</TableHead>
++            <TableHead>Last error</TableHead>
++          </TableRow>
++        </TableHeader>
++        <TableBody>
++          {targets.map((t) => (
++            <TableRow key={t.id}>
++              <TableCell>
++                <span className="font-medium text-foreground">
++                  {clusterName.get(t.cluster_id) ?? t.cluster_id}
++                </span>
++              </TableCell>
++              <TableCell>
++                <FleetStatusBadge status={t.status} />
++              </TableCell>
++              <TableCell className="text-muted-foreground">{t.sub_operation_type || '—'}</TableCell>
++              <TableCell className="text-muted-foreground">
++                {t.started_at ? formatRelativeTime(t.started_at) : '—'}
++              </TableCell>
++              <TableCell className="text-muted-foreground">
++                {t.completed_at ? formatRelativeTime(t.completed_at) : '—'}
++              </TableCell>
++              <TableCell className="max-w-xs truncate text-status-error" title={t.last_error}>
++                {t.last_error || '—'}
++              </TableCell>
++            </TableRow>
++          ))}
++        </TableBody>
++      </Table>
++    </div>
++  );
++}
+diff --git a/frontend/src/components/fleet/operation-spec-fields.tsx b/frontend/src/components/fleet/operation-spec-fields.tsx
+new file mode 100644
+index 0000000..bf0e042
+--- /dev/null
++++ b/frontend/src/components/fleet/operation-spec-fields.tsx
+@@ -0,0 +1,115 @@
++'use client';
++
++import { useEffect, useState } from 'react';
++import { useQuery } from '@tanstack/react-query';
++import { getTools, listClusterTemplates } from '@/lib/api';
++import { queryKeys } from '@/lib/hooks';
++import type { FleetOperationType } from '@/lib/api/fleet-operations';
++
++interface OperationSpecFieldsProps {
++  operationType: FleetOperationType;
++  onChange: (spec: Record<string, unknown> | undefined) => void;
++}
++
++const clusterTemplateKeys = {
++  list: (params?: Record<string, unknown>) => ['cluster-templates', 'list', params] as const,
++};
++
++/**
++ * Per-type operation_spec sub-form.
++ *   - tool_* : { slug } picked from the tools catalog.
++ *   - apply_template : { template_id } picked from cluster templates.
++ *   - rotate_agent_token : no spec.
++ */
++export function OperationSpecFields({ operationType, onChange }: OperationSpecFieldsProps) {
++  const isToolOp =
++    operationType === 'tool_upgrade' ||
++    operationType === 'tool_install' ||
++    operationType === 'tool_uninstall';
++  const isTemplateOp = operationType === 'apply_template';
++
++  const tools = useQuery({
++    queryKey: queryKeys.tools.list(),
++    queryFn: getTools,
++    enabled: isToolOp,
++  });
++  const templates = useQuery({
++    queryKey: clusterTemplateKeys.list(),
++    queryFn: () => listClusterTemplates(),
++    enabled: isTemplateOp,
++  });
++
++  const [slug, setSlug] = useState('');
++  const [templateId, setTemplateId] = useState('');
++
++  // Reset selections when the operation type changes and re-emit spec.
++  useEffect(() => {
++    setSlug('');
++    setTemplateId('');
++    onChange(operationType === 'rotate_agent_token' ? undefined : {});
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [operationType]);
++
++  useEffect(() => {
++    if (isToolOp) onChange(slug ? { slug } : {});
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [slug, isToolOp]);
++
++  useEffect(() => {
++    if (isTemplateOp) onChange(templateId ? { template_id: templateId } : {});
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [templateId, isTemplateOp]);
++
++  if (isToolOp) {
++    return (
++      <div className="space-y-1.5">
++        <label className="text-sm font-medium text-foreground">Tool</label>
++        <select
++          aria-label="tool slug"
++          value={slug}
++          onChange={(e) => setSlug(e.target.value)}
++          className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++        >
++          <option value="">Select a tool…</option>
++          {(tools.data ?? []).map((t) => (
++            <option key={t.slug} value={t.slug}>
++              {t.name} ({t.slug})
++            </option>
++          ))}
++        </select>
++        <p className="text-xs text-muted-foreground">
++          The tool is applied on every matched cluster using its default preset.
++        </p>
++      </div>
++    );
++  }
++
++  if (isTemplateOp) {
++    return (
++      <div className="space-y-1.5">
++        <label className="text-sm font-medium text-foreground">Template</label>
++        <select
++          aria-label="template id"
++          value={templateId}
++          onChange={(e) => setTemplateId(e.target.value)}
++          className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++        >
++          <option value="">Select a template…</option>
++          {(templates.data?.data ?? []).map((t) => (
++            <option key={t.id} value={t.id}>
++              {t.displayName || t.name}
++            </option>
++          ))}
++        </select>
++      </div>
++    );
++  }
++
++  // rotate_agent_token — no spec.
++  return (
++    <p className="text-sm text-muted-foreground">
++      This operation rotates the agent token on every matched cluster. No further
++      configuration is required.
++    </p>
++  );
++}
+diff --git a/frontend/src/components/fleet/selector-builder.test.tsx b/frontend/src/components/fleet/selector-builder.test.tsx
+new file mode 100644
+index 0000000..1ee02d2
+--- /dev/null
++++ b/frontend/src/components/fleet/selector-builder.test.tsx
+@@ -0,0 +1,72 @@
++import { render, fireEvent } from '@testing-library/react';
++import { SelectorBuilder, buildSelector } from './selector-builder';
++import { selectorIsEmpty } from '@/lib/api/fleet-operations';
++
++describe('buildSelector — emits the exact wire shape', () => {
++  it('drops empty label/expression rows', () => {
++    const sel = buildSelector([{ key: '', value: '' }], [], []);
++    expect(sel).toEqual({});
++    expect(selectorIsEmpty(sel)).toBe(true);
++  });
++
++  it('builds matchLabels from non-empty rows only', () => {
++    const sel = buildSelector(
++      [
++        { key: 'tier', value: 'prod' },
++        { key: '', value: 'ignored' },
++      ],
++      [],
++      [],
++    );
++    expect(sel).toEqual({ matchLabels: { tier: 'prod' } });
++  });
++
++  it('splits In/NotIn values on commas and omits values for Exists/DoesNotExist', () => {
++    const sel = buildSelector(
++      [],
++      [
++        { key: 'env', operator: 'In', values: 'staging, canary' },
++        { key: 'gpu', operator: 'Exists', values: 'ignored' },
++      ],
++      [],
++    );
++    expect(sel).toEqual({
++      matchExpressions: [
++        { key: 'env', operator: 'In', values: ['staging', 'canary'] },
++        { key: 'gpu', operator: 'Exists' },
++      ],
++    });
++  });
++
++  it('includes matchGroupIDs when groups are selected', () => {
++    const sel = buildSelector([{ key: 'tier', value: 'prod' }], [], ['g1', 'g2']);
++    expect(sel).toEqual({
++      matchLabels: { tier: 'prod' },
++      matchGroupIDs: ['g1', 'g2'],
++    });
++  });
++});
++
++describe('SelectorBuilder — onChange wiring', () => {
++  it('emits an empty selector on mount and a populated one after typing', () => {
++    const onChange = jest.fn();
++    const { getByLabelText } = render(<SelectorBuilder onChange={onChange} />);
++
++    // Initial emit is the empty selector (single blank label row).
++    expect(onChange).toHaveBeenLastCalledWith({});
++
++    fireEvent.change(getByLabelText('label key 1'), { target: { value: 'tier' } });
++    fireEvent.change(getByLabelText('label value 1'), { target: { value: 'prod' } });
++
++    expect(onChange).toHaveBeenLastCalledWith({ matchLabels: { tier: 'prod' } });
++  });
++
++  it('renders a group multi-select when groups are provided', () => {
++    const onChange = jest.fn();
++    const { getByRole } = render(
++      <SelectorBuilder onChange={onChange} groups={[{ id: 'g1', name: 'Prod fleet' }]} />,
++    );
++    fireEvent.click(getByRole('button', { name: 'Prod fleet' }));
++    expect(onChange).toHaveBeenLastCalledWith({ matchGroupIDs: ['g1'] });
++  });
++});
+diff --git a/frontend/src/components/fleet/selector-builder.tsx b/frontend/src/components/fleet/selector-builder.tsx
+new file mode 100644
+index 0000000..48fdc0d
+--- /dev/null
++++ b/frontend/src/components/fleet/selector-builder.tsx
+@@ -0,0 +1,263 @@
++'use client';
++
++import { useEffect, useId, useMemo, useState } from 'react';
++import { Plus, Trash2 } from 'lucide-react';
++import { cn } from '@/lib/utils';
++import type { FleetSelector, FleetSelectorOperator } from '@/lib/api/fleet-operations';
++
++interface LabelRow {
++  key: string;
++  value: string;
++}
++
++interface ExprRow {
++  key: string;
++  operator: FleetSelectorOperator;
++  values: string; // comma-separated in the input, split on build
++}
++
++const OPERATORS: FleetSelectorOperator[] = ['In', 'NotIn', 'Exists', 'DoesNotExist'];
++
++function operatorNeedsValues(op: FleetSelectorOperator): boolean {
++  return op === 'In' || op === 'NotIn';
++}
++
++/**
++ * Build the wire-shape FleetSelector from the row state. Empty rows are
++ * dropped; only non-empty keys contribute. This is the exact shape the
++ * backend validator expects (matchLabels / matchExpressions / matchGroupIDs).
++ */
++export function buildSelector(
++  labels: LabelRow[],
++  exprs: ExprRow[],
++  groupIds: string[],
++): FleetSelector {
++  const selector: FleetSelector = {};
++
++  const matchLabels: Record<string, string> = {};
++  for (const row of labels) {
++    const key = row.key.trim();
++    if (key) matchLabels[key] = row.value;
++  }
++  if (Object.keys(matchLabels).length > 0) selector.matchLabels = matchLabels;
++
++  const matchExpressions = exprs
++    .filter((row) => row.key.trim())
++    .map((row) => {
++      const expr: { key: string; operator: FleetSelectorOperator; values?: string[] } = {
++        key: row.key.trim(),
++        operator: row.operator,
++      };
++      if (operatorNeedsValues(row.operator)) {
++        expr.values = row.values
++          .split(',')
++          .map((v) => v.trim())
++          .filter(Boolean);
++      }
++      return expr;
++    });
++  if (matchExpressions.length > 0) selector.matchExpressions = matchExpressions;
++
++  if (groupIds.length > 0) selector.matchGroupIDs = groupIds;
++
++  return selector;
++}
++
++interface SelectorBuilderProps {
++  onChange: (selector: FleetSelector) => void;
++  /** Aggregated label key -> distinct values, for autocomplete. */
++  labelSuggestions?: Record<string, string[]>;
++  groups?: { id: string; name: string }[];
++  className?: string;
++}
++
++export function SelectorBuilder({
++  onChange,
++  labelSuggestions = {},
++  groups = [],
++  className,
++}: SelectorBuilderProps) {
++  const [labels, setLabels] = useState<LabelRow[]>([{ key: '', value: '' }]);
++  const [exprs, setExprs] = useState<ExprRow[]>([]);
++  const [groupIds, setGroupIds] = useState<string[]>([]);
++
++  const keyListId = useId();
++
++  const labelKeys = useMemo(() => Object.keys(labelSuggestions).sort(), [labelSuggestions]);
++
++  // Emit whenever any row changes. buildSelector drops empty rows so the
++  // parent always sees the canonical wire shape.
++  useEffect(() => {
++    onChange(buildSelector(labels, exprs, groupIds));
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [labels, exprs, groupIds]);
++
++  return (
++    <div className={cn('space-y-5', className)}>
++      {/* datalist of known label keys */}
++      <datalist id={keyListId}>
++        {labelKeys.map((k) => (
++          <option key={k} value={k} />
++        ))}
++      </datalist>
++
++      {/* matchLabels */}
++      <div className="space-y-2">
++        <div className="flex items-center justify-between">
++          <label className="text-sm font-medium text-foreground">Match labels</label>
++          <button
++            type="button"
++            onClick={() => setLabels((rows) => [...rows, { key: '', value: '' }])}
++            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
++          >
++            <Plus className="h-3 w-3" /> Add label
++          </button>
++        </div>
++        {labels.length === 0 && (
++          <p className="text-xs text-muted-foreground">No label matchers.</p>
++        )}
++        {labels.map((row, i) => {
++          const valueListId = `${keyListId}-vals-${i}`;
++          const suggestions = labelSuggestions[row.key.trim()] ?? [];
++          return (
++            <div key={i} className="flex items-center gap-2">
++              <input
++                aria-label={`label key ${i + 1}`}
++                list={keyListId}
++                value={row.key}
++                onChange={(e) =>
++                  setLabels((rows) => rows.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
++                }
++                placeholder="tier"
++                className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
++              />
++              <span className="text-muted-foreground">=</span>
++              <datalist id={valueListId}>
++                {suggestions.map((v) => (
++                  <option key={v} value={v} />
++                ))}
++              </datalist>
++              <input
++                aria-label={`label value ${i + 1}`}
++                list={valueListId}
++                value={row.value}
++                onChange={(e) =>
++                  setLabels((rows) => rows.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
++                }
++                placeholder="prod"
++                className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
++              />
++              <button
++                type="button"
++                aria-label={`remove label ${i + 1}`}
++                onClick={() => setLabels((rows) => rows.filter((_, j) => j !== i))}
++                className="text-muted-foreground hover:text-status-error"
++              >
++                <Trash2 className="h-4 w-4" />
++              </button>
++            </div>
++          );
++        })}
++      </div>
++
++      {/* matchExpressions */}
++      <div className="space-y-2">
++        <div className="flex items-center justify-between">
++          <label className="text-sm font-medium text-foreground">Match expressions</label>
++          <button
++            type="button"
++            onClick={() => setExprs((rows) => [...rows, { key: '', operator: 'In', values: '' }])}
++            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
++          >
++            <Plus className="h-3 w-3" /> Add expression
++          </button>
++        </div>
++        {exprs.length === 0 && (
++          <p className="text-xs text-muted-foreground">No set-based matchers.</p>
++        )}
++        {exprs.map((row, i) => (
++          <div key={i} className="flex items-center gap-2">
++            <input
++              aria-label={`expression key ${i + 1}`}
++              list={keyListId}
++              value={row.key}
++              onChange={(e) =>
++                setExprs((rows) => rows.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
++              }
++              placeholder="env"
++              className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
++            />
++            <select
++              aria-label={`expression operator ${i + 1}`}
++              value={row.operator}
++              onChange={(e) =>
++                setExprs((rows) =>
++                  rows.map((r, j) =>
++                    j === i ? { ...r, operator: e.target.value as FleetSelectorOperator } : r,
++                  ),
++                )
++              }
++              className="h-8 rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++            >
++              {OPERATORS.map((op) => (
++                <option key={op} value={op}>
++                  {op}
++                </option>
++              ))}
++            </select>
++            <input
++              aria-label={`expression values ${i + 1}`}
++              value={row.values}
++              disabled={!operatorNeedsValues(row.operator)}
++              onChange={(e) =>
++                setExprs((rows) => rows.map((r, j) => (j === i ? { ...r, values: e.target.value } : r)))
++              }
++              placeholder={operatorNeedsValues(row.operator) ? 'staging, canary' : '—'}
++              className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-40"
++            />
++            <button
++              type="button"
++              aria-label={`remove expression ${i + 1}`}
++              onClick={() => setExprs((rows) => rows.filter((_, j) => j !== i))}
++              className="text-muted-foreground hover:text-status-error"
++            >
++              <Trash2 className="h-4 w-4" />
++            </button>
++          </div>
++        ))}
++      </div>
++
++      {/* matchGroupIDs */}
++      {groups.length > 0 && (
++        <div className="space-y-2">
++          <label className="text-sm font-medium text-foreground">Cluster groups</label>
++          <div className="flex flex-wrap gap-2">
++            {groups.map((g) => {
++              const selected = groupIds.includes(g.id);
++              return (
++                <button
++                  key={g.id}
++                  type="button"
++                  aria-pressed={selected}
++                  onClick={() =>
++                    setGroupIds((ids) =>
++                      selected ? ids.filter((x) => x !== g.id) : [...ids, g.id],
++                    )
++                  }
++                  className={cn(
++                    'rounded-full border px-3 py-1 text-xs transition-colors',
++                    selected
++                      ? 'border-primary bg-primary/10 text-primary'
++                      : 'border-border text-muted-foreground hover:bg-accent',
++                  )}
++                >
++                  {g.name}
++                </button>
++              );
++            })}
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/frontend/src/components/layout/sidebar.tsx b/frontend/src/components/layout/sidebar.tsx
+index 89f4acb..410e7a2 100644
+--- a/frontend/src/components/layout/sidebar.tsx
++++ b/frontend/src/components/layout/sidebar.tsx
+@@ -51,6 +51,7 @@ import {
+   Camera,
+   Route,
+   Waypoints,
++  Rocket,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { ExtensionNavItems } from '@/components/extensions/ExtensionNavItems';
+@@ -111,6 +112,7 @@ const globalNavGroups: NavGroup[] = [
+       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
+       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
+       { label: 'Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'agents', verb: 'read' } },
++      { label: 'Fleet Operations', href: '/dashboard/fleet', icon: Rocket, permission: { resource: 'fleet_operations', verb: 'list' } },
+       { label: 'Onboarding Bundles', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
+     ],
+   },
+diff --git a/frontend/src/lib/api.ts b/frontend/src/lib/api.ts
+index 4cb7ee7..cdf8a1b 100644
+--- a/frontend/src/lib/api.ts
++++ b/frontend/src/lib/api.ts
+@@ -2726,3 +2726,9 @@ export * from './api/cluster-groups';
+ // UI extensions — manifest validation and registry controls.
+ // ============================================================
+ export * from './api/extensions';
++
++// ============================================================
++// Fleet operations (DIR-01) — bulk fanout of tool/template/token
++// operations across the cluster fleet. See lib/api/fleet-operations.ts.
++// ============================================================
++export * from './api/fleet-operations';
+diff --git a/frontend/src/lib/api/fleet-operations.test.ts b/frontend/src/lib/api/fleet-operations.test.ts
+new file mode 100644
+index 0000000..c504b4c
+--- /dev/null
++++ b/frontend/src/lib/api/fleet-operations.test.ts
+@@ -0,0 +1,170 @@
++import api from '@/lib/api';
++import {
++  getFleetOperations,
++  getFleetOperation,
++  createFleetOperation,
++  getFleetTargets,
++  pauseFleetOperation,
++  resumeFleetOperation,
++  abortFleetOperation,
++  retryFailedFleetOperation,
++  selectorIsEmpty,
++  matchesFleetSelector,
++  evaluateFleetSelector,
++  isTerminalFleetStatus,
++  type FleetSelector,
++  type SelectorCandidate,
++} from './fleet-operations';
++
++jest.mock('@/lib/api', () => ({
++  __esModule: true,
++  default: {
++    get: jest.fn(),
++    post: jest.fn(),
++  },
++}));
++
++const mockedApi = api as jest.Mocked<typeof api>;
++
++describe('fleet-operations API client', () => {
++  beforeEach(() => jest.clearAllMocks());
++
++  it('GET list hits the trailing-slash route and passes pagination/status params', async () => {
++    mockedApi.get.mockResolvedValueOnce({ data: { data: [], count: 0, next: null, previous: null } });
++    await getFleetOperations({ status: 'running', limit: 50, offset: 10 });
++    expect(mockedApi.get).toHaveBeenCalledWith('/fleet-operations/', {
++      params: { status: 'running', limit: 50, offset: 10 },
++    });
++  });
++
++  it('GET detail unwraps the { data } envelope', async () => {
++    mockedApi.get.mockResolvedValueOnce({ data: { data: { id: 'op1', name: 'x' } } });
++    await expect(getFleetOperation('op1')).resolves.toEqual(
++      expect.objectContaining({ id: 'op1' }),
++    );
++    expect(mockedApi.get).toHaveBeenCalledWith('/fleet-operations/op1/');
++  });
++
++  it('POST create unwraps the { data } envelope and posts the body', async () => {
++    const body = {
++      name: 'Upgrade',
++      operation_type: 'tool_upgrade' as const,
++      selector: { matchLabels: { tier: 'prod' } },
++    };
++    mockedApi.post.mockResolvedValueOnce({ data: { data: { id: 'op2' } } });
++    await expect(createFleetOperation(body)).resolves.toEqual(
++      expect.objectContaining({ id: 'op2' }),
++    );
++    expect(mockedApi.post).toHaveBeenCalledWith('/fleet-operations/', body);
++  });
++
++  it('GET targets hits the nested trailing-slash route', async () => {
++    mockedApi.get.mockResolvedValueOnce({ data: { data: [], count: 0, next: null, previous: null } });
++    await getFleetTargets('op1', { limit: 200 });
++    expect(mockedApi.get).toHaveBeenCalledWith('/fleet-operations/op1/targets/', {
++      params: { limit: 200 },
++    });
++  });
++
++  it.each([
++    ['pause', pauseFleetOperation, '/fleet-operations/op1/pause/'],
++    ['resume', resumeFleetOperation, '/fleet-operations/op1/resume/'],
++    ['abort', abortFleetOperation, '/fleet-operations/op1/abort/'],
++    ['retry-failed', retryFailedFleetOperation, '/fleet-operations/op1/retry-failed/'],
++  ] as const)('POST %s hits the trailing-slash lifecycle route', async (_name, fn, url) => {
++    mockedApi.post.mockResolvedValueOnce({ data: { data: { id: 'op1' } } });
++    await fn('op1');
++    expect(mockedApi.post).toHaveBeenCalledWith(url);
++  });
++});
++
++describe('selectorIsEmpty', () => {
++  it('treats null / {} as empty', () => {
++    expect(selectorIsEmpty(null)).toBe(true);
++    expect(selectorIsEmpty({})).toBe(true);
++    expect(selectorIsEmpty({ matchLabels: {} })).toBe(true);
++    expect(selectorIsEmpty({ matchExpressions: [] })).toBe(true);
++    expect(selectorIsEmpty({ matchGroupIDs: [] })).toBe(true);
++  });
++
++  it('treats any populated field as non-empty', () => {
++    expect(selectorIsEmpty({ matchLabels: { a: 'b' } })).toBe(false);
++    expect(selectorIsEmpty({ matchExpressions: [{ key: 'k', operator: 'Exists' }] })).toBe(false);
++    expect(selectorIsEmpty({ matchGroupIDs: ['g1'] })).toBe(false);
++  });
++});
++
++describe('matchesFleetSelector — mirrors Go matchesSelector', () => {
++  const cluster = (labels: Record<string, string>, groupIds?: string[]): SelectorCandidate => ({
++    labels,
++    groupIds,
++  });
++
++  it('matchLabels is AND of equals', () => {
++    const sel: FleetSelector = { matchLabels: { tier: 'prod', region: 'us-east' } };
++    expect(matchesFleetSelector(sel, cluster({ tier: 'prod', region: 'us-east' }))).toBe(true);
++    expect(matchesFleetSelector(sel, cluster({ tier: 'prod', region: 'us-west' }))).toBe(false);
++    expect(matchesFleetSelector(sel, cluster({ tier: 'prod' }))).toBe(false);
++  });
++
++  it('In matches present-and-listed; misses when absent or not listed', () => {
++    const sel: FleetSelector = { matchExpressions: [{ key: 'env', operator: 'In', values: ['staging', 'canary'] }] };
++    expect(matchesFleetSelector(sel, cluster({ env: 'staging' }))).toBe(true);
++    expect(matchesFleetSelector(sel, cluster({ env: 'prod' }))).toBe(false);
++    expect(matchesFleetSelector(sel, cluster({}))).toBe(false);
++  });
++
++  it('NotIn matches when absent (k8s semantics) or not listed', () => {
++    const sel: FleetSelector = { matchExpressions: [{ key: 'env', operator: 'NotIn', values: ['prod'] }] };
++    expect(matchesFleetSelector(sel, cluster({ env: 'staging' }))).toBe(true);
++    expect(matchesFleetSelector(sel, cluster({}))).toBe(true);
++    expect(matchesFleetSelector(sel, cluster({ env: 'prod' }))).toBe(false);
++  });
++
++  it('Exists / DoesNotExist gate on key presence', () => {
++    const exists: FleetSelector = { matchExpressions: [{ key: 'gpu', operator: 'Exists' }] };
++    expect(matchesFleetSelector(exists, cluster({ gpu: 'true' }))).toBe(true);
++    expect(matchesFleetSelector(exists, cluster({}))).toBe(false);
++    const notExists: FleetSelector = { matchExpressions: [{ key: 'gpu', operator: 'DoesNotExist' }] };
++    expect(matchesFleetSelector(notExists, cluster({}))).toBe(true);
++    expect(matchesFleetSelector(notExists, cluster({ gpu: 'true' }))).toBe(false);
++  });
++
++  it('unknown operator matches nothing', () => {
++    const sel = { matchExpressions: [{ key: 'k', operator: 'EqualsIgnoreCase', values: ['v'] }] } as unknown as FleetSelector;
++    expect(matchesFleetSelector(sel, cluster({ k: 'v' }))).toBe(false);
++  });
++
++  it('matchGroupIDs matches on intersection', () => {
++    const sel: FleetSelector = { matchGroupIDs: ['g1', 'g2'] };
++    expect(matchesFleetSelector(sel, cluster({}, ['g2']))).toBe(true);
++    expect(matchesFleetSelector(sel, cluster({}, ['g3']))).toBe(false);
++    expect(matchesFleetSelector(sel, cluster({}, []))).toBe(false);
++  });
++});
++
++describe('evaluateFleetSelector', () => {
++  it('empty selector matches NO clusters', () => {
++    const candidates: SelectorCandidate[] = [{ labels: { tier: 'prod' } }, { labels: {} }];
++    expect(evaluateFleetSelector({}, candidates)).toEqual([]);
++  });
++
++  it('filters candidates by the predicate', () => {
++    const candidates: SelectorCandidate[] = [
++      { labels: { tier: 'prod' } },
++      { labels: { tier: 'dev' } },
++    ];
++    expect(evaluateFleetSelector({ matchLabels: { tier: 'prod' } }, candidates)).toHaveLength(1);
++  });
++});
++
++describe('isTerminalFleetStatus', () => {
++  it('is terminal for completed/failed/aborted only', () => {
++    expect(isTerminalFleetStatus('completed')).toBe(true);
++    expect(isTerminalFleetStatus('failed')).toBe(true);
++    expect(isTerminalFleetStatus('aborted')).toBe(true);
++    expect(isTerminalFleetStatus('running')).toBe(false);
++    expect(isTerminalFleetStatus('paused')).toBe(false);
++    expect(isTerminalFleetStatus('pending')).toBe(false);
++  });
++});
+diff --git a/frontend/src/lib/api/fleet-operations.ts b/frontend/src/lib/api/fleet-operations.ts
+new file mode 100644
+index 0000000..16d2810
+--- /dev/null
++++ b/frontend/src/lib/api/fleet-operations.ts
+@@ -0,0 +1,289 @@
++/**
++ * Fleet operations API client (DIR-01).
++ *
++ * Bulk fleet-operations let an operator drive an upgrade / install /
++ * uninstall / template-apply / agent-token-rotation across a whole
++ * cluster fleet from one dashboard. The backend is fully built,
++ * RBAC-gated (`fleet_operations`), audited, idempotent and orchestrated
++ * by a durable worker — this client is the frontend consumer.
++ *
++ * All endpoints sit under /api/v1/fleet-operations/. The list + targets
++ * endpoints return the standard paginated envelope ({ data, count, next,
++ * previous }); get/create/lifecycle return the wrapped { data } envelope.
++ *
++ * Wire shapes are snake_case here because they mirror the handler structs
++ * (internal/handler/fleet_operations.go) verbatim — do NOT camelCase them.
++ *
++ * Re-exported from ../api.ts via `export * from './api/fleet-operations'`.
++ */
++import api from '@/lib/api';
++import type { APIResponse } from '@/types';
++
++// ─────────────────────────────────────────────────────────────────────
++// Enums
++// ─────────────────────────────────────────────────────────────────────
++
++/** Operation types the orchestrator actually dispatches today. */
++export type FleetOperationType =
++  | 'tool_upgrade'
++  | 'tool_install'
++  | 'tool_uninstall'
++  | 'apply_template'
++  | 'rotate_agent_token';
++
++/** Parent-operation lifecycle status. */
++export type FleetOperationStatus =
++  | 'pending'
++  | 'running'
++  | 'paused'
++  | 'completed'
++  | 'failed'
++  | 'aborted';
++
++export type FleetStrategy = 'parallel' | 'sequential';
++export type FleetOnError = 'abort' | 'continue';
++export type FleetSelectorOperator = 'In' | 'NotIn' | 'Exists' | 'DoesNotExist';
++
++// ─────────────────────────────────────────────────────────────────────
++// Selector
++// ─────────────────────────────────────────────────────────────────────
++
++export interface FleetSelectorExpression {
++  key: string;
++  operator: FleetSelectorOperator;
++  values?: string[];
++}
++
++/**
++ * Kubernetes-style label selector. Mirrors internal/worker/tasks/
++ * fleet_selector.go. An empty selector matches NO clusters — that's a
++ * load-bearing safety property the UI must enforce client-side too.
++ */
++export interface FleetSelector {
++  matchLabels?: Record<string, string>;
++  matchExpressions?: FleetSelectorExpression[];
++  matchGroupIDs?: string[];
++}
++
++// ─────────────────────────────────────────────────────────────────────
++// Wire shapes
++// ─────────────────────────────────────────────────────────────────────
++
++export interface FleetOperation {
++  id: string;
++  name: string;
++  description: string;
++  operation_type: string;
++  operation_spec: Record<string, unknown> | null;
++  selector: FleetSelector | null;
++  strategy: FleetStrategy;
++  max_concurrent: number;
++  on_error: FleetOnError;
++  respect_maintenance_windows: boolean;
++  status: FleetOperationStatus;
++  total_clusters: number;
++  completed_clusters: number;
++  failed_clusters: number;
++  skipped_clusters: number;
++  started_at?: string;
++  completed_at?: string;
++  last_error?: string;
++  created_by?: string;
++  created_at: string;
++  updated_at: string;
++}
++
++export interface FleetOperationTarget {
++  id: string;
++  operation_id: string;
++  cluster_id: string;
++  status: string;
++  sub_operation_id?: string;
++  sub_operation_type?: string;
++  started_at?: string;
++  completed_at?: string;
++  last_error?: string;
++  created_at: string;
++  updated_at: string;
++}
++
++export interface CreateFleetOperationRequest {
++  name: string;
++  description?: string;
++  operation_type: FleetOperationType;
++  operation_spec?: Record<string, unknown>;
++  selector: FleetSelector;
++  strategy?: FleetStrategy;
++  max_concurrent?: number;
++  on_error?: FleetOnError;
++  respect_maintenance_windows?: boolean;
++}
++
++/** Standard paginated envelope returned by RespondPaginated. */
++export interface FleetPaginated<T> {
++  data: T[];
++  count: number;
++  next: string | null;
++  previous: string | null;
++}
++
++export interface FleetListParams {
++  status?: FleetOperationStatus;
++  limit?: number;
++  offset?: number;
++}
++
++// ─────────────────────────────────────────────────────────────────────
++// Client functions
++// ─────────────────────────────────────────────────────────────────────
++
++export async function getFleetOperations(
++  params?: FleetListParams,
++): Promise<FleetPaginated<FleetOperation>> {
++  const res = await api.get<FleetPaginated<FleetOperation>>('/fleet-operations/', { params });
++  return res.data;
++}
++
++export async function getFleetOperation(id: string): Promise<FleetOperation> {
++  const res = await api.get<APIResponse<FleetOperation>>(`/fleet-operations/${id}/`);
++  return res.data.data;
++}
++
++export async function createFleetOperation(
++  body: CreateFleetOperationRequest,
++): Promise<FleetOperation> {
++  const res = await api.post<APIResponse<FleetOperation>>('/fleet-operations/', body);
++  return res.data.data;
++}
++
++export async function getFleetTargets(
++  id: string,
++  params?: { limit?: number; offset?: number },
++): Promise<FleetPaginated<FleetOperationTarget>> {
++  const res = await api.get<FleetPaginated<FleetOperationTarget>>(
++    `/fleet-operations/${id}/targets/`,
++    { params },
++  );
++  return res.data;
++}
++
++export async function pauseFleetOperation(id: string): Promise<FleetOperation> {
++  const res = await api.post<APIResponse<FleetOperation>>(`/fleet-operations/${id}/pause/`);
++  return res.data.data;
++}
++
++export async function resumeFleetOperation(id: string): Promise<FleetOperation> {
++  const res = await api.post<APIResponse<FleetOperation>>(`/fleet-operations/${id}/resume/`);
++  return res.data.data;
++}
++
++export async function abortFleetOperation(id: string): Promise<FleetOperation> {
++  const res = await api.post<APIResponse<FleetOperation>>(`/fleet-operations/${id}/abort/`);
++  return res.data.data;
++}
++
++export async function retryFailedFleetOperation(id: string): Promise<FleetOperation> {
++  const res = await api.post<APIResponse<FleetOperation>>(`/fleet-operations/${id}/retry-failed/`);
++  return res.data.data;
++}
++
++// ─────────────────────────────────────────────────────────────────────
++// Client-side selector predicate — mirrors matchesSelector in
++// internal/worker/tasks/fleet_selector.go so the UI can preview a match
++// count before create. This is a stopgap (there is no backend dry-run
++// endpoint); keep it byte-for-byte faithful to the Go truth table.
++// ─────────────────────────────────────────────────────────────────────
++
++export interface SelectorCandidate {
++  labels: Record<string, string>;
++  groupIds?: string[];
++}
++
++/** True when the selector has no matchLabels / matchExpressions / matchGroupIDs. */
++export function selectorIsEmpty(sel: FleetSelector | null | undefined): boolean {
++  if (!sel) return true;
++  return (
++    Object.keys(sel.matchLabels ?? {}).length === 0 &&
++    (sel.matchExpressions ?? []).length === 0 &&
++    (sel.matchGroupIDs ?? []).length === 0
++  );
++}
++
++function intersects(a: string[], b: string[]): boolean {
++  return a.some((x) => b.includes(x));
++}
++
++function matchesExpression(
++  expr: FleetSelectorExpression,
++  labels: Record<string, string>,
++): boolean {
++  const present = Object.prototype.hasOwnProperty.call(labels, expr.key);
++  const val = labels[expr.key];
++  const values = expr.values ?? [];
++  switch (expr.operator) {
++    case 'In':
++      if (!present) return false;
++      return values.includes(val);
++    case 'NotIn':
++      // k8s semantics: NotIn matches when the key is absent.
++      if (!present) return true;
++      return !values.includes(val);
++    case 'Exists':
++      return present;
++    case 'DoesNotExist':
++      return !present;
++    default:
++      // Unknown operators match nothing (defensive — same as Go).
++      return false;
++  }
++}
++
++/** Per-cluster predicate. AND of every matchLabel, matchExpression, and the group branch. */
++export function matchesFleetSelector(sel: FleetSelector, c: SelectorCandidate): boolean {
++  for (const [k, v] of Object.entries(sel.matchLabels ?? {})) {
++    if (c.labels[k] !== v) return false;
++  }
++  for (const expr of sel.matchExpressions ?? []) {
++    if (!matchesExpression(expr, c.labels)) return false;
++  }
++  const groupIds = sel.matchGroupIDs ?? [];
++  if (groupIds.length > 0 && !intersects(groupIds, c.groupIds ?? [])) return false;
++  return true;
++}
++
++/** Returns the candidates the selector matches. An empty selector matches NONE. */
++export function evaluateFleetSelector(
++  sel: FleetSelector,
++  candidates: SelectorCandidate[],
++): SelectorCandidate[] {
++  if (selectorIsEmpty(sel)) return [];
++  return candidates.filter((c) => matchesFleetSelector(sel, c));
++}
++
++// ─────────────────────────────────────────────────────────────────────
++// UI helpers
++// ─────────────────────────────────────────────────────────────────────
++
++/** Operation types offered in the create form (implemented only). */
++export const FLEET_OPERATION_TYPES: { value: FleetOperationType; label: string; hint: string }[] = [
++  { value: 'tool_upgrade', label: 'Upgrade tool', hint: 'Upgrade an installed cluster tool across the fleet' },
++  { value: 'tool_install', label: 'Install tool', hint: 'Install a cluster tool across the fleet' },
++  { value: 'tool_uninstall', label: 'Uninstall tool', hint: 'Remove a cluster tool across the fleet' },
++  { value: 'apply_template', label: 'Apply template', hint: 'Apply an onboarding template across the fleet' },
++  { value: 'rotate_agent_token', label: 'Rotate agent token', hint: 'Rotate the agent token on every matched cluster' },
++];
++
++/** Operation types the backend reserves but rejects (400) today. */
++export const FLEET_OPERATION_TYPES_RESERVED: FleetOperationType[] | string[] = [
++  'drain_namespaces',
++  'custom_helm',
++];
++
++export function fleetOpTypeLabel(type: string): string {
++  return FLEET_OPERATION_TYPES.find((t) => t.value === type)?.label ?? type;
++}
++
++/** Terminal statuses stop polling. */
++export function isTerminalFleetStatus(status: string): boolean {
++  return status === 'completed' || status === 'failed' || status === 'aborted';
++}
+diff --git a/frontend/src/lib/query-keys.ts b/frontend/src/lib/query-keys.ts
+index dc19b8f..eac1fef 100644
+--- a/frontend/src/lib/query-keys.ts
++++ b/frontend/src/lib/query-keys.ts
+@@ -203,6 +203,13 @@ export const queryKeys = {
+     diagnostics: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'diagnostics'] as const,
+     operations: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'operations'] as const,
+   },
++  fleetOperations: {
++    all: ['fleet-operations'] as const,
++    list: (params?: Record<string, unknown>) => ['fleet-operations', 'list', params] as const,
++    detail: (id: string) => ['fleet-operations', 'detail', id] as const,
++    targets: (id: string, params?: Record<string, unknown>) =>
++      ['fleet-operations', 'detail', id, 'targets', params] as const,
++  },
+   extensions: {
+     list: ['extensions'] as const,
+     // §HostMounts — viewer-readable enabled-extension mounts. The host runtime

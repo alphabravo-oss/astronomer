@@ -1,0 +1,807 @@
+diff --git a/internal/config/config.go b/internal/config/config.go
+index 478a925..e6c0bc4 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -107,10 +107,17 @@ type Config struct {
+ 	// enabling it with zero rules is a no-op.
+ 	NativeRBACEnabled bool `mapstructure:"native_rbac_enabled"`
+ 	// NamespaceScopedRBACEnabled gates namespace/project-scoped cluster resource
+-	// reads. Default false: when off, project bindings still grant nothing on
+-	// cluster routes and list handlers return the full cluster (byte-identical
+-	// to today). When on, project bindings resolve to their namespaces and list
+-	// results are filtered to the caller's authorized namespaces.
++	// reads. PROMOTED to default TRUE (task 009 / finding DIR-04): project
++	// bindings now resolve to their namespaces and cluster list results are
++	// filtered to the caller's authorized namespaces, closing the multi-tenancy
++	// gap that had soaked dark behind a default-off flag. The change is mostly
++	// additive — project members gain a namespace-filtered view they were
++	// previously 403'd from — and the seams fail closed for scoped users while
++	// superusers/cluster-wide grants still see everything. Operators who need
++	// the old byte-identical full-cluster behaviour set
++	// NAMESPACE_SCOPED_RBAC_ENABLED=false; the flag is runtime-togglable and
++	// invalidates the RBAC cache on flip. Also gates kubectl-shell caller
++	// scoping (see internal/handler/kubectl_shell_scope.go).
+ 	NamespaceScopedRBACEnabled      bool   `mapstructure:"namespace_scoped_rbac_enabled"`
+ 	KubectlShellImage               string `mapstructure:"kubectl_shell_image"`
+ 	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
+@@ -271,6 +278,10 @@ func Load() (*Config, error) {
+ 		envconfig.Default{Key: "kubectl_shell_enabled", Value: false},
+ 		envconfig.Default{Key: "control_plane_snapshots_enabled", Value: false},
+ 		envconfig.Default{Key: "native_rbac_enabled", Value: false},
++		// PROMOTED (task 009 / DIR-04): namespace-scoped RBAC is ON by
++		// default. Set NAMESPACE_SCOPED_RBAC_ENABLED=false to restore the
++		// old full-cluster behaviour.
++		envconfig.Default{Key: "namespace_scoped_rbac_enabled", Value: true},
+ 		envconfig.Default{Key: "kubectl_shell_image", Value: "astronomer-shell:dev"},
+ 		envconfig.Default{Key: "kubectl_shell_idle_timeout_minutes", Value: 30},
+ 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+index f6d451d..56394bf 100644
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -40,7 +40,8 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
+ 		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=true not resolved into cfg.NamespaceScopedRBACEnabled")
+ 	}
+ 
+-	// And default OFF when unset.
++	// native_rbac + control-plane snapshots default OFF when unset; but
++	// namespace_scoped_rbac was PROMOTED to default ON (task 009 / DIR-04).
+ 	t.Setenv("NATIVE_RBAC_ENABLED", "")
+ 	t.Setenv("CONTROL_PLANE_SNAPSHOTS_ENABLED", "")
+ 	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "")
+@@ -48,8 +49,37 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatalf("Load() error = %v", err)
+ 	}
+-	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled || def.NamespaceScopedRBACEnabled {
+-		t.Fatal("feature flags must default OFF when env is unset")
++	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled {
++		t.Fatal("native_rbac / control_plane_snapshots must default OFF when env is unset")
++	}
++	if !def.NamespaceScopedRBACEnabled {
++		t.Fatal("namespace_scoped_rbac_enabled must default ON after promotion (task 009)")
++	}
++}
++
++// TestNamespaceScopedRBACEnabledPromotedDefaultAndOptOut guards the DIR-04
++// promotion: the authorization filter is ON by default, and an operator can
++// still explicitly opt OUT (restoring the old full-cluster behaviour) via
++// NAMESPACE_SCOPED_RBAC_ENABLED=false.
++func TestNamespaceScopedRBACEnabledPromotedDefaultAndOptOut(t *testing.T) {
++	// Default (unset) → ON.
++	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "")
++	on, err := Load()
++	if err != nil {
++		t.Fatalf("Load() error = %v", err)
++	}
++	if !on.NamespaceScopedRBACEnabled {
++		t.Fatal("namespace_scoped_rbac_enabled must default ON")
++	}
++
++	// Explicit opt-out → OFF (fail-safe kill switch stays available).
++	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "false")
++	off, err := Load()
++	if err != nil {
++		t.Fatalf("Load() error = %v", err)
++	}
++	if off.NamespaceScopedRBACEnabled {
++		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=false must turn the filter OFF")
+ 	}
+ }
+ 
+diff --git a/internal/handler/kubectl_shell.go b/internal/handler/kubectl_shell.go
+index dc99149..454e8c6 100644
+--- a/internal/handler/kubectl_shell.go
++++ b/internal/handler/kubectl_shell.go
+@@ -115,6 +115,24 @@ type KubectlShellHandler struct {
+ 	// its existing blanket-verb behaviour. Wired via SetFeatureFlags.
+ 	// See kubectl_shell_scope.go.
+ 	Features ShellFeatureReader
++	// NamespaceScopedRBAC mirrors cfg.NamespaceScopedRBACEnabled. Task 009
++	// (DIR-04) collapses the two independent multi-tenancy switches: when
++	// namespace-scoped RBAC is on, shell caller-scoping is on too, so an
++	// operator makes ONE multi-tenancy choice. shellScopeEnabled ORs this
++	// with the legacy feature.shell_scope_to_caller platform setting. Wired
++	// via SetNamespaceScopedRBAC.
++	NamespaceScopedRBAC bool
++}
++
++// SetNamespaceScopedRBAC wires the master multi-tenancy switch
++// (cfg.NamespaceScopedRBACEnabled). When true, shell caller-scoping is
++// enabled without also needing the legacy feature.shell_scope_to_caller
++// platform setting — see the flag-collapse note in kubectl_shell_scope.go.
++func (h *KubectlShellHandler) SetNamespaceScopedRBAC(enabled bool) {
++	if h == nil {
++		return
++	}
++	h.NamespaceScopedRBAC = enabled
+ }
+ 
+ // CrossPodWSForwarder is the surface the shell handler uses to
+@@ -270,6 +288,10 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
+ 	// bindings grant against THIS cluster and FAIL CLOSED when the scope
+ 	// can't be determined. See kubectl_shell_scope.go.
+ 	var scopeDetail map[string]any
++	// scopeNamespaces carries the caller's confined namespace allow-set into
++	// kubectl.Open so it can provision per-namespace Roles (mechanism A).
++	// nil for cross-namespace / superuser callers (the ClusterRole path).
++	var scopeNamespaces []string
+ 	if h.shellScopeEnabled(r.Context()) {
+ 		scope, ok := h.deriveScopeForCaller(r.Context(), userID, clusterID, verbs)
+ 		if !ok {
+@@ -278,11 +300,18 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
+ 			return
+ 		}
+ 		verbs = scope.Verbs
++		if !scope.AllNamespaces && !scope.Superuser {
++			// Confined caller — provision namespaced Roles so the session
++			// ServiceAccount is genuinely bounded at the apiserver, not just
++			// audited (DIR-04 mechanism A).
++			scopeNamespaces = scope.SortedNamespaces()
++		}
+ 		scopeDetail = map[string]any{
+ 			"scope_enabled":     true,
+ 			"scope_all_ns":      scope.AllNamespaces,
+ 			"scope_namespaces":  scope.SortedNamespaces(),
+ 			"scope_impersonate": scope.Caller.String(),
++			"scope_enforcement": scopeEnforcementLabel(scope),
+ 		}
+ 	}
+ 
+@@ -292,11 +321,12 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
+ 	elevated := verbs.Superuser || verbs.Update || verbs.Delete
+ 
+ 	info, err := kubectl.Open(r.Context(), h.Deps, kubectl.OpenRequest{
+-		UserID:    userID,
+-		ClusterID: clusterID,
+-		Verbs:     verbs,
+-		ClientIP:  parseClientIP(r),
+-		UserAgent: r.UserAgent(),
++		UserID:     userID,
++		ClusterID:  clusterID,
++		Verbs:      verbs,
++		Namespaces: scopeNamespaces,
++		ClientIP:   parseClientIP(r),
++		UserAgent:  r.UserAgent(),
+ 	})
+ 	if err != nil {
+ 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ShellOpenFailed, err.Error())
+@@ -630,17 +660,16 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
+ 			if len(line) > 1024 {
+ 				line = line[:1024] + "...<truncated>"
+ 			}
+-			// OPT-IN caller-scoping: DETECTIVE control. When the flag is
+-			// on and the command targets a namespace outside the caller's
+-			// scope, emit a security audit + structured log. We cannot
+-			// hard-block here: onInput runs inside the exec read loop but
+-			// has no signal back to suppress the forward (the frame is
+-			// relayed by ExecConsumer). Real per-namespace ENFORCEMENT
+-			// requires either namespaced Role manifests (internal/kubectl)
+-			// or K8s impersonation on the proxy — see
+-			// CallerScope.ImpersonationHeaders + integration notes. The
+-			// Open-time verb constraint (read-only for namespace-scoped
+-			// callers) already blunts the blast radius.
++			// Caller-scoping WS audit: DETECTIVE control layered on top of
++			// the PREVENTIVE enforcement. As of DIR-04 mechanism A, a
++			// confined session is provisioned with per-namespace Roles
++			// (internal/kubectl), so an out-of-scope target is already
++			// DENIED by the apiserver — the SA has no rights outside its
++			// namespaces. This block still records the attempt for the
++			// audit trail (onInput runs in the exec read loop and has no
++			// back-channel to suppress the forward, but it no longer needs
++			// one: the apiserver rejects it). The Open-time read-only verb
++			// cap on namespace-scoped callers is defense-in-depth.
+ 			if scopeActive && !wsScope.AllNamespaces {
+ 				for _, target := range namespaceTargetsFromCommand(line) {
+ 					if wsScope.Allows(target) {
+diff --git a/internal/handler/kubectl_shell_scope.go b/internal/handler/kubectl_shell_scope.go
+index 05a2b8f..9bddbd9 100644
+--- a/internal/handler/kubectl_shell_scope.go
++++ b/internal/handler/kubectl_shell_scope.go
+@@ -125,6 +125,18 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
+ 		if !bindingAppliesToCluster(b, clusterID) {
+ 			continue
+ 		}
++		// A RAW project binding (project-scoped, no explicit cluster or
++		// namespace) is NOT a cross-namespace grant — treating it as
++		// AllNamespaces was the DIR-04 over-grant that handed a
++		// project-restricted operator the whole cluster. Its concrete
++		// namespaces come from the project→namespace expansion (the
++		// synthetic cluster+namespace bindings GetUserBindings emits when
++		// namespace_scoped_rbac is enabled), folded in via
++		// AuthorizedNamespaces below. Skip it here so it neither sets
++		// AllNamespaces nor (on its own) determines the scope.
++		if b.ProjectID != "" && b.ClusterID == "" {
++			continue
++		}
+ 		s.Determined = true
+ 		if b.Namespace != "" {
+ 			// Namespace-scoped binding contributes exactly that namespace.
+@@ -135,6 +147,23 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
+ 		// grants cross-namespace scope.
+ 		s.AllNamespaces = true
+ 	}
++	// Fold in the caller's REAL effective namespace grant on this cluster.
++	// AuthorizedNamespaces resolves the project→namespace expansion (and any
++	// native per-namespace list grants) into a concrete allow-set for the
++	// resources a shell reads, replacing the old coarse "determined but
++	// empty" project handling. It fails closed (all==false, empty set) when
++	// nothing applies. A cluster-wide grant here promotes to AllNamespaces.
++	if !s.AllNamespaces {
++		if all, names := engine.AuthorizedNamespaces(bindings, rbac.ResourcePods, rbac.VerbList, clusterID); all {
++			s.Determined = true
++			s.AllNamespaces = true
++		} else {
++			for ns := range names {
++				s.Determined = true
++				s.Namespaces[ns] = struct{}{}
++			}
++		}
++	}
+ 	if !s.Determined {
+ 		return s
+ 	}
+@@ -159,13 +188,13 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
+ 
+ // bindingAppliesToCluster reports whether a binding is relevant to the
+ // target cluster for scope-derivation purposes. Mirrors the spirit of
+-// rbac.Engine.bindingApplies (which is unexported) but is intentionally
+-// conservative: a project-scoped binding without an explicit namespace
+-// is treated as applicable (Determined) yet contributes no concrete
+-// namespace, so its holder is confined to read-only with no explicit
+-// namespace grant — safe by construction. Resolving a project's
+-// namespace set would require a project→namespace lookup that lives
+-// outside this handler's owned surface (see integration notes).
++// rbac.Engine.bindingApplies (which is unexported). NOTE (DIR-04): a raw
++// project-scoped binding (ProjectID set, no explicit cluster) is reported
++// applicable here, but deriveCallerScope no longer treats it as a
++// cross-namespace grant — it resolves the project's concrete namespaces via
++// engine.AuthorizedNamespaces (which consumes the project→namespace
++// synthetic-binding expansion). This function stays permissive so that
++// path can run; the confinement happens in deriveCallerScope.
+ func bindingAppliesToCluster(b rbac.RoleBinding, clusterID uuid.UUID) bool {
+ 	if b.IsSuperuser {
+ 		return true
+@@ -235,6 +264,22 @@ func (s CallerScope) ImpersonationHeaders() map[string]string {
+ 	}
+ }
+ 
++// scopeEnforcementLabel names the in-cluster enforcement shape a session
++// gets, for the audit trail. "cluster-admin" and "cluster-role" are
++// cross-namespace; "namespaced-role" is the confined mechanism-A path where
++// per-namespace Roles genuinely bound the session ServiceAccount at the
++// apiserver (not merely audited).
++func scopeEnforcementLabel(s CallerScope) string {
++	switch {
++	case s.Superuser:
++		return "cluster-admin"
++	case s.AllNamespaces:
++		return "cluster-role"
++	default:
++		return "namespaced-role"
++	}
++}
++
+ // namespaceAllSentinel represents a cross-namespace ("-A" /
+ // --all-namespaces) command target in scope checks.
+ const namespaceAllSentinel = "\x00__all_namespaces__"
+@@ -273,12 +318,21 @@ func namespaceTargetsFromCommand(line string) []string {
+ 	return out
+ }
+ 
+-// shellScopeEnabled reports whether the caller-scoping feature flag is
+-// set. DEFAULT FALSE — a nil reader or an unset key yields false, so
+-// the shell's existing behaviour is preserved unless an operator
+-// explicitly opts in.
++// shellScopeEnabled reports whether caller-scoping is active. Task 009
++// (DIR-04) collapses the two multi-tenancy switches: scoping is ON when
++// EITHER the master namespace_scoped_rbac_enabled config flag is set
++// (h.NamespaceScopedRBAC, the promoted default) OR the legacy
++// feature.shell_scope_to_caller platform setting is explicitly on. A nil
++// reader and an unset key both yield false for the legacy path, so with
++// namespace-scoped RBAC off the shell keeps its pre-feature behaviour.
+ func (h *KubectlShellHandler) shellScopeEnabled(ctx context.Context) bool {
+-	if h == nil || h.Features == nil {
++	if h == nil {
++		return false
++	}
++	if h.NamespaceScopedRBAC {
++		return true
++	}
++	if h.Features == nil {
+ 		return false
+ 	}
+ 	return h.Features.BoolValue(ctx, shellScopeToCallerFlag, false)
+diff --git a/internal/handler/kubectl_shell_scope_test.go b/internal/handler/kubectl_shell_scope_test.go
+index 50c7ef1..0c65a1d 100644
+--- a/internal/handler/kubectl_shell_scope_test.go
++++ b/internal/handler/kubectl_shell_scope_test.go
+@@ -1,6 +1,7 @@
+ package handler
+ 
+ import (
++	"context"
+ 	"testing"
+ 
+ 	"github.com/google/uuid"
+@@ -101,6 +102,87 @@ func TestDeriveCallerScope(t *testing.T) {
+ 	})
+ }
+ 
++// podsRules grants pods:get/list/watch so a binding's role matches the
++// resource/verb deriveCallerScope resolves namespaces against.
++func podsRules() []rbac.Rule {
++	return []rbac.Rule{{Resource: "pods", Verbs: []string{"get", "list", "watch"}}}
++}
++
++// TestDeriveCallerScope_ProjectExpansion covers the DIR-04 change: a RAW
++// project binding is no longer treated as a cross-namespace grant, and the
++// project→namespace synthetic cluster bindings (what GetUserBindings emits
++// when namespace_scoped_rbac is on) resolve into a concrete namespace
++// allow-set via engine.AuthorizedNamespaces.
++func TestDeriveCallerScope_ProjectExpansion(t *testing.T) {
++	engine := rbac.NewEngine()
++	cluster := uuid.New()
++	caller := uuid.New()
++	project := uuid.New()
++	rw := kubectl.EffectiveVerbs{Read: true, Update: true, Delete: true}
++
++	t.Run("raw project binding is not cross-namespace and fails closed unexpanded", func(t *testing.T) {
++		// A project binding with no synthetic expansion present resolves to
++		// zero namespaces → undetermined → fail closed. Crucially it must
++		// NOT grant AllNamespaces (the old over-grant).
++		bindings := []rbac.RoleBinding{
++			{UserID: caller.String(), RoleRules: podsRules(), Scope: "project", ProjectID: project.String()},
++		}
++		s := deriveCallerScope(engine, bindings, cluster, caller, rw)
++		if s.AllNamespaces {
++			t.Fatalf("raw project binding must not grant cross-namespace scope, got %+v", s)
++		}
++		if s.Determined {
++			t.Fatalf("unexpanded project-only binding must fail closed (undetermined), got %+v", s)
++		}
++	})
++
++	t.Run("project expansion resolves concrete namespaces confined", func(t *testing.T) {
++		// The original project binding PLUS the two synthetic cluster+namespace
++		// bindings GetUserBindings would append for this project's namespaces.
++		bindings := []rbac.RoleBinding{
++			{UserID: caller.String(), RoleRules: podsRules(), Scope: "project", ProjectID: project.String()},
++			{UserID: caller.String(), RoleRules: podsRules(), Scope: "cluster", ClusterID: cluster.String(), Namespace: "team-a"},
++			{UserID: caller.String(), RoleRules: podsRules(), Scope: "cluster", ClusterID: cluster.String(), Namespace: "team-b"},
++		}
++		s := deriveCallerScope(engine, bindings, cluster, caller, rw)
++		if !s.Determined || s.AllNamespaces {
++			t.Fatalf("expected confined determined scope, got %+v", s)
++		}
++		if _, ok := s.Namespaces["team-a"]; !ok {
++			t.Fatalf("team-a missing from %v", s.SortedNamespaces())
++		}
++		if _, ok := s.Namespaces["team-b"]; !ok {
++			t.Fatalf("team-b missing from %v", s.SortedNamespaces())
++		}
++		if s.Allows("team-c") {
++			t.Fatalf("team-c must be out of scope")
++		}
++		// Confinement caps at read-only (coarse ClusterRole can't express a
++		// per-namespace write; mechanism A provisions read-only Roles).
++		if s.Verbs.Update || s.Verbs.Delete {
++			t.Fatalf("confined scope must be read-only, got %+v", s.Verbs)
++		}
++	})
++}
++
++// TestShellScopeEnabled_FlagCollapse guards §4.3: shell caller-scoping turns
++// on when the master namespace_scoped_rbac switch is on, without needing the
++// legacy feature.shell_scope_to_caller platform setting.
++func TestShellScopeEnabled_FlagCollapse(t *testing.T) {
++	t.Run("namespace-scoped RBAC on enables scoping with no feature reader", func(t *testing.T) {
++		h := &KubectlShellHandler{NamespaceScopedRBAC: true}
++		if !h.shellScopeEnabled(context.Background()) {
++			t.Fatal("NamespaceScopedRBAC=true must enable shell scoping")
++		}
++	})
++	t.Run("both off keeps scoping off", func(t *testing.T) {
++		h := &KubectlShellHandler{}
++		if h.shellScopeEnabled(context.Background()) {
++			t.Fatal("with both switches off, scoping must stay off")
++		}
++	})
++}
++
+ func TestNamespaceTargetsFromCommand(t *testing.T) {
+ 	cases := []struct {
+ 		line string
+diff --git a/internal/kubectl/manifests.go b/internal/kubectl/manifests.go
+index 87b821a..480d99e 100644
+--- a/internal/kubectl/manifests.go
++++ b/internal/kubectl/manifests.go
+@@ -196,6 +196,80 @@ func ClusterRoleManifest(n Names, verbs EffectiveVerbs) []byte {
+ 	return b
+ }
+ 
++// RoleManifest renders a NAMESPACED Role scoped to a single namespace,
++// mirroring `verbs` against the wildcard resource set. Task 009 (DIR-04)
++// mechanism A: when a caller's astronomer grants confine them to a
++// specific set of namespaces, the shell provisions one Role + RoleBinding
++// per authorized namespace instead of a cluster-wide ClusterRole, so the
++// session ServiceAccount is genuinely confined at the apiserver — a
++// namespace-scoped operator can no longer read across the whole cluster.
++//
++// Superuser callers never reach this path (they bind to cluster-admin).
++func RoleManifest(n Names, namespace string, verbs EffectiveVerbs) []byte {
++	if verbs.Superuser {
++		return nil
++	}
++	rules := []map[string]any{
++		{
++			"apiGroups": []string{"*"},
++			"resources": []string{"*"},
++			"verbs":     verbs.Verbs(),
++		},
++	}
++	m := map[string]any{
++		"apiVersion": "rbac.authorization.k8s.io/v1",
++		"kind":       "Role",
++		"metadata": map[string]any{
++			"name":      n.RoleName,
++			"namespace": namespace,
++			"labels": map[string]string{
++				"app.kubernetes.io/managed-by": "astronomer-go",
++				"astronomer.io/component":      "kubectl-shell",
++			},
++		},
++		"rules": rules,
++	}
++	b, _ := json.Marshal(m)
++	return b
++}
++
++// RoleBindingManifest renders a NAMESPACED RoleBinding in `namespace` that
++// ties the session ServiceAccount (which lives in n.SANamespace, i.e.
++// kube-system) to the per-namespace Role emitted by RoleManifest. A
++// RoleBinding may reference a subject in another namespace, so one SA is
++// confined to exactly the set of namespaces the caller is authorized for.
++func RoleBindingManifest(n Names, namespace string, verbs EffectiveVerbs) []byte {
++	if verbs.Superuser {
++		return nil
++	}
++	m := map[string]any{
++		"apiVersion": "rbac.authorization.k8s.io/v1",
++		"kind":       "RoleBinding",
++		"metadata": map[string]any{
++			"name":      n.BindingName,
++			"namespace": namespace,
++			"labels": map[string]string{
++				"app.kubernetes.io/managed-by": "astronomer-go",
++				"astronomer.io/component":      "kubectl-shell",
++			},
++		},
++		"subjects": []map[string]any{
++			{
++				"kind":      "ServiceAccount",
++				"name":      n.SAName,
++				"namespace": n.SANamespace,
++			},
++		},
++		"roleRef": map[string]any{
++			"apiGroup": "rbac.authorization.k8s.io",
++			"kind":     "Role",
++			"name":     n.RoleName,
++		},
++	}
++	b, _ := json.Marshal(m)
++	return b
++}
++
+ // ClusterRoleBindingManifest renders the binding that ties the SA to
+ // either the per-session ClusterRole (non-superuser) or the built-in
+ // cluster-admin ClusterRole (superuser).
+diff --git a/internal/kubectl/session.go b/internal/kubectl/session.go
+index 7f6f270..9322c91 100644
+--- a/internal/kubectl/session.go
++++ b/internal/kubectl/session.go
+@@ -93,6 +93,20 @@ type OpenRequest struct {
+ 	Verbs     EffectiveVerbs
+ 	ClientIP  *netip.Addr
+ 	UserAgent string
++	// Namespaces is the caller's authorized namespace allow-set (task 009 /
++	// DIR-04 mechanism A). When non-empty AND the caller is not a superuser,
++	// Open provisions a NAMESPACED Role + RoleBinding in each listed
++	// namespace instead of the blanket cluster-wide ClusterRole, confining
++	// the session ServiceAccount at the apiserver. Empty means cross-namespace
++	// (the pre-feature ClusterRole path) — used for superuser and cluster-wide
++	// callers.
++	Namespaces []string
++}
++
++// confined reports whether the session should be provisioned with
++// per-namespace Roles (mechanism A) rather than a cluster-wide ClusterRole.
++func (r OpenRequest) confined() bool {
++	return !r.Verbs.Superuser && len(r.Namespaces) > 0
+ }
+ 
+ // SessionInfo is the small wire-shape returned by Open() / Get().
+@@ -182,21 +196,50 @@ func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error)
+ 		return fail(fmt.Errorf("create ServiceAccount: %w", err))
+ 	}
+ 
+-	// Step 2: ClusterRole (skipped for superuser — they bind directly
+-	// to the built-in cluster-admin role).
+-	if !req.Verbs.Superuser {
++	// Steps 2+3: RBAC. Three shapes:
++	//   - superuser ............ ClusterRoleBinding → built-in cluster-admin.
++	//   - confined (mechanism A) namespaced Role + RoleBinding per authorized
++	//     namespace — the SA is genuinely confined at the apiserver.
++	//   - cross-namespace ...... cluster-wide ClusterRole + ClusterRoleBinding
++	//     (the pre-feature break-glass path).
++	switch {
++	case req.Verbs.Superuser:
++		// Step 3 only: ClusterRoleBinding to cluster-admin.
++		if err := applyJSON(ctx, deps.Requester, clusterID,
++			"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
++			ClusterRoleBindingManifest(names, req.Verbs)); err != nil {
++			return fail(fmt.Errorf("create ClusterRoleBinding: %w", err))
++		}
++	case req.confined():
++		// Per-namespace Role + RoleBinding. Duplicate namespaces are
++		// harmless (applyJSON treats 409 as success).
++		for _, ns := range req.Namespaces {
++			if ns == "" {
++				continue
++			}
++			if err := applyJSON(ctx, deps.Requester, clusterID,
++				fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/namespaces/%s/roles", ns),
++				RoleManifest(names, ns, req.Verbs)); err != nil {
++				return fail(fmt.Errorf("create Role in %s: %w", ns, err))
++			}
++			if err := applyJSON(ctx, deps.Requester, clusterID,
++				fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/namespaces/%s/rolebindings", ns),
++				RoleBindingManifest(names, ns, req.Verbs)); err != nil {
++				return fail(fmt.Errorf("create RoleBinding in %s: %w", ns, err))
++			}
++		}
++	default:
++		// Cluster-wide ClusterRole + ClusterRoleBinding.
+ 		if err := applyJSON(ctx, deps.Requester, clusterID,
+ 			"/apis/rbac.authorization.k8s.io/v1/clusterroles",
+ 			ClusterRoleManifest(names, req.Verbs)); err != nil {
+ 			return fail(fmt.Errorf("create ClusterRole: %w", err))
+ 		}
+-	}
+-
+-	// Step 3: ClusterRoleBinding.
+-	if err := applyJSON(ctx, deps.Requester, clusterID,
+-		"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+-		ClusterRoleBindingManifest(names, req.Verbs)); err != nil {
+-		return fail(fmt.Errorf("create ClusterRoleBinding: %w", err))
++		if err := applyJSON(ctx, deps.Requester, clusterID,
++			"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
++			ClusterRoleBindingManifest(names, req.Verbs)); err != nil {
++			return fail(fmt.Errorf("create ClusterRoleBinding: %w", err))
++		}
+ 	}
+ 
+ 	// Step 4: Pod.
+@@ -444,10 +487,83 @@ func tearDownK8s(ctx context.Context, deps Deps, clusterID string, n Names) erro
+ 	step(fmt.Sprintf("/api/v1/namespaces/%s/pods/%s", n.PodNamespace, n.PodName))
+ 	step(fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/%s", n.BindingName))
+ 	step(fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterroles/%s", n.RoleName))
++	// Mechanism A (DIR-04): confined sessions created NAMESPACED Role +
++	// RoleBinding objects whose namespaces aren't recorded on the session
++	// row, so we can't address them by path. Enumerate them cluster-wide by
++	// the shared component label, filter to THIS session's object name, and
++	// delete each by its namespace. Best-effort — the ClusterRole path above
++	// already covered the cross-namespace case (404s are treated as success).
++	if err := deleteNamespacedRBAC(ctx, deps, clusterID, n); err != nil && firstErr == nil {
++		firstErr = err
++	}
+ 	step(fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/%s", n.SANamespace, n.SAName))
+ 	return firstErr
+ }
+ 
++// deleteNamespacedRBAC removes the per-namespace Role + RoleBinding objects a
++// confined (mechanism A) session provisioned. It lists both kinds
++// cluster-wide by the kubectl-shell component label and deletes only the ones
++// whose name matches this session's deterministic astro-shell-<id> name, so a
++// concurrent session's objects are never touched. A list failure is returned
++// (so the caller can surface it) but never blocks the rest of teardown.
++func deleteNamespacedRBAC(ctx context.Context, deps Deps, clusterID string, n Names) error {
++	kinds := []struct {
++		listPath string
++		wantName string
++	}{
++		{"/apis/rbac.authorization.k8s.io/v1/roles?labelSelector=astronomer.io/component=kubectl-shell", n.RoleName},
++		{"/apis/rbac.authorization.k8s.io/v1/rolebindings?labelSelector=astronomer.io/component=kubectl-shell", n.BindingName},
++	}
++	var firstErr error
++	for _, k := range kinds {
++		resp, err := deps.Requester.Do(ctx, clusterID, "GET", k.listPath, nil, nil)
++		if err != nil {
++			if firstErr == nil {
++				firstErr = err
++			}
++			continue
++		}
++		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
++			// 404 (RBAC API absent) or other — nothing to sweep.
++			continue
++		}
++		var list struct {
++			Items []struct {
++				Metadata struct {
++					Name      string `json:"name"`
++					Namespace string `json:"namespace"`
++				} `json:"metadata"`
++			} `json:"items"`
++		}
++		if err := json.Unmarshal(resp.Body, &list); err != nil {
++			if firstErr == nil {
++				firstErr = err
++			}
++			continue
++		}
++		// RoleName == BindingName in practice (same short id), so key the
++		// delete path off the list we're iterating, not the name.
++		kindPath := kindPathFor(k.listPath)
++		for _, item := range list.Items {
++			if item.Metadata.Name != k.wantName || item.Metadata.Namespace == "" {
++				continue
++			}
++			_ = deleteJSON(ctx, deps.Requester, clusterID,
++				fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/namespaces/%s/%s/%s",
++					item.Metadata.Namespace, kindPath, item.Metadata.Name))
++		}
++	}
++	return firstErr
++}
++
++// kindPathFor maps a list path to its namespaced sub-resource segment.
++func kindPathFor(listPath string) string {
++	if strings.Contains(listPath, "/rolebindings") {
++		return "rolebindings"
++	}
++	return "roles"
++}
++
+ // waitForPodReady polls the apiserver every 500ms (or PodReadyTimeout/8,
+ // whichever is smaller) until the pod reports Running + Ready or the
+ // deadline elapses.
+@@ -543,6 +659,9 @@ func sweepOrphanPods(ctx context.Context, deps Deps, clusterID string, keep map[
+ 			fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/%s", p.Metadata.Name))
+ 		_ = deleteJSON(ctx, deps.Requester, clusterID,
+ 			fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterroles/%s", p.Metadata.Name))
++		// Sweep any per-namespace Role/RoleBinding an orphaned confined
++		// session left behind (mechanism A). Name == pod name == role name.
++		_ = deleteNamespacedRBAC(ctx, deps, clusterID, Names{RoleName: p.Metadata.Name, BindingName: p.Metadata.Name})
+ 		_ = deleteJSON(ctx, deps.Requester, clusterID,
+ 			fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/%s", DefaultNamespace, p.Metadata.Name))
+ 	}
+diff --git a/internal/kubectl/session_test.go b/internal/kubectl/session_test.go
+index ac6e1a6..eaadcd2 100644
+--- a/internal/kubectl/session_test.go
++++ b/internal/kubectl/session_test.go
+@@ -325,6 +325,102 @@ func TestOpen_RBACBindingMatchesEffectiveVerbs(t *testing.T) {
+ 	}
+ }
+ 
++// TestOpen_ConfinedProvisionsNamespacedRoles covers DIR-04 mechanism A: a
++// caller confined to specific namespaces gets one namespaced Role +
++// RoleBinding per namespace and NO cluster-wide ClusterRole, so the session
++// ServiceAccount is bounded at the apiserver.
++func TestOpen_ConfinedProvisionsNamespacedRoles(t *testing.T) {
++	q := newFakeQuerier()
++	r := newFakeRequester()
++	deps := Deps{Queries: q, Requester: r, PodReadyTimeout: 2 * time.Second}
++
++	_, err := Open(context.Background(), deps, OpenRequest{
++		UserID: uuid.New(), ClusterID: uuid.New(),
++		Verbs:      EffectiveVerbs{Read: true},
++		Namespaces: []string{"team-a", "team-b"},
++	})
++	if err != nil {
++		t.Fatalf("Open: %v", err)
++	}
++	posts := r.callsByMethod("POST")
++
++	// No cluster-wide ClusterRole / ClusterRoleBinding for a confined session.
++	for _, c := range posts {
++		if strings.Contains(c.path, "/clusterroles") || strings.Contains(c.path, "/clusterrolebindings") {
++			t.Fatalf("confined session must not create cluster-wide RBAC, saw POST %s", c.path)
++		}
++	}
++
++	// One Role + one RoleBinding per namespace.
++	for _, ns := range []string{"team-a", "team-b"} {
++		if !hasPost(posts, "/namespaces/"+ns+"/roles") {
++			t.Errorf("missing namespaced Role POST for %s", ns)
++		}
++		if !hasPost(posts, "/namespaces/"+ns+"/rolebindings") {
++			t.Errorf("missing namespaced RoleBinding POST for %s", ns)
++		}
++	}
++}
++
++// TestClose_ConfinedDeletesNamespacedRoles verifies teardown enumerates and
++// deletes the per-namespace Role/RoleBinding objects a confined session left
++// behind (they aren't addressable from the session row).
++func TestClose_ConfinedDeletesNamespacedRoles(t *testing.T) {
++	q := newFakeQuerier()
++	r := newFakeRequester()
++	deps := Deps{Queries: q, Requester: r, PodReadyTimeout: 2 * time.Second}
++
++	info, err := Open(context.Background(), deps, OpenRequest{
++		UserID: uuid.New(), ClusterID: uuid.New(),
++		Verbs:      EffectiveVerbs{Read: true},
++		Namespaces: []string{"team-a"},
++	})
++	if err != nil {
++		t.Fatalf("Open: %v", err)
++	}
++	roleName := q.snapshot(info.ID).SaName
++
++	// Program the cluster-wide Role/RoleBinding label-list response used by
++	// teardown so it can discover the per-namespace objects to delete. The
++	// fake short-circuits every labelSelector GET to listPods.
++	roleList, _ := json.Marshal(map[string]any{
++		"items": []map[string]any{
++			{"metadata": map[string]any{"name": roleName, "namespace": "team-a"}},
++		},
++	})
++	r.listPods = &K8sResponse{StatusCode: 200, Body: roleList}
++
++	if err := Close(context.Background(), deps, info.ID); err != nil {
++		t.Fatalf("Close: %v", err)
++	}
++
++	deletedRole := false
++	deletedBinding := false
++	for _, c := range r.callsByMethod("DELETE") {
++		if strings.Contains(c.path, "/namespaces/team-a/roles/"+roleName) {
++			deletedRole = true
++		}
++		if strings.Contains(c.path, "/namespaces/team-a/rolebindings/"+roleName) {
++			deletedBinding = true
++		}
++	}
++	if !deletedRole {
++		t.Errorf("expected DELETE of namespaced Role in team-a")
++	}
++	if !deletedBinding {
++		t.Errorf("expected DELETE of namespaced RoleBinding in team-a")
++	}
++}
++
++func hasPost(posts []k8sCall, substr string) bool {
++	for _, c := range posts {
++		if strings.Contains(c.path, substr) {
++			return true
++		}
++	}
++	return false
++}
++
+ func TestOpen_SuperuserUsesClusterAdmin(t *testing.T) {
+ 	q := newFakeQuerier()
+ 	r := newFakeRequester()
+diff --git a/internal/server/server.go b/internal/server/server.go
+index 3d0532a..15fd3cb 100644
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -1413,9 +1413,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
+ 	if deps.KubectlShell != nil {
+ 		deps.KubectlShell.SetStreamAuth(jwtManager, queries)
+ 		deps.KubectlShell.SetStreamTickets(deps.StreamTicketStore)
+-		// Opt-in caller-RBAC scoping. Reads feature.shell_scope_to_caller
+-		// (default false via BoolValue's false fallback), so this only
+-		// changes behaviour once an operator flips the flag on.
++		// Caller-RBAC scoping. Task 009 (DIR-04) collapses the two
++		// multi-tenancy switches: the master namespace_scoped_rbac_enabled
++		// config flag (promoted to default ON) enables shell scoping
++		// directly, and the legacy feature.shell_scope_to_caller platform
++		// setting still works as an independent opt-in for operators who
++		// disabled the master flag.
++		deps.KubectlShell.SetNamespaceScopedRBAC(cfg.NamespaceScopedRBACEnabled)
+ 		if deps.SettingsCache != nil {
+ 			deps.KubectlShell.SetFeatureFlags(deps.SettingsCache)
+ 		}
